@@ -1,38 +1,14 @@
 /**
  * projectListComponent.js
  * Handles rendering and interaction with the project list UI.
- * Dependencies:
- * - window.eventHandlers (external utility, for event management)
- * - window.projectManager (external dependency, for project operations)
- * - window.modalManager (external dependency, for modal dialogs)
- * - window.showNotification (external dependency, for notifications)
- * - window.app (external dependency, for authentication state)
- * - window.auth (external dependency, for auth events)
- * - document (browser built-in, for DOM manipulation)
- * - localStorage (browser built-in, for persistent state)
- * - URL (browser built-in, for URL manipulation)
- * - CustomEvent (browser built-in, for custom events)
+ *
+ * ## Dependencies:
+ * - window.app: Application core with state management and API requests.
+ * - window.eventHandlers: Utility for event management
+ * - window.projectManager: Project management API.
+ * - window.modalManager: Modal dialog management.
+ * - window.DependencySystem: Dependency injection/registration system.
  */
-
-// Browser APIs:
-// - document (DOM access)
-// - localStorage (state persistence)
-// - URL (URL parsing/manipulation)
-// - CustomEvent (event system)
-
-// External Dependencies (Global Scope):
-// - window.eventHandlers (event management)
-// - window.projectManager (project data operations)
-// - window.modalManager (modal management)
-// - window.showNotification (notification system)
-// - window.app (application state)
-// - window.auth (authentication system)
-
-// Optional Dependencies:
-// - Notification system falls back to console
-// - Modal system has fallback to native confirm
-// - Graceful degradation when components aren't available
-
 
 class ProjectListComponent {
     /**
@@ -56,18 +32,23 @@ class ProjectListComponent {
             initialized: false
         };
 
-        // We'll defer container setup & event binding until our init method
-        console.log(`[ProjectListComponent] Constructing instance with elementId: ${this.elementId}`);
-        this._initialize().then(() => this._loadProjects());
+        // Element reference - will be initialized later
+        this.element = null;
     }
 
     /**
-     * Asynchronously initializes the component.
-     * Includes retry logic to ensure container element is ready.
-     * @private
+     * Initialize the component.
+     * @returns {Promise<boolean>}
      */
-    async _initialize() {
+    async initialize() {
+        if (this.state.initialized) {
+            console.log('[ProjectListComponent] Already initialized');
+            return true;
+        }
+
         try {
+            console.log(`[ProjectListComponent] Initializing with elementId: ${this.elementId}`);
+
             // Step 1: Ensure container
             await this._ensureContainer();
 
@@ -80,15 +61,18 @@ class ProjectListComponent {
             // Step 4: Mark as initialized
             this.state.initialized = true;
             console.log('[ProjectListComponent] Initialization complete.');
+            return true;
         } catch (error) {
             console.error('[ProjectListComponent] Failed to initialize:', error);
             this._showErrorState('Initialization error');
+            return false;
         }
     }
 
     /**
      * Ensures the container element exists in the DOM, with limited retries.
      * @private
+     * @returns {Promise<boolean>}
      */
     async _ensureContainer() {
         let attempts = 0;
@@ -134,13 +118,89 @@ class ProjectListComponent {
         document.addEventListener('projectUpdated', (e) => this._handleProjectUpdated(e.detail));
 
         // Listen for auth changes (re-load projects if user logs in)
-        if (window.auth?.AuthBus) {
-            window.auth.AuthBus.addEventListener('authStateChanged', (e) => {
-                if (e.detail?.authenticated) {
-                    this._loadProjects();
-                }
-            });
+        document.addEventListener('authStateChanged', (e) => {
+            if (e.detail?.authenticated) {
+                this._loadProjects();
+            }
+        });
+    }
+
+    /**
+     * Show the project list component.
+     */
+    show() {
+        if (this.element) {
+            this.element.classList.remove('hidden');
         }
+        // ALSO un‑fade the outer view
+        const listView = document.getElementById('projectListView');
+        if (listView) {
+            listView.classList.remove('hidden', 'opacity-0');
+        }
+    }
+
+    /**
+     * Hide the project list component.
+     */
+    hide() {
+        if (this.element) {
+            this.element.classList.add('hidden');
+        }
+        const listView = document.getElementById('projectListView');
+        if (listView) {
+            listView.classList.add('hidden', 'opacity-0');
+        }
+    }
+
+    /**
+     * Render projects into the component's DOM element.
+     * @param {Array|Object} data - Projects, or an object containing projects
+     */
+    renderProjects(data) {
+        // Debug log of the received data
+        console.log('%c[ProjectListComponent.renderProjects] Received:', 'color: teal; font-weight: bold', data);
+
+        if (!this.element) {
+            console.warn('[ProjectListComponent] renderProjects called without a valid container element.');
+            return;
+        }
+
+        // Normalize data
+        let projects = [];
+        if (Array.isArray(data)) {
+            projects = data;
+        } else if (data?.projects) {
+            projects = data.projects;
+        } else if (data?.data?.projects) {
+            projects = data.data.projects;
+        }
+
+        console.log('%c[ProjectListComponent.renderProjects] Parsed projects array:', 'color: teal; font-weight: bold', projects);
+
+        this.state.projects = projects;
+
+        // If user not authenticated, show login prompt
+        if (!window.app.state.isAuthenticated) {
+            this._showLoginRequired();
+            return;
+        }
+
+        // Show empty state if no projects
+        if (projects.length === 0) {
+            this._showEmptyState();
+            return;
+        }
+
+        // Clear and render
+        this.element.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+
+        projects.forEach(project => {
+            const card = this._createProjectCard(project);
+            fragment.appendChild(card);
+        });
+
+        this.element.appendChild(fragment);
     }
 
     /**
@@ -230,57 +290,6 @@ class ProjectListComponent {
     }
 
     /**
-     * Handler for clicks on project cards (using event delegation).
-     * @private
-     */
-    _handleCardClick(e) {
-        const projectCard = e.target.closest('.project-card');
-        if (!projectCard) return;
-
-        // Check if an action button was clicked
-        const actionBtn = e.target.closest('[data-action]');
-        if (actionBtn) {
-            e.stopPropagation();
-            const action = actionBtn.dataset.action;
-            const projectId = projectCard.dataset.projectId;
-            this._handleAction(action, projectId);
-            return;
-        }
-
-        // Otherwise treat as a card click
-        const projectId = projectCard.dataset.projectId;
-        if (projectId) {
-            this.onViewProject(projectId);
-        }
-    }
-
-    /**
-     * Actually perform the specified action (view, edit, delete).
-     * @private
-     */
-    _handleAction(action, projectId) {
-        const project = this.state.projects.find(p => p.id === projectId);
-        if (!project) {
-            console.warn(`[ProjectListComponent] Project not found: ${projectId}`);
-            return;
-        }
-
-        switch (action) {
-            case 'view':
-                this.onViewProject(projectId);
-                break;
-            case 'edit':
-                this._openEditModal(project);
-                break;
-            case 'delete':
-                this._confirmDelete(project);
-                break;
-            default:
-                console.warn(`[ProjectListComponent] Unknown action: ${action}`);
-        }
-    }
-
-    /**
      * Binds event listeners to main and sidebar "Create Project" buttons with retry logic,
      * ensuring modals are loaded first.
      * @private
@@ -336,6 +345,120 @@ class ProjectListComponent {
     }
 
     /**
+     * Handler for clicks on project cards (using event delegation).
+     * @private
+     */
+    _handleCardClick(e) {
+        const projectCard = e.target.closest('.project-card');
+        if (!projectCard) return;
+
+        // Check if an action button was clicked
+        const actionBtn = e.target.closest('[data-action]');
+        if (actionBtn) {
+            e.stopPropagation();
+            const action = actionBtn.dataset.action;
+            const projectId = projectCard.dataset.projectId;
+            console.log('[ProjectListComponent] Action button clicked', action, projectId);
+            this._handleAction(action, projectId);
+            return;
+        }
+
+        // Otherwise treat as a card click
+        const projectId = projectCard.dataset.projectId;
+        if (projectId) {
+            console.log('[ProjectListComponent] Card clicked, calling onViewProject', projectId);
+            this.onViewProject(projectId);
+        }
+    }
+
+    /**
+     * Actually perform the specified action (view, edit, delete).
+     * @private
+     */
+    _handleAction(action, projectId) {
+        console.log('[ProjectListComponent] _handleAction', action, projectId);
+        const project = this.state.projects.find(p => p.id === projectId);
+        if (!project) {
+            console.warn(`[ProjectListComponent] Project not found: ${projectId}`);
+            return;
+        }
+
+        switch (action) {
+            case 'view':
+                console.log('[ProjectListComponent] View action triggered, calling onViewProject', projectId);
+                this.onViewProject(projectId);
+                break;
+            case 'edit':
+                this._openEditModal(project);
+                break;
+            case 'delete':
+                this._confirmDelete(project);
+                break;
+            default:
+                console.warn(`[ProjectListComponent] Unknown action: ${action}`);
+        }
+    }
+
+    /**
+     * Actually perform the specified action (view, edit, delete).
+     * @private
+     */
+    _handleAction(action, projectId) {
+        const project = this.state.projects.find(p => p.id === projectId);
+        if (!project) {
+            console.warn(`[ProjectListComponent] Project not found: ${projectId}`);
+            return;
+        }
+
+        switch (action) {
+            case 'view':
+                this.onViewProject(projectId);
+                break;
+            case 'edit':
+                this._openEditModal(project);
+                break;
+            case 'delete':
+                this._confirmDelete(project);
+                break;
+            default:
+                console.warn(`[ProjectListComponent] Unknown action: ${action}`);
+        }
+    }
+
+    /**
+     * Open the "edit project" modal.
+     * @private
+     */
+    _openEditModal(project) {
+        if (window.projectModal?.openModal) {
+            window.projectModal.openModal(project);
+        } else {
+            console.error('[ProjectListComponent] window.projectModal.openModal not available');
+        }
+    }
+
+    /**
+     * Open a confirmation dialog for project deletion.
+     * @private
+     */
+    _confirmDelete(project) {
+        if (window.modalManager?.confirmAction) {
+            window.modalManager.confirmAction({
+                title: 'Delete Project',
+                message: `Are you sure you want to delete "${project.name}"? This cannot be undone.`,
+                confirmText: 'Delete',
+                confirmClass: 'btn-error',
+                onConfirm: () => this._executeDelete(project.id)
+            });
+        } else {
+            // Fallback to native confirm
+            if (confirm(`Delete "${project.name}"? This cannot be undone.`)) {
+                this._executeDelete(project.id);
+            }
+        }
+    }
+
+    /**
      * Execute the actual delete operation.
      * @private
      */
@@ -353,6 +476,29 @@ class ProjectListComponent {
                 console.error('[ProjectListComponent] Failed to delete project:', err);
                 window.app?.showNotification('Failed to delete project', 'error');
             });
+    }
+
+    /**
+     * When a project is created externally, add to our local array and re-render.
+     * @private
+     */
+    _handleProjectCreated(project) {
+        if (!project) return;
+        this.state.projects.unshift(project);
+        this.renderProjects(this.state.projects);
+    }
+
+    /**
+     * When a project is updated externally, replace in our local array and re-render.
+     * @private
+     */
+    _handleProjectUpdated(updatedProject) {
+        if (!updatedProject) return;
+        const idx = this.state.projects.findIndex(p => p.id === updatedProject.id);
+        if (idx >= 0) {
+            this.state.projects[idx] = updatedProject;
+            this.renderProjects(this.state.projects);
+        }
     }
 
     /**
@@ -382,108 +528,172 @@ class ProjectListComponent {
     }
 
     /**
-     * When a project is created externally, add to our local array and re-render.
+     * Handle opening the "new project" modal.
      * @private
      */
-    _handleProjectCreated(project) {
-        if (!project) return;
-        this.state.projects.unshift(project);
-        this.renderProjects(this.state.projects);
+    _openNewProjectModal() {
+        if (window.projectModal?.openModal) {
+            window.projectModal.openModal();
+        } else {
+            console.error('[ProjectListComponent] window.projectModal.openModal not available');
+        }
     }
 
     /**
-     * When a project is updated externally, replace in our local array and re-render.
+     * Shows a loading skeleton while data is being fetched.
      * @private
      */
-    _handleProjectUpdated(updatedProject) {
-        if (!updatedProject) return;
-        const idx = this.state.projects.findIndex(p => p.id === updatedProject.id);
-        if (idx >= 0) {
-            this.state.projects[idx] = updatedProject;
-            this.renderProjects(this.state.projects);
-        }
-    }
+    _showLoadingState() {
+        if (!this.element) return;
 
-    /* =========================================================================
-     * PUBLIC METHODS
-     * ========================================================================= */
-
-    /**
-     * Show the project list component.
-     */
-    show() {
-        if (this.element) {
-            this.element.classList.remove('hidden');
-        }
-        // ALSO un‑fade the outer view
-        const listView = document.getElementById('projectListView');
-        if (listView) {
-            listView.classList.remove('hidden', 'opacity-0');
-        }
-    }
-
-    /**
-     * Hide the project list component.
-     */
-    hide() {
-        if (this.element) {
-            this.element.classList.add('hidden');
-        }
-        const listView = document.getElementById('projectListView');
-        if (listView) {
-            listView.classList.add('hidden', 'opacity-0');
-        }
-    }
-
-    /**
-     * Render projects into the component's DOM element.
-     * @param {Array|Object} data - Projects, or an object containing projects
-     */
-    renderProjects(data) {
-        if (!this.element) {
-            console.warn('[ProjectListComponent] renderProjects called without a valid container element.');
-            return;
-        }
-
-        // Normalize data
-        let projects = [];
-        if (Array.isArray(data)) {
-            projects = data;
-        } else if (data?.projects) {
-            projects = data.projects;
-        } else if (data?.data?.projects) {
-            projects = data.data.projects;
-        }
-
-        this.state.projects = projects;
-
-        // If user not authenticated, show login prompt
-        if (!window.app.state.isAuthenticated) {
-            this._showLoginRequired();
-            return;
-        }
-
-        // Show empty state if no projects
-        if (projects.length === 0) {
-            this._showEmptyState();
-            return;
-        }
-
-        // Clear and render
         this.element.innerHTML = '';
-        const fragment = document.createDocumentFragment();
-
-        projects.forEach(project => {
-            const card = this._createProjectCard(project);
-            fragment.appendChild(card);
-        });
-
-        this.element.appendChild(fragment);
+        for (let i = 0; i < 6; i++) {
+            const skeleton = document.createElement('div');
+            skeleton.className = 'bg-base-200 animate-pulse rounded-lg p-4';
+            skeleton.innerHTML = `
+          <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
+          <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
+          <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
+          <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
+        `;
+            this.element.appendChild(skeleton);
+        }
     }
 
-    /* =========================================================================
-     * Internal Rendering Helpers
-     * ========================================================================= */
+    /**
+     * Show an empty state message when no projects exist.
+     * @private
+     */
+    _showEmptyState() {
+        if (!this.element) return;
+
+        this.element.innerHTML = `
+        <div class="col-span-3 text-center py-10">
+          <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+          </svg>
+          <p class="mt-4 text-lg">No projects found</p>
+          <p class="text-base-content/60 mt-1">Create a new project to get started</p>
+          <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
+        </div>
+      `;
+
+        // Wire up create button
+        const createBtn = document.getElementById('emptyStateCreateBtn');
+        if (createBtn) {
+            if (window.eventHandlers?.trackListener) {
+                window.eventHandlers.trackListener(createBtn, 'click', () => this._openNewProjectModal());
+            } else {
+                createBtn.addEventListener('click', () => this._openNewProjectModal());
+            }
+        }
+    }
+
+    /**
+     * Show a login prompt if user is not authenticated.
+     * @private
+     */
+    _showLoginRequired() {
+        if (!this.element) return;
+
+        this.element.innerHTML = `
+        <div class="col-span-3 text-center py-10">
+          <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
+            </path>
+          </svg>
+          <p class="mt-4 text-lg">Please log in to view your projects</p>
+          <button id="loginButton" class="btn btn-primary mt-4">Login</button>
+        </div>
+      `;
+
+        // Wire up login button
+        const loginBtn = document.getElementById('loginButton');
+        if (loginBtn) {
+            if (window.eventHandlers?.trackListener) {
+                window.eventHandlers.trackListener(loginBtn, 'click', (e) => {
+                    e.preventDefault();
+                    const authButton = document.getElementById('authButton');
+                    const authDropdown = document.getElementById('authDropdown');
+                    if (authButton && authDropdown) {
+                        authDropdown.classList.remove('hidden');
+                        authButton.setAttribute('aria-expanded', 'true');
+                        // Ensure login tab is active
+                        if (typeof window.switchAuthTab === 'function') {
+                            window.switchAuthTab('login');
+                        } else if (typeof switchAuthTab === 'function') {
+                            switchAuthTab('login');
+                        }
+                    } else {
+                        // Fallback: notify user or log error
+                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
+                        if (window.app?.showNotification) {
+                            window.app.showNotification(fallbackMsg, "error");
+                        } else {
+                            alert(fallbackMsg);
+                        }
+                    }
+                });
+            } else {
+                loginBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const authButton = document.getElementById('authButton');
+                    const authDropdown = document.getElementById('authDropdown');
+                    if (authButton && authDropdown) {
+                        authDropdown.classList.remove('hidden');
+                        authButton.setAttribute('aria-expanded', 'true');
+                        if (typeof window.switchAuthTab === 'function') {
+                            window.switchAuthTab('login');
+                        } else if (typeof switchAuthTab === 'function') {
+                            switchAuthTab('login');
+                        }
+                    } else {
+                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
+                        if (window.app?.showNotification) {
+                            window.app.showNotification(fallbackMsg, "success");
+                        } else {
+                            console.log(fallbackMsg);
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    /**
+     * Show a generic error state.
+     * @param {string} message
+     * @private
+     */
+    _showErrorState(message) {
+        if (!this.element) return;
+
+        const fallbackMsg = typeof message === 'string' && message.trim().length > 0
+            ? message
+            : "An unknown error occurred.";
+
+        this.element.innerHTML = `
+        <div class="col-span-3 text-center py-10">
+          <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <p class="mt-4 text-lg text-error">${fallbackMsg}</p>
+          <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
+        </div>
+      `;
+
+        const retryBtn = document.getElementById('retryButton');
+        if (retryBtn) {
+            if (window.eventHandlers?.trackListener) {
+                window.eventHandlers.trackListener(retryBtn, 'click', () => this._loadProjects());
+            } else {
+                retryBtn.addEventListener('click', () => this._loadProjects());
+            }
+        }
+    }
 
     /**
      * Creates a project card element with relevant action buttons.
@@ -592,175 +802,6 @@ class ProjectListComponent {
     }
 
     /**
-     * Shows a loading skeleton while data is being fetched.
-     * @private
-     */
-    _showLoadingState() {
-        if (!this.element) return;
-
-        this.element.innerHTML = '';
-        for (let i = 0; i < 6; i++) {
-            const skeleton = document.createElement('div');
-            skeleton.className = 'bg-base-200 animate-pulse rounded-lg p-4';
-            skeleton.innerHTML = `
-        <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
-        <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-        <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
-        <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
-      `;
-            this.element.appendChild(skeleton);
-        }
-    }
-
-    /**
-     * Show an empty state message when no projects exist.
-     * @private
-     */
-    _showEmptyState() {
-        if (!this.element) return;
-
-        this.element.innerHTML = `
-      <div class="col-span-3 text-center py-10">
-        <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-        </svg>
-        <p class="mt-4 text-lg">No projects found</p>
-        <p class="text-base-content/60 mt-1">Create a new project to get started</p>
-        <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
-      </div>
-    `;
-
-        // Wire up create button
-        const createBtn = document.getElementById('emptyStateCreateBtn');
-        if (createBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(createBtn, 'click', () => this._openNewProjectModal());
-            } else {
-                createBtn.addEventListener('click', () => this._openNewProjectModal());
-            }
-        }
-    }
-
-    /**
-     * Show a login prompt if user is not authenticated.
-     * @private
-     */
-    _showLoginRequired() {
-        if (!this.element) return;
-
-        this.element.innerHTML = `
-      <div class="col-span-3 text-center py-10">
-        <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
-          </path>
-        </svg>
-        <p class="mt-4 text-lg">Please log in to view your projects</p>
-        <button id="loginButton" class="btn btn-primary mt-4">Login</button>
-      </div>
-    `;
-
-        // Wire up login button
-        const loginBtn = document.getElementById('loginButton');
-        if (loginBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(loginBtn, 'click', (e) => {
-                    e.preventDefault();
-                    const authButton = document.getElementById('authButton');
-                    const authDropdown = document.getElementById('authDropdown');
-                    if (authButton && authDropdown) {
-                        authDropdown.classList.remove('hidden');
-                        authButton.setAttribute('aria-expanded', 'true');
-                        // Ensure login tab is active
-                        if (typeof window.switchAuthTab === 'function') {
-                            window.switchAuthTab('login');
-                        } else if (typeof switchAuthTab === 'function') {
-                            switchAuthTab('login');
-                        }
-                    } else {
-                        // Fallback: notify user or log error
-                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
-                        if (window.app?.showNotification) {
-                            window.app.showNotification(fallbackMsg, "error");
-                        } else {
-                            alert(fallbackMsg);
-                        }
-                    }
-                });
-            } else {
-                loginBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const authButton = document.getElementById('authButton');
-                    const authDropdown = document.getElementById('authDropdown');
-                    if (authButton && authDropdown) {
-                        authDropdown.classList.remove('hidden');
-                        authButton.setAttribute('aria-expanded', 'true');
-                        if (typeof window.switchAuthTab === 'function') {
-                            window.switchAuthTab('login');
-                        } else if (typeof switchAuthTab === 'function') {
-                            switchAuthTab('login');
-                        }
-                    } else {
-                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
-                        if (window.app?.showNotification) {
-                            window.app.showNotification(fallbackMsg, "success");
-                        } else {
-                            console.log(fallbackMsg);
-                        }
-                    }
-                });
-            }
-        }
-    }
-
-    /**
-     * Show a generic error state.
-     * @param {string} message
-     * @private
-     */
-    _showErrorState(message) {
-        if (!this.element) return;
-
-        const fallbackMsg = typeof message === 'string' && message.trim().length > 0
-            ? message
-            : "An unknown error occurred.";
-
-        this.element.innerHTML = `
-      <div class="col-span-3 text-center py-10">
-        <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <p class="mt-4 text-lg text-error">${fallbackMsg}</p>
-        <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
-      </div>
-    `;
-
-        const retryBtn = document.getElementById('retryButton');
-        if (retryBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(retryBtn, 'click', () => this._loadProjects());
-            } else {
-                retryBtn.addEventListener('click', () => this._loadProjects());
-            }
-        }
-    }
-
-    /**
-     * Handle opening the "new project" modal.
-     * @private
-     */
-    _openNewProjectModal() {
-        if (window.projectModal?.openModal) {
-            window.projectModal.openModal();
-        } else {
-            console.error('[ProjectListComponent] window.projectModal.openModal not available');
-        }
-    }
-
-
-    /**
      * Format date strings for display.
      * @param {string} dateString
      * @returns {string}
@@ -803,5 +844,21 @@ class ProjectListComponent {
     }
 }
 
-// Expose to global
-window.ProjectListComponent = ProjectListComponent;
+/**
+ * Factory function to create a new ProjectListComponent instance.
+ * @param {Object} options - Configuration options
+ * @returns {ProjectListComponent} A new ProjectListComponent instance.
+ */
+export function createProjectListComponent(options = {}) {
+    return new ProjectListComponent(options);
+}
+
+// For backward compatibility and module registration, app.js will use this code
+// instead of having the module self-initialize:
+/*
+const projectListComponent = createProjectListComponent({ elementId: 'projectList' });
+await projectListComponent.initialize();
+window.ProjectListComponent = ProjectListComponent; // Keep class constructor for backward compatibility
+window.projectListComponent = projectListComponent; // Instance for immediate use
+DependencySystem.register('projectListComponent', projectListComponent);
+*/

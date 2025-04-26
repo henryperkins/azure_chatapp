@@ -583,14 +583,8 @@ const publicAuth = {
   }
 };
 
-// Register with DependencySystem if available
+// Register with DependencySystem; DependencySystem is always available before this script loads.
 window.auth = publicAuth;
-
-if (window.DependencySystem) {
-  window.DependencySystem.register('auth', publicAuth);
-  console.log('[auth.js] Registered auth module with DependencySystem');
-} else {
-  console.warn('[auth.js] DependencySystem not found, attached auth to window');
-}
+window.DependencySystem.register('auth', publicAuth);
 
 export default publicAuth;

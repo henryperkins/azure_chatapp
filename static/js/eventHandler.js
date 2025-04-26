@@ -652,22 +652,6 @@ window.eventHandlers = {
   PRIORITY
 };
 
-// Register with DependencySystem when it becomes available
-if (window.DependencySystem) {
-  window.DependencySystem.register('eventHandlers', window.eventHandlers);
-} else {
-  // Wait for DependencySystem to be available
-  Object.defineProperty(window, 'DependencySystem', {
-    configurable: true,
-    set: function(value) {
-      Object.defineProperty(window, 'DependencySystem', {
-        value: value,
-        configurable: true,
-        writable: true
-      });
-      value.register('eventHandlers', window.eventHandlers);
-    }
-  });
-}
+window.DependencySystem.register('eventHandlers', window.eventHandlers);
 
 export default window.eventHandlers;
