@@ -412,12 +412,6 @@ function setupForm(formId, submitHandler, options = {}) {
  * Internal helper to retry the init process multiple times if needed.
  */
 
-/**
- * Initialize all event handlers
- */
-function init() {
-  attemptInit();
-}
 
 /**
  * Wrapper for authentication state changes.
