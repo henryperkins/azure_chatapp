@@ -665,10 +665,13 @@ function handleAuthStateChange(event) {
         } else {
             // Hide the login-required message, reveal project view if appropriate.
             loginRequiredMessage?.classList.add('hidden');
-            projectListView?.classList.remove('hidden');
-            setTimeout(() => {
-                projectListView.classList.remove('opacity-0');
-            }, 100);
+            projectListView?.classList.remove('hidden', 'opacity-0');
+            if (projectListView) projectListView.style.display = '';
+            
+            // If projectDashboard is available, use it to show project list
+            if (window.projectDashboard?.showProjectList) {
+                setTimeout(() => window.projectDashboard.showProjectList(), 50);
+            }
 
             // If the user is on a details view, keep the details visible. Otherwise show list.
             if (window.projectDashboard?.state?.currentView === 'details' &&

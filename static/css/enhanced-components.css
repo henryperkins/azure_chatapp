@@ -1,11 +1,11 @@
-/* Enhanced Components CSS for Azure Chat Application
- * Uses Tailwind CSS v4 + DaisyUI 5
- * 
- * This file supplements the main tailwind.css with enhanced component styles
- * focusing on accessibility, visual design, and workflow efficiency.
- */
+/* =============================================================================
+   enhanced-components.css
+   =============================================================================
+   Enhanced Components CSS for Azure Chat Application
+   Tailwind CSS v4 + DaisyUI 5
+*/
 
-@import "tailwindcss";
+/* Do NOT "@import 'tailwindcss';" here. This file is included by tailwind.css. */
 
 /* Enhanced Dracula theme with better contrast ratios for accessibility */
 @plugin "daisyui/theme" {
@@ -13,25 +13,25 @@
   default: true;
   prefersdark: true;
   color-scheme: "dark";
-  
+
   /* Base colors with improved contrast */
   --color-base-100: oklch(28.822% 0.022 277.508);
-  --color-base-200: oklch(25.805% 0.02 277.508); 
+  --color-base-200: oklch(25.805% 0.02 277.508);
   --color-base-300: oklch(22.787% 0.019 277.508);
   --color-base-content: oklch(98.747% 0.007 106.545);
-  
+
   /* Primary colors with better contrast */
   --color-primary: oklch(76.461% 0.198 346.812);
   --color-primary-content: oklch(16.092% 0.036 346.812);
-  
+
   /* Secondary colors */
   --color-secondary: oklch(74.202% 0.148 301.883);
   --color-secondary-content: oklch(15.84% 0.029 301.883);
-  
+
   /* Accent colors */
   --color-accent: oklch(85.392% 0.144 66.558);
   --color-accent-content: oklch(17.678% 0.024 66.558);
-  
+
   /* State colors with enhanced contrast */
   --color-info: oklch(88.263% 0.123 212.846);
   --color-info-content: oklch(18.652% 0.025 212.846);
@@ -41,19 +41,19 @@
   --color-warning-content: oklch(20.106% 0.046 112.757);
   --color-error: oklch(72.22% 0.226 24.43);
   --color-error-content: oklch(14.644% 0.051 24.43);
-  
+
   /* Enhanced border radius for better visual appeal */
   --radius-selector: 0.75rem;
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
-  
+
   /* Enhanced sizing for better touch targets */
   --size-selector: 0.3rem;
   --size-field: 0.3rem;
-  
+
   /* Border settings */
   --border: 1px;
-  
+
   /* Visual effects */
   --depth: 0.5;
   --noise: 0;
@@ -64,25 +64,25 @@
   name: "azure-light";
   prefersdark: false;
   color-scheme: "light";
-  
+
   /* Base colors */
   --color-base-100: oklch(98% 0.01 270);
   --color-base-200: oklch(95% 0.02 270);
   --color-base-300: oklch(92% 0.03 270);
   --color-base-content: oklch(27% 0.02 270);
-  
+
   /* Primary colors */
   --color-primary: oklch(60% 0.18 275);
   --color-primary-content: oklch(96% 0.01 275);
-  
+
   /* Secondary colors */
   --color-secondary: oklch(70% 0.15 240);
   --color-secondary-content: oklch(97% 0.01 240);
-  
+
   /* Accent colors */
   --color-accent: oklch(65% 0.16 210);
   --color-accent-content: oklch(97% 0.01 210);
-  
+
   /* State colors */
   --color-info: oklch(79% 0.12 212);
   --color-info-content: oklch(20% 0.02 212);
@@ -92,32 +92,27 @@
   --color-warning-content: oklch(25% 0.03 90);
   --color-error: oklch(70% 0.18 24);
   --color-error-content: oklch(98% 0.01 24);
-  
+
   /* Enhanced border radius for better visual appeal */
   --radius-selector: 0.75rem;
   --radius-field: 0.5rem;
   --radius-box: 0.75rem;
-  
+
   /* Enhanced sizing for better touch targets */
   --size-selector: 0.3rem;
   --size-field: 0.3rem;
-  
+
   /* Border settings */
   --border: 1px;
-  
+
   /* Visual effects */
   --depth: 0.3;
   --noise: 0;
 }
 
-/* Enhanced Accessibility Styles */
+/* ======================= Enhanced Accessibility Styles ====================== */
 
 /* Focus styles for better keyboard navigation */
-.focus-style {
-  @apply outline-offset-2 outline-2 outline-primary;
-}
-
-/* Enhanced focus indicators for interactive elements */
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
@@ -127,10 +122,10 @@ textarea:focus-visible,
 .btn:focus-visible,
 .menu-item:focus-visible,
 [role="button"]:focus-visible {
-  @apply focus-style;
+  @apply outline-offset-2 outline-2 outline-primary;
 }
 
-/* Stronger visual indication of interactive elements for clarity */
+/* Buttons */
 .btn {
   @apply transition duration-200;
 }
@@ -147,16 +142,16 @@ textarea:focus-visible,
 .input:focus-visible,
 .select:focus-visible,
 .textarea:focus-visible {
-  @apply ring-2 ring-primary ring-opacity-70;
+  @apply ring-2 ring-primary;
 }
 
 .input-error,
 .select-error,
 .textarea-error {
-  @apply border-error border-opacity-50;
+  @apply border-error;
 }
 
-/* Input validation states with clear visual indication */
+/* Input validation states */
 .validator-success {
   @apply border-success;
 }
@@ -188,7 +183,8 @@ textarea:focus-visible,
 }
 
 .loading-overlay {
-  @apply absolute inset-0 bg-base-200 bg-opacity-50 flex items-center justify-center z-50;
+  @apply absolute inset-0 bg-base-200 flex items-center justify-center z-50;
+  /* For semi-transparency, use a slash alpha or RGBA in your HTML or an override. */
 }
 
 /* Enhanced Chat UI */
@@ -218,12 +214,11 @@ textarea:focus-visible,
 
 /* Enhanced Knowledge Base UI */
 .kb-result-card {
-  @apply card card-compact bg-base-100 shadow-sm hover:shadow-md transition-all 
-         border border-base-300 cursor-pointer;
+  @apply card bg-base-100 shadow-sm hover:shadow-md transition-all border border-base-300 cursor-pointer;
 }
 
 .kb-result-card:focus-visible {
-  @apply focus-style;
+  @apply outline-offset-2 outline-2 outline-primary;
 }
 
 .kb-result-relevance {
@@ -252,20 +247,20 @@ textarea:focus-visible,
 }
 
 .sidebar-nav-item.active {
-  @apply bg-primary bg-opacity-20 text-primary-content;
+  @apply bg-primary text-primary-content;
 }
 
 /* Enhanced Tabs */
 .enhanced-tabs {
-  @apply tabs tabs-bordered gap-1;
+  @apply gap-1;
 }
 
 .enhanced-tab {
-  @apply tab tab-lg transition-all duration-200;
+  @apply transition-all duration-200;
 }
 
 .enhanced-tab.tab-active {
-  @apply tab-border-primary font-medium;
+  @apply font-medium;
 }
 
 /* Enhanced Skeleton Loading State */
@@ -281,23 +276,22 @@ textarea:focus-visible,
   @apply h-12 w-12 bg-base-300 rounded-full;
 }
 
-/* Enhanced File Upload Component */
+/* Enhanced File Upload Zones */
 .upload-zone {
-  @apply border-2 border-dashed border-base-300 rounded-box p-8 
-         text-center transition-all duration-300;
+  @apply border-2 border-dashed border-base-300 rounded-box p-8 text-center transition-all duration-300;
 }
 
 .upload-zone-active {
-  @apply border-primary border-opacity-70 bg-primary bg-opacity-5;
+  @apply border-primary bg-primary;
+  /* For partial opacity, use e.g. border-primary/70 bg-primary/5 in HTML. */
 }
 
 .upload-zone-error {
-  @apply border-error border-opacity-70 bg-error bg-opacity-5;
+  @apply border-error bg-error;
 }
 
 .file-preview {
-  @apply p-2 border border-base-300 rounded-box flex items-center gap-2 
-         bg-base-100 mt-2;
+  @apply p-2 border border-base-300 rounded-box flex items-center gap-2 bg-base-100 mt-2;
 }
 
 .file-preview-icon {
@@ -318,7 +312,7 @@ textarea:focus-visible,
 
 /* Enhanced Notification Styling */
 .notification {
-  @apply alert shadow-lg max-w-md animate-in fade-in slide-in-from-right-4 duration-300;
+  @apply alert shadow-lg max-w-md duration-300;
 }
 
 .notification-success {
@@ -367,17 +361,16 @@ textarea:focus-visible,
 }
 
 .floating-label span {
-  @apply absolute left-3 -top-2 px-1 text-xs transition-all
-         pointer-events-none bg-base-100 text-base-content/70;
+  @apply absolute left-3 -top-2 px-1 text-xs transition-all pointer-events-none bg-base-100 text-base-content/70;
 }
 
-.floating-label input:placeholder-shown + span,
-.floating-label textarea:placeholder-shown + span {
+.floating-label input:placeholder-shown+span,
+.floating-label textarea:placeholder-shown+span {
   @apply top-1/2 -translate-y-1/2 text-base;
 }
 
-.floating-label input:focus + span,
-.floating-label textarea:focus + span {
+.floating-label input:focus+span,
+.floating-label textarea:focus+span {
   @apply -top-2 text-xs text-primary;
 }
 
@@ -387,8 +380,7 @@ textarea:focus-visible,
 }
 
 .skip-to-content {
-  @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50
-         focus:p-2 focus:bg-primary focus:text-primary-content focus:rounded;
+  @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:p-2 focus:bg-primary focus:text-primary-content focus:rounded;
 }
 
 /* Status Indicators */
@@ -450,5 +442,5 @@ textarea:focus-visible,
   @apply flex gap-1 justify-end;
 }
 
-/* Include DaisyUI */
-@plugin "daisyui";
+/* Include DaisyUI plugin at the end if not in aggregator */
+/* @plugin "daisyui"; */

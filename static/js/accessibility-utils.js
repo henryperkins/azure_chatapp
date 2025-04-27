@@ -19,7 +19,7 @@
     enhanceFormAccessibility();
     improveModalAccessibility();
     setupSkipLinks();
-    
+
     // Register with DependencySystem if available
     if (window.DependencySystem) {
       window.DependencySystem.register('accessibilityUtils', {
@@ -48,14 +48,14 @@
         e.preventDefault();
         toggleKeyboardHelp();
       }
-      
+
       // 'N' for new project/conversation
       if (e.key === 'n' && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
         const newProjBtn = document.getElementById('sidebarNewProjectBtn');
         if (newProjBtn) newProjBtn.click();
       }
-      
+
       // 'S' to focus search
       if (e.key === 's' && !e.ctrlKey && !e.altKey && !e.metaKey) {
         e.preventDefault();
@@ -65,7 +65,7 @@
           searchBox.select();
         }
       }
-      
+
       // ESC to close keyboard help
       if (e.key === 'Escape') {
         const keyboardHelp = document.getElementById('keyboardHelp');
@@ -90,27 +90,27 @@
   function toggleKeyboardHelp(showHelp) {
     const keyboardHelp = document.getElementById('keyboardHelp');
     if (!keyboardHelp) return;
-    
+
     const isCurrentlyShown = !keyboardHelp.classList.contains('hidden');
     const shouldShow = showHelp === undefined ? !isCurrentlyShown : showHelp;
-    
+
     if (shouldShow && isCurrentlyShown) return;
     if (!shouldShow && !isCurrentlyShown) return;
-    
+
     if (shouldShow) {
       // Store last focused element before showing help
       lastFocusedElement = document.activeElement;
       keyboardHelp.classList.remove('hidden');
-      
+
       // Focus first interactive element in the help dialog
       const closeBtn = keyboardHelp.querySelector('button');
       if (closeBtn) setTimeout(() => closeBtn.focus(), 50);
-      
+
       // Trap focus in the dialog
       trapFocusInElement(keyboardHelp);
     } else {
       keyboardHelp.classList.add('hidden');
-      
+
       // Return focus to previous element
       if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
         setTimeout(() => lastFocusedElement.focus(), 50);
@@ -136,7 +136,7 @@
         handleFormValidation(e.target, false);
       }
     }, true);
-    
+
     document.addEventListener('change', function(e) {
       if (e.target.classList.contains('validator')) {
         handleFormValidation(e.target, e.target.validity.valid);
@@ -156,7 +156,7 @@
       hintEl.className = 'validator-hint';
       input.insertAdjacentElement('afterend', hintEl);
     }
-    
+
     if (isValid) {
       input.classList.add('validator-success');
       input.classList.remove('validator-error');
@@ -167,7 +167,7 @@
       input.classList.add('validator-error');
       input.classList.remove('validator-success');
       hintEl.className = 'validator-hint validator-hint-error';
-      
+
       // Set appropriate error message based on validity state
       if (input.validity.valueMissing) {
         hintEl.textContent = 'This field is required';
@@ -182,7 +182,7 @@
       } else {
         hintEl.textContent = 'Please enter a valid value';
       }
-      
+
       hintEl.setAttribute('aria-live', 'assertive');
     }
   }
@@ -194,8 +194,8 @@
     // Monitor for dialog/modal openings
     const observer = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && 
-            mutation.attributeName === 'open' && 
+        if (mutation.type === 'attributes' &&
+            mutation.attributeName === 'open' &&
             mutation.target.tagName === 'DIALOG') {
           const dialog = mutation.target;
           if (dialog.hasAttribute('open')) {
@@ -204,12 +204,12 @@
         }
       });
     });
-    
+
     // Observe all existing and future dialogs
     document.querySelectorAll('dialog').forEach(dialog => {
       observer.observe(dialog, { attributes: true });
     });
-    
+
     // Check for new dialogs when content changes
     const bodyObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
@@ -226,8 +226,8 @@
         }
       });
     });
-    
-    bodyObserver.observe(document.body, { 
+
+    bodyObserver.observe(document.body, {
       childList: true,
       subtree: true
     });
@@ -255,20 +255,20 @@
    */
   function trapFocusInElement(element) {
     if (!element) return;
-    
+
     const focusableElements = getFocusableElements(element);
     if (focusableElements.length === 0) return;
-    
+
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
-    
+
     element.addEventListener('keydown', function(e) {
       if (e.key === 'Tab') {
         // Shift+Tab on first element goes to last element
         if (e.shiftKey && document.activeElement === firstElement) {
           e.preventDefault();
           lastElement.focus();
-        } 
+        }
         // Tab on last element goes to first element
         else if (!e.shiftKey && document.activeElement === lastElement) {
           e.preventDefault();
@@ -276,7 +276,7 @@
         }
       }
     });
-    
+
     // Focus first element on open
     setTimeout(() => {
       if (!element.contains(document.activeElement)) {
@@ -291,11 +291,11 @@
   function getFocusableElements(container) {
     const selector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     const candidates = Array.from(container.querySelectorAll(selector));
-    
+
     // Filter to only visible and enabled elements
     return candidates.filter(el => {
       return (
-        !el.disabled && 
+        !el.disabled &&
         el.offsetParent !== null &&
         getComputedStyle(el).visibility !== 'hidden'
       );
@@ -306,10 +306,10 @@
    * Focus a specific element with safety checks
    */
   function focusElement(selector, delay = 0) {
-    const element = typeof selector === 'string' ? 
-      document.querySelector(selector) : 
+    const element = typeof selector === 'string' ?
+      document.querySelector(selector) :
       selector;
-      
+
     if (element && typeof element.focus === 'function') {
       if (delay) {
         setTimeout(() => element.focus(), delay);
@@ -339,7 +339,7 @@
    */
   function announceScreenReaderText(text, importance = 'polite') {
     let announcer = document.getElementById('a11y-announcer');
-    
+
     if (!announcer) {
       announcer = document.createElement('div');
       announcer.id = 'a11y-announcer';
@@ -348,10 +348,10 @@
       announcer.setAttribute('aria-atomic', 'true');
       document.body.appendChild(announcer);
     }
-    
+
     // Clear previous text first
     announcer.textContent = '';
-    
+
     // Set new text after a short delay to ensure announcement
     setTimeout(() => {
       announcer.textContent = text;
@@ -364,6 +364,7 @@
     getFocusableElements,
     trapFocusInElement,
     toggleKeyboardShortcuts,
-    announceScreenReaderText
+    announceScreenReaderText,
+    isInputElement
   };
 })();

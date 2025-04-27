@@ -127,41 +127,67 @@ class ProjectDashboard {
    * Show the project list view and hide details.
    */
   showProjectList() {
+    console.log('[ProjectDashboard] Showing project list view');
+    
+    // Clear state
     this.state.currentView = 'list';
     this.state.currentProject = null;
 
     // Aggressively clear localStorage for robustness
     localStorage.removeItem('selectedProjectId');
+    
+    // Update URL (remove project param) - do this FIRST
+    const currentUrl = new URL(window.location);
+    if (currentUrl.searchParams.has('project')) {
+      currentUrl.searchParams.delete('project');
+      window.history.pushState({}, '', currentUrl.toString());
+      console.log('[ProjectDashboard] Cleared project param from URL');
+    }
 
-    // Dom-level, ARIA, and CSS toggles: ONLY #projectListView visible, details truly hidden
+    // DOM-level, ARIA, and CSS toggles: ONLY #projectListView visible, details truly hidden
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
-    if (listView) {
-      listView.classList.remove('hidden', 'opacity-0');
-      listView.setAttribute('aria-hidden', 'false');
-      listView.style.display = '';
-    }
+    
+    // Hide details view first
     if (detailsView) {
       detailsView.classList.add('hidden');
       detailsView.setAttribute('aria-hidden', 'true');
       detailsView.style.display = 'none';
+      console.log('[ProjectDashboard] Details view hidden');
+    }
+    
+    // Then show list view
+    if (listView) {
+      listView.classList.remove('hidden', 'opacity-0');
+      listView.setAttribute('aria-hidden', 'false');
+      listView.style.display = '';
+      console.log('[ProjectDashboard] List view shown');
     }
 
     // Components visibility control
     if (this.components.projectDetails) {
       this.components.projectDetails.hide();
     }
+    
     if (this.components.projectList) {
       this.components.projectList.show();
+      console.log('[ProjectDashboard] ProjectList component shown');
+    } else {
+      console.warn('[ProjectDashboard] ProjectList component not available');
     }
-
-    // Update URL (remove project param)
-    const currentUrl = new URL(window.location);
-    currentUrl.searchParams.delete('project');
-    window.history.pushState({}, '', currentUrl.toString());
 
     // Load projects (debounced if available)
     this._loadProjects();
+    
+    // Force a redraw for browsers that might have rendering issues
+    setTimeout(() => {
+      if (listView) {
+        listView.style.display = 'none';
+        // Force a reflow
+        void listView.offsetHeight;
+        listView.style.display = '';
+      }
+    }, 50);
   }
 
   /**
