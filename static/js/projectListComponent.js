@@ -319,17 +319,6 @@ class ProjectListComponent {
             window.projectManager.currentProjects = projects;
         }
 
-        // If user not authenticated, show login
-        const isAuthenticated = window.app?.state?.isAuthenticated ||
-                                window.auth?.isAuthenticated?.() ||
-                                (window.DependencySystem?.modules?.has('auth') &&
-                                window.DependencySystem.modules.get('auth').isAuthenticated?.());
-
-        if (!isAuthenticated) {
-            console.log('[ProjectListComponent] User not authenticated, showing login required');
-            this._showLoginRequired();
-            return;
-        }
 
         console.log('[ProjectListComponent] User is authenticated, rendering projects');
 
