@@ -1,18 +1,18 @@
-<!-- Project Creation/Edit Modal -->
+<!-- Project Creation/Edit Modal (Enhanced for Accessibility) -->
 <dialog id="projectModal" class="modal modal-bottom sm:modal-middle" role="dialog" aria-modal="true" aria-labelledby="projectModalTitle">
     <div class="modal-box max-w-2xl">
         <div class="flex justify-between items-center mb-6">
             <h3 id="projectModalTitle" class="text-2xl font-bold">Create New Project</h3>
             <button id="projectModalCloseBtn" type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close dialog">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
+                    stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
         <form id="projectModalForm">
             <input type="hidden" id="projectModalIdInput" name="projectId" value="" />
-            <div class="form-control mb-6">
+            <div class="form-control-enhanced">
                 <label for="projectModalNameInput" class="label">
                     <span class="label-text font-medium">Project Name <span class="text-error">*</span></span>
                 </label>
@@ -22,46 +22,60 @@
                        required
                        aria-required="true"
                        autocomplete="off"
-                       class="input input-bordered w-full focus:ring-2 focus:ring-primary"
-                       aria-describedby="projectForm-nameError" />
-                <label id="projectForm-nameError" class="label hidden" role="alert">
-                    <span class="label-text-alt text-error">Project name is required</span>
-                </label>
+                       class="input input-bordered w-full validator"
+                       aria-describedby="projectModalNameInput-hint" />
+                <p id="projectModalNameInput-hint" class="validator-hint hidden" role="alert"></p>
             </div>
-            <div class="mb-4">
-                <label for="projectModalDescInput" class="block text-sm font-medium text-base-content mb-1">
+            
+            <div class="form-control-enhanced">
+                <label for="projectModalDescInput" class="block text-sm font-medium text-base-content">
                     Description
                 </label>
                 <textarea id="projectModalDescInput"
                           name="description"
                           rows="3"
-                          class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                          placeholder="Description helps organize and understand project purpose"
+                          class="textarea textarea-bordered w-full"></textarea>
             </div>
-            <div class="mb-4">
-                <label for="projectModalGoalsInput" class="block text-sm font-medium text-base-content mb-1">
+            
+            <div class="form-control-enhanced">
+                <label for="projectModalGoalsInput" class="block text-sm font-medium text-base-content">
                     Goals
                 </label>
                 <textarea id="projectModalGoalsInput"
                           name="goals"
                           rows="3"
-                          class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                          placeholder="What are the main objectives of this project?"
+                          class="textarea textarea-bordered w-full"></textarea>
             </div>
-            <div class="mb-4">
-                <label for="projectModalMaxTokensInput"
-                    class="block text-sm font-medium text-base-content mb-1">
+            
+            <div class="form-control-enhanced">
+                <label for="projectModalMaxTokensInput" class="block text-sm font-medium text-base-content">
                     Maximum Tokens
                 </label>
                 <input id="projectModalMaxTokensInput"
                        name="maxTokens"
                        type="number"
                        value="200000"
+                       min="50000" 
+                       max="500000"
                        autocomplete="off"
-                       class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary" />
+                       class="input input-bordered w-full validator" />
                 <p class="text-base-content/60 text-xs mt-1">
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
             </div>
+            
+            <!-- Loading indicator -->
+            <div id="projectModalLoading" class="loading-container hidden my-4">
+                <div class="loading loading-spinner loading-md text-primary"></div>
+                <span class="ml-2">Processing request...</span>
+            </div>
+            
             <div class="modal-action">
+                <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
+                    <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
+                </kbd>
                 <button type="button" id="projectCancelBtn"
                     class="btn btn-ghost"
                     aria-label="Cancel and close dialog">
@@ -170,16 +184,15 @@
     </div>
 </div>
 
-<!-- Knowledge Base Settings Modal -->
+<!-- Knowledge Base Settings Modal (Enhanced) -->
 <dialog id="knowledgeBaseSettingsModal" class="modal" data-kb-debug="true">
     <div class="modal-box max-w-lg w-full">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-semibold">Knowledge Base Settings</h3>
-            <button id="closeKnowledgeSettingsBtn" type="button" class="btn btn-ghost btn-sm btn-square">
+            <h3 id="knowledgeBaseSettingsTitle" class="text-xl font-semibold">Knowledge Base Settings</h3>
+            <button id="closeKnowledgeSettingsBtn" type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close dialog">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18
-                6M6 6l12 12" />
+                    stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
@@ -187,72 +200,102 @@
         <form id="knowledgeBaseForm">
             <input type="hidden" id="knowledgeBaseIdInput" name="knowledge_base_id" value="" />
 
-            <div class="mb-4">
-                <label for="knowledgeBaseNameInput"
-                    class="block text-sm font-medium text-base-content mb-1">
-                    Knowledge Base Name*
+            <div class="form-control-enhanced">
+                <label for="knowledgeBaseNameInput" class="block text-sm font-medium text-base-content">
+                    Knowledge Base Name <span class="text-error">*</span>
                 </label>
-                <input id="knowledgeBaseNameInput" name="name" type="text" required
-                    class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary" />
+                <input id="knowledgeBaseNameInput" 
+                       name="name" 
+                       type="text" 
+                       required
+                       aria-required="true" 
+                       autocomplete="off"
+                       placeholder="Enter a descriptive name for this knowledge base"
+                       class="input input-bordered w-full validator" 
+                       aria-describedby="knowledgeBaseNameInput-hint" />
+                <p id="knowledgeBaseNameInput-hint" class="validator-hint hidden" role="alert"></p>
             </div>
 
-            <div class="mb-4">
-                <label for="knowledgeBaseDescInput"
-                    class="block text-sm font-medium text-base-content mb-1">
+            <div class="form-control-enhanced">
+                <label for="knowledgeBaseDescInput" class="block text-sm font-medium text-base-content">
                     Description
                 </label>
-                <textarea id="knowledgeBaseDescInput" name="description" rows="3"
-                    class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary"></textarea>
+                <textarea id="knowledgeBaseDescInput" 
+                          name="description" 
+                          rows="3"
+                          placeholder="Describe the purpose and content of this knowledge base"
+                          class="textarea textarea-bordered w-full"></textarea>
             </div>
 
-            <div class="mb-4">
-                <label for="embeddingModelSelect"
-                    class="block text-sm font-medium text-base-content mb-1">
+            <div class="form-control-enhanced">
+                <label for="embeddingModelSelect" class="block text-sm font-medium text-base-content">
                     Embedding Model
                 </label>
-                <select id="embeddingModelSelect" name="embedding_model"
-                    class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary">
+                <select id="embeddingModelSelect" 
+                        name="embedding_model"
+                        class="select select-bordered w-full">
                     <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (384d • Fast • Default)</option>
                     <option value="text-embedding-3-small">OpenAI: text-embedding-3-small (1536d • Recommended)</option>
                     <option value="text-embedding-3-large">OpenAI: text-embedding-3-large (3072d • Largest)</option>
                     <option value="embed-english-v3.0">Cohere: embed-english-v3.0 (1024d • English Only)</option>
                 </select>
-                <p class="text-xs text-base-content/60 mt-1">
+                <div class="model-error text-error text-xs mt-1 hidden"></div>
+                <p class="text-xs text-base-content/70 mt-1">
                     The embedding model determines how text is converted to vector representations for semantic search.
                 </p>
             </div>
 
-            <div class="mb-4">
-                <div class="flex items-center mb-2">
-                    <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files"
-                        class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" />
-                    <label for="processAllFilesCheckbox" class="ml-2 block text-sm text-base-content">
-                        Process all project files for knowledge search
+            <fieldset class="border border-base-300 rounded-box p-3 mt-4">
+                <legend class="text-sm font-medium px-1">Processing Options</legend>
+                
+                <div class="form-control mb-2">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files"
+                               class="checkbox checkbox-primary checkbox-sm" />
+                        <span class="label-text">Process all project files for knowledge search</span>
                     </label>
+                    <p class="text-xs text-base-content/70 mt-1 ml-7">
+                        This will process all existing files in the project for knowledge search.
+                        New files will be automatically processed when added.
+                    </p>
                 </div>
-                <p class="text-xs text-base-content/60 mt-1">
-                    This will process all existing files in the project for knowledge search. New files will be
-                    automatically
-                    processed when added.
-                </p>
+
+                <div class="form-control">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" id="autoEnableCheckbox" name="auto_enable"
+                               class="checkbox checkbox-primary checkbox-sm" checked />
+                        <span class="label-text">Automatically use knowledge in conversations</span>
+                    </label>
+                    <p class="text-xs text-base-content/70 mt-1 ml-7">
+                        When enabled, the AI will automatically search project files for relevant information
+                        when answering questions.
+                    </p>
+                </div>
+            </fieldset>
+
+            <!-- Processing status indicator -->
+            <div id="kbProcessingStatus" class="alert alert-info shadow-xs mt-4 hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+                     class="stroke-info shrink-0 w-5 h-5" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                    <h3 class="font-bold text-sm">Processing</h3>
+                    <div class="text-xs">Files will be processed in the background after saving.</div>
+                </div>
             </div>
 
-            <div class="mb-4">
-                <div class="flex items-center mb-2">
-                    <input type="checkbox" id="autoEnableCheckbox" name="auto_enable"
-                        class="h-4 w-4 text-blue-600 border-gray-300 rounded-sm" checked />
-                    <label for="autoEnableCheckbox" class="ml-2 block text-sm text-base-content">
-                        Automatically use knowledge in conversations
-                    </label>
-                </div>
-                <p class="text-xs text-base-content/60 mt-1">
-                    When enabled, the AI will automatically search your project files for relevant information when
-                    answering
-                    questions.
-                </p>
+            <!-- Loading indicator -->
+            <div id="kbSettingsLoading" class="loading-container hidden my-4">
+                <div class="loading loading-spinner loading-md text-primary"></div>
+                <span class="ml-2">Saving settings...</span>
             </div>
 
             <div class="flex justify-end gap-2 mt-6">
+                <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
+                    <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
+                </kbd>
                 <button type="button" id="cancelKnowledgeBaseFormBtn"
                     class="btn btn-outline">
                     Cancel
@@ -266,37 +309,68 @@
     </div>
 </dialog>
 
-<!-- Knowledge Result Detail Modal -->
+<!-- Knowledge Result Detail Modal (Enhanced) -->
 <dialog id="knowledgeResultModal" class="modal" data-kb-debug="true">
     <div class="modal-box max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
             <h3 id="knowledgeResultTitle" class="text-xl font-semibold">Knowledge Result</h3>
-            <button id="closeKnowledgeResultBtn" type="button" class="btn btn-ghost btn-sm btn-square">
+            <button id="closeKnowledgeResultBtn" type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close dialog">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6
-                18L18 6M6 6l12 12" />
+                    stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
-        <div class="mb-4">
-            <div class="flex items-center mb-2">
-                <div class="text-sm font-medium text-base-content/60 mr-2">Source:</div>
-                <div id="knowledgeResultSource" class="text-sm font-semibold">Filename</div>
-            </div>
-            <div class="flex items-center mb-4">
-                <div class="text-sm font-medium text-base-content/60 mr-2">Relevance:</div>
-                <div id="knowledgeResultScore" class="text-sm">Score</div>
+        
+        <div class="card card-compact bg-base-200 shadow-sm mb-4">
+            <div class="card-body p-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="flex items-center gap-2">
+                        <div class="badge badge-neutral">Source</div>
+                        <div id="knowledgeResultSource" class="text-sm font-medium truncate">Filename</div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="badge badge-neutral">Relevance</div>
+                        <div id="knowledgeResultScore" class="badge badge-lg kb-result-relevance-high">92%</div>
+                    </div>
+                    
+                    <div id="knowledgeResultMetadata" class="col-span-1 md:col-span-2 flex flex-wrap gap-2 text-xs text-base-content/70 border-t border-base-300 pt-2 mt-1">
+                        <span class="badge badge-ghost badge-sm">Type: <span id="knowledgeResultType">text</span></span>
+                        <span class="badge badge-ghost badge-sm">Last Modified: <span id="knowledgeResultDate">2024-04-12</span></span>
+                        <span class="badge badge-ghost badge-sm">Size: <span id="knowledgeResultSize">2.4 KB</span></span>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="bg-base-200 p-4 rounded-lg overflow-x-auto">
+        
+        <div class="bg-base-100 border border-base-300 p-4 rounded-box overflow-x-auto mb-4">
             <pre id="knowledgeResultContent" class="whitespace-pre-wrap text-sm" data-sanitize="true"></pre>
         </div>
-        <div class="mt-4 flex justify-end">
-            <button id="useInChatBtn" type="button"
-                class="btn btn-primary btn-sm">
+        
+        <div class="modal-action">
+            <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
+                <kbd class="kbd kbd-sm">Ctrl</kbd> + <kbd class="kbd kbd-sm">C</kbd> <span class="mx-1">to copy</span>
+            </kbd>
+            <button id="copyContentBtn" type="button" class="btn btn-outline btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                Copy
+            </button>
+            <button id="useInChatBtn" type="button" class="btn btn-primary btn-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
                 Use in Conversation
             </button>
+        </div>
+        
+        <!-- Feedback message for clipboard operations -->
+        <div id="copyFeedback" class="alert alert-success shadow-xs mt-2 hidden" role="alert">
+            <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Content copied to clipboard!</span>
         </div>
     </div>
 </dialog>

@@ -1,0 +1,454 @@
+/* Enhanced Components CSS for Azure Chat Application
+ * Uses Tailwind CSS v4 + DaisyUI 5
+ * 
+ * This file supplements the main tailwind.css with enhanced component styles
+ * focusing on accessibility, visual design, and workflow efficiency.
+ */
+
+@import "tailwindcss";
+
+/* Enhanced Dracula theme with better contrast ratios for accessibility */
+@plugin "daisyui/theme" {
+  name: "dracula-enhanced";
+  default: true;
+  prefersdark: true;
+  color-scheme: "dark";
+  
+  /* Base colors with improved contrast */
+  --color-base-100: oklch(28.822% 0.022 277.508);
+  --color-base-200: oklch(25.805% 0.02 277.508); 
+  --color-base-300: oklch(22.787% 0.019 277.508);
+  --color-base-content: oklch(98.747% 0.007 106.545);
+  
+  /* Primary colors with better contrast */
+  --color-primary: oklch(76.461% 0.198 346.812);
+  --color-primary-content: oklch(16.092% 0.036 346.812);
+  
+  /* Secondary colors */
+  --color-secondary: oklch(74.202% 0.148 301.883);
+  --color-secondary-content: oklch(15.84% 0.029 301.883);
+  
+  /* Accent colors */
+  --color-accent: oklch(85.392% 0.144 66.558);
+  --color-accent-content: oklch(17.678% 0.024 66.558);
+  
+  /* State colors with enhanced contrast */
+  --color-info: oklch(88.263% 0.123 212.846);
+  --color-info-content: oklch(18.652% 0.025 212.846);
+  --color-success: oklch(87.099% 0.229 148.024);
+  --color-success-content: oklch(18.419% 0.053 148.024);
+  --color-warning: oklch(95.533% 0.184 112.757);
+  --color-warning-content: oklch(20.106% 0.046 112.757);
+  --color-error: oklch(72.22% 0.226 24.43);
+  --color-error-content: oklch(14.644% 0.051 24.43);
+  
+  /* Enhanced border radius for better visual appeal */
+  --radius-selector: 0.75rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  
+  /* Enhanced sizing for better touch targets */
+  --size-selector: 0.3rem;
+  --size-field: 0.3rem;
+  
+  /* Border settings */
+  --border: 1px;
+  
+  /* Visual effects */
+  --depth: 0.5;
+  --noise: 0;
+}
+
+/* Light mode theme */
+@plugin "daisyui/theme" {
+  name: "azure-light";
+  prefersdark: false;
+  color-scheme: "light";
+  
+  /* Base colors */
+  --color-base-100: oklch(98% 0.01 270);
+  --color-base-200: oklch(95% 0.02 270);
+  --color-base-300: oklch(92% 0.03 270);
+  --color-base-content: oklch(27% 0.02 270);
+  
+  /* Primary colors */
+  --color-primary: oklch(60% 0.18 275);
+  --color-primary-content: oklch(96% 0.01 275);
+  
+  /* Secondary colors */
+  --color-secondary: oklch(70% 0.15 240);
+  --color-secondary-content: oklch(97% 0.01 240);
+  
+  /* Accent colors */
+  --color-accent: oklch(65% 0.16 210);
+  --color-accent-content: oklch(97% 0.01 210);
+  
+  /* State colors */
+  --color-info: oklch(79% 0.12 212);
+  --color-info-content: oklch(20% 0.02 212);
+  --color-success: oklch(75% 0.16 148);
+  --color-success-content: oklch(98% 0.01 148);
+  --color-warning: oklch(82% 0.15 90);
+  --color-warning-content: oklch(25% 0.03 90);
+  --color-error: oklch(70% 0.18 24);
+  --color-error-content: oklch(98% 0.01 24);
+  
+  /* Enhanced border radius for better visual appeal */
+  --radius-selector: 0.75rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  
+  /* Enhanced sizing for better touch targets */
+  --size-selector: 0.3rem;
+  --size-field: 0.3rem;
+  
+  /* Border settings */
+  --border: 1px;
+  
+  /* Visual effects */
+  --depth: 0.3;
+  --noise: 0;
+}
+
+/* Enhanced Accessibility Styles */
+
+/* Focus styles for better keyboard navigation */
+.focus-style {
+  @apply outline-offset-2 outline-2 outline-primary;
+}
+
+/* Enhanced focus indicators for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.tab:focus-visible,
+.btn:focus-visible,
+.menu-item:focus-visible,
+[role="button"]:focus-visible {
+  @apply focus-style;
+}
+
+/* Stronger visual indication of interactive elements for clarity */
+.btn {
+  @apply transition duration-200;
+}
+
+.btn:hover {
+  @apply shadow-md transform-gpu -translate-y-0.5;
+}
+
+.btn:active {
+  @apply shadow-sm transform-gpu translate-y-0;
+}
+
+/* Enhanced form field states */
+.input:focus-visible,
+.select:focus-visible,
+.textarea:focus-visible {
+  @apply ring-2 ring-primary ring-opacity-70;
+}
+
+.input-error,
+.select-error,
+.textarea-error {
+  @apply border-error border-opacity-50;
+}
+
+/* Input validation states with clear visual indication */
+.validator-success {
+  @apply border-success;
+}
+
+.validator-error {
+  @apply border-error;
+}
+
+.validator-hint {
+  @apply text-xs mt-1 opacity-90;
+}
+
+.validator-hint-error {
+  @apply text-error;
+}
+
+.validator-hint-success {
+  @apply text-success;
+}
+
+/* Enhanced Modals */
+.modal-box {
+  @apply max-h-[85vh] overflow-y-auto;
+}
+
+/* Enhanced Loading States */
+.loading-container {
+  @apply flex items-center justify-center p-4;
+}
+
+.loading-overlay {
+  @apply absolute inset-0 bg-base-200 bg-opacity-50 flex items-center justify-center z-50;
+}
+
+/* Enhanced Chat UI */
+.chat-container {
+  @apply flex flex-col space-y-4 p-4;
+}
+
+.chat-user {
+  @apply chat chat-end;
+}
+
+.chat-user .chat-bubble {
+  @apply chat-bubble-primary;
+}
+
+.chat-ai {
+  @apply chat chat-start;
+}
+
+.chat-ai .chat-bubble {
+  @apply chat-bubble-neutral;
+}
+
+.chat-timestamp {
+  @apply text-xs opacity-70 mt-1;
+}
+
+/* Enhanced Knowledge Base UI */
+.kb-result-card {
+  @apply card card-compact bg-base-100 shadow-sm hover:shadow-md transition-all 
+         border border-base-300 cursor-pointer;
+}
+
+.kb-result-card:focus-visible {
+  @apply focus-style;
+}
+
+.kb-result-relevance {
+  @apply badge badge-sm;
+}
+
+.kb-result-relevance-high {
+  @apply badge-success;
+}
+
+.kb-result-relevance-medium {
+  @apply badge-warning;
+}
+
+.kb-result-relevance-low {
+  @apply badge-ghost;
+}
+
+/* Enhanced Sidebar Navigation */
+.sidebar-nav {
+  @apply menu menu-vertical p-2 bg-base-200 w-full rounded-box;
+}
+
+.sidebar-nav-item {
+  @apply font-medium;
+}
+
+.sidebar-nav-item.active {
+  @apply bg-primary bg-opacity-20 text-primary-content;
+}
+
+/* Enhanced Tabs */
+.enhanced-tabs {
+  @apply tabs tabs-bordered gap-1;
+}
+
+.enhanced-tab {
+  @apply tab tab-lg transition-all duration-200;
+}
+
+.enhanced-tab.tab-active {
+  @apply tab-border-primary font-medium;
+}
+
+/* Enhanced Skeleton Loading State */
+.skeleton-card {
+  @apply card shadow-sm border border-base-300 animate-pulse p-4 bg-base-200;
+}
+
+.skeleton-text {
+  @apply h-4 bg-base-300 rounded my-2;
+}
+
+.skeleton-circle {
+  @apply h-12 w-12 bg-base-300 rounded-full;
+}
+
+/* Enhanced File Upload Component */
+.upload-zone {
+  @apply border-2 border-dashed border-base-300 rounded-box p-8 
+         text-center transition-all duration-300;
+}
+
+.upload-zone-active {
+  @apply border-primary border-opacity-70 bg-primary bg-opacity-5;
+}
+
+.upload-zone-error {
+  @apply border-error border-opacity-70 bg-error bg-opacity-5;
+}
+
+.file-preview {
+  @apply p-2 border border-base-300 rounded-box flex items-center gap-2 
+         bg-base-100 mt-2;
+}
+
+.file-preview-icon {
+  @apply text-lg opacity-70;
+}
+
+.file-preview-name {
+  @apply flex-1 truncate text-sm;
+}
+
+.file-preview-size {
+  @apply text-xs opacity-70;
+}
+
+.file-preview-remove {
+  @apply btn btn-ghost btn-xs btn-square text-error;
+}
+
+/* Enhanced Notification Styling */
+.notification {
+  @apply alert shadow-lg max-w-md animate-in fade-in slide-in-from-right-4 duration-300;
+}
+
+.notification-success {
+  @apply alert-success;
+}
+
+.notification-error {
+  @apply alert-error;
+}
+
+.notification-warning {
+  @apply alert-warning;
+}
+
+.notification-info {
+  @apply alert-info;
+}
+
+/* Enhanced Form Control Styling */
+.form-control-enhanced {
+  @apply relative mb-4;
+}
+
+.form-control-enhanced label {
+  @apply block text-sm font-medium mb-1;
+}
+
+.form-control-enhanced .input,
+.form-control-enhanced .select,
+.form-control-enhanced .textarea {
+  @apply w-full;
+}
+
+.form-control-enhanced .error-message {
+  @apply text-xs text-error mt-1 absolute -bottom-5;
+}
+
+/* More accessible floating labels */
+.floating-label {
+  @apply relative;
+}
+
+.floating-label input,
+.floating-label textarea {
+  @apply placeholder-transparent;
+}
+
+.floating-label span {
+  @apply absolute left-3 -top-2 px-1 text-xs transition-all
+         pointer-events-none bg-base-100 text-base-content/70;
+}
+
+.floating-label input:placeholder-shown + span,
+.floating-label textarea:placeholder-shown + span {
+  @apply top-1/2 -translate-y-1/2 text-base;
+}
+
+.floating-label input:focus + span,
+.floating-label textarea:focus + span {
+  @apply -top-2 text-xs text-primary;
+}
+
+/* A11y improvements */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+}
+
+.skip-to-content {
+  @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50
+         focus:p-2 focus:bg-primary focus:text-primary-content focus:rounded;
+}
+
+/* Status Indicators */
+.status-indicator {
+  @apply flex items-center gap-2;
+}
+
+.status-indicator-dot {
+  @apply status;
+}
+
+.status-indicator-dot-active {
+  @apply status-success;
+}
+
+.status-indicator-dot-inactive {
+  @apply status-error;
+}
+
+.status-indicator-dot-pending {
+  @apply status-warning;
+}
+
+.status-indicator-text {
+  @apply text-sm;
+}
+
+/* Keyboard Shortcuts */
+.kbd-container {
+  @apply flex flex-wrap gap-1 text-xs text-base-content/70;
+}
+
+.kbd-shortcut {
+  @apply kbd kbd-sm;
+}
+
+/* Better Tables for Data */
+.data-table {
+  @apply table table-zebra w-full;
+}
+
+.data-table-container {
+  @apply overflow-x-auto rounded-box border border-base-300 bg-base-100;
+}
+
+.data-table-heading {
+  @apply text-xs uppercase tracking-wider;
+}
+
+.data-table-row {
+  @apply hover:bg-base-200/50 transition-colors duration-150;
+}
+
+.data-table-cell {
+  @apply py-2 px-4;
+}
+
+.data-table-actions {
+  @apply flex gap-1 justify-end;
+}
+
+/* Include DaisyUI */
+@plugin "daisyui";
