@@ -312,6 +312,7 @@ class ProjectListComponent {
         console.log('%c[ProjectListComponent.renderProjects] Parsed projects array:', 'color: teal; font-weight: bold', projects);
 
         this.state.projects = projects || [];
+        this.show();
 
         // Store in projectManager if available
         if (window.projectManager) {
