@@ -619,6 +619,113 @@ function validatePassword(password) {
   };
 }
 
+/**
+ * Set up navigation-related elements
+ */
+function setupNavigationElements() {
+  // Toggle sidebar with button
+  const navToggleBtn = document.getElementById('navToggleBtn');
+  const mainSidebar = document.getElementById('mainSidebar');
+  const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+
+  if (navToggleBtn && mainSidebar) {
+    trackListener(navToggleBtn, 'click', () => {
+      mainSidebar.classList.toggle('-translate-x-full');
+      const isExpanded = !mainSidebar.classList.contains('-translate-x-full');
+      navToggleBtn.setAttribute('aria-expanded', isExpanded.toString());
+      mainSidebar.setAttribute('aria-hidden', (!isExpanded).toString());
+      console.log('[EventHandler] Sidebar toggled:', isExpanded ? 'open' : 'closed');
+    });
+  }
+
+  if (closeSidebarBtn && mainSidebar) {
+    trackListener(closeSidebarBtn, 'click', () => {
+      mainSidebar.classList.add('-translate-x-full');
+      if (navToggleBtn) {
+        navToggleBtn.setAttribute('aria-expanded', 'false');
+      }
+      mainSidebar.setAttribute('aria-hidden', 'true');
+    });
+  }
+
+  // Setup any other navigation-related elements
+  setupNavigation();
+}
+
+/**
+ * Set up content elements like tabs, etc.
+ */
+function setupContentElements() {
+  // Project tab navigation
+  const projectTabs = document.querySelectorAll('[role="tab"]');
+  if (projectTabs.length > 0) {
+    projectTabs.forEach(tab => {
+      trackListener(tab, 'click', () => {
+        const controlsId = tab.getAttribute('aria-controls');
+        const targetPanel = document.getElementById(controlsId);
+
+        // Hide all panels
+        document.querySelectorAll('[role="tabpanel"]').forEach(panel => {
+          panel.classList.add('hidden');
+        });
+
+        // Show the targeted panel
+        if (targetPanel) {
+          targetPanel.classList.remove('hidden');
+        }
+
+        // Update tab states
+        projectTabs.forEach(t => {
+          t.setAttribute('aria-selected', 'false');
+          t.classList.remove('tab-active');
+          t.tabIndex = -1;
+        });
+
+        tab.setAttribute('aria-selected', 'true');
+        tab.classList.add('tab-active');
+        tab.tabIndex = 0;
+      });
+    });
+  }
+
+  // Keyboard help modal
+  const keyboardHelpBtn = document.getElementById('keyboardHelpBtn');
+  const keyboardHelp = document.getElementById('keyboardHelp');
+
+  if (keyboardHelpBtn && keyboardHelp) {
+    trackListener(keyboardHelpBtn, 'click', () => {
+      keyboardHelp.classList.toggle('hidden');
+    });
+
+    // Close when clicking the close button or outside
+    const closeBtn = keyboardHelp.querySelector('.btn-ghost');
+    if (closeBtn) {
+      trackListener(closeBtn, 'click', () => {
+        keyboardHelp.classList.add('hidden');
+      });
+    }
+
+    trackListener(keyboardHelp, 'click', (e) => {
+      if (e.target === keyboardHelp) {
+        keyboardHelp.classList.add('hidden');
+      }
+    });
+  }
+
+  // Keyboard shortcuts
+  trackListener(document, 'keydown', (e) => {
+    // ? key for help
+    if (e.key === '?' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      keyboardHelp?.classList.toggle('hidden');
+    }
+
+    // Escape to close modals
+    if (e.key === 'Escape') {
+      keyboardHelp?.classList.add('hidden');
+    }
+  });
+}
+
 // Handle dynamic element reinitialization
 function reinitializeAuthElements() {
   const authButton = document.getElementById('authButton');
@@ -649,6 +756,23 @@ document.addEventListener('authStateChanged', reinitializeAuthElements);
  * @property {Function} init - Initialize all event handlers.
  * @property {Object} PRIORITY - Event priority levels.
  */
+/**
+ * Initialize all event handlers
+ * @returns {void}
+ */
+function init() {
+  // Setup common UI elements first
+  setupCommonElements();
+
+  // Setup navigation elements
+  setupNavigationElements();
+
+  // Setup main content handlers
+  setupContentElements();
+
+  console.log('[EventHandler] All handlers initialized');
+}
+
 window.eventHandlers = {
   trackListener,
   cleanupListeners,
