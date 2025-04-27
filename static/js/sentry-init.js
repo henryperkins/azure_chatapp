@@ -154,7 +154,11 @@
             window.SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE || '1.0'
           ),
           integrations: [
-            // Browser Tracing
+            // New BrowserTracing integration for automatic performance tracing
+            Sentry.browserTracingIntegration && Sentry.browserTracingIntegration({
+              // tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/], // optional
+            }),
+            // Browser Tracing (legacy, can be removed if using browserTracingIntegration)
             Sentry.BrowserTracing && Sentry.BrowserTracing({
               // advanced tracing config
             }),
