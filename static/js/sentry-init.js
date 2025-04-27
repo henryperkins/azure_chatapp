@@ -168,6 +168,9 @@
               // Optional: specify levels to capture
               // levels: ['log', 'info', 'warn', 'error', 'debug', 'assert']
             }),
+            Sentry.contextLinesIntegration && Sentry.contextLinesIntegration({
+              // frameContextLines: 7 // (optional)
+            }),
           ].filter(Boolean),
           beforeSend(event, hint) {
             // If user disables in real time or we discover dev environment
