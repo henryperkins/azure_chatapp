@@ -79,7 +79,16 @@
       modules: new Map(),
       states: new Map(),
       waiters: new Map(),
-      register(name, instance, dependencies = []) {
+      /**
+       * Register a module, ensuring all dependencies are loaded first.
+       * If dependencies are not loaded, waits for them before registering.
+       * Returns a Promise that resolves to the registered instance.
+       */
+      async register(name, instance, dependencies = []) {
+        if (dependencies && dependencies.length > 0) {
+          // Wait for all dependencies to be loaded before proceeding
+          await this.waitFor(dependencies);
+        }
         console.log(`[DependencySystem] Registering module: ${name}`);
         this.modules.set(name, instance);
         this.states.set(name, 'loaded');
@@ -111,6 +120,8 @@
           let resolved = false;
           const timeoutId = setTimeout(() => {
             if (!resolved) {
+              const errorMsg = `[DependencySystem] ERROR: Timeout waiting for dependencies: ${missing.join(', ')}. Registration or initialization failed because these dependencies were not satisfied.`;
+              console.error(errorMsg);
               console.warn(`[DependencySystem] Timeout waiting for: ${missing.join(', ')}`);
               resolved = true;
               resolve(nameArray.map(name => this.modules.get(name) || null));
@@ -138,43 +149,22 @@
     window.DependencySystem = DependencySystem;
   </script>
 
-  <!-- Tier 1: Core Utilities -->
+  <!-- Modules providing global side effects (must be loaded first) -->
   <script type="module" src="/static/js/utils.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
-  <script type="module" src="/static/js/notification-handler.js"></script>
-
-  <!-- Tier 2: Core Framework & Auth -->
   <script type="module" src="/static/js/eventHandler.js"></script>
+  <script type="module" src="/static/js/accessibility-utils.js"></script>
+
+  <!-- Authentication module (must be loaded before app.js and modules that depend on 'auth') -->
   <script type="module" src="/static/js/auth.js"></script>
 
-  <!-- Tier 3: Core Managers & State -->
+  <!-- Main application entrypoint (imports all other modules) -->
   <script type="module" src="/static/js/app.js"></script>
-  <script type="module" src="/static/js/modelConfig.js"></script>
-  <script type="module" src="/static/js/modalManager.js"></script> <!-- Needs app.js, eventHandler -->
-  <script type="module" src="/static/js/projectManager.js"></script> <!-- Needs app.js, auth.js -->
-  <script type="module" src="/static/js/sidebar.js"></script> <!-- Needs app.js -->
-  <script type="module" src="/static/js/chat.js"></script> <!-- Needs app.js, auth.js, modelConfig.js -->
 
-  <!-- Tier 4: UI Utilities & Component Definitions -->
-  <script type="module" src="/static/js/projectDashboardUtils.js"></script>
-  <!-- Needs managers, Provides uiUtilsInstance -->
-  <script type="module" src="/static/js/projectListComponent.js"></script> <!-- Needs managers, eventHandler -->
-  <script type="module" src="/static/js/projectDetailsComponent.js"></script> <!-- Needs managers, chatManager, utils -->
-  <script type="module" src="/static/js/knowledgeBaseComponent.js"></script>
-  <script type="module" src="/static/js/FileUploadComponent.js"></script>
-
-  <!-- Tier 5: UI Initialization & Rendering Logic -->
-  <script type="module" src="/static/js/projectDashboard.js"></script> <!-- Needs Component Classes, managers -->
-  <script type="module" src="/static/js/uiRenderer.js"></script> <!-- Needs sidebar, modelConfig -->
-  <script type="module" src="/static/js/chatExtensions.js"></script> <!-- Needs chatManager, auth, app -->
-
-  <!-- Tier 6: Enhanced UI & Accessibility -->
-  <script type="module" src="/static/js/theme-toggle.js"></script>
-  <script src="/static/js/accessibility-utils.js"></script>
+  <!-- Classic scripts (non-modules, loaded last) -->
+  <script src="/static/js/projectListComponent.js"></script>
+  <script src="/static/js/projectManager.js"></script>
   <script src="/static/js/kb-result-handlers.js"></script>
-  <script src="/static/js/sidebar-enhancements.js"></script>
-
-  <!-- Debug scripts -->
   <script src="/static/js/debug-project.js"></script>
   <script src="/static/js/fixes-verification.js"></script>
 </head>

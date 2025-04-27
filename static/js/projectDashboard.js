@@ -128,14 +128,14 @@ class ProjectDashboard {
    */
   showProjectList() {
     console.log('[ProjectDashboard] Showing project list view');
-    
+
     // Clear state
     this.state.currentView = 'list';
     this.state.currentProject = null;
 
     // Aggressively clear localStorage for robustness
     localStorage.removeItem('selectedProjectId');
-    
+
     // Update URL (remove project param) - do this FIRST
     const currentUrl = new URL(window.location);
     if (currentUrl.searchParams.has('project')) {
@@ -147,7 +147,7 @@ class ProjectDashboard {
     // DOM-level, ARIA, and CSS toggles: ONLY #projectListView visible, details truly hidden
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
-    
+
     // Hide details view first
     if (detailsView) {
       detailsView.classList.add('hidden');
@@ -155,7 +155,7 @@ class ProjectDashboard {
       detailsView.style.display = 'none';
       console.log('[ProjectDashboard] Details view hidden');
     }
-    
+
     // Then show list view
     if (listView) {
       listView.classList.remove('hidden', 'opacity-0');
@@ -168,7 +168,7 @@ class ProjectDashboard {
     if (this.components.projectDetails) {
       this.components.projectDetails.hide();
     }
-    
+
     if (this.components.projectList) {
       this.components.projectList.show();
       console.log('[ProjectDashboard] ProjectList component shown');
@@ -178,7 +178,7 @@ class ProjectDashboard {
 
     // Load projects (debounced if available)
     this._loadProjects();
-    
+
     // Force a redraw for browsers that might have rendering issues
     setTimeout(() => {
       if (listView) {
@@ -470,8 +470,30 @@ class ProjectDashboard {
    * @private
    */
   _loadProjects() {
-    if (window.app.state.isAuthenticated && window.projectManager?.loadProjects) {
-      window.projectManager.loadProjects('all');
+    console.log('[ProjectDashboard] Loading projects...');
+
+    // Check authentication from centralized state
+    if (!window.app?.state?.isAuthenticated) {
+      console.warn('[ProjectDashboard] Not authenticated, cannot load projects');
+      return;
+    }
+
+    // Ensure projectManager is available
+    if (!window.projectManager?.loadProjects) {
+      console.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
+      return;
+    }
+
+    try {
+      // Load projects with a slight delay to ensure DOM is ready
+      setTimeout(() => {
+        window.projectManager.loadProjects('all')
+          .catch(error => {
+            console.error('[ProjectDashboard] Error loading projects:', error);
+          });
+      }, 100);
+    } catch (error) {
+      console.error('[ProjectDashboard] Exception during project loading:', error);
     }
   }
 

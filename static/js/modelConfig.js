@@ -116,11 +116,55 @@ export function createModelConfig() {
   }
 
   function initializeUI() {
-    if (window.uiRenderer) {
-      if (typeof window.uiRenderer.setupModelDropdown === "function") window.uiRenderer.setupModelDropdown();
-      if (typeof window.uiRenderer.setupMaxTokensUI === "function") window.uiRenderer.setupMaxTokensUI();
-      if (typeof window.uiRenderer.setupVisionUI === "function") window.uiRenderer.setupVisionUI();
-    }
+    // Inline model config UI setup (formerly via uiRenderer)
+    if (typeof setupModelDropdown === "function") setupModelDropdown();
+    if (typeof setupMaxTokensUI === "function") setupMaxTokensUI();
+    if (typeof setupVisionUI === "function") setupVisionUI();
+  }
+
+  // --- Model Config UI Setup (migrated from uiRenderer.js) ---
+  function setupModelDropdown() {
+    const sel = document.getElementById('modelSelect');
+    if (!sel) return;
+    const options = getModelOptions();
+    sel.innerHTML = '';
+    options.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.id; opt.textContent = m.name;
+      if (m.description) opt.title = m.description;
+      sel.appendChild(opt);
+    });
+    const current = getConfig().modelName;
+    if (current) sel.value = current;
+    const handler = () => updateModelConfig({ modelName: sel.value });
+    if (window.eventHandlers?.trackListener) window.eventHandlers.trackListener(sel, 'change', handler);
+    else sel.addEventListener('change', handler);
+  }
+
+  function setupMaxTokensUI() {
+    const container = document.getElementById('maxTokensContainer');
+    if (!container) return;
+    const current = getConfig().maxTokens || 4096;
+    const slider = Object.assign(document.createElement('input'), { type: 'range', min: 100, max: 100000, value: current, className: 'w-full mt-2' });
+    const display = Object.assign(document.createElement('div'), { className: 'text-sm text-gray-600 dark:text-gray-400', textContent: `${current} tokens` });
+    const update = (v) => { const t = Math.max(100, Math.min(100000, +v)); display.textContent = `${t} tokens`; updateModelConfig({ maxTokens: t }); };
+    slider.addEventListener('input', (e) => update(e.target.value));
+    container.innerHTML = ''; container.append(slider, display);
+  }
+
+  function setupVisionUI() {
+    const panel = document.getElementById('visionPanel');
+    if (!panel) return;
+    const name = getConfig().modelName;
+    const supports = getModelOptions().find(m => m.id === name)?.supportsVision;
+    panel.classList.toggle('hidden', !supports);
+    if (!supports) return;
+    const toggle = Object.assign(document.createElement('input'), { type: 'checkbox', id: 'visionToggle', className: 'mr-2', checked: getConfig().visionEnabled });
+    const label = Object.assign(document.createElement('label'), { htmlFor: 'visionToggle', className: 'text-sm', textContent: 'Enable Vision' });
+    const handler = () => updateModelConfig({ visionEnabled: toggle.checked });
+    toggle.addEventListener('change', handler);
+    panel.innerHTML = '';
+    panel.append(toggle, label);
   }
 
   return {

@@ -67,10 +67,18 @@ function createProjectDashboardUtils() {
       if (options.textContent !== undefined) element.textContent = options.textContent;
       if (options.innerHTML !== undefined) element.innerHTML = options.innerHTML;
 
-      // Set event handlers
+      // Set event handlers - Enhanced to support multiple event types
       if (typeof options.onclick === 'function') {
         window.eventHandlers.trackListener(element, 'click', options.onclick);
       }
+
+      // Handle other event types (mouseenter, mouseleave, change, submit, etc.)
+      Object.entries(options).forEach(([key, handler]) => {
+        if (key.startsWith('on') && key !== 'onclick' && typeof handler === 'function') {
+          const eventType = key.substring(2).toLowerCase(); // Extract event type from property name
+          window.eventHandlers.trackListener(element, eventType, handler);
+        }
+      });
 
       // Set data attributes
       Object.entries(options).forEach(([key, value]) => {
@@ -89,21 +97,11 @@ function createProjectDashboardUtils() {
       return element;
     },
 
-    /**
-     * Toggle element visibility
-     * @param {HTMLElement|string} element - Element or selector
-     * @param {boolean} visible - Whether element should be visible
-     */
-    toggleVisible(element, visible) {
-      // Use canonical utility from eventHandlers
-      window.eventHandlers.toggleVisible(element, visible);
-    },
-
-    /**
-     * Format number with commas
-     * @param {number} number - Number to format
-     * @returns {string} - Formatted number
-     */
+  /**
+   * Format number with commas
+   * @param {number} number - Number to format
+   * @returns {string} - Formatted number
+   */
     formatNumber(number) {
       return new Intl.NumberFormat().format(number || 0);
     },
@@ -139,63 +137,7 @@ function createProjectDashboardUtils() {
     },
   };
 
-  /**
-   * Show notification
-   * @param {string} message - Notification message
-   * @param {string} type - Notification type (success, error, warning, info)
-   * @param {Object} options - Additional options
-   */
-  ProjectDashboard.showNotification = (message, type = 'info', options = {}) => {
-    // Canonical: always use notificationHandler if available, fallback to window.showNotification, else console.
-    if (window.notificationHandler?.show) {
-      return window.notificationHandler.show(message, type, options);
-    }
-    if (typeof window.showNotification === 'function') {
-      return window.showNotification(message, type, options);
-    }
-    // Last resort
-    console.log(`[${type.toUpperCase()}] ${message}`);
-  };
-
-  /**
-   * Set up a collapsible section
-   * @param {string} toggleId - Toggle button ID
-   * @param {string} panelId - Panel ID
-   * @param {Function} onExpand - Callback on expand
-   */
-  ProjectDashboard.setupCollapsible = (toggleId, panelId, onExpand) => {
-    // Use canonical helper from eventHandlers
-    window.eventHandlers.setupCollapsible(toggleId, panelId, undefined, onExpand);
-  };
-
-  /**
-   * Show project list view
-   */
-  ProjectDashboard.showProjectListView = () => {
-    const listView = document.getElementById('projectListView');
-    const detailsView = document.getElementById('projectDetailsView');
-
-    if (listView) {
-      listView.classList.remove('hidden');
-    }
-
-    if (detailsView) {
-      detailsView.classList.add('hidden');
-    }
-
-    // Update URL
-    const url = new URL(window.location);
-    url.searchParams.delete('project');
-    url.searchParams.delete('chatId');
-    window.history.pushState({}, '', url.toString());
-
-    // Check authentication and load projects
-    Promise.resolve(window.app.state.isAuthenticated).then(isAuthenticated => {
-      if (isAuthenticated && window.projectManager?.loadProjects) {
-        window.projectManager.loadProjects('all');
-      }
-    });
-  };
+  // Removed setupCollapsible wrapper in favor of directly using window.eventHandlers.setupCollapsible
 
   /**
    * Set up event listeners for UI elements
@@ -222,13 +164,24 @@ function createProjectDashboardUtils() {
         if (currentProject?.id && window.projectManager?.togglePinProject) {
           try {
             const updatedProject = await window.projectManager.togglePinProject(currentProject.id);
-            ProjectDashboard.showNotification(
-              `Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}`,
-              'success'
-            );
+            if (window.notificationHandler?.show) {
+              window.notificationHandler.show(
+                `Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}`,
+                'success'
+              );
+            } else if (window.app?.showNotification) {
+              window.app.showNotification(
+                `Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}`,
+                'success'
+              );
+            }
           } catch (error) {
             console.error('Failed to toggle pin:', error);
-            ProjectDashboard.showNotification('Failed to toggle pin', 'error');
+            if (window.notificationHandler?.show) {
+              window.notificationHandler.show('Failed to toggle pin', 'error');
+            } else if (window.app?.showNotification) {
+              window.app.showNotification('Failed to toggle pin', 'error');
+            }
           }
         }
       });
@@ -250,14 +203,25 @@ function createProjectDashboardUtils() {
             onConfirm: async () => {
               try {
                 await window.projectManager.toggleArchiveProject(currentProject.id);
-                ProjectDashboard.showNotification(
-                  `Project ${currentProject.archived ? 'unarchived' : 'archived'}`,
-                  'success'
-                );
-                ProjectDashboard.showProjectListView();
+                if (window.notificationHandler?.show) {
+                  window.notificationHandler.show(
+                    `Project ${currentProject.archived ? 'unarchived' : 'archived'}`,
+                    'success'
+                  );
+                } else if (window.app?.showNotification) {
+                  window.app.showNotification(
+                    `Project ${currentProject.archived ? 'unarchived' : 'archived'}`,
+                    'success'
+                  );
+                }
+                // Use centralized navigation logic (e.g., app.js or projectDashboard) here if needed
               } catch (error) {
                 console.error('Failed to toggle archive:', error);
-                ProjectDashboard.showNotification('Failed to toggle archive', 'error');
+                if (window.notificationHandler?.show) {
+                  window.notificationHandler.show('Failed to toggle archive', 'error');
+                } else if (window.app?.showNotification) {
+                  window.app.showNotification('Failed to toggle archive', 'error');
+                }
               }
             },
           });
@@ -279,24 +243,10 @@ function createProjectDashboardUtils() {
     return this;
   };
 
-  // Export to window
-  window.ProjectDashboard = ProjectDashboard;
-
-  // For backward compatibility
-  window.showProjectsView = ProjectDashboard.showProjectListView;
-  window.uiUtilsInstance = ProjectDashboard.UIUtils;
-
+  // Only assign these globals once - registration will be handled centrally in app.js
   return ProjectDashboard;
 }
 
-// Create and export the utils instance
-const projectDashboardUtils = createProjectDashboardUtils();
-
-// Register with dependency system
-if (window.DependencySystem) {
-  window.DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
-}
-
-// Make factory available on window for browser consumers; avoid ES exports to prevent SyntaxError in classic scripts.
-window.createProjectDashboardUtils = createProjectDashboardUtils;
-window.projectDashboardUtils = projectDashboardUtils;
+export { createProjectDashboardUtils };
+// Export the factory function only - let app.js handle the instantiation and registration
+// This prevents duplicate global assignments and ensures proper initialization order

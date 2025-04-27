@@ -46,7 +46,8 @@ const PRIORITY = {
 };
 
 /**
- * Track an event listener with proper wrapping and cleanup
+ * Track an event listener with proper wrapping and cleanup.
+ * Prevents duplicate registration for the same (element, type, handler, options, description) combo.
  * @param {EventTarget} element - DOM element to attach the listener to
  * @param {string} type - Event type (e.g. 'click', 'submit')
  * @param {Function} handler - Event handler function
@@ -69,6 +70,21 @@ function trackListener(element, type, handler, options = {}) {
   const usePassive = (typeof passive === 'boolean') ? passive : !nonPassiveEvents.includes(type);
 
   const finalOptions = { capture, once, signal, passive: usePassive };
+  const description = options.description || '';
+
+  // Prevent duplicate registration: check if a listener with the same signature is already tracked
+  for (const l of trackedListeners) {
+    if (
+      l.element === element &&
+      l.type === type &&
+      l.originalHandler === handler &&
+      JSON.stringify(l.options) === JSON.stringify(finalOptions) &&
+      l.description === description
+    ) {
+      // Already registered, skip
+      return l.handler;
+    }
+  }
 
   // Create wrapped handler with error handling
   const wrappedHandler = async function (event) {
@@ -110,7 +126,7 @@ function trackListener(element, type, handler, options = {}) {
     handler: wrappedHandler,
     options: finalOptions,
     originalHandler: handler,
-    description: options.description || '',
+    description,
     priority: options.priority || PRIORITY.NORMAL
   });
 
@@ -118,16 +134,47 @@ function trackListener(element, type, handler, options = {}) {
 }
 
 /**
- * Remove all tracked listeners
+ * List all currently tracked listeners for diagnostics.
+ * @returns {Array} Array of listener info objects.
+ */
+function listTrackedListeners(filter = {}) {
+  // filter: {element, type, description, priority}
+  const arr = [];
+  trackedListeners.forEach(l => {
+    if (
+      (!filter.element || l.element === filter.element) &&
+      (!filter.type || l.type === filter.type) &&
+      (!filter.description || l.description === filter.description) &&
+      (!filter.priority || l.priority === filter.priority)
+    ) {
+      arr.push({
+        element: l.element,
+        type: l.type,
+        description: l.description,
+        priority: l.priority,
+        handler: l.handler,
+        originalHandler: l.originalHandler,
+        options: l.options
+      });
+    }
+  });
+  return arr;
+}
+
+/**
+ * Remove all tracked listeners.
+ * Optionally filter by element, type, or description.
  * @param {Element} [targetElement] - Optional element to limit cleanup to
  * @param {string} [targetType] - Optional event type to limit cleanup to
+ * @param {string} [targetDescription] - Optional description to limit cleanup to
  */
-function cleanupListeners(targetElement, targetType) {
+function cleanupListeners(targetElement, targetType, targetDescription) {
   const listenersToRemove = new Set();
   trackedListeners.forEach(listener => {
     const elementMatches = !targetElement || listener.element === targetElement;
     const typeMatches = !targetType || listener.type === targetType;
-    if (elementMatches && typeMatches) {
+    const descMatches = !targetDescription || listener.description === targetDescription;
+    if (elementMatches && typeMatches && descMatches) {
       listenersToRemove.add(listener);
     }
   });
@@ -383,7 +430,7 @@ async function attemptInit(retries = 0) {
 
   // Set up any global event logic here, if needed
   if (window.auth?.AuthBus) {
-    window.auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
+    window.auth.AuthBus.addEventListener('authStateChanged', onAuthStateChange);
     window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
   }
 
@@ -407,39 +454,18 @@ function init() {
 }
 
 /**
- * Handle auth state changes
+ * Wrapper for authentication state changes.
+ * Delegates to the centralized handler from app.js via DependencySystem.
+ * Add any UI-specific updates here if needed.
  */
-function handleAuthStateChange(event) {
-  const { authenticated } = event.detail || {};
-
-  // Close auth dropdown
-  const authDropdown = document.getElementById('authDropdown');
-  if (authDropdown) authDropdown.classList.add('hidden');
-
-  // Update UI visibility
-  toggleVisible('#authButton', !authenticated);
-  toggleVisible('#userMenu', authenticated);
-  toggleVisible('#loginRequiredMessage', !authenticated);
-  toggleVisible('#globalChatUI', authenticated);
-
-  // Handle project view state
-  const projectListView = document.getElementById('projectListView');
-  if (projectListView) {
-    projectListView.classList.toggle('opacity-0', !authenticated);
-
-    // After authentication, show the project list via the dashboard (this manages project loading and DOM)
-    if (authenticated && window.projectDashboard?.showProjectList) {
-      console.log('[eventHandler] Auth state changed to authenticated, showing project dashboard list');
-      setTimeout(() => {
-        window.projectDashboard.showProjectList();
-      }, 100); // Small delay to ensure all UI components are ready
-    }
+function onAuthStateChange(event) {
+  const centralizedHandler = window.DependencySystem?.modules?.get('handleAuthStateChange');
+  if (typeof centralizedHandler === 'function') {
+    centralizedHandler(event);
+  } else {
+    console.warn('[eventHandler] Centralized handleAuthStateChange not found in DependencySystem.');
   }
-
-  // Redirect if on login page
-  if (authenticated && window.location.pathname === '/login') {
-    window.location.href = '/';
-  }
+  // Add any UI-specific updates here if needed.
 }
 
 /**
@@ -563,11 +589,8 @@ function setupCommonElements() {
         throw new Error('Username and password are required');
       }
 
-      // Ensure window.auth and register method exist
-      if (!window.auth || typeof window.auth.register !== 'function') {
-        throw new Error('Authentication module not loaded. Cannot register.');
-      }
-
+      // Robustly await DependencySystem's 'auth' module for race-free registration
+      let auth;
       try {
         // Validate password requirements
         const validation = validatePassword(password);
@@ -575,8 +598,14 @@ function setupCommonElements() {
           throw new Error(validation.message);
         }
 
+        // Wait for auth module before proceeding
+        [auth] = await window.DependencySystem.waitFor('auth');
+        if (!auth || typeof auth.register !== 'function') {
+          throw new Error('Authentication module not loaded. Cannot register.');
+        }
+
         // Register and get response
-        const response = await window.auth.register({
+        const response = await auth.register({
           username,
           password
         });
@@ -646,10 +675,24 @@ function reinitializeAuthElements() {
 document.addEventListener('modalsLoaded', reinitializeAuthElements);
 document.addEventListener('authStateChanged', reinitializeAuthElements);
 
-// Export to window and as a module
+/**
+ * @namespace eventHandlers
+ * Centralized UI event helpers for the application. All helpers are registered with DependencySystem.
+ * @property {Function} trackListener - Track an event listener with cleanup.
+ * @property {Function} cleanupListeners - Remove all tracked listeners.
+ * @property {Function} delegate - Set up a delegated event listener.
+ * @property {Function} debounce - Debounce a function.
+ * @property {Function} toggleVisible - Toggle visibility of elements.
+ * @property {Function} setupCollapsible - Set up a collapsible section.
+ * @property {Function} setupModal - Set up a modal with standardized behavior.
+ * @property {Function} setupForm - Set up a form with standardized error handling.
+ * @property {Function} init - Initialize all event handlers.
+ * @property {Object} PRIORITY - Event priority levels.
+ */
 window.eventHandlers = {
   trackListener,
   cleanupListeners,
+  listTrackedListeners,
   delegate,
   debounce,
   toggleVisible,
@@ -660,6 +703,11 @@ window.eventHandlers = {
   PRIORITY
 };
 
+if (!window.DependencySystem.get) {
+    window.DependencySystem.get = function(moduleName) {
+        return this.modules?.get(moduleName);
+    };
+}
 window.DependencySystem.register('eventHandlers', window.eventHandlers);
 
 export default window.eventHandlers;
