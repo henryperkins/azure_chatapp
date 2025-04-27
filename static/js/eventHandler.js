@@ -411,40 +411,6 @@ function setupForm(formId, submitHandler, options = {}) {
 /**
  * Internal helper to retry the init process multiple times if needed.
  */
-async function attemptInit(retries = 0) {
-  const maxRetries = 5;
-  // Wait until DOM is at least ready
-  if (document.readyState === 'loading') {
-    if (retries < maxRetries) {
-      console.log('[eventHandler] DOM not fully loaded, retrying in 300ms...');
-      setTimeout(() => attemptInit(retries + 1), 300);
-      return;
-    } else {
-      console.warn('[eventHandler] DOM not ready after multiple attempts');
-      return;
-    }
-  }
-
-  // Clean up existing listeners to avoid duplicates
-  cleanupListeners();
-
-  // Set up any global event logic here, if needed
-  if (window.auth?.AuthBus) {
-    window.auth.AuthBus.addEventListener('authStateChanged', onAuthStateChange);
-    window.auth.AuthBus.addEventListener('backendUnavailable', handleBackendUnavailable);
-  }
-
-  // Set up global key bindings with passive:false to allow preventDefault()
-  trackListener(document, 'keydown', handleKeyDown, { passive: false });
-
-  // Set up navigation
-  setupNavigation();
-
-  // Set up common UI elements
-  setupCommonElements();
-
-  console.log('[eventHandler] Initialization complete.');
-}
 
 /**
  * Initialize all event handlers
