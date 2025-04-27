@@ -1,53 +1,55 @@
 <!-- Project List View, styled to align with sidebar theme/tokens but as dashboard content -->
-<div class="flex flex-col gap-3">
-  <!-- Title and Actions -->
-  <div class="flex items-center justify-between gap-2 mb-2">
-    <h2 class="text-lg font-semibold text-base-content">Projects</h2>
-    <button id="projectListCreateBtn"
-      type="button"
-      class="btn btn-primary btn-sm flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-      </svg>
-      New Project
-    </button>
-  </div>
-
-  <!-- Filters and Search row -->
-  <div class="flex flex-wrap items-center gap-2 mb-2">
-    <!-- Filter tabs (DaisyUI theme-aligned tabs) -->
-    <div id="projectFilterTabs" class="tabs tabs-boxed bg-base-200 rounded-lg h-10">
-      <button type="button" class="tab text-sm min-w-[90px] font-medium focus:outline-none focus-visible:ring-2" data-filter="all" aria-current="page">
-        All
-      </button>
-      <button type="button" class="tab text-sm min-w-[90px] font-medium text-base-content/70" data-filter="pinned">
-        Pinned
-      </button>
-      <button type="button" class="tab text-sm min-w-[90px] font-medium text-base-content/70" data-filter="archived">
-        Archived
+<div id="projectListView" class="project-list-view">
+  <div class="flex flex-col gap-3">
+    <!-- Title and Actions -->
+    <div class="flex items-center justify-between gap-2 mb-2">
+      <h2 class="text-lg font-semibold text-base-content">Projects</h2>
+      <button id="projectListCreateBtn"
+        type="button"
+        class="btn btn-primary btn-sm flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        New Project
       </button>
     </div>
-    <!-- Search input -->
-    <div class="flex-1 min-w-[200px] max-w-[320px] ml-2">
-      <label for="projectSearchInput" class="sr-only">Search projects</label>
-      <input id="projectSearchInput"
-        type="search"
-        placeholder="Search projects..."
-        class="input input-bordered input-sm w-full"
-        autocomplete="off"
-        spellcheck="false"
-      />
+
+    <!-- Filters and Search row -->
+    <div class="flex flex-wrap items-center gap-2 mb-2">
+      <!-- Filter tabs (DaisyUI theme-aligned tabs) -->
+      <div id="projectFilterTabs" class="tabs tabs-boxed bg-base-200 rounded-lg h-10">
+        <button type="button" class="tab text-sm min-w-[90px] font-medium focus:outline-none focus-visible:ring-2" data-filter="all" aria-current="page">
+          All
+        </button>
+        <button type="button" class="tab text-sm min-w-[90px] font-medium text-base-content/70" data-filter="pinned">
+          Pinned
+        </button>
+        <button type="button" class="tab text-sm min-w-[90px] font-medium text-base-content/70" data-filter="archived">
+          Archived
+        </button>
+      </div>
+      <!-- Search input -->
+      <div class="flex-1 min-w-[200px] max-w-[320px] ml-2">
+        <label for="projectSearchInput" class="sr-only">Search projects</label>
+        <input id="projectSearchInput"
+          type="search"
+          placeholder="Search projects..."
+          class="input input-bordered input-sm w-full"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
     </div>
-  </div>
 
-  <!-- Project card grid -->
-  <div id="projectList" class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 py-2">
-    <!-- Project cards injected here -->
-  </div>
+    <!-- Project card grid -->
+    <div id="projectList" class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 py-2">
+      <!-- Project cards injected here -->
+    </div>
 
-  <!-- No projects message -->
-  <div id="noProjectsMessage" class="hidden text-center py-8 text-base-content/60 text-sm font-medium">
-    No projects found. Create your first project using the "New Project" button.
+    <!-- No projects message -->
+    <div id="noProjectsMessage" class="hidden text-center py-8 text-base-content/60 text-sm font-medium">
+      No projects found. Create your first project using the "New Project" button.
+    </div>
   </div>
 </div>

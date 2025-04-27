@@ -171,13 +171,22 @@ async def create_conversation(
 
             # Create conversation
             with sentry_span(op="db.create", description="Create conversation record"):
-                conv = await conv_service.create_conversation(
-                    user_id=current_user.id,
-                    title=conversation_data.title,
-                    model_id=conversation_data.model_id,
-                    project_id=project_id
-                )
-                transaction.set_tag("conversation.id", str(conv.id))
+                from sqlalchemy.exc import IntegrityError
+                try:
+                    conv = await conv_service.create_conversation(
+                        user_id=current_user.id,
+                        title=conversation_data.title,
+                        model_id=conversation_data.model_id,
+                        project_id=project_id
+                    )
+                    transaction.set_tag("conversation.id", str(conv.id))
+                except IntegrityError as db_exc:
+                    logger.exception(f"[create_conversation route] Database error with project_id={project_id}, user_id={current_user.id}")
+                    metrics.incr("conversation.create.failure", tags={"reason": "db_integrity_error"})
+                    raise HTTPException(
+                        status_code=500,
+                        detail="Database error. Possibly a foreign key violation or concurrency issue."
+                    ) from db_exc
 
             # Set user context
             with configure_scope() as scope:
