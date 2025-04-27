@@ -4,7 +4,14 @@
  */
 
 (function() {
-  console.log("[DEBUG-PROJECT] Initializing project debugging...");
+  // Wait for the app to be fully initialized before running debug hooks
+  document.addEventListener('appInitialized', function debugInitHandler() {
+    document.removeEventListener('appInitialized', debugInitHandler);
+    runDebugHooks();
+  });
+
+  function runDebugHooks() {
+    console.log("[DEBUG-PROJECT] Initializing project debugging...");
 
   // Check if we already have a project in localStorage
   const selectedProjectId = localStorage.getItem('selectedProjectId');
@@ -193,4 +200,5 @@
         });
     }
   }, 3000);
+  }
 })();

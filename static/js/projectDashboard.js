@@ -315,6 +315,8 @@ class ProjectDashboard {
 
       const html = await response.text();
       container.innerHTML = html;
+      // Ensure the project list view is visible after HTML injection
+      container.classList.remove('opacity-0');
       console.log('[ProjectDashboard] project_list.html loaded successfully.');
     } catch (err) {
       console.error('[ProjectDashboard] Error fetching project_list.html:', err);
