@@ -14,7 +14,7 @@
 /* 2) DaisyUI plugin config (optional).
    If you want DaisyUI built-in themes, for example: */
 @plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
+  themes: ["light", "dark"];
   /*
      Additional config possible:
      prefix: daisy-;

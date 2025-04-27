@@ -8,10 +8,10 @@
 /* Do NOT re-import Tailwind here. This file is included by tailwind.css. */
 
 @plugin "daisyui/theme" {
-    name: "dracula";
-    default: false;
-    prefersdark: false;
-    color-scheme: "dark";
+    "name": "dracula",
+    "default": false,
+    "prefersdark": false,
+    "color-scheme": "dark",
 
     --color-base-100: oklch(28.822% 0.022 277.508);
     --color-base-200: oklch(26.805% 0.02 277.508);
