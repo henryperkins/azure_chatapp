@@ -64,37 +64,26 @@ export function createChatManager() {
       console.log("[Chat] Initializing chat system...");
       try {
         if (!isAuthenticated()) {
-          console.warn("[Chat] User not authenticated, cannot initialize chat");
+          throw new Error("User not authenticated");
         }
         this._setupUIElements(options);
         this._bindEvents();
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const chatId = urlParams.get("chatId");
-        this.projectId = this._getProjectId();
-
-        if (!this.projectId) {
-          console.warn("[Chat] No project selected, chat system requires a project");
-          this._showMessage("system", "Please select a project to start a conversation");
-          this.isInitialized = true;
-          return false;
-        }
-
-        if (isAuthenticated()) {
-          if (chatId) {
-            await this.loadConversation(chatId);
-          } else {
-            await this.createNewConversation();
-          }
+        // Attempt to create a new conversation if none exists
+        try {
+          await this.createNewConversation();
+        } catch (convError) {
+          // Enhanced diagnostics for backend errors
+          console.error("[Chat] Failed to create default conversation:", convError);
+          this._showErrorMessage(
+            "Could not create a new conversation. Please check your project configuration or contact support."
+          );
+          // Optionally, disable chat UI or retry logic here
         }
         this.isInitialized = true;
-        console.log("[Chat] System initialized");
-        document.dispatchEvent(new CustomEvent("chatInitialized", { detail: { instance: this } }));
-        return true;
       } catch (error) {
-        console.error("[Chat] Initialization failed:", error);
         this._handleError("initialization", error);
-        return false;
+        throw error;
       }
     }
 

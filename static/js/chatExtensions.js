@@ -1,41 +1,15 @@
 // chatExtensions.js
-// ----------------------------
-// Additional chat functionality that extends the core chat.js file
-// - Chat title editing
-// - Potential for future conversation actions
-//
 /**
- * Dependencies:
- * - window.eventHandlers (external utility, for event management)
- * - window.auth (external dependency, for authentication checks)
- * - window.chatManager (external dependency, for chat state)
- * - window.app (external dependency, for API requests)
- * - window.showNotification (external dependency, for user feedback)
- * - document (browser built-in, for DOM manipulation)
- * - window (browser built-in, for selection API)
+ * chatExtensions.js
+ * ----------------------------
+ * Additional chat functionality that extends the core chat.js file:
+ *  - Chat title editing
+ *  - Future conversation actions
+ *
+ * Uses window.DependencySystem modules for core services.
  */
 
-// Browser APIs:
-// - document (DOM access)
-// - window (selection API)
-
-// External Dependencies (Global Scope):
-// - window.eventHandlers (event management)
-// - window.auth (authentication system)
-// - window.chatManager (chat state management)
-// - window.app (API requests)
-// - window.showNotification (user notifications)
-
-// Optional Dependencies:
-// - Gracefully handles missing notification system
-// - Falls back if chatManager not available
-// - Handles missing auth checks
-
-
-/**
- * Initializes the chat extensions module
- */
-function initChatExtensions() {
+export function initChatExtensions() {
   try {
     setupChatTitleEditing();
     console.log("[ChatExtensions] Initialized");
@@ -44,14 +18,27 @@ function initChatExtensions() {
   }
 }
 
-// Export initialization function
-window.initChatExtensions = initChatExtensions;
-
-/**
- * Sets up the chat title editing functionality,
- * using standardized event handling and central auth checks
- */
 function setupChatTitleEditing() {
+  const ds = window.DependencySystem; // Always reference via window for module safety
+  if (!ds) {
+    console.warn("[ChatExtensions] DependencySystem not found, skipping initialization");
+    return;
+  }
+
+  const eventHandlers = ds.get('eventHandlers') || {};
+  const auth = ds.get('auth') || {};
+  const chatManager = ds.get('chatManager') || {};
+  const app = ds.get('app') || {};
+  const notificationHandler = ds.get('notificationHandler') || {};
+
+  const trackListener = eventHandlers.trackListener
+    ? eventHandlers.trackListener.bind(eventHandlers)
+    : (el, evt, fn, opts) => el.addEventListener(evt, fn, opts);
+
+  const showNotification = notificationHandler.show
+    ? notificationHandler.show.bind(notificationHandler)
+    : (msg, type = 'info') => console.log(`[${type}] ${msg}`);
+
   const editTitleBtn = document.getElementById("chatTitleEditBtn");
   const chatTitleEl = document.getElementById("chatTitle");
 
@@ -60,30 +47,28 @@ function setupChatTitleEditing() {
     return;
   }
 
-  // Use centralized eventHandler.js to track event
-  window.eventHandlers.trackListener(
-    editTitleBtn,
-    "click",
-    () => handleTitleEditClick(editTitleBtn, chatTitleEl),
-    { description: "Chat title editing" }
-  );
+  trackListener(editTitleBtn, "click", () => {
+    handleTitleEditClick(editTitleBtn, chatTitleEl, auth, chatManager, app, showNotification, trackListener);
+  }, { description: "Chat title editing" });
 }
 
-/**
- * Handles the process of clicking "Edit" on the chat title
- * @param {HTMLElement} editTitleBtn - The button that toggles edit mode
- * @param {HTMLElement} chatTitleEl - The title element to edit
- */
-async function handleTitleEditClick(editTitleBtn, chatTitleEl) {
-  // Already in edit mode?
+async function handleTitleEditClick(
+  editTitleBtn,
+  chatTitleEl,
+  auth,
+  chatManager,
+  app,
+  showNotification,
+  trackListener
+) {
   if (chatTitleEl.getAttribute("contenteditable") === "true") {
     return;
   }
 
-  // Store original
   const originalTitle = chatTitleEl.textContent;
+  const originalBtnText = editTitleBtn.textContent;
 
-  // Enable contenteditable
+  // Enter edit mode
   chatTitleEl.setAttribute("contenteditable", "true");
   chatTitleEl.classList.add(
     "border",
@@ -102,13 +87,16 @@ async function handleTitleEditClick(editTitleBtn, chatTitleEl) {
   selection.removeAllRanges();
   selection.addRange(range);
 
-  // Change the edit button text to "Save"
-  const oldBtnText = editTitleBtn.textContent;
+  // Update button
   editTitleBtn.textContent = "Save";
 
-  // Completion logic for editing
+  // Cleanup and save/cancel logic
   const completeEditing = async (shouldSave) => {
-    // Remove editable state
+    // Remove temporary listeners
+    chatTitleEl.removeEventListener('keydown', keyHandler);
+    document.removeEventListener('click', clickOutsideHandler);
+
+    // Exit edit mode
     chatTitleEl.setAttribute("contenteditable", "false");
     chatTitleEl.classList.remove(
       "border",
@@ -118,102 +106,85 @@ async function handleTitleEditClick(editTitleBtn, chatTitleEl) {
       "focus:ring-1",
       "focus:ring-blue-500"
     );
-
-    // Restore button text
-    editTitleBtn.textContent = oldBtnText;
+    editTitleBtn.textContent = originalBtnText;
 
     if (!shouldSave) {
-      // Revert
       chatTitleEl.textContent = originalTitle;
       return;
     }
 
-    // Trim new title
+    // Validate new title
     const newTitle = chatTitleEl.textContent.trim();
-
     if (!newTitle) {
       chatTitleEl.textContent = originalTitle;
-      window.showNotification?.("Title cannot be empty", "error");
+      showNotification("Title cannot be empty", "error");
       return;
     }
-
+    if (newTitle.length > 100) {
+      chatTitleEl.textContent = originalTitle;
+      showNotification("Title must be under 100 characters", "error");
+      return;
+    }
     if (newTitle === originalTitle) {
-      // No changes
       return;
     }
 
-    // Attempt to save updated title
     try {
-      // Check if the user is authenticated
-      if (!window.auth?.isAuthenticated()) {
-        window.showNotification?.("Authentication required", "error");
+      if (!auth.isAuthenticated?.()) {
+        showNotification("Authentication required", "error");
         chatTitleEl.textContent = originalTitle;
         return;
       }
 
-      // Ensure chatManager is ready
-      const conversationId = window.chatManager?.currentConversationId;
-      const projectId = window.chatManager?.projectId;
+      const conversationId = chatManager.currentConversationId;
+      const projectId = chatManager.projectId;
       if (!conversationId || !projectId) {
-        window.showNotification?.("No active conversation", "error");
+        showNotification("No active conversation", "error");
         chatTitleEl.textContent = originalTitle;
         return;
       }
 
-      // Call API to update conversation title
+      // Update via API
       const endpoint = `/api/projects/${projectId}/conversations/${conversationId}`;
-      await window.app.apiRequest(endpoint, "PATCH", { title: newTitle });
+      await app.apiRequest(endpoint, "PATCH", { title: newTitle });
 
-      // Notify user
-      window.showNotification?.("Conversation title updated", "success");
-
-      // Refresh conversation list if available
+      showNotification("Conversation title updated", "success");
       if (typeof window.loadConversationList === "function") {
         setTimeout(() => window.loadConversationList(), 500);
       }
     } catch (err) {
       console.error("[ChatExtensions] Failed to update conversation title:", err);
-      chatTitleEl.textContent = originalTitle; // revert
-      window.showNotification?.(
-        err?.message || "Error updating conversation title",
-        "error"
-      );
+      chatTitleEl.textContent = originalTitle;
+      showNotification(err.message || "Error updating conversation title", "error");
     }
   };
 
-  // Temporarily override the button's onclick
-  const originalClickHandler = editTitleBtn.onclick;
-  editTitleBtn.onclick = () => {
-    completeEditing(true);
-    // Restore original click handler
-    editTitleBtn.onclick = originalClickHandler;
-  };
-
-  // Handle Enter/Escape within the editable title
+  // Key handler for Enter/Escape
   const keyHandler = (e) => {
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       e.preventDefault();
       completeEditing(true);
-      chatTitleEl.removeEventListener("keydown", keyHandler);
-    } else if (e.key === "Escape") {
+    } else if (e.key === 'Escape') {
       e.preventDefault();
       completeEditing(false);
-      chatTitleEl.removeEventListener("keydown", keyHandler);
     }
   };
 
-  chatTitleEl.addEventListener("keydown", keyHandler);
-
-  // Handle clicking outside
+  // Click outside to save
   const clickOutsideHandler = (e) => {
-    if (e.target !== chatTitleEl && e.target !== editTitleBtn) {
+    if (!chatTitleEl.contains(e.target) && e.target !== editTitleBtn) {
       completeEditing(true);
-      document.removeEventListener("click", clickOutsideHandler);
     }
   };
 
-  // Slight delay so it doesn't immediately trigger
-  setTimeout(() => {
-    document.addEventListener("click", clickOutsideHandler);
-  }, 100);
+  // Attach temp listeners
+  trackListener(chatTitleEl, "keydown", keyHandler, {
+    description: "Chat title editing keydown"
+  });
+  trackListener(document, "click", clickOutsideHandler, {
+    description: "Chat title outside click", once: true
+  });
+  trackListener(editTitleBtn, "click", () => completeEditing(true), {
+    description: "Chat title save", once: true
+  });
 }

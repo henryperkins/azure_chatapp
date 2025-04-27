@@ -170,11 +170,9 @@ class ProjectListComponent {
         this._bindFilterEvents();
 
         // Delegated click listener for project cards
-        if (window.eventHandlers?.trackListener) {
-            window.eventHandlers.trackListener(this.element, 'click', (e) => this._handleCardClick(e));
-        } else {
-            this.element.addEventListener('click', (e) => this._handleCardClick(e));
-        }
+        window.eventHandlers.trackListener(this.element, 'click', (e) => this._handleCardClick(e), {
+            description: 'Project List Card Click'
+        });
 
         // Listen for project collection events
         document.addEventListener('projectsLoaded', (e) => this.renderProjects(e.detail));
@@ -220,8 +218,13 @@ class ProjectListComponent {
                     description: `Filter tab click (${tab.dataset.filter})`
                 });
             } else {
-                tab.addEventListener('keydown', keydownHandler, { passive: false });
-                tab.addEventListener('click', clickHandler, false);
+                window.eventHandlers.trackListener(tab, 'keydown', keydownHandler, {
+                    passive: false,
+                    description: `Filter tab keydown (${tab.dataset.filter})`
+                });
+                window.eventHandlers.trackListener(tab, 'click', clickHandler, {
+                    description: `Filter tab click (${tab.dataset.filter})`
+                });
             }
         });
     }
@@ -316,17 +319,17 @@ class ProjectListComponent {
         }
 
         // If user not authenticated, show login
-        const isAuthenticated = window.app?.state?.isAuthenticated || 
-                                window.auth?.isAuthenticated?.() || 
-                                (window.DependencySystem?.modules?.has('auth') && 
+        const isAuthenticated = window.app?.state?.isAuthenticated ||
+                                window.auth?.isAuthenticated?.() ||
+                                (window.DependencySystem?.modules?.has('auth') &&
                                 window.DependencySystem.modules.get('auth').isAuthenticated?.());
-                                
+
         if (!isAuthenticated) {
             console.log('[ProjectListComponent] User not authenticated, showing login required');
             this._showLoginRequired();
             return;
         }
-        
+
         console.log('[ProjectListComponent] User is authenticated, rendering projects');
 
         // Show empty state if no projects
@@ -356,22 +359,22 @@ class ProjectListComponent {
      */
     show() {
         console.log('[ProjectListComponent] Show method called');
-        
+
         // Make sure both the component and its container are visible
         if (this.element) {
             this.element.classList.remove('hidden');
             this.element.style.display = '';
         }
-        
+
         const listView = document.getElementById('projectListView');
         if (listView) {
             listView.classList.remove('hidden', 'opacity-0');
             listView.style.display = '';
-            
+
             // Force CSS reflow to ensure transitions work
             void listView.offsetHeight;
         }
-        
+
         // If we have projects stored, render them again to ensure they're visible
         if (this.state.projects && this.state.projects.length > 0) {
             console.log('[ProjectListComponent] Re-rendering projects on show');
@@ -673,11 +676,9 @@ class ProjectListComponent {
         // Wire up create button
         const createBtn = document.getElementById('emptyStateCreateBtn');
         if (createBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(createBtn, 'click', () => this._openNewProjectModal());
-            } else {
-                createBtn.addEventListener('click', () => this._openNewProjectModal());
-            }
+            window.eventHandlers.trackListener(createBtn, 'click', () => this._openNewProjectModal(), {
+                description: 'Empty State Create Project Button'
+            });
         }
     }
 
@@ -701,52 +702,13 @@ class ProjectListComponent {
         // Wire up login button
         const loginBtn = document.getElementById('loginButton');
         if (loginBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(loginBtn, 'click', (e) => {
-                    e.preventDefault();
-                    const authButton = document.getElementById('authButton');
-                    const authDropdown = document.getElementById('authDropdown');
-                    if (authButton && authDropdown) {
-                        authDropdown.classList.remove('hidden');
-                        authButton.setAttribute('aria-expanded', 'true');
-                        // Ensure login tab is active
-                        if (typeof window.switchAuthTab === 'function') {
-                            window.switchAuthTab('login');
-                        } else if (typeof switchAuthTab === 'function') {
-                            switchAuthTab('login');
-                        }
-                    } else {
-                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
-                        if (window.app?.showNotification) {
-                            window.app.showNotification(fallbackMsg, "error");
-                        } else {
-                            alert(fallbackMsg);
-                        }
-                    }
-                });
-            } else {
-                loginBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    const authButton = document.getElementById('authButton');
-                    const authDropdown = document.getElementById('authDropdown');
-                    if (authButton && authDropdown) {
-                        authDropdown.classList.remove('hidden');
-                        authButton.setAttribute('aria-expanded', 'true');
-                        if (typeof window.switchAuthTab === 'function') {
-                            window.switchAuthTab('login');
-                        } else if (typeof switchAuthTab === 'function') {
-                            switchAuthTab('login');
-                        }
-                    } else {
-                        const fallbackMsg = "Login unavailable: Unable to find login controls in the UI.";
-                        if (window.app?.showNotification) {
-                            window.app.showNotification(fallbackMsg, "success");
-                        } else {
-                            console.log(fallbackMsg);
-                        }
-                    }
-                });
-            }
+            const handler = (e) => {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('requestLogin'));
+            };
+            window.eventHandlers.trackListener(loginBtn, 'click', handler, {
+                description: 'Login Required Login Button'
+            });
         }
     }
 
@@ -771,11 +733,9 @@ class ProjectListComponent {
 
         const retryBtn = document.getElementById('retryButton');
         if (retryBtn) {
-            if (window.eventHandlers?.trackListener) {
-                window.eventHandlers.trackListener(retryBtn, 'click', () => this._loadProjects());
-            } else {
-                retryBtn.addEventListener('click', () => this._loadProjects());
-            }
+            window.eventHandlers.trackListener(retryBtn, 'click', () => this._loadProjects(), {
+                description: 'Project List Retry Button'
+            });
         }
     }
 
