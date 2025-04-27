@@ -1,6 +1,10 @@
 @import "tailwindcss";
 
-/* Custom Dracula theme for daisyUI */
+/* Include Enhanced Components CSS */
+@import "./enhanced-components.css";
+@import "./file-upload-enhanced.css";
+
+/* Legacy Dracula theme - kept for backward compatibility */
 @plugin "daisyui/theme" {
   name: "dracula";
   default: false;
