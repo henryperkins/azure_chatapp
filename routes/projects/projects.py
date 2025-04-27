@@ -668,7 +668,8 @@ async def get_project_stats(
                         processed_result = await db.execute(
                             select(func.count(ProjectFile.id)).where(
                                 ProjectFile.project_id == project_id,
-                                ProjectFile.processed_for_search == True,  # noqa
+                                ProjectFile.config.isnot(None),
+                                ProjectFile.config.contains({"processed_for_search": True})
                             )
                         )
                         processed = processed_result.scalar() or 0
