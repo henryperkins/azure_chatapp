@@ -163,9 +163,10 @@
               // advanced tracing config
             }),
             // Session Replay
-            Sentry.Replay && Sentry.Replay({
-              maskAllText: true,
-              blockAllMedia: true,
+            Sentry.replayIntegration && Sentry.replayIntegration({
+              maskAllText: true,      // Mask all text by default (recommended for privacy)
+              blockAllMedia: true,    // Block all images/media by default
+              // You can add more options here as needed, see docs
             }),
             // Capture console logs as breadcrumbs/events
             Sentry.captureConsoleIntegration && Sentry.captureConsoleIntegration({
