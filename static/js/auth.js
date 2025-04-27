@@ -477,12 +477,6 @@ async function init() {
   }
   console.log('[Auth] Initializing auth module...');
 
-  // Wait for DOM ready
-  if (document.readyState === 'loading') {
-    await new Promise(resolve =>
-      document.addEventListener('DOMContentLoaded', resolve, { once: true })
-    );
-  }
 
   // Set up login form handler (if present)
   const setupLoginForm = () => {
