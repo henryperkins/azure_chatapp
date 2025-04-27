@@ -252,21 +252,27 @@ def build_azure_payload(
         model_max_tokens = model_config.get("max_tokens")
         client_max_tokens = kwargs.get("max_tokens")
 
+        # Only send the parameter supported by the model
         if model_max_completion is not None:
             payload["max_completion_tokens"] = (
                 min(client_max_tokens, model_max_completion)
                 if client_max_tokens else model_max_completion
             )
+            # Do NOT send max_tokens if max_completion_tokens is supported
+            payload.pop("max_tokens", None)
         elif model_max_tokens is not None:
             # Standard model
             if client_max_tokens:
                 payload["max_tokens"] = min(client_max_tokens, model_max_tokens)
             else:
                 payload["max_tokens"] = model_max_tokens
+            # Do NOT send max_completion_tokens if not supported
+            payload.pop("max_completion_tokens", None)
         else:
             # Direct fallback to user request
             if client_max_tokens:
                 payload["max_tokens"] = client_max_tokens
+                payload.pop("max_completion_tokens", None)
 
         # Unsupported params
         unsupported = model_config.get("unsupported_params", [])
