@@ -8,6 +8,7 @@
  *  - Misc. security-, performance- and DX-improvements
  * -------------------------------------------------------------------- */
 
+import './auth.js';
 import { createModalManager, createProjectModal } from './modalManager.js';
 import { createProjectManager } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
@@ -347,14 +348,6 @@ async function initializeAuthSystem() {
 /* ------------------------------------------------------------------- */
 
 async function initializeUIComponents() {
-    // Dynamic imports when needed
-    if (!window.ProjectListComponent) {
-        await import('./projectListComponent.js');
-    }
-    if (!DependencySystem.modules.has('ProjectListComponent')) {
-        DependencySystem.register('ProjectListComponent', window.ProjectListComponent);
-    }
-
     if (!window.projectDashboard) {
         const { createProjectDashboard } = await import('./projectDashboard.js');
         window.projectDashboard = createProjectDashboard();
@@ -365,6 +358,8 @@ async function initializeUIComponents() {
     window.initAccessibilityEnhancements?.();
     window.initSidebarEnhancements?.();
 
+    // Initialize the dashboard AFTER other components might be registered
+    // The dashboard will now handle initializing ProjectListComponent internally
     await window.projectDashboard.initialize?.();
 
     const modelConfig = createModelConfig();

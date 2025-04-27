@@ -61,7 +61,11 @@ class ProjectListComponent {
             this.state.initializationTime = Date.now();
 
             // Step 1: Ensure container with retry mechanism
-            await this._ensureContainerWithRetry();
+            const containerFound = await this._ensureContainerWithRetry();
+            if (!containerFound) {
+                // Error already logged in _ensureContainerWithRetry
+                return false;
+            }
 
             // Step 2: Bind event listeners
             this._bindEventListeners();
@@ -69,12 +73,20 @@ class ProjectListComponent {
             // Step 3: Bind create project buttons
             await this._bindCreateProjectButtons();
 
-            // Step 4: Check for cached data to handle race conditions
-            this._checkForCachedProjectData();
-
-            // Step 5: Mark as initialized
+            // Step 4: Mark as initialized *before* checking cache/loading
             this.state.initialized = true;
-            console.log('[ProjectListComponent] Initialization complete.');
+            console.log('[ProjectListComponent] Core initialization complete. Container ready.');
+
+            // Step 5: Check for cached data or load projects
+            // Defer slightly to allow other UI updates
+            setTimeout(() => {
+                if (!this._checkForCachedProjectData()) {
+                    // If no cached data was rendered, trigger a load
+                    this._loadProjects();
+                }
+            }, 50); // Small delay
+
+            console.log('[ProjectListComponent] Initialization sequence finished.');
             return true;
         } catch (error) {
             console.error('[ProjectListComponent] Failed to initialize:', error);
@@ -85,7 +97,7 @@ class ProjectListComponent {
 
     /**
      * Ensures the container element exists with retry logic.
-     * @returns {Promise<boolean>}
+     * @returns {Promise<boolean>} - True if found, false otherwise.
      * @private
      */
     async _ensureContainerWithRetry() {
@@ -112,20 +124,29 @@ class ProjectListComponent {
         }
 
         // Exceeded maximum attempts
-        throw new Error(`Container #${this.elementId} could not be located after ${maxAttempts} attempts.`);
+        console.error(`[ProjectListComponent] CRITICAL: Container #${this.elementId} could not be located after ${maxAttempts} attempts.`);
+        this._showErrorState(`UI Element #${this.elementId} not found.`); // Show error state
+        return false; // Indicate failure
     }
 
     /**
      * Check for cached project data that might have arrived before initialization.
      * This handles race conditions where projectsLoaded fired earlier.
+     * @returns {boolean} - True if cached data was found and rendered, false otherwise.
      * @private
      */
     _checkForCachedProjectData() {
+        // Ensure element exists before trying to render
+        if (!this.element) {
+            console.warn('[ProjectListComponent] _checkForCachedProjectData called but element is not ready.');
+            return false;
+        }
+
         // If we already have projects in the manager, use them
         if (window.projectManager?.currentProjects?.length > 0) {
-            console.log('[ProjectListComponent] Found cached projects, rendering...');
+            console.log('[ProjectListComponent] Found cached projects in projectManager, rendering...');
             this.renderProjects(window.projectManager.currentProjects);
-            return;
+            return true; // Data found and rendered
         }
 
         // Otherwise, check for any recent 'projectsLoaded' events in a local cache
@@ -135,8 +156,11 @@ class ProjectListComponent {
             const mostRecent = recentEvents[recentEvents.length - 1];
             if (mostRecent.detail && (mostRecent.detail.projects || Array.isArray(mostRecent.detail))) {
                 this.renderProjects(mostRecent.detail);
+                return true; // Data found and rendered
             }
         }
+
+        return false; // No cached data rendered
     }
 
     /**
@@ -273,23 +297,25 @@ class ProjectListComponent {
      * @param {Array|Object} data - Projects, or an object containing projects
      */
     renderProjects(data) {
+        // --- CRITICAL CHECK ---
+        if (!this.element) {
+            console.error(`[ProjectListComponent.renderProjects] ABORTING: Target element #${this.elementId} is not available in the DOM.`);
+            // Optionally attempt to re-find the element once more
+            this.element = document.getElementById(this.elementId);
+            if (!this.element) {
+                this._showErrorState(`Rendering failed: UI element #${this.elementId} missing.`);
+                return; // Definitely cannot render
+            }
+            console.warn(`[ProjectListComponent.renderProjects] Re-found element #${this.elementId} just in time.`);
+        }
+        // --- END CRITICAL CHECK ---
+
+
         // Debug log
         console.log('%c[ProjectListComponent.renderProjects] Received:', 'color: teal; font-weight: bold', data);
 
-        // Check if container is ready
-        if (!this.element) {
-            console.warn('[ProjectListComponent] renderProjects called without a valid container element, will retry');
-            setTimeout(() => {
-                this.element = document.getElementById(this.elementId);
-                if (this.element) {
-                    console.log('[ProjectListComponent] Container found on retry, rendering projects');
-                    this.renderProjects(data);
-                } else {
-                    console.error('[ProjectListComponent] Container still not found after retry');
-                }
-            }, 300);
-            return;
-        }
+        // Check if container is ready (redundant due to check above, but keep for safety)
+        // if (!this.element) { ... existing retry logic removed as it's handled above ... }
 
         // Normalize data
         let projects = [];
@@ -312,7 +338,7 @@ class ProjectListComponent {
         console.log('%c[ProjectListComponent.renderProjects] Parsed projects array:', 'color: teal; font-weight: bold', projects);
 
         this.state.projects = projects || [];
-        this.show();
+        this.show(); // Ensure the container itself is meant to be visible
 
         // Store in projectManager if available
         if (window.projectManager) {
@@ -350,31 +376,29 @@ class ProjectListComponent {
     show() {
         console.log('[ProjectListComponent] Show method called');
 
+        // Make sure the component's root element exists before trying to modify it
+        if (!this.element) {
+            console.warn('[ProjectListComponent.show] Cannot show, element is null. Attempting to find...');
+            this.element = document.getElementById(this.elementId);
+            if (!this.element) {
+                console.error('[ProjectListComponent.show] CRITICAL: Cannot show component, element not found.');
+                return; // Cannot proceed
+            }
+        }
+
         // Make sure both the component and its container are visible
         if (this.element) {
             this.element.classList.remove('hidden');
-            this.element.style.display = '';
+            this.element.style.display = ''; // Use default display
         }
 
         const listView = document.getElementById('projectListView');
         if (listView) {
             listView.classList.remove('hidden', 'opacity-0');
-            listView.style.display = '';
+            listView.style.display = ''; // Use default display
 
             // Force CSS reflow to ensure transitions work
             void listView.offsetHeight;
-        }
-
-        // If we have projects stored, render them again to ensure they're visible
-        if (this.state.projects && this.state.projects.length > 0) {
-            console.log('[ProjectListComponent] Re-rendering projects on show');
-            this.renderProjects(this.state.projects);
-        } else if (window.projectManager?.currentProjects?.length > 0) {
-            console.log('[ProjectListComponent] Rendering projects from projectManager');
-            this.renderProjects(window.projectManager.currentProjects);
-        } else {
-            // Try to load projects if none are cached
-            this._loadProjects();
         }
     }
 
@@ -783,8 +807,7 @@ class ProjectListComponent {
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                        viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M11 5H6a2 2 0 00-2 2v11a2
-                             2 0 002 2h11a2 2 0 002-2v-5m
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m
                              -1.414-9.414a2 2 0 112.828
                              2.828L11.828 15H9v-2.828l8.586
                              -8.586z"/>
