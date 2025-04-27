@@ -162,7 +162,12 @@
             Sentry.Replay && Sentry.Replay({
               maskAllText: true,
               blockAllMedia: true,
-            })
+            }),
+            // Capture console logs as breadcrumbs/events
+            Sentry.captureConsoleIntegration && Sentry.captureConsoleIntegration({
+              // Optional: specify levels to capture
+              // levels: ['log', 'info', 'warn', 'error', 'debug', 'assert']
+            }),
           ].filter(Boolean),
           beforeSend(event, hint) {
             // If user disables in real time or we discover dev environment
@@ -277,14 +282,14 @@
     });
 
     // Override console.error
-    const originalConsoleError = console.error;
-    console.error = function (...args) {
-      const err = args[0] instanceof Error ? args[0] : new Error(args.join(' '));
-      if (window.Sentry && typeof Sentry.captureException === 'function') {
-        Sentry.captureException(err, { extra: { type: 'console.error', args: args.slice(1) } });
-      }
-      originalConsoleError.apply(console, args);
-    };
+    // const originalConsoleError = console.error;
+    // console.error = function (...args) {
+    //   const err = args[0] instanceof Error ? args[0] : new Error(args.join(' '));
+    //   if (window.Sentry && typeof Sentry.captureException === 'function') {
+    //     Sentry.captureException(err, { extra: { type: 'console.error', args: args.slice(1) } });
+    //   }
+    //   originalConsoleError.apply(console, args);
+    // };
 
     // Log user clicks as breadcrumbs
     document.addEventListener('click', (event) => {
