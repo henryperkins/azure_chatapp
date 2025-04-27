@@ -577,8 +577,90 @@ const publicAuth = {
   }
 };
 
-// Register with DependencySystem; DependencySystem is always available before this script loads.
 window.auth = publicAuth;
 window.DependencySystem.register('auth', publicAuth);
+
+// ============================
+// Auth Dropdown UI Logic
+// ============================
+(function setupAuthDropdown() {
+  // Ensure DOM is ready
+  function ready(fn) {
+    if (document.readyState !== 'loading') fn();
+    else document.addEventListener('DOMContentLoaded', fn, { once: true });
+  }
+
+  ready(() => {
+    const authBtn = document.getElementById('authButton');
+    const dropdown = document.getElementById('authDropdown');
+    if (!authBtn || !dropdown) return;
+
+    let open = false;
+    let lastActiveElement = null;
+
+    function showDropdown() {
+      if (open) return;
+      open = true;
+      dropdown.classList.remove('hidden');
+      dropdown.setAttribute('aria-hidden', 'false');
+      authBtn.setAttribute('aria-expanded', 'true');
+      lastActiveElement = document.activeElement;
+
+      // Focus first input
+      const input = dropdown.querySelector('input, button, [tabindex]:not([tabindex="-1"])');
+      if (input) input.focus();
+
+      // Outside click closes
+      document.addEventListener('mousedown', handleOutside, true);
+      document.addEventListener('keydown', handleKeydown, true);
+    }
+
+    function hideDropdown() {
+      if (!open) return;
+      open = false;
+      dropdown.classList.add('hidden');
+      dropdown.setAttribute('aria-hidden', 'true');
+      authBtn.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('mousedown', handleOutside, true);
+      document.removeEventListener('keydown', handleKeydown, true);
+      if (lastActiveElement && typeof lastActiveElement.focus === 'function') {
+        lastActiveElement.focus();
+      }
+    }
+
+    function handleOutside(e) {
+      if (!dropdown.contains(e.target) && e.target !== authBtn) {
+        hideDropdown();
+      }
+    }
+
+    function handleKeydown(e) {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        hideDropdown();
+      }
+    }
+
+    authBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (open) {
+        hideDropdown();
+      } else {
+        showDropdown();
+      }
+    });
+
+    // Optional: hide on window blur (mobile UX)
+    window.addEventListener('blur', hideDropdown);
+
+    // Defensive: If user logs in, hide the dropdown and show user menu
+    window.DependencySystem.waitFor('auth', ([auth]) => {
+      auth.AuthBus?.addEventListener('authStateChanged', (ev) => {
+        if (ev?.detail?.authenticated) {
+          hideDropdown();
+        }
+      });
+    });
+  });
+})();
 
 export default publicAuth;
