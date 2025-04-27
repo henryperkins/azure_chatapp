@@ -316,10 +316,18 @@ class ProjectListComponent {
         }
 
         // If user not authenticated, show login
-        if (!window.app?.state?.isAuthenticated) {
+        const isAuthenticated = window.app?.state?.isAuthenticated || 
+                                window.auth?.isAuthenticated?.() || 
+                                (window.DependencySystem?.modules?.has('auth') && 
+                                window.DependencySystem.modules.get('auth').isAuthenticated?.());
+                                
+        if (!isAuthenticated) {
+            console.log('[ProjectListComponent] User not authenticated, showing login required');
             this._showLoginRequired();
             return;
         }
+        
+        console.log('[ProjectListComponent] User is authenticated, rendering projects');
 
         // Show empty state if no projects
         if (!projects || projects.length === 0) {
@@ -347,12 +355,33 @@ class ProjectListComponent {
      * Show the project list component.
      */
     show() {
+        console.log('[ProjectListComponent] Show method called');
+        
+        // Make sure both the component and its container are visible
         if (this.element) {
             this.element.classList.remove('hidden');
+            this.element.style.display = '';
         }
+        
         const listView = document.getElementById('projectListView');
         if (listView) {
             listView.classList.remove('hidden', 'opacity-0');
+            listView.style.display = '';
+            
+            // Force CSS reflow to ensure transitions work
+            void listView.offsetHeight;
+        }
+        
+        // If we have projects stored, render them again to ensure they're visible
+        if (this.state.projects && this.state.projects.length > 0) {
+            console.log('[ProjectListComponent] Re-rendering projects on show');
+            this.renderProjects(this.state.projects);
+        } else if (window.projectManager?.currentProjects?.length > 0) {
+            console.log('[ProjectListComponent] Rendering projects from projectManager');
+            this.renderProjects(window.projectManager.currentProjects);
+        } else {
+            // Try to load projects if none are cached
+            this._loadProjects();
         }
     }
 

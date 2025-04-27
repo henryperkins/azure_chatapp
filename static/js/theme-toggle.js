@@ -1,72 +1,75 @@
 /**
- * Theme Toggle for daisyUI 5 with Tailwind v4
+ * Theme Toggle for DaisyUI 5 with Tailwind v4, supporting custom themes
+ * (azure-light for light mode, dracula-enhanced for dark mode).
  *
- * This script handles the dark mode toggle functionality based on daisyUI 5's theming system,
- * which uses the data-theme attribute on the HTML element.
+ * This script handles dark mode toggle functionality and keeps
+ * everything in sync with DaisyUI/Tailwind's required theme names.
  */
 console.log("[theme-toggle.js] Script is running...");
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Theme names used in DaisyUI config
+  const LIGHT_THEME = 'azure-light';
+  const DARK_THEME = 'dracula-enhanced';
+
   const darkModeToggle = document.getElementById('darkModeToggle');
   const darkModeIcon = document.getElementById('darkModeIcon');
 
   if (!darkModeToggle || !darkModeIcon) return;
 
-  // Function to update the UI based on current theme
+  // Set icon based on current theme
   function updateThemeUI(isDark) {
     if (isDark) {
-      // Switch icon to sun when in dark mode
+      // Sun (light) icon for dark mode
       darkModeIcon.innerHTML = `
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
       `;
     } else {
-      // Switch icon to moon when in light mode
+      // Moon (dark) icon for light mode
       darkModeIcon.innerHTML = `
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
       `;
     }
   }
 
-  // Function to get current theme preference
+  // Which DaisyUI theme name is considered "dark"?
+  function isCurrentThemeDark(theme) {
+    return theme === DARK_THEME;
+  }
+
+  // Retrieve current theme from storage or OS preference (returns DaisyUI theme name)
   function getCurrentTheme() {
-    // Check if theme is stored in localStorage
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
+    if (savedTheme === LIGHT_THEME || savedTheme === DARK_THEME) {
       return savedTheme;
     }
-
-    // If no saved preference, respect OS preference
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    // Fall back to system
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? DARK_THEME : LIGHT_THEME;
   }
 
-  // Function to set theme
+  // Set theme and store
   function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
-    // Also toggle .light class for Tailwind v4 @theme .light support
-    if (theme === 'light') {
-      document.documentElement.classList.add('light');
-    } else {
-      document.documentElement.classList.remove('light');
-    }
     localStorage.setItem('theme', theme);
-    updateThemeUI(theme === 'dark');
+    // Optionally: toggle any .light/.dark classes for Tailwind, here not needed due to DaisyUI config
+    updateThemeUI(isCurrentThemeDark(theme));
   }
 
-  // Initialize theme on page load
+  // On page load: normalize base.html's early script/theme, then re-set with toggle logic
   const currentTheme = getCurrentTheme();
   setTheme(currentTheme);
 
-  // Toggle theme when button is clicked
+  // Toggle theme on button click between DaisyUI theme names
   darkModeToggle.addEventListener('click', () => {
-    const newTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    const themeNow = document.documentElement.getAttribute('data-theme');
+    const newTheme = (themeNow === DARK_THEME) ? LIGHT_THEME : DARK_THEME;
     setTheme(newTheme);
   });
 
-  // Listen for OS theme changes
+  // Listen for system changes (if no manual selection is set)
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-    // Only auto-switch if user hasn't manually set a preference
     if (!localStorage.getItem('theme')) {
-      const newTheme = e.matches ? 'dark' : 'light';
+      const newTheme = e.matches ? DARK_THEME : LIGHT_THEME;
       setTheme(newTheme);
     }
   });

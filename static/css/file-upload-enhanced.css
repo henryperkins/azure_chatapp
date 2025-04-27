@@ -1,23 +1,27 @@
-/* Enhanced File Upload Component Styles 
- * Using Tailwind CSS v4 + DaisyUI 5
- */
+/* =============================================================================
+   file-upload-enhanced.css
+   =============================================================================
+   Enhanced File Upload Component Styles
+   Tailwind CSS v4 + DaisyUI 5
+*/
+
+/* Do NOT import Tailwind here. The aggregator (tailwind.css) does that. */
 
 .file-upload-container {
-  @apply border-2 border-dashed border-base-300 rounded-box p-6
-         bg-base-200/50 transition-colors duration-300;
+  @apply border-2 border-dashed border-base-300 rounded-box p-6 bg-base-200/50 transition-colors duration-300;
 }
 
 .file-upload-container:hover,
 .file-upload-container:focus-within {
-  @apply border-primary border-opacity-70 bg-primary bg-opacity-5;
+  @apply border-primary/70 bg-primary/5;
 }
 
 .file-upload-container.dragging {
-  @apply border-primary border-opacity-90 bg-primary bg-opacity-10;
+  @apply border-primary/90 bg-primary/10;
 }
 
 .file-upload-container.error {
-  @apply border-error border-opacity-70 bg-error bg-opacity-5;
+  @apply border-error/70 bg-error/5;
 }
 
 .file-upload-icon {
@@ -48,9 +52,10 @@
   @apply mt-4 space-y-2;
 }
 
+/* Old "animate-in fade-in-0 zoom-in-95" is invalid in Tailwind v4
+   Replaced with "fade-zoom-in" (defined in tailwind.css) */
 .file-preview-item {
-  @apply p-2 bg-base-100 rounded-box shadow-sm flex items-center
-         gap-2 border border-base-300 animate-in fade-in-0 zoom-in-95;
+  @apply p-2 bg-base-100 rounded-box shadow-sm flex items-center gap-2 border border-base-300 fade-zoom-in;
 }
 
 .file-preview-icon {
@@ -109,13 +114,18 @@
   @apply progress progress-primary w-full h-2;
 }
 
-/* Placeholder animations for drag-and-drop */
+/* Pulse border animation for drag-and-drop highlight */
 @keyframes pulse-border {
-  0%, 100% {
-    @apply border-opacity-70;
+
+  0%,
+  100% {
+    border-color: rgba(107, 114, 128, 0.7);
+    /* base-300 70% opacity */
   }
+
   50% {
-    @apply border-opacity-100;
+    border-color: rgba(107, 114, 128, 1);
+    /* base-300 100% opacity */
   }
 }
 
@@ -123,10 +133,12 @@
   animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* Indeterminate progress keyframes */
 @keyframes progress-indeterminate {
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
@@ -138,7 +150,12 @@
 
 .file-upload-progress-indeterminate::after {
   content: "";
-  @apply absolute top-0 left-0 right-0 bottom-0 bg-primary;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-primary, #2563eb);
   animation: progress-indeterminate 1.5s infinite linear;
   transform: translateX(-100%);
 }
