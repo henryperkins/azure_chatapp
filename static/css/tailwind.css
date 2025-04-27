@@ -46,6 +46,5 @@
 /* 4) Import partial CSS files: enhanced-components, file-upload, legacy-dracula-theme. */
 @import "./enhanced-components.css";
 @import "./file-upload-enhanced.css";
-@import "./legacy-dracula-theme.css";
 
 /* Done! "npm run build:css" will compile into a single dist/tailwind.css file. */
