@@ -598,16 +598,7 @@ function handleInitError(error) {
 if (document.readyState !== 'loading') {
     init().catch(handleInitError);
 } else {
-    if (window.eventHandlers?.trackListener) {
-        window.eventHandlers.trackListener(
-            document,
-            'DOMContentLoaded',
-            () => init().catch(handleInitError),
-            { description: 'App DOMContentLoaded Init' }
-        );
-    } else {
-        document.addEventListener('DOMContentLoaded', () =>
-            init().catch(handleInitError)
-        );
-    }
+    document.addEventListener('DOMContentLoaded', () => {
+        init().catch(handleInitError);
+    });
 }
