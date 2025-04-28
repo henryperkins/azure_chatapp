@@ -1,0 +1,15 @@
+{% extends "layout.html" %}
+{% block page_title %}Home - Azure OpenAI Chat{% endblock %}
+{% block content %}
+<section class="p-4 md:p-6">
+  <h2 class="text-xl font-semibold mb-4">Welcome to Azure OpenAI Chat!</h2>
+  <p class="text-base-content/70 mb-4">
+    This is the home page. Use the sidebar to navigate or start a project.
+  </p>
+  {% if user_is_authenticated %}
+    <p class="text-sm text-success">You are logged in as {{ username }}.</p>
+  {% else %}
+    <p class="text-sm text-error">You are not logged in. Press the "Login" button in the header to simulate login.</p>
+  {% endif %}
+</section>
+{% endblock %}

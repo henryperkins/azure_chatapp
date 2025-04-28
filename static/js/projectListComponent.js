@@ -219,7 +219,8 @@ class ProjectListComponent {
         const container = document.getElementById('projectFilterTabs');
         if (!container) return;
 
-        const tabs = container.querySelectorAll('.project-filter-btn');
+        // Updated selector to match audit: select all .tab[data-filter] for filter tabs
+        const tabs = container.querySelectorAll('.tab[data-filter]');
         tabs.forEach((tab) => {
             const filterValue = tab.dataset.filter;
             if (!filterValue) return;
@@ -270,7 +271,8 @@ class ProjectListComponent {
      * @private
      */
     _updateActiveTab() {
-        const tabs = document.querySelectorAll('#projectFilterTabs .project-filter-btn');
+        // Match filter tab selector to .tab[data-filter] for audit compliance
+        const tabs = document.querySelectorAll('#projectFilterTabs .tab[data-filter]');
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
             tab.classList.toggle('tab-active', isActive);

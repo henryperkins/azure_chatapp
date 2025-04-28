@@ -413,7 +413,12 @@ async function initializeUIComponents() {
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
 
     if (window.app.state.isAuthenticated) {
-        await window.chatManager.initialize();
+        await window.chatManager.initialize({
+            containerSelector: "#globalChatUI",
+            inputSelector: "#chatUIInput",
+            sendButtonSelector: "#globalChatSendBtn",
+            titleSelector: "#chatTitle"
+        });
     }
     handleNavigationChange();
     registerAppListeners();
@@ -588,7 +593,12 @@ function registerAppListeners() {
     waitFor(['auth', 'chatManager'], (auth, chatManager) => {
         const maybeInitChat = debounce(() => {
             if (auth.isAuthenticated() && window.app.getProjectId()) {
-                chatManager.initialize();
+                chatManager.initialize({
+                    containerSelector: "#globalChatUI",
+                    inputSelector: "#chatUIInput",
+                    sendButtonSelector: "#globalChatSendBtn",
+                    titleSelector: "#chatTitle"
+                });
             }
         }, 300);
 

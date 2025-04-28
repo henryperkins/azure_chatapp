@@ -57,12 +57,13 @@
     return originalFetch.apply(this, args);
   };
 
-  // Monitor projectsLoaded events
-  document.addEventListener('projectsLoaded', function(e) {
-    console.log('[DEBUG-PROJECT] projectsLoaded event fired with data:', e.detail);
+  // Ensure debug DOM checks run only after the project list is ready in the DOM
+  document.addEventListener('projectListReady', () => {
+    // Monitor projectsLoaded events
+    document.addEventListener('projectsLoaded', function(e) {
+      console.log('[DEBUG-PROJECT] projectsLoaded event fired with data:', e.detail);
 
-    // Wait a bit and check if projects were rendered
-    setTimeout(() => {
+      // Now it's guaranteed projectList is present
       const projectListElement = document.getElementById('projectList');
       if (projectListElement) {
         const cards = projectListElement.querySelectorAll('.project-card');
@@ -70,7 +71,59 @@
       } else {
         console.error('[DEBUG-PROJECT] projectList element not found in DOM');
       }
-    }, 500);
+    });
+
+    // Directly test the API endpoint, but verify DOM rendering after both projectListReady and projectsLoaded
+    setTimeout(() => {
+      if (window.app?.state?.isAuthenticated) {
+        console.log('[DEBUG-PROJECT] Authentication detected, directly testing API endpoint...');
+        fetch('/api/projects?filter=all&skip=0&limit=100')
+          .then(async response => {
+            const clone = response.clone();
+            try {
+              console.log('[DEBUG-PROJECT] Direct API status:', response.status, response.statusText);
+              const rawHeaders = {};
+              response.headers.forEach((v, k) => { rawHeaders[k] = v; });
+              console.log('[DEBUG-PROJECT] Direct API headers:', rawHeaders);
+
+              const data = await clone.json();
+              console.log('[DEBUG-PROJECT] Direct API response data:', data);
+
+              if (data && Array.isArray(data.projects)) {
+                console.log(`[DEBUG-PROJECT] Direct API: Found ${data.projects.length} projects`);
+
+                // Only check DOM after both projectListReady and the next projectsLoaded event
+                let readyFired = false;
+                let projectsFired = false;
+                function checkProjectCardRendered() {
+                  setTimeout(() => {
+                    if (data.projects.length > 0 && !document.querySelector('.project-card')) {
+                      console.error('[DEBUG-PROJECT] API returns projects but none are rendered! DOM rendering issue detected');
+                    }
+                  }, 750);
+                }
+                document.addEventListener('projectListReady', function handler1() {
+                  document.removeEventListener('projectListReady', handler1);
+                  readyFired = true;
+                  if (projectsFired) checkProjectCardRendered();
+                });
+                document.addEventListener('projectsLoaded', function handler2() {
+                  document.removeEventListener('projectsLoaded', handler2);
+                  projectsFired = true;
+                  if (readyFired) checkProjectCardRendered();
+                });
+              } else {
+                console.warn('[DEBUG-PROJECT] Invalid/unexpected project response format from direct API call');
+              }
+            } catch (e) {
+              console.error('[DEBUG-PROJECT] Error directly testing API:', e);
+            }
+          })
+          .catch(err => {
+            console.error('[DEBUG-PROJECT] Direct API request failed:', err);
+          });
+      }
+    }, 3000);
   });
 
   // Patch the ProjectListComponent.renderProjects method
