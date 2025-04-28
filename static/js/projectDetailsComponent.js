@@ -116,13 +116,13 @@ class ProjectDetailsComponent {
       artifacts: document.getElementById('artifactsLoadingIndicator')
     };
 
-    // Initialize file upload component elements
-    this.elements.fileInput = document.getElementById('projectFileInput');
+    // Initialize file upload component elements (updated to match HTML IDs for audit parity)
+    this.elements.fileInput = document.getElementById('file-upload-input');
     this.elements.uploadBtn = document.getElementById('uploadFileBtn');
     this.elements.dragZone = document.getElementById('dragDropZone');
-    this.elements.uploadProgress = document.getElementById('uploadProgressContainer');
-    this.elements.progressBar = document.getElementById('uploadProgressBar');
-    this.elements.uploadStatus = document.getElementById('uploadStatusText');
+    this.elements.uploadProgress = document.getElementById('filesUploadProgress');
+    this.elements.progressBar = document.getElementById('fileProgressBar');
+    this.elements.uploadStatus = document.getElementById('uploadStatus');
   }
 
   /**

@@ -58,41 +58,46 @@
   function verifyProjectsLoadedAfterAuth(authenticated) {
     if (!authenticated) return;
 
-    console.log("[FIXES-VERIFICATION] Checking if projects are loaded after authentication");
+    // Ensure verification only runs after project list is ready in the DOM
+    document.addEventListener('projectListReady', function handler() {
+      document.removeEventListener('projectListReady', handler);
 
-    // Check if projectManager attempted to load projects
-    if (window.projectManager && window.projectManager._lastProjectLoadTime) {
-      const timeSinceAuth = Date.now() - window.projectManager._lastProjectLoadTime;
-      console.log(`[FIXES-VERIFICATION] Projects were loaded ${timeSinceAuth}ms ago`);
-      verificationResults.projectManagerLoading = timeSinceAuth < 5000; // Should be recent
-    }
+      console.log("[FIXES-VERIFICATION] Checking if projects are loaded after authentication (projectListReady fired)");
 
-    // Check DOM structure
-    const projectListElement = document.getElementById('projectList');
-    const projectListView = document.getElementById('projectListView');
+      // Check if projectManager attempted to load projects
+      if (window.projectManager && window.projectManager._lastProjectLoadTime) {
+        const timeSinceAuth = Date.now() - window.projectManager._lastProjectLoadTime;
+        console.log(`[FIXES-VERIFICATION] Projects were loaded ${timeSinceAuth}ms ago`);
+        verificationResults.projectManagerLoading = timeSinceAuth < 5000; // Should be recent
+      }
 
-    if (projectListElement && projectListView) {
-      console.log("[FIXES-VERIFICATION] Project list DOM elements found");
+      // Check DOM structure
+      const projectListElement = document.getElementById('projectList');
+      const projectListView = document.getElementById('projectListView');
 
-      // Check visibility
-      const isVisible = !projectListView.classList.contains('hidden') &&
-                       !projectListView.classList.contains('opacity-0');
-      console.log(`[FIXES-VERIFICATION] Project list is visible: ${isVisible}`);
+      if (projectListElement && projectListView) {
+        console.log("[FIXES-VERIFICATION] Project list DOM elements found");
 
-      // Verify if project cards are rendered with a small delay
-      setTimeout(() => {
-        const projectCards = projectListElement.querySelectorAll('.project-card');
-        console.log(`[FIXES-VERIFICATION] Found ${projectCards.length} project cards`);
-        verificationResults.domStructureValid = projectCards.length > 0 ||
-                                              projectListElement.innerHTML.includes('No projects found');
+        // Check visibility
+        const isVisible = !projectListView.classList.contains('hidden') &&
+                        !projectListView.classList.contains('opacity-0');
+        console.log(`[FIXES-VERIFICATION] Project list is visible: ${isVisible}`);
 
-        // Final verification report
-        reportVerificationResults();
-      }, 1000);
-    } else {
-      console.error("[FIXES-VERIFICATION] Project list DOM elements not found");
-      verificationResults.domStructureValid = false;
-    }
+        // Verify if project cards are rendered with a small delay
+        setTimeout(() => {
+          const projectCards = projectListElement.querySelectorAll('.project-card');
+          console.log(`[FIXES-VERIFICATION] Found ${projectCards.length} project cards`);
+          verificationResults.domStructureValid = projectCards.length > 0 ||
+                                                projectListElement.innerHTML.includes('No projects found');
+
+          // Final verification report
+          reportVerificationResults();
+        }, 1000);
+      } else {
+        console.error("[FIXES-VERIFICATION] Project list DOM elements not found");
+        verificationResults.domStructureValid = false;
+      }
+    });
   }
 
   // Monitor projectDashboard initialization

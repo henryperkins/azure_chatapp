@@ -321,6 +321,10 @@ class ProjectDashboard {
 
       // Ensure the project list view is visible after HTML injection
       container.classList.remove('opacity-0');
+
+      // Dispatch a global event after project list DOM is present
+      document.dispatchEvent(new Event('projectListReady'));
+
       console.log('[ProjectDashboard] project_list.html loaded and DOM updated.');
     } catch (err) {
       console.error('[ProjectDashboard] Error fetching project_list.html:', err);
