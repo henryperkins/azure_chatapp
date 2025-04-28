@@ -341,6 +341,10 @@ export function createChatManager() {
         this.sendButton = document.querySelector(options.sendButtonSelector || "#sendBtn");
       }
       this.titleElement = document.querySelector(options.titleSelector || "#chatTitle");
+      const editBtn = document.getElementById("chatTitleEditBtn");
+      if (this.titleElement) this.titleElement.classList.remove("hidden");
+      if (editBtn) editBtn.classList.remove("hidden");
+      if (window.initChatExtensions) window.initChatExtensions();
     }
 
     _createChatContainer() {

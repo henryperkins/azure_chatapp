@@ -160,8 +160,21 @@
   <script type="module" src="/static/js/app.js"></script>
 
   <script src="/static/js/kb-result-handlers.js"></script>
-  <script src="/static/js/debug-project.js"></script>
-  <script src="/static/js/fixes-verification.js"></script>
+
+  <!-- Load debug/verification scripts ONLY in development environment for security -->
+  <script>
+    if (
+      location.hostname === 'localhost' ||
+      location.hostname.startsWith('127.')
+    ) {
+      const s1 = document.createElement('script');
+      s1.src = '/static/js/debug-project.js';
+      document.head.appendChild(s1);
+      const s2 = document.createElement('script');
+      s2.src = '/static/js/fixes-verification.js';
+      document.head.appendChild(s2);
+    }
+  </script>
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col font-sans">
@@ -743,7 +756,15 @@
   <div id="chatUI" class="hidden" data-requires-chat="true"></div>
   <div id="noChatSelectedMessage" class="hidden" data-requires-chat="true">No chat selected</div>
   <div id="conversationArea" class="hidden" data-requires-chat="true"></div>
-  <div id="chatTitle" class="hidden" data-requires-chat="true">Chat Title</div>
+  <div style="display: flex; align-items: center; gap: 0.5rem;">
+    <div id="chatTitle" class="hidden" data-requires-chat="true">Chat Title</div>
+    <button id="chatTitleEditBtn"
+            class="hidden"
+            data-requires-chat="true"
+            aria-label="Edit conversation title"
+            tabindex="0"
+            type="button">✏️</button>
+  </div>
   <button id="newConversationBtn" class="hidden" data-requires-chat="true">New Conversation</button>
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
 

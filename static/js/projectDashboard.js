@@ -315,9 +315,13 @@ class ProjectDashboard {
 
       const html = await response.text();
       container.innerHTML = html;
+
+      // Wait for the browser to process DOM changes from innerHTML
+      await new Promise(requestAnimationFrame);
+
       // Ensure the project list view is visible after HTML injection
       container.classList.remove('opacity-0');
-      console.log('[ProjectDashboard] project_list.html loaded successfully.');
+      console.log('[ProjectDashboard] project_list.html loaded and DOM updated.');
     } catch (err) {
       console.error('[ProjectDashboard] Error fetching project_list.html:', err);
       container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
@@ -370,18 +374,6 @@ class ProjectDashboard {
   async _initializeComponents() {
     console.log('[ProjectDashboard] Initializing components...');
 
-    // Ensure DOM updates complete if markup was dynamically injected
-    await new Promise(requestAnimationFrame);
-
-    // Ensure #projectList exists before building component (addresses async DOM issue)
-    await (async () => {
-      for (let i = 0; i < 30; i++) {
-        if (document.getElementById('projectList')) return;
-        await new Promise(r => setTimeout(r, 100));
-      }
-      throw new Error('Timeout waiting for #projectList in DOM during dashboard component init');
-    })();
-
     // Project list component
     if (window.ProjectListComponent) {
       this.components.projectList = new window.ProjectListComponent({
@@ -413,13 +405,9 @@ class ProjectDashboard {
    */
   _processUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
-    let projectId = urlParams.get('project');
+    const projectId = urlParams.get('project');
 
-    // Optionally restore last selected project from localStorage
-    if (!projectId) {
-      projectId = localStorage.getItem('selectedProjectId');
-    }
-
+    // Always ignore localStorage for initial view, only respect explicit ?project= param
     if (projectId) {
       this.showProjectDetails(projectId);
     } else {
@@ -549,6 +537,13 @@ class ProjectDashboard {
         localStorage.removeItem('selectedProjectId');
         this.state.currentView = 'list';
         this.state.currentProject = null;
+
+        // Remove any lingering ?project param from URL to ensure list view
+        const url = new URL(window.location);
+        if (url.searchParams.has('project')) {
+          url.searchParams.delete('project');
+          window.history.replaceState({}, '', url.toString());
+        }
 
         if (projectListView) projectListView.classList.remove('hidden');
         if (projectDetailsView) projectDetailsView.classList.add('hidden');

@@ -119,9 +119,7 @@ async function getCSRFTokenAsync() {
       const token = await fetchCsrfToken();
       if (token) {
         csrfToken = token;
-        // Optionally update meta tag for frameworks
-        const meta = document.querySelector('meta[name="csrf-token"]');
-        if (meta) meta.content = token;
+        // Secure: Do NOT update meta tag to avoid DOM exposure of CSRF
       }
       return token;
     } finally {
@@ -653,13 +651,13 @@ window.DependencySystem.register('auth', publicAuth);
     window.addEventListener('blur', hideDropdown);
 
     // Defensive: If user logs in, hide the dropdown and show user menu
-    window.DependencySystem.waitFor('auth', ([auth]) => {
-      auth.AuthBus?.addEventListener('authStateChanged', (ev) => {
-        if (ev?.detail?.authenticated) {
-          hideDropdown();
-        }
-      });
-    });
+window.DependencySystem.waitFor('auth', (auth) => {
+  auth.AuthBus?.addEventListener('authStateChanged', (ev) => {
+    if (ev?.detail?.authenticated) {
+      hideDropdown();
+    }
+  });
+});
   });
 })();
 

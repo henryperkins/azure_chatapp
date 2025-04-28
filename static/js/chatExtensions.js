@@ -46,10 +46,12 @@ function setupChatTitleEditing() {
     console.warn("[ChatExtensions] Chat title edit elements not found in DOM");
     return;
   }
+  if (editTitleBtn.hasAttribute("data-chat-title-handler-bound")) return;
 
   trackListener(editTitleBtn, "click", () => {
     handleTitleEditClick(editTitleBtn, chatTitleEl, auth, chatManager, app, showNotification, trackListener);
   }, { description: "Chat title editing" });
+  editTitleBtn.setAttribute("data-chat-title-handler-bound", "true");
 }
 
 async function handleTitleEditClick(
