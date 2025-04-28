@@ -269,6 +269,8 @@ async function init() {
             },
             validateUUID
         };
+        // Security: Lock down window.app after assignment
+        Object.defineProperty(window, "app", { writable: false, configurable: false });
         DependencySystem.register('app', window.app);
         if (APP_CONFIG.DEBUG) console.debug('[App] app module registered');
 
@@ -321,6 +323,8 @@ async function initializeCoreSystems() {
     await projectManager.initialize();
     DependencySystem.register('projectManager', projectManager);
     window.projectManager = projectManager; // legacy glue
+    // Security: Lock down window.projectManager after assignment
+    Object.defineProperty(window, "projectManager", { writable: false, configurable: false });
 }
 
 /* ------------------------------------------------------------------- */
@@ -351,6 +355,8 @@ async function initializeUIComponents() {
     if (!window.projectDashboard) {
         const { createProjectDashboard } = await import('./projectDashboard.js');
         window.projectDashboard = createProjectDashboard();
+        // Security: Lock down window.projectDashboard after assignment
+        Object.defineProperty(window, "projectDashboard", { writable: false, configurable: false });
         DependencySystem.register('projectDashboard', window.projectDashboard);
     }
 
@@ -378,6 +384,8 @@ async function initializeUIComponents() {
     DependencySystem.register('chatManager', chatManager);
 
     window.chatManager = chatManager;
+    // Security: Lock down window.chatManager after assignment
+    Object.defineProperty(window, "chatManager", { writable: false, configurable: false });
     initChatExtensions();
 
     /* Project details component */
@@ -549,6 +557,25 @@ function handleAuthStateChange(event) {
             }
         }
     });
+
+    // Refresh project lists in sidebar (and grid, if needed) after authentication state changes
+    if (authenticated && window.projectManager?.loadProjects) {
+        window.projectManager.loadProjects('all').then(projects => {
+            // Sidebar project list
+            const sidebar = window.DependencySystem?.modules.get('sidebar');
+            if (sidebar?.renderProjects && Array.isArray(projects)) {
+                sidebar.renderProjects(projects);
+            }
+            // Optionally, refresh other project UIs here if not already tightly wired
+        }).catch((err) => {
+            // Show error, but do not break auth flow
+            if (window.app?.showNotification) {
+                window.app.showNotification('Failed to load projects after login', 'error');
+            } else {
+                console.error('Failed to load projects after login', err);
+            }
+        });
+    }
 }
 DependencySystem.register('handleAuthStateChange', handleAuthStateChange);
 
