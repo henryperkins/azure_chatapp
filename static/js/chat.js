@@ -3,6 +3,8 @@
  * Modular ChatManager: export as createChatManager(), uses centralized state via DependencySystem.
  */
 
+import { isValidProjectId, getCurrentProjectId } from './projectManager.js';
+
 const CHAT_CONFIG = {
   DEFAULT_MODEL: "claude-3-sonnet-20240229",
   MAX_TOKENS: 4096,
@@ -59,15 +61,34 @@ export function createChatManager() {
       this.createConversation = (...args) => this.createNewConversation(...args);
     }
 
+    _isValidProjectId(id) {
+      return isValidProjectId(id);
+    }
+
     async initialize(options = {}) {
-      if (options.projectId) {
-        this.projectId = options.projectId;
+      // Always get a valid projectId: options.projectId > getCurrentProjectId() > error
+      let projectId =
+        (options.projectId && isValidProjectId(options.projectId))
+          ? options.projectId
+          : getCurrentProjectId();
+      this.projectId = projectId;
+
+      // Defensive: Validate project ID before any chat action can initialize
+      if (!this._isValidProjectId(this.projectId)) {
+        const msg = "[Chat] Project ID required before initializing chat.";
+        this._showErrorMessage(msg);
+        this._handleError("initialization", msg);
+        // Optionally, disable chat UI here globally if helper exists:
+        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+          window.projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
+        }
+        throw new Error(msg);
       }
       if (this.isInitialized) {
         console.warn("[Chat] System already initialized");
         return true;
       }
-      console.log("[Chat] Initializing chat system...");
+      console.log("[Chat] Initializing chat system with projectId:", this.projectId);
       try {
         if (!isAuthenticated()) {
           throw new Error("User not authenticated");
@@ -84,11 +105,14 @@ export function createChatManager() {
           this._showErrorMessage(
             "Could not create a new conversation. Please check your project configuration or contact support."
           );
-          // Optionally, disable chat UI or retry logic here
         }
         this.isInitialized = true;
       } catch (error) {
         this._handleError("initialization", error);
+        // Optionally, disable chat UI here as well
+        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+          window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+        }
         throw error;
       }
     }
@@ -100,6 +124,11 @@ export function createChatManager() {
       }
       if (!isAuthenticated()) {
         console.warn("[Chat] loadConversation called but user not authenticated");
+        return false;
+      }
+      if (!this._isValidProjectId(this.projectId)) {
+        this._handleError("loading conversation", "[Chat] Project ID is invalid or missing.");
+        this._showErrorMessage("Cannot load conversation: Project is not loaded or ID is invalid.");
         return false;
       }
       if (this.isLoading) {
@@ -155,13 +184,24 @@ export function createChatManager() {
     }
 
     async createNewConversation(projectId = null) {
-      if (projectId) this.projectId = projectId;
+      // Always use passed explicit ID if valid, else prefer stable getter
+      let idToUse = isValidProjectId(projectId)
+        ? projectId
+        : getCurrentProjectId();
+      this.projectId = idToUse;
+
       if (!isAuthenticated()) {
         console.warn("[Chat] User not authenticated, cannot create conversation");
         throw new Error("Not authenticated");
       }
-      if (!this.projectId) {
-        throw new Error("[Chat] Project ID is required to create a conversation");
+      if (!this._isValidProjectId(this.projectId)) {
+        const msg = "[Chat] Project ID is required to create a conversation";
+        this._showErrorMessage(msg);
+        this._handleError("creating conversation", msg);
+        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+          window.projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
+        }
+        throw new Error(msg);
       }
       this._clearMessages();
       try {
@@ -187,6 +227,9 @@ export function createChatManager() {
         return conversation;
       } catch (error) {
         this._handleError("creating conversation", error);
+        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+          window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+        }
         throw error;
       }
     }
@@ -197,11 +240,24 @@ export function createChatManager() {
         window.app?.showNotification?.("Please log in to send messages", "error");
         return;
       }
+      // Always use DRY getter for projectId check
+      if (!this._isValidProjectId(this.projectId)) {
+        const msg = "No valid project loaded. Please select a valid project before sending messages.";
+        this._showErrorMessage(msg);
+        this._handleError("sending message", msg);
+        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+          window.projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
+        }
+        return;
+      }
       if (!this.currentConversationId) {
         try {
           await this.createNewConversation();
         } catch (error) {
           this._handleError("creating conversation", error);
+          if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+            window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+          }
           return;
         }
       }
@@ -265,6 +321,9 @@ export function createChatManager() {
         this._hideThinkingIndicator();
         this._showErrorMessage(error.message);
         this._handleError("sending message", error);
+        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
+          window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+        }
       }
     }
 
@@ -272,6 +331,11 @@ export function createChatManager() {
       if (!this.currentConversationId) return false;
       if (!isAuthenticated()) {
         console.warn("[Chat] Cannot delete conversation - not authenticated");
+        return false;
+      }
+      if (!this._isValidProjectId(this.projectId)) {
+        this._handleError("deleting conversation", "[Chat] Project ID is invalid or missing.");
+        this._showErrorMessage("Cannot delete conversation: Project is not loaded or ID is invalid.");
         return false;
       }
       try {
@@ -543,26 +607,7 @@ export function createChatManager() {
       });
     }
 
-    _getProjectId() {
-      const storedId = localStorage.getItem("selectedProjectId");
-      if (storedId && this._isValidUUID(storedId)) return storedId;
-      const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
-      if (pathMatch && pathMatch[1] && this._isValidUUID(pathMatch[1])) return pathMatch[1];
-      const urlParams = new URLSearchParams(window.location.search);
-      const queryId = urlParams.get("project") || urlParams.get("projectId");
-      if (queryId && this._isValidUUID(queryId)) return queryId;
-      // Final fallback: use window.projectManager.currentProject.id, if valid
-      if (window.projectManager?.currentProject?.id &&
-          this._isValidUUID(window.projectManager.currentProject.id)) {
-        return window.projectManager.currentProject.id;
-      }
-      return null;
-    }
-    _isValidUUID(uuid) {
-      if (!uuid) return false;
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidPattern.test(uuid);
-    }
+    // _getProjectId() no longer used. Use getCurrentProjectId() from projectManager.js everywhere!
     _extractErrorMessage(error) {
       if (!error) return "Unknown error occurred";
       if (typeof error === "string") return error;

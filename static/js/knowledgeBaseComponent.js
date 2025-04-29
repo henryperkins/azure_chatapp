@@ -32,7 +32,9 @@ export function createKnowledgeBaseComponent(options = {}) {
     auth = window.auth,
     projectManager = window.projectManager,
     showNotification = window.showNotification,
-    uiUtilsInstance = window.uiUtilsInstance
+    uiUtilsInstance = window.uiUtilsInstance,
+    getCurrentProjectId = projectManager?.getCurrentProjectId || (typeof window !== "undefined" && window.projectManager && window.projectManager.getCurrentProjectId) || (() => null),
+    isValidProjectId = window.projectManager?.isValidProjectId || (() => false)
   } = options;
 
   // Merge any additional config (searchDebounceTime, maxConcurrentProcesses, etc.)
@@ -61,6 +63,19 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.projectManager = projectManager;
       this.showNotification = showNotification;
       this.uiUtils = uiUtilsInstance;
+      this.getCurrentProjectId = getCurrentProjectId;
+      this.isValidProjectId = isValidProjectId;
+
+      this._resolveAndValidateProjectId = (maybeId = null) => {
+        let id = (maybeId && this.isValidProjectId(maybeId)) ? maybeId : this.getCurrentProjectId();
+        if (!this.isValidProjectId(id)) {
+          // Defensive warning and user notification
+          this.showNotification?.("No valid project loaded (KB)", "error");
+          console.error("[KB] Invalid or missing projectId", { maybeId, got: id });
+          return null;
+        }
+        return id;
+      };
 
       // Component state
       this.state = {
@@ -397,9 +412,9 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      const projectId = this._getCurrentProjectId();
+      const projectId = this._resolveAndValidateProjectId(null);
       if (!projectId) {
-        this._showError('No project selected');
+        this._showError('No valid project selected for KB search');
         return;
       }
 
@@ -443,9 +458,9 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async toggleKnowledgeBase(enabled) {
-      const projectId = this._getCurrentProjectId();
+      const projectId = this._resolveAndValidateProjectId(null);
       if (!projectId) {
-        this.showNotification?.('No project selected', 'error');
+        this.showNotification?.('No valid project selected for Knowledge Base toggle', 'error');
         return;
       }
 
@@ -486,8 +501,9 @@ export function createKnowledgeBaseComponent(options = {}) {
     // ======================
 
     async reprocessFiles(projectId) {
-      if (!projectId) {
-        this.showNotification?.('No project selected', 'error');
+      const pid = this._resolveAndValidateProjectId(projectId);
+      if (!pid) {
+        this.showNotification?.('No valid project selected for reprocessing', 'error');
         return;
       }
 
@@ -498,7 +514,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         if (!this.apiRequest) throw new Error('apiRequest not available');
 
         const response = await this.apiRequest(
-          `/api/projects/${projectId}/knowledge-base/reindex`,
+          `/api/projects/${pid}/knowledge-base/reindex`,
           {
             method: 'POST',
             body: { force_reindex: true }
@@ -511,8 +527,8 @@ export function createKnowledgeBaseComponent(options = {}) {
           // Refresh project data
           if (this.projectManager) {
             await Promise.all([
-              this.projectManager.loadProjectDetails(projectId),
-              this.projectManager.loadProjectStats(projectId)
+              this.projectManager.loadProjectDetails(pid),
+              this.projectManager.loadProjectStats(pid)
             ]).then(([project]) => {
               this.renderKnowledgeBaseInfo(project?.knowledge_base);
             });
