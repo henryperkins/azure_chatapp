@@ -14,20 +14,6 @@
 
 class ProjectDashboard {
   constructor() {
-    // Patch: ensure we always (re)initialize after auth flips to true
-    document.addEventListener('authStateChanged', (e) => {
-      const { authenticated } = e.detail || {};
-      // If the dashboard bailed out earlier, try again the moment we have auth
-      if (authenticated && !this.state?.initialized) {
-        console.log('[ProjectDashboard] Logged in – resuming initialization');
-        this.initialize();          // Will load project_list.html etc.
-      }
-      // If we *are* initialized already just refresh the list
-      else if (authenticated && this.state?.initialized) {
-        this.showProjectList();     // makes sure list view is visible
-        this._loadProjects?.();     // pulls projects from the API
-      }
-    });
 
     // Component references
     this.components = {
@@ -42,20 +28,34 @@ class ProjectDashboard {
       initialized: false      // Initialization flag
     };
 
-    // Listen once: when auth flips to true and not initialized, re-run initialize and fetch projects
-    document.addEventListener('authStateChanged', (e) => {
-      if (e.detail?.authenticated && !this.state.initialized) {
-        this.initialize();   // initializes the dashboard and reloads the project list UI
+    // Listen for auth changes on the AuthBus (not document)
+    const authBus = window.auth?.AuthBus;
+    const handler = (e) => {
+      const { authenticated } = e.detail || {};
+      if (!authenticated) return;
+      if (!this.state.initialized) {
+        console.log('[ProjectDashboard] Authenticated – initializing dashboard');
+        this.initialize();
         window.projectManager?.loadProjects('all');
+      } else {
+        console.log('[ProjectDashboard] Authenticated – refreshing project list');
+        this.showProjectList();
+        this._loadProjects();
       }
-    });
+    };
+    if (authBus && typeof authBus.addEventListener === 'function') {
+      authBus.addEventListener('authStateChanged', handler);
+    } else {
+      // Fallback for unexpected setup
+      document.addEventListener('authStateChanged', handler);
+    }
   }
 
   /**
    * Initialize the project dashboard.
    * Sets up components and event listeners.
    *
-   * @returns {Promise<boolean>} - Resolves true if initialized, false otherwise.
+   * @returns {Promise<boolean>} - Resolves true if initialized , false otherwise.
    */
   async initialize() {
     // Prevent multiple initializations
@@ -211,6 +211,12 @@ class ProjectDashboard {
 
     try {
       await this._loadProjectDetailsHtml();
+
+      // Ensure ProjectDetailsComponent is initialized *after* the HTML exists (run only once)
+      if (this.components.projectDetails &&
+          !this.components.projectDetails.state?.initialized) {
+        await this.components.projectDetails.initialize();
+      }
     } catch (err) {
       console.error('[ProjectDashboard] Error loading project details page:', err);
       window.app?.showNotification('Error loading project details UI', 'error');
@@ -321,6 +327,20 @@ class ProjectDashboard {
       const html = await response.text();
       container.innerHTML = html;
 
+      // --- Execute <script> tags from loaded HTML ---
+      const scripts = Array.from(container.querySelectorAll('script'));
+      for (const old of scripts) {
+        const s = document.createElement('script');
+        if (old.src) {
+          s.src = old.src;
+        } else {
+          s.textContent = old.textContent;
+        }
+        s.async = false;
+        old.remove();
+        document.head.appendChild(s);
+      }
+
       // Wait for the browser to process DOM changes from innerHTML
       await new Promise(requestAnimationFrame);
 
@@ -367,6 +387,20 @@ class ProjectDashboard {
       }
       const html = await response.text();
       container.innerHTML = html;
+
+      // --- Execute <script> tags from loaded HTML ---
+      const scripts = Array.from(container.querySelectorAll('script'));
+      for (const old of scripts) {
+        const s = document.createElement('script');
+        if (old.src) {
+          s.src = old.src;
+        } else {
+          s.textContent = old.textContent;
+        }
+        s.async = false;
+        old.remove();
+        document.head.appendChild(s);
+      }
       console.log('[ProjectDashboard] project_details.html loaded successfully.');
     } catch (err) {
       console.error('[ProjectDashboard] Error fetching project_details.html:', err);

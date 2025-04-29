@@ -60,6 +60,9 @@ class ProjectListComponent {
     }
 
     async initialize() {
+        // Diagnostics: Log projectEvents cache (once, then remove if not needed)
+        console.log('[DIAG] projectEvents cache on init:', window.projectEvents?.projectsLoaded);
+
         if (this.state.initialized) {
             console.log('[ProjectListComponent] Already initialized');
             return true;
@@ -251,13 +254,19 @@ class ProjectListComponent {
     _bindEventListeners() {
         this._bindFilterEvents();
 
+        // Listen on *both* projectManager instance and document for robustness
+        const handler = (e) => this.renderProjects(e.detail);
+        document.addEventListener('projectsLoaded', handler);
+        if (window.projectManager?.addEventListener) {
+            window.projectManager.addEventListener('projectsLoaded', handler);
+        }
+
         // Delegated click listener for project cards
         window.eventHandlers.trackListener(this.element, 'click', (e) => this._handleCardClick(e), {
             description: 'Project List Card Click'
         });
 
-        // Listen for project collection events
-        document.addEventListener('projectsLoaded', (e) => this.renderProjects(e.detail));
+        // Listen for project collection events (existing handlers remain for create/update)
         document.addEventListener('projectCreated', (e) => this._handleProjectCreated(e.detail));
         document.addEventListener('projectUpdated', (e) => this._handleProjectUpdated(e.detail));
 
@@ -333,25 +342,26 @@ class ProjectListComponent {
     // --------------------------------------
 
     renderProjects(data) {
-        /* ---------------------------------------------------------
-         * Guard 1:  Ignore events whose payload is obviously not a
-         *           list-of-projects.  This prevents a later, rogue
-         *           `projectsLoaded` event (carrying conversations,
-         *           stats, etc.) from wiping an already correct UI.
-         * --------------------------------------------------------- */
-        const looksLikeProjectArray = (value) =>
-            Array.isArray(value) &&
-            value.every((p) => p && typeof p === 'object' && 'id' in p);
+      /* ---------------------------------------------------------
+       * Guard 1:  Ignore events whose payload is obviously not a
+       *           list-of-projects.  This prevents a later, rogue
+       *           `projectsLoaded` event (carrying conversations,
+       *           stats, etc.) from wiping an already correct UI.
+       * --------------------------------------------------------- */
+      const looksLikeProjectArray = (value) =>
+          Array.isArray(value) &&
+          value.every((p) => p && typeof p === 'object' && 'id' in p);
 
-        const payloadIsConversations =
-            data?.status === 'success' && Array.isArray(data?.conversations);
+      // --- revised guard: only bail if it is *really* a bare conversations payload ---
+      const isPureConversationPayload =
+            Array.isArray(data?.conversations) &&
+            !looksLikeProjectArray(data) &&
+            !looksLikeProjectArray(data?.projects);
 
-        if (!looksLikeProjectArray(data) &&
-            !looksLikeProjectArray(data?.projects) &&
-            payloadIsConversations) {
-            console.warn('[ProjectListComponent] Ignoring projectsLoaded event that contains conversations, not projects.');
-            return;   // <-- early-exit, keep existing list intact
-        }
+      if (isPureConversationPayload) {
+          console.warn('[ProjectListComponent] Ignoring projectsLoaded that only contains conversations');
+          return;   // <-- early-exit only if not a project payload
+      }
 
         if (!this.element) {
             console.error(`[ProjectListComponent.renderProjects] ABORTING: Target element #${this.elementId} is not available in the DOM.`);
