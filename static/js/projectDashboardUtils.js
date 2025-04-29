@@ -144,17 +144,18 @@ function createProjectDashboardUtils() {
    */
   ProjectDashboard.setupEventListeners = () => {
     // Project edit button
-    const editBtn = document.getElementById('editProjectBtn');
-    if (editBtn) {
-      window.eventHandlers.trackListener(editBtn, 'click', () => {
+const editBtn = document.getElementById('editProjectBtn');
+if (editBtn) {
+    window.eventHandlers.trackListener(editBtn, 'click', () => {
         const currentProject = window.projectManager?.currentProject;
-        if (currentProject && window.projectModal?.openModal) {
-          window.projectModal.openModal(currentProject);
+        const pm = window.DependencySystem?.modules.get('projectModal') || window.projectModal;
+        if (currentProject && pm?.openModal) {
+            pm.openModal(currentProject);
         } else {
-          console.error('[projectDashboardUtils] projectModal.openModal not available');
+            console.error('[projectDashboardUtils] projectModal.openModal not available');
         }
-      });
-    }
+    });
+}
 
     // Project pin button
     const pinBtn = document.getElementById('pinProjectBtn');

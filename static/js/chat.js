@@ -57,6 +57,9 @@ export function createChatManager() {
     }
 
     async initialize(options = {}) {
+      if (options.projectId) {
+        this.projectId = options.projectId;
+      }
       if (this.isInitialized) {
         console.warn("[Chat] System already initialized");
         return true;
@@ -148,7 +151,8 @@ export function createChatManager() {
       }
     }
 
-    async createNewConversation() {
+    async createNewConversation(projectId = null) {
+      if (projectId) this.projectId = projectId;
       if (!isAuthenticated()) {
         console.warn("[Chat] User not authenticated, cannot create conversation");
         throw new Error("Not authenticated");

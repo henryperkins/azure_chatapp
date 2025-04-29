@@ -10,6 +10,9 @@
  * - window.DependencySystem: Dependency injection/registration system.
  */
 
+function _getProjectModal() {
+    return window.DependencySystem?.modules.get('projectModal') || window.projectModal;
+}
 // --------------------------------------
 // ProjectListComponent Class
 // --------------------------------------
@@ -633,10 +636,11 @@ class ProjectListComponent {
             if (!btn) return;
             const handler = (e) => {
                 e.preventDefault();
-                if (window.projectModal?.openModal) {
-                    window.projectModal.openModal();
+                const pm = _getProjectModal();
+                if (pm?.openModal) {
+                    pm.openModal();
                 } else {
-                    console.error('[ProjectListComponent] window.projectModal.openModal not available.');
+                    console.error('[ProjectListComponent] projectModal.openModal not available.');
                 }
             };
             if (window.eventHandlers?.trackListener) {
@@ -666,18 +670,20 @@ class ProjectListComponent {
     }
 
     _openNewProjectModal() {
-        if (window.projectModal?.openModal) {
-            window.projectModal.openModal();
+        const pm = _getProjectModal();
+        if (pm?.openModal) {
+            pm.openModal();
         } else {
-            console.error('[ProjectListComponent] window.projectModal.openModal not available');
+            console.error('[ProjectListComponent] projectModal.openModal not available');
         }
     }
 
     _openEditModal(project) {
-        if (window.projectModal?.openModal) {
-            window.projectModal.openModal(project);
+        const pm = _getProjectModal();
+        if (pm?.openModal) {
+            pm.openModal(project);
         } else {
-            console.error('[ProjectListComponent] window.projectModal.openModal not available');
+            console.error('[ProjectListComponent] projectModal.openModal not available');
         }
     }
 

@@ -43,12 +43,12 @@ class ProjectDashboard {
         this._loadProjects();
       }
     };
-    if (authBus && typeof authBus.addEventListener === 'function') {
-      authBus.addEventListener('authStateChanged', handler);
-    } else {
-      // Fallback for unexpected setup
-      document.addEventListener('authStateChanged', handler);
-    }
+if (authBus && typeof authBus.addEventListener === 'function') {
+  authBus.addEventListener('authStateChanged', handler);
+} else if (!window.auth) {
+  // Fallback for unexpected setup
+  document.addEventListener('authStateChanged', handler);
+}
   }
 
   /**
@@ -140,7 +140,7 @@ class ProjectDashboard {
     const currentUrl = new URL(window.location);
     if (currentUrl.searchParams.has('project')) {
       currentUrl.searchParams.delete('project');
-      window.history.pushState({}, '', currentUrl.toString());
+      window.history.replaceState({}, '', currentUrl.toString());
       console.log('[ProjectDashboard] Cleared project param from URL');
     }
 
@@ -248,8 +248,14 @@ class ProjectDashboard {
 
     // Update URL and localStorage
     const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('project', projectId);
-    window.history.pushState({}, '', currentUrl.toString());
+    const existingId = currentUrl.searchParams.get('project');
+
+    // Only change history if the target ID actually differs
+    if (existingId !== projectId) {
+      currentUrl.searchParams.set('project', projectId);
+      // replaceState avoids growing the stack when navigating within SPA
+      window.history.replaceState({}, '', currentUrl.toString());
+    }
     localStorage.setItem('selectedProjectId', projectId);
 
     // Load project data
