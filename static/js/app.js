@@ -13,7 +13,7 @@ import { createModalManager, createProjectModal } from './modalManager.js';
 import { createProjectManager } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
 import { createProjectListComponent, ProjectListComponent } from './projectListComponent.js';
-import { createProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createProjectDetailsComponent, ProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
@@ -301,15 +301,13 @@ async function initializeCoreSystems() {
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
 
-    document.addEventListener(
-        'modalsLoaded',
-        async () => {
-            const projectModal = createProjectModal();
-            await projectModal.init();
-            DependencySystem.register('projectModal', projectModal);
-        },
-        { once: true }
-    );
+const projectModal = createProjectModal();
+await projectModal.init();
+DependencySystem.register('projectModal', projectModal);
+window.projectModal = projectModal; // legacy glue for backward compatibility
+Object.defineProperty(window, 'projectModal', { writable: false, configurable: false });
+// Fire legacy event for old code that might still wait for it
+document.dispatchEvent(new Event('modalsLoaded'));
 
     await waitFor('eventHandlers', null, 5_000);
 
@@ -352,6 +350,13 @@ async function initializeAuthSystem() {
 /* ------------------------------------------------------------------- */
 
 async function initializeUIComponents() {
+    // --- Expose ProjectDetailsComponent CLASS before dashboard init ---
+if (!window.ProjectDetailsComponent) {
+  // Expose class early **and** register for DI before any dynamic import can require it
+  window.ProjectDetailsComponent = ProjectDetailsComponent;
+  DependencySystem.register?.('ProjectDetailsComponent', ProjectDetailsComponent);
+}
+
     if (!window.projectDashboard) {
         const { createProjectDashboard } = await import('./projectDashboard.js');
         window.projectDashboard = createProjectDashboard();
@@ -360,14 +365,23 @@ async function initializeUIComponents() {
         DependencySystem.register('projectDashboard', window.projectDashboard);
     }
 
-    // Misc enhancements (optional)
+    // Optional: misc. enhancements
     window.initAccessibilityEnhancements?.();
     window.initSidebarEnhancements?.();
 
-    // Initialize the dashboard AFTER other components might be registered
-    // The dashboard will now handle initializing ProjectListComponent internally
+    // --- Project details singleton instance ---
+    const projectDetailsComponent = createProjectDetailsComponent({
+        onBack: () => {
+            window.projectDashboard?.showProjectList?.() || (window.location.href = '/');
+        }
+    });
+    await projectDetailsComponent.initialize();
+    DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
+
+    // ---- Only now is it safe to initialize the dashboard ----
     await window.projectDashboard.initialize?.();
 
+    // The rest of the component initializations...
     const modelConfig = createModelConfig();
     DependencySystem.register('modelConfig', modelConfig);
 
@@ -387,15 +401,6 @@ async function initializeUIComponents() {
     // Security: Lock down window.chatManager after assignment
     Object.defineProperty(window, "chatManager", { writable: false, configurable: false });
     initChatExtensions();
-
-    /* Project details component */
-    const projectDetailsComponent = createProjectDetailsComponent({
-        onBack: () => {
-            window.projectDashboard?.showProjectList?.() || (window.location.href = '/');
-        }
-    });
-    await projectDetailsComponent.initialize();
-    DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
 
     /* Sidebar */
     const sidebar = createSidebar();
