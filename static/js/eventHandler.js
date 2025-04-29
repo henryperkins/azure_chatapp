@@ -512,32 +512,9 @@ function setupCommonElements() {
     }, { passive: false });
   }
 
-  const authButton = document.getElementById('authButton');
-  const authDropdown = document.getElementById('authDropdown');
-
-  if (authButton && authDropdown) {
-    window.eventHandlers.trackListener(authButton, 'click', (e) => {
-      e.preventDefault();
-      authDropdown.classList.toggle('hidden');
-      const isHidden = authDropdown.classList.contains('hidden');
-      if (isHidden) {
-        authDropdown.setAttribute('inert', '');
-      } else {
-        authDropdown.removeAttribute('inert');
-      }
-      authButton.setAttribute('aria-expanded', isHidden ? 'false' : 'true');
-    });
-
-    // Close dropdown when clicking outside
-    window.eventHandlers.trackListener(document, 'click', (e) => {
-      if (!authDropdown.contains(e.target) && e.target !== authButton) {
-        authDropdown.classList.add('hidden');
-        authButton.setAttribute('aria-expanded', 'false');
-      }
-    });
-  }
-
-  // NOTE: Login form handling is managed in base.html and auth.js.
+  // NOTE: Auth dropdown UI logic is now managed exclusively in auth.js.
+  // All duplicate handlers have been removed for a single point of truth.
+  // Login form handling is managed in base.html and auth.js.
   // Duplicate event handler removed to prevent multiple POSTs and 422 errors.
 
   // Register form
@@ -630,6 +607,13 @@ function setupNavigationElements() {
 
   if (navToggleBtn && mainSidebar) {
     trackListener(navToggleBtn, 'click', () => {
+      const willShow = mainSidebar.classList.contains('-translate-x-full');
+      if (!willShow) {
+        // Sidebar is hiding: blur any focus within sidebar for accessibility
+        if (mainSidebar.contains(document.activeElement)) {
+          document.activeElement.blur();
+        }
+      }
       mainSidebar.classList.toggle('-translate-x-full');
       const isExpanded = !mainSidebar.classList.contains('-translate-x-full');
       navToggleBtn.setAttribute('aria-expanded', isExpanded.toString());
@@ -640,6 +624,10 @@ function setupNavigationElements() {
 
   if (closeSidebarBtn && mainSidebar) {
     trackListener(closeSidebarBtn, 'click', () => {
+      // Sidebar is hiding: blur any focus within sidebar for accessibility
+      if (mainSidebar.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
       mainSidebar.classList.add('-translate-x-full');
       if (navToggleBtn) {
         navToggleBtn.setAttribute('aria-expanded', 'false');
