@@ -60,7 +60,14 @@ function extractResourceList(response, options = {}) {
   // fallback for unique object with id
   if (response?.[dataKey]?.id) return [response[dataKey]];
   if (response?.id) return [response];
-  // optional: handle singular keys
+  // expanded for wrapped or singular key results
+  if (listKeys) {
+    for (const key of listKeys) {
+      if (Array.isArray(response?.data?.[key])) return response.data[key];
+      if (response?.data?.[key] && typeof response.data[key] === "object" && response.data[key].id)
+        return [response.data[key]];
+    }
+  }
   if (singularKey && response?.[singularKey]) return [response[singularKey]];
   if (singularKey && response?.[dataKey]?.[singularKey]) return [response[dataKey][singularKey]];
 

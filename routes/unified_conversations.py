@@ -41,9 +41,9 @@ router = APIRouter(tags=["Project Conversations"])
 CONVERSATION_SAMPLE_RATE = 1.0  # Sample all conversations
 AI_SAMPLE_RATE = 0.5  # Sample 50% of AI operations
 
-# ============================
+# =============================================================================
 # Pydantic Models
-# ============================
+# =============================================================================
 
 
 class ConversationCreate(BaseModel):
@@ -80,14 +80,12 @@ class MessageCreate(BaseModel):
 class BatchConversationIds(BaseModel):
     """Model for batch operations"""
 
-    # Pylance might complain about min_items, max_items on older Pydantic versions,
-    # but it should work on modern versions. We'll keep them.
     conversation_ids: List[UUID] = Field(...)
 
 
-# ============================
+# =============================================================================
 # Conversation CRUD with Monitoring
-# ============================
+# =============================================================================
 
 
 @router.get("/{project_id}/conversations", response_model=dict)
@@ -255,7 +253,7 @@ async def create_conversation(
 async def get_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -266,8 +264,10 @@ async def get_project_conversation(
         description=f"Get conversation {conversation_id}",
     ) as span:
         try:
+            current_user = current_user_tuple[0]
             span.set_tag("project.id", str(project_id))
             span.set_tag("conversation.id", str(conversation_id))
+            span.set_tag("user.id", str(current_user.id))
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
@@ -300,7 +300,7 @@ async def update_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
     update_data: ConversationUpdate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -313,11 +313,13 @@ async def update_project_conversation(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             if update_data.sentry_trace:
                 transaction.set_data("frontend_trace", update_data.sentry_trace)
 
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
+            transaction.set_tag("user.id", str(current_user.id))
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
@@ -376,7 +378,7 @@ async def update_project_conversation(
 async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """Delete conversation with resource tracking"""
@@ -388,8 +390,10 @@ async def delete_project_conversation(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
+            transaction.set_tag("user.id", str(current_user.id))
 
             # Delete conversation
             deleted_id = await conv_service.delete_conversation(
@@ -422,9 +426,9 @@ async def delete_project_conversation(
         ) from e
 
 
-# ============================
+# =============================================================================
 # Message Operations with AI Monitoring
-# ============================
+# =============================================================================
 
 
 @router.post(
@@ -436,7 +440,7 @@ async def create_project_conversation_message(
     project_id: UUID,
     conversation_id: UUID,
     new_msg: MessageCreate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -449,12 +453,14 @@ async def create_project_conversation_message(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             # Set context from frontend if available
             if new_msg.sentry_trace:
                 transaction.set_data("frontend_trace", new_msg.sentry_trace)
 
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
+            transaction.set_tag("user.id", str(current_user.id))
             transaction.set_tag("message.role", new_msg.role)
             transaction.set_data("message_length", len(new_msg.content))
 
@@ -507,7 +513,8 @@ async def create_project_conversation_message(
                 ) as ai_span:
                     ai_start = time.time()
 
-                    # Record AI-specific metrics
+                    # (Imaginary AI generation logic would go here)
+
                     ai_duration = (time.time() - ai_start) * 1000
                     ai_span.set_data("ai_response_time_ms", ai_duration)
                     message_metrics.update(
@@ -561,9 +568,9 @@ async def create_project_conversation_message(
         raise HTTPException(status_code=500, detail="Message processing failed") from e
 
 
-# ============================
+# =============================================================================
 # AI-Powered Features with Monitoring
-# ============================
+# =============================================================================
 
 
 @router.post(
@@ -573,12 +580,11 @@ async def summarize_conversation(
     project_id: UUID,
     conversation_id: UUID,
     max_length: int = Query(200, ge=50, le=500),
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """Generate summary with AI performance tracking"""
-    # Define model_id with a default upfront to avoid unbound issues
     model_id = ""
     transaction = start_transaction(
         op="ai", name="Summarize Conversation", sampled=random.random() < AI_SAMPLE_RATE
@@ -586,8 +592,10 @@ async def summarize_conversation(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
+            transaction.set_tag("user.id", str(current_user.id))
             transaction.set_data("max_length", max_length)
 
             # Validate access
@@ -637,11 +645,14 @@ async def summarize_conversation(
                     unit="millisecond",
                     tags={"model": model_id},
                 )
-                metrics.distribution(
-                    "ai.summary.compression_ratio",
-                    len(summary) / sum(len(m.get("content", "")) for m in messages),
-                    tags={"model": model_id},
-                )
+                # Example ratio metric
+                total_input_len = sum(len(m.get("content", "")) for m in messages)
+                if total_input_len > 0:
+                    metrics.distribution(
+                        "ai.summary.compression_ratio",
+                        len(summary) / total_input_len,
+                        tags={"model": model_id},
+                    )
 
             logger.info(f"Generated summary for conversation {conversation_id}")
             payload = {
@@ -659,22 +670,21 @@ async def summarize_conversation(
     except Exception as e:
         transaction.set_tag("error", True)
         capture_exception(e)
-        model_for_error = model_id if "model_id" in locals() else ""
-        metrics.incr("ai.summary.failure", tags={"model": model_for_error})
+        metrics.incr("ai.summary.failure", tags={"model": model_id})
         logger.error(f"Summary generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Summary generation failed") from e
 
 
-# ============================
+# =============================================================================
 # Batch Operations with Tracing
-# ============================
+# =============================================================================
 
 
 @router.post("/{project_id}/conversations/batch-delete", response_model=dict)
 async def batch_delete_conversations(
     project_id: UUID,
     batch_data: BatchConversationIds,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -687,7 +697,9 @@ async def batch_delete_conversations(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             transaction.set_tag("project.id", str(project_id))
+            transaction.set_tag("user.id", str(current_user.id))
             transaction.set_tag("batch_size", len(batch_data.conversation_ids))
 
             # Validate access
@@ -751,9 +763,9 @@ async def batch_delete_conversations(
         ) from e
 
 
-# ============================
+# =============================================================================
 # Utility Endpoints
-# ============================
+# =============================================================================
 
 
 @router.get(
@@ -762,7 +774,7 @@ async def batch_delete_conversations(
 async def list_project_conversation_messages(
     project_id: UUID,
     conversation_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -775,8 +787,10 @@ async def list_project_conversation_messages(
         description=f"List messages for {conversation_id}",
     ) as span:
         try:
+            current_user = current_user_tuple[0]
             span.set_tag("project.id", str(project_id))
             span.set_tag("conversation.id", str(conversation_id))
+            span.set_tag("user.id", str(current_user.id))
             span.set_data("pagination.skip", skip)
             span.set_data("pagination.limit", limit)
 

@@ -110,10 +110,10 @@ export function createChatManager() {
       this._showLoadingIndicator();
       try {
         this._clearMessages();
-        const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}`;
+        const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/`;
         const conversation = await window.app.apiRequest(endpoint, { method: "GET" });
 
-        const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages`;
+        const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages/`;
         const messagesResponse = await window.app.apiRequest(messagesEndpoint, { method: "GET" });
         const messages = messagesResponse.data?.messages || [];
 
@@ -242,7 +242,7 @@ export function createChatManager() {
             budget_tokens: modelConfig.thinkingBudget
           };
         }
-        const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/messages`;
+        const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/messages/`;
         const response = await window.app.apiRequest(endpoint, { method: "POST", body: messagePayload });
         this._hideThinkingIndicator();
 
@@ -275,7 +275,7 @@ export function createChatManager() {
         return false;
       }
       try {
-        const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}`;
+        const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/`;
         await window.app.apiRequest(endpoint, { method: "DELETE" });
         this.currentConversationId = null;
         this._clearMessages();
