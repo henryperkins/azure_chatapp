@@ -54,7 +54,7 @@ export function createChatManager() {
 
       this._eventHandlers = {};
       this.modelConfig = getModelConfig().getConfig();
-      
+
       // Backwards compatibility alias
       this.createConversation = (...args) => this.createNewConversation(...args);
     }
@@ -165,15 +165,19 @@ export function createChatManager() {
       }
       this._clearMessages();
       try {
-        const endpoint = `/api/projects/${this.projectId}/conversations`;
+        const endpoint = `/api/projects/${this.projectId}/conversations/`;
         const config = getModelConfig().getConfig();
         const payload = {
           title: `New Chat ${new Date().toLocaleString()}`,
           model_id: config.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
         const response = await window.app.apiRequest(endpoint, { method: "POST", body: payload });
-        const conversation = response.data || response;
-        if (!conversation.id) throw new Error("[Chat] Invalid response from server creating conversation");
+        const conversation =
+          response?.data?.conversation ||
+          response?.data ||
+          response?.conversation ||
+          response;
+        if (!conversation || !conversation.id) throw new Error("[Chat] Invalid response from server creating conversation");
         this.currentConversationId = conversation.id;
         if (this.titleElement) this.titleElement.textContent = conversation.title || "New Conversation";
         const newUrl = new URL(window.location.href);
@@ -547,6 +551,11 @@ export function createChatManager() {
       const urlParams = new URLSearchParams(window.location.search);
       const queryId = urlParams.get("project") || urlParams.get("projectId");
       if (queryId && this._isValidUUID(queryId)) return queryId;
+      // Final fallback: use window.projectManager.currentProject.id, if valid
+      if (window.projectManager?.currentProject?.id &&
+          this._isValidUUID(window.projectManager.currentProject.id)) {
+        return window.projectManager.currentProject.id;
+      }
       return null;
     }
     _isValidUUID(uuid) {
@@ -571,22 +580,7 @@ export function createChatManager() {
       }
     }
     // Optional backward compatibility: alias createConversation for legacy callers
-    constructor() {
-      this.currentConversationId = null;
-      this.projectId = null;
-      this.isInitialized = false;
-      this.isLoading = false;
-      this.currentImage = null;
-      this.container = null;
-      this.messageContainer = null;
-      this.inputField = null;
-      this.sendButton = null;
-      this.titleElement = null;
-      this._eventHandlers = {};
-      this.modelConfig = getModelConfig().getConfig();
-
-      this.createConversation = (...args) => this.createNewConversation(...args);
-    }
+    // (Removed duplicate constructor)
   } // end ChatManager class
 
   // Return modular instance, registration and window assignment handled in app.js

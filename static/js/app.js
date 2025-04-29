@@ -43,7 +43,11 @@ const APP_CONFIG = {
     API_ENDPOINTS: {
         AUTH_VERIFY: '/api/auth/verify/',
         PROJECTS: '/api/projects/',
-        PROJECT_DETAILS: '/api/projects/{projectId}/'
+        PROJECT_DETAILS: '/api/projects/{projectId}/',
+        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
+        PROJECT_FILES: '/api/projects/{projectId}/files/',
+        PROJECT_STATS: '/api/projects/{projectId}/stats/',
+        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts/'
     },
 
     SELECTORS: {
@@ -180,7 +184,21 @@ async function apiRequest(url, opts = {}, skipCache = false) {
 
             // Auto parse JSON responses
             if (resp.headers.get('content-type')?.includes('application/json')) {
-                return await resp.json();
+                const json = await resp.json();
+                if (json && typeof json === 'object') {
+                    if (json.status === 'success' && 'data' in json) {
+                        return json.data;
+                    }
+                    if (json.status === 'success') {
+                        // fall back to root spread (e.g. {status:'success', conversations:[…]})
+                        const { status, message, ...rest } = json;
+                        if (Object.keys(rest).length === 1) {
+                            // unwrap single key like {conversation:{…}}, {project:{…}}, etc
+                            return Object.values(rest)[0];
+                        }
+                    }
+                }
+                return json;
             }
             return await resp.text();
         } catch (e) {
@@ -594,22 +612,28 @@ DependencySystem.register('handleAuthStateChange', handleAuthStateChange);
 /* ------------------------------------------------------------------- */
 function registerAppListeners() {
     window.addEventListener('popstate', handleNavigationChange);
-    /* re-init chat on auth or project change */
+    /* robust re-init of chat on auth or project change */
     waitFor(['auth', 'chatManager'], (auth, chatManager) => {
-        const maybeInitChat = debounce(() => {
-            if (auth.isAuthenticated() && window.app.getProjectId()) {
+        const safeInitChat = debounce(() => {
+            // Prefer DependencySystem, then window.projectManager, then fallback
+            const projectId =
+                window.projectManager?.currentProject?.id ||
+                (window.projectManager?.getCurrentProject?.()?.id) ||
+                window.app.getProjectId();
+            if (auth.isAuthenticated() && projectId) {
                 chatManager.initialize({
                     containerSelector: "#globalChatUI",
                     inputSelector: "#chatUIInput",
                     sendButtonSelector: "#globalChatSendBtn",
-                    titleSelector: "#chatTitle"
+                    titleSelector: "#chatTitle",
+                    projectId
                 });
             }
         }, 300);
 
-        auth.AuthBus?.addEventListener('authStateChanged', maybeInitChat);
+        auth.AuthBus?.addEventListener('authStateChanged', safeInitChat);
         waitFor('projectManager', (pm) => {
-            const handler = maybeInitChat;
+            const handler = safeInitChat;
             if (typeof pm.addEventListener === 'function') {
                 pm.addEventListener('projectSelected', handler);
             } else if (typeof pm.on === 'function') {

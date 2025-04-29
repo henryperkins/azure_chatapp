@@ -18,7 +18,7 @@ from typing import List, Dict, Optional, Any, Union, AsyncGenerator, cast
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
-from .openai import openai_chat
+from utils.openai import openai_chat
 
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ async def do_summarization(
                         except (UnicodeDecodeError, json.JSONDecodeError) as e:
                             logger.error(f"Error decoding chunk: {e}")
                             continue
-        
+
         summary_text = complete_response["choices"][0]["message"]["content"]
         return summary_text.strip()
     except Exception as e:

@@ -13,7 +13,7 @@ from config import settings
 from utils.db_utils import get_by_id, save_model
 from utils.message_handlers import get_conversation_messages, update_project_token_usage
 
-from .ai_helper import get_model_config, retrieve_knowledge_context, calculate_tokens
+from utils.ai_helper import get_model_config, retrieve_knowledge_context, calculate_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ async def generate_ai_response(
             try:
                 if isinstance(conversation.project_id, UUID):
                     knowledge_context = await retrieve_knowledge_context(
-                        query=last_user_content, 
+                        query=last_user_content,
                         project_id=conversation.project_id,  # type: ignore[arg-type]
                         db=db
                     )
@@ -107,7 +107,7 @@ async def generate_ai_response(
         "model_name": str(model_id),  # str
         "stream": stream,  # bool
     }
-    
+
     # Add optional parameters only if they are not None
     if image_data is not None:
         api_params["image_data"] = image_data
@@ -117,7 +117,7 @@ async def generate_ai_response(
         api_params["max_tokens"] = max_tokens
     if temperature is not None:
         api_params["temperature"] = temperature
-    
+
     # Add any additional parameters
     api_params.update({k: v for k, v in kwargs.items() if v is not None})
 
@@ -285,5 +285,3 @@ async def generate_ai_response(
         raise HTTPException(
             status_code=500, detail=f"Failed to generate AI response: {str(e)}"
         ) from e
-
-

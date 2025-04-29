@@ -49,19 +49,10 @@ __all__ = [
     "ConversationService",
     # User
     "get_user_by_username",
-    # Utils
-    "handle_service_errors",
-    "ServiceError",
-    "validate_resource_exists",
-    "validate_user_resource_access",
-    "validate_project_resource",
-    "get_by_id",
-    "save_model",
-    "get_all_by_condition",
 ]
 
 # File storage services
-from .file_storage import (
+from services.file_storage import (
     FileStorage,
     get_file_storage,
     save_file_to_storage,
@@ -70,21 +61,21 @@ from .file_storage import (
 )
 
 # Text extraction services
-from .text_extraction import (
+from services.text_extraction import (
     TextExtractor,
     get_text_extractor,
     TextExtractionError,
 )
 
 # Vector database services
-from .vector_db import (
+from services.vector_db import (
     VectorDB,
     get_vector_db,
     process_file_for_search,
 )
 
 # Knowledge base services
-from .knowledgebase_service import (
+from services.knowledgebase_service import (
     delete_project_file,
     get_project_files_stats,
     search_project_context,
@@ -92,7 +83,7 @@ from .knowledgebase_service import (
 )
 
 # Project services
-from .project_service import (
+from services.project_service import (
     validate_project_access,
     get_default_project,
     create_project,
@@ -103,7 +94,7 @@ from .project_service import (
 )
 
 # Artifact services
-from .artifact_service import (
+from services.artifact_service import (
     create_artifact,
     get_artifact,
     list_artifacts,
@@ -115,13 +106,13 @@ from .artifact_service import (
 )
 
 # Conversation services
-from .conversation_service import (
+from services.conversation_service import (
     validate_model_and_params,
     get_conversation_service,
     ConversationService,
 )
 
 # User services
-from .user_service import (
+from services.user_service import (
     get_user_by_username,
 )
