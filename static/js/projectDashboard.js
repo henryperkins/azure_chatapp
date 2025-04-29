@@ -286,6 +286,11 @@ class ProjectDashboard {
     if (loginMessage) {
       loginMessage.classList.remove('hidden');
     }
+    // Accessibility: If focus is within the sidebar, blur it before hiding
+    const sidebar = document.getElementById('mainSidebar');
+    if (sidebar && sidebar.contains(document.activeElement)) {
+      document.activeElement.blur();
+    }
     const projectViews = document.querySelectorAll('#projectListView, #projectDetailsView');
     projectViews.forEach(view => view.classList.add('hidden'));
   }
@@ -378,14 +383,30 @@ class ProjectDashboard {
   async _initializeComponents() {
     console.log('[ProjectDashboard] Initializing components...');
 
+    // Ensure #projectList is present in the DOM before initializing the component
+    const waitForProjectList = async () => {
+      const maxAttempts = 20, delay = 100;
+      for (let i = 0; i < maxAttempts; i++) {
+        if (document.getElementById('projectList')) return;
+        await new Promise(r => setTimeout(r, delay));
+      }
+      throw new Error('Timeout: #projectList did not appear in DOM after injecting project_list.html');
+    };
+    await waitForProjectList();
+
     // Project list component
     if (window.ProjectListComponent) {
       this.components.projectList = new window.ProjectListComponent({
         elementId: 'projectList',
         onViewProject: this._handleViewProject.bind(this)
       });
-      await this.components.projectList.initialize();
-      console.log('[ProjectDashboard] ProjectListComponent created and initialized.');
+      try {
+        await this.components.projectList.initialize();
+        console.log('[ProjectDashboard] ProjectListComponent created and initialized.');
+      } catch (err) {
+        console.error('[ProjectDashboard] ProjectListComponent failed to initialize:', err);
+        throw new Error('ProjectListComponent failed to initialize.');
+      }
     } else {
       console.error('[ProjectDashboard] ProjectListComponent not found on window.');
     }
@@ -401,6 +422,19 @@ class ProjectDashboard {
     }
 
     console.log('[ProjectDashboard] Components initialized.');
+
+    // --- Patch 2: Force replay of projectsLoaded after both components initialized ---
+    setTimeout(() => {
+      if (window.projectManager?.currentProjects?.length) {
+        document.dispatchEvent(new CustomEvent('projectsLoaded', {
+          detail: { projects: window.projectManager.currentProjects }
+        }));
+        console.log('[ProjectDashboard] Patch2: Dispatched projectsLoaded event for late-initializers.');
+      } else {
+        window.projectManager?.loadProjects('all');
+        console.log('[ProjectDashboard] Patch2: Reloaded projects to guarantee fresh projectsLoaded event.');
+      }
+    }, 0);
   }
 
   /**
@@ -608,7 +642,7 @@ class ProjectDashboard {
     requestAnimationFrame(() => {
       if (this.components.projectList) {
         console.log("[ProjectDashboard] Rendering " + projects.length + " project(s).");
-        this.components.projectList.renderProjects(projects);
+        this.components.projectList.renderProjects({ projects });
       } else {
         console.warn('[ProjectDashboard] ProjectListComponent not available to render projects.');
       }
