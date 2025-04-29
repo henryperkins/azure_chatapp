@@ -69,13 +69,39 @@ class ProjectManager {
       }
 
       console.log('[ProjectManager] Project created:', project.id);
+
+      // 1. Ensure a KB and at least one conversation, idempotent
+      const ensureConversation = async () => {
+        const hasConvo =
+          (Array.isArray(project.conversations) && project.conversations.length) ||
+          Number(project.conversation_count) > 0;
+        if (hasConvo) return project.conversations?.[0];
+        return await this.createDefaultConversation(project.id);
+      };
+
+      const ensureKnowledgeBase = async () => {
+        if (project.knowledge_base?.id) return project.knowledge_base;
+        return await this.initializeKnowledgeBase(project.id);
+      };
+
+      const [conversation, kb] = await Promise.all([
+        ensureConversation(),
+        ensureKnowledgeBase()
+      ]);
+
+      // 2. Merge into project object for downstream consumers
+      if (conversation) {
+        project.conversations = [conversation];
+        project.conversation_count = 1;
+      }
+      if (kb) project.knowledge_base = kb;
+
       this._emitEvent('projectCreated', project);
-
-      // Always create default conversation
-      await this.createDefaultConversation(project.id);
-
-      // Always initialize knowledge base
-      await this.initializeKnowledgeBase(project.id);
+      document.dispatchEvent(
+        new CustomEvent('projectConversationsLoaded', {
+          detail: { projectId: project.id, conversations: project.conversations },
+        })
+      );
 
       return project;
     } catch (error) {
@@ -87,17 +113,23 @@ class ProjectManager {
 
   async createDefaultConversation(projectId) {
     try {
-      const response = await window.app.apiRequest(`/api/projects/${projectId}/conversations`, {
-        method: 'POST',
-        body: {
-          title: 'Default Conversation',
-          model_id: window.modelConfig?.getConfig()?.modelName || 'claude-3-sonnet-20240229'
+      const response = await window.app.apiRequest(
+        `/api/projects/${projectId}/conversations`,
+        {
+          method: 'POST',
+          body: {
+            title: 'Default Conversation',
+            model_id:
+              window.modelConfig?.getConfig()?.modelName || 'claude-3-sonnet-20240229'
+          }
         }
-      });
+      );
 
       const conversation = response.data || response;
 
-      if (!conversation.id) throw new Error('Failed to create default conversation');
+      if (!conversation.id) {
+        throw new Error('Failed to create default conversation');
+      }
 
       console.log('[ProjectManager] Default conversation created:', conversation.id);
       return conversation;
@@ -109,17 +141,19 @@ class ProjectManager {
 
   async initializeKnowledgeBase(projectId) {
     try {
-      const response = await window.app.apiRequest(`/api/projects/${projectId}/knowledge-bases`, {
-        method: 'POST',
-        body: {
-          name: 'Default Knowledge Base',
-          description: 'Auto-created knowledge base.',
-          embedding_model: 'text-embedding-3-small'  // Adjust model as needed
+      const response = await window.app.apiRequest(
+        `/api/projects/${projectId}/knowledge-bases`,
+        {
+          method: 'POST',
+          body: {
+            name: 'Default Knowledge Base',
+            description: 'Auto-created knowledge base.',
+            embedding_model: 'text-embedding-3-small' // Adjust model as needed
+          }
         }
-      });
+      );
 
       const kb = response.data || response;
-
       if (!kb.id) throw new Error('Failed to initialize knowledge base');
 
       console.log('[ProjectManager] Knowledge base initialized:', kb.id);
@@ -147,7 +181,8 @@ class ProjectManager {
    */
   async loadProjects(filter = 'all') {
     if (this.projectLoadingInProgress) {
-      this.CONFIG.DEBUG && console.log("[ProjectManager] Project loading already in progress");
+      this.CONFIG.DEBUG &&
+        console.log("[ProjectManager] Project loading already in progress");
       return [];
     }
 
@@ -172,18 +207,28 @@ class ProjectManager {
       params.append("limit", "100");
 
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
-      this.CONFIG.DEBUG && console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
+      this.CONFIG.DEBUG &&
+        console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
       const response = await window.app.apiRequest(endpoint);
+
       // Always log the full API response for debugging
-      console.log('%c[FULL /api/projects RESPONSE]', 'color: orange; font-weight: bold', JSON.stringify(response));
-      this.CONFIG.DEBUG && console.log('[ProjectManager] Raw projects response:', response);
+      console.log(
+        '%c[FULL /api/projects RESPONSE]',
+        'color: orange; font-weight: bold',
+        JSON.stringify(response)
+      );
+      this.CONFIG.DEBUG &&
+        console.log('[ProjectManager] Raw projects response:', response);
 
       // Support various API response shapes
       const projects =
         response?.data?.projects ||
         response?.projects ||
-        (Array.isArray(response?.data) ? response.data :
-          (Array.isArray(response) ? response : []));
+        (Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : []);
 
       if (!Array.isArray(projects)) {
         console.warn("[ProjectManager] Unexpected project list format:", response);
@@ -251,7 +296,9 @@ class ProjectManager {
       let projectData = null;
       if (response?.data?.id) projectData = response.data;
       else if (response?.id) projectData = response;
-      else if ((response?.status === 'success' || response?.success === true) && response?.data?.id) projectData = response.data;
+      else if ((response?.status === 'success' || response?.success === true) && response?.data?.id) {
+        projectData = response.data;
+      }
 
       if (!projectData || projectData.id !== projectId) {
         throw new Error("Invalid project response format or ID mismatch");
@@ -285,7 +332,6 @@ class ProjectManager {
       if (error.status === 404) {
         this._emitEvent("projectNotFound", { projectId });
       }
-
       return null;
     }
   }
@@ -332,8 +378,11 @@ class ProjectManager {
       const files =
         response?.data?.files ||
         response?.files ||
-        (Array.isArray(response?.data) ? response.data :
-          (Array.isArray(response) ? response : []));
+        (Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : []);
 
       this._emitEvent("projectFilesLoaded", { projectId, files });
       return files;
@@ -362,8 +411,11 @@ class ProjectManager {
       const conversations =
         response?.data?.conversations ||
         response?.conversations ||
-        (Array.isArray(response?.data) ? response.data :
-          (Array.isArray(response) ? response : []));
+        (Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : []);
 
       this._emitEvent("projectConversationsLoaded", { projectId, conversations });
       return conversations;
@@ -392,8 +444,11 @@ class ProjectManager {
       const artifacts =
         response?.data?.artifacts ||
         response?.artifacts ||
-        (Array.isArray(response?.data) ? response.data :
-          (Array.isArray(response) ? response : []));
+        (Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : []);
 
       this._emitEvent("projectArtifactsLoaded", { projectId, artifacts });
       return artifacts;
@@ -537,9 +592,8 @@ class ProjectManager {
    */
   async createConversation(projectId, options = {}) {
     try {
-      // Persist selected project for context
       localStorage.setItem("selectedProjectId", projectId);
-      return await window.chatManager.createNewConversation(options);
+      return await window.chatManager.createNewConversation(projectId, options);
     } catch (error) {
       console.error("[ProjectManager] createConversation error:", error);
       throw error;
@@ -611,12 +665,15 @@ class ProjectManager {
         formData.append('file', file);
         formData.append('projectId', projectId);
 
-        await window.app.apiRequest(`/api/projects/${projectId}/files`, { method: 'POST', body: formData });
+        await window.app.apiRequest(`/api/projects/${projectId}/files`, {
+          method: 'POST',
+          body: formData
+        });
         return true;
       } catch (err) {
         attempt++;
         if (attempt >= maxRetries) throw err;
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // exponential backoff
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // simple backoff
       }
     }
   }

@@ -25,7 +25,7 @@ class ProjectDetailsComponent {
     // State
     this.state = {
       currentProject: null,
-      activeTab: 'files',
+      activeTab: 'details', // show Details by default
       isLoading: {},
       initialized: false
     };
@@ -102,6 +102,7 @@ class ProjectDetailsComponent {
 
     // Tab content sections
     this.elements.tabContents = {
+      details: document.getElementById('detailsTab'),
       files: document.getElementById('filesTab'),
       knowledge: document.getElementById('knowledgeTab'),
       conversations: document.getElementById('conversationsTab'),
@@ -246,7 +247,7 @@ class ProjectDetailsComponent {
    * @param {string} tabName - Tab name
    */
   switchTab(tabName) {
-    const validTabs = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'];
+    const validTabs = ['details', 'files', 'knowledge', 'conversations', 'artifacts', 'chat'];
     if (!validTabs.includes(tabName)) {
       console.warn(`[ProjectDetailsComponent] Invalid tab name: ${tabName}`);
       return;
@@ -389,8 +390,9 @@ class ProjectDetailsComponent {
    */
   async createNewChat() {
     try {
-      await window.chatManager.initialize();
-      const newConversationId = await window.chatManager.createConversation(this.state.currentProject?.id);
+      await window.chatManager.initialize({ projectId: this.state.currentProject?.id });
+      const newConversation = await window.chatManager.createNewConversation();
+      const newConversationId = newConversation.id;
 
       // Switch to the chat tab and load the new conversation
       localStorage.setItem('selectedProjectId', this.state.currentProject?.id);
@@ -903,6 +905,8 @@ class ProjectDetailsComponent {
 export function createProjectDetailsComponent(options = {}) {
   return new ProjectDetailsComponent(options);
 }
+
+export { ProjectDetailsComponent };
 
 // The app.js will handle initialization and registration like:
 /*
