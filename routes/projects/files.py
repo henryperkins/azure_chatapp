@@ -41,17 +41,14 @@ async def list_project_files(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     file_type: Optional[str] = Query(
-        None,
-        min_length=1,
-        max_length=50,
-        regex="^[a-zA-Z0-9._-]+$"
+        None, min_length=1, max_length=50, regex="^[a-zA-Z0-9._-]+$"
     ),
 ):
     """
     List files in a project with metadata only.
     Does not include knowledge base processing details.
     """
-    user, _ = current_user_and_token
+    user, _token = current_user_and_token
     try:
         # Validate project access
         await validate_project_access(project_id, user, db)
@@ -66,30 +63,36 @@ async def list_project_files(
             *conditions,
             limit=limit,
             offset=skip,
-            order_by=ProjectFile.created_at.desc()
+            order_by=ProjectFile.created_at.desc(),
         )
 
-        return await create_standard_response({
-            "files": [{
-                "id": str(f.id),
-                "filename": f.filename,
-                "file_type": f.file_type,
-                "file_size": f.file_size,
-                "created_at": f.created_at.isoformat(),
-                "metadata": f.metadata or {}
-            } for f in files],
-            "count": len(files),
-            "total_size": await db.scalar(
-                select(func.sum(ProjectFile.file_size))
-                .where(ProjectFile.project_id == project_id)
-            ) or 0
-        })
+        return await create_standard_response(
+            {
+                "files": [
+                    {
+                        "id": str(f.id),
+                        "filename": f.filename,
+                        "file_type": f.file_type,
+                        "file_size": f.file_size,
+                        "created_at": f.created_at.isoformat(),
+                        "metadata": f.metadata or {},
+                    }
+                    for f in files
+                ],
+                "count": len(files),
+                "total_size": await db.scalar(
+                    select(func.sum(ProjectFile.file_size)).where(
+                        ProjectFile.project_id == project_id
+                    )
+                )
+                or 0,
+            }
+        )
 
     except Exception as e:
         logger.error(f"Error listing files: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to list project files"
+            status_code=500, detail="Failed to list project files"
         ) from e
 
 
@@ -104,7 +107,7 @@ async def get_project_file_metadata(
     Get metadata for a specific file.
     NOTE: Actual file content retrieval will be handled separately.
     """
-    user, _ = current_user_and_token
+    user, _token = current_user_and_token
     try:
         # Validate project access
         await validate_project_access(project_id, user, db)
@@ -113,23 +116,24 @@ async def get_project_file_metadata(
         if not file or file.project_id != project_id:
             raise HTTPException(status_code=404, detail="File not found")
 
-        return await create_standard_response({
-            "id": str(file.id),
-            "filename": file.filename,
-            "file_type": file.file_type,
-            "file_size": file.file_size,
-            "created_at": file.created_at.isoformat(),
-            "metadata": file.metadata or {},
-            "storage_path": file.file_path
-        })
+        return await create_standard_response(
+            {
+                "id": str(file.id),
+                "filename": file.filename,
+                "file_type": file.file_type,
+                "file_size": file.file_size,
+                "created_at": file.created_at.isoformat(),
+                "metadata": file.metadata or {},
+                "storage_path": file.file_path,
+            }
+        )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error retrieving file metadata: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to retrieve file metadata"
+            status_code=500, detail="Failed to retrieve file metadata"
         ) from e
 
 
@@ -144,7 +148,7 @@ async def delete_project_file(
     Delete a file from project storage.
     NOTE: KB cleanup is handled by the KB service via database triggers/signals.
     """
-    user, _ = current_user_and_token
+    user, _token = current_user_and_token
     try:
         # Validate project access
         await validate_project_access(project_id, user, db)
@@ -163,16 +167,15 @@ async def delete_project_file(
         await db.delete(file)
         await db.commit()
 
-        return await create_standard_response({"id": str(file_id)}, "File deleted successfully")
+        return await create_standard_response(
+            {"id": str(file_id)}, "File deleted successfully"
+        )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"File deletion failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to delete file"
-        ) from e
+        raise HTTPException(status_code=500, detail="Failed to delete file") from e
 
 
 @router.get("/{file_id}/download", include_in_schema=False)
@@ -186,8 +189,7 @@ async def download_project_file(
     Stub for future file download endpoint.
     Actual implementation will depend on storage backend.
     """
-    user, _ = current_user_and_token
+    user, _token = current_user_and_token
     raise HTTPException(
-        status_code=501,
-        detail="File download endpoint not yet implemented"
+        status_code=501, detail="File download endpoint not yet implemented"
     )

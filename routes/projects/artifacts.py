@@ -2,7 +2,7 @@
 p_artifacts.py
 --------------
 Routes for managing artifacts within a project.
-Provides endpoints for creating, listing, retrieving and deleting artifacts.
+Provides endpoints for creating, listing, retrieving, and deleting artifacts.
 """
 
 import logging
@@ -52,8 +52,10 @@ async def create_artifact(
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Create a new artifact for the project."""
-    user, _ = current_user_and_token
+    """
+    Create a new artifact for the project.
+    """
+    user, _token = current_user_and_token
     try:
         artifact = await artifact_service.create_artifact(
             db=db,
@@ -92,8 +94,10 @@ async def list_artifacts(
     skip: int = 0,
     limit: int = 100,
 ):
-    """List all artifacts for a project with optional filtering."""
-    user, _ = current_user_and_token
+    """
+    List all artifacts for a project with optional filtering.
+    """
+    user, _token = current_user_and_token
     try:
         artifacts = await artifact_service.list_artifacts(
             project_id=project_id,
@@ -131,8 +135,10 @@ async def get_artifact_stats(
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get statistics about artifacts in the project."""
-    user, _ = current_user_and_token
+    """
+    Get statistics about artifacts in the project.
+    """
+    user, _token = current_user_and_token
     try:
         stats = await artifact_service.get_artifact_stats(
             project_id=project_id,
@@ -158,8 +164,10 @@ async def get_artifact(
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get a specific artifact by ID."""
-    user, _ = current_user_and_token
+    """
+    Get a specific artifact by ID.
+    """
+    user, _token = current_user_and_token
     try:
         artifact = await artifact_service.get_artifact(
             db=db,
@@ -188,8 +196,10 @@ async def update_artifact(
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Update an artifact by ID."""
-    user, _ = current_user_and_token
+    """
+    Update an artifact by ID.
+    """
+    user, _token = current_user_and_token
     try:
         artifact = await artifact_service.update_artifact(
             db=db,
@@ -220,8 +230,10 @@ async def delete_artifact(
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Delete an artifact by ID."""
-    user, _ = current_user_and_token
+    """
+    Delete an artifact by ID.
+    """
+    user, _token = current_user_and_token
     try:
         result = await artifact_service.delete_artifact(
             db=db,
@@ -233,7 +245,7 @@ async def delete_artifact(
         return await create_standard_response(
             result, message=result.get("message", "Artifact deleted successfully")
         )
-    except HTTPException:  # pylint: disable=unused-variable
+    except HTTPException:
         raise
     except Exception as _e:
         logger.error("Error deleting artifact", exc_info=True)
@@ -251,8 +263,10 @@ async def export_artifact(
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Export an artifact in various formats."""
-    user, _ = current_user_and_token
+    """
+    Export an artifact in various formats.
+    """
+    user, _token = current_user_and_token
     try:
         export_data = await artifact_service.export_artifact(
             db=db,
@@ -265,7 +279,7 @@ async def export_artifact(
         return await create_standard_response(
             export_data, message=f"Artifact exported as {export_format} successfully"
         )
-    except HTTPException:  # pylint: disable=unused-variable
+    except HTTPException:
         raise
     except Exception as _e:
         logger.error("Error exporting artifact", exc_info=True)

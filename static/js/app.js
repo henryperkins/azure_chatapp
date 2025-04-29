@@ -187,10 +187,11 @@ async function apiRequest(url, opts = {}, skipCache = false) {
                 const json = await resp.json();
                 if (json && typeof json === 'object') {
                     if (json.status === 'success' && 'data' in json) {
+                        // Always unwrap .data payload
                         return json.data;
                     }
                     if (json.status === 'success') {
-                        // fall back to root spread (e.g. {status:'success', conversations:[…]})
+                        // Fall back to {status:'success', resource:{…}}
                         const { status, message, ...rest } = json;
                         if (Object.keys(rest).length === 1) {
                             // unwrap single key like {conversation:{…}}, {project:{…}}, etc
