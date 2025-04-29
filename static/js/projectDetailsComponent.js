@@ -411,16 +411,36 @@ class ProjectDetailsComponent {
       console.error('[ProjectDetailsComponent] createNewChat failed: invalid projectId', { projectId });
       return;
     }
+
+    // Only initialize chat if not already ready for this project
+    if (
+      !window.chatManager.isInitialized ||
+      window.chatManager.projectId !== projectId
+    ) {
+      try {
+        await window.chatManager.initialize({ projectId });
+      } catch (initErr) {
+        console.error('Error initializing chat for new chat:', initErr);
+        window.app.showNotification('Failed to initialize chat', 'error');
+        return;
+      }
+    }
+
     try {
-      await window.chatManager.initialize({ projectId });
       const newConversation = await window.chatManager.createNewConversation();
       const newConversationId = newConversation.id;
 
-      // Switch to the chat tab and load the new conversation
+      // Switch to the chat tab and load the new conversation if needed
       localStorage.setItem('selectedProjectId', this.state.currentProject?.id);
       this.switchTab('chat');
 
-      await window.chatManager.loadConversation(newConversationId);
+      // Only load if this conversation is not already active/loading
+      if (
+        window.chatManager.currentConversationId !== newConversationId &&
+        !window.chatManager.isLoading
+      ) {
+        await window.chatManager.loadConversation(newConversationId);
+      }
 
       // Update URL
       const url = new URL(window.location.href);
@@ -521,13 +541,31 @@ class ProjectDetailsComponent {
    * @private
    */
   async _initializeChat() {
-    // Defensive: Only allow initializing chat if valid projectId is present
     const projectId = this.state.currentProject?.id;
     if (!isValidProjectId(projectId)) {
       this.disableChatUI("Cannot initialize chat: No valid project selected.");
       window.app.showNotification('Cannot initialize chat: No valid project selected.', 'error');
       return;
     }
+
+    // If already initialized for this project, just load conversation if needed
+    if (
+      window.chatManager.isInitialized &&
+      window.chatManager.projectId === projectId
+    ) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const chatId = urlParams.get('chatId');
+      if (
+        chatId &&
+        window.chatManager.currentConversationId !== chatId &&
+        !window.chatManager.isLoading
+      ) {
+        await window.chatManager.loadConversation(chatId);
+      }
+      this.enableChatUI();
+      return;
+    }
+
     try {
       await window.chatManager.initialize({ projectId });
       const urlParams = new URLSearchParams(window.location.search);
@@ -882,17 +920,51 @@ class ProjectDetailsComponent {
    * @private
    */
   async _handleConversationClick(conversation) {
-    if (!conversation?.id || !this.state.currentProject?.id) {
-      window.app.showNotification('Invalid conversation data', 'error');
+    const projectId = this.state.currentProject?.id;
+    if (!conversation?.id || !isValidProjectId(projectId)) {
+      this.disableChatUI("No valid project loaded.");
+      window.app.showNotification('No valid project loaded.', 'error');
+      console.error('[ProjectDetailsComponent] _handleConversationClick failed: invalid conversation or projectId', { conversationId: conversation?.id, projectId });
       return;
     }
 
-    try {
-      localStorage.setItem('selectedProjectId', this.state.currentProject.id);
-      this.switchTab('chat');
+    localStorage.setItem('selectedProjectId', projectId);
 
-      await window.chatManager.initialize({ projectId: this.state.currentProject.id });
-      await window.chatManager.loadConversation(conversation.id);
+    // If already on chat tab, project, and this conversation, no-op
+    if (
+      this.state.activeTab === 'chat' &&
+      window.chatManager.projectId === projectId &&
+      window.chatManager.currentConversationId === conversation.id
+    ) {
+      return;
+    }
+
+    // Only switch tab if not already there (to avoid recursive state bounce)
+    if (this.state.activeTab !== 'chat') {
+      this.switchTab('chat');
+      // Wait for chatManager initialization to sync projectId if needed
+      let waitMs = 0;
+      while (
+        (!window.chatManager.isInitialized || window.chatManager.projectId !== projectId) &&
+        waitMs < 400
+      ) {
+        // Poll in 40ms increments up to 400ms (max UI frame is fast enough)
+        await new Promise(resolve => setTimeout(resolve, 40));
+        waitMs += 40;
+      }
+    }
+
+    try {
+      // Defensive: ensure chatManager is initialized for this project and projectId is valid before loading convo
+      if (!window.chatManager.isInitialized || window.chatManager.projectId !== projectId || !isValidProjectId(window.chatManager.projectId)) {
+        await window.chatManager.initialize({ projectId });
+      }
+      if (
+        window.chatManager.currentConversationId !== conversation.id &&
+        !window.chatManager.isLoading
+      ) {
+        await window.chatManager.loadConversation(conversation.id);
+      }
 
       const url = new URL(window.location.href);
       url.searchParams.set('chatId', conversation.id);
