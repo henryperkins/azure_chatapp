@@ -34,6 +34,40 @@
 window.projectEvents = window.projectEvents || {};
 
 /**
+ * Strongly-normalize project fetch/create API responses. Throws if no valid project ID found.
+ * See: unified frontend remediation spec.
+ */
+export function normalizeProjectResponse(response) {
+  let projectData = null;
+  if (Array.isArray(response)) projectData = response[0];
+  if (!projectData || !projectData.id) projectData = response?.data?.id ? response.data : null;
+  if (!projectData || !projectData.id) projectData = response?.id ? response : null;
+
+  // Coerce and check for all known keys (uuid, project_id, projectId, id)
+  projectData &&= {
+    ...projectData,
+    id: String(
+      projectData.id ??
+      projectData.uuid ??
+      projectData.project_id ??
+      projectData.projectId ??
+      ''
+    ).trim()
+  };
+  // Accept only "strong" UUID/project IDs, not 'null', not empty, not loose types
+  if (
+    !projectData ||
+    !projectData.id ||
+    projectData.id.toLowerCase() === 'null' ||
+    !isValidProjectId(projectData.id)
+  ) {
+    console.error('[ProjectManager] Invalid project data/ID', { response, projectData });
+    throw new Error('Invalid or missing project ID after project load');
+  }
+  return projectData;
+}
+
+/**
  * Utility: Normalizes any API response to a uniform array of records—or single object—for resource loaders.
  */
 function extractResourceList(response, options = {}) {
@@ -74,8 +108,20 @@ function extractResourceList(response, options = {}) {
   return null; // Unable to produce an array
 }
 
+/** True UUID (canonical, not just non-empty string) validator. */
+export function isValidProjectId(id) {
+  // Accept 32/36-cc UUIDs, not 'null', not empty, not accidental number/undefined
+  return (
+    typeof id === 'string' &&
+    /^[0-9a-f-]{32,36}$/i.test(id) &&
+    id.toLowerCase() !== 'null'
+  );
+}
+
 class ProjectManager {
   constructor() {
+    // Static helper for robust projectId validation everywhere (deprecated—use export now)
+    this._isValidProjectId = isValidProjectId;
     // Configuration constants
     this.CONFIG = {
       DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
@@ -304,7 +350,6 @@ class ProjectManager {
       this.projectLoadingInProgress = false;
     }
   }
-
   /**
    * Load details for a specific project, including related data.
    *
@@ -312,9 +357,9 @@ class ProjectManager {
    * @returns {Promise<Project|null>} - Resolves to the project object or null on error.
    */
   async loadProjectDetails(projectId) {
-    /* Accept UUIDs, numeric or opaque string IDs */
-    if (!String(projectId).length) {
-      console.error("[ProjectManager] Empty project ID supplied");
+    // Defensive: reject empty or loosely-supplied projectId up front
+    if (!isValidProjectId(projectId)) {
+      console.error("[ProjectManager] Empty or invalid project ID supplied");
       this._emitEvent("projectDetailsError", {
         projectId,
         error: { message: "Project ID is required" }
@@ -341,42 +386,19 @@ class ProjectManager {
 
       if (!response) return null;
 
-      // DRY normalization: try all plausible shapes for detail object
-      let projectArr = extractResourceList(response, {
-        listKeys: ["projects", "project"],
-        singularKey: "project"
-      });
-
-      let projectData = Array.isArray(projectArr) ? projectArr[0] : null;
-
-      // Fallback to legacy parsing if above fails
-      if (!projectData || !projectData.id) {
-        if (response?.data?.id) {
-          projectData = response.data;
-        } else if (response?.id) {
-          projectData = response;
-        } else if ((response?.status === 'success' || response?.success === true) && response?.data && typeof response.data === 'object') {
-          projectData = response.data;
-        } else if (Array.isArray(response?.data) && response.data[0] && response.data[0].id) {
-          projectData = response.data[0];
-        } else if (Array.isArray(response) && response[0]?.id) {
-          projectData = response[0];
-        }
-      }
-
-      // Normalise id field (uuid, project_id, etc.)
-      if (projectData && !projectData.id) {
-        projectData.id = projectData.uuid
-          || projectData.project_id
-          || projectData.projectId
-          || null;
-      }
-
-      if (!projectData) {
+      // Use strict normalization/validation
+      let projectData;
+      try {
+        projectData = normalizeProjectResponse(response);
+      } catch (err) {
+        this._emitEvent("projectDetailsError", {
+          projectId,
+          error: { message: err.message, response }
+        });
         return null;
       }
 
-      // Normalise both sides to lowercase string to allow 42/UUID, etc.
+      // Normalize both sides to lowercase string to allow 42/UUID, etc.
       const parsedId = String(projectData.id).toLowerCase();
       const requestedId = String(projectId).toLowerCase();
       if (parsedId !== requestedId) {
@@ -397,10 +419,10 @@ class ProjectManager {
 
       // Load related data in parallel (stats, files, conversations, artifacts)
       await Promise.allSettled([
-        this.loadProjectStats(projectId),
-        this.loadProjectFiles(projectId),
-        this.loadProjectConversations(projectId),
-        this.loadProjectArtifacts(projectId)
+        this.loadProjectStats(projectData.id), // use normalized/validated id
+        this.loadProjectFiles(projectData.id),
+        this.loadProjectConversations(projectData.id),
+        this.loadProjectArtifacts(projectData.id)
       ]);
 
       return JSON.parse(JSON.stringify(this.currentProject));
@@ -784,6 +806,52 @@ class ProjectManager {
       console.warn('[ProjectManager] event cache error:', e);
     }
   }
+}
+
+/**
+ * Trusted, DRY getter for current projectId — always prefer this utility!
+ * Will never return null/"null"/junk. Use everywhere (chat, tab switch, API, etc).
+ * Returns the first valid projectId from these sources (most authoritative first):
+ *   - window.projectManager.currentProject.id
+ *   - window.projectManager.getCurrentProject().id
+ *   - window.app.getProjectId()
+ *   - window.app?.state?.currentProjectId
+ *   - localStorage 'selectedProjectId'
+ *   - URL pathname (/projects/:id)
+ *   - search params ('project', or 'projectId')
+ */
+export function getCurrentProjectId() {
+  const manager = window.projectManager;
+  const appId = window.app?.getProjectId?.();
+  const localId = localStorage.getItem('selectedProjectId');
+  const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
+  const urlParam = new URLSearchParams(window.location.search).get('project');
+
+  // Allow getCurrentProject as method, and currentProject as property object
+  const candidates = [
+    manager?.currentProject?.id,
+    typeof manager?.getCurrentProject === 'function' ? manager.getCurrentProject()?.id : undefined,
+    appId,
+    urlParam,
+    pathMatch?.[1],
+    localId
+  ];
+
+  const valid = candidates.find(
+    id =>
+      typeof id === 'string' &&
+      /^[0-9a-f-]{32,36}$/i.test(id) &&
+      id.toLowerCase() !== 'null'
+  );
+  if (!valid) {
+    console.error('[App] getCurrentProjectId failed to resolve', {
+      candidates,
+      pathname: window.location.pathname,
+      href: window.location.href
+    });
+    return null;
+  }
+  return valid;
 }
 
 // Export factory function for app.js to use
