@@ -333,6 +333,26 @@ class ProjectListComponent {
     // --------------------------------------
 
     renderProjects(data) {
+        /* ---------------------------------------------------------
+         * Guard 1:  Ignore events whose payload is obviously not a
+         *           list-of-projects.  This prevents a later, rogue
+         *           `projectsLoaded` event (carrying conversations,
+         *           stats, etc.) from wiping an already correct UI.
+         * --------------------------------------------------------- */
+        const looksLikeProjectArray = (value) =>
+            Array.isArray(value) &&
+            value.every((p) => p && typeof p === 'object' && 'id' in p);
+
+        const payloadIsConversations =
+            data?.status === 'success' && Array.isArray(data?.conversations);
+
+        if (!looksLikeProjectArray(data) &&
+            !looksLikeProjectArray(data?.projects) &&
+            payloadIsConversations) {
+            console.warn('[ProjectListComponent] Ignoring projectsLoaded event that contains conversations, not projects.');
+            return;   // <-- early-exit, keep existing list intact
+        }
+
         if (!this.element) {
             console.error(`[ProjectListComponent.renderProjects] ABORTING: Target element #${this.elementId} is not available in the DOM.`);
             this.element = document.getElementById(this.elementId);
