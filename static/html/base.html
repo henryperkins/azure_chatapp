@@ -693,23 +693,6 @@
 
       <div id="notificationArea" role="status" aria-live="polite" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
 
-      <!-- Keyboard shortcuts help (toggle with ? key) -->
-      <div id="keyboardHelp" class="hidden fixed inset-0 bg-base-300 bg-opacity-70 z-50 flex items-center justify-center"
-           role="dialog" aria-modal="true" aria-labelledby="keyboardHelpTitle">
-        <div class="card max-w-lg w-full bg-base-100 shadow-xl p-6">
-          <button class="btn btn-sm btn-ghost btn-circle absolute top-2 right-2" aria-label="Close keyboard shortcuts">×</button>
-          <h3 id="keyboardHelpTitle" class="text-lg font-bold mb-4">Keyboard Shortcuts</h3>
-          <div class="kbd-container grid grid-cols-2 gap-2">
-            <div class="flex items-center"><kbd class="kbd kbd-sm">Tab</kbd><span class="ml-2">Navigate interactive elements</span></div>
-            <div class="flex items-center"><kbd class="kbd kbd-sm">↑ ↓</kbd><span class="ml-2">Navigate lists</span></div>
-            <div class="flex items-center"><kbd class="kbd kbd-sm">Esc</kbd><span class="ml-2">Close modal / Clear selection</span></div>
-            <div class="flex items-center"><kbd class="kbd kbd-sm">Ctrl</kbd>+<kbd class="kbd kbd-sm">Enter</kbd><span class="ml-2">Submit message</span></div>
-            <div class="flex items-center"><kbd class="kbd kbd-sm">s</kbd><span class="ml-2">Focus search</span></div>
-            <div class="flex items-center"><kbd class="kbd kbd-sm">n</kbd><span class="ml-2">New project/conversation</span></div>
-            <div class="flex items-center"><kbd class="kbd kbd-sm">?</kbd><span class="ml-2">Toggle this help</span></div>
-          </div>
-        </div>
-      </div>
 
       <div class="flex-1 overflow-y-auto p-4 md:p-6">
         <section id="projectManagerPanel"
@@ -743,10 +726,32 @@
       </div>
     </div>
   </div>
+  <div id="globalChatContainer" class="mt-4 transition-all duration-300 ease-in-out">
+    <div class="flex justify-between items-center mb-2">
+      <h3 class="font-medium text-lg">Conversation</h3>
+      <button id="minimizeChatBtn" type="button" class="text-gray-500 hover:text-gray-700 p-1">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+    <div id="globalChatUI" class="bg-base-100 rounded-box shadow-md border border-base-200">
+      <div id="globalChatMessages" class="chat-message-container"></div>
+      <div class="flex items-center border-t border-base-200 p-2">
+        <input id="chatUIInput" type="text"
+          class="flex-1 input input-bordered rounded-l-sm"
+          placeholder="Type your message...">
+        <button id="globalChatSendBtn" type="button"
+          class="btn btn-primary rounded-r-sm rounded-l-none">
+          Send
+        </button>
+      </div>
+    </div>
+  </div>
   <div id="chatUIContainer" class="hidden" data-requires-chat="true"></div>
 
   <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" role="status"
-    aria-live="polite">
     <div class="text-center">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
       <p class="text-lg">Loading application...</p>
