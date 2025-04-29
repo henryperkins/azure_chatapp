@@ -37,6 +37,7 @@
             data: data
           });
 
+          // PATCH: Accept both array and object resource forms, warn only if neither
           if (data && Array.isArray(data.projects)) {
             console.log(`[DEBUG-PROJECT] Found ${data.projects.length} projects`);
 
@@ -44,6 +45,9 @@
             data.projects.forEach((p, i) => {
               console.log(`[DEBUG-PROJECT] Project ${i+1}:`, p);
             });
+          } else if (data && typeof data.data === "object") {
+            // Accept detail/object resource
+            console.log('[DEBUG-PROJECT] Response is a valid object (not an array of projects).');
           } else {
             console.warn('[DEBUG-PROJECT] Invalid project response format:', data);
           }
@@ -236,11 +240,14 @@
             const data = await clone.json();
             console.log('[DEBUG-PROJECT] Direct API response data:', data);
 
+            // PATCH: Accept both array and object resource forms, warn only if neither
             if (data && Array.isArray(data.projects)) {
               console.log(`[DEBUG-PROJECT] Direct API: Found ${data.projects.length} projects`);
               if (data.projects.length > 0 && !document.querySelector('.project-card')) {
                 console.error('[DEBUG-PROJECT] API returns projects but none are rendered! DOM rendering issue detected');
               }
+            } else if (data && typeof data.data === "object") {
+              console.log('[DEBUG-PROJECT] Direct API: Response is a valid object (not an array of projects).');
             } else {
               console.warn('[DEBUG-PROJECT] Invalid/unexpected project response format from direct API call');
             }
