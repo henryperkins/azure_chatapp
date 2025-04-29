@@ -322,7 +322,13 @@ class ProjectManager {
             ? response
             : []);
 
-      if (!Array.isArray(projects)) {
+      // PATCH: Accept valid single-object project, warn only if neither array nor object with .id
+      let normalizedProjects = projects;
+      if (Array.isArray(projects)) {
+        // proceed
+      } else if (projects && typeof projects === "object" && projects.id) {
+        normalizedProjects = [projects];
+      } else {
         console.warn("[ProjectManager] Unexpected project list format:", response);
         this._emitEvent("projectsLoaded", {
           projects: [],
@@ -332,11 +338,11 @@ class ProjectManager {
       }
 
       this._emitEvent("projectsLoaded", {
-        projects,
+        projects: normalizedProjects,
         filter
       });
 
-      return projects;
+      return normalizedProjects;
     } catch (error) {
       console.error("[ProjectManager] Error loading projects:", error);
       this._emitEvent("projectsLoaded", {
