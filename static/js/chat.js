@@ -567,6 +567,23 @@ export function createChatManager() {
         window.app.showNotification(message, "error");
       }
     }
+    // Optional backward compatibility: alias createConversation for legacy callers
+    constructor() {
+      this.currentConversationId = null;
+      this.projectId = null;
+      this.isInitialized = false;
+      this.isLoading = false;
+      this.currentImage = null;
+      this.container = null;
+      this.messageContainer = null;
+      this.inputField = null;
+      this.sendButton = null;
+      this.titleElement = null;
+      this._eventHandlers = {};
+      this.modelConfig = getModelConfig().getConfig();
+
+      this.createConversation = (...args) => this.createNewConversation(...args);
+    }
   } // end ChatManager class
 
   // Return modular instance, registration and window assignment handled in app.js

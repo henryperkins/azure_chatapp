@@ -823,7 +823,7 @@ class ProjectDetailsComponent {
       localStorage.setItem('selectedProjectId', this.state.currentProject.id);
       this.switchTab('chat');
 
-      await window.chatManager.initialize();
+      await window.chatManager.initialize({ projectId: this.state.currentProject.id });
       await window.chatManager.loadConversation(conversation.id);
 
       const url = new URL(window.location.href);
