@@ -33,18 +33,53 @@
 /* Defensive: one-time cache holder for replay (at top-level) */
 window.projectEvents = window.projectEvents || {};
 
+/**
+ * Utility: Normalizes any API response to a uniform array of records—or single object—for resource loaders.
+ */
+function extractResourceList(response, options = {}) {
+  const {
+    listKeys = ["projects", "conversations", "artifacts", "files"],
+    dataKey = "data",
+    singularKey = null
+  } = options;
+
+  // List at root or inside .data, or named key
+  for (const key of listKeys) {
+    if (Array.isArray(response?.[key])) return response[key];
+    if (Array.isArray(response?.[dataKey]?.[key])) return response[dataKey][key];
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray(response?.data?.[key])) return response.data[key];
+    if (response?.[key] && typeof response[key] === "object" && response[key].id)
+      return [response[key]];
+    if (response?.[dataKey]?.[key] && typeof response[dataKey][key] === "object" && response[dataKey][key].id)
+      return [response[dataKey][key]];
+  }
+  // fallback for arrays directly
+  if (Array.isArray(response?.[dataKey])) return response[dataKey];
+  if (Array.isArray(response)) return response;
+  // fallback for unique object with id
+  if (response?.[dataKey]?.id) return [response[dataKey]];
+  if (response?.id) return [response];
+  // optional: handle singular keys
+  if (singularKey && response?.[singularKey]) return [response[singularKey]];
+  if (singularKey && response?.[dataKey]?.[singularKey]) return [response[dataKey][singularKey]];
+
+  return null; // Unable to produce an array
+}
+
 class ProjectManager {
   constructor() {
     // Configuration constants
     this.CONFIG = {
       DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
       ENDPOINTS: {
-        PROJECTS: '/api/projects',
-        PROJECT_DETAIL: '/api/projects/{projectId}',
-        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
-        PROJECT_FILES: '/api/projects/{projectId}/files',
-        PROJECT_STATS: '/api/projects/{projectId}/stats',
-        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts'
+        // trailing slashes prevent 307 redirects and keep fetch() on the 200 path
+        PROJECTS: '/api/projects/',
+        PROJECT_DETAIL: '/api/projects/{projectId}/',
+        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
+        PROJECT_FILES: '/api/projects/{projectId}/files/',
+        PROJECT_STATS: '/api/projects/{projectId}/stats/',
+        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts/'
       }
     };
 
@@ -114,7 +149,7 @@ class ProjectManager {
   async createDefaultConversation(projectId) {
     try {
       const response = await window.app.apiRequest(
-        `/api/projects/${projectId}/conversations`,
+        `/api/projects/${projectId}/conversations/`,
         {
           method: 'POST',
           body: {
@@ -125,9 +160,13 @@ class ProjectManager {
         }
       );
 
-      const conversation = response.data || response;
+      const conversation =
+        response?.data?.conversation ||
+        response?.data ||
+        response?.conversation ||
+        response;
 
-      if (!conversation.id) {
+      if (!conversation || !conversation.id) {
         throw new Error('Failed to create default conversation');
       }
 
@@ -142,7 +181,7 @@ class ProjectManager {
   async initializeKnowledgeBase(projectId) {
     try {
       const response = await window.app.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases`,
+        `/api/projects/${projectId}/knowledge-bases/`,
         {
           method: 'POST',
           body: {
@@ -266,11 +305,12 @@ class ProjectManager {
    * @returns {Promise<Project|null>} - Resolves to the project object or null on error.
    */
   async loadProjectDetails(projectId) {
-    if (!window.app.validateUUID(projectId)) {
-      console.error("[ProjectManager] Invalid project ID:", projectId);
+    /* Accept UUIDs, numeric or opaque string IDs */
+    if (!String(projectId).length) {
+      console.error("[ProjectManager] Empty project ID supplied");
       this._emitEvent("projectDetailsError", {
         projectId,
-        error: { message: "Invalid project ID" }
+        error: { message: "Project ID is required" }
       });
       return null;
     }
@@ -292,16 +332,51 @@ class ProjectManager {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
       const response = await window.app.apiRequest(endpoint);
 
-      // Support various API response shapes
-      let projectData = null;
-      if (response?.data?.id) projectData = response.data;
-      else if (response?.id) projectData = response;
-      else if ((response?.status === 'success' || response?.success === true) && response?.data?.id) {
-        projectData = response.data;
+      if (!response) return null;
+
+      // DRY normalization: try all plausible shapes for detail object
+      let projectArr = extractResourceList(response, {
+        listKeys: ["projects", "project"],
+        singularKey: "project"
+      });
+
+      let projectData = Array.isArray(projectArr) ? projectArr[0] : null;
+
+      // Fallback to legacy parsing if above fails
+      if (!projectData || !projectData.id) {
+        if (response?.data?.id) {
+          projectData = response.data;
+        } else if (response?.id) {
+          projectData = response;
+        } else if ((response?.status === 'success' || response?.success === true) && response?.data && typeof response.data === 'object') {
+          projectData = response.data;
+        } else if (Array.isArray(response?.data) && response.data[0] && response.data[0].id) {
+          projectData = response.data[0];
+        } else if (Array.isArray(response) && response[0]?.id) {
+          projectData = response[0];
+        }
       }
 
-      if (!projectData || projectData.id !== projectId) {
-        throw new Error("Invalid project response format or ID mismatch");
+      // Normalise id field (uuid, project_id, etc.)
+      if (projectData && !projectData.id) {
+        projectData.id = projectData.uuid
+          || projectData.project_id
+          || projectData.projectId
+          || null;
+      }
+
+      if (!projectData) {
+        return null;
+      }
+
+      // Normalise both sides to lowercase string to allow 42/UUID, etc.
+      const parsedId = String(projectData.id).toLowerCase();
+      const requestedId = String(projectId).toLowerCase();
+      if (parsedId !== requestedId) {
+        console.warn("[ProjectManager] ID mismatch – taking server value:", {
+          requestedId,
+          parsedId
+        });
       }
 
       this.currentProject = projectData;
@@ -374,15 +449,11 @@ class ProjectManager {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
       const response = await window.app.apiRequest(endpoint);
 
-      // Support various API response shapes
-      const files =
-        response?.data?.files ||
-        response?.files ||
-        (Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response)
-            ? response
-            : []);
+      let files = extractResourceList(response, { listKeys: ["files", "file"] });
+      if (!Array.isArray(files)) {
+        console.warn("[ProjectManager] Unexpected file list format:", response);
+        files = [];
+      }
 
       this._emitEvent("projectFilesLoaded", { projectId, files });
       return files;
@@ -407,15 +478,13 @@ class ProjectManager {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
       const response = await window.app.apiRequest(endpoint);
 
-      // Support various API response shapes
-      const conversations =
-        response?.data?.conversations ||
-        response?.conversations ||
-        (Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response)
-            ? response
-            : []);
+      if (!response) return [];
+
+      let conversations = extractResourceList(response, { listKeys: ["conversations", "conversation"] });
+      if (!Array.isArray(conversations)) {
+        console.warn("[ProjectManager] Unexpected conversation list format:", response);
+        conversations = [];
+      }
 
       this._emitEvent("projectConversationsLoaded", { projectId, conversations });
       return conversations;
@@ -440,15 +509,13 @@ class ProjectManager {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
       const response = await window.app.apiRequest(endpoint);
 
-      // Support various API response shapes
-      const artifacts =
-        response?.data?.artifacts ||
-        response?.artifacts ||
-        (Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response)
-            ? response
-            : []);
+      if (!response) return [];
+
+      let artifacts = extractResourceList(response, { listKeys: ["artifacts", "artifact"] });
+      if (!Array.isArray(artifacts)) {
+        console.warn("[ProjectManager] Unexpected artifact list format:", response);
+        artifacts = [];
+      }
 
       this._emitEvent("projectArtifactsLoaded", { projectId, artifacts });
       return artifacts;
@@ -665,7 +732,7 @@ class ProjectManager {
         formData.append('file', file);
         formData.append('projectId', projectId);
 
-        await window.app.apiRequest(`/api/projects/${projectId}/files`, {
+        await window.app.apiRequest(`/api/projects/${projectId}/files/`, {
           method: 'POST',
           body: formData
         });
