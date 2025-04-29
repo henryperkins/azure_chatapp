@@ -78,6 +78,11 @@
                 }
               }
             }
+            // Accept raw object with id in .data
+            if (!found && typeof data.data === 'object' && data.data && !Array.isArray(data.data) && 'id' in data.data) {
+              found = true;
+              console.log('[DEBUG-PROJECT] Found raw object with id in .data:', data.data);
+            }
             // Unknown
             if (!found) {
               console.warn('[DEBUG-PROJECT] Invalid project response format:', data);
@@ -321,6 +326,11 @@
                     break;
                   }
                 }
+              }
+              // Accept raw object with id in .data
+              if (!found && typeof data.data === 'object' && data.data && !Array.isArray(data.data) && 'id' in data.data) {
+                found = true;
+                console.log('[DEBUG-PROJECT] Found raw object with id in .data:', data.data);
               }
               if (!found) {
                 console.warn('[DEBUG-PROJECT] Invalid/unexpected project response format from direct API call');
