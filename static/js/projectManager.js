@@ -30,6 +30,9 @@
  *  @property {Array<{file: File, reason: string}>} invalidFiles
  */
 
+/* Defensive: one-time cache holder for replay (at top-level) */
+window.projectEvents = window.projectEvents || {};
+
 class ProjectManager {
   constructor() {
     // Configuration constants
@@ -625,12 +628,30 @@ class ProjectManager {
    * @param {Object} detail - Event detail object.
    */
   _emitEvent(eventName, detail) {
-    document.dispatchEvent(new CustomEvent(eventName, {
-      detail: {
-        ...detail,
-        source: "projectManager"
-      }
-    }));
+    // Build event object once (for both dispatches and cache)
+    const evt = new CustomEvent(eventName, {
+      detail,
+      bubbles: false,
+      composed: false
+    });
+    evt.timestamp = Date.now();
+
+    // Dispatch on local EventTarget (ProjectManager instance) for local listeners
+    this.dispatchEvent?.(evt);
+
+    // Also dispatch on global document so UI components can hear it
+    document.dispatchEvent(evt);
+
+    // Cache for late-joining listeners (store latest 20 per event)
+    try {
+      const store = window.projectEvents;
+      store[eventName] = store[eventName] || [];
+      store[eventName].push(evt);
+      if (store[eventName].length > 20) store[eventName].shift();
+    } catch (e) {
+      // Defensive: don't break app if caching fails
+      console.warn('[ProjectManager] event cache error:', e);
+    }
   }
 }
 
