@@ -42,7 +42,7 @@ from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
 from services.file_storage import get_file_storage
-from utils.sentry_utils import sentry_span, tag_transaction
+from utils.sentry_utils import sentry_span
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -100,14 +100,15 @@ async def create_project(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Create a new project with full monitoring and always create a knowledge base"""
-    current_user = current_user_tuple[0]
+    """
+    Create a new project with full monitoring and always create a knowledge base.
+    """
+    current_user, _token = current_user_tuple
     transaction = start_transaction(
         op="project",
         name="Create Project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
-
     try:
         with transaction:
             # Set context
@@ -133,18 +134,22 @@ async def create_project(
 
             # 2. Immediately create a knowledge base for this project
             from services.knowledgebase_service import create_knowledge_base
+
             kb = await create_knowledge_base(
                 name=f"{project.name} Knowledge Base",
                 project_id=project.id,
                 description="Auto-created KB for project",
                 db=db,
             )
+
             # 3. Attach KB to project and save
-            project.knowledge_base_id = kb.id
+            import uuid
+            project.knowledge_base_id = uuid.UUID(str(kb.id))
             await save_model(db, project)
 
             # 4. Immediately create a default conversation for this project
             from services.conversation_service import ConversationService
+
             conv_service = ConversationService(db)
             default_conversation = await conv_service.create_conversation(
                 user_id=current_user.id,
@@ -168,8 +173,9 @@ async def create_project(
 
             logger.info(f"Created project {project.id} with KB {kb.id}")
             return await create_standard_response(
-                serialize_project(project), "Project and knowledge base created successfully",
-                span_or_transaction=transaction
+                serialize_project(project),
+                "Project and knowledge base created successfully",
+                span_or_transaction=transaction,
             )
 
     except Exception as e:
@@ -186,14 +192,16 @@ async def create_project(
 @router.get("/", response_model=Dict)
 async def list_projects(
     request: Request,
-    filter_type: ProjectFilter = Query(ProjectFilter.all, alias="filter", description="Filter type"),
+    filter_type: ProjectFilter = Query(
+        ProjectFilter.all, alias="filter", description="Filter type"
+    ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """List projects with performance tracing"""
-    current_user = current_user_tuple[0]
+    current_user, _token = current_user_tuple
     with sentry_span(
         op="project",
         name="List Projects",
@@ -265,7 +273,7 @@ async def get_project(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get project details with monitoring"""
-    current_user = current_user_tuple[0]
+    current_user, _token = current_user_tuple
     with sentry_span(
         op="project", name="Get Project", description=f"Get project {project_id}"
     ) as span:
@@ -276,14 +284,13 @@ async def get_project(
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
 
-            # Set context
+            # Set context in Sentry
             with configure_scope() as scope:
                 scope.set_context("project", serialize_project(project))
 
             metrics.incr("project.view.success")
             return await create_standard_response(
-                serialize_project(project),
-                span_or_transaction=span
+                serialize_project(project), span_or_transaction=span
             )
 
         except HTTPException as http_exc:
@@ -313,13 +320,12 @@ async def update_project(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Update project with change tracking"""
-    current_user = current_user_tuple[0]
+    current_user, _token = current_user_tuple
     transaction = start_transaction(
         op="project",
         name="Update Project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
-
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
@@ -344,7 +350,6 @@ async def update_project(
             with sentry_span(op="db.update", description="Update project record"):
                 for key, value in updates.items():
                     if getattr(project, key) != value:
-                        # Save old value for logging
                         old_val = getattr(project, key)
                         setattr(project, key, value)
                         changes[key] = {"old": old_val, "new": value}
@@ -367,8 +372,9 @@ async def update_project(
                 )
 
             return await create_standard_response(
-                serialize_project(project), "Project updated successfully",
-                span_or_transaction=transaction
+                serialize_project(project),
+                "Project updated successfully",
+                span_or_transaction=transaction,
             )
 
     except HTTPException as http_exc:
@@ -397,13 +403,12 @@ async def delete_project(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Delete project with resource cleanup tracking"""
-    current_user = current_user_tuple[0]
+    current_user, _token = current_user_tuple
     transaction = start_transaction(
         op="project",
         name="Delete Project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
-
     try:
         with transaction:
             transaction.set_tag("project.id", str(project_id))
@@ -429,7 +434,6 @@ async def delete_project(
                 files = await get_all_by_condition(
                     db, ProjectFile, ProjectFile.project_id == project_id
                 )
-
                 for file in files:
                     try:
                         await storage.delete_file(file.file_path)
@@ -459,7 +463,6 @@ async def delete_project(
                 "project.delete.success",
                 tags={"files_deleted": files_deleted, "files_failed": files_failed},
             )
-
             capture_message(
                 "Project deleted",
                 level="info",
@@ -471,8 +474,9 @@ async def delete_project(
             )
 
             return await create_standard_response(
-                {"id": str(project_id)}, "Project deleted successfully",
-                span_or_transaction=transaction
+                {"id": str(project_id)},
+                "Project deleted successfully",
+                span_or_transaction=transaction,
             )
 
     except Exception as e:
@@ -498,7 +502,7 @@ async def toggle_archive_project(
     db: AsyncSession = Depends(get_async_session),
 ):
     """Toggle archive status with state tracking"""
-    current_user = current_user_tuple[0]
+    current_user, _token = current_user_tuple
     with sentry_span(
         op="project",
         name="Toggle Archive",
@@ -506,6 +510,7 @@ async def toggle_archive_project(
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(current_user.id))
 
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
@@ -513,6 +518,7 @@ async def toggle_archive_project(
             # Track state change
             old_state = project.archived
             project.archived = not project.archived
+
             if project.archived and project.pinned:
                 project.pinned = False
                 span.set_tag("pinned_cleared", True)
@@ -531,7 +537,7 @@ async def toggle_archive_project(
             return await create_standard_response(
                 serialize_project(project),
                 f"Project {'archived' if project.archived else 'unarchived'}",
-                span_or_transaction=span
+                span_or_transaction=span,
             )
 
         except Exception as e:
@@ -551,8 +557,8 @@ async def toggle_pin_project(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Toggle pin status with validation"""
-    current_user = current_user_tuple[0]
+    """Toggle pin status of a project with validation"""
+    current_user, _token = current_user_tuple
     with sentry_span(
         op="project",
         name="Toggle Pin",
@@ -560,6 +566,7 @@ async def toggle_pin_project(
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(current_user.id))
 
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
@@ -579,7 +586,7 @@ async def toggle_pin_project(
             return await create_standard_response(
                 serialize_project(project),
                 f"Project {'pinned' if project.pinned else 'unpinned'}",
-                span_or_transaction=span
+                span_or_transaction=span,
             )
 
         except HTTPException as http_exc:
@@ -612,9 +619,10 @@ async def get_project_stats(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get project statistics with performance tracing"""
-    current_user = current_user_tuple[0]
-    current_user = current_user_tuple[0]
+    """
+    Get project statistics with performance tracing.
+    """
+    current_user, _token = current_user_tuple
     with sentry_span(
         op="project",
         name="Get Stats",
@@ -623,11 +631,11 @@ async def get_project_stats(
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(current_user.id))
 
             # Validate access
             project = await validate_project_access(project_id, current_user, db)
 
-            # Track metrics collection
             metrics.incr("project.stats.requested")
             start_time = time.time()
 
@@ -642,8 +650,10 @@ async def get_project_stats(
             # Get file statistics
             files_result = await db.execute(
                 select(
-                    func.count(ProjectFile.id), func.sum(ProjectFile.file_size)
-                ).where(ProjectFile.project_id == project_id)
+                    func.count(), func.sum(ProjectFile.file_size)
+                )
+                .select_from(ProjectFile)
+                .where(ProjectFile.project_id == project_id)
             )
             file_count, total_size = files_result.first() or (0, 0)
 
@@ -669,7 +679,9 @@ async def get_project_stats(
                             select(func.count(ProjectFile.id)).where(
                                 ProjectFile.project_id == project_id,
                                 ProjectFile.config.isnot(None),
-                                ProjectFile.config.contains({"processed_for_search": True})
+                                ProjectFile.config.contains(
+                                    {"processed_for_search": True}
+                                ),
                             )
                         )
                         processed = processed_result.scalar() or 0
