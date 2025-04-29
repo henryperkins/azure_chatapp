@@ -23,7 +23,7 @@ from sentry_sdk import (
     configure_scope,
     start_transaction,
     metrics,
-    capture_message
+    capture_message,
 )
 
 from db import get_async_session
@@ -45,20 +45,26 @@ AI_SAMPLE_RATE = 0.5  # Sample 50% of AI operations
 # Pydantic Models
 # ============================
 
+
 class ConversationCreate(BaseModel):
     """Model for creating a new conversation"""
+
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
+
 class ConversationUpdate(BaseModel):
     """Model for updating a conversation"""
+
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
+
 class MessageCreate(BaseModel):
     """Model for creating a message"""
+
     content: str = Field(..., description="Message content")
     role: str = Field("user", description="'user' or 'assistant'")
     image_data: Optional[str] = Field(None, description="Base64 image data")
@@ -70,15 +76,19 @@ class MessageCreate(BaseModel):
     max_tokens: Optional[int] = Field(None, ge=100, le=32000)
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
+
 class BatchConversationIds(BaseModel):
     """Model for batch operations"""
+
     # Pylance might complain about min_items, max_items on older Pydantic versions,
     # but it should work on modern versions. We'll keep them.
     conversation_ids: List[UUID] = Field(...)
 
+
 # ============================
 # Conversation CRUD with Monitoring
 # ============================
+
 
 @router.get("/{project_id}/conversations", response_model=dict)
 async def list_project_conversations(
@@ -108,24 +118,21 @@ async def list_project_conversations(
             # Get conversations
             start_time = time.time()
             conversations = await conv_service.list_conversations(
-                user_id=current_user.id,
-                project_id=project_id,
-                skip=skip,
-                limit=limit
+                user_id=current_user.id, project_id=project_id, skip=skip, limit=limit
             )
             duration = (time.time() - start_time) * 1000
 
             span.set_data("db_query_time_ms", duration)
             metrics.distribution(
-                "conversation.list.duration",
-                duration,
-                unit="millisecond"
+                "conversation.list.duration", duration, unit="millisecond"
             )
 
             payload = {
                 "status": "success",
-                "conversations": [serialize_conversation(conv) for conv in conversations],
-                "count": len(conversations)
+                "conversations": [
+                    serialize_conversation(conv) for conv in conversations
+                ],
+                "count": len(conversations),
             }
             return make_sentry_trace_response(payload, span)
         except HTTPException:
@@ -136,9 +143,9 @@ async def list_project_conversations(
             metrics.incr("conversation.list.failure")
             logger.error(f"Failed to list conversations: {str(e)}")
             raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve conversations"
+                status_code=500, detail="Failed to retrieve conversations"
             ) from e
+
 
 @router.post("/{project_id}/conversations", response_model=dict)
 async def create_conversation(
@@ -152,7 +159,7 @@ async def create_conversation(
     transaction = start_transaction(
         op="conversation",
         name="Create Conversation",
-        sampled=random.random() < CONVERSATION_SAMPLE_RATE
+        sampled=random.random() < CONVERSATION_SAMPLE_RATE,
     )
 
     try:
@@ -173,54 +180,66 @@ async def create_conversation(
             # Create conversation
             with sentry_span(op="db.create", description="Create conversation record"):
                 from sqlalchemy.exc import IntegrityError
+
                 try:
                     conv = await conv_service.create_conversation(
                         user_id=current_user.id,
                         title=conversation_data.title,
                         model_id=conversation_data.model_id,
-                        project_id=project_id
+                        project_id=project_id,
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
                 except IntegrityError as db_exc:
-                    logger.exception(f"[create_conversation route] Database error with project_id={project_id}, user_id={current_user.id}")
-                    metrics.incr("conversation.create.failure", tags={"reason": "db_integrity_error"})
+                    logger.exception(
+                        f"[create_conversation route] Database error with project_id={project_id}, user_id={current_user.id}"
+                    )
+                    metrics.incr(
+                        "conversation.create.failure",
+                        tags={"reason": "db_integrity_error"},
+                    )
                     raise HTTPException(
                         status_code=500,
-                        detail="Database error. Possibly a foreign key violation or concurrency issue."
+                        detail="Database error. Possibly a foreign key violation or concurrency issue.",
                     ) from db_exc
 
             # Set user context
             with configure_scope() as scope:
-                scope.set_context("conversation", {
-                    "id": str(conv.id),
-                    "title": conv.title,
-                    "model": conversation_data.model_id
-                })
+                scope.set_context(
+                    "conversation",
+                    {
+                        "id": str(conv.id),
+                        "title": conv.title,
+                        "model": conversation_data.model_id,
+                    },
+                )
                 scope.user = {
                     "id": str(current_user.id),
-                    "username": current_user.username
+                    "username": current_user.username,
                 }
 
             # Track metrics
-            metrics.incr("conversation.created", tags={
-                "model": conversation_data.model_id,
-                "project_id": str(project_id)
-            })
+            metrics.incr(
+                "conversation.created",
+                tags={
+                    "model": conversation_data.model_id,
+                    "project_id": str(project_id),
+                },
+            )
 
             logger.info(f"Created conversation {conv.id} in project {project_id}")
             payload = {
                 "status": "success",
-                "conversation": serialize_conversation(conv)
+                "conversation": serialize_conversation(conv),
             }
             return make_sentry_trace_response(payload, transaction)
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
         transaction.set_data("status_code", http_exc.status_code)
-        metrics.incr("conversation.create.failure", tags={
-            "reason": "http_error",
-            "status_code": http_exc.status_code
-        })
+        metrics.incr(
+            "conversation.create.failure",
+            tags={"reason": "http_error", "status_code": http_exc.status_code},
+        )
         raise
     except Exception as e:
         transaction.set_tag("error", True)
@@ -228,15 +247,15 @@ async def create_conversation(
         metrics.incr("conversation.create.failure", tags={"reason": "exception"})
         logger.error(f"Conversation creation failed: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to create conversation"
+            status_code=500, detail="Failed to create conversation"
         ) from e
+
 
 @router.get("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def get_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
-    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -244,13 +263,11 @@ async def get_project_conversation(
     with sentry_span(
         op="conversation",
         name="Get Conversation",
-        description=f"Get conversation {conversation_id}"
+        description=f"Get conversation {conversation_id}",
     ) as span:
         try:
-            current_user = current_user_tuple[0]
             span.set_tag("project.id", str(project_id))
             span.set_tag("conversation.id", str(conversation_id))
-            span.set_tag("user.id", str(current_user.id))
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
@@ -259,14 +276,11 @@ async def get_project_conversation(
             conv_data = await conv_service.get_conversation(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
-                project_id=project_id
+                project_id=project_id,
             )
 
             metrics.incr("conversation.viewed")
-            payload = {
-                "status": "success",
-                "conversation": conv_data
-            }
+            payload = {"status": "success", "conversation": conv_data}
             return make_sentry_trace_response(payload, span)
 
         except HTTPException:
@@ -277,16 +291,16 @@ async def get_project_conversation(
             metrics.incr("conversation.view.failure")
             logger.error(f"Failed to get conversation: {str(e)}")
             raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve conversation"
+                status_code=500, detail="Failed to retrieve conversation"
             ) from e
+
 
 @router.patch("/{project_id}/conversations/{conversation_id}", response_model=dict)
 async def update_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
     update_data: ConversationUpdate,
-    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    current_user: User = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -294,18 +308,16 @@ async def update_project_conversation(
     transaction = start_transaction(
         op="conversation",
         name="Update Conversation",
-        sampled=random.random() < CONVERSATION_SAMPLE_RATE
+        sampled=random.random() < CONVERSATION_SAMPLE_RATE,
     )
 
     try:
         with transaction:
-            current_user = current_user_tuple[0]
             if update_data.sentry_trace:
                 transaction.set_data("frontend_trace", update_data.sentry_trace)
 
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
-            transaction.set_tag("user.id", str(current_user.id))
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
@@ -324,37 +336,31 @@ async def update_project_conversation(
                 user_id=current_user.id,
                 project_id=project_id,
                 title=update_data.title,
-                model_id=update_data.model_id
+                model_id=update_data.model_id,
             )
 
             # Record metrics
             if changes:
-                metrics.incr("conversation.updated", tags={
-                    "fields_updated": len(changes)
-                })
+                metrics.incr(
+                    "conversation.updated", tags={"fields_updated": len(changes)}
+                )
                 capture_message(
                     "Conversation updated",
                     level="info",
-                    data={
-                        "conversation_id": str(conversation_id),
-                        "changes": changes
-                    }
+                    data={"conversation_id": str(conversation_id), "changes": changes},
                 )
 
             logger.info(f"Updated conversation {conversation_id}")
-            payload = {
-                "status": "success",
-                "conversation": conv_dict
-            }
+            payload = {"status": "success", "conversation": conv_dict}
             return make_sentry_trace_response(payload, transaction)
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
         transaction.set_data("status_code", http_exc.status_code)
-        metrics.incr("conversation.update.failure", tags={
-            "reason": "http_error",
-            "status_code": http_exc.status_code
-        })
+        metrics.incr(
+            "conversation.update.failure",
+            tags={"reason": "http_error", "status_code": http_exc.status_code},
+        )
         raise
     except Exception as e:
         transaction.set_tag("error", True)
@@ -362,8 +368,12 @@ async def update_project_conversation(
         metrics.incr("conversation.update.failure", tags={"reason": "exception"})
         logger.error(f"Conversation update failed: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to update conversation"
+            status_code=500, detail="Failed to update conversation"
+        ) from e
+
+
+@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
+async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),
@@ -373,7 +383,7 @@ async def update_project_conversation(
     transaction = start_transaction(
         op="conversation",
         name="Delete Conversation",
-        sampled=random.random() < CONVERSATION_SAMPLE_RATE
+        sampled=random.random() < CONVERSATION_SAMPLE_RATE,
     )
 
     try:
@@ -385,7 +395,7 @@ async def update_project_conversation(
             deleted_id = await conv_service.delete_conversation(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
-                project_id=project_id
+                project_id=project_id,
             )
 
             # Record metrics
@@ -393,14 +403,11 @@ async def update_project_conversation(
             capture_message(
                 "Conversation deleted",
                 level="info",
-                data={"conversation_id": str(conversation_id)}
+                data={"conversation_id": str(conversation_id)},
             )
 
             logger.info(f"Deleted conversation {conversation_id}")
-            payload = {
-                "status": "success",
-                "conversation_id": str(deleted_id)
-            }
+            payload = {"status": "success", "conversation_id": str(deleted_id)}
             return make_sentry_trace_response(payload, transaction)
 
     except HTTPException:
@@ -411,18 +418,19 @@ async def update_project_conversation(
         metrics.incr("conversation.delete.failure")
         logger.error(f"Failed to delete conversation: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Failed to delete conversation"
+            status_code=500, detail="Failed to delete conversation"
         ) from e
+
 
 # ============================
 # Message Operations with AI Monitoring
 # ============================
 
+
 @router.post(
     "/{project_id}/conversations/{conversation_id}/messages",
     response_model=dict,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 async def create_project_conversation_message(
     project_id: UUID,
@@ -436,7 +444,7 @@ async def create_project_conversation_message(
     transaction = start_transaction(
         op="conversation",
         name="Process Message",
-        sampled=random.random() < AI_SAMPLE_RATE
+        sampled=random.random() < AI_SAMPLE_RATE,
     )
 
     try:
@@ -461,14 +469,16 @@ async def create_project_conversation_message(
             conv_data = await conv_service.get_conversation(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
-                project_id=project_id
+                project_id=project_id,
             )
             model_id = conv_data.get("model_id", "")
             transaction.set_tag("model.id", model_id)
 
             # Process message
             message_metrics = {}
-            with sentry_span(op="message.process", description="Handle message") as span:
+            with sentry_span(
+                op="message.process", description="Handle message"
+            ) as span:
                 start_time = time.time()
 
                 response = await conv_service.create_message(
@@ -492,30 +502,34 @@ async def create_project_conversation_message(
 
             # AI response processing
             if new_msg.role.lower() == "user":
-                with sentry_span(op="ai.response", description="Generate AI response") as ai_span:
+                with sentry_span(
+                    op="ai.response", description="Generate AI response"
+                ) as ai_span:
                     ai_start = time.time()
 
                     # Record AI-specific metrics
                     ai_duration = (time.time() - ai_start) * 1000
                     ai_span.set_data("ai_response_time_ms", ai_duration)
-                    message_metrics.update({
-                        "ai_response_time_ms": ai_duration,
-                        "response_length": len(response.get("content", "")),
-                        "thinking_steps": len(response.get("thinking_steps", []))
-                    })
+                    message_metrics.update(
+                        {
+                            "ai_response_time_ms": ai_duration,
+                            "response_length": len(response.get("content", "")),
+                            "thinking_steps": len(response.get("thinking_steps", [])),
+                        }
+                    )
 
                     # Track model performance
                     metrics.distribution(
                         "ai.response.duration",
                         ai_duration,
                         unit="millisecond",
-                        tags={"model": model_id}
+                        tags={"model": model_id},
                     )
                     if "thinking_steps" in response:
                         metrics.distribution(
                             "ai.thinking.steps",
                             len(response["thinking_steps"]),
-                            tags={"model": model_id}
+                            tags={"model": model_id},
                         )
 
             # Track overall metrics
@@ -524,42 +538,37 @@ async def create_project_conversation_message(
                     f"conversation.message.{metric}",
                     value,
                     unit="millisecond",
-                    tags={
-                        "project_id": str(project_id),
-                        "model": model_id
-                    }
+                    tags={"project_id": str(project_id), "model": model_id},
                 )
 
             logger.info(f"Processed message in conversation {conversation_id}")
-            payload = {
-                "status": "success",
-                "message": response
-            }
+            payload = {"status": "success", "message": response}
             return make_sentry_trace_response(payload, transaction)
 
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
         transaction.set_data("status_code", http_exc.status_code)
-        metrics.incr("conversation.message.failure", tags={
-            "reason": "http_error",
-            "status_code": http_exc.status_code
-        })
+        metrics.incr(
+            "conversation.message.failure",
+            tags={"reason": "http_error", "status_code": http_exc.status_code},
+        )
         raise
     except Exception as e:
         transaction.set_tag("error", True)
         capture_exception(e)
         metrics.incr("conversation.message.failure", tags={"reason": "exception"})
         logger.error(f"Message processing failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Message processing failed"
-        ) from e
+        raise HTTPException(status_code=500, detail="Message processing failed") from e
+
 
 # ============================
 # AI-Powered Features with Monitoring
 # ============================
 
-@router.post("/{project_id}/conversations/{conversation_id}/summarize", response_model=dict)
+
+@router.post(
+    "/{project_id}/conversations/{conversation_id}/summarize", response_model=dict
+)
 async def summarize_conversation(
     project_id: UUID,
     conversation_id: UUID,
@@ -572,9 +581,7 @@ async def summarize_conversation(
     # Define model_id with a default upfront to avoid unbound issues
     model_id = ""
     transaction = start_transaction(
-        op="ai",
-        name="Summarize Conversation",
-        sampled=random.random() < AI_SAMPLE_RATE
+        op="ai", name="Summarize Conversation", sampled=random.random() < AI_SAMPLE_RATE
     )
 
     try:
@@ -590,7 +597,7 @@ async def summarize_conversation(
             conv_data = await conv_service.get_conversation(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
-                project_id=project_id
+                project_id=project_id,
             )
             model_id = conv_data.get("model_id", "")
             transaction.set_tag("model.id", model_id)
@@ -601,7 +608,7 @@ async def summarize_conversation(
                 user_id=current_user.id,
                 project_id=project_id,
                 skip=0,
-                limit=9999
+                limit=9999,
             )
 
             if not messages:
@@ -615,7 +622,7 @@ async def summarize_conversation(
                     conversation_id=conversation_id,
                     messages=messages,
                     model_id=model_id,
-                    max_length=max_length
+                    max_length=max_length,
                 )
 
                 duration = (time.time() - start_time) * 1000
@@ -628,12 +635,12 @@ async def summarize_conversation(
                     "ai.summary.duration",
                     duration,
                     unit="millisecond",
-                    tags={"model": model_id}
+                    tags={"model": model_id},
                 )
                 metrics.distribution(
                     "ai.summary.compression_ratio",
                     len(summary) / sum(len(m.get("content", "")) for m in messages),
-                    tags={"model": model_id}
+                    tags={"model": model_id},
                 )
 
             logger.info(f"Generated summary for conversation {conversation_id}")
@@ -643,7 +650,7 @@ async def summarize_conversation(
                     "summary": summary,
                     "title": conv_data["title"],
                     "message_count": len(messages),
-                }
+                },
             }
             return make_sentry_trace_response(payload, transaction)
 
@@ -652,17 +659,16 @@ async def summarize_conversation(
     except Exception as e:
         transaction.set_tag("error", True)
         capture_exception(e)
-        model_for_error = model_id if 'model_id' in locals() else ""
+        model_for_error = model_id if "model_id" in locals() else ""
         metrics.incr("ai.summary.failure", tags={"model": model_for_error})
         logger.error(f"Summary generation failed: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="Summary generation failed"
-        ) from e
+        raise HTTPException(status_code=500, detail="Summary generation failed") from e
+
 
 # ============================
 # Batch Operations with Tracing
 # ============================
+
 
 @router.post("/{project_id}/conversations/batch-delete", response_model=dict)
 async def batch_delete_conversations(
@@ -676,7 +682,7 @@ async def batch_delete_conversations(
     transaction = start_transaction(
         op="conversation",
         name="Batch Delete Conversations",
-        sampled=random.random() < CONVERSATION_SAMPLE_RATE
+        sampled=random.random() < CONVERSATION_SAMPLE_RATE,
     )
 
     try:
@@ -691,12 +697,14 @@ async def batch_delete_conversations(
             failed_ids = []
 
             for conv_id in batch_data.conversation_ids:
-                with sentry_span(op="db.delete", description=f"Delete {conv_id}") as span:
+                with sentry_span(
+                    op="db.delete", description=f"Delete {conv_id}"
+                ) as span:
                     try:
                         await conv_service.delete_conversation(
                             conversation_id=conv_id,
                             user_id=current_user.id,
-                            project_id=project_id
+                            project_id=project_id,
                         )
                         deleted_ids.append(str(conv_id))
                         span.set_tag("success", True)
@@ -704,27 +712,32 @@ async def batch_delete_conversations(
                         failed_ids.append(str(conv_id))
                         span.set_tag("success", False)
                         span.set_tag("error", str(e))
-                        logger.warning(f"Failed to delete conversation {conv_id}: {str(e)}")
+                        logger.warning(
+                            f"Failed to delete conversation {conv_id}: {str(e)}"
+                        )
 
             # Record metrics
-            metrics.incr("conversation.batch_delete", tags={
-                "success_count": len(deleted_ids),
-                "failure_count": len(failed_ids)
-            })
+            metrics.incr(
+                "conversation.batch_delete",
+                tags={
+                    "success_count": len(deleted_ids),
+                    "failure_count": len(failed_ids),
+                },
+            )
             capture_message(
                 "Batch conversation delete",
                 level="info",
                 data={
                     "project_id": str(project_id),
                     "deleted": deleted_ids,
-                    "failed": failed_ids
-                }
+                    "failed": failed_ids,
+                },
             )
 
             payload = {
                 "status": "success",
                 "deleted": deleted_ids,
-                "failed": failed_ids
+                "failed": failed_ids,
             }
             return make_sentry_trace_response(payload, transaction)
 
@@ -734,15 +747,18 @@ async def batch_delete_conversations(
         metrics.incr("conversation.batch_delete.failure")
         logger.error(f"Batch delete failed: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail="Batch delete operation failed"
+            status_code=500, detail="Batch delete operation failed"
         ) from e
+
 
 # ============================
 # Utility Endpoints
 # ============================
 
-@router.get("/{project_id}/conversations/{conversation_id}/messages", response_model=dict)
+
+@router.get(
+    "/{project_id}/conversations/{conversation_id}/messages", response_model=dict
+)
 async def list_project_conversation_messages(
     project_id: UUID,
     conversation_id: UUID,
@@ -756,7 +772,7 @@ async def list_project_conversation_messages(
     with sentry_span(
         op="conversation",
         name="List Messages",
-        description=f"List messages for {conversation_id}"
+        description=f"List messages for {conversation_id}",
     ) as span:
         try:
             span.set_tag("project.id", str(project_id))
@@ -774,22 +790,20 @@ async def list_project_conversation_messages(
                 user_id=current_user.id,
                 project_id=project_id,
                 skip=skip,
-                limit=limit
+                limit=limit,
             )
             duration = (time.time() - start_time) * 1000
 
             span.set_data("db_query_time_ms", duration)
             metrics.distribution(
-                "conversation.message_list.duration",
-                duration,
-                unit="millisecond"
+                "conversation.message_list.duration", duration, unit="millisecond"
             )
 
             # Get conversation metadata
             conv_data = await conv_service.get_conversation(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
-                project_id=project_id
+                project_id=project_id,
             )
 
             payload = {
@@ -799,7 +813,7 @@ async def list_project_conversation_messages(
                     "title": conv_data["title"],
                     "model_id": conv_data["model_id"],
                     "count": len(messages),
-                }
+                },
             }
             return make_sentry_trace_response(payload, span)
 
@@ -811,6 +825,5 @@ async def list_project_conversation_messages(
             metrics.incr("conversation.message_list.failure")
             logger.error(f"Failed to list messages: {str(e)}")
             raise HTTPException(
-                status_code=500,
-                detail="Failed to retrieve messages"
+                status_code=500, detail="Failed to retrieve messages"
             ) from e
