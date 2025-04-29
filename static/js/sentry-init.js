@@ -10,6 +10,8 @@
  * after we verify Sentry is actually enabled and loaded.
  */
 
+window._sentryAlreadyInitialized = window._sentryAlreadyInitialized || false;
+
 (function () {
   /**
    * Determines if Sentry should be disabled based on:
@@ -83,6 +85,11 @@
    * The main initialization function, called first. If Sentry is disabled, we do nothing.
    */
   function initializeSentry() {
+    if (window._sentryAlreadyInitialized) {
+      console.log('[Sentry] Already initialized, skipping');
+      return;
+    }
+    
     if (shouldDisableSentry()) {
       console.log('[Sentry] Disabled based on environment or user preference');
       return;
@@ -127,6 +134,11 @@
    * Once Sentry is available, configure it and attach global handlers.
    */
   function setupSentry() {
+    if (window._sentryAlreadyInitialized) {
+      console.log('[Sentry] Already initialized, skipping duplicate setup');
+      return;
+    }
+    
     if (!window.Sentry || typeof Sentry.init !== 'function') {
       return; // Sentry script blocked or failed
     }
@@ -198,6 +210,7 @@
           }
         });
 
+        window._sentryAlreadyInitialized = true;
         console.log('[Sentry] Initialized successfully');
         // Basic context/tags
         Sentry.setTag('browser', navigator.userAgent);
