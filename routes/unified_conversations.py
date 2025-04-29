@@ -144,7 +144,7 @@ async def list_project_conversations(
 async def create_conversation(
     project_id: UUID,
     conversation_data: ConversationCreate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -157,6 +157,7 @@ async def create_conversation(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             # Set context from frontend trace if available
             if conversation_data.sentry_trace:
                 transaction.set_data("frontend_trace", conversation_data.sentry_trace)
