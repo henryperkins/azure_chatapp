@@ -54,6 +54,9 @@ export function createChatManager() {
 
       this._eventHandlers = {};
       this.modelConfig = getModelConfig().getConfig();
+      
+      // Backwards compatibility alias
+      this.createConversation = (...args) => this.createNewConversation(...args);
     }
 
     async initialize(options = {}) {
