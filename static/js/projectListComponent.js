@@ -48,6 +48,17 @@ class ProjectListComponent {
      * Initialize the component with retry capabilities and robust race-condition handling.
      * @returns {Promise<boolean>}
      */
+    async _waitForListContainer() {
+        const maxAttempts = 40, retryDelay = 100; // 4s max
+        let el = null;
+        for (let i = 0; i < maxAttempts; i++) {
+            el = document.getElementById(this.elementId);
+            if (el) return el;
+            await new Promise(r => setTimeout(r, retryDelay));
+        }
+        throw new Error(`Timeout: Project list container #${this.elementId} not found`);
+    }
+
     async initialize() {
         if (this.state.initialized) {
             console.log('[ProjectListComponent] Already initialized');
@@ -60,12 +71,10 @@ class ProjectListComponent {
             // Save initialization time to handle race conditions
             this.state.initializationTime = Date.now();
 
-            // Step 1: Ensure container with retry mechanism
-            const containerFound = await this._ensureContainerWithRetry();
-            if (!containerFound) {
-                // Error already logged in _ensureContainerWithRetry
-                return false;
-            }
+            // --- Stricter: Force wait for actual container element before proceeding ---
+            await this._waitForListContainer();
+            this.element = document.getElementById(this.elementId);
+            if (!this.element) throw new Error(`Timeout: Project list container #${this.elementId} not found (post-wait)`);
 
             // Step 2: Bind event listeners
             this._bindEventListeners();
@@ -77,8 +86,10 @@ class ProjectListComponent {
             this.state.initialized = true;
             console.log('[ProjectListComponent] Core initialization complete. Container ready.');
 
-            // Step 5: Check for cached data or load projects
-            // Defer slightly to allow other UI updates
+            // Patch 1: After initialization, forcibly replay missed projectsLoaded events if any (event "replay" logic)
+            this._replayMissedProjectsLoaded();
+
+            // Step 5: Check for cached data or load projects (for fallback robustness)
             setTimeout(() => {
                 if (!this._checkForCachedProjectData()) {
                     // If no cached data was rendered, trigger a load
@@ -96,13 +107,14 @@ class ProjectListComponent {
     }
 
     /**
-     * Ensures the container element exists with retry logic.
+     * Patch 3: Ensures the container element exists with retry logic,
+     * and if still not found, waits for a DOM event indicating it is ready (projectListReady).
      * @returns {Promise<boolean>} - True if found, false otherwise.
      * @private
      */
-    async _ensureContainerWithRetry() {
-        const maxAttempts = 20; // attempt up to 20 times
-        const retryInterval = 150; // 150ms between attempts
+    async _ensureContainerWithRetryWithProjectListReady() {
+        const maxAttempts = 20;
+        const retryInterval = 150;
         let attempts = 0;
 
         while (attempts < maxAttempts) {
@@ -114,24 +126,71 @@ class ProjectListComponent {
                 return true;
             }
 
-            if (attempts % 5 === 0) {
-                console.warn(
-                    `[ProjectListComponent] Container #${this.elementId} not found (attempt ${attempts}/${maxAttempts}). Retrying...`
-                );
+            // On the first failed attempt, if event-based fallback hasn't happened, wait for "projectListReady"
+            if (attempts === 3) {
+                // Still not present, wait for external event (async HTML injection complete)
+                console.warn(`[ProjectListComponent] Waiting for 'projectListReady' event...`);
+                await new Promise((resolve) => {
+                    // Either projectListReady or next retry will continue
+                    let resolved = false;
+                    const handler = () => {
+                        if (!resolved) {
+                            resolved = true;
+                            document.removeEventListener('projectListReady', handler);
+                            resolve();
+                        }
+                    };
+                    document.addEventListener('projectListReady', handler, { once: true });
+                    // Timeout fallback to avoid hanging indefinitely
+                    setTimeout(() => {
+                        if (!resolved) {
+                            resolved = true;
+                            document.removeEventListener('projectListReady', handler);
+                            resolve();
+                        }
+                    }, 2000);
+                });
+            } else {
+                await new Promise((r) => setTimeout(r, retryInterval));
             }
-
-            await new Promise((r) => setTimeout(r, retryInterval));
         }
 
         // Exceeded maximum attempts
         console.error(`[ProjectListComponent] CRITICAL: Container #${this.elementId} could not be located after ${maxAttempts} attempts.`);
-        this._showErrorState(`UI Element #${this.elementId} not found.`); // Show error state
-        return false; // Indicate failure
+        this._showErrorState(`UI Element #${this.elementId} not found.`);
+        return false;
+    }
+
+    /**
+     * Patch 1: Replay any missed 'projectsLoaded' events, robustly.
+     * Called after component is initialized and container is present.
+     * This ensures UI sync even if event arrived "too early".
+     */
+    _replayMissedProjectsLoaded() {
+        if (!this.element) {
+            console.error("[ProjectListComponent] Cannot replay projectsLoaded: element not found.");
+            return false;
+        }
+        // Try to find any cached event
+        if (window.projectEvents && window.projectEvents.projectsLoaded && window.projectEvents.projectsLoaded.length) {
+            const recent = window.projectEvents.projectsLoaded.at(-1);
+            if (recent && this.renderProjects) {
+                this.renderProjects(recent.detail?.projects || recent.detail);
+                console.log('[ProjectListComponent] Replayed (rendered) missed projectsLoaded event from cache.');
+                return true;
+            }
+        }
+        if (window.projectManager?.currentProjects?.length) {
+            this.renderProjects({ projects: window.projectManager.currentProjects });
+            console.log('[ProjectListComponent] Replayed missed projectsLoaded using projectManager.currentProjects.');
+            return true;
+        }
+        return false;
     }
 
     /**
      * Check for cached project data that might have arrived before initialization.
-     * This handles race conditions where projectsLoaded fired earlier.
+     * (Race condition fallback, can remain as extra line of defense.)
      * @returns {boolean} - True if cached data was found and rendered, false otherwise.
      * @private
      */
@@ -145,8 +204,8 @@ class ProjectListComponent {
         // If we already have projects in the manager, use them
         if (window.projectManager?.currentProjects?.length > 0) {
             console.log('[ProjectListComponent] Found cached projects in projectManager, rendering...');
-            this.renderProjects(window.projectManager.currentProjects);
-            return true; // Data found and rendered
+            this.renderProjects({ projects: window.projectManager.currentProjects });
+            return true;
         }
 
         // Otherwise, check for any recent 'projectsLoaded' events in a local cache
@@ -156,7 +215,7 @@ class ProjectListComponent {
             const mostRecent = recentEvents[recentEvents.length - 1];
             if (mostRecent.detail && (mostRecent.detail.projects || Array.isArray(mostRecent.detail))) {
                 this.renderProjects(mostRecent.detail);
-                return true; // Data found and rendered
+                return true;
             }
         }
 
@@ -190,7 +249,6 @@ class ProjectListComponent {
      * @private
      */
     _bindEventListeners() {
-        // Filter tab events
         this._bindFilterEvents();
 
         // Delegated click listener for project cards
@@ -211,22 +269,16 @@ class ProjectListComponent {
         });
     }
 
-    /**
-     * Binds event listeners to filter tabs.
-     * @private
-     */
     _bindFilterEvents() {
         const container = document.getElementById('projectFilterTabs');
         if (!container) return;
 
-        // Updated selector to match audit: select all .tab[data-filter] for filter tabs
         const tabs = container.querySelectorAll('.tab[data-filter]');
         tabs.forEach((tab) => {
             const filterValue = tab.dataset.filter;
             if (!filterValue) return;
 
             const keydownHandler = (e) => {
-                // Enter or Space = "click"
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     this._setFilter(filterValue);
@@ -254,11 +306,6 @@ class ProjectListComponent {
         });
     }
 
-    /**
-     * Update the filter in state and re-load projects.
-     * @param {string} filter
-     * @private
-     */
     _setFilter(filter) {
         this.state.filter = filter;
         this._updateActiveTab();
@@ -266,12 +313,7 @@ class ProjectListComponent {
         this._loadProjects();
     }
 
-    /**
-     * Mark the currently active tab visually.
-     * @private
-     */
     _updateActiveTab() {
-        // Match filter tab selector to .tab[data-filter] for audit compliance
         const tabs = document.querySelectorAll('#projectFilterTabs .tab[data-filter]');
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
@@ -280,10 +322,6 @@ class ProjectListComponent {
         });
     }
 
-    /**
-     * Update the browser URL with the current filter (no full reload).
-     * @private
-     */
     _updateUrl(filter) {
         const url = new URL(window.location);
         url.searchParams.set('filter', filter);
@@ -294,69 +332,58 @@ class ProjectListComponent {
     // Render Methods
     // --------------------------------------
 
-    /**
-     * Render projects into the component's DOM element with retry logic.
-     * @param {Array|Object} data - Projects, or an object containing projects
-     */
     renderProjects(data) {
-        // --- CRITICAL CHECK ---
         if (!this.element) {
             console.error(`[ProjectListComponent.renderProjects] ABORTING: Target element #${this.elementId} is not available in the DOM.`);
-            // Optionally attempt to re-find the element once more
             this.element = document.getElementById(this.elementId);
             if (!this.element) {
                 this._showErrorState(`Rendering failed: UI element #${this.elementId} missing.`);
-                return; // Definitely cannot render
+                return;
             }
             console.warn(`[ProjectListComponent.renderProjects] Re-found element #${this.elementId} just in time.`);
         }
-        // --- END CRITICAL CHECK ---
-
-
-        // Debug log
         console.log('%c[ProjectListComponent.renderProjects] Received:', 'color: teal; font-weight: bold', data);
 
-        // Check if container is ready (redundant due to check above, but keep for safety)
-        // if (!this.element) { ... existing retry logic removed as it's handled above ... }
-
-        // Normalize data
         let projects = [];
         if (Array.isArray(data)) {
             projects = data;
-        } else if (data?.projects) {
+        } else if (data?.projects && Array.isArray(data.projects)) {
             projects = data.projects;
-        } else if (data?.data?.projects) {
+        } else if (data?.data?.projects && Array.isArray(data.data.projects)) {
             projects = data.data.projects;
-        } else if (data?.data && !Array.isArray(data.data) && typeof data.data === 'object') {
-            // single project object
+        } else if (Array.isArray(data?.data)) {
+            projects = data.data;
+        } else if (
+            typeof data === "object" &&
+            !Array.isArray(data) &&
+            data?.data && typeof data.data === "object" && !Array.isArray(data.data)
+        ) {
+            // Possibly wrapped as {data: {id:...}} for a single project fallback
             projects = [data.data];
         } else if (data?.status === 'success' && Array.isArray(data?.conversations)) {
-            // conversation data => ignore
             console.warn('[ProjectListComponent] Received conversations data instead of projects');
             projects = [];
+        } else {
+            // Log all normalization failures robustly
+            console.warn("[ProjectListComponent] Could not find projects array in data:", data);
         }
 
-        // Log parsed data
         console.log('%c[ProjectListComponent.renderProjects] Parsed projects array:', 'color: teal; font-weight: bold', projects);
 
         this.state.projects = projects || [];
-        this.show(); // Ensure the container itself is meant to be visible
+        this.show();
 
-        // Store in projectManager if available
         if (window.projectManager) {
             window.projectManager.currentProjects = projects;
         }
 
-
         console.log('[ProjectListComponent] User is authenticated, rendering projects');
 
-        // Show empty state if no projects
         if (!projects || projects.length === 0) {
             this._showEmptyState();
             return;
         }
 
-        // Clear and render
         this.element.innerHTML = '';
         const fragment = document.createDocumentFragment();
 
@@ -370,43 +397,76 @@ class ProjectListComponent {
         this.element.appendChild(fragment);
 
         console.log(`[ProjectListComponent] Successfully rendered ${projects.length} project(s)`);
+
+        // Advanced DOM validation/debugging - inject after render to trace issues
+        setTimeout(() => {
+            // 1. Assert the element is still in the visible DOM tree
+            let el = this.element;
+            let hierarchy = [];
+            while (el) {
+                hierarchy.push(el.id || el.className || el.tagName);
+                if (el === document.body) break;
+                el = el.parentElement;
+            }
+            console.log('[DEBUG] ProjectList element hierarchy:', hierarchy.reverse().join(' > '));
+
+            // 2. Check for actual project cards
+            const cards = this.element ? this.element.querySelectorAll('.project-card') : [];
+            console.log('[DEBUG] Project card count (direct DOM):', cards.length);
+
+            // 3. Check computed style; is it visible and not clipped?
+            if (this.element) {
+                const rect = this.element.getBoundingClientRect();
+                const cs = window.getComputedStyle(this.element);
+                console.log('[DEBUG] ProjectList bounding box:', rect, 'display:', cs.display, 'visibility:', cs.visibility, 'opacity:', cs.opacity);
+
+                // 4. Log z-index and stacking context up the parent chain
+                let zIdxLine = [];
+                let node = this.element;
+                while (node) {
+                    zIdxLine.push(`${node.id || node.tagName}: z-index=${window.getComputedStyle(node).zIndex}`);
+                    node = node.parentElement;
+                }
+                console.log('[DEBUG] Stacking context:', zIdxLine.join(' | '));
+            }
+        }, 250);
     }
 
-    /**
-     * Show the project list component.
-     */
     show() {
         console.log('[ProjectListComponent] Show method called');
-
-        // Make sure the component's root element exists before trying to modify it
         if (!this.element) {
             console.warn('[ProjectListComponent.show] Cannot show, element is null. Attempting to find...');
             this.element = document.getElementById(this.elementId);
             if (!this.element) {
                 console.error('[ProjectListComponent.show] CRITICAL: Cannot show component, element not found.');
-                return; // Cannot proceed
+                return;
             }
         }
+        // Unhide this.element
+        this.element.classList.remove('hidden');
+        this.element.style.display = '';
 
-        // Make sure both the component and its container are visible
-        if (this.element) {
-            this.element.classList.remove('hidden');
-            this.element.style.display = ''; // Use default display
+        // Unhide all ancestor containers up to and including #projectListView
+        let parent = this.element.parentElement;
+        while (parent) {
+            if (parent.classList) {
+                parent.classList.remove('hidden', 'opacity-0');
+            }
+            if (parent.style) {
+                parent.style.display = '';
+            }
+            if (parent.id === "projectListView") break;
+            parent = parent.parentElement;
         }
 
         const listView = document.getElementById('projectListView');
         if (listView) {
             listView.classList.remove('hidden', 'opacity-0');
-            listView.style.display = ''; // Use default display
-
-            // Force CSS reflow to ensure transitions work
+            listView.style.display = '';
             void listView.offsetHeight;
         }
     }
 
-    /**
-     * Hide the project list component.
-     */
     hide() {
         if (this.element) {
             this.element.classList.add('hidden');
@@ -421,12 +481,8 @@ class ProjectListComponent {
     // Project Loading
     // --------------------------------------
 
-    /**
-     * Load projects via projectManager based on the current filter.
-     * @private
-     */
     async _loadProjects() {
-        if (this.state.loading) return; // prevent multiple requests
+        if (this.state.loading) return;
         if (!window.projectManager?.loadProjects) {
             console.warn('[ProjectListComponent] Cannot load projects, projectManager.loadProjects is missing.');
             return;
@@ -436,14 +492,12 @@ class ProjectListComponent {
         this._showLoadingState();
 
         try {
-            // Load from projectManager
             await window.projectManager.loadProjects(this.state.filter);
         } catch (error) {
             console.error('[ProjectListComponent] Error loading projects:', error);
             this._showErrorState('Failed to load projects');
         } finally {
             this.state.loading = false;
-            // Actual rendering occurs upon projectsLoaded event
         }
     }
 
@@ -451,15 +505,10 @@ class ProjectListComponent {
     // Event Handlers (Project CRUD)
     // --------------------------------------
 
-    /**
-     * Handler for clicks on the project list container (delegation).
-     * @private
-     */
     _handleCardClick(e) {
         const projectCard = e.target.closest('.project-card');
         if (!projectCard) return;
 
-        // Check if an action button was clicked
         const actionBtn = e.target.closest('[data-action]');
         if (actionBtn) {
             e.stopPropagation();
@@ -470,7 +519,6 @@ class ProjectListComponent {
             return;
         }
 
-        // Otherwise treat as card click => onViewProject
         const projectId = projectCard.dataset.projectId;
         if (projectId) {
             console.log('[ProjectListComponent] Card clicked => onViewProject:', projectId);
@@ -478,10 +526,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Perform the specified project action (view, edit, delete).
-     * @private
-     */
     _handleAction(action, projectId) {
         const project = this.state.projects.find((p) => p.id === projectId);
         if (!project) {
@@ -523,13 +567,7 @@ class ProjectListComponent {
     // Modals: Create/Edit Projects
     // --------------------------------------
 
-    /**
-     * Binds event listeners to main/side "Create Project" buttons with retry logic,
-     * ensuring modals are loaded first.
-     * @private
-     */
     async _bindCreateProjectButtons() {
-        // Wait for modalsLoaded and for both DOM and window.projectModal to exist
         await new Promise((resolve) => {
             const checkReady = () => {
                 if (document.getElementById('projectModal') && window.projectModal) {
@@ -547,7 +585,6 @@ class ProjectListComponent {
             };
             document.addEventListener('modalsLoaded', listener);
 
-            // Fallback: poll for up to 5s
             const t0 = Date.now();
             const poll = () => {
                 if (!checkReady() && Date.now() - t0 < 5000) {
@@ -566,7 +603,6 @@ class ProjectListComponent {
             if (!btn) return;
             const handler = (e) => {
                 e.preventDefault();
-                // open the new-project modal
                 if (window.projectModal?.openModal) {
                     window.projectModal.openModal();
                 } else {
@@ -588,7 +624,6 @@ class ProjectListComponent {
             let btn = null;
             while (attempts < maxAttempts && !(btn = document.getElementById(id))) {
                 attempts++;
-                // If emptyStateCreateBtn doesn't exist, no need to wait a lot
                 if (id === 'emptyStateCreateBtn' && attempts > 1) break;
                 await new Promise((r) => setTimeout(r, 100 * attempts));
             }
@@ -652,10 +687,6 @@ class ProjectListComponent {
     // UI States
     // --------------------------------------
 
-    /**
-     * Shows a loading skeleton while data is being fetched.
-     * @private
-     */
     _showLoadingState() {
         if (!this.element) return;
         this.element.innerHTML = '';
@@ -672,10 +703,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Show an empty state message when no projects exist.
-     * @private
-     */
     _showEmptyState() {
         if (!this.element) return;
         this.element.innerHTML = `
@@ -689,7 +716,6 @@ class ProjectListComponent {
               <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
             </div>
         `;
-        // Wire up create button
         const createBtn = document.getElementById('emptyStateCreateBtn');
         if (createBtn) {
             window.eventHandlers.trackListener(createBtn, 'click', () => this._openNewProjectModal(), {
@@ -698,10 +724,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Show a login prompt if user is not authenticated.
-     * @private
-     */
     _showLoginRequired() {
         if (!this.element) return;
         this.element.innerHTML = `
@@ -715,7 +737,6 @@ class ProjectListComponent {
               <button id="loginButton" class="btn btn-primary mt-4">Login</button>
             </div>
         `;
-        // Wire up login button
         const loginBtn = document.getElementById('loginButton');
         if (loginBtn) {
             const handler = (e) => {
@@ -728,11 +749,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Show a generic error state.
-     * @param {string} message
-     * @private
-     */
     _showErrorState(message) {
         if (!this.element) return;
         const fallbackMsg = (typeof message === 'string' && message.trim()) ? message : "An unknown error occurred.";
@@ -759,10 +775,6 @@ class ProjectListComponent {
     // Card Creation / Utilities
     // --------------------------------------
 
-    /**
-     * Creates a project card element with relevant action buttons.
-     * @private
-     */
     _createProjectCard(project) {
         const theme = this.state.customization.theme || 'default';
         const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
@@ -774,7 +786,6 @@ class ProjectListComponent {
         card.setAttribute('role', 'article');
         card.setAttribute('aria-labelledby', `project-title-${project.id}`);
 
-        // Header
         const header = document.createElement('div');
         header.className = 'flex justify-between items-start';
 
@@ -786,7 +797,6 @@ class ProjectListComponent {
         const actions = document.createElement('div');
         actions.className = 'flex gap-1';
 
-        // Action buttons: view, edit, delete
         const actionButtons = [
             {
                 action: 'view',
@@ -846,7 +856,6 @@ class ProjectListComponent {
         header.appendChild(actions);
         card.appendChild(header);
 
-        // Description
         if (this.state.customization.showDescription && project.description) {
             const description = document.createElement('p');
             description.className = 'project-description text-sm text-base-content/80 mb-3 line-clamp-2';
@@ -854,18 +863,15 @@ class ProjectListComponent {
             card.appendChild(description);
         }
 
-        // Footer (date, badges, etc.)
         const footer = document.createElement('div');
         footer.className = 'mt-auto pt-2 flex justify-between text-xs text-base-content/70';
 
-        // Date
         if (this.state.customization.showDate && project.updated_at) {
             const dateEl = document.createElement('span');
             dateEl.textContent = this._formatDate(project.updated_at);
             footer.appendChild(dateEl);
         }
 
-        // Badges
         const badges = document.createElement('div');
         badges.className = 'flex gap-1';
 
@@ -891,12 +897,6 @@ class ProjectListComponent {
         return card;
     }
 
-    /**
-     * Format date strings for display.
-     * @param {string} dateString
-     * @returns {string}
-     * @private
-     */
     _formatDate(dateString) {
         if (!dateString) return '';
         try {
@@ -907,10 +907,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Load card customization from localStorage.
-     * @private
-     */
     _loadCustomization() {
         try {
             const saved = localStorage.getItem('projectCardsCustomization');
@@ -920,10 +916,6 @@ class ProjectListComponent {
         }
     }
 
-    /**
-     * Defaults for card customization (theme, showDescription, etc.).
-     * @private
-     */
     _getDefaultCustomization() {
         return {
             theme: 'default',
@@ -937,18 +929,12 @@ class ProjectListComponent {
 // --------------------------------------
 // Factory: createProjectListComponent
 // --------------------------------------
-/**
- * Factory function to create a new ProjectListComponent instance.
- * @param {Object} options - Configuration options
- * @returns {ProjectListComponent} A new ProjectListComponent instance
- */
 export function createProjectListComponent(options = {}) {
     return new ProjectListComponent(options);
 }
 
 export { ProjectListComponent };
 
-// Attach ProjectListComponent to window for global access
 if (typeof window !== "undefined") {
     window.ProjectListComponent = ProjectListComponent;
 }
