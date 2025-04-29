@@ -62,7 +62,11 @@ export function createChatManager() {
     }
 
     _isValidProjectId(id) {
-      return isValidProjectId(id);
+      const valid = isValidProjectId(id);
+      if (!valid) {
+        console.warn('[ChatManager] Invalid project ID:', id);
+      }
+      return valid;
     }
 
     async initialize(options = {}) {
@@ -131,56 +135,61 @@ export function createChatManager() {
         this._showErrorMessage("Cannot load conversation: Project is not loaded or ID is invalid.");
         return false;
       }
-      if (this.isLoading) {
-        console.warn("[Chat] Loading already in progress");
-        return false;
+
+      // Lock: ensure only one load at a time
+      if (this.loadPromise) {
+        console.warn("[Chat] Loading already in progress -- chaining to existing loadPromise.");
+        return this.loadPromise;
       }
+
       this.isLoading = true;
       this._showLoadingIndicator();
-      try {
-        this._clearMessages();
-        const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/`;
-        const conversation = await window.app.apiRequest(endpoint, { method: "GET" });
+      this.loadPromise = (async () => {
+        try {
+          this._clearMessages();
+          const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/`;
+          const conversation = await window.app.apiRequest(endpoint, { method: "GET" });
 
-        const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages/`;
-        const messagesResponse = await window.app.apiRequest(messagesEndpoint, { method: "GET" });
-        const messages = messagesResponse.data?.messages || [];
+          const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages/`;
+          const messagesResponse = await window.app.apiRequest(messagesEndpoint, { method: "GET" });
+          const messages = messagesResponse.data?.messages || [];
 
-        this.currentConversationId = conversationId;
-        if (this.titleElement)
-          this.titleElement.textContent = conversation.title || "New Conversation";
-        this._renderMessages(messages);
+          this.currentConversationId = conversationId;
+          if (this.titleElement)
+            this.titleElement.textContent = conversation.title || "New Conversation";
+          this._renderMessages(messages);
 
-        // Update the conversation list in the sidebar using the central UI renderer
-        if (window.uiRenderer && typeof window.uiRenderer.renderConversations === "function") {
-          // Ensure window.chatConfig is up-to-date for uiRenderer
-          window.chatConfig = window.chatConfig || {};
-          if (Array.isArray(window.chatConfig.conversations)) {
-            // Try to update the title of the current conversation in the list for consistency
-            window.chatConfig.conversations = window.chatConfig.conversations.map(conv =>
-              conv.id === conversationId ? { ...conv, title: conversation.title } : conv
-            );
+          // Update the conversation list in the sidebar using the central UI renderer
+          if (window.uiRenderer && typeof window.uiRenderer.renderConversations === "function") {
+            window.chatConfig = window.chatConfig || {};
+            if (Array.isArray(window.chatConfig.conversations)) {
+              window.chatConfig.conversations = window.chatConfig.conversations.map(conv =>
+                conv.id === conversationId ? { ...conv, title: conversation.title } : conv
+              );
+            }
+            window.uiRenderer.renderConversations(window.chatConfig);
           }
-          window.uiRenderer.renderConversations(window.chatConfig);
-        }
 
-        // Update URL if needed
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get("chatId") !== conversationId) {
-          const newUrl = new URL(window.location.href);
-          newUrl.searchParams.set("chatId", conversationId);
-          window.history.pushState({}, "", newUrl.toString());
-        }
+          // Update URL if needed
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get("chatId") !== conversationId) {
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set("chatId", conversationId);
+            window.history.pushState({}, "", newUrl.toString());
+          }
 
-        this.isLoading = false;
-        this._hideLoadingIndicator();
-        return true;
-      } catch (error) {
-        this.isLoading = false;
-        this._hideLoadingIndicator();
-        this._handleError("loading conversation", error);
-        return false;
-      }
+          return true;
+        } catch (error) {
+          this._handleError("loading conversation", error);
+          return false;
+        } finally {
+          this.isLoading = false;
+          this._hideLoadingIndicator();
+          this.loadPromise = null;
+        }
+      })();
+
+      return this.loadPromise;
     }
 
     async createNewConversation(projectId = null) {
