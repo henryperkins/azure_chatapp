@@ -236,7 +236,7 @@ async def create_conversation(
 async def get_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -247,8 +247,10 @@ async def get_project_conversation(
         description=f"Get conversation {conversation_id}"
     ) as span:
         try:
+            current_user = current_user_tuple[0]
             span.set_tag("project.id", str(project_id))
             span.set_tag("conversation.id", str(conversation_id))
+            span.set_tag("user.id", str(current_user.id))
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
@@ -284,7 +286,7 @@ async def update_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
     update_data: ConversationUpdate,
-    current_user: User = Depends(get_current_user_and_token),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
@@ -297,11 +299,13 @@ async def update_project_conversation(
 
     try:
         with transaction:
+            current_user = current_user_tuple[0]
             if update_data.sentry_trace:
                 transaction.set_data("frontend_trace", update_data.sentry_trace)
 
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("conversation.id", str(conversation_id))
+            transaction.set_tag("user.id", str(current_user.id))
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
@@ -360,10 +364,6 @@ async def update_project_conversation(
         raise HTTPException(
             status_code=500,
             detail="Failed to update conversation"
-        ) from e
-
-@router.delete("/{project_id}/conversations/{conversation_id}", response_model=dict)
-async def delete_project_conversation(
     project_id: UUID,
     conversation_id: UUID,
     current_user: User = Depends(get_current_user_and_token),

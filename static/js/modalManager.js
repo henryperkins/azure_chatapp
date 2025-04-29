@@ -288,15 +288,25 @@ class ProjectModal {
   /**
    * Initialize the ProjectModal by discovering required DOM elements and setting up listeners.
    */
-  init() {
+  async init() {
     console.log("[ProjectModal] Starting initialization...");
 
-    // Example IDs - adapt to match your modals.html
-    this.modalElement = document.getElementById("projectModal");
-    this.formElement = document.getElementById("projectModalForm");
+    // Wait until DOM ready for both modal and form, try for up to 2 seconds
+    const waitForEl = (id, tries = 20) =>
+      new Promise(resolve => {
+        const loop = () => {
+          const el = document.getElementById(id);
+          if (el || tries-- <= 0) return resolve(el);
+          setTimeout(loop, 100);
+        };
+        loop();
+      });
+
+    this.modalElement = await waitForEl("projectModal");
+    this.formElement  = await waitForEl("projectModalForm");
 
     if (!this.modalElement || !this.formElement) {
-      console.error("[ProjectModal] Required elements not found");
+      // graceful no-op if not ready after waiting
       return;
     }
 
