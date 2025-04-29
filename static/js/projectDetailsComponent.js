@@ -11,6 +11,8 @@
  * - window.FileUploadComponent: File uploads.
  */
 
+import { isValidProjectId, getCurrentProjectId } from './projectManager.js';
+
 class ProjectDetailsComponent {
   /**
    * @param {Object} options - Component options
@@ -253,6 +255,19 @@ class ProjectDetailsComponent {
       return;
     }
 
+    // Always check projectId before any tab that needs it
+    const needValidProjectTabs = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'];
+    const projectId = getCurrentProjectId();
+    if (
+      needValidProjectTabs.includes(tabName) &&
+      !isValidProjectId(projectId)
+    ) {
+      this.disableChatUI("Project not loaded yet.");
+      window.app?.showNotification?.('Cannot open: No valid project loaded.', 'error');
+      console.error("[ProjectDetailsComponent] Refusing to show tab due to invalid projectId", { tabName, projectId });
+      return;
+    }
+
     // Update tab buttons
     const tabButtons = document.querySelectorAll('.project-tab-btn');
     tabButtons.forEach(btn => {
@@ -389,8 +404,15 @@ class ProjectDetailsComponent {
    * This method might delegate to a chat manager
    */
   async createNewChat() {
+    const projectId = getCurrentProjectId();
+    if (!isValidProjectId(projectId)) {
+      this.disableChatUI("Cannot create chat: No valid project loaded.");
+      window.app?.showNotification?.('Cannot create chat: No valid project loaded.', 'error');
+      console.error('[ProjectDetailsComponent] createNewChat failed: invalid projectId', { projectId });
+      return;
+    }
     try {
-      await window.chatManager.initialize({ projectId: this.state.currentProject?.id });
+      await window.chatManager.initialize({ projectId });
       const newConversation = await window.chatManager.createNewConversation();
       const newConversationId = newConversation.id;
 
@@ -434,9 +456,16 @@ class ProjectDetailsComponent {
    * @private
    */
   async _loadTabContent(tabName) {
-    if (!this.state.currentProject?.id) return;
+    const projectId = getCurrentProjectId();
 
-    const projectId = this.state.currentProject.id;
+    // For any tab that expects a project to be loaded, abort early if projectId isn't valid
+    if ((["files", "knowledge", "conversations", "artifacts", "chat"].includes(tabName)) &&
+        (!isValidProjectId(projectId))) {
+      this.disableChatUI("Cannot view tab: No valid project loaded.");
+      window.app?.showNotification?.('No valid project loaded – cannot view this tab.', 'error');
+      console.error("[ProjectDetailsComponent] Aborting tab load due to invalid projectId", { tabName, projectId });
+      return;
+    }
 
     // Gracefully handle knowledge tab visibility/component
     if (this.knowledgeBaseComponent) {
@@ -492,8 +521,15 @@ class ProjectDetailsComponent {
    * @private
    */
   async _initializeChat() {
+    // Defensive: Only allow initializing chat if valid projectId is present
+    const projectId = this.state.currentProject?.id;
+    if (!isValidProjectId(projectId)) {
+      this.disableChatUI("Cannot initialize chat: No valid project selected.");
+      window.app.showNotification('Cannot initialize chat: No valid project selected.', 'error');
+      return;
+    }
     try {
-      await window.chatManager.initialize();
+      await window.chatManager.initialize({ projectId });
       const urlParams = new URLSearchParams(window.location.search);
       const chatId = urlParams.get('chatId');
 
@@ -502,9 +538,41 @@ class ProjectDetailsComponent {
       } else {
         await this.createNewChat();
       }
+      this.enableChatUI();
     } catch (error) {
+      this.disableChatUI("Failed to initialize chat: " + (error.message || error));
       console.error('[ProjectDetailsComponent] Failed to initialize chat:', error);
       window.app.showNotification('Failed to initialize chat', 'error');
+    }
+  }
+
+  /**
+   * Disable chat input and send button, optionally with a reason.
+   * @param {string} reason
+   */
+  disableChatUI(reason = "") {
+    const sendBtn = document.getElementById("projectChatSendBtn");
+    const input = document.getElementById("projectChatInput");
+    if (sendBtn) {
+      sendBtn.disabled = true;
+      sendBtn.title = reason || "Chat is unavailable";
+    }
+    if (input) {
+      input.disabled = true;
+      input.placeholder = reason || "Chat unavailable";
+    }
+  }
+
+  /**
+   * Enable chat input and send button when safe.
+   */
+  enableChatUI() {
+    const sendBtn = document.getElementById("projectChatSendBtn");
+    const input = document.getElementById("projectChatInput");
+    if (sendBtn) sendBtn.disabled = false;
+    if (input) {
+      input.disabled = false;
+      input.placeholder = "Type your message...";
     }
   }
 
