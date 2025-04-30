@@ -23,6 +23,7 @@ import './sidebar-enhancements.js';
 import { createChatManager } from './chat.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { initChatExtensions } from './chatExtensions.js';
+import { isAuthenticated, showNotification } from './utils/globalUtils.js';
 
 /* ---------------------------------------------------------------------
  * Configuration
@@ -334,6 +335,7 @@ document.dispatchEvent(new Event('modalsLoaded'));
     if (window.notificationHandler) {
         DependencySystem.register('notificationHandler', window.notificationHandler);
     }
+    DependencySystem.register('globalUtils', { isAuthenticated, showNotification });
 
     // Project manager
     const projectManager = createProjectManager();
@@ -413,7 +415,7 @@ if (!window.ProjectDetailsComponent) {
 
     /* ---------- Chat manager with debounce to avoid flood ---------- */
     const chatManager = createChatManager();
-    chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
+    // initialize() is already idempotent - debounce wrapper removed per codebase hardening
     DependencySystem.register('chatManager', chatManager);
 
     window.chatManager = chatManager;
@@ -462,18 +464,7 @@ function toggleElement(selectorOrElement, show) {
     el?.classList.toggle('hidden', !show);
 }
 
-function showNotification(message, type = 'info', duration = 5_000) {
-    if (window.notificationHandler?.show) {
-        window.notificationHandler.show(message, type, { timeout: duration });
-    } else if (
-        typeof window.showNotification === 'function' &&
-        window.showNotification !== showNotification
-    ) {
-        window.showNotification(message, type, { timeout: duration });
-    } else if (APP_CONFIG.DEBUG) {
-        console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-}
+// showNotification removed: now provided by utils/globalUtils.js
 
 /* ------------------------------------------------------------------- */
 /* Navigation / routing                                                 */

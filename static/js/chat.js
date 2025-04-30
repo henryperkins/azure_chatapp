@@ -3,7 +3,8 @@
  * Modular ChatManager: export as createChatManager(), uses centralized state via DependencySystem.
  */
 
-import { isValidProjectId, getCurrentProjectId } from './projectManager.js';
+import { getCurrentProjectId } from './projectManager.js';
+import { isValidProjectId, isAuthenticated } from './utils/globalUtils.js';
 
 const CHAT_CONFIG = {
   DEFAULT_MODEL: "claude-3-sonnet-20240229",
@@ -30,15 +31,7 @@ export function createChatManager() {
     };
   }
   // ---- HELPER: Check for centralized authentication ----
-  function isAuthenticated() {
-    if (window.DependencySystem?.modules?.has("app")) {
-      return !!window.DependencySystem.modules.get("app").state.isAuthenticated;
-    }
-    if (window.app?.state?.isAuthenticated != null) return window.app.state.isAuthenticated;
-    // Fallback for legacy (should always use centralized)
-    if (window.auth?.isAuthenticated) return window.auth.isAuthenticated();
-    return false;
-  }
+  // (removed, now importing from globalUtils)
 
   class ChatManager {
     constructor() {
@@ -61,13 +54,7 @@ export function createChatManager() {
       this.createConversation = (...args) => this.createNewConversation(...args);
     }
 
-    _isValidProjectId(id) {
-      const valid = isValidProjectId(id);
-      if (!valid) {
-        console.warn('[ChatManager] Invalid project ID:', id);
-      }
-      return valid;
-    }
+    // (removed _isValidProjectId, uses canonical isValidProjectId directly)
 
     async initialize(options = {}) {
       // Always get a valid projectId: options.projectId > getCurrentProjectId() > error
@@ -78,7 +65,7 @@ export function createChatManager() {
       this.projectId = projectId;
 
       // Defensive: Validate project ID before any chat action can initialize
-      if (!this._isValidProjectId(this.projectId)) {
+      if (!isValidProjectId(this.projectId)) {
         const msg = "[Chat] Project ID required before initializing chat.";
         this._showErrorMessage(msg);
         this._handleError("initialization", msg);
@@ -130,7 +117,7 @@ export function createChatManager() {
         console.warn("[Chat] loadConversation called but user not authenticated");
         return false;
       }
-      if (!this._isValidProjectId(this.projectId)) {
+      if (!isValidProjectId(this.projectId)) {
         this._handleError("loading conversation", "[Chat] Project ID is invalid or missing.");
         this._showErrorMessage("Cannot load conversation: Project is not loaded or ID is invalid.");
         return false;
@@ -203,7 +190,7 @@ export function createChatManager() {
         console.warn("[Chat] User not authenticated, cannot create conversation");
         throw new Error("Not authenticated");
       }
-      if (!this._isValidProjectId(this.projectId)) {
+      if (!isValidProjectId(this.projectId)) {
         const msg = "[Chat] Project ID is required to create a conversation";
         this._showErrorMessage(msg);
         this._handleError("creating conversation", msg);
@@ -250,7 +237,7 @@ export function createChatManager() {
         return;
       }
       // Always use DRY getter for projectId check
-      if (!this._isValidProjectId(this.projectId)) {
+      if (!isValidProjectId(this.projectId)) {
         const msg = "No valid project loaded. Please select a valid project before sending messages.";
         this._showErrorMessage(msg);
         this._handleError("sending message", msg);
@@ -342,7 +329,7 @@ export function createChatManager() {
         console.warn("[Chat] Cannot delete conversation - not authenticated");
         return false;
       }
-      if (!this._isValidProjectId(this.projectId)) {
+      if (!isValidProjectId(this.projectId)) {
         this._handleError("deleting conversation", "[Chat] Project ID is invalid or missing.");
         this._showErrorMessage("Cannot delete conversation: Project is not loaded or ID is invalid.");
         return false;
