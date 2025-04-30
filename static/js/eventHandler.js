@@ -43,7 +43,6 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
   app = app || resolveDep('app');
   auth = auth || resolveDep('auth');
   projectManager = projectManager || resolveDep('projectManager');
-  sidebar = sidebar || resolveDep('sidebar');
   modalManager = modalManager || resolveDep('modalManager');
 
   // --- Tracked Listeners ---
