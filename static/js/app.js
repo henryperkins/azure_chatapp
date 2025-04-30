@@ -1,20 +1,15 @@
 /* eslint-disable no-console */
 /**
- * app.js - Refactored Application Core (v2 - Finalized)
+ * app.js - Application Core
  *
  * - Centralized dependency management via DependencySystem.
  * - Deterministic initialization sequence using async/await.
- * - Core utilities consolidated (apiRequest, notification, UUID validation).
+ * - Consolidated core utilities (apiRequest, notification, UUID validation).
  * - Reduced global scope pollution (strict DependencySystem usage).
  * - Consistent use of ES Modules.
- * - Placeholders and examples removed or completed.
  */
 
-// --- Core Dependencies ---
-// - DependencySystem is assumed to be loaded via a <script> tag in base.html
-// - Utility modules like formatting.js, utils.js should self-register or be handled early if needed
-
-// --- Component Factories/Classes (Imported) ---
+// --- Imports ---
 import { createModalManager, createProjectModal } from './modalManager.js';
 import { createProjectManager, isValidProjectId as validateUUID } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
@@ -27,22 +22,22 @@ import { createChatManager } from './chat.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { initChatExtensions } from './chatExtensions.js';
 
-import './notification-handler.js';    // Registers 'notificationHandler'
-import './sidebar-enhancements.js';     // Automatically runs/enhances as needed
-import './FileUploadComponent.js';      // Registers 'FileUploadComponent' or adds global enhancements
-import './auth.js';                     // Registers 'auth' and possibly 'AuthBus'
+import './notification-handler.js';
+import './sidebar-enhancements.js';
+import './FileUploadComponent.js';
+import './auth.js';
 
 /* ---------------------------------------------------------------------
- * Configuration (Centralized)
+ * Configuration
  * ------------------------------------------------------------------- */
 const APP_CONFIG = {
     DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
     TIMEOUTS: {
-        INITIALIZATION: 15_000,
-        AUTH_CHECK: 5_000,
-        API_REQUEST: 10_000,  // Slightly increased API timeout
-        COMPONENT_LOAD: 5_000,
-        DEPENDENCY_WAIT: 10_000
+        INITIALIZATION: 15000,
+        AUTH_CHECK: 5000,
+        API_REQUEST: 10000,
+        COMPONENT_LOAD: 5000,
+        DEPENDENCY_WAIT: 10000
     },
     API_ENDPOINTS: {
         AUTH_LOGIN: '/api/auth/login',
@@ -54,16 +49,15 @@ const APP_CONFIG = {
         PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
         PROJECT_FILES: '/api/projects/{projectId}/files',
         PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts',
-        PROJECT_KNOWLEDGE_BASE: '/api/projects/{projectId}/knowledge_base',
-        // Additional core endpoints can be added or updated here
+        PROJECT_KNOWLEDGE_BASE: '/api/projects/{projectId}/knowledge_base'
     },
     SELECTORS: {
         MAIN_SIDEBAR: '#mainSidebar',
         NAV_TOGGLE_BTN: '#navToggleBtn',
         SIDEBAR_PROJECTS: '#sidebarProjects',
-        AUTH_BUTTON: '#authButton',             // Button that opens the login/register panel
-        USER_MENU_BUTTON: '#userMenuButton',    // Button for the logged-in user's menu
-        USER_MENU: '#userMenu',                 // Dropdown menu container
+        AUTH_BUTTON: '#authButton',
+        USER_MENU_BUTTON: '#userMenuButton',
+        USER_MENU: '#userMenu',
         PROJECT_LIST_VIEW: '#projectListView',
         PROJECT_DETAILS_VIEW: '#projectDetailsView',
         LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
@@ -81,7 +75,7 @@ const appState = {
     initialized: false,
     initializing: false,
     currentPhase: 'idle',
-    isAuthenticated: false // Updated by auth initialization
+    isAuthenticated: false
 };
 
 /* ---------------------------------------------------------------------
@@ -91,15 +85,14 @@ const DependencySystem = window.DependencySystem;
 if (!DependencySystem) {
     console.error("CRITICAL: DependencySystem not found. Application cannot start.");
     document.body.innerHTML = `
-        <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
-            <strong>Application Critical Error:</strong> Core dependency system failed to load.
-            Please contact support or refresh.
-        </div>`;
+    <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
+      <strong>Application Critical Error:</strong> Core dependency system failed to load.
+      Please contact support or refresh.
+    </div>`;
     throw new Error("DependencySystem is required but not available.");
 }
 const waitFor = DependencySystem.waitFor.bind(DependencySystem);
 
-/** Simple debounce (trailing edge). */
 function debounce(fn, wait = 250) {
     let timeoutId = null;
     return function (...args) {
@@ -111,7 +104,6 @@ function debounce(fn, wait = 250) {
     };
 }
 
-/** Stable JSON-like stringify for caching keys, etc. */
 function stableStringify(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
     if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
@@ -121,7 +113,6 @@ function stableStringify(value) {
         .join(',')}}`;
 }
 
-/** Normalizes a URL (sorts query params, removes trailing slash unless root). */
 function normaliseUrl(url) {
     try {
         const u = new URL(url, window.location.origin);
@@ -139,14 +130,12 @@ function normaliseUrl(url) {
 
 const pendingRequests = new Map();
 
-/** Robust API request utility: handles CSRF, timeouts, dedup (GET), JSON parse, error parsing. */
 async function apiRequest(url, opts = {}, skipCache = false) {
     const auth = DependencySystem.modules.get('auth');
     const method = (opts.method || 'GET').toUpperCase();
     const unsafeVerb = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
     const normalizedUrl = normaliseUrl(url);
 
-    // Build a dedup key, timestamp for formData to avoid collisions
     const bodyKey = opts.body instanceof FormData
         ? `[form-data-${Date.now()}]`
         : stableStringify(opts.body || {});
@@ -166,7 +155,6 @@ async function apiRequest(url, opts = {}, skipCache = false) {
         else if (APP_CONFIG.DEBUG) console.warn(`[API] CSRF token unavailable for ${method} ${normalizedUrl}`);
     }
 
-    // Serialize JSON body if not FormData
     if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
         if (!opts.headers['Content-Type']) {
             opts.headers['Content-Type'] = 'application/json;charset=UTF-8';
@@ -205,7 +193,6 @@ async function apiRequest(url, opts = {}, skipCache = false) {
                     }
                     errPayload = { ...errPayload, ...errorJson };
                 } catch {
-                    // Attempt text fallback
                     try { errPayload.rawResponse = await resp.text(); } catch {/* ignore */ }
                 }
                 const error = new Error(errPayload.message);
@@ -244,8 +231,7 @@ async function apiRequest(url, opts = {}, skipCache = false) {
     return reqPromise;
 }
 
-/** Displays notifications using the registered 'notificationHandler' module. */
-function showNotification(message, type = 'info', duration = 5_000) {
+function showNotification(message, type = 'info', duration = 5000) {
     try {
         const notificationHandler = DependencySystem.modules.get('notificationHandler');
         if (notificationHandler?.show) {
@@ -269,7 +255,6 @@ function showNotification(message, type = 'info', duration = 5_000) {
     }
 }
 
-/** Toggles element visibility by adding/removing a "hidden" class. */
 function toggleElement(selectorOrElement, show) {
     try {
         const el = typeof selectorOrElement === 'string'
@@ -292,7 +277,7 @@ function toggleElement(selectorOrElement, show) {
 }
 
 /* ---------------------------------------------------------------------
- * SPA Router Patch (Ensures 'locationchange' event)
+ * SPA Router Patch
  * ------------------------------------------------------------------- */
 (() => {
     if (history.pushState._patched) return;
@@ -330,7 +315,7 @@ function toggleElement(selectorOrElement, show) {
 })();
 
 /* ---------------------------------------------------------------------
- * Application Instance (Registered with DependencySystem)
+ * Application Instance
  * ------------------------------------------------------------------- */
 const app = {
     apiRequest,
@@ -396,7 +381,6 @@ async function init() {
     const initStartTime = performance.now();
 
     try {
-        // Phase 0: Register core app object in DependencySystem
         appState.currentPhase = 'register_app';
         DependencySystem.register('app', app);
         Object.defineProperty(window, "app", {
@@ -408,7 +392,6 @@ async function init() {
             console.debug('[App] Core app module registered.');
         }
 
-        // Phase 1: Wait for essential systems (Auth, Events, Notifications)
         appState.currentPhase = 'waiting_core_deps';
         console.log('[App] Waiting for essential dependencies...');
         await waitFor(['auth', 'eventHandlers', 'notificationHandler'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
@@ -416,27 +399,21 @@ async function init() {
             console.debug('[App] Essential dependencies loaded.');
         }
 
-        // Phase 2: Initialize Core Non-UI Systems
         appState.currentPhase = 'init_core_systems';
         await initializeCoreSystems();
 
-        // Phase 3: Initialize Authentication System
         appState.currentPhase = 'init_auth';
         await initializeAuthSystem();
 
-        // Phase 4: Initialize UI Components
         appState.currentPhase = 'init_ui';
         await initializeUIComponents();
 
-        // Phase 5: Register Global Listeners
         appState.currentPhase = 'registering_listeners';
         registerAppListeners();
 
-        // Phase 6: Finalization
         appState.currentPhase = 'finalizing';
         appState.initialized = true;
 
-        // Fire first navigation check
         handleNavigationChange();
 
         const initEndTime = performance.now();
@@ -458,15 +435,12 @@ async function init() {
     }
 }
 
-/** Initializes core non-UI modules. */
 async function initializeCoreSystems() {
     console.log('[App] Initializing core systems...');
 
-    // Modal Manager
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
 
-    // Project Modal (initialize if it has an init method)
     const projectModal = createProjectModal();
     if (typeof projectModal.init === 'function') {
         await projectModal.init();
@@ -474,7 +448,6 @@ async function initializeCoreSystems() {
     DependencySystem.register('projectModal', projectModal);
     document.dispatchEvent(new Event('modalsLoaded'));
 
-    // Project Manager
     const projectManager = createProjectManager();
     if (typeof projectManager.initialize === 'function') {
         await projectManager.initialize();
@@ -484,7 +457,6 @@ async function initializeCoreSystems() {
     console.log('[App] Core systems initialized.');
 }
 
-/** Initializes auth system and sets appState.isAuthenticated. */
 async function initializeAuthSystem() {
     console.log('[App] Initializing authentication system...');
     const auth = DependencySystem.modules.get('auth');
@@ -504,11 +476,8 @@ async function initializeAuthSystem() {
     }
 }
 
-/** Initializes UI components and registers them with DependencySystem. */
 async function initializeUIComponents() {
     console.log('[App] Initializing UI components...');
-
-    // Register potential component classes if others rely on them
     if (typeof ProjectDetailsComponent === 'function') {
         DependencySystem.register('ProjectDetailsComponent', ProjectDetailsComponent);
     }
@@ -519,11 +488,9 @@ async function initializeUIComponents() {
         DependencySystem.register('FileUploadComponent', window.FileUploadComponent);
     }
 
-    // Create and register the main dashboard
     const projectDashboard = createProjectDashboard();
     DependencySystem.register('projectDashboard', projectDashboard);
 
-    // Create and register the project details component
     const projectDetailsComponent = createProjectDetailsComponent({
         onBack: async () => {
             try {
@@ -537,14 +504,12 @@ async function initializeUIComponents() {
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
 
-    // Model Config & Dashboard Utils
     const modelConfig = createModelConfig();
     DependencySystem.register('modelConfig', modelConfig);
 
     const projectDashboardUtils = createProjectDashboardUtils();
     DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
-    // Chat Manager
     const chatManager = createChatManager();
     if (typeof chatManager.initialize === 'function') {
         chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
@@ -552,14 +517,12 @@ async function initializeUIComponents() {
     DependencySystem.register('chatManager', chatManager);
     initChatExtensions();
 
-    // Sidebar
     const sidebar = createSidebar();
     if (typeof sidebar.init === 'function') {
         await sidebar.init();
     }
     DependencySystem.register('sidebar', sidebar);
 
-    // Knowledge Base
     const kbDeps = await waitFor(['auth', 'projectManager']);
     const knowledgeBaseComponent = createKnowledgeBaseComponent({
         apiRequest,
@@ -572,13 +535,11 @@ async function initializeUIComponents() {
     }
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
 
-    // Initialize dashboard last
     if (typeof projectDashboard.initialize === 'function') {
         console.log('[App] Initializing ProjectDashboard instance...');
         await projectDashboard.initialize();
     }
 
-    // Optional global enhancements
     if (typeof window.initAccessibilityEnhancements === 'function') {
         window.initAccessibilityEnhancements();
     }
@@ -595,10 +556,8 @@ async function initializeUIComponents() {
 function registerAppListeners() {
     console.log('[App] Registering global event listeners...');
 
-    // SPA navigation changes
     window.addEventListener('locationchange', handleNavigationChange);
 
-    // Auth State Change
     waitFor('auth', (auth) => {
         if (auth?.AuthBus?.addEventListener && !auth.AuthBus._appListenerAttached) {
             auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
@@ -609,15 +568,11 @@ function registerAppListeners() {
         }
     }).catch(err => console.error('[App] Failed to wait for AuthBus:', err));
 
-    // Chat initialization triggers
     setupChatInitializationTrigger();
 
     console.log('[App] Global event listeners registered.');
 }
 
-/**
- * Sets up debounced chat manager initialization on auth or project changes.
- */
 function setupChatInitializationTrigger() {
     const requiredDeps = ['auth', 'chatManager', 'projectManager'];
     const debouncedInitChat = debounce(async () => {
@@ -642,7 +597,6 @@ function setupChatInitializationTrigger() {
         }
     }, 350);
 
-    // Attach listeners once dependencies are ready
     waitFor(requiredDeps, (deps) => {
         if (deps.auth?.AuthBus && !deps.auth.AuthBus._chatInitListenerAttached) {
             deps.auth.AuthBus.addEventListener('authStateChanged', debouncedInitChat);
@@ -652,7 +606,6 @@ function setupChatInitializationTrigger() {
         }
 
         if (typeof deps.projectManager.addEventListener === 'function' && !deps.projectManager._chatInitListenerAttached) {
-            // e.g., 'currentProjectChanged' event from projectManager
             deps.projectManager.addEventListener('currentProjectChanged', debouncedInitChat);
             deps.projectManager._chatInitListenerAttached = true;
         } else {
@@ -660,7 +613,7 @@ function setupChatInitializationTrigger() {
         }
 
         console.log('[App] Chat re-initialization listeners attached.');
-        debouncedInitChat(); // Check current state once
+        debouncedInitChat();
     }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2).catch(err =>
         console.error('[App] Failed setup for chat init triggers:', err)
     );
@@ -701,7 +654,6 @@ async function handleNavigationChange() {
     const url = new URL(window.location.href);
     const projectId = url.searchParams.get('project');
 
-    // If not authenticated, show login prompt or message
     if (!appState.isAuthenticated) {
         console.log('[App] Navigation change: User not authenticated.');
         projectDashboard.showLoginRequiredMessage?.();
@@ -709,13 +661,12 @@ async function handleNavigationChange() {
     }
     toggleElement('LOGIN_REQUIRED_MESSAGE', false);
 
-    // Authenticated Routing
     try {
         if (projectId && validateUUID(projectId) && typeof projectDashboard.showProjectDetails === 'function') {
             console.log(`[App] Navigating to project details: ${projectId}`);
             await projectDashboard.showProjectDetails(projectId);
         } else if (typeof projectDashboard.showProjectList === 'function') {
-            console.log('[App] Navigating to project list view (default/invalid project).');
+            console.log('[App] Navigating to project list view.');
             await projectDashboard.showProjectList();
         } else {
             console.warn('[App] Unhandled navigation or missing dashboard methods.');
@@ -739,7 +690,7 @@ async function handleNavigationChange() {
 async function handleAuthStateChange(event) {
     const { authenticated, username } = event?.detail || {};
     const newAuthState = !!authenticated;
-    if (newAuthState === appState.isAuthenticated) return; // No change
+    if (newAuthState === appState.isAuthenticated) return;
 
     const previousAuthState = appState.isAuthenticated;
     appState.isAuthenticated = newAuthState;
@@ -754,13 +705,11 @@ async function handleAuthStateChange(event) {
         if (authStatusSpan) {
             authStatusSpan.textContent = appState.isAuthenticated ? (username ?? 'Authenticated') : 'Not Authenticated';
         }
-        // Optionally update userStatusSpan text or styling here
         if (APP_CONFIG.DEBUG) {
             console.log('[App] Updated auth UI elements.');
         }
     });
 
-    // If essential modules are missing, log and notify
     let projectManager, projectDashboard, sidebar, chatManager;
     try {
         [projectManager, projectDashboard, sidebar, chatManager] = await Promise.all([
@@ -776,7 +725,6 @@ async function handleAuthStateChange(event) {
     }
 
     if (appState.isAuthenticated && !previousAuthState) {
-        // --- User Logged IN ---
         console.log('[App] User logged in. Refreshing data/UI.');
         toggleElement('LOGIN_REQUIRED_MESSAGE', false);
         projectDashboard?.showProjectList?.();
@@ -797,7 +745,6 @@ async function handleAuthStateChange(event) {
         }
 
     } else if (!appState.isAuthenticated && previousAuthState) {
-        // --- User Logged OUT ---
         console.log('[App] User logged out. Clearing data/UI.');
         toggleElement('LOGIN_REQUIRED_MESSAGE', true);
         if (projectManager) {
@@ -852,10 +799,10 @@ function bootstrap() {
     if (!window.DependencySystem) {
         console.error("CRITICAL: DependencySystem not found. Bootstrap aborted.");
         document.body.innerHTML = `
-            <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
-                <strong>Application Critical Error:</strong> Core dependency system failed to load.
-                Please refresh or contact support.
-            </div>`;
+      <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
+        <strong>Application Critical Error:</strong> Core dependency system failed to load.
+        Please refresh or contact support.
+      </div>`;
         return;
     }
 
@@ -865,7 +812,7 @@ function bootstrap() {
     const startInit = () => {
         const time = performance.now();
         console.log(
-            `[App] DOM ready/loaded. (Delay: ${(time - bootstrapStartTime).toFixed(2)} ms) Starting initialization...`
+            `[App] DOM ready. (Delay: ${(time - bootstrapStartTime).toFixed(2)} ms) Starting initialization...`
         );
         init().catch(err => console.error("[App] Unhandled error during async init:", err));
     };
@@ -877,5 +824,4 @@ function bootstrap() {
     }
 }
 
-// Start the application bootstrap process
 bootstrap();
