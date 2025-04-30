@@ -1,17 +1,20 @@
 /**
- * modelConfig.js - Lightweight model configuration manager
- * Dependencies:
- * - localStorage (browser built-in)
- * - CustomEvent (browser built-in)
- * - window.chatManager (external dependency, expected to be available in global scope)
+ * modelConfig.js - DependencySystem/DI Refactored Edition
+ *
+ * Modular model configuration manager.
+ * - No `window.*` access internally
+ * - All dependencies via DI (DependencySystem, eventHandlers optionally injected)
+ * - UI event binding via DI-injected eventHandlers if available
+ *
+ * Exports: createModelConfig({ DependencySystem, eventHandlers })
  */
 
-/**
- * Modular ModelConfig
- * Exported as a factory function to avoid implicit globals.
- * Uses centralized auth state if needed by consumers.
- */
-export function createModelConfig() {
+export function createModelConfig({ DependencySystem, eventHandlers } = {}) {
+  // Dependency resolution: always prefer DI, fallback to DependencySystem argument, never window.*
+  DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem) || undefined;
+  eventHandlers = eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers')) || undefined;
+
+  // --- Module State ---
   const modelConfigState = {
     modelName: localStorage.getItem("modelName") || "claude-3-sonnet-20240229",
     provider: localStorage.getItem("provider") || "anthropic",
@@ -30,9 +33,7 @@ export function createModelConfig() {
     }
   };
 
-  /**
-   * Update model configuration and notify listeners
-   */
+  // --- Update and Broadcast Model Config ---
   function updateModelConfig(config) {
     Object.assign(modelConfigState, {
       modelName: config.modelName || modelConfigState.modelName,
@@ -50,7 +51,7 @@ export function createModelConfig() {
       }
     });
 
-    // Persist to localStorage
+    // Persist settings to localStorage
     localStorage.setItem("modelName", modelConfigState.modelName);
     localStorage.setItem("provider", modelConfigState.provider);
     localStorage.setItem("maxTokens", modelConfigState.maxTokens);
@@ -59,28 +60,29 @@ export function createModelConfig() {
     localStorage.setItem("visionDetail", modelConfigState.visionDetail);
     localStorage.setItem("extendedThinking", modelConfigState.extendedThinking);
     localStorage.setItem("thinkingBudget", modelConfigState.thinkingBudget);
-
     if (modelConfigState.customInstructions) {
       localStorage.setItem("globalCustomInstructions", modelConfigState.customInstructions);
     }
-
-    // Save Azure-specific settings
     localStorage.setItem("azureMaxCompletionTokens", modelConfigState.azureParams.maxCompletionTokens);
     localStorage.setItem("azureReasoningEffort", modelConfigState.azureParams.reasoningEffort);
     localStorage.setItem("azureVisionDetail", modelConfigState.azureParams.visionDetail);
 
-    // DependencySystem preferred: update chatManager if registered
-    const ds = window.DependencySystem;
-    const chatMgr = ds?.modules?.get('chatManager');
-    if (chatMgr?.updateModelConfig) {
-      chatMgr.updateModelConfig(modelConfigState);
+    // Notify chatManager via DependencySystem if registered
+    let chatManager = undefined;
+    if (DependencySystem && DependencySystem.modules?.get) {
+      chatManager = DependencySystem.modules.get('chatManager');
+    }
+    if (chatManager?.updateModelConfig) {
+      chatManager.updateModelConfig(modelConfigState);
     }
 
+    // Broadcast event (for listeners wanting model changes)
     document.dispatchEvent(new CustomEvent('modelConfigChanged', {
       detail: { ...modelConfigState }
     }));
   }
 
+  // Option generator
   function getModelOptions() {
     return [
       {
@@ -112,17 +114,18 @@ export function createModelConfig() {
   }
 
   function onConfigChange(callback) {
+    // Standard event subscribe
     document.addEventListener('modelConfigChanged', (e) => callback(e.detail));
   }
 
+  // --- UI Component Initializer ---
   function initializeUI() {
-    // Inline model config UI setup (formerly via uiRenderer)
     if (typeof setupModelDropdown === "function") setupModelDropdown();
     if (typeof setupMaxTokensUI === "function") setupMaxTokensUI();
     if (typeof setupVisionUI === "function") setupVisionUI();
   }
 
-  // --- Model Config UI Setup (migrated from uiRenderer.js) ---
+  // --- Model Config UI Setup (no globals, no window.eventHandlers used) ---
   function setupModelDropdown() {
     const sel = document.getElementById('modelSelect');
     if (!sel) return;
@@ -137,8 +140,11 @@ export function createModelConfig() {
     const current = getConfig().modelName;
     if (current) sel.value = current;
     const handler = () => updateModelConfig({ modelName: sel.value });
-    if (window.eventHandlers?.trackListener) window.eventHandlers.trackListener(sel, 'change', handler);
-    else sel.addEventListener('change', handler);
+    if (eventHandlers?.trackListener) {
+      eventHandlers.trackListener(sel, 'change', handler);
+    } else {
+      sel.addEventListener('change', handler);
+    }
   }
 
   function setupMaxTokensUI() {
@@ -162,16 +168,21 @@ export function createModelConfig() {
     const toggle = Object.assign(document.createElement('input'), { type: 'checkbox', id: 'visionToggle', className: 'mr-2', checked: getConfig().visionEnabled });
     const label = Object.assign(document.createElement('label'), { htmlFor: 'visionToggle', className: 'text-sm', textContent: 'Enable Vision' });
     const handler = () => updateModelConfig({ visionEnabled: toggle.checked });
-    toggle.addEventListener('change', handler);
+    if (eventHandlers?.trackListener) {
+      eventHandlers.trackListener(toggle, 'change', handler);
+    } else {
+      toggle.addEventListener('change', handler);
+    }
     panel.innerHTML = '';
     panel.append(toggle, label);
   }
 
+  // --- Module API ---
   return {
     getConfig,
     updateConfig: updateModelConfig,
     getModelOptions,
     onConfigChange,
-    initializeUI
+    initializeUI,
   };
 }
