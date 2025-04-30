@@ -206,12 +206,8 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     }
   }
 
-  // DependencySystem registration, if provided
-  if (DependencySystem && DependencySystem.register && typeof DependencySystem.register === "function") {
-    DependencySystem.register('notificationHandler', {
-      show, hide, clear, cleanup, addMessageListener, removeMessageListener
-    });
-  }
+  // DependencySystem registration is now always handled in the orchestrator (app.js).
+  // No top-level registration or DependencySystem usage here.
 
   return {
     show,
