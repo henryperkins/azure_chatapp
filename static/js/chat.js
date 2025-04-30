@@ -18,7 +18,19 @@
  *   DependencySystem.register('chatManager', chatManager);
  */
 
-import { getCurrentProjectId } from './projectManager.js';
+/**
+ * Returns current project id from the registered ProjectManager via DependencySystem.
+ */
+function getCurrentProjectId() {
+  const depSystem = (typeof window !== 'undefined' && window.DependencySystem);
+  const pm =
+    depSystem && depSystem.modules && depSystem.modules.get
+      ? depSystem.modules.get('projectManager')
+      : null;
+  return pm && typeof pm.getCurrentProject === 'function'
+    ? pm.getCurrentProject()?.id
+    : null;
+}
 import { isValidProjectId, isAuthenticated } from './utils/globalUtils.js';
 
 const CHAT_CONFIG = {
