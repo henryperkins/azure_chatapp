@@ -147,7 +147,7 @@ export class FileUploadComponent {
    * @param {FileList|Array<File>} files
    */
   async _uploadFiles(files) {
-    const { app, projectManager } = this;
+    const { app } = this;
     const projectId = this.projectId || app.getProjectId?.();
     if (!projectId || !app.validateUUID?.(projectId)) {
       app.showNotification?.('No valid project selected', 'error');

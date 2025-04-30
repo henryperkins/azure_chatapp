@@ -13,22 +13,19 @@ import { createModalManager, createProjectModal } from './modalManager.js';
 import { createProjectManager, isValidProjectId as validateUUID } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
 import { ProjectListComponent } from './projectListComponent.js';
-import { ProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
 import { createChatManager } from './chat.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
-import { initChatExtensions } from './chatExtensions.js';
+import { createChatExtensions } from './chatExtensions.js';
 import FileUploadComponent from './FileUploadComponent.js';
-import * as utils from './utils.js';
 import * as formatting from './formatting.js';
 import * as accessibilityUtils from './accessibility-utils.js';
 import * as globalUtils from './utils/globalUtils.js';
 
 import './notification-handler.js';
-import './sidebar-enhancements.js';
 import './auth.js';
 
 /* ---------------------------------------------------------------------
@@ -519,7 +516,8 @@ async function initializeUIComponents() {
         chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
     }
     DependencySystem.register('chatManager', chatManager);
-    initChatExtensions();
+    const chatExtensions = createChatExtensions({ DependencySystem });
+    chatExtensions.init();
 
     const sidebar = createSidebar();
     if (typeof sidebar.init === 'function') {
@@ -561,6 +559,7 @@ async function initializeUIComponents() {
     if (typeof window.initAccessibilityEnhancements === 'function') {
         window.initAccessibilityEnhancements();
     }
+    // Safely initialize sidebar enhancements if loaded
     if (typeof window.initSidebarEnhancements === 'function') {
         window.initSidebarEnhancements();
     }

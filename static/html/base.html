@@ -150,7 +150,6 @@
   </script>
 
   <!-- Modules providing global side effects (must be loaded first) -->
-  <script type="module" src="/static/js/utils.js"></script>
   <script type="module" src="/static/js/formatting.js"></script>
   <script type="module" src="/static/js/eventHandler.js"></script>
   <script type="module" src="/static/js/accessibility-utils.js"></script>
@@ -161,21 +160,6 @@
 
   <!-- KB Result Handlers are now loaded and initialized via app.js/orchestrator,
        do NOT include as a global script. -->
-
-  <!-- Load debug/verification scripts ONLY in development environment for security -->
-  <script>
-    if (
-      location.hostname === 'localhost' ||
-      location.hostname.startsWith('127.')
-    ) {
-      const s1 = document.createElement('script');
-      s1.src = '/static/js/debug-project.js';
-      document.head.appendChild(s1);
-      const s2 = document.createElement('script');
-      s2.src = '/static/js/fixes-verification.js';
-      document.head.appendChild(s2);
-    }
-  </script>
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col font-sans">
