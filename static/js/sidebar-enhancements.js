@@ -7,14 +7,13 @@
  * This file is loaded as a plain <script>, so we attach only to window,
  * no ES module exports.
  */
-(function() {
-  // Helper for tracking events: use window.eventHandlers if available,
-  // otherwise fall back to addEventListener.
-  const EH = window.eventHandlers || {
-    trackListener(el, type, handler, opts) {
-      if (el && el.addEventListener) el.addEventListener(type, handler, opts && opts.capture);
-    }
-  };
+(function({ eventHandlers, DependencySystem } = {}) {
+  DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
+  eventHandlers = eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers'));
+  if (!eventHandlers) throw new Error('eventHandlers required for sidebar-enhancements');
+
+  // Helper for tracking events: use injected eventHandlers
+  const EH = eventHandlers;
 
   function initSidebarEnhancements() {
     initCollapseControls();
@@ -85,8 +84,13 @@
 
     EH.trackListener(btn, 'click', e => {
       e.preventDefault();
-      const sidebar = window.DependencySystem?.modules?.get('sidebar');
+      const sidebar = DependencySystem?.modules?.get('sidebar');
       sidebar?.activateTab('projects');
     });
+  }
+
+  // Expose init function globally for legacy usage
+  if (typeof window !== 'undefined') {
+    window.initSidebarEnhancements = initSidebarEnhancements;
   }
 })();
