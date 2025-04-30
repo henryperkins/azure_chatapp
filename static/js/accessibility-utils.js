@@ -28,8 +28,6 @@ function initAccessibilityEnhancements() {
     });
   }
 }
-// Expose initializer for app.js
-window.initAccessibilityEnhancements = initAccessibilityEnhancements;
 
 /**
  * Bind all global keyboard shortcuts (including sidebar controls).

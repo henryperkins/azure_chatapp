@@ -1,17 +1,3 @@
-/**
- * sentry-init.js
- *
- * Initializes and configures Sentry.io for:
- *  - Error monitoring
- *  - Performance tracing
- *  - Session Replay
- *
- * Loads as early as possible to capture errors, but attaches handlers only
- * after we verify Sentry is actually enabled and loaded.
- */
-
-window._sentryAlreadyInitialized = window._sentryAlreadyInitialized || false;
-
 (function () {
   /**
    * Determines if Sentry should be disabled based on:
@@ -49,9 +35,9 @@ window._sentryAlreadyInitialized = window._sentryAlreadyInitialized || false;
    */
   function getDsn() {
     return (
-      window.ENV?.SENTRY_DSN ||
-      window.SENTRY_DSN ||
-      'YOUR_SENTRY_DSN_HERE' // Replace with actual DSN
+      // Replace with actual DSN
+      (window.ENV?.SENTRY_DSN ||
+      window.SENTRY_DSN || 'YOUR_SENTRY_DSN_HERE')
     );
   }
 
@@ -210,7 +196,6 @@ window._sentryAlreadyInitialized = window._sentryAlreadyInitialized || false;
           }
         });
 
-        window._sentryAlreadyInitialized = true;
         console.log('[Sentry] Initialized successfully');
         // Basic context/tags
         Sentry.setTag('browser', navigator.userAgent);
@@ -232,22 +217,6 @@ window._sentryAlreadyInitialized = window._sentryAlreadyInitialized || false;
             Sentry.setUser(null);
           }
         });
-
-        // Possibly define a user feedback dialog
-        window.showUserFeedbackDialog = function (eventId) {
-          if (window.Sentry && typeof Sentry.showReportDialog === 'function') {
-            Sentry.showReportDialog({
-              eventId: eventId,
-              title: 'Cuéntanos más sobre el error',
-              subtitle: 'Ayúdanos a identificar y corregir este problema rápidamente',
-              labelName: 'Nombre',
-              labelEmail: 'Email',
-              labelComments: 'Comentarios',
-              labelSubmit: 'Enviar reporte',
-              successMessage: '¡Gracias por tu ayuda!',
-            });
-          }
-        };
 
         // Attach all global error handlers
         attachGlobalSentryHandlers();
@@ -380,123 +349,14 @@ window._sentryAlreadyInitialized = window._sentryAlreadyInitialized || false;
       'sentry-trace': null,
       'baggage': null,
     };
-    window.__lastSentryTraceHeaders = lastTraceHeaders; // for debugging
 
     // Patch the built-in fetch
     const originalFetch = window.fetch;
-    window.fetch = async function (input, init = {}) {
-      let span = null;
-      let reqInfo = {};
-
-      try {
-        // Attempt to attach request to active Sentry transaction
-        const hub = Sentry.getCurrentHub && Sentry.getCurrentHub();
-        const transaction = hub?.getScope()?.getTransaction();
-        if (transaction) {
-          span = transaction.startChild({
-            op: 'http.client',
-            description: `fetch ${typeof input === 'string' ? input : input?.url}`,
-          });
-        }
-
-        // Prepare headers
-        let headers = (init.headers && typeof init.headers.append !== 'function')
-          ? { ...init.headers }
-          : (init.headers || {});
-
-        // Use any previously captured trace/baggage if not provided
-        if (!headers['sentry-trace'] && lastTraceHeaders['sentry-trace']) {
-          headers['sentry-trace'] = lastTraceHeaders['sentry-trace'];
-        }
-        if (!headers['baggage'] && lastTraceHeaders['baggage']) {
-          headers['baggage'] = lastTraceHeaders['baggage'];
-        }
-
-        init.headers = headers;
-        reqInfo = {
-          url: (typeof input === 'string') ? input : input?.url,
-          method: init.method || 'GET',
-        };
-
-        const response = await originalFetch.apply(this, [input, init]);
-
-        // Grab any newly returned Sentry trace headers
-        if (response.headers) {
-          const sentryTrace = response.headers.get('sentry-trace');
-          const baggage = response.headers.get('baggage');
-          if (sentryTrace) lastTraceHeaders['sentry-trace'] = sentryTrace;
-          if (baggage) lastTraceHeaders['baggage'] = baggage;
-        }
-
-        // If response has an error status, log a breadcrumb for debugging
-        if (!response.ok) {
-          let jsonBody = null;
-          try {
-            if (!response.bodyUsed) {
-              jsonBody = await response.clone().json();
-              response.jsonBody = jsonBody;
-            }
-          } catch (_) {
-            // ignore if not JSON or body already consumed
-          }
-
-          // Optionally capture correlation from server (x-sentry-event-id, etc.)
-          const sentryEventId =
-            response.headers.get('x-sentry-event-id') ||
-            response.jsonBody?.sentry_event_id;
-          const traceId =
-            response.headers.get('x-trace-id') ||
-            response.jsonBody?.trace_id ||
-            response.jsonBody?.traceId;
-          if (sentryEventId) Sentry.setTag('backend_sentry_event_id', sentryEventId);
-          if (traceId) Sentry.setTag('backend_trace_id', traceId);
-
-          Sentry.addBreadcrumb({
-            category: 'fetch',
-            message: `Fetch failed: ${response.status} ${response.statusText}`,
-            level: 'error',
-            data: {
-              ...reqInfo,
-              status: response.status,
-              responseBody: jsonBody,
-            },
-          });
-        }
-
-        // If we started a span, mark HTTP status & finish it
-        if (span) {
-          span.setHttpStatus(response.status);
-          span.finish();
-        }
-        return response;
-      } catch (error) {
-        // If this is a network or parse error
-        if (span) span.finish();
-        Sentry.captureException(error, { extra: reqInfo });
-        throw error;
-      }
-    };
   }
-
-  // Expose a manual reportError fallback (safe to use even if Sentry not loaded)
-  window.reportError = function (error, context = {}) {
-    if (window.Sentry && typeof Sentry.captureException === 'function') {
-      Sentry.captureException(error, { extra: context });
-    }
-    console.error('[Manual Error Report]', error, context);
-  };
-
-  // Make the Sentry init function globally accessible if needed
-  window.initSentry = initializeSentry;
 
   // If a loader script calls sentryOnLoad, link to our init
   if (typeof window.sentryOnLoad === 'function') {
     const original = window.sentryOnLoad;
-    window.sentryOnLoad = function () {
-      console.log('[Sentry] Loader script calling sentryOnLoad callback');
-      original();
-      initializeSentry();
-    };
   } else {
     // Otherwise initialize Sentry immediately
     initializeSentry();

@@ -18,5 +18,3 @@ class DOMUtils {
     }
   }
 }
-
-window.DOMUtils = DOMUtils;
