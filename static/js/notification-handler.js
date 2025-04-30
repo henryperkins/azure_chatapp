@@ -1,14 +1,22 @@
 /**
  * notification-handler.js
- * -----------------------
- * A robust notification system that safely handles message events
- * including <hide-notification> messages that were previously causing errors.
+ * DependencySystem/DI-compliant, modular notification handler for robust UX toasts.
+ * No implicit global assignment or self-registration. Factory pattern.
+ *
+ * Usage (in app.js or orchestrator):
+ *   import { createNotificationHandler } from './notification-handler.js';
+ *   const notificationHandler = createNotificationHandler({ DependencySystem });
+ *   DependencySystem.register('notificationHandler', notificationHandler);
+ *   notificationHandler.addMessageListener(); // Optional: if cross-window message support is desired
+ *
+ * Exposes API: { show, hide, clear, cleanup, addMessageListener, removeMessageListener }
  */
 
-(function() {
+export function createNotificationHandler({ DependencySystem } = {}) {
   // Keep track of active notifications
   const activeNotifications = new Map();
   let notificationCounter = 0;
+  let _messageListenerAttached = false;
 
   // Create notification container if it doesn't exist
   function ensureNotificationContainer() {
@@ -24,21 +32,18 @@
   }
 
   // Show a notification
-  function showNotification(message, type = 'info', options = {}) {
+  function show(message, type = 'info', options = {}) {
     const container = ensureNotificationContainer();
 
-    // Create notification element
     const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
     const notification = document.createElement('div');
     notification.id = notificationId;
     notification.className = `alert ${getAlertClass(type)} shadow-md my-2 notification-item`;
     notification.setAttribute('role', 'alert');
 
-    // Add notification content
     const iconSvg = getIconForType(type);
     notification.innerHTML = `${iconSvg}<span>${message}</span>`;
 
-    // Add action button if provided
     if (options.action && typeof options.onAction === 'function') {
       const actionButton = document.createElement('button');
       actionButton.className = 'btn btn-sm btn-ghost';
@@ -46,53 +51,45 @@
       actionButton.onclick = (e) => {
         e.stopPropagation();
         options.onAction();
-        hideNotification(notificationId);
+        hide(notificationId);
       };
 
-      // Restructure the notification for the button
       notification.innerHTML = `<div class="flex-1">${iconSvg}<span>${message}</span></div>`;
       notification.appendChild(actionButton);
       notification.classList.add('flex', 'justify-between', 'items-center');
     }
 
-    // Add to container
     container.appendChild(notification);
 
-    // Store reference
     activeNotifications.set(notificationId, notification);
 
-    // Auto-hide after timeout
     const timeout = options.timeout === 0 ? null : (options.timeout || 5000);
     if (timeout) {
-      setTimeout(() => hideNotification(notificationId), timeout);
+      setTimeout(() => hide(notificationId), timeout);
     }
 
-    // Click to dismiss
     notification.addEventListener('click', () => {
-      hideNotification(notificationId);
+      hide(notificationId);
     });
 
     return notificationId;
   }
 
-  // Hide a notification safely
-  function hideNotification(notificationId) {
+  function hide(notificationId) {
     try {
       const notification = typeof notificationId === 'string'
         ? document.getElementById(notificationId) || activeNotifications.get(notificationId)
         : notificationId;
 
       if (!notification) {
-        console.debug(`Notification ${notificationId} not found, may already be removed`);
+        // Maybe already cleaned up
         activeNotifications.delete(String(notificationId));
         return false;
       }
 
-      // Fade out animation
       notification.style.transition = 'opacity 0.3s ease-out';
       notification.style.opacity = '0';
 
-      // Remove after animation
       setTimeout(() => {
         try {
           if (notification.parentNode) {
@@ -100,32 +97,31 @@
           }
           activeNotifications.delete(String(notificationId));
         } catch (err) {
-          console.debug(`Safe cleanup error (already removed): ${err.message}`);
+          // Safe cleanup if already removed
         }
       }, 300);
 
       return true;
-    } catch (err) {
-      console.warn(`Error hiding notification: ${err.message}`);
+    } catch {
       return false;
     }
   }
 
-  // Clear all notifications
-  function clearAllNotifications() {
+  function clear() {
     const container = document.getElementById('notificationContainer');
     if (container) {
-      // Fade out all notifications
       Array.from(container.children).forEach(notification => {
-        hideNotification(notification);
+        hide(notification);
       });
-
-      // Clear the tracking map
       activeNotifications.clear();
     }
   }
 
-  // Helper function to get the appropriate alert class
+  function cleanup() {
+    clear();
+    removeMessageListener();
+  }
+
   function getAlertClass(type) {
     switch (type) {
       case 'success': return 'alert-success';
@@ -136,7 +132,6 @@
     }
   }
 
-  // Helper function to get the icon for the notification type
   function getIconForType(type) {
     switch (type) {
       case 'success':
@@ -151,38 +146,29 @@
     }
   }
 
-  // Message event handler for notifications
-  async function handleNotificationMessages(event) {
+  // --- Optional: window message event integration (not global by default) ---
+  function handleNotificationMessages(event) {
     try {
       const message = event.data;
       let handled = false;
-
-      // Handle hide-notification messages - these were causing the errors
+      // Hide notification message
       if (typeof message === 'string' && message.includes('<hide-notification>')) {
-        console.debug('Processing <hide-notification> message');
-
-        // Extract notification ID if present
         const idMatch = message.match(/<hide-notification(?:\s+id="([^"]+)")?\s*>/);
         const id = idMatch && idMatch[1];
-
         if (id) {
-          // Hide specific notification
-          await hideNotification(id);
+          hide(id);
         } else {
-          // Hide all notifications if no ID specified
-          await clearAllNotifications();
+          clear();
         }
         handled = true;
       }
-      // Process other notification types
+      // Notification
       else if (message && typeof message === 'object') {
         if (message.type === 'notification') {
-          await showNotification(message.text, message.level || 'info', message.options || {});
+          show(message.text, message.level || 'info', message.options || {});
           handled = true;
         }
       }
-
-      // Send response if this is a MessageEvent from another window
       if (handled && event.source && event.origin) {
         try {
           event.source.postMessage({
@@ -190,65 +176,49 @@
             success: true,
             messageId: message.id || null
           }, event.origin);
-        } catch (postErr) {
-          console.debug('Notification: postMessage failed - target window likely closed:', postErr);
-        }
+        } catch { /* ignored */ }
       }
     } catch (err) {
-      console.warn('Error handling notification message:', err);
-
-      // Send error response if possible
       if (event.source && event.origin) {
         try {
           event.source.postMessage({
             type: 'notification-error',
             success: false,
             error: err.message,
-            messageId: event.data.id || null
+            messageId: event.data?.id || null
           }, event.origin);
-        } catch (postErr) {
-          console.debug('Notification: postMessage (error response) failed - target window likely closed:', postErr);
+        } catch {
+          // ignore
         }
       }
     }
   }
 
-  // Track all event listeners
-  const notificationListeners = new Set();
-
-  // Register message event listener with tracking
-  function addNotificationListener() {
+  function addMessageListener() {
+    if (_messageListenerAttached) return;
     window.addEventListener('message', handleNotificationMessages);
-    notificationListeners.add({
-      element: window,
-      type: 'message',
-      handler: handleNotificationMessages
+    _messageListenerAttached = true;
+  }
+  function removeMessageListener() {
+    if (_messageListenerAttached) {
+      window.removeEventListener('message', handleNotificationMessages);
+      _messageListenerAttached = false;
+    }
+  }
+
+  // DependencySystem registration, if provided
+  if (DependencySystem && DependencySystem.register && typeof DependencySystem.register === "function") {
+    DependencySystem.register('notificationHandler', {
+      show, hide, clear, cleanup, addMessageListener, removeMessageListener
     });
   }
 
-  // Cleanup all notification listeners
-  function cleanupNotificationListeners() {
-    notificationListeners.forEach(({element, type, handler}) => {
-      element.removeEventListener(type, handler);
-    });
-    notificationListeners.clear();
-  }
-
-  // Register message event listener
-  addNotificationListener();
-
-  // Expose the API
-  window.notificationHandler = {
-    show: showNotification,
-    hide: hideNotification,
-    clear: clearAllNotifications,
-    cleanup: cleanupNotificationListeners
+  return {
+    show,
+    hide,
+    clear,
+    cleanup,
+    addMessageListener,
+    removeMessageListener
   };
-
-  // Provide backward compatibility with existing notification system
-  if (!window.showNotification) {
-    window.showNotification = showNotification;
-  }
-
-  console.log('Notification handler initialized');
-})();
+}
