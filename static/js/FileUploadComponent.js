@@ -1,40 +1,63 @@
 /**
- * FileUploadComponent.js
- * Handles file upload functionality for projects
- * Dependencies:
- * - window.eventHandlers (external utility, for event management)
- * - window.projectManager (external dependency, for file upload operations)
- * - window.showNotification (external dependency, for user feedback)
- * - document (browser built-in, for DOM manipulation)
+ * FileUploadComponent.js (DependencySystem/DI Refactored)
+ * Handles file upload functionality for projects.
+ *
+ * Dependencies (DI or via DependencySystem, NO window.*):
+ * - app: required (for notification, utility, API)
+ * - eventHandlers: required (for listener binding)
+ * - projectManager: required (for file upload workflows)
+ *
+ * Usage (from orchestrator or parent):
+ *   import { FileUploadComponent } from './FileUploadComponent.js';
+ *   const uploadComponent = new FileUploadComponent({ ...deps, ...elements });
+ *   uploadComponent.init();
+ *
+ * No window.* access or global assignments. No DOM polling or event replay.
  */
 
-// Browser APIs:
-// - document (DOM access)
-// - File API (file handling)
-// - Event system (event listeners)
-
-// External Dependencies (Global Scope):
-// - window.eventHandlers (event management)
-// - window.projectManager (file upload operations)
-// - window.showNotification (user notifications)
-
-// Optional Dependencies:
-// - Gracefully handles missing projectManager
-// - Falls back to basic error logging if showNotification not available
-// - Uses eventHandlers if available, falls back to native events
-
-class FileUploadComponent {
+export class FileUploadComponent {
+  /**
+   * @param {Object} options
+   * @param {Object} options.app - Required. App/core dependency system with notification & api.
+   * @param {Object} options.eventHandlers - Required. Tracked event handler utils.
+   * @param {Object} options.projectManager - Required. Project file upload API.
+   * @param {string} [options.projectId] - Optional, can be set later
+   * @param {Function} [options.onUploadComplete]
+   * @param {HTMLElement} [options.fileInput]
+   * @param {HTMLElement} [options.uploadBtn]
+   * @param {HTMLElement} [options.dragZone]
+   * @param {HTMLElement} [options.uploadProgress]
+   * @param {HTMLElement} [options.progressBar]
+   * @param {HTMLElement} [options.uploadStatus]
+   */
   constructor(options = {}) {
+    // --- Dependency resolution ---
+    const DS = options.DependencySystem || (typeof window !== "undefined" && window.DependencySystem);
+    const getDep = (name, fallback) =>
+      options[name] ||
+      (DS?.modules?.get && DS.modules.get(name)) ||
+      (typeof fallback === "function" ? fallback() : fallback);
+
+    /** @type {Object} */
+    this.app = getDep('app');
+    /** @type {Object} */
+    this.eventHandlers = getDep('eventHandlers');
+    /** @type {Object} */
+    this.projectManager = getDep('projectManager');
+    if (!this.app || !this.eventHandlers || !this.projectManager) {
+      throw new Error("FileUploadComponent requires 'app', 'eventHandlers', and 'projectManager' dependencies.");
+    }
+
     this.projectId = options.projectId || null;
     this.onUploadComplete = options.onUploadComplete || (() => {});
 
-    // File upload config
+    // --- Configuration ---
     this.fileConstants = {
       allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'],
       maxSizeMB: 30
     };
 
-    // Element references
+    // --- Elements (all DI or assigned on init, never polled) ---
     this.elements = {
       fileInput: options.fileInput || null,
       uploadBtn: options.uploadBtn || null,
@@ -44,71 +67,74 @@ class FileUploadComponent {
       uploadStatus: options.uploadStatus || null
     };
 
-    // Bind events
-    this._bindEvents();
+    /** @type {{total:number, completed:number, failed:number}} */
+    this.uploadStatus = null;
+
+    this._handlersBound = false;
   }
 
   /**
-   * Bind event listeners
-   * @private
+   * Initialize component: (re)binds events, checks required DOM is present.
+   * Should be called only when elements are ready.
    */
+  init() {
+    if (this._handlersBound) return;
+    this._bindEvents();
+    this._handlersBound = true;
+  }
+
+  /** Bind event listeners (never poll DOM) */
   _bindEvents() {
-    // File input
-    if (this.elements.fileInput) {
-      window.eventHandlers.trackListener(this.elements.fileInput, 'change', (e) => {
+    const { fileInput, uploadBtn, dragZone } = this.elements;
+    const EH = this.eventHandlers;
+
+    // --- File input: file selection
+    if (fileInput) {
+      EH.trackListener(fileInput, 'change', (e) => {
         this._handleFileSelection(e);
       });
     }
 
-    // Upload button
-    if (this.elements.uploadBtn) {
-      window.eventHandlers.trackListener(this.elements.uploadBtn, 'click', () => {
-        this.elements.fileInput?.click();
+    // --- Upload button: triggers file input
+    if (uploadBtn) {
+      EH.trackListener(uploadBtn, 'click', () => {
+        fileInput?.click();
       });
     }
 
-    // Drag and drop
-    if (this.elements.dragZone) {
-      ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        window.eventHandlers.trackListener(this.elements.dragZone, eventName, (e) => {
+    // --- Drag-n-drop: highlight, drop, click
+    if (dragZone) {
+      ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
+        EH.trackListener(dragZone, eventName, (e) => {
           e.preventDefault();
           e.stopPropagation();
-
           if (eventName === 'dragenter' || eventName === 'dragover') {
-            this.elements.dragZone.classList.add('border-primary');
+            dragZone.classList.add('border-primary');
           } else {
-            this.elements.dragZone.classList.remove('border-primary');
+            dragZone.classList.remove('border-primary');
             if (eventName === 'drop') {
               this._handleFileDrop(e);
             }
           }
         });
       });
-
-      // Click on drag zone
-      window.eventHandlers.trackListener(this.elements.dragZone, 'click', () => {
-        this.elements.fileInput?.click();
+      // Click on dragZone mimics clicking input
+      EH.trackListener(dragZone, 'click', () => {
+        fileInput?.click();
       });
     }
   }
 
-  /**
-   * Handle file selection from input
-   * @param {Event} e - Change event
-   * @private
-   */
+  /** @private */
   _handleFileSelection(e) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     this._uploadFiles(files);
+    // Reset input so same file can be selected again
     e.target.value = null;
   }
 
-  /**
-   * Handle file drop
-   * @param {Event} e - Drop event
-   * @private
-   */
+  /** @private */
   _handleFileDrop(e) {
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
@@ -116,33 +142,34 @@ class FileUploadComponent {
   }
 
   /**
-   * Upload files
-   * @param {FileList} files - Files to upload
+   * Main upload flow: validates, batches, uploads, and shows progress.
    * @private
+   * @param {FileList|Array<File>} files
    */
   async _uploadFiles(files) {
-    if (!this.projectId) {
-      window.showNotification('No project selected', 'error');
+    const { app, projectManager } = this;
+    const projectId = this.projectId || app.getProjectId?.();
+    if (!projectId || !app.validateUUID?.(projectId)) {
+      app.showNotification?.('No valid project selected', 'error');
       return;
     }
 
+    // Centralized file validation — use internal method for extension/filename, let manager do size as needed
     const { validFiles, invalidFiles } = this._validateFiles(files);
 
-    // Handle invalid files
     invalidFiles.forEach(({ file, error }) => {
-      window.showNotification(`Skipped ${file.name}: ${error}`, 'error');
+      app.showNotification?.(`Skipped ${file.name}: ${error}`, 'error');
     });
 
     if (validFiles.length === 0) return;
 
-    // Show progress
     this._setupUploadProgress(validFiles.length);
 
-    // Upload files in batches
+    // Batch in groups to avoid overwhelming the backend
     const BATCH_SIZE = 3;
     for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
       const batch = validFiles.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(file => this._uploadFile(file)));
+      await Promise.all(batch.map(file => this._uploadFile(projectId, file)));
     }
 
     this.onUploadComplete();
@@ -150,150 +177,122 @@ class FileUploadComponent {
 
   /**
    * Upload a single file
-   * @param {File} file - File to upload
-   * @returns {Promise<void>}
    * @private
+   * @param {string} projectId
+   * @param {File} file
+   * @returns {Promise<void>}
    */
-  async _uploadFile(file) {
+  async _uploadFile(projectId, file) {
+    const { app, projectManager } = this;
     try {
-      if (!window.projectManager?.uploadFile) {
+      if (typeof projectManager.uploadFileWithRetry !== "function") {
         throw new Error('Upload function not available');
       }
-
-      await window.projectManager.uploadFileWithRetry(this.projectId, { file });
+      await projectManager.uploadFileWithRetry(projectId, { file });
       this._updateUploadProgress(1, 0);
-      window.showNotification(`${file.name} uploaded successfully`, 'success');
+      app.showNotification?.(`${file.name} uploaded successfully`, 'success');
     } catch (error) {
-      console.error(`Upload error for ${file.name}:`, error);
+      console.error(`[FileUploadComponent] Upload error for ${file.name}:`, error);
       this._updateUploadProgress(0, 1);
       const errorMsg = this._getUploadErrorMessage(error, file.name);
-      window.showNotification(`Failed to upload ${file.name}: ${errorMsg}`, 'error');
+      app.showNotification?.(`Failed to upload ${file.name}: ${errorMsg}`, 'error');
     }
   }
 
   /**
-   * Validate files
-   * @param {FileList] files - Files to validate
-   * @returns {Object} - Valid and invalid files
+   * Validate files against extension, name, and size.
    * @private
+   * @param {FileList|Array<File>} files
+   * @returns {{validFiles: File[], invalidFiles: Array<{file: File, error: string}>}}
    */
   _validateFiles(files) {
+    const { allowedExtensions, maxSizeMB } = this.fileConstants;
     const validFiles = [];
     const invalidFiles = [];
-
     for (const file of files) {
-      // Basic filename sanitization
       const sanitizedName = file.name.replace(/[^\w\.\-]/g, '_');
       if (sanitizedName !== file.name) {
-        invalidFiles.push({
-          file,
-          error: `Invalid characters in filename`
-        });
+        invalidFiles.push({ file, error: `Invalid characters in filename` });
         continue;
       }
-
       const ext = '.' + file.name.split('.').pop().toLowerCase();
-      const isValidExt = this.fileConstants.allowedExtensions.includes(ext);
-      const isValidSize = file.size <= this.fileConstants.maxSizeMB * 1024 * 1024;
-
+      const isValidExt = allowedExtensions.includes(ext);
+      const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
       if (!isValidExt) {
         invalidFiles.push({
           file,
-          error: `Invalid file type (${ext}). Allowed: ${this.fileConstants.allowedExtensions.join(', ')}`
+          error: `Invalid file type (${ext}). Allowed: ${allowedExtensions.join(', ')}`
         });
       } else if (!isValidSize) {
         invalidFiles.push({
           file,
-          error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${this.fileConstants.maxSizeMB}MB)`
+          error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`
         });
       } else {
         validFiles.push(file);
       }
     }
-
     return { validFiles, invalidFiles };
   }
 
-  /**
-   * Set up upload progress
-   * @param {number} total - Total files
-   * @private
-   */
+  /** Show initial progress state. */
   _setupUploadProgress(total) {
     this.uploadStatus = { total, completed: 0, failed: 0 };
-
-    if (this.elements.uploadProgress) {
-      this.elements.uploadProgress.classList.remove('hidden');
+    const { uploadProgress, progressBar, uploadStatus: statusEl } = this.elements;
+    // Show progress bar
+    if (uploadProgress) {
+      uploadProgress.classList.remove('hidden');
     }
-
-    if (this.elements.progressBar) {
-      this.elements.progressBar.value = 0;
-      this.elements.progressBar.classList.remove('progress-success', 'progress-error');
-      this.elements.progressBar.classList.add('progress-info');
+    if (progressBar) {
+      progressBar.value = 0;
+      progressBar.classList.remove('progress-success', 'progress-error', 'progress-warning');
+      progressBar.classList.add('progress-info');
     }
-
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent = `Uploading 0/${total} files`;
+    if (statusEl) {
+      statusEl.textContent = `Uploading 0/${total} files`;
     }
   }
 
-  /**
-   * Update upload progress
-   * @param {number} success - Successful uploads
-   * @param {number} failed - Failed uploads
-   * @private
-   */
+  /** Update progress, state, and finish UX. */
   _updateUploadProgress(success, failed) {
     this.uploadStatus.completed += (success + failed);
     this.uploadStatus.failed += failed;
     const { total, completed, failed: totalFailed } = this.uploadStatus;
+    const { progressBar, uploadStatus: statusEl, uploadProgress } = this.elements;
 
-    if (this.elements.progressBar) {
+    if (progressBar) {
       const percent = Math.round((completed / total) * 100);
-      this.elements.progressBar.value = percent;
-      this.elements.progressBar.classList.remove('progress-info', 'progress-success', 'progress-error');
-      this.elements.progressBar.classList.add(totalFailed > 0 ?
-        (totalFailed === completed ? 'progress-error' : 'progress-warning') : 'progress-success');
+      progressBar.value = percent;
+      progressBar.classList.remove('progress-info', 'progress-success', 'progress-error', 'progress-warning');
+      progressBar.classList.add(
+        totalFailed > 0 ?
+          (totalFailed === completed ? 'progress-error' : 'progress-warning') :
+          'progress-success'
+      );
     }
-
-    if (this.elements.uploadStatus) {
-      this.elements.uploadStatus.textContent = `Uploading ${completed}/${total} files${totalFailed > 0 ? ` (${totalFailed} failed)` : ''}`;
+    if (statusEl) {
+      statusEl.textContent = `Uploading ${completed}/${total} files${totalFailed > 0 ? ` (${totalFailed} failed)` : ''}`;
     }
-
-    // Hide when complete
-    if (completed === total && this.elements.uploadProgress) {
+    // Hide progress UX only after all are done and shortly after for visibility
+    if (completed === total && uploadProgress) {
       setTimeout(() => {
-        this.elements.uploadProgress.classList.add('hidden');
+        uploadProgress.classList.add('hidden');
       }, 2000);
     }
   }
 
   /**
-   * Get error message for upload error
-   * @param {Error} error - Error object
-   * @param {string} fileName - File name
-   * @returns {string} - Error message
+   * Derives user friendly error message from error/response.
    * @private
    */
   _getUploadErrorMessage(error, fileName) {
-    const message = error.message || 'Unknown error';
-
-    if (message.includes('auth') || error.status === 401) {
-      return 'Authentication failed';
-    }
-
-    if (message.includes('too large') || message.includes('size')) {
-      return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;
-    }
-
-    if (message.includes('token limit')) {
-      return 'Project token limit exceeded';
-    }
-
-    if (message.includes('validation') || error.status === 422) {
-      return 'File format not supported';
-    }
-
+    const message = error?.message || "Unknown error";
+    if (message.includes('auth') || error?.status === 401) return "Authentication failed";
+    if (message.includes('too large') || message.includes('size')) return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;
+    if (message.includes('token limit')) return 'Project token limit exceeded';
+    if (message.includes('validation') || error?.status === 422) return "File format not supported";
     return message;
   }
 }
+
+export default FileUploadComponent;

@@ -159,7 +159,8 @@
   <!-- Main application entrypoint (imports all other modules) -->
   <script type="module" src="/static/js/app.js"></script>
 
-  <script src="/static/js/kb-result-handlers.js"></script>
+  <!-- KB Result Handlers are now loaded and initialized via app.js/orchestrator,
+       do NOT include as a global script. -->
 
   <!-- Load debug/verification scripts ONLY in development environment for security -->
   <script>
