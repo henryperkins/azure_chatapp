@@ -26,7 +26,13 @@
     window.fetch = function(...args) {
       const [url, options] = args;
 
-      if (url.includes('/api/projects') && !url.includes('/files') && !url.includes('/stats')) {
+      const { pathname } = new URL(url, location.origin);
+      // only inspect the collection endpoint `/api/projects` or the simple filtered list
+      const isProjectList =
+        /^\/api\/projects\/?$/.test(pathname) ||
+        /^\/api\/projects\/?\?/.test(pathname);
+
+      if (isProjectList) {
         console.log(`[DEBUG-PROJECT] Intercepted API call to ${url}`);
 
         return originalFetch.apply(this, args).then(async (response) => {

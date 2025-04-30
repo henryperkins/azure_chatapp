@@ -99,7 +99,12 @@ function trackListener(element, type, handler, options = {}) {
 
       const duration = performance.now() - startTime;
       // Higher threshold for submit events since they often involve network calls
-      const threshold = type === 'submit' ? 500 : 100;
+      const threshold =
+        type === 'submit'
+          ? 800 // forms can be expensive
+          : type === 'click'
+            ? 500 // allow half a second for routes/net I/O
+            : 100;
       if (duration > threshold) {
         console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
       }
