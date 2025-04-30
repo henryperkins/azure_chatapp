@@ -22,7 +22,6 @@
     console.log(`[DEBUG-PROJECT] selectedProjectId from localStorage: ${selectedProjectId}`);
 
     // --- PATCHED FETCH INTERCEPTOR ---
-    const originalFetch = window.fetch;
 
     // Ensure debug DOM checks run only after the project list is ready in the DOM
     document.addEventListener('projectListReady', () => {

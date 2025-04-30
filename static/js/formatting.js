@@ -34,14 +34,3 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
-
-/**
- * Optionally auto-format any elements with [data-format="true"] on page load.
- */
-function autoFormatExistingElements() {
-  const nodes = document.querySelectorAll('[data-format="true"]');
-  nodes.forEach((node) => {
-    const original = node.textContent;
-    node.innerHTML = formatText(original);
-  });
-}

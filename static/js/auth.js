@@ -274,10 +274,10 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
         try {
           await refreshTokens();
           return verifyAuthState(true);
-        } catch (refreshError) {
-          await clearTokenState({ source: 'refresh_failed' });
-          return false;
-        }
+       } catch {
+         await clearTokenState({ source: 'refresh_failed' });
+         return false;
+       }
       }
 
       // For other errors, maintain current state
@@ -408,7 +408,7 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
       authState.isReady = true;
       return verified;
 
-    } catch (error) {
+    } catch {
       await clearTokenState({ source: 'init_fail', isError: true });
       authState.isReady = true;
       broadcastAuth(false, null, 'init_error');

@@ -210,7 +210,7 @@ export class FileUploadComponent {
     const validFiles = [];
     const invalidFiles = [];
     for (const file of files) {
-      const sanitizedName = file.name.replace(/[^\w\.\-]/g, '_');
+      const sanitizedName = file.name.replace(/[^\w.-]/g, '_');
       if (sanitizedName !== file.name) {
         invalidFiles.push({ file, error: `Invalid characters in filename` });
         continue;
@@ -285,7 +285,7 @@ export class FileUploadComponent {
    * Derives user friendly error message from error/response.
    * @private
    */
-  _getUploadErrorMessage(error, fileName) {
+  _getUploadErrorMessage(error) {
     const message = error?.message || "Unknown error";
     if (message.includes('auth') || error?.status === 401) return "Authentication failed";
     if (message.includes('too large') || message.includes('size')) return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;

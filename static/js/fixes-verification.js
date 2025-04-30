@@ -102,7 +102,7 @@
 
   // Monitor projectDashboard initialization
   function monitorProjectDashboardInit() {
-    document.addEventListener('projectDashboardInitialized', (e) => {
+    document.addEventListener('projectDashboardInitialized', () => {
       console.log("[FIXES-VERIFICATION] projectDashboard initialization event detected");
       verificationResults.projectDashboardInit = true;
     });

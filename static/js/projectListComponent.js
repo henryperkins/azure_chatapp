@@ -674,7 +674,7 @@ export class ProjectListComponent {
         try {
             const date = new Date(dateString);
             return date.toLocaleDateString();
-        } catch (err) {
+        } catch {
             return dateString;
         }
     }
@@ -692,7 +692,7 @@ export class ProjectListComponent {
         }
     }
 
-    _getDefaultCustomization() {
+    _mgetDefaultCustomization() {
         return {
             theme: 'default',
             showDescription: true,
