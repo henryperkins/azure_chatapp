@@ -21,10 +21,14 @@ import { createProjectDashboardUtils } from './projectDashboardUtils.js';
 import { createChatManager } from './chat.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { initChatExtensions } from './chatExtensions.js';
+import FileUploadComponent from './FileUploadComponent.js';
+import * as utils from './utils.js';
+import * as formatting from './formatting.js';
+import * as accessibilityUtils from './accessibility-utils.js';
+import * as globalUtils from './utils/globalUtils.js';
 
 import './notification-handler.js';
 import './sidebar-enhancements.js';
-import './FileUploadComponent.js';
 import './auth.js';
 
 /* ---------------------------------------------------------------------
@@ -484,8 +488,8 @@ async function initializeUIComponents() {
     if (typeof ProjectListComponent === 'function') {
         DependencySystem.register('ProjectListComponent', ProjectListComponent);
     }
-    if (window.FileUploadComponent) {
-        DependencySystem.register('FileUploadComponent', window.FileUploadComponent);
+    if (FileUploadComponent) {
+        DependencySystem.register('FileUploadComponent', FileUploadComponent);
     }
 
     const projectDashboard = createProjectDashboard();
@@ -522,6 +526,12 @@ async function initializeUIComponents() {
         await sidebar.init();
     }
     DependencySystem.register('sidebar', sidebar);
+
+    // Register utility modules for DI
+    DependencySystem.register('utils', utils);
+    DependencySystem.register('formatting', formatting);
+    DependencySystem.register('accessibilityUtils', accessibilityUtils);
+    DependencySystem.register('globalUtils', globalUtils);
 
     const kbDeps = await waitFor(['auth', 'projectManager']);
     const knowledgeBaseComponent = createKnowledgeBaseComponent({
