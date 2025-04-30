@@ -120,11 +120,10 @@ export function isValidProjectId(id) {
 
 class ProjectManager {
   constructor({ app, chatManager, modelConfig, DependencySystem } = {}) {
-    // Support orchestrator-driven dependency injection (DependencySystem first, fallback to args)
-    this.DependencySystem = DependencySystem || window.DependencySystem;
-    if (!this.DependencySystem) {
+    if (!DependencySystem) {
       throw new Error("DependencySystem is required for ProjectManager");
     }
+    this.DependencySystem = DependencySystem;
     this.app = app || this.DependencySystem.modules.get("app");
     this.chatManager = chatManager || this.DependencySystem.modules.get("chatManager");
     this.modelConfig = modelConfig || this.DependencySystem.modules.get("modelConfig");
@@ -322,14 +321,26 @@ class ProjectManager {
         console.log('[ProjectManager] Raw projects response:', response);
 
       // Support various API response shapes
-      const projects =
-        response?.data?.projects ||
-        response?.projects ||
-        (Array.isArray(response?.data)
-          ? response.data
-          : Array.isArray(response)
-            ? response
-            : []);
+      let projects = [];
+      if (Array.isArray(response?.data?.projects)) {
+        projects = response.data.projects;
+      } else if (Array.isArray(response?.projects)) {
+        projects = response.projects;
+      } else if (Array.isArray(response?.data)) {
+        projects = response.data;
+      } else if (Array.isArray(response)) {
+        projects = response;
+      } else if (response?.data && typeof response.data === "object" && response.data.id) {
+        projects = [response.data];
+      } else if (response && typeof response === "object" && response.id) {
+        projects = [response];
+      } else if (response?.data?.projects && typeof response.data.projects === "object" && response.data.projects.id) {
+        projects = [response.data.projects];
+      } else if (response?.projects && typeof response.projects === "object" && response.projects.id) {
+        projects = [response.projects];
+      } else {
+        projects = [];
+      }
 
       // PATCH: Accept valid single-object project, warn only if neither array nor object with .id
       let normalizedProjects = projects;
