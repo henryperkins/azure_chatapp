@@ -25,8 +25,37 @@ import * as formatting from './formatting.js';
 import * as accessibilityUtils from './accessibility-utils.js';
 import * as globalUtils from './utils/globalUtils.js';
 
-import './notification-handler.js';
-import './auth.js';
+import { createNotificationHandler } from './notification-handler.js';
+import { createEventHandlers } from './eventHandler.js';
+import { createAuthModule } from './auth.js';
+
+// --- Confirm DependencySystem is present before using it ---
+const DependencySystem = window.DependencySystem;
+if (!DependencySystem) {
+    console.error("CRITICAL: DependencySystem not found. Application cannot start.");
+    document.body.innerHTML = `
+    <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
+      <strong>Application Critical Error:</strong> Core dependency system failed to load.
+      Please contact support or refresh.
+    </div>`;
+    throw new Error("DependencySystem is required but not available.");
+}
+const waitFor = DependencySystem.waitFor.bind(DependencySystem);
+
+// -- DependencySystem Core Module Registration (explicit, DI-compliant) --
+const notificationHandler = createNotificationHandler({ DependencySystem });
+DependencySystem.register('notificationHandler', notificationHandler);
+
+const eventHandlers = createEventHandlers({ DependencySystem });
+DependencySystem.register('eventHandlers', eventHandlers);
+
+const auth = createAuthModule({
+  DependencySystem,
+  apiRequest,
+  eventHandlers,
+  showNotification: notificationHandler.show
+});
+DependencySystem.register('auth', auth);
 
 /* ---------------------------------------------------------------------
  * Configuration
@@ -82,17 +111,6 @@ const appState = {
 /* ---------------------------------------------------------------------
  * Core Utilities
  * ------------------------------------------------------------------- */
-const DependencySystem = window.DependencySystem;
-if (!DependencySystem) {
-    console.error("CRITICAL: DependencySystem not found. Application cannot start.");
-    document.body.innerHTML = `
-    <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
-      <strong>Application Critical Error:</strong> Core dependency system failed to load.
-      Please contact support or refresh.
-    </div>`;
-    throw new Error("DependencySystem is required but not available.");
-}
-const waitFor = DependencySystem.waitFor.bind(DependencySystem);
 
 function debounce(fn, wait = 250) {
     let timeoutId = null;
@@ -447,9 +465,19 @@ async function initializeCoreSystems() {
         await projectModal.init();
     }
     DependencySystem.register('projectModal', projectModal);
+
+    // Insert chatManager creation before ProjectManager so 'chatManager' is available
+    const chatManager = createChatManager();
+    if (typeof chatManager.initialize === 'function') {
+        chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
+    }
+    DependencySystem.register('chatManager', chatManager);
+
     document.dispatchEvent(new Event('modalsLoaded'));
 
-    const projectManager = createProjectManager();
+    const projectManager = createProjectManager({
+        DependencySystem: window.DependencySystem
+    });
     if (typeof projectManager.initialize === 'function') {
         await projectManager.initialize();
     }
@@ -461,19 +489,23 @@ async function initializeCoreSystems() {
 async function initializeAuthSystem() {
     console.log('[App] Initializing authentication system...');
     const auth = DependencySystem.modules.get('auth');
-    if (!auth) {
-        throw new Error("[App] Auth module registered but instance not found.");
+    if (!auth || typeof auth.init !== 'function') {
+        throw new Error("[App] Auth module is missing or invalid in DependencySystem.");
     }
     try {
-        if (typeof auth.init === 'function') {
-            await auth.init();
+        await auth.init();
+        if (!auth.isAuthenticated || typeof auth.isAuthenticated !== 'function') {
+            throw new Error("[App] Auth module does not provide isAuthenticated().");
         }
         appState.isAuthenticated = auth.isAuthenticated();
         console.log(`[App] Initial authentication state: ${appState.isAuthenticated}`);
     } catch (err) {
-        console.error('[App] Auth system initialization/check failed:', err);
+        // Enhanced error context and fail-fast propagation
+        console.error('[App] Auth system initialization/check failed:', err && err.stack ? err.stack : err);
         appState.isAuthenticated = false;
-        showNotification('Authentication check failed.', 'error');
+        showNotification(`Authentication check failed: ${err && err.message ? err.message : err}`, 'error');
+        // Propagate so global init can surface critical initialization error
+        throw new Error(`[App] initializeAuthSystem failed: ${err && err.message ? err.message : err}`);
     }
 }
 
@@ -492,6 +524,13 @@ async function initializeUIComponents() {
     const projectDashboard = createProjectDashboard();
     DependencySystem.register('projectDashboard', projectDashboard);
 
+    // --- Resolve all DI dependencies required by ProjectDetailsComponent
+    const appRef = app;
+    const projectManager = DependencySystem.modules.get('projectManager');
+    const eventHandlers = DependencySystem.modules.get('eventHandlers');
+    const modalManager = DependencySystem.modules.get('modalManager');
+    const FileUploadComponentClass = DependencySystem.modules.get('FileUploadComponent');
+
     const projectDetailsComponent = createProjectDetailsComponent({
         onBack: async () => {
             try {
@@ -501,7 +540,13 @@ async function initializeUIComponents() {
                 console.error('[App] Error in onBack callback:', e);
                 window.location.href = '/';
             }
-        }
+        },
+        app: appRef,
+        projectManager,
+        eventHandlers,
+        FileUploadComponentClass,
+        modalManager,
+        knowledgeBaseComponent: DependencySystem.modules.get('knowledgeBaseComponent')
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
 
@@ -511,33 +556,34 @@ async function initializeUIComponents() {
     const projectDashboardUtils = createProjectDashboardUtils();
     DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
-    const chatManager = createChatManager();
-    if (typeof chatManager.initialize === 'function') {
-        chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
-    }
-    DependencySystem.register('chatManager', chatManager);
     const chatExtensions = createChatExtensions({ DependencySystem });
     chatExtensions.init();
 
-    const sidebar = createSidebar();
+    const sidebar = createSidebar({
+        DependencySystem,
+        eventHandlers,
+        app: app,
+        projectDashboard,
+        projectManager
+    });
     if (typeof sidebar.init === 'function') {
         await sidebar.init();
     }
     DependencySystem.register('sidebar', sidebar);
 
     // Register utility modules for DI
-    DependencySystem.register('utils', utils);
+    DependencySystem.register('utils', globalUtils);
     DependencySystem.register('formatting', formatting);
     DependencySystem.register('accessibilityUtils', accessibilityUtils);
-    DependencySystem.register('globalUtils', globalUtils);
 
     const kbDeps = await waitFor(['auth', 'projectManager']);
-    const knowledgeBaseComponent = createKnowledgeBaseComponent({
-        apiRequest,
-        auth: kbDeps.auth,
-        projectManager: kbDeps.projectManager,
-        showNotification
-    });
+const knowledgeBaseComponent = createKnowledgeBaseComponent({
+    DependencySystem,
+    apiRequest,
+    auth: kbDeps.auth,
+    projectManager: kbDeps.projectManager,
+    showNotification
+});
     if (typeof knowledgeBaseComponent.initialize === 'function') {
         await knowledgeBaseComponent.initialize();
     }
