@@ -17,8 +17,8 @@
  * ## Initialization/Integration Contract:
  * - The orchestrator MUST inject all required dependencies via the constructor options.
  * - The orchestrator MUST ensure the main container (#projectDetailsView) exists and
- *   is populated with the necessary base HTML structure (tabs, lists, etc.) *before*
- *   calling the `initialize()` method of this component instance.
+ *   is populated with the necessary base HTML structure (tabs, lists, etc.) *before*
+ *   calling the `initialize()` method of this component instance.
  * - This component does NOT fetch or inject its own base HTML.
  */
 

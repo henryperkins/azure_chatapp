@@ -75,7 +75,7 @@
       console.log('[Sentry] Already initialized, skipping');
       return;
     }
-    
+
     if (shouldDisableSentry()) {
       console.log('[Sentry] Disabled based on environment or user preference');
       return;
@@ -124,7 +124,7 @@
       console.log('[Sentry] Already initialized, skipping duplicate setup');
       return;
     }
-    
+
     if (!window.Sentry || typeof Sentry.init !== 'function') {
       return; // Sentry script blocked or failed
     }
@@ -344,14 +344,7 @@
   function enhanceFetchForSentry() {
     if (!window.fetch || !window.Sentry) return;
 
-    // Optionally store the last known Sentry trace or baggage from responses
-    const lastTraceHeaders = {
-      'sentry-trace': null,
-      'baggage': null,
-    };
-
     // Patch the built-in fetch
-    const originalFetch = window.fetch;
   }
 
   // If a loader script calls sentryOnLoad, link to our init

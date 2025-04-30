@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * app.js - Application Core
  *
@@ -15,6 +14,7 @@ import { createProjectManager, isValidProjectId as validateUUID } from './projec
 import { createProjectDashboard } from './projectDashboard.js';
 import { ProjectListComponent } from './projectListComponent.js';
 import { ProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
@@ -722,6 +722,9 @@ async function handleAuthStateChange(event) {
         const userStatusSpan = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
         if (authStatusSpan) {
             authStatusSpan.textContent = appState.isAuthenticated ? (username ?? 'Authenticated') : 'Not Authenticated';
+        }
+        if (userStatusSpan) {
+            userStatusSpan.textContent = appState.isAuthenticated ? (username ?? '') : '';
         }
         if (APP_CONFIG.DEBUG) {
             console.log('[App] Updated auth UI elements.');
