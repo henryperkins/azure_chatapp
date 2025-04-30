@@ -20,14 +20,15 @@ export function createSidebar({
   uiRenderer,
   DependencySystem
 } = {}) {
-  // Dependency resolution
-  DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
+  if (!DependencySystem) throw new Error('DependencySystem is required for sidebar');
+  if (!eventHandlers) throw new Error('eventHandlers is required for sidebar');
+
+  // Dependency resolution helpers
   function resolveDep(name) {
     if (DependencySystem?.modules?.get) return DependencySystem.modules.get(name);
     if (DependencySystem?.get) return DependencySystem.get(name);
     return undefined;
   }
-  eventHandlers = eventHandlers || resolveDep('eventHandlers');
   app = app || resolveDep('app');
   projectDashboard = projectDashboard || resolveDep('projectDashboard');
   projectManager = projectManager || resolveDep('projectManager');
@@ -42,7 +43,7 @@ export function createSidebar({
     try { return JSON.parse(jsonString); } catch { return defaultVal; }
   }
   const starred = new Set(
-    safeParseJSON(typeof localStorage !== 'undefined' && localStorage.getItem('starredConversations'), [])
+    safeParseJSON(localStorage?.getItem('starredConversations'), [])
   );
 
   // ───────────────────────── init ─────────────────────────
@@ -51,7 +52,7 @@ export function createSidebar({
       findDom();
       restorePersistentState();
       bindDomEvents();
-      const activeTab = typeof localStorage !== 'undefined' ? localStorage.getItem('sidebarActiveTab') : 'recent';
+      const activeTab = localStorage?.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
       console.log('[sidebar] initialized successfully');
       return true;
@@ -72,7 +73,7 @@ export function createSidebar({
   }
 
   function restorePersistentState() {
-    pinned = typeof localStorage !== 'undefined' && localStorage.getItem('sidebarPinned') === 'true';
+    pinned = localStorage?.getItem('sidebarPinned') === 'true';
     if (pinned) {
       el.classList.add('sidebar-pinned', 'translate-x-0');
       visible = true;
@@ -83,11 +84,7 @@ export function createSidebar({
   function bindDomEvents() {
     const addListener = (target, type, handler, desc) => {
       if (!target) return;
-      if (eventHandlers?.trackListener) {
-        eventHandlers.trackListener(target, type, handler, { description: desc });
-      } else {
-        target.addEventListener(type, handler);
-      }
+      eventHandlers.trackListener(target, type, handler, { description: desc });
     };
 
     addListener(btnToggle, 'click', () => toggleSidebar(), 'Sidebar toggle');
@@ -107,7 +104,7 @@ export function createSidebar({
 
   function togglePin(force) {
     pinned = (force !== undefined) ? !!force : !pinned;
-    if (typeof localStorage !== 'undefined') localStorage.setItem('sidebarPinned', pinned);
+    if (localStorage) localStorage.setItem('sidebarPinned', pinned);
     el.classList.toggle('sidebar-pinned', pinned);
     updatePinButtonVisual();
     if (pinned) showSidebar();
@@ -134,14 +131,12 @@ export function createSidebar({
     btnToggle.setAttribute('aria-expanded', 'true');
     createBackdrop();
 
-    setTimeout(() => {
-      const activeTab = typeof localStorage !== 'undefined' ? localStorage.getItem('sidebarActiveTab') : 'recent';
-      if (activeTab === 'projects') {
-        ensureProjectDashboard();
-        const projSearch = document.getElementById('sidebarProjectSearch');
-        if (projSearch) projSearch.focus();
-      }
-    }, 10);
+    const activeTab = localStorage?.getItem('sidebarActiveTab') || 'recent';
+    if (activeTab === 'projects') {
+      ensureProjectDashboard();
+      const projSearch = document.getElementById('sidebarProjectSearch');
+      if (projSearch) projSearch.focus();
+    }
 
     dispatch('sidebarVisibilityChanged', { visible });
   }
@@ -161,24 +156,20 @@ export function createSidebar({
   }
 
   function handleResize() {
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+    if (window?.innerWidth >= 1024) {
       removeBackdrop();
     }
   }
 
   function createBackdrop() {
-    if (backdrop || (typeof window !== 'undefined' && window.innerWidth >= 1024)) return;
+    if (backdrop || window?.innerWidth >= 1024) return;
     backdrop = Object.assign(document.createElement('div'), {
       className: 'fixed inset-0 bg-black bg-opacity-50 z-40',
       style: 'cursor:pointer',
     });
 
     const closeHandler = () => closeSidebar();
-    if (eventHandlers?.trackListener) {
-      eventHandlers.trackListener(backdrop, 'click', closeHandler, { description: 'Sidebar backdrop' });
-    } else {
-      backdrop.addEventListener('click', closeHandler);
-    }
+    eventHandlers.trackListener(backdrop, 'click', closeHandler, { description: 'Sidebar backdrop' });
 
     document.body.appendChild(backdrop);
   }
@@ -217,7 +208,7 @@ export function createSidebar({
       }
     });
 
-    if (typeof localStorage !== 'undefined') localStorage.setItem('sidebarActiveTab', name);
+    if (localStorage) localStorage.setItem('sidebarActiveTab', name);
     dispatch('sidebarTabChanged', { tab: name });
 
     if (name === 'recent') {
@@ -240,15 +231,15 @@ export function createSidebar({
   }
 
   function maybeRenderRecentConversations() {
-    if (uiRenderer?.renderConversations && typeof window !== 'undefined' && window.chatConfig?.conversations) {
-      uiRenderer.renderConversations(window.chatConfig);
-    } else {
-      renderConversations(typeof window !== 'undefined' ? window.chatConfig : {});
+    if (uiRenderer?.renderConversations) {
+      uiRenderer.renderConversations();
     }
   }
 
   function maybeRenderStarredConversations() {
-    renderStarredConversations(typeof window !== 'undefined' ? window.chatConfig || {} : {});
+    if (uiRenderer?.renderStarredConversations) {
+      uiRenderer.renderStarredConversations();
+    }
   }
 
   function isConversationStarred(id) {
@@ -261,7 +252,7 @@ export function createSidebar({
     } else {
       starred.add(id);
     }
-    if (typeof localStorage !== 'undefined') localStorage.setItem('starredConversations', JSON.stringify([...starred]));
+    if (localStorage) localStorage.setItem('starredConversations', JSON.stringify([...starred]));
     maybeRenderStarredConversations();
     dispatch('sidebarStarredChanged', { id, starred: starred.has(id) });
     return starred.has(id);
