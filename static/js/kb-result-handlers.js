@@ -210,10 +210,3 @@ function populateResultMetadata() {
   // In a real implementation, you would fetch this data from the API
   // response when the result is selected
 }
-
-// Export functionality for use in other modules
-window.kbResultHandlers = {
-  copyKnowledgeContent,
-  showCopyFeedback,
-  updateResultStyleByRelevance
-};

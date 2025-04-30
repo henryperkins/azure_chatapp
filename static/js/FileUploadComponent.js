@@ -297,6 +297,3 @@ class FileUploadComponent {
     return message;
   }
 }
-
-// Export to window
-window.FileUploadComponent = FileUploadComponent;

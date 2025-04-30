@@ -89,7 +89,4 @@
       sidebar?.activateTab('projects');
     });
   }
-
-  // Expose initializer for app.js
-  window.initSidebarEnhancements = initSidebarEnhancements;
 })();
