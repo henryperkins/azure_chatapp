@@ -190,7 +190,7 @@
                   }
                 });
                 event.request.url = url.toString();
-              } catch { }
+              } catch { /* ignore malformed URLs, just leave event.request.url unchanged */ }
             }
             return event;
           }
@@ -349,7 +349,6 @@
 
   // If a loader script calls sentryOnLoad, link to our init
   if (typeof window.sentryOnLoad === 'function') {
-    const original = window.sentryOnLoad;
   } else {
     // Otherwise initialize Sentry immediately
     initializeSentry();
