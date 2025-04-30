@@ -46,9 +46,6 @@ const waitFor = DependencySystem.waitFor.bind(DependencySystem);
 const notificationHandler = createNotificationHandler({ DependencySystem });
 DependencySystem.register('notificationHandler', notificationHandler);
 
-const eventHandlers = createEventHandlers({ DependencySystem });
-DependencySystem.register('eventHandlers', eventHandlers);
-
 const auth = createAuthModule({
   DependencySystem,
   apiRequest,
@@ -156,6 +153,7 @@ async function apiRequest(url, opts = {}, skipCache = false) {
     const normalizedUrl = normaliseUrl(url);
 
     const bodyKey = opts.body instanceof FormData
+        ? `[form-data-${Date.now()}]`
         ? `[form-data-${Date.now()}]`
         : stableStringify(opts.body || {});
     const requestKey = `${method}-${normalizedUrl}-${bodyKey}`;
@@ -468,180 +466,223 @@ async function init() {
 }
 
 async function initializeCoreSystems() {
-    console.log('[App] Initializing core systems...');
+  console.log('[App] Initializing core systems...');
 
-    const modalManager = createModalManager();
-    DependencySystem.register('modalManager', modalManager);
-
-    const projectModal = createProjectModal();
-    if (typeof projectModal.init === 'function') {
-        await projectModal.init();
-    }
-    // Ensure global event handlers attach their listeners
-    const eventHandlers = DependencySystem.modules.get('eventHandlers');
-    if (typeof eventHandlers?.init === 'function') {
-        await eventHandlers.init();
-    }
-    DependencySystem.register('projectModal', projectModal);
-
-    // Insert chatManager creation before ProjectManager so 'chatManager' is available
-    const chatManager = createChatManager();
-    if (typeof chatManager.initialize === 'function') {
-        chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
-    }
-    DependencySystem.register('chatManager', chatManager);
-
-    document.dispatchEvent(new Event('modalsLoaded'));
-
-    const projectManager = createProjectManager({
-        DependencySystem: window.DependencySystem
-    });
-    if (typeof projectManager.initialize === 'function') {
-        await projectManager.initialize();
-    }
-    DependencySystem.register('projectManager', projectManager);
-
-    console.log('[App] Core systems initialized.');
-}
 
 async function initializeAuthSystem() {
-    console.log('[App] Initializing authentication system...');
-    const auth = DependencySystem.modules.get('auth');
-    if (!auth || typeof auth.init !== 'function') {
-        throw new Error("[App] Auth module is missing or invalid in DependencySystem.");
-    }
-    try {
-        await auth.init();
-        if (!auth.isAuthenticated || typeof auth.isAuthenticated !== 'function') {
-            throw new Error("[App] Auth module does not provide isAuthenticated().");
-        }
-        appState.isAuthenticated = auth.isAuthenticated();
-        console.log(`[App] Initial authentication state: ${appState.isAuthenticated}`);
-    } catch (err) {
-        // Enhanced error context and fail-fast propagation
-        console.error('[App] Auth system initialization/check failed:', err && err.stack ? err.stack : err);
-        appState.isAuthenticated = false;
-        showNotification(`Authentication check failed: ${err && err.message ? err.message : err}`, 'error');
-        // Propagate so global init can surface critical initialization error
-        throw new Error(`[App] initializeAuthSystem failed: ${err && err.message ? err.message : err}`);
-    }
+  console.log('[App] Initializing authentication system...');
+  const auth = DependencySystem.modules.get('auth');
+  if (!auth || typeof auth.init !== 'function') {
+      throw new Error("[App] Auth module is missing or invalid in DependencySystem.");
+  }
+  try {
+      await auth.init();
+      if (!auth.isAuthenticated || typeof auth.isAuthenticated !== 'function') {
+          throw new Error("[App] Auth module does not provide isAuthenticated().");
+      }
+      appState.isAuthenticated = auth.isAuthenticated();
+      console.log(`[App] Initial authentication state: ${appState.isAuthenticated}`);
+  } catch (err) {
+      // Enhanced error context and fail-fast propagation
+      console.error('[App] Auth system initialization/check failed:', err && err.stack ? err.stack : err);
+      appState.isAuthenticated = false;
+      showNotification(`Authentication check failed: ${err && err.message ? err.message : err}`, 'error');
+      // Propagate so global init can surface critical initialization error
+      throw new Error(`[App] initializeAuthSystem failed: ${err && err.message ? err.message : err}`);
+  }
+}
+
+  // PHASE 1: Create components in correct order, passing explicit dependencies
+  const modalManager = createModalManager();
+
+  // Register modalManager immediately so it's available
+  DependencySystem.register('modalManager', modalManager);
+
+  // Create chatManager before projectManager
+  const chatManager = createChatManager();
+
+  // Register chatManager immediately so projectManager can access it
+  DependencySystem.register('chatManager', chatManager);
+
+  // Configure chatManager's initialize method if needed
+  if (typeof chatManager.initialize === 'function') {
+    chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
+  }
+
+  // Now create projectManager with explicit chatManager dependency
+  const projectManager = createProjectManager({
+    DependencySystem: window.DependencySystem,
+    chatManager: chatManager // Explicit dependency injection
+  });
+
+  // Register projectManager
+  DependencySystem.register('projectManager', projectManager);
+
+  // Create projectModal after its dependencies are ready
+  const projectModal = createProjectModal();
+  DependencySystem.register('projectModal', projectModal);
+
+  // Trigger modals loaded event
+  document.dispatchEvent(new Event('modalsLoaded'));
+
+  // PHASE 2: Initialize components in dependency order
+  // Initialize modalManager first
+  if (typeof modalManager.init === 'function') {
+    await modalManager.init();
+  }
+
+  // Initialize projectModal next
+  if (typeof projectModal.init === 'function') {
+    await projectModal.init();
+  }
+
+  // Initialize projectManager
+  if (typeof projectManager.initialize === 'function') {
+    await projectManager.initialize();
+  }
+
+  // Now initialize eventHandlers after all its dependencies are registered
+  const eventHandlers = DependencySystem.modules.get('eventHandlers');
+  if (typeof eventHandlers?.init === 'function') {
+    await eventHandlers.init();
+  }
+
+  console.log('[App] Core systems initialized.');
 }
 
 async function initializeUIComponents() {
-    console.log('[App] Initializing UI components...');
-    if (typeof ProjectDetailsComponent === 'function') {
-        DependencySystem.register('ProjectDetailsComponent', ProjectDetailsComponent);
-    }
-    if (typeof ProjectListComponent === 'function') {
-        DependencySystem.register('ProjectListComponent', ProjectListComponent);
-    }
-    if (FileUploadComponent) {
-        DependencySystem.register('FileUploadComponent', FileUploadComponent);
-    }
+  console.log('[App] Initializing UI components...');
 
-    const projectDashboard = createProjectDashboard();
-    DependencySystem.register('projectDashboard', projectDashboard);
+  // Register component classes first
+  if (typeof ProjectDetailsComponent === 'function') {
+    DependencySystem.register('ProjectDetailsComponent', ProjectDetailsComponent);
+  }
+  if (typeof ProjectListComponent === 'function') {
+    DependencySystem.register('ProjectListComponent', ProjectListComponent);
+  }
+  if (FileUploadComponent) {
+    DependencySystem.register('FileUploadComponent', FileUploadComponent);
+  }
 
-    // --- Resolve all DI dependencies required by ProjectDetailsComponent
-    const appRef = app;
-    const projectManager = DependencySystem.modules.get('projectManager');
-    const eventHandlers = DependencySystem.modules.get('eventHandlers');
-    const modalManager = DependencySystem.modules.get('modalManager');
-    const FileUploadComponentClass = DependencySystem.modules.get('FileUploadComponent');
+  // Get references to already-registered dependencies
+  const appRef = app;
+  const projectManager = DependencySystem.modules.get('projectManager');
+  const eventHandlers = DependencySystem.modules.get('eventHandlers');
+  const modalManager = DependencySystem.modules.get('modalManager');
+  const FileUploadComponentClass = DependencySystem.modules.get('FileUploadComponent');
 
-    const projectDetailsComponent = createProjectDetailsComponent({
-        onBack: async () => {
-            try {
-                const pd = await waitFor('projectDashboard');
-                pd?.showProjectList?.();
-            } catch (e) {
-                console.error('[App] Error in onBack callback:', e);
-                window.location.href = '/';
-            }
-        },
-        app: appRef,
-        projectManager,
-        eventHandlers,
-        FileUploadComponentClass,
-        modalManager,
-        knowledgeBaseComponent: DependencySystem.modules.get('knowledgeBaseComponent')
-    });
-    DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
+  // Create UI components with explicit dependencies
+  const projectDashboard = createProjectDashboard();
 
-    const modelConfig = createModelConfig();
-    DependencySystem.register('modelConfig', modelConfig);
+  // Register immediately so it can be referenced
+  DependencySystem.register('projectDashboard', projectDashboard);
 
-    const projectDashboardUtils = createProjectDashboardUtils();
-    DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
+  const modelConfig = createModelConfig();
+  DependencySystem.register('modelConfig', modelConfig);
 
-    const chatExtensions = createChatExtensions({ DependencySystem });
-    chatExtensions.init();
+  const projectDashboardUtils = createProjectDashboardUtils();
+  DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
-    const sidebar = createSidebar({
-        DependencySystem,
-        eventHandlers,
-        app: app,
-        projectDashboard,
-        projectManager
-    });
-    if (typeof sidebar.init === 'function') {
-        await sidebar.init();
-    }
-    DependencySystem.register('sidebar', sidebar);
+  const chatExtensions = createChatExtensions({ DependencySystem });
 
-    // Register utility modules for DI
-    DependencySystem.register('utils', globalUtils);
-    DependencySystem.register('formatting', formatting);
-    DependencySystem.register('accessibilityUtils', accessibilityUtils);
+  // Create projectDetailsComponent with explicit dependencies
+  const projectDetailsComponent = createProjectDetailsComponent({
+    onBack: async () => {
+      try {
+        const pd = await DependencySystem.waitFor('projectDashboard');
+        pd?.showProjectList?.();
+      } catch (e) {
+        console.error('[App] Error in onBack callback:', e);
+        window.location.href = '/';
+      }
+    },
+    app: appRef,
+    projectManager,
+    eventHandlers,
+    FileUploadComponentClass,
+    modalManager
+  });
+  DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
 
-    const kbDeps = await waitFor(['auth', 'projectManager']);
-const knowledgeBaseComponent = createKnowledgeBaseComponent({
+  // Create sidebar with explicit dependencies
+  const sidebar = createSidebar({
+    DependencySystem,
+    eventHandlers,
+    app: app,
+    projectDashboard,
+    projectManager
+  });
+  DependencySystem.register('sidebar', sidebar);
+
+  // Register utility modules
+  DependencySystem.register('utils', globalUtils);
+  DependencySystem.register('formatting', formatting);
+  DependencySystem.register('accessibilityUtils', accessibilityUtils);
+
+  // Create knowledgeBaseComponent last, as it depends on many others
+  const knowledgeBaseComponent = createKnowledgeBaseComponent({
     DependencySystem,
     apiRequest,
-    auth: kbDeps.auth,
-    projectManager: kbDeps.projectManager,
+    auth: DependencySystem.modules.get('auth'),
+    projectManager: projectManager,
     showNotification
-});
-    if (typeof knowledgeBaseComponent.initialize === 'function') {
-        await knowledgeBaseComponent.initialize();
-    }
-    DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
+  });
+  DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
 
-    if (typeof projectDashboard.initialize === 'function') {
-        console.log('[App] Initializing ProjectDashboard instance...');
-        await projectDashboard.initialize();
-    }
-    // Wire up modelConfig’s UI controls
-    if (modelConfig?.initializeUI) {
-        modelConfig.initializeUI();
-    }
-    // Directly initialize standalone list/details components
-    const projectListComp = DependencySystem.modules.get('ProjectListComponent');
-    if (projectListComp?.initialize) {
-        await projectListComp.initialize();
-    }
-    const projectDetailsComp = DependencySystem.modules.get('projectDetailsComponent');
-    if (projectDetailsComp?.initialize) {
-        await projectDetailsComp.initialize();
-    }
+  // Initialize components in dependency order
+  // Initialize sidebar
+  if (typeof sidebar.init === 'function') {
+    await sidebar.init();
+  }
 
-    // Trigger initial project load after all UI components are ready
-    if (appState.isAuthenticated) {
-        const projectManager = DependencySystem.modules.get('projectManager');
-        if (projectManager?.loadProjects) {
-            projectManager.loadProjects('all');
-        }
-    }
+  // Initialize chatExtensions
+  chatExtensions.init();
 
-    if (typeof window.initAccessibilityEnhancements === 'function') {
-        window.initAccessibilityEnhancements();
-    }
-    // Safely initialize sidebar enhancements if loaded
-    if (typeof window.initSidebarEnhancements === 'function') {
-        window.initSidebarEnhancements();
-    }
+  // Initialize modelConfig's UI controls
+  if (modelConfig?.initializeUI) {
+    modelConfig.initializeUI();
+  }
 
-    console.log('[App] UI components initialized.');
+  // Initialize KB component
+  if (typeof knowledgeBaseComponent.initialize === 'function') {
+    await knowledgeBaseComponent.initialize();
+  }
+
+  // Initialize projectDashboard
+  if (typeof projectDashboard.initialize === 'function') {
+    console.log('[App] Initializing ProjectDashboard instance...');
+    await projectDashboard.initialize();
+  }
+
+  // Initialize standalone components
+  const projectListComp = DependencySystem.modules.get('ProjectListComponent');
+  if (projectListComp?.initialize) {
+    await projectListComp.initialize();
+  }
+
+  const projectDetailsComp = DependencySystem.modules.get('projectDetailsComponent');
+  if (projectDetailsComp?.initialize) {
+    await projectDetailsComp.initialize();
+  }
+
+  // Trigger initial project load if authenticated
+  if (appState.isAuthenticated) {
+    if (projectManager?.loadProjects) {
+      projectManager.loadProjects('all');
+    }
+  }
+
+  // Initialize accessibility enhancements
+  if (typeof window.initAccessibilityEnhancements === 'function') {
+    window.initAccessibilityEnhancements();
+  }
+
+  // Initialize sidebar enhancements
+  if (typeof window.initSidebarEnhancements === 'function') {
+    window.initSidebarEnhancements();
+  }
+
+  console.log('[App] UI components initialized.');
 }
 
 /* ---------------------------------------------------------------------
