@@ -121,7 +121,7 @@ class ProjectDashboard {
 
       // Dispatch dashboard initialized event
       document.dispatchEvent(
-        new CustomEvent('projectDashboardInitializedEvent', { detail: { success: true } })
+        new CustomEvent('projectDashboardInitialized', { detail: { success: true } })
       );
 
       console.log('[ProjectDashboard] Initialization complete.');
@@ -131,7 +131,7 @@ class ProjectDashboard {
       this.app?.showNotification('Dashboard initialization failed', 'error');
       this.state.initialized = false;
       document.dispatchEvent(
-        new CustomEvent('projectDashboardInitializedEvent', { detail: { success: false, error } })
+        new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
       );
       return false;
     }

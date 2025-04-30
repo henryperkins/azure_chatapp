@@ -232,17 +232,15 @@ export class ProjectListComponent {
      * @private
      */
     _extractProjects(data) {
-        if (Array.isArray(data)) {
-            return data;
-        }
-        // If an object with a projects array
-        if (Array.isArray(data?.projects)) {
-            return data.projects;
-        }
-        if (Array.isArray(data?.data?.projects)) {
-            return data.data.projects;
-        }
-        // etc. Fallback
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.projects)) return data.projects;
+        if (Array.isArray(data?.data?.projects)) return data.data.projects;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data)) return data;
+        if (data?.data && typeof data.data === "object" && data.data.id) return [data.data];
+        if (data && typeof data === "object" && data.id) return [data];
+        if (data?.projects && typeof data.projects === "object" && data.projects.id) return [data.projects];
+        if (data?.data?.projects && typeof data.data.projects === "object" && data.data.projects.id) return [data.data.projects];
         return [];
     }
 
