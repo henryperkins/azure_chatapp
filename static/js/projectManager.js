@@ -1,13 +1,15 @@
 /**
- * projectManager.js
+ * projectManager.js - DependencySystem Refactored Edition
  *
- * Project management module for web applications.
+ * Project management module, strictly DI-based, with orchestrator-driven dependency resolution.
  *
- * ## Dependencies:
- * - window.app: Application core with state management and API requests.
- * - window.DependencySystem: Dependency injection/registration system.
- * - window.chatManager: Chat/conversation management module.
- * - FormData: For file uploads.
+ * ## Dependencies (all via DependencySystem):
+ * - app: Application core (API, state mgmt, notifications)
+ * - chatManager: Chat/conversation management
+ * - modelConfig: Model configuration manager (optional)
+ * - DependencySystem: Dependency injection module (required)
+ *
+ * No reliance on window.* globals for shared modules. No event replay cabinet.
  */
 
 /** @typedef {Object} Project
@@ -30,8 +32,6 @@
  *  @property {Array<{file: File, reason: string}>} invalidFiles
  */
 
-/* Defensive: one-time cache holder for replay (at top-level) */
-window.projectEvents = window.projectEvents || {};
 
 /**
  * Strongly-normalize project fetch/create API responses. Throws if no valid project ID found.
@@ -119,14 +119,24 @@ export function isValidProjectId(id) {
 }
 
 class ProjectManager {
-  constructor() {
-    // Static helper for robust projectId validation everywhere (deprecated—use export now)
-    this._isValidProjectId = isValidProjectId;
+  constructor({ app, chatManager, modelConfig, DependencySystem } = {}) {
+    // Support orchestrator-driven dependency injection (DependencySystem first, fallback to args)
+    this.DependencySystem = DependencySystem || window.DependencySystem;
+    if (!this.DependencySystem) {
+      throw new Error("DependencySystem is required for ProjectManager");
+    }
+    this.app = app || this.DependencySystem.modules.get("app");
+    this.chatManager = chatManager || this.DependencySystem.modules.get("chatManager");
+    this.modelConfig = modelConfig || this.DependencySystem.modules.get("modelConfig");
+
+    // Defensive: warn if any required dependency missing
+    if (!this.app) throw new Error("ProjectManager constructor: 'app' dependency missing.");
+    if (!this.chatManager) throw new Error("ProjectManager constructor: 'chatManager' dependency missing.");
+
     // Configuration constants
     this.CONFIG = {
       DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
       ENDPOINTS: {
-        // trailing slashes prevent 307 redirects and keep fetch() on the 200 path
         PROJECTS: '/api/projects/',
         PROJECT_DETAIL: '/api/projects/{projectId}/',
         PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
@@ -136,7 +146,6 @@ class ProjectManager {
       }
     };
 
-    // Internal state
     this.currentProject = null;
     this.projectLoadingInProgress = false;
   }
@@ -145,7 +154,7 @@ class ProjectManager {
 
   async createProject(projectData) {
     try {
-      const response = await window.app.apiRequest('/api/projects', {
+      const response = await this.app.apiRequest('/api/projects', {
         method: 'POST',
         body: projectData
       });
@@ -194,21 +203,21 @@ class ProjectManager {
       return project;
     } catch (error) {
       console.error('[ProjectManager] Error creating project:', error);
-      window.app?.showNotification('Failed to create project', 'error');
+      this.app?.showNotification('Failed to create project', 'error');
       throw error;
     }
   }
 
   async createDefaultConversation(projectId) {
     try {
-      const response = await window.app.apiRequest(
+      const response = await this.app.apiRequest(
         `/api/projects/${projectId}/conversations/`,
         {
           method: 'POST',
           body: {
             title: 'Default Conversation',
             model_id:
-              window.modelConfig?.getConfig()?.modelName || 'claude-3-sonnet-20240229'
+              (this.modelConfig?.getConfig?.()?.modelName) || 'claude-3-sonnet-20240229'
           }
         }
       );
@@ -227,13 +236,13 @@ class ProjectManager {
       return conversation;
     } catch (error) {
       console.error('[ProjectManager] Failed to create default conversation:', error);
-      window.app?.showNotification('Default conversation creation failed', 'error');
+      this.app?.showNotification('Default conversation creation failed', 'error');
     }
   }
 
   async initializeKnowledgeBase(projectId) {
     try {
-      const response = await window.app.apiRequest(
+      const response = await this.app.apiRequest(
         `/api/projects/${projectId}/knowledge-bases/`,
         {
           method: 'POST',
@@ -252,7 +261,7 @@ class ProjectManager {
       return kb;
     } catch (error) {
       console.error('[ProjectManager] Failed to initialize knowledge base:', error);
-      window.app?.showNotification('Knowledge base initialization failed', 'error');
+      this.app?.showNotification('Knowledge base initialization failed', 'error');
     }
   }
 
@@ -279,7 +288,7 @@ class ProjectManager {
     }
 
     // Check authentication from centralized state
-    if (!window.app.state.isAuthenticated) {
+    if (!this.app.state.isAuthenticated) {
       console.warn("[ProjectManager] Not authenticated, can't load projects");
       this._emitEvent("projectsLoaded", {
         projects: [],
@@ -301,7 +310,7 @@ class ProjectManager {
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
       this.CONFIG.DEBUG &&
         console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
-      const response = await window.app.apiRequest(endpoint);
+      const response = await this.app.apiRequest(endpoint);
 
       // Always log the full API response for debugging
       console.log(
@@ -374,7 +383,7 @@ class ProjectManager {
     }
 
     // Check authentication from centralized state
-    if (!window.app.state.isAuthenticated) {
+    if (!this.app.state.isAuthenticated) {
       console.warn("[ProjectManager] Not authenticated, can't load project details");
       this._emitEvent("projectDetailsError", {
         projectId,
@@ -388,7 +397,7 @@ class ProjectManager {
 
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
-      const response = await window.app.apiRequest(endpoint);
+      const response = await this.app.apiRequest(endpoint);
 
       if (!response) return null;
 
@@ -455,7 +464,7 @@ class ProjectManager {
   async loadProjectStats(projectId) {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_STATS.replace('{projectId}', projectId);
-      const response = await window.app.apiRequest(endpoint);
+      const response = await this.app.apiRequest(endpoint);
 
       const stats = response?.data || {};
       this._emitEvent("projectStatsLoaded", {
@@ -482,7 +491,7 @@ class ProjectManager {
   async loadProjectFiles(projectId) {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
-      const response = await window.app.apiRequest(endpoint);
+      const response = await this.app.apiRequest(endpoint);
 
       let files = extractResourceList(response, { listKeys: ["files", "file"] });
       if (!Array.isArray(files)) {
@@ -511,7 +520,7 @@ class ProjectManager {
   async loadProjectConversations(projectId) {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
-      const response = await window.app.apiRequest(endpoint);
+      const response = await this.app.apiRequest(endpoint);
 
       if (!response) return [];
 
@@ -542,7 +551,7 @@ class ProjectManager {
   async loadProjectArtifacts(projectId) {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
-      const response = await window.app.apiRequest(endpoint);
+      const response = await this.app.apiRequest(endpoint);
 
       if (!response) return [];
 
@@ -572,7 +581,7 @@ class ProjectManager {
    * @returns {Promise<Project>} - Resolves to the saved project object.
    */
   async createOrUpdateProject(projectId, projectData) {
-    if (!window.app.state.isAuthenticated) {
+    if (!this.app.state.isAuthenticated) {
       throw new Error("Authentication required");
     }
 
@@ -583,7 +592,7 @@ class ProjectManager {
       : this.CONFIG.ENDPOINTS.PROJECTS;
 
     try {
-      const response = await window.app.apiRequest(endpoint, { method, body: projectData });
+      const response = await this.app.apiRequest(endpoint, { method, body: projectData });
       const resultData = response?.data || response;
 
       if (!resultData || !resultData.id) {
@@ -611,13 +620,13 @@ class ProjectManager {
    * @returns {Promise<any>} - Resolves to API response.
    */
   async deleteProject(projectId) {
-    if (!window.app.state.isAuthenticated) {
+    if (!this.app.state.isAuthenticated) {
       throw new Error("Authentication required");
     }
 
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
-      const response = await window.app.apiRequest(endpoint, { method: "DELETE" });
+      const response = await this.app.apiRequest(endpoint, { method: "DELETE" });
 
       if (this.currentProject?.id === projectId) {
         this.currentProject = null;
@@ -638,13 +647,13 @@ class ProjectManager {
    * @returns {Promise<any>} - Resolves to API response.
    */
   async togglePinProject(projectId) {
-    if (!window.app.state.isAuthenticated) {
+    if (!this.app.state.isAuthenticated) {
       throw new Error("Authentication required");
     }
 
     try {
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/pin`;
-      const response = await window.app.apiRequest(endpoint, { method: "POST" });
+      const response = await this.app.apiRequest(endpoint, { method: "POST" });
 
       this._emitEvent("projectPinToggled", {
         projectId,
@@ -665,13 +674,13 @@ class ProjectManager {
    * @returns {Promise<any>} - Resolves to API response.
    */
   async toggleArchiveProject(projectId) {
-    if (!window.app.state.isAuthenticated) {
+    if (!this.app.state.isAuthenticated) {
       throw new Error("Authentication required");
     }
 
     try {
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/archive`;
-      const response = await window.app.apiRequest(endpoint, { method: "PATCH" });
+      const response = await this.app.apiRequest(endpoint, { method: "PATCH" });
 
       this._emitEvent("projectArchiveToggled", {
         projectId,
@@ -695,7 +704,7 @@ class ProjectManager {
   async createConversation(projectId, options = {}) {
     try {
       localStorage.setItem("selectedProjectId", projectId);
-      return await window.chatManager.createNewConversation(projectId, options);
+      return await this.chatManager.createNewConversation(projectId, options);
     } catch (error) {
       console.error("[ProjectManager] createConversation error:", error);
       throw error;
@@ -712,7 +721,7 @@ class ProjectManager {
   async deleteProjectConversation(projectId, conversationId) {
     try {
       localStorage.setItem("selectedProjectId", projectId);
-      await window.chatManager.deleteConversation(conversationId);
+      await this.chatManager.deleteConversation(conversationId);
       return true;
     } catch (error) {
       console.error("[ProjectManager] deleteProjectConversation error:", error);
@@ -767,7 +776,7 @@ class ProjectManager {
         formData.append('file', file);
         formData.append('projectId', projectId);
 
-        await window.app.apiRequest(`/api/projects/${projectId}/files/`, {
+        await this.app.apiRequest(`/api/projects/${projectId}/files/`, {
           method: 'POST',
           body: formData
         });
@@ -795,74 +804,21 @@ class ProjectManager {
     });
     evt.timestamp = Date.now();
 
-    // Dispatch on local EventTarget (ProjectManager instance) for local listeners
-    this.dispatchEvent?.(evt);
-
-    // Also dispatch on global document so UI components can hear it
+    // Dispatch on document so UI components can hear it
     document.dispatchEvent(evt);
-
-    // Cache for late-joining listeners (store latest 20 per event)
-    try {
-      const store = window.projectEvents;
-      store[eventName] = store[eventName] || [];
-      store[eventName].push(evt);
-      if (store[eventName].length > 20) store[eventName].shift();
-    } catch (e) {
-      // Defensive: don't break app if caching fails
-      console.warn('[ProjectManager] event cache error:', e);
-    }
   }
 }
 
 /**
- * Trusted, DRY getter for current projectId — always prefer this utility!
- * Will never return null/"null"/junk. Use everywhere (chat, tab switch, API, etc).
- * Returns the first valid projectId from these sources (most authoritative first):
- *   - window.projectManager.currentProject.id
- *   - window.projectManager.getCurrentProject().id
- *   - window.app.getProjectId()
- *   - window.app?.state?.currentProjectId
- *   - localStorage 'selectedProjectId'
- *   - URL pathname (/projects/:id)
- *   - search params ('project', or 'projectId')
+ * Factory function for dependency-injected ProjectManager construction.
+ *
+ * Usage from orchestrator (in app.js):
+ *
+ *    const projectManager = createProjectManager();
+ *    DependencySystem.register('projectManager', projectManager);
  */
-export function getCurrentProjectId() {
-  const manager = window.projectManager;
-  const appId = window.app?.getProjectId?.();
-  const localId = localStorage.getItem('selectedProjectId');
-  const pathMatch = window.location.pathname.match(/\/projects\/([0-9a-f-]+)/i);
-  const urlParam = new URLSearchParams(window.location.search).get('project');
-
-  // Allow getCurrentProject as method, and currentProject as property object
-  const candidates = [
-    manager?.currentProject?.id,
-    typeof manager?.getCurrentProject === 'function' ? manager.getCurrentProject()?.id : undefined,
-    appId,
-    urlParam,
-    pathMatch?.[1],
-    localId
-  ];
-
-  const valid = candidates.find(
-    id =>
-      typeof id === 'string' &&
-      /^[0-9a-f-]{32,36}$/i.test(id) &&
-      id.toLowerCase() !== 'null'
-  );
-  if (!valid) {
-    console.error('[App] getCurrentProjectId failed to resolve', {
-      candidates,
-      pathname: window.location.pathname,
-      href: window.location.href
-    });
-    return null;
-  }
-  return valid;
-}
-
-// Export factory function for app.js to use
-export function createProjectManager() {
-  return new ProjectManager();
+export function createProjectManager(deps = {}) {
+  return new ProjectManager(deps);
 }
 
 // For backward compatibility and module registration, app.js will use this code

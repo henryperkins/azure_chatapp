@@ -1,19 +1,46 @@
 /**
  * projectDashboard.js
  *
- * Coordinates project dashboard components and state.
+ * Coordinates project dashboard components and state, interacting exclusively
+ * via DependencySystem for all dependencies. No global/window.* access for shared modules.
  *
- * ## Dependencies:
- * - window.app: Application core with state management and UI helpers.
- * - window.projectManager: Project management API.
- * - window.ProjectListComponent: Renders the project list.
- * - window.ProjectDetailsComponent: Renders project details.
- * - window.DependencySystem: Dependency injection/registration system.
- * - window.eventHandlers: Utility for debouncing.
+ * ## Dependencies (all via DependencySystem):
+ * - app: Core app module (state mgmt, notifications, utilities)
+ * - projectManager: Project management API
+ * - ProjectListComponent: Renders the project list
+ * - ProjectDetailsComponent: Renders project details
+ * - eventHandlers: Utility for event listener tracking/cleanup (if applicable)
+ * - auth: Auth module (and AuthBus for state events)
+ *
+ * ## Initialization/Integration contract:
+ * - The orchestrator (e.g., app.js) is responsible for:
+ *     - Registering all required modules/components before constructing ProjectDashboard.
+ *     - Ensuring main dashboard containers (#projectListView, #projectDetailsView) exist in the DOM before initialization.
+ *     - Injecting any required HTML content into containers beforehand.
+ * - ProjectDashboard only binds listeners, manages its own state, and coordinates component logic/UI—never fetching or injecting HTML itself.
  */
 
+/**
+ * ProjectDashboard
+ *
+ * Coordinates project dashboard components and state using DependencySystem only.
+ * All dependencies are injected via DependencySystem. No global/window access except when required by browser APIs.
+ */
 class ProjectDashboard {
   constructor() {
+    // Dependency references (set in initialize, not accessed via window)
+    this.DependencySystem = window.DependencySystem;
+    if (!this.DependencySystem) {
+      throw new Error('DependencySystem not available for ProjectDashboard');
+    }
+
+    // Get all core dependencies once at construction
+    this.app = this.DependencySystem.modules.get('app');
+    this.projectManager = this.DependencySystem.modules.get('projectManager');
+    this.ProjectListComponent = this.DependencySystem.modules.get('ProjectListComponent');
+    this.ProjectDetailsComponent = this.DependencySystem.modules.get('ProjectDetailsComponent');
+    this.eventHandlers = this.DependencySystem.modules.get('eventHandlers');
+    this.auth = this.DependencySystem.modules.get('auth');
 
     // Component references
     this.components = {
@@ -28,27 +55,27 @@ class ProjectDashboard {
       initialized: false      // Initialization flag
     };
 
-    // Listen for auth changes on the AuthBus (not document)
-    const authBus = window.auth?.AuthBus;
+    // Attach listener for authentication state via AuthBus (DependencySystem only)
+    const authBus = this.auth?.AuthBus;
     const handler = (e) => {
       const { authenticated } = e.detail || {};
       if (!authenticated) return;
       if (!this.state.initialized) {
         console.log('[ProjectDashboard] Authenticated – initializing dashboard');
         this.initialize();
-        window.projectManager?.loadProjects('all');
+        this.projectManager?.loadProjects('all');
       } else {
         console.log('[ProjectDashboard] Authenticated – refreshing project list');
         this.showProjectList();
         this._loadProjects();
       }
     };
-if (authBus && typeof authBus.addEventListener === 'function') {
-  authBus.addEventListener('authStateChanged', handler);
-} else if (!window.auth) {
-  // Fallback for unexpected setup
-  document.addEventListener('authStateChanged', handler);
-}
+    if (authBus && typeof authBus.addEventListener === 'function') {
+      authBus.addEventListener('authStateChanged', handler);
+    } else {
+      // For rare/legacy fallback, listen on document
+      document.addEventListener('authStateChanged', handler);
+    }
   }
 
   /**
@@ -68,32 +95,19 @@ if (authBus && typeof authBus.addEventListener === 'function') {
 
     try {
       // Check authentication - using centralized app state
-      if (!window.app.state.isAuthenticated) {
+      if (!this.app.state.isAuthenticated) {
         console.log('[ProjectDashboard] Not authenticated, waiting for login...');
         this._showLoginRequiredMessage();
         return false;
       }
 
-      // Wait for DOM ready
-      if (document.readyState === 'loading') {
-        await new Promise(resolve =>
-          document.addEventListener('DOMContentLoaded', resolve, { once: true })
-        );
+      // Fail immediately if required containers are not present
+      const listView = document.getElementById('projectListView');
+      if (!listView) {
+        throw new Error('Missing required #projectListView container during initialization');
       }
 
-      // NEW: Wait for main container (#projectListView) to exist before proceeding, retries up to 30x/3s
-      await (async () => {
-        for (let i = 0; i < 30; i++) {
-          if (document.getElementById('projectListView')) return;
-          await new Promise(r => setTimeout(r, 100));
-        }
-        throw new Error('Timeout waiting for #projectListView container in DOM during dashboard init');
-      })();
-
-      // Load required HTML content
-      await this._loadProjectListHtml();
-
-      // Initialize components
+      // Initialize components (assume HTML is already injected by orchestrator)
       await this._initializeComponents();
 
       // Process URL parameters for initial view
@@ -114,7 +128,7 @@ if (authBus && typeof authBus.addEventListener === 'function') {
       return true;
     } catch (error) {
       console.error('[ProjectDashboard] Initialization failed:', error);
-      window.app?.showNotification('Dashboard initialization failed', 'error');
+      this.app?.showNotification('Dashboard initialization failed', 'error');
       this.state.initialized = false;
       document.dispatchEvent(
         new CustomEvent('projectDashboardInitializedEvent', { detail: { success: false, error } })
@@ -210,7 +224,7 @@ if (authBus && typeof authBus.addEventListener === 'function') {
     this.state.currentProject = projectId;
 
     try {
-      await this._loadProjectDetailsHtml();
+      // Component HTML is assumed to be already present by orchestrator
 
       // Ensure ProjectDetailsComponent is initialized *after* the HTML exists (run only once)
       if (this.components.projectDetails &&
@@ -219,7 +233,7 @@ if (authBus && typeof authBus.addEventListener === 'function') {
       }
     } catch (err) {
       console.error('[ProjectDashboard] Error loading project details page:', err);
-      window.app?.showNotification('Error loading project details UI', 'error');
+      this.app?.showNotification('Error loading project details UI', 'error');
       localStorage.removeItem('selectedProjectId');
       this.showProjectList();
       return false;
@@ -259,21 +273,21 @@ if (authBus && typeof authBus.addEventListener === 'function') {
     localStorage.setItem('selectedProjectId', projectId);
 
     // Load project data
-    if (window.app.state.isAuthenticated && window.projectManager?.loadProjectDetails) {
-      window.projectManager
+    if (this.app.state.isAuthenticated && this.projectManager?.loadProjectDetails) {
+      this.projectManager
         .loadProjectDetails(projectId)
         .then(project => {
           // treat explicit 404 / error only; ignore empty objects returned by unrelated calls
           if (!project || (typeof project === 'object' && Object.keys(project).length === 0)) {
             console.warn('[ProjectDashboard] Project not found after details load');
-            window.app?.showNotification('Project not found', 'error');
+            this.app?.showNotification('Project not found', 'error');
             localStorage.removeItem('selectedProjectId');
             this.showProjectList();
           }
         })
         .catch((error) => {
           console.error('[ProjectDashboard] Failed to load project details:', error);
-          window.app?.showNotification('Failed to load project details', 'error');
+          this.app?.showNotification('Failed to load project details', 'error');
           localStorage.removeItem('selectedProjectId');
           this.showProjectList();
         });
@@ -307,112 +321,12 @@ if (authBus && typeof authBus.addEventListener === 'function') {
     projectViews.forEach(view => view.classList.add('hidden'));
   }
 
-  /**
-   * Loads the project list HTML into #projectListView if not already present.
-   * @returns {Promise<void>}
-   * @throws {Error} If the container is missing or fetch fails.
-   * @private
-   */
-  async _loadProjectListHtml() {
-    const container = document.getElementById('projectListView');
-    if (!container) {
-      console.error('[ProjectDashboard] projectListView container not found in DOM.');
-      throw new Error('Missing projectListView container');
-    }
-
-    // Always load and set value—never shortcut if #projectList is present, to ensure proper markup and listeners
-    console.log('[ProjectDashboard] Loading project_list.html...');
-    try {
-      const response = await fetch('/static/html/project_list.html');
-      if (!response.ok) {
-        console.error('[ProjectDashboard] Failed to load project_list.html. Status:', response.status);
-        container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
-        throw new Error("HTTP " + response.status);
-      }
-
-      const html = await response.text();
-      container.innerHTML = html;
-
-      // --- Execute <script> tags from loaded HTML ---
-      const scripts = Array.from(container.querySelectorAll('script'));
-      for (const old of scripts) {
-        const s = document.createElement('script');
-        if (old.src) {
-          s.src = old.src;
-        } else {
-          s.textContent = old.textContent;
-        }
-        s.async = false;
-        old.remove();
-        document.head.appendChild(s);
-      }
-
-      // Wait for the browser to process DOM changes from innerHTML
-      await new Promise(requestAnimationFrame);
-
-      // Ensure the project list view is visible after HTML injection
-      container.classList.remove('opacity-0');
-
-      // Dispatch a global event after project list DOM is present
-      document.dispatchEvent(new Event('projectListReady'));
-
-      console.log('[ProjectDashboard] project_list.html loaded and DOM updated.');
-    } catch (err) {
-      console.error('[ProjectDashboard] Error fetching project_list.html:', err);
-      container.innerHTML = '<p class="text-error text-center">Error loading project list UI.</p>';
-      throw err;
-    }
+  // No-op: HTML loading should be orchestrated by the parent module.
+  _loadProjectListHtml() {
+    throw new Error('[ProjectDashboard] HTML loading responsibility has been moved to the orchestrator. This method should not be called.');
   }
-
-  /**
-   * Loads the project details HTML into #projectDetailsView if not already present.
-   * @returns {Promise<void>}
-   * @throws {Error} If the container is missing or fetch fails.
-   * @private
-   */
-  async _loadProjectDetailsHtml() {
-    const container = document.getElementById('projectDetailsView');
-    if (!container) {
-      console.error('[ProjectDashboard] projectDetailsView container not found in DOM.');
-      throw new Error('Missing projectDetailsView container');
-    }
-
-    // Avoid reloading if already present
-    if (container.querySelector('#detailsTab')) {
-      console.log('[ProjectDashboard] project_details.html is already loaded.');
-      return;
-    }
-
-    console.log('[ProjectDashboard] Loading project_details.html...');
-    try {
-      const response = await fetch('/static/html/project_details.html');
-      if (!response.ok) {
-        console.error('[ProjectDashboard] Failed to load project_details.html. Status:', response.status);
-        container.innerHTML = '<p class="text-error text-center">Error loading project details UI.</p>';
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const html = await response.text();
-      container.innerHTML = html;
-
-      // --- Execute <script> tags from loaded HTML ---
-      const scripts = Array.from(container.querySelectorAll('script'));
-      for (const old of scripts) {
-        const s = document.createElement('script');
-        if (old.src) {
-          s.src = old.src;
-        } else {
-          s.textContent = old.textContent;
-        }
-        s.async = false;
-        old.remove();
-        document.head.appendChild(s);
-      }
-      console.log('[ProjectDashboard] project_details.html loaded successfully.');
-    } catch (err) {
-      console.error('[ProjectDashboard] Error fetching project_details.html:', err);
-      container.innerHTML = '<p class="text-error text-center">Error loading project details UI.</p>';
-      throw err;
-    }
+  _loadProjectDetailsHtml() {
+    throw new Error('[ProjectDashboard] HTML loading responsibility has been moved to the orchestrator. This method should not be called.');
   }
 
   /**
@@ -424,19 +338,14 @@ if (authBus && typeof authBus.addEventListener === 'function') {
     console.log('[ProjectDashboard] Initializing components...');
 
     // Ensure #projectList is present in the DOM before initializing the component
-    const waitForProjectList = async () => {
-      const maxAttempts = 20, delay = 100;
-      for (let i = 0; i < maxAttempts; i++) {
-        if (document.getElementById('projectList')) return;
-        await new Promise(r => setTimeout(r, delay));
-      }
-      throw new Error('Timeout: #projectList did not appear in DOM after injecting project_list.html');
-    };
-    await waitForProjectList();
+    const projectListEl = document.getElementById('projectList');
+    if (!projectListEl) {
+      throw new Error('Missing #projectList element in DOM after injecting project_list.html');
+    }
 
     // Project list component
-    if (window.ProjectListComponent) {
-      this.components.projectList = new window.ProjectListComponent({
+    if (this.ProjectListComponent) {
+      this.components.projectList = new this.ProjectListComponent({
         elementId: 'projectList',
         onViewProject: this._handleViewProject.bind(this)
       });
@@ -448,33 +357,22 @@ if (authBus && typeof authBus.addEventListener === 'function') {
         throw new Error('ProjectListComponent failed to initialize.');
       }
     } else {
-      console.error('[ProjectDashboard] ProjectListComponent not found on window.');
+      console.error('[ProjectDashboard] ProjectListComponent not found (DependencySystem).');
     }
 
     // Project details component
-    if (window.ProjectDetailsComponent) {
-      this.components.projectDetails = new window.ProjectDetailsComponent({
+    if (this.ProjectDetailsComponent) {
+      this.components.projectDetails = new this.ProjectDetailsComponent({
         onBack: this._handleBackToList.bind(this)
       });
       console.log('[ProjectDashboard] ProjectDetailsComponent created.');
     } else {
-      console.error('[ProjectDashboard] ProjectDetailsComponent not found on window.');
+      console.error('[ProjectDashboard] ProjectDetailsComponent not found (DependencySystem).');
     }
 
     console.log('[ProjectDashboard] Components initialized.');
 
-    // --- Patch 2: Force replay of projectsLoaded after both components initialized ---
-    setTimeout(() => {
-      if (window.projectManager?.currentProjects?.length) {
-        document.dispatchEvent(new CustomEvent('projectsLoaded', {
-          detail: { projects: window.projectManager.currentProjects }
-        }));
-        console.log('[ProjectDashboard] Patch2: Dispatched projectsLoaded event for late-initializers.');
-      } else {
-        window.projectManager?.loadProjects('all');
-        console.log('[ProjectDashboard] Patch2: Reloaded projects to guarantee fresh projectsLoaded event.');
-      }
-    }, 0);
+    // (No event replay/caching needed: orchestrator is responsible for correct event timing/data refresh)
   }
 
   /**
@@ -541,13 +439,13 @@ if (authBus && typeof authBus.addEventListener === 'function') {
     console.log('[ProjectDashboard] Loading projects...');
 
     // Check authentication from centralized state
-    if (!window.app?.state?.isAuthenticated) {
+    if (!this.app?.state?.isAuthenticated) {
       console.warn('[ProjectDashboard] Not authenticated, cannot load projects');
       return;
     }
 
     // Ensure projectManager is available
-    if (!window.projectManager?.loadProjects) {
+    if (!this.projectManager?.loadProjects) {
       console.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
       return;
     }
@@ -555,7 +453,7 @@ if (authBus && typeof authBus.addEventListener === 'function') {
     try {
       // Load projects with a slight delay to ensure DOM is ready
       setTimeout(() => {
-        window.projectManager.loadProjects('all')
+        this.projectManager.loadProjects('all')
           .catch(error => {
             console.error('[ProjectDashboard] Error loading projects:', error);
           });
@@ -769,7 +667,7 @@ if (authBus && typeof authBus.addEventListener === 'function') {
       detailsView.style.display = 'none';
     }
 
-    window.app?.showNotification('The requested project was not found', 'error');
+    this.app?.showNotification('The requested project was not found', 'error');
     this.showProjectList();
   }
 }
