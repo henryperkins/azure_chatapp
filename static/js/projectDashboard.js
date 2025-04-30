@@ -263,8 +263,8 @@ if (authBus && typeof authBus.addEventListener === 'function') {
       window.projectManager
         .loadProjectDetails(projectId)
         .then(project => {
-          // If project load returns null/undefined, treat as not found
-          if (!project) {
+          // treat explicit 404 / error only; ignore empty objects returned by unrelated calls
+          if (!project || (typeof project === 'object' && Object.keys(project).length === 0)) {
             console.warn('[ProjectDashboard] Project not found after details load');
             window.app?.showNotification('Project not found', 'error');
             localStorage.removeItem('selectedProjectId');
