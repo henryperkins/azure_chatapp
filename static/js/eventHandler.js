@@ -32,6 +32,8 @@
  *   @param {Object} deps.modalManager - Modal handler
  *   @param {Object} deps.DependencySystem - Preferred for DI dependency registry
  */
+import { waitForDepsAndDom } from './utils/initHelpers.js';
+
 export function createEventHandlers({ app, auth, projectManager, sidebar, modalManager, DependencySystem } = {}) {
   // Helper for optional DI from DependencySystem if not provided at construction time
   DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
@@ -518,10 +520,17 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
   }
 
 
-  function init() {
+  let initialized = false;
+  async function init() {
+    if (initialized) return;
+    await waitForDepsAndDom({
+      deps: ['app', 'auth', 'projectManager', 'modalManager'],
+      domSelectors: ['body', '#mainSidebar', '#navToggleBtn']
+    });
     setupCommonElements();
     setupNavigationElements();
     setupContentElements();
+    initialized = true;
     console.log('[EventHandler] All handlers initialized');
   }
 

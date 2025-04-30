@@ -433,6 +433,19 @@ async function init() {
         appState.currentPhase = 'finalizing';
         appState.initialized = true;
 
+        // --- FINAL-PHASE CENTRAL SAFETY NET ---
+        // Re-invoke essential inits/UI hooks to ensure no missed/bad-state modules
+        try {
+            // These are no-ops if already initialized (dedup flags inside each)
+            await DependencySystem.modules.get('eventHandlers')?.init?.();
+            DependencySystem.modules.get('modelConfig')?.initializeUI?.();
+            DependencySystem.modules.get('chatExtensions')?.init?.();
+            await DependencySystem.modules.get('ProjectListComponent')?.initialize?.();
+            await DependencySystem.modules.get('projectDetailsComponent')?.initialize?.();
+        } catch (err) {
+            console.warn('[App] Post-initialization safety net failed:', err);
+        }
+
         handleNavigationChange();
 
         const initEndTime = performance.now();
@@ -463,6 +476,11 @@ async function initializeCoreSystems() {
     const projectModal = createProjectModal();
     if (typeof projectModal.init === 'function') {
         await projectModal.init();
+    }
+    // Ensure global event handlers attach their listeners
+    const eventHandlers = DependencySystem.modules.get('eventHandlers');
+    if (typeof eventHandlers?.init === 'function') {
+        await eventHandlers.init();
     }
     DependencySystem.register('projectModal', projectModal);
 
@@ -592,6 +610,19 @@ const knowledgeBaseComponent = createKnowledgeBaseComponent({
     if (typeof projectDashboard.initialize === 'function') {
         console.log('[App] Initializing ProjectDashboard instance...');
         await projectDashboard.initialize();
+    }
+    // Wire up modelConfig’s UI controls
+    if (modelConfig?.initializeUI) {
+        modelConfig.initializeUI();
+    }
+    // Directly initialize standalone list/details components
+    const projectListComp = DependencySystem.modules.get('ProjectListComponent');
+    if (projectListComp?.initialize) {
+        await projectListComp.initialize();
+    }
+    const projectDetailsComp = DependencySystem.modules.get('projectDetailsComponent');
+    if (projectDetailsComp?.initialize) {
+        await projectDetailsComp.initialize();
     }
 
     // Trigger initial project load after all UI components are ready
