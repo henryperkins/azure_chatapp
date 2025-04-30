@@ -376,27 +376,30 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
     // Set up login form handler (if present)
     const setupLoginForm = () => {
       const loginForm = document.getElementById('loginForm');
-      if (loginForm && !loginForm._listenerAttached) {
-        loginForm._listenerAttached = true;
-        loginForm.action = '/api/auth/login';
-        loginForm.method = 'POST';
+    if (loginForm && !loginForm._listenerAttached) {
+      loginForm._listenerAttached = true;
+      loginForm.action = '/api/auth/login';
+      loginForm.method = 'POST';
 
-        (eventHandlers?.trackListener
-          ? eventHandlers.trackListener
-          : loginForm.addEventListener.bind(loginForm)
-        )('submit', async (e) => {
-          e.preventDefault();
-          const formData = new FormData(loginForm);
-          try {
-            await publicAuth.login(
-              formData.get('username'),
-              formData.get('password')
-            );
-          } catch (error) {
-            showNotification?.('Login failed: ' + error.message, 'error');
-          }
-        });
+      const handler = async (e) => {
+        e.preventDefault();
+        const formData = new FormData(loginForm);
+        try {
+          await publicAuth.login(
+            formData.get('username'),
+            formData.get('password')
+          );
+        } catch (error) {
+          showNotification?.('Login failed: ' + error.message, 'error');
+        }
+      };
+
+      if (eventHandlers?.trackListener) {
+        eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false });
+      } else {
+        loginForm.addEventListener('submit', handler, { passive: false });
       }
+    }
     };
 
     setupLoginForm();
@@ -408,11 +411,14 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
       authState.isReady = true;
       return verified;
 
-    } catch {
+    } catch (err) {
+      // Enhanced error logging and propagation
+      console.error('[Auth] Initial verification failed in init:', err && err.stack ? err.stack : err);
       await clearTokenState({ source: 'init_fail', isError: true });
       authState.isReady = true;
       broadcastAuth(false, null, 'init_error');
-      return false;
+      // Propagate the real cause upward for diagnostics
+      throw err;
     } finally {
       setInterval(() => {
         if (!document.hidden && authState.isAuthenticated) {
