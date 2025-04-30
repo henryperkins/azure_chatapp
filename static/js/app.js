@@ -550,6 +550,14 @@ async function initializeUIComponents() {
         await projectDashboard.initialize();
     }
 
+    // Trigger initial project load after all UI components are ready
+    if (appState.isAuthenticated) {
+        const projectManager = DependencySystem.modules.get('projectManager');
+        if (projectManager?.loadProjects) {
+            projectManager.loadProjects('all');
+        }
+    }
+
     if (typeof window.initAccessibilityEnhancements === 'function') {
         window.initAccessibilityEnhancements();
     }
