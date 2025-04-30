@@ -321,8 +321,7 @@ export function createChatManager({
             assistantMessage.content,
             null,
             response.data.thinking,
-            response.data.redacted_thinking,
-            assistantMessage.metadata
+            response.data.redacted_thinking
           );
         } else if (response.data?.assistant_error) {
           const errorMsg = this._extractErrorMessage(response.data.assistant_error);
@@ -477,7 +476,7 @@ export function createChatManager({
       });
     }
 
-    _showMessage(role, content, id = null, thinking = null, redactedThinking = false, metadata = null) {
+    _showMessage(role, content, id = null, thinking = null, redactedThinking = false) {
       if (!this.messageContainer) return;
       const message = document.createElement("div");
       message.className = `message ${role}-message`;
@@ -611,8 +610,7 @@ export function createChatManager({
           msg.content,
           msg.id,
           msg.thinking,
-          msg.redacted_thinking,
-          msg.metadata
+          msg.redacted_thinking
         );
       });
     }
@@ -622,7 +620,7 @@ export function createChatManager({
       if (typeof error === "string") return error;
       if (error.message) return error.message;
       if (typeof error === "object") {
-        try { return JSON.stringify(error); } catch (e) { return "Unknown error object"; }
+        try { return JSON.stringify(error); } catch { return "Unknown error object"; }
       }
       return String(error);
     }

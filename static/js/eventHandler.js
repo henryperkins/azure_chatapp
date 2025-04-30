@@ -352,38 +352,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     }, { passive: false });
   }
 
-  function onAuthStateChange(event) {
-    const centralizedHandler = DependencySystem?.modules?.get('handleAuthStateChange');
-    if (typeof centralizedHandler === 'function') {
-      centralizedHandler(event);
-    } else {
-      console.warn('[eventHandler] Centralized handleAuthStateChange not found in DependencySystem.');
-    }
-  }
 
-  function handleBackendUnavailable(event) {
-    const { reason } = event.detail || {};
-    const message = `Backend service unavailable: ${reason || 'unknown reason'}. Will retry later.`;
-    if (app?.showNotification) {
-      app.showNotification(message, 'warning', 8000);
-    }
-  }
 
-  function handleKeyDown(e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
-      e.preventDefault();
-      const helpModal = document.getElementById('helpModal');
-      if (helpModal && typeof helpModal.showModal === 'function') {
-        helpModal.showModal();
-      }
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === '.') {
-      e.preventDefault();
-      if (sidebar) {
-        sidebar.toggle();
-      }
-    }
-  }
 
   function setupNavigation() {
     const newConversationBtn = document.getElementById('newConversationBtn');
@@ -451,7 +421,6 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         if (response && response.access_token) {
           setTimeout(() => { window.location.href = '/'; }, 100);
         } else {
-          switchAuthTab('login'); // Switch to login tab if no auto-login
         }
       }, { resetOnSuccess: false });
     }
@@ -549,15 +518,6 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     });
   }
 
-  function reinitializeAuthElements() {
-    const authButton = document.getElementById('authButton');
-    const authDropdown = document.getElementById('authDropdown');
-    if (authButton && authDropdown && !authButton._listenerAttached) {
-      setupCommonElements();
-      authButton._listenerAttached = true;
-      console.log('[eventHandler] Re-initialized auth elements');
-    }
-  }
 
   function init() {
     setupCommonElements();

@@ -96,7 +96,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
             notification.parentNode.removeChild(notification);
           }
           activeNotifications.delete(String(notificationId));
-        } catch (err) {
+        } catch {
           // Safe cleanup if already removed
         }
       }, 300);
