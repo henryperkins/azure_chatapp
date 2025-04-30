@@ -8,18 +8,28 @@
 let keyboardShortcutsEnabled = true;
 let lastFocusedElement = null;
 
+let eventHandlers;
+let DependencySystem;
+
 /**
  * Initialize all accessibility enhancements.
  * Should be called once during app bootstrap.
+ * @param {Object} opts - Optional dependencies
+ * @param {Object} opts.eventHandlers - Event handler utilities (required)
+ * @param {Object} opts.DependencySystem - Dependency system (optional)
  */
-function initAccessibilityEnhancements() {
+export function initAccessibilityEnhancements(opts = {}) {
+  DependencySystem = opts.DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
+  eventHandlers = opts.eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers'));
+  if (!eventHandlers) throw new Error('eventHandlers required for accessibility-utils');
+
   bindGlobalShortcuts();
   enhanceFormAccessibility();
   improveModalAccessibility();
   setupSkipLinks();
 
-  if (window.DependencySystem) {
-    window.DependencySystem.register('accessibilityUtils', {
+  if (DependencySystem) {
+    DependencySystem.register('accessibilityUtils', {
       focusElement,
       getFocusable,
       trapFocus,
@@ -33,10 +43,10 @@ function initAccessibilityEnhancements() {
  * Bind all global keyboard shortcuts (including sidebar controls).
  */
 function bindGlobalShortcuts() {
-  window.eventHandlers.trackListener(document, 'keydown', async e => {
+  eventHandlers.trackListener(document, 'keydown', async e => {
     if (!keyboardShortcutsEnabled || isInput(e.target)) return;
 
-    const sidebar = await window.DependencySystem?.waitFor?.('sidebar', null, 3000);
+    const sidebar = await DependencySystem?.waitFor?.('sidebar', null, 3000);
 
     // toggle sidebar: `/`, `` ` ``, or `\`
     if ((e.key === '/' || e.key === '`' || e.key === '\\') && noMods(e)) {
@@ -89,7 +99,7 @@ function bindGlobalShortcuts() {
   }, { description: 'Global keyboard shortcuts' });
 
   // click on close button inside help dialog
-  window.eventHandlers.trackListener(document, 'click', e => {
+  eventHandlers.trackListener(document, 'click', e => {
     if (e.target.closest('#keyboardHelp button')) closeKeyboardHelpIfOpen();
   }, { description: 'Help close click' });
 }
