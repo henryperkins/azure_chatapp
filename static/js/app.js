@@ -794,7 +794,6 @@ function handleInitError(error) {
  * ------------------------------------------------------------------- */
 function bootstrap() {
     if (window.appBootstrapCalled) return;
-    window.appBootstrapCalled = true;
 
     if (!window.DependencySystem) {
         console.error("CRITICAL: DependencySystem not found. Bootstrap aborted.");
