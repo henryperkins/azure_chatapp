@@ -692,7 +692,7 @@ export class ProjectListComponent {
         }
     }
 
-    _mgetDefaultCustomization() {
+    _mygetDefaultCustomization() {
         return {
             theme: 'default',
             showDescription: true,
