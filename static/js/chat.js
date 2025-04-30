@@ -1,6 +1,21 @@
 /**
- * chat.js
- * Modular ChatManager: export as createChatManager(), uses centralized state via DependencySystem.
+ * chat.js - DependencySystem/DI Refactored Edition
+ *
+ * Modular, orchestrator-registered ChatManager.
+ * NO window.* global access, global assignment, or fallback—uses DependencySystem/DI only.
+ *
+ * ## Dependencies (from DependencySystem or by DI injection in factory):
+ * - app: Core (must provide apiRequest, showNotification)
+ * - eventHandlers: For event tracking and cleanup (optional, but recommended)
+ * - modelConfig: Model config controller (optional, for model features)
+ * - uiRenderer: UI renderer for sidebar/conversation list (optional)
+ * - projectDetailsComponent: UI component for chat disable/legacy (optional)
+ * - DependencySystem: for DI lookups (optional if all dependencies provided)
+ *
+ * Usage (in app.js orchestrator):
+ *   import { createChatManager } from './chat.js';
+ *   const chatManager = createChatManager({ app, eventHandlers, ... });
+ *   DependencySystem.register('chatManager', chatManager);
  */
 
 import { getCurrentProjectId } from './projectManager.js';
@@ -14,24 +29,39 @@ const CHAT_CONFIG = {
 };
 
 /**
- * Factory function for ChatManager.
- * Uses DependencySystem ('app', 'modelConfig'), no globals attached!
+ * Modular ChatManager factory function.
+ * All dependencies must be injected via options or will be resolved from DependencySystem if available.
  */
-export function createChatManager() {
-  // ---- HELPER: Get centralized modelConfig ----
+export function createChatManager({
+  app,
+  eventHandlers,
+  modelConfig,
+  uiRenderer,
+  projectDetailsComponent,
+  DependencySystem
+} = {}) {
+  DependencySystem = DependencySystem
+    || (typeof window !== 'undefined' && window.DependencySystem);
+
+  // DI resolution as fallback
+  function resolveDep(name) {
+    return (DependencySystem?.modules?.get && DependencySystem.modules.get(name))
+      || (DependencySystem?.get && DependencySystem.get(name));
+  }
+  app = app || resolveDep('app');
+  eventHandlers = eventHandlers || resolveDep('eventHandlers');
+  modelConfig = modelConfig || resolveDep('modelConfig');
+  uiRenderer = uiRenderer || resolveDep('uiRenderer');
+  projectDetailsComponent = projectDetailsComponent || resolveDep('projectDetailsComponent');
+
   function getModelConfig() {
-    if (window.DependencySystem?.modules?.has('modelConfig')) {
-      return window.DependencySystem.modules.get('modelConfig');
-    }
-    return {
+    return modelConfig || {
       getConfig: () => ({}),
       updateConfig: () => {},
       getModelOptions: () => [],
       onConfigChange: () => {}
     };
   }
-  // ---- HELPER: Check for centralized authentication ----
-  // (removed, now importing from globalUtils)
 
   class ChatManager {
     constructor() {
@@ -50,28 +80,22 @@ export function createChatManager() {
       this._eventHandlers = {};
       this.modelConfig = getModelConfig().getConfig();
 
-      // Backwards compatibility alias
       this.createConversation = (...args) => this.createNewConversation(...args);
     }
 
-    // (removed _isValidProjectId, uses canonical isValidProjectId directly)
-
     async initialize(options = {}) {
-      // Always get a valid projectId: options.projectId > getCurrentProjectId() > error
       let projectId =
         (options.projectId && isValidProjectId(options.projectId))
           ? options.projectId
           : getCurrentProjectId();
       this.projectId = projectId;
 
-      // Defensive: Validate project ID before any chat action can initialize
       if (!isValidProjectId(this.projectId)) {
         const msg = "[Chat] Project ID required before initializing chat.";
         this._showErrorMessage(msg);
         this._handleError("initialization", msg);
-        // Optionally, disable chat UI here globally if helper exists:
-        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-          window.projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
+        if (typeof projectDetailsComponent?.disableChatUI === "function") {
+          projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
         }
         throw new Error(msg);
       }
@@ -91,7 +115,6 @@ export function createChatManager() {
         try {
           await this.createNewConversation();
         } catch (convError) {
-          // Enhanced diagnostics for backend errors
           console.error("[Chat] Failed to create default conversation:", convError);
           this._showErrorMessage(
             "Could not create a new conversation. Please check your project configuration or contact support."
@@ -100,9 +123,8 @@ export function createChatManager() {
         this.isInitialized = true;
       } catch (error) {
         this._handleError("initialization", error);
-        // Optionally, disable chat UI here as well
-        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-          window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+        if (typeof projectDetailsComponent?.disableChatUI === "function") {
+          projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
         }
         throw error;
       }
@@ -123,7 +145,6 @@ export function createChatManager() {
         return false;
       }
 
-      // Lock: ensure only one load at a time
       if (this.loadPromise) {
         console.warn("[Chat] Loading already in progress -- chaining to existing loadPromise.");
         return this.loadPromise;
@@ -135,10 +156,10 @@ export function createChatManager() {
         try {
           this._clearMessages();
           const endpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/`;
-          const conversation = await window.app.apiRequest(endpoint, { method: "GET" });
+          const conversation = await app.apiRequest(endpoint, { method: "GET" });
 
           const messagesEndpoint = `/api/projects/${this.projectId}/conversations/${conversationId}/messages/`;
-          const messagesResponse = await window.app.apiRequest(messagesEndpoint, { method: "GET" });
+          const messagesResponse = await app.apiRequest(messagesEndpoint, { method: "GET" });
           const messages = messagesResponse.data?.messages || [];
 
           this.currentConversationId = conversationId;
@@ -146,18 +167,15 @@ export function createChatManager() {
             this.titleElement.textContent = conversation.title || "New Conversation";
           this._renderMessages(messages);
 
-          // Update the conversation list in the sidebar using the central UI renderer
-          if (window.uiRenderer && typeof window.uiRenderer.renderConversations === "function") {
-            window.chatConfig = window.chatConfig || {};
-            if (Array.isArray(window.chatConfig.conversations)) {
-              window.chatConfig.conversations = window.chatConfig.conversations.map(conv =>
+          if (uiRenderer && typeof uiRenderer.renderConversations === "function") {
+            if (Array.isArray(uiRenderer.conversations)) {
+              uiRenderer.conversations = uiRenderer.conversations.map(conv =>
                 conv.id === conversationId ? { ...conv, title: conversation.title } : conv
               );
             }
-            window.uiRenderer.renderConversations(window.chatConfig);
+            uiRenderer.renderConversations(uiRenderer);
           }
 
-          // Update URL if needed
           const urlParams = new URLSearchParams(window.location.search);
           if (urlParams.get("chatId") !== conversationId) {
             const newUrl = new URL(window.location.href);
@@ -180,7 +198,6 @@ export function createChatManager() {
     }
 
     async createNewConversation(projectId = null) {
-      // Always use passed explicit ID if valid, else prefer stable getter
       let idToUse = isValidProjectId(projectId)
         ? projectId
         : getCurrentProjectId();
@@ -194,8 +211,8 @@ export function createChatManager() {
         const msg = "[Chat] Project ID is required to create a conversation";
         this._showErrorMessage(msg);
         this._handleError("creating conversation", msg);
-        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-          window.projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
+        if (typeof projectDetailsComponent?.disableChatUI === "function") {
+          projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
         }
         throw new Error(msg);
       }
@@ -207,7 +224,7 @@ export function createChatManager() {
           title: `New Chat ${new Date().toLocaleString()}`,
           model_id: config.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
-        const response = await window.app.apiRequest(endpoint, { method: "POST", body: payload });
+        const response = await app.apiRequest(endpoint, { method: "POST", body: payload });
         const conversation =
           response?.data?.conversation ||
           response?.data ||
@@ -223,8 +240,8 @@ export function createChatManager() {
         return conversation;
       } catch (error) {
         this._handleError("creating conversation", error);
-        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-          window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+        if (typeof projectDetailsComponent?.disableChatUI === "function") {
+          projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
         }
         throw error;
       }
@@ -233,16 +250,15 @@ export function createChatManager() {
     async sendMessage(messageText) {
       if (!messageText.trim()) return;
       if (!isAuthenticated()) {
-        window.app?.showNotification?.("Please log in to send messages", "error");
+        app?.showNotification?.("Please log in to send messages", "error");
         return;
       }
-      // Always use DRY getter for projectId check
       if (!isValidProjectId(this.projectId)) {
         const msg = "No valid project loaded. Please select a valid project before sending messages.";
         this._showErrorMessage(msg);
         this._handleError("sending message", msg);
-        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-          window.projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
+        if (typeof projectDetailsComponent?.disableChatUI === "function") {
+          projectDetailsComponent.disableChatUI("Chat unavailable: project not loaded.");
         }
         return;
       }
@@ -251,8 +267,8 @@ export function createChatManager() {
           await this.createNewConversation();
         } catch (error) {
           this._handleError("creating conversation", error);
-          if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-            window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+          if (typeof projectDetailsComponent?.disableChatUI === "function") {
+            projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
           }
           return;
         }
@@ -266,12 +282,12 @@ export function createChatManager() {
       this._showThinkingIndicator();
 
       try {
-        const modelConfig = getModelConfig().getConfig();
+        const modelConfigObj = getModelConfig().getConfig();
         const messagePayload = {
           content: messageText,
           role: "user",
           type: "message",
-          vision_detail: modelConfig.visionDetail || "auto"
+          vision_detail: modelConfigObj.visionDetail || "auto"
         };
         if (this.currentImage) {
           let imgData = this.currentImage;
@@ -281,21 +297,21 @@ export function createChatManager() {
             const sizeBytes = Math.floor((b64.length * 3) / 4);
             if (sizeBytes > 4 * 1024 * 1024) {
               this._hideThinkingIndicator();
-              window.app?.showNotification?.("Image is too large (max 4MB). Please choose a smaller file.", "error");
+              app?.showNotification?.("Image is too large (max 4MB). Please choose a smaller file.", "error");
               return;
             }
           }
           messagePayload.image_data = this.currentImage;
           this.currentImage = null;
         }
-        if (modelConfig.extendedThinking) {
+        if (modelConfigObj.extendedThinking) {
           messagePayload.thinking = {
             type: "enabled",
-            budget_tokens: modelConfig.thinkingBudget
+            budget_tokens: modelConfigObj.thinkingBudget
           };
         }
         const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/messages/`;
-        const response = await window.app.apiRequest(endpoint, { method: "POST", body: messagePayload });
+        const response = await app.apiRequest(endpoint, { method: "POST", body: messagePayload });
         this._hideThinkingIndicator();
 
         if (response.data?.assistant_message) {
@@ -317,8 +333,8 @@ export function createChatManager() {
         this._hideThinkingIndicator();
         this._showErrorMessage(error.message);
         this._handleError("sending message", error);
-        if (typeof window.projectDetailsComponent?.disableChatUI === "function") {
-          window.projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
+        if (typeof projectDetailsComponent?.disableChatUI === "function") {
+          projectDetailsComponent.disableChatUI("Chat unavailable: " + (error?.message || error));
         }
       }
     }
@@ -336,7 +352,7 @@ export function createChatManager() {
       }
       try {
         const endpoint = `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/`;
-        await window.app.apiRequest(endpoint, { method: "DELETE" });
+        await app.apiRequest(endpoint, { method: "DELETE" });
         this.currentConversationId = null;
         this._clearMessages();
         const urlParams = new URLSearchParams(window.location.search);
@@ -415,7 +431,7 @@ export function createChatManager() {
       const editBtn = document.getElementById("chatTitleEditBtn");
       if (this.titleElement) this.titleElement.classList.remove("hidden");
       if (editBtn) editBtn.classList.remove("hidden");
-      if (window.initChatExtensions) window.initChatExtensions();
+      if (typeof window.initChatExtensions === "function") window.initChatExtensions();
     }
 
     _createChatContainer() {
@@ -428,9 +444,8 @@ export function createChatManager() {
     }
 
     _bindEvents() {
-      const trackListener =
-        window.eventHandlers?.trackListener ??
-        ((el, type, fn, opts) => { el.addEventListener(type, fn, opts); return fn; });
+      const trackListener = eventHandlers?.trackListener
+        || ((el, type, fn, opts) => { el.addEventListener(type, fn, opts); return fn; });
 
       if (this.inputField) {
         trackListener(this.inputField, "keydown", (e) => {
@@ -452,7 +467,6 @@ export function createChatManager() {
         const lastUserMessage = userMessages[userMessages.length - 1];
         const messageText = lastUserMessage.querySelector(".message-content")?.textContent;
         if (messageText) {
-          // Remove last assistant message
           const assistantMessages = Array.from(this.messageContainer.querySelectorAll(".assistant-message"));
           if (assistantMessages.length > 0) assistantMessages[assistantMessages.length - 1].remove();
           this.sendMessage(messageText);
@@ -501,7 +515,7 @@ export function createChatManager() {
     _formatText(text) {
       if (!text) return "";
       const sanitized = this._sanitizeHtml(text);
-      return window.formatText ? window.formatText(sanitized) : sanitized;
+      return sanitized;
     }
 
     _createThinkingBlock(thinking, redacted) {
@@ -603,7 +617,6 @@ export function createChatManager() {
       });
     }
 
-    // _getProjectId() no longer used. Use getCurrentProjectId() from projectManager.js everywhere!
     _extractErrorMessage(error) {
       if (!error) return "Unknown error occurred";
       if (typeof error === "string") return error;
@@ -616,14 +629,10 @@ export function createChatManager() {
     _handleError(context, error) {
       const message = this._extractErrorMessage(error);
       console.error(`[Chat - ${context}]`, error);
-      if (window.app?.showNotification) {
-        window.app.showNotification(message, "error");
+      if (app?.showNotification) {
+        app.showNotification(message, "error");
       }
     }
-    // Optional backward compatibility: alias createConversation for legacy callers
-    // (Removed duplicate constructor)
-  } // end ChatManager class
-
-  // Return modular instance, registration and window assignment handled in app.js
+  }
   return new ChatManager();
 }

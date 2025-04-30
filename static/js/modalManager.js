@@ -21,13 +21,19 @@
 class ModalManager {
   /**
    * @constructor
-   * Create a new ModalManager instance. Use init() to attach event listeners.
+   * @param {Object} opts - Dependency injection object.
+   *   @param {object} [opts.eventHandlers] - For managed event binding.
+   *   @param {object} [opts.DependencySystem] - Optional for DI.
    */
-  constructor() {
-    /**
-     * Maps logical modal names to <dialog> element IDs.
-     * Configure these IDs to match your HTML.
-     */
+  constructor({ eventHandlers, DependencySystem } = {}) {
+    this.DependencySystem =
+      DependencySystem ||
+      (typeof window !== "undefined" ? window.DependencySystem : undefined);
+    this.eventHandlers =
+      eventHandlers ||
+      (this.DependencySystem?.modules?.get?.("eventHandlers")) ||
+      undefined;
+
     this.modalMappings = {
       project: "projectModal",
       delete: "deleteConfirmModal",
@@ -42,19 +48,16 @@ class ModalManager {
   }
 
   /**
-   * Initialize the ModalManager by attaching 'close' listeners to each mapped <dialog>
-   * element. This is typically called once, e.g. from app.js after creating the instance.
+   * Initialize and attach 'close' listeners to dialogs. Orchestrator must call after DOM ready.
    */
   init() {
     console.log("[ModalManager] init() called. Setting up modals...");
 
-    // Register a close listener for each mapped dialog
     Object.values(this.modalMappings).forEach((modalId) => {
       const modalEl = document.getElementById(modalId);
       if (modalEl) {
-        // If eventHandlers is available, use its trackListener. Otherwise, fallback.
-        if (window.eventHandlers?.trackListener) {
-          window.eventHandlers.trackListener(
+        if (this.eventHandlers?.trackListener) {
+          this.eventHandlers.trackListener(
             modalEl,
             "close",
             () => this._onDialogClose(modalId),
@@ -238,12 +241,12 @@ class ModalManager {
     };
 
     // Attach handlers with eventHandlers->trackListener if available, otherwise fallback
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(newConfirmBtn, "click", confirmHandler, {
-        description: "Confirm Modal Confirm Click",
+    if (this.eventHandlers?.trackListener) {
+      this.eventHandlers.trackListener(newConfirmBtn, "click", confirmHandler, {
+        description: "Confirm Modal Confirm Click"
       });
-      window.eventHandlers.trackListener(newCancelBtn, "click", cancelHandler, {
-        description: "Confirm Modal Cancel Click",
+      this.eventHandlers.trackListener(newCancelBtn, "click", cancelHandler, {
+        description: "Confirm Modal Cancel Click"
       });
     } else {
       newConfirmBtn.addEventListener("click", confirmHandler);
@@ -276,9 +279,31 @@ export function createModalManager() {
 
 class ProjectModal {
   /**
-   * Call init() after constructing to attach necessary event handlers.
+   * @constructor
+   * @param {Object} opts
+   *   @param {Object} [opts.projectManager] - Project manager instance.
+   *   @param {Object} [opts.eventHandlers] - Event handler utilities.
+   *   @param {Function} [opts.showNotification] - Notification function.
+   *   @param {Object} [opts.DependencySystem] - Optional for DI.
    */
-  constructor() {
+  constructor({ projectManager, eventHandlers, showNotification, DependencySystem } = {}) {
+    this.DependencySystem =
+      DependencySystem ||
+      (typeof window !== "undefined" ? window.DependencySystem : undefined);
+
+    this.eventHandlers =
+      eventHandlers ||
+      (this.DependencySystem?.modules?.get?.("eventHandlers")) ||
+      undefined;
+    this.projectManager =
+      projectManager ||
+      (this.DependencySystem?.modules?.get?.("projectManager")) ||
+      undefined;
+    this.showNotification =
+      showNotification ||
+      (this.DependencySystem?.modules?.get?.("app")?.showNotification) ||
+      undefined;
+
     this.modalElement = null;
     this.formElement = null;
     this.isOpen = false;
@@ -286,30 +311,14 @@ class ProjectModal {
   }
 
   /**
-   * Initialize the ProjectModal by discovering required DOM elements and setting up listeners.
+   * Initialize after DOM is ready. Throws if modal/form elements not found.
    */
-  async init() {
-    console.log("[ProjectModal] Starting initialization...");
-
-    // Wait until DOM ready for both modal and form, try for up to 2 seconds
-    const waitForEl = (id, tries = 20) =>
-      new Promise(resolve => {
-        const loop = () => {
-          const el = document.getElementById(id);
-          if (el || tries-- <= 0) return resolve(el);
-          setTimeout(loop, 100);
-        };
-        loop();
-      });
-
-    this.modalElement = await waitForEl("projectModal");
-    this.formElement  = await waitForEl("projectModalForm");
-
+  init() {
+    this.modalElement = document.getElementById("projectModal");
+    this.formElement = document.getElementById("projectModalForm");
     if (!this.modalElement || !this.formElement) {
-      // graceful no-op if not ready after waiting
-      return;
+      throw new Error("[ProjectModal] Required DOM elements not found on init.");
     }
-
     this.setupEventListeners();
     console.log("[ProjectModal] Initialized successfully");
   }
@@ -373,54 +382,51 @@ class ProjectModal {
 
     // Submission
     const submitHandler = async (e) => await this.handleSubmit(e);
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(this.formElement, "submit", submitHandler, {
+    if (this.eventHandlers?.trackListener) {
+      this.eventHandlers.trackListener(this.formElement, "submit", submitHandler, {
         passive: false,
-        description: "ProjectModal submit",
+        description: "ProjectModal submit"
       });
     } else {
       this.formElement.addEventListener("submit", submitHandler);
     }
 
-    // Cancel button
     const cancelBtn = this.modalElement.querySelector("#projectCancelBtn");
     if (cancelBtn) {
       const cancelHandler = (e) => {
         e.preventDefault();
         this.closeModal();
       };
-      if (window.eventHandlers?.trackListener) {
-        window.eventHandlers.trackListener(cancelBtn, "click", cancelHandler, {
-          description: "ProjectModal Cancel",
+      if (this.eventHandlers?.trackListener) {
+        this.eventHandlers.trackListener(cancelBtn, "click", cancelHandler, {
+          description: "ProjectModal Cancel"
         });
       } else {
         cancelBtn.addEventListener("click", cancelHandler);
       }
     }
 
-    // ESC key
     const escHandler = (e) => {
       if (e.key === "Escape" && this.isOpen) {
         this.closeModal();
       }
     };
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(document, "keydown", escHandler, {
-        description: "ProjectModal ESC handler",
+    if (this.eventHandlers?.trackListener) {
+      this.eventHandlers.trackListener(document, "keydown", escHandler, {
+        description: "ProjectModal ESC handler"
       });
     } else {
       document.addEventListener("keydown", escHandler);
     }
 
-    // Clicking on the backdrop for <dialog>
     const backdropHandler = (e) => {
       if (e.target === this.modalElement && this.isOpen) {
         this.closeModal();
       }
     };
-    if (window.eventHandlers?.trackListener) {
-      window.eventHandlers.trackListener(this.modalElement, "click", backdropHandler, {
-        description: "ProjectModal backdrop click",
+    if (this.eventHandlers?.trackListener) {
+      this.eventHandlers.trackListener(this.modalElement, "click", backdropHandler, {
+        description: "ProjectModal backdrop click"
       });
     } else {
       this.modalElement.addEventListener("click", backdropHandler);
@@ -488,11 +494,10 @@ class ProjectModal {
    * @throws If no projectManager is available or the save operation fails.
    */
   async saveProject(projectId, projectData) {
-    if (!window.projectManager) {
-      throw new Error("[ProjectModal] projectManager not available");
+    if (!this.projectManager) {
+      throw new Error("[ProjectModal] projectManager not available (not injected)");
     }
-    // createOrUpdateProject is assumed to handle both create and update logic
-    await window.projectManager.createOrUpdateProject(projectId, projectData);
+    await this.projectManager.createOrUpdateProject(projectId, projectData);
   }
 
   /**
@@ -516,20 +521,16 @@ class ProjectModal {
    * @param {string} message - The error text.
    */
   showError(message) {
-    if (window.showNotification) {
-      window.showNotification(message, "error");
+    if (this.showNotification) {
+      this.showNotification(message, "error");
     } else {
       alert(message);
     }
   }
 
-  /**
-   * Utility to show a success message. Prefers showNotification for user feedback.
-   * @param {string} message - The success text.
-   */
   showSuccess(message) {
-    if (window.showNotification) {
-      window.showNotification(message, "success");
+    if (this.showNotification) {
+      this.showNotification(message, "success");
     } else {
       console.log(message);
     }
@@ -541,6 +542,6 @@ class ProjectModal {
  * This allows app.js (or another orchestrator) to decide when to initialize.
  * @returns {ProjectModal} A new ProjectModal instance.
  */
-export function createProjectModal() {
-  return new ProjectModal();
+export function createProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem } = {}) {
+  return new ProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem });
 }
