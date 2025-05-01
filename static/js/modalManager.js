@@ -288,13 +288,13 @@ class ModalManager {
 }
 
 /**
- * A factory function to create and initialize a new ModalManager instance.
- * Exports are used so app.js can decide when and how to instantiate and register.
- * @returns {ModalManager} A fully initialized ModalManager instance.
+ * A factory function to create a new ModalManager instance.
+ * The init() method must be called separately after the modal DOM is ready.
+ * @returns {ModalManager} A new ModalManager instance.
  */
 export function createModalManager() {
   const manager = new ModalManager();
-  manager.init();
+  // REMOVED: manager.init(); - Initialization is now decoupled and should be called after the modal DOM is ready in app.js
   return manager;
 }
 
