@@ -15,10 +15,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const darkModeToggle = document.getElementById('darkModeToggle');
   const darkModeIcon = document.getElementById('darkModeIcon');
 
-  if (!darkModeToggle || !darkModeIcon) return;
-
   // Set icon based on current theme
   function updateThemeUI(isDark) {
+    if (!darkModeIcon) return;
     if (isDark) {
       // Sun (light) icon for dark mode
       darkModeIcon.innerHTML = `
@@ -51,20 +50,21 @@ document.addEventListener('DOMContentLoaded', () => {
   function setTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
-    // Optionally: toggle any .light/.dark classes for Tailwind, here not needed due to DaisyUI config
     updateThemeUI(isCurrentThemeDark(theme));
   }
 
-  // On page load: normalize base.html's early script/theme, then re-set with toggle logic
+  // On page load: set theme and update icon
   const currentTheme = getCurrentTheme();
   setTheme(currentTheme);
 
   // Toggle theme on button click between DaisyUI theme names
-  darkModeToggle.addEventListener('click', () => {
-    const themeNow = document.documentElement.getAttribute('data-theme');
-    const newTheme = (themeNow === DARK_THEME) ? LIGHT_THEME : DARK_THEME;
-    setTheme(newTheme);
-  });
+  if (darkModeToggle) {
+    darkModeToggle.addEventListener('click', () => {
+      const themeNow = document.documentElement.getAttribute('data-theme');
+      const newTheme = (themeNow === DARK_THEME) ? LIGHT_THEME : DARK_THEME;
+      setTheme(newTheme);
+    });
+  }
 
   // Listen for system changes (if no manual selection is set)
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
@@ -73,4 +73,14 @@ document.addEventListener('DOMContentLoaded', () => {
       setTheme(newTheme);
     }
   });
+
+  // Watch for changes to data-theme (in case other scripts change it)
+  const observer = new MutationObserver(() => {
+    const theme = document.documentElement.getAttribute('data-theme');
+    updateThemeUI(isCurrentThemeDark(theme));
+  });
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // Initial icon update (in case theme was set before DOMContentLoaded)
+  updateThemeUI(isCurrentThemeDark(document.documentElement.getAttribute('data-theme')));
 });
