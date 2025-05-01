@@ -62,6 +62,28 @@ const auth = createAuthModule({
 });
 DependencySystem.register('auth', auth);
 
+/* -------------------------------------------------------------------
+ * ChatManager: Register instance early, before anything else needs it
+ * ------------------------------------------------------------------- */
+const chatManager = createChatManager({
+    DependencySystem,
+    apiRequest,
+    auth,
+    eventHandlers,
+    showNotification: notificationHandler.show
+});
+// Defensive: ensure real instance, not the factory
+if (typeof chatManager.initialize !== 'function') {
+    throw new Error('[App] createChatManager() did not return a valid instance');
+}
+DependencySystem.register('chatManager', chatManager);
+// Harden: fix if some module or late load registered the factory by accident
+if (DependencySystem.modules.get('chatManager') === createChatManager) {
+    console.error('[App] ERROR: chatManager registered as factory – fixing.');
+    DependencySystem.modules.delete('chatManager');
+    DependencySystem.register('chatManager', chatManager);
+}
+
 /* ---------------------------------------------------------------------
  * Configuration
  * ------------------------------------------------------------------- */
@@ -513,18 +535,25 @@ async function init() {
 async function initializeCoreSystems() {
     console.log('[App] Initializing core systems...');
 
-    // PHASE 1: Create components and register dependencies
-    const modalManager = createModalManager(); // Create instance (init() is NOT called here anymore)
+    // PHASE 1: Create components and register dependencies (always register constructed instances)
+    const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
-    window.modalManager = modalManager; // Keep global ref if needed, though DependencySystem is preferred
+    window.modalManager = modalManager;
 
-    const chatManager = createChatManager({ DependencySystem });
-    DependencySystem.register('chatManager', chatManager);
+    // chatManager is already registered above.
+    // Defensive: do not re-register in core systems.
+    const chatMgrInstance = DependencySystem.modules.get('chatManager');
+    if (!chatMgrInstance || typeof chatMgrInstance.initialize !== 'function') {
+        throw new Error('[App] chatManager registration: not a valid instance with "initialize".');
+    }
 
-    const projectManager = createProjectManager({ DependencySystem, chatManager });
+    const projectManager = createProjectManager({ DependencySystem, chatManager: chatMgrInstance });
     DependencySystem.register('projectManager', projectManager);
+    if (typeof DependencySystem.modules.get('projectManager') === 'function' ||
+        typeof projectManager.initialize !== 'function') {
+        throw new Error('[App] projectManager registration: not a valid instance with "initialize".');
+    }
 
-    // Create and register the project modal (DOM markup will arrive asynchronously)
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
 
@@ -538,35 +567,35 @@ async function initializeCoreSystems() {
 
     // PHASE 2: Initialize components in order, *after* dependencies and DOM elements are ready
 
-    // Initialize modalManager *after* modalsReady promise resolves
     if (typeof modalManager.init === 'function') {
         console.log('[App] Initializing ModalManager...');
-        modalManager.init(); // Now safe to call init()
+        modalManager.init();
     } else {
         console.error('[App] modalManager.init function not found!');
     }
 
-    // Initialize chatManager
     if (typeof chatManager.initialize === 'function') {
-        console.log('[App] Initializing ChatManager...');
-        await chatManager.initialize();
+        if (appState.isAuthenticated) {
+            console.log('[App] Initializing ChatManager (user already authenticated)…');
+            await chatManager.initialize();
+        } else {
+            // Safe to skip here; debounced re-init will occur after login/project change
+            console.log('[App] Skipping ChatManager.init – waiting for user authentication.');
+        }
     }
 
-    // Initialize projectModal *after* modalsReady promise resolves
     if (typeof projectModal.init === 'function') {
         console.log('[App] Initializing ProjectModal...');
-        projectModal.init(); // Now safe to call init()
+        projectModal.init();
     } else {
         console.error('[App] projectModal.init function not found!');
     }
 
-    // Initialize projectManager
     if (typeof projectManager.initialize === 'function') {
         console.log('[App] Initializing ProjectManager...');
         await projectManager.initialize();
     }
 
-    // Initialize eventHandlers
     const eh = DependencySystem.modules.get('eventHandlers');
     if (typeof eh?.init === 'function') {
         console.log('[App] Initializing EventHandlers...');
@@ -856,29 +885,66 @@ async function initializeUIComponents() {
 /* ---------------------------------------------------------------------
  * Global Event Listeners
  * ------------------------------------------------------------------- */
+function getAuthBus() {
+    // Always resolve from DependencySystem's current 'auth' module
+    const auth = DependencySystem?.modules?.get('auth');
+    return auth?.AuthBus;
+}
+
+// Ensure only one AuthBus event attachment across all runtime
+function attachAuthBusListener(event, handler, markerGlobalName) {
+    const bus = getAuthBus();
+    if (!bus || typeof bus.addEventListener !== "function") {
+        console.error('[App] Cannot attach listener: AuthBus missing or invalid.', bus);
+        return false;
+    }
+    if (!window[markerGlobalName] || window[markerGlobalName] !== bus) {
+        bus.addEventListener(event, handler);
+        window[markerGlobalName] = bus;
+        if (APP_CONFIG.DEBUG) {
+            console.log(`[App] Attached ${event} listener to AuthBus (global marker ${markerGlobalName}).`);
+        }
+        return true;
+    }
+    return false;
+}
+
 function registerAppListeners() {
     console.log('[App] Registering global event listeners...');
 
     window.addEventListener('locationchange', handleNavigationChange);
 
-    waitFor('auth', auth => {
-        if (auth?.AuthBus?.addEventListener && !auth.AuthBus._appListenerAttached) {
-            auth.AuthBus.addEventListener('authStateChanged', handleAuthStateChange);
-            auth.AuthBus._appListenerAttached = true;
-            console.log('[App] Attached authStateChanged listener to AuthBus.');
-        } else if (!auth?.AuthBus?.addEventListener) {
-            console.error('[App] Could not attach authStateChanged listener: AuthBus not available or invalid.');
-        }
+    // Canonical attachment to AuthBus (never to document)
+    waitFor('auth', () => {
+        attachAuthBusListener('authStateChanged', handleAuthStateChange, '_globalAuthStateChangedAttached');
     }).catch(err => console.error('[App] Failed to wait for AuthBus:', err));
 
     setupChatInitializationTrigger();
+
+    if(APP_CONFIG.DEBUG){
+        // Debugging: register a global for runtime AuthBus integrity checking
+        window._verifyAuthBus = () => {
+            const auth = DependencySystem?.modules?.get('auth');
+            console.log('[DEBUG] Auth module:', auth);
+            console.log('[DEBUG] AuthBus:', auth?.AuthBus);
+            console.log('[DEBUG] All window AuthBus markers:', {
+                _globalAuthStateChangedAttached: window._globalAuthStateChangedAttached,
+                _globalChatInitAuthAttached: window._globalChatInitAuthAttached
+            });
+            if (window.LAST_AUTHBUS && auth?.AuthBus && window.LAST_AUTHBUS !== auth.AuthBus) {
+                console.error('[DEBUG] AuthBus mismatch detected! Possible overwrite/race condition.');
+            }
+            window.LAST_AUTHBUS = auth?.AuthBus;
+        };
+    }
 
     console.log('[App] Global event listeners registered.');
 }
 
 function setupChatInitializationTrigger() {
     const requiredDeps = ['auth', 'chatManager', 'projectManager'];
-    const debouncedInitChat = debounce(async () => {
+    // Make debouncedInitChat accept a forced projectId
+    const debouncedInitChat = debounce(async (forceProjectId = null) => {
         try {
             const deps = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
 
@@ -897,15 +963,22 @@ function setupChatInitializationTrigger() {
             }
 
             const projectId = app.getProjectId();
-            if (deps.auth.isAuthenticated() && projectId && typeof deps.chatManager.initialize === "function") {
+            // New: prefer explicit (forced) projectId > then regular > then deps.projectManager state
+            const finalProjectId =
+                  forceProjectId
+                  ?? projectId
+                  ?? deps.projectManager?.currentProject?.id
+                  ?? null;
+
+            if (deps.auth.isAuthenticated() && typeof deps.chatManager.initialize === "function") {
                 if (APP_CONFIG.DEBUG) {
-                    console.log(`[App] Debounced chat init triggered. Project: ${projectId}`);
+                    console.log(`[App] Debounced chat init triggered. Project: ${finalProjectId}`);
                 }
-                await deps.chatManager.initialize({ projectId });
+                await deps.chatManager.initialize({ projectId: finalProjectId });
             } else {
                 if (APP_CONFIG.DEBUG) {
                     console.log(
-                        `[App] Skipping debounced chat init. Auth: ${typeof deps.auth.isAuthenticated === "function" ? deps.auth.isAuthenticated() : 'unavailable'}, Project: ${projectId}`
+                        `[App] Skipping debounced chat init. Auth: ${typeof deps.auth.isAuthenticated === "function" ? deps.auth.isAuthenticated() : 'unavailable'}, Project: ${finalProjectId}`
                     );
                 }
                 deps.chatManager?.clear?.();
@@ -916,23 +989,10 @@ function setupChatInitializationTrigger() {
     }, 350);
 
     waitFor(requiredDeps, deps => {
-        // Wire up auth listener (prefer AuthBus, fallback to document)
-        if (deps.auth?.AuthBus && typeof deps.auth.AuthBus.addEventListener === 'function') {
-            if (!deps.auth.AuthBus._chatInitListenerAttached) {
-                deps.auth.AuthBus.addEventListener('authStateChanged', debouncedInitChat);
-                deps.auth.AuthBus._chatInitListenerAttached = true;
-            }
-        } else {
-            // Fallback: listen on document for authStateChanged
-            if (!document._chatInitAuthListenerAttached) {
-                document.addEventListener('authStateChanged', debouncedInitChat);
-                document._chatInitAuthListenerAttached = true;
-                if (APP_CONFIG.DEBUG) {
-                    console.warn('[App] Falling back to document for authStateChanged -> chat reinit listener.');
-                }
-            }
-        }
-        // Wire up projectManager project change listener (must fallback to document, as no addEventListener on projectManager)
+        // Always attach to the canonical AuthBus; never fallback
+        attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
+
+        // projectManager changes are still document-level
         if (!document._chatInitProjListenerAttached) {
             document.addEventListener('currentProjectChanged', debouncedInitChat);
             document._chatInitProjListenerAttached = true;
@@ -940,6 +1000,9 @@ function setupChatInitializationTrigger() {
                 console.warn('[App] Falling back to document for currentProjectChanged -> chat reinit listener.');
             }
         }
+        // NEW: listen for guaranteed project readiness
+        document.addEventListener('currentProjectReady',
+            e => debouncedInitChat(e.detail?.project?.id));
         console.log('[App] Chat re-initialization listeners attached.');
         debouncedInitChat();
     }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)

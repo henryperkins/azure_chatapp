@@ -672,8 +672,28 @@
       </div>
     </nav>
 
-    <!-- Main Content Area -->
-    <main id="mainContent" class="flex-1 flex flex-col overflow-hidden">
+  <!-- Main Content Area -->
+  <div id="loginRequiredMessage" class="hidden">
+    <div class="flex flex-col items-center justify-center py-10 px-4">
+      <h2 class="text-2xl font-bold mb-2 text-primary">Welcome to Azure OpenAI Chat!</h2>
+      <p class="text-base-content/80 mb-4 text-center max-w-xl">
+        <strong>How to get started:</strong>
+        <br>
+        1. Use the <span class="font-semibold">Login</span> button in the header (top right).<br>
+        2. Once logged in, you can browse projects, start new chats, or upload files.<br>
+        3. All features require you to be signed in.
+      </p>
+      <p class="text-base-content/70 mb-4 text-center max-w-md">
+        <span class="font-semibold text-warning">Please login to continue.</span>
+        <br>
+        Use the <b>Login</b> button in the header above to sign in or create your account.
+      </p>
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-primary/50 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </div>
+  </div>
+  <main id="mainContent" class="flex-1 flex flex-col overflow-hidden">
       <h2 class="sr-only">Project Management Dashboard</h2>
 
       <div id="notificationArea" role="status" aria-live="polite" class="fixed top-16 right-4 z-50 w-72 gap-2"></div>
@@ -824,28 +844,36 @@
 
 
     // --- Modal HTML Loader ---
-    (function loadModalsHtml() {
-      const modalsContainer = document.getElementById('modalsContainer');
-      if (!modalsContainer) {
-        console.error('[ModalLoader] #modalsContainer not found in DOM.');
-        return;
-      }
-      fetch('/static/html/modals.html')
-        .then(resp => {
-          if (!resp.ok) throw new Error('Failed to load modals.html');
-          return resp.text();
-        })
-        .then(html => {
-          modalsContainer.innerHTML = html;
-          // Unhide modalsContainer so dialogs will render correctly
-          modalsContainer.classList.remove('hidden');
-          // Optionally, dispatch an event to signal modals are ready
-          document.dispatchEvent(new CustomEvent('modalsLoaded'));
-        })
-        .catch(err => {
-          console.error('[ModalLoader] Error loading modals.html:', err);
-        });
-    })();
+    document.addEventListener('DOMContentLoaded', function () {
+      (function loadModalsHtml() {
+        const modalsContainer = document.getElementById('modalsContainer');
+        if (!modalsContainer) {
+          console.error('[ModalLoader] #modalsContainer not found in DOM.');
+          return;
+        }
+        console.log('[ModalLoader] Starting fetch for /static/html/modals.html...'); // <-- Add log
+        fetch('/static/html/modals.html')
+          .then(resp => {
+            console.log(`[ModalLoader] Fetch response status: ${resp.status}`); // <-- Add log
+            if (!resp.ok) {
+              throw new Error(`HTTP error! status: ${resp.status}`);
+            }
+            return resp.text();
+          })
+          .then(html => {
+            console.log('[ModalLoader] Fetch successful, injecting HTML...'); // <-- Add log
+            modalsContainer.innerHTML = html;
+            modalsContainer.classList.remove('hidden');
+            console.log('[ModalLoader] HTML injected, dispatching modalsLoaded event...'); // <-- Add log
+            document.dispatchEvent(new CustomEvent('modalsLoaded'));
+            console.log('[ModalLoader] modalsLoaded event dispatched.'); // <-- Add log
+          })
+          .catch(err => {
+            // Log the specific error during fetch or processing
+            console.error('[ModalLoader] Error loading or processing modals.html:', err); // <-- Enhanced log
+          });
+      })();
+    });
 
     // Add an event listener to toggle aria-expanded on the navToggleBtn
     document.addEventListener('DOMContentLoaded', () => {
