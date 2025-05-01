@@ -644,6 +644,10 @@ async function initializeUIComponents() {
     DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
     // Create and register projectDashboard
+    // Defensive: Remove any previous incorrect registration of the factory function
+    if (DependencySystem.modules.get('projectDashboard') === createProjectDashboard) {
+        DependencySystem.modules.delete('projectDashboard');
+    }
     const projectDashboard = createProjectDashboard();
     // Debug: Ensure we are registering the instance, not the factory
     console.log('[App] Registered projectDashboard:', projectDashboard);
