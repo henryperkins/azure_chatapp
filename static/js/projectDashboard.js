@@ -213,6 +213,9 @@ class ProjectDashboard {
           this.app?.showNotification('Project not found', 'error');
           localStorage.removeItem('selectedProjectId');
           this.showProjectList();
+        } else if (this.components.projectDetails && this.components.projectDetails.renderProject) {
+          // Directly render project data in case event is missed
+          this.components.projectDetails.renderProject(project);
         }
       } catch (error) {
         console.error('[ProjectDashboard] Failed to load project details:', error);

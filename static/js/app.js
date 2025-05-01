@@ -8,170 +8,8 @@
  * - Consistent use of ES Modules.
  */
 
-// --- Imports ---
-import { createModalManager, createProjectModal } from './modalManager.js';
-import { MODAL_MAPPINGS } from './modalConstants.js';
-import { createProjectManager, isValidProjectId as validateUUID } from './projectManager.js';
-import { createProjectDashboard } from './projectDashboard.js';
-import { ProjectListComponent } from './projectListComponent.js';
-import { createProjectDetailsComponent } from './projectDetailsComponent.js';
-import { createSidebar } from './sidebar.js';
-import { createModelConfig } from './modelConfig.js';
-import { createProjectDashboardUtils } from './projectDashboardUtils.js';
-import { createChatManager } from './chat.js';
-import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
-import { createChatExtensions } from './chatExtensions.js';
-import FileUploadComponent from './FileUploadComponent.js';
-import * as formatting from './formatting.js';
-import * as accessibilityUtils from './accessibility-utils.js';
-import * as globalUtils from './utils/globalUtils.js';
-
-import { createNotificationHandler } from './notification-handler.js';
-import { createEventHandlers } from './eventHandler.js';
-import { createAuthModule } from './auth.js';
-import { waitForDepsAndDom } from './utils/initHelpers.js';
-
-// --- Confirm DependencySystem is present before using it ---
-const DependencySystem = window.DependencySystem;
-if (!DependencySystem) {
-    console.error("CRITICAL: DependencySystem not found. Application cannot start.");
-    document.body.innerHTML = `
-    <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
-      <strong>Application Critical Error:</strong> Core dependency system failed to load.
-      Please contact support or refresh.
-    </div>`;
-    throw new Error("DependencySystem is required but not available.");
-}
-const waitFor = DependencySystem.waitFor.bind(DependencySystem);
-
-// -- DependencySystem Core Module Registration (explicit, DI-compliant) --
-const notificationHandler = createNotificationHandler({ DependencySystem });
-DependencySystem.register('notificationHandler', notificationHandler);
-
-// Register modal mapping as a DI constant
-DependencySystem.register('modalMapping', MODAL_MAPPINGS);
-
-const eventHandlers = createEventHandlers({ DependencySystem });
-DependencySystem.register('eventHandlers', eventHandlers);
-
-const auth = createAuthModule({
-    DependencySystem,
-    apiRequest,
-    eventHandlers,
-    showNotification: notificationHandler.show
-});
-DependencySystem.register('auth', auth);
-
-/* -------------------------------------------------------------------
- * ChatManager: Register instance early, before anything else needs it
- * ------------------------------------------------------------------- */
-const chatManager = createChatManager({
-    DependencySystem,
-    apiRequest,
-    auth,
-    eventHandlers,
-    showNotification: notificationHandler.show
-});
-// Defensive: ensure real instance, not the factory
-if (typeof chatManager.initialize !== 'function') {
-    throw new Error('[App] createChatManager() did not return a valid instance');
-}
-DependencySystem.register('chatManager', chatManager);
-// Harden: fix if some module or late load registered the factory by accident
-if (DependencySystem.modules.get('chatManager') === createChatManager) {
-    console.error('[App] ERROR: chatManager registered as factory – fixing.');
-    DependencySystem.modules.delete('chatManager');
-    DependencySystem.register('chatManager', chatManager);
-}
-
 /* ---------------------------------------------------------------------
- * Configuration
- * ------------------------------------------------------------------- */
-const APP_CONFIG = {
-    DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
-    TIMEOUTS: {
-        INITIALIZATION: 15000,
-        AUTH_CHECK: 5000,
-        API_REQUEST: 10000,
-        COMPONENT_LOAD: 5000,
-        DEPENDENCY_WAIT: 10000
-    },
-    API_ENDPOINTS: {
-        AUTH_LOGIN: '/api/auth/login',
-        AUTH_REGISTER: '/api/auth/register',
-        AUTH_LOGOUT: '/api/auth/logout',
-        AUTH_VERIFY: '/api/auth/verify',
-        PROJECTS: '/api/projects',
-        PROJECT_DETAILS: '/api/projects/{projectId}',
-        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
-        PROJECT_FILES: '/api/projects/{projectId}/files',
-        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts',
-        PROJECT_KNOWLEDGE_BASE: '/api/projects/{projectId}/knowledge_base'
-    },
-    SELECTORS: {
-        MAIN_SIDEBAR: '#mainSidebar',
-        NAV_TOGGLE_BTN: '#navToggleBtn',
-        SIDEBAR_PROJECTS: '#sidebarProjects',
-        AUTH_BUTTON: '#authButton',
-        USER_MENU_BUTTON: '#userMenuButton',
-        USER_MENU: '#userMenu',
-        PROJECT_LIST_VIEW: '#projectListView',
-        PROJECT_DETAILS_VIEW: '#projectDetailsView',
-        LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
-        APP_LOADING_SPINNER: '#appLoading',
-        APP_FATAL_ERROR: '#appFatalError',
-        AUTH_STATUS_SPAN: '#authStatus',
-        USER_STATUS_SPAN: '#userStatus'
-    }
-};
-
-/* ---------------------------------------------------------------------
- * Global App State
- * ------------------------------------------------------------------- */
-const appState = {
-    initialized: false,
-    initializing: false,
-    currentPhase: 'idle',
-    isAuthenticated: false
-};
-
-/* ---------------------------------------------------------------------
- * Header Rendering based on Auth State
- * ------------------------------------------------------------------- */
-function renderAuthHeader() {
-    try {
-        const authMod = DependencySystem.modules.get('auth');
-        const isAuth = typeof authMod?.isAuthenticated === 'function' && authMod.isAuthenticated();
-        // Auth button
-        const btn = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || document.querySelector('#loginButton');
-        if (btn) {
-            btn.textContent = isAuth ? 'Logout' : 'Login';
-            btn.onclick = (e) => {
-                e.preventDefault();
-                if (isAuth) {
-                    authMod.logout();
-                } else {
-                    const modal = DependencySystem.modules.get('modalManager');
-                    if (modal?.show) modal.show('login');
-                }
-            };
-        }
-        // Status spans
-        const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
-        const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
-        if (authStatus) {
-            authStatus.textContent = isAuth ? 'Signed in' : 'Not signed in';
-        }
-        if (userStatus) {
-            userStatus.textContent = isAuth ? `Hello, ${authMod.getCurrentUser()}` : '';
-        }
-    } catch (e) {
-        console.error('[App] renderAuthHeader error:', e);
-    }
-}
-
-/* ---------------------------------------------------------------------
- * Core Utilities
+ * Core Utilities (Moved up before module registrations)
  * ------------------------------------------------------------------- */
 function debounce(fn, wait = 250) {
     let timeoutId = null;
@@ -358,6 +196,172 @@ function toggleElement(selectorOrElement, show) {
         console.error(`[App] Error in toggleElement for ${selectorOrElement}:`, e);
     }
 }
+
+  // --- Imports ---
+import { createModalManager, createProjectModal } from './modalManager.js';
+import { MODAL_MAPPINGS } from './modalConstants.js';
+import { createProjectManager, isValidProjectId as validateUUID } from './projectManager.js';
+import { createProjectDashboard } from './projectDashboard.js';
+import { ProjectListComponent } from './projectListComponent.js';
+import { createProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createSidebar } from './sidebar.js';
+import { createModelConfig } from './modelConfig.js';
+import { createProjectDashboardUtils } from './projectDashboardUtils.js';
+import { createChatManager } from './chat.js';
+import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
+import { createChatExtensions } from './chatExtensions.js';
+import FileUploadComponent from './FileUploadComponent.js';
+import * as formatting from './formatting.js';
+import * as accessibilityUtils from './accessibility-utils.js';
+import * as globalUtils from './utils/globalUtils.js';
+
+import { createNotificationHandler } from './notification-handler.js';
+import { createEventHandlers } from './eventHandler.js';
+import { createAuthModule } from './auth.js';
+import { waitForDepsAndDom } from './utils/initHelpers.js';
+
+// --- Confirm DependencySystem is present before using it ---
+const DependencySystem = window.DependencySystem;
+if (!DependencySystem) {
+    console.error("CRITICAL: DependencySystem not found. Application cannot start.");
+    document.body.innerHTML = `
+    <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
+      <strong>Application Critical Error:</strong> Core dependency system failed to load.
+      Please contact support or refresh.
+    </div>`;
+    throw new Error("DependencySystem is required but not available.");
+}
+const waitFor = DependencySystem.waitFor.bind(DependencySystem);
+
+// Register apiRequest in DependencySystem for clean DI (after DependencySystem is defined)
+DependencySystem.register('apiRequest', apiRequest);
+
+// -- DependencySystem Core Module Registration (explicit, DI-compliant) --
+const notificationHandler = createNotificationHandler({ DependencySystem });
+DependencySystem.register('notificationHandler', notificationHandler);
+
+// Register modal mapping as a DI constant
+DependencySystem.register('modalMapping', MODAL_MAPPINGS);
+
+const eventHandlers = createEventHandlers({ DependencySystem });
+DependencySystem.register('eventHandlers', eventHandlers);
+
+const auth = createAuthModule({
+    DependencySystem,
+    apiRequest,
+    eventHandlers,
+    showNotification: notificationHandler.show
+});
+DependencySystem.register('auth', auth);
+
+/* -------------------------------------------------------------------
+ * ChatManager: Register instance early, before anything else needs it
+ * ------------------------------------------------------------------- */
+const chatManager = createChatManager({
+    DependencySystem,
+    apiRequest,
+    auth,
+    eventHandlers,
+    showNotification: notificationHandler.show
+});
+// Defensive: ensure real instance, not the factory
+if (typeof chatManager.initialize !== 'function') {
+    throw new Error('[App] createChatManager() did not return a valid instance');
+}
+DependencySystem.register('chatManager', chatManager);
+// Harden: fix if some module or late load registered the factory by accident
+if (DependencySystem.modules.get('chatManager') === createChatManager) {
+    console.error('[App] ERROR: chatManager registered as factory – fixing.');
+    DependencySystem.modules.delete('chatManager');
+    DependencySystem.register('chatManager', chatManager);
+}
+
+/* ---------------------------------------------------------------------
+ * Configuration
+ * ------------------------------------------------------------------- */
+const APP_CONFIG = {
+    DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
+    TIMEOUTS: {
+        INITIALIZATION: 15000,
+        AUTH_CHECK: 5000,
+        API_REQUEST: 10000,
+        COMPONENT_LOAD: 5000,
+        DEPENDENCY_WAIT: 10000
+    },
+    API_ENDPOINTS: {
+        AUTH_LOGIN: '/api/auth/login',
+        AUTH_REGISTER: '/api/auth/register',
+        AUTH_LOGOUT: '/api/auth/logout',
+        AUTH_VERIFY: '/api/auth/verify',
+        PROJECTS: '/api/projects',
+        PROJECT_DETAILS: '/api/projects/{projectId}',
+        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
+        PROJECT_FILES: '/api/projects/{projectId}/files',
+        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts',
+        PROJECT_KNOWLEDGE_BASE: '/api/projects/{projectId}/knowledge_base'
+    },
+    SELECTORS: {
+        MAIN_SIDEBAR: '#mainSidebar',
+        NAV_TOGGLE_BTN: '#navToggleBtn',
+        SIDEBAR_PROJECTS: '#sidebarProjects',
+        AUTH_BUTTON: '#authButton',
+        USER_MENU_BUTTON: '#userMenuButton',
+        USER_MENU: '#userMenu',
+        PROJECT_LIST_VIEW: '#projectListView',
+        PROJECT_DETAILS_VIEW: '#projectDetailsView',
+        LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
+        APP_LOADING_SPINNER: '#appLoading',
+        APP_FATAL_ERROR: '#appFatalError',
+        AUTH_STATUS_SPAN: '#authStatus',
+        USER_STATUS_SPAN: '#userStatus'
+    }
+};
+
+/* ---------------------------------------------------------------------
+ * Global App State
+ * ------------------------------------------------------------------- */
+const appState = {
+    initialized: false,
+    initializing: false,
+    currentPhase: 'idle',
+    isAuthenticated: false
+};
+
+/* ---------------------------------------------------------------------
+ * Header Rendering based on Auth State
+ * ------------------------------------------------------------------- */
+function renderAuthHeader() {
+    try {
+        const authMod = DependencySystem.modules.get('auth');
+        const isAuth = typeof authMod?.isAuthenticated === 'function' && authMod.isAuthenticated();
+        // Auth button
+        const btn = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || document.querySelector('#loginButton');
+        if (btn) {
+            btn.textContent = isAuth ? 'Logout' : 'Login';
+            btn.onclick = (e) => {
+                e.preventDefault();
+                if (isAuth) {
+                    authMod.logout();
+                } else {
+                    const modal = DependencySystem.modules.get('modalManager');
+                    if (modal?.show) modal.show('login');
+                }
+            };
+        }
+        // Status spans
+        const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
+        const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
+        if (authStatus) {
+            authStatus.textContent = isAuth ? 'Signed in' : 'Not signed in';
+        }
+        if (userStatus) {
+            userStatus.textContent = isAuth ? `Hello, ${authMod.getCurrentUser()}` : '';
+        }
+    } catch (e) {
+        console.error('[App] renderAuthHeader error:', e);
+    }
+}
+
 
 /* ---------------------------------------------------------------------
  * SPA Router Patch
@@ -1029,7 +1033,8 @@ async function handleNavigationChange() {
     console.log(`[App] Handling navigation change. URL: ${window.location.href}`);
     let projectDashboard;
     try {
-        projectDashboard = await waitFor('projectDashboard', null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+        // Fix 1: Make sure we destructure the array out of waitFor
+        [projectDashboard] = await waitFor(['projectDashboard'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
     } catch (e) {
         console.error('[App] Project Dashboard unavailable for navigation:', e);
         showNotification('UI Navigation Error.', 'error');
