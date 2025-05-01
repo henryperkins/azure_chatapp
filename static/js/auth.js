@@ -438,14 +438,24 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
                 modalManager?.hide?.('login');
               }
             } catch (error) {
+              // Determine user-friendly message
+              let msg;
+              if (error.status === 401) {
+                msg = 'Incorrect username or password.';
+              } else if (error.status === 400) {
+                msg = (error.data && error.data.detail) || 'Invalid login request.';
+              } else {
+                msg = (error.data && error.data.detail) || error.message || 'Login failed due to server error.';
+              }
+              // Display error
               if (loginForm.id === 'loginModalForm') {
                 const errorEl = document.getElementById('loginModalError');
                 if (errorEl) {
-                  errorEl.textContent = 'Login failed: ' + (error.message || 'Unknown error');
+                  errorEl.textContent = msg;
                   errorEl.classList.remove('hidden');
                 }
               } else {
-                showNotification?.('Login failed: ' + error.message, 'error');
+                showNotification?.(msg, 'error');
               }
             } finally {
               if (submitBtn) {
