@@ -1,34 +1,102 @@
 /**
- * knowledgeBaseComponent.js
+ * @module knowledgeBaseComponent
+ * @description Factory module for creating KnowledgeBaseComponent instances with dependency injection.
  *
- * A DependencySystem-based Knowledge Base UI & logic component.
+ * ## Dependencies
+ * All dependencies must be provided via constructor options or DependencySystem:
  *
- * Dependencies:
- *   - DependencySystem (optional if you pass all dependencies via `options`)
- *   - app: Required; provides apiRequest, showNotification, validateUUID,
- *          and optionally getProjectId.
- *   - projectManager: Required; for project and KB operations (e.g., load details, reindex).
- *   - eventHandlers: Required; for tracked event binding (instead of direct
- *                    addEventListener).
- *   - uiUtils: Required; for formatBytes, formatDate, fileIcon, etc.
+ * @typedef {Object} Dependencies
+ * @property {Object} DependencySystem - Core dependency resolver (required)
+ * @property {Object} app - Application utilities (required)
+ * @property {Function} app.validateUUID - UUID validation function
+ * @property {Function} app.apiRequest - API communication handler
+ * @property {Function} app.getProjectId - Project ID getter
+ * @property {Function} app.showNotification - Notification display function
+ * @property {Object} projectManager - Project management utilities (required)
+ * @property {Object} projectManager.currentProject - Current project data
+ * @property {Function} projectManager.loadProjectDetails - Project details loader
+ * @property {Function} projectManager.loadProjectStats - Project statistics loader (optional)
+ * @property {Object} eventHandlers - Event management system (required)
+ * @property {Function} eventHandlers.trackListener - Event listener tracker
+ * @property {Object} uiUtils - UI formatting utilities (required)
+ * @property {Function} uiUtils.formatBytes - File size formatter
+ * @property {Function} uiUtils.formatDate - Date formatter
+ * @property {Function} uiUtils.fileIcon - File-type icon mapper
+ * @property {Object} [uiUtilsInstance] - Alternate UI utils instance (fallback)
  *
- * Checklist Conformity:
- *   - No window.* references or fallback.
- *   - No direct addEventListener (use eventHandlers.trackListener).
- *   - No setTimeout or interval-based DOM polling.
- *   - All dependencies are injected from DependencySystem or from `options`.
+ * @typedef {Object} ElRefs
+ * @property {HTMLElement} [container] - Main container element
+ * @property {HTMLElement} [activeSection] - Active KB section
+ * @property {HTMLElement} [inactiveSection] - Inactive KB section
+ * @property {HTMLElement} [statusBadge] - Status indicator badge
+ * @property {HTMLElement} [searchInput] - Search input field
+ * @property {HTMLElement} [searchButton] - Search button
+ * @property {HTMLElement} [resultsContainer] - Search results container
+ * @property {HTMLElement} [resultsSection] - Search results section
+ * @property {HTMLElement} [noResultsSection] - No-results section
+ * @property {HTMLElement} [topKSelect] - Top-K results dropdown
+ * @property {HTMLElement} [kbToggle] - Enable/disable toggle
+ * @property {HTMLElement} [reprocessButton] - Reprocess files button
+ * @property {HTMLElement} [setupButton] - Setup KB button
+ * @property {HTMLElement} [settingsButton] - Settings button
+ * @property {HTMLElement} [kbNameDisplay] - KB name display
+ * @property {HTMLElement} [kbModelDisplay] - Model display
+ * @property {HTMLElement} [kbVersionDisplay] - Version display
+ * @property {HTMLElement} [kbLastUsedDisplay] - Last-used display
+ * @property {HTMLElement} [settingsModal] - Settings modal
+ * @property {HTMLElement} [settingsForm] - Settings form
+ * @property {HTMLElement} [cancelSettingsBtn] - Cancel settings button
+ * @property {HTMLElement} [modelSelect] - Model selection dropdown
+ * @property {HTMLElement} [resultModal] - Result detail modal
+ * @property {HTMLElement} [resultTitle] - Result title
+ * @property {HTMLElement} [resultSource] - Result source label
+ * @property {HTMLElement} [resultScore] - Result score badge
+ * @property {HTMLElement} [resultContent] - Result content container
+ * @property {HTMLElement} [useInChatBtn] - Chat integration button
  *
- * Usage:
- *   import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
+ * @typedef {Object} Config
+ * @property {number} [maxConcurrentProcesses=3] - Max concurrent operations
+ * @property {number} [searchDebounceTime=300] - Search debounce delay
+ * @property {number} [minQueryLength=2] - Minimum search query length
+ * @property {number} [maxQueryLength=500] - Maximum search query length
  *
- *   // If using DependencySystem:
- *   DependencySystem.modules.set('knowledgeBaseComponent', createKnowledgeBaseComponent);
+ * @typedef {Object} FileInfo
+ * @property {string} filename
+ * @property {string} file_type
  *
- *   // Later, in your code:
- *   const kbComponent = createKnowledgeBaseComponent({ DependencySystem, ...elementRefs });
- *   await kbComponent.initialize(true, kbData, projectId);
+ * @typedef {Object} SearchResult
+ * @property {FileInfo} file_info
+ * @property {Object} metadata
+ * @property {number} score
+ * @property {string} text
+ *
+ * @typedef {Object} KnowledgeBaseData
+ * @property {string} id
+ * @property {string} name
+ * @property {string} embedding_model
+ * @property {number} version
+ * @property {string} last_used
+ * @property {boolean} is_active
+ * @property {Object} stats
+ * @property {number} stats.file_count
+ * @property {number} stats.chunk_count
+ * @property {number} stats.unprocessed_files
+ * @property {number} embedding_dimension
  */
 
+/**
+ * Factory function to create a KnowledgeBaseComponent instance
+ * @param {Object} [options={}] - Configuration options and dependencies
+ * @param {Dependencies} options - DI dependencies
+ * @param {ElRefs} [options.elRefs] - Pre-injected DOM elements
+ * @param {Config} [options.config] - Override default configuration
+ * @returns {KnowledgeBaseComponent} Initialized component instance
+ * @throws {Error} If required dependencies are missing
+ * @example
+ * import createKnowledgeBaseComponent from './knowledgeBaseComponent';
+ * const kb = createKnowledgeBaseComponent({ DependencySystem, app, projectManager, eventHandlers, uiUtils });
+ * kb.initialize(true);
+ */
 export function createKnowledgeBaseComponent(options = {}) {
   // ------------------------------------------------------------------
   // Dependency resolution (strictly from options or DS, no window.*)
@@ -39,17 +107,17 @@ export function createKnowledgeBaseComponent(options = {}) {
   const DS = options.DependencySystem;
   const getDep = (name) =>
     // Strictly require via options, else from DependencySystem (never window.*)
-    (name in options ? options[name] : DS.modules.get(name));
+    name in options ? options[name] : DS.modules.get(name);
 
   // Required dependencies
-  const app = getDep('app');
-  const projectManager = getDep('projectManager');
-  const eventHandlers = getDep('eventHandlers');
-  const uiUtils = getDep('uiUtils') || getDep('uiUtilsInstance');
+  const app = getDep("app");
+  const projectManager = getDep("projectManager");
+  const eventHandlers = getDep("eventHandlers");
+  const uiUtils = getDep("uiUtils") || getDep("uiUtilsInstance");
 
   if (!app || !projectManager || !eventHandlers || !uiUtils) {
     throw new Error(
-      "KnowledgeBaseComponent requires 'app', 'projectManager', 'eventHandlers', and 'uiUtils' dependencies."
+      "KnowledgeBaseComponent requires 'app', 'projectManager', 'eventHandlers', and 'uiUtils' dependencies.",
     );
   }
 
@@ -57,7 +125,7 @@ export function createKnowledgeBaseComponent(options = {}) {
   const {
     validateUUID = app.validateUUID,
     apiRequest = app.apiRequest,
-    showNotification = app.showNotification
+    showNotification = app.showNotification,
   } = app;
 
   // Configuration handling
@@ -65,13 +133,18 @@ export function createKnowledgeBaseComponent(options = {}) {
     maxConcurrentProcesses: options.maxConcurrentProcesses || 3,
     searchDebounceTime: options.searchDebounceTime || 300,
     minQueryLength: options.minQueryLength || 2,
-    maxQueryLength: options.maxQueryLength || 500
+    maxQueryLength: options.maxQueryLength || 500,
   };
 
   /**
    * Main KnowledgeBase Component class.
+   * @class KnowledgeBaseComponent
    */
   class KnowledgeBaseComponent {
+    /**
+     * Create KnowledgeBaseComponent instance
+     * @param {ElRefs} [elRefs={}] - Pre-injected DOM element references
+     */
     constructor(elRefs = {}) {
       // --------------------------------------------------------------
       // Store injected references
@@ -86,46 +159,91 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.config = config;
 
       // --------------------------------------------------------------
-      // UI element references (DI preferred, fallback to querySelector for legacy support only)
+      // DOM Element References
+      // All elements are either injected or looked up by ID
       // --------------------------------------------------------------
       this.elements = {
         container: elRefs.container || document.getElementById("knowledgeTab"),
-        activeSection: elRefs.activeSection || document.getElementById("knowledgeBaseActive"),
-        inactiveSection: elRefs.inactiveSection || document.getElementById("knowledgeBaseInactive"),
-        statusBadge: elRefs.statusBadge || document.getElementById("kbStatusBadge"),
+        activeSection:
+          elRefs.activeSection ||
+          document.getElementById("knowledgeBaseActive"),
+        inactiveSection:
+          elRefs.inactiveSection ||
+          document.getElementById("knowledgeBaseInactive"),
+        statusBadge:
+          elRefs.statusBadge || document.getElementById("kbStatusBadge"),
 
-        searchInput: elRefs.searchInput || document.getElementById("knowledgeSearchInput"),
-        searchButton: elRefs.searchButton || document.getElementById("runKnowledgeSearchBtn"),
-        resultsContainer: elRefs.resultsContainer || document.getElementById("knowledgeResultsList"),
-        resultsSection: elRefs.resultsSection || document.getElementById("knowledgeSearchResults"),
-        noResultsSection: elRefs.noResultsSection || document.getElementById("knowledgeNoResults"),
-        topKSelect: elRefs.topKSelect || document.getElementById("knowledgeTopK"),
+        searchInput:
+          elRefs.searchInput || document.getElementById("knowledgeSearchInput"),
+        searchButton:
+          elRefs.searchButton ||
+          document.getElementById("runKnowledgeSearchBtn"),
+        resultsContainer:
+          elRefs.resultsContainer ||
+          document.getElementById("knowledgeResultsList"),
+        resultsSection:
+          elRefs.resultsSection ||
+          document.getElementById("knowledgeSearchResults"),
+        noResultsSection:
+          elRefs.noResultsSection ||
+          document.getElementById("knowledgeNoResults"),
+        topKSelect:
+          elRefs.topKSelect || document.getElementById("knowledgeTopK"),
 
-        kbToggle: elRefs.kbToggle || document.getElementById("knowledgeBaseEnabled"),
-        reprocessButton: elRefs.reprocessButton || document.getElementById("reprocessFilesBtn"),
-        setupButton: elRefs.setupButton || document.getElementById("setupKnowledgeBaseBtn"),
-        settingsButton: elRefs.settingsButton || document.getElementById("knowledgeBaseSettingsBtn"),
+        kbToggle:
+          elRefs.kbToggle || document.getElementById("knowledgeBaseEnabled"),
+        reprocessButton:
+          elRefs.reprocessButton ||
+          document.getElementById("reprocessFilesBtn"),
+        setupButton:
+          elRefs.setupButton ||
+          document.getElementById("setupKnowledgeBaseBtn"),
+        settingsButton:
+          elRefs.settingsButton ||
+          document.getElementById("knowledgeBaseSettingsBtn"),
 
-        kbNameDisplay: elRefs.kbNameDisplay || document.getElementById("knowledgeBaseName"),
-        kbModelDisplay: elRefs.kbModelDisplay || document.getElementById("knowledgeBaseModelDisplay"),
-        kbVersionDisplay: elRefs.kbVersionDisplay || document.getElementById("knowledgeBaseVersionDisplay"),
-        kbLastUsedDisplay: elRefs.kbLastUsedDisplay || document.getElementById("knowledgeBaseLastUsedDisplay"),
+        kbNameDisplay:
+          elRefs.kbNameDisplay || document.getElementById("knowledgeBaseName"),
+        kbModelDisplay:
+          elRefs.kbModelDisplay ||
+          document.getElementById("knowledgeBaseModelDisplay"),
+        kbVersionDisplay:
+          elRefs.kbVersionDisplay ||
+          document.getElementById("knowledgeBaseVersionDisplay"),
+        kbLastUsedDisplay:
+          elRefs.kbLastUsedDisplay ||
+          document.getElementById("knowledgeBaseLastUsedDisplay"),
 
-        settingsModal: elRefs.settingsModal || document.getElementById("knowledgeBaseSettingsModal"),
-        settingsForm: elRefs.settingsForm || document.getElementById("knowledgeBaseForm"),
-        cancelSettingsBtn: elRefs.cancelSettingsBtn || document.getElementById("cancelKnowledgeBaseFormBtn"),
-        modelSelect: elRefs.modelSelect || document.getElementById("knowledgeBaseModelSelect"),
+        settingsModal:
+          elRefs.settingsModal ||
+          document.getElementById("knowledgeBaseSettingsModal"),
+        settingsForm:
+          elRefs.settingsForm || document.getElementById("knowledgeBaseForm"),
+        cancelSettingsBtn:
+          elRefs.cancelSettingsBtn ||
+          document.getElementById("cancelKnowledgeBaseFormBtn"),
+        modelSelect:
+          elRefs.modelSelect ||
+          document.getElementById("knowledgeBaseModelSelect"),
 
-        resultModal: elRefs.resultModal || document.getElementById("knowledgeResultModal"),
-        resultTitle: elRefs.resultTitle || document.getElementById("knowledgeResultTitle"),
-        resultSource: elRefs.resultSource || document.getElementById("knowledgeResultSource"),
-        resultScore: elRefs.resultScore || document.getElementById("knowledgeResultScore"),
-        resultContent: elRefs.resultContent || document.getElementById("knowledgeResultContent"),
-        useInChatBtn: elRefs.useInChatBtn || document.getElementById("useInChatBtn")
+        resultModal:
+          elRefs.resultModal || document.getElementById("knowledgeResultModal"),
+        resultTitle:
+          elRefs.resultTitle || document.getElementById("knowledgeResultTitle"),
+        resultSource:
+          elRefs.resultSource ||
+          document.getElementById("knowledgeResultSource"),
+        resultScore:
+          elRefs.resultScore || document.getElementById("knowledgeResultScore"),
+        resultContent:
+          elRefs.resultContent ||
+          document.getElementById("knowledgeResultContent"),
+        useInChatBtn:
+          elRefs.useInChatBtn || document.getElementById("useInChatBtn"),
       };
 
       // --------------------------------------------------------------
-      // Internal state
+      // Internal State Management
       // --------------------------------------------------------------
       this.state = {
         knowledgeBase: null,
@@ -135,36 +253,40 @@ export function createKnowledgeBaseComponent(options = {}) {
         activeProcesses: 0,
         lastHealthCheck: null,
         authState: null,
-        isInitialized: false
+        isInitialized: false,
       };
 
       // --------------------------------------------------------------
-      // Utility Mappings
+      // Utility Bindings from UI Utils
       // --------------------------------------------------------------
       this.formatBytes = uiUtils.formatBytes;
       this.formatDate = uiUtils.formatDate;
       this.fileIcon = uiUtils.fileIcon;
 
       // --------------------------------------------------------------
-      // Debounced search setup
+      // Debounced Search Setup
       // --------------------------------------------------------------
       this.debouncedSearch = this._debounce(
         this.searchKnowledgeBase.bind(this),
-        this.config.searchDebounceTime
+        this.config.searchDebounceTime,
       );
 
       // --------------------------------------------------------------
-      // Initialize event listeners (always via eventHandlers)
+      // Initialize Event Handlers
+      // Uses eventHandlers.trackListener for consistent management
       // --------------------------------------------------------------
       this._bindEventHandlers();
     }
 
-    // ------------------------------------------------------------------
-    // Public initialization method
-    // ------------------------------------------------------------------
-    async initialize(isVisible = false, kbData = null, projectId = null) {
+    /**
+     * Initialize component (load data and toggle visibility)
+     * @param {boolean} isVisible - Whether the KB tab is visible
+     * @param {KnowledgeBaseData|null} [kbData=null] - Initial KB data
+     * @param {string|null} [projectId=null] - Project UUID override
+     * @returns {Promise<void>}
+     */
+    async initialize(isVisible, kbData = null, projectId = null) {
       if (this.state.isInitialized && !isVisible) {
-        // If already initialized but just toggling visibility
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
         return;
@@ -172,10 +294,9 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       this.state.isInitialized = true;
       if (isVisible) {
-        this._validateDOM(); // Warn about missing critical elements, if any
+        this._validateDOM();
       }
 
-      // If we have KB data, render; else hide
       if (kbData) {
         await this.renderKnowledgeBaseInfo(kbData, projectId);
       } else {
@@ -183,20 +304,24 @@ export function createKnowledgeBaseComponent(options = {}) {
         this.elements.inactiveSection?.classList.add("hidden");
       }
 
-      // Toggle container visibility
       this.elements.container?.classList.toggle("hidden", !isVisible);
-      this.elements.container?.classList.toggle("pointer-events-none", !isVisible);
+      this.elements.container?.classList.toggle(
+        "pointer-events-none",
+        !isVisible,
+      );
     }
 
-    // ------------------------------------------------------------------
-    // Event Handler Binding (using eventHandlers instead of addEventListener)
-    // ------------------------------------------------------------------
+    /**
+     * Bind UI events via eventHandlers
+     * @private
+     */
     _bindEventHandlers() {
       const EH = this.eventHandlers;
 
-      // Use DependencySystem trackListener everywhere for consistent listener tracking
       if (this.elements.searchButton) {
-        EH.trackListener(this.elements.searchButton, "click", () => this._triggerSearch());
+        EH.trackListener(this.elements.searchButton, "click", () =>
+          this._triggerSearch(),
+        );
       }
       if (this.elements.searchInput) {
         EH.trackListener(this.elements.searchInput, "input", (e) => {
@@ -213,90 +338,100 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
       if (this.elements.reprocessButton) {
         EH.trackListener(this.elements.reprocessButton, "click", () => {
-          const projectId = this._getCurrentProjectId();
-          if (projectId) this.reprocessFiles(projectId);
+          const pid = this._getCurrentProjectId();
+          if (pid) this.reprocessFiles(pid);
         });
       }
       if (this.elements.setupButton) {
-        EH.trackListener(this.elements.setupButton, "click", () => this._showKnowledgeBaseModal());
+        EH.trackListener(this.elements.setupButton, "click", () =>
+          this._showKnowledgeBaseModal(),
+        );
       }
       if (this.elements.settingsForm) {
-        EH.trackListener(this.elements.settingsForm, "submit", (e) => this._handleKnowledgeBaseFormSubmit(e));
+        EH.trackListener(this.elements.settingsForm, "submit", (e) =>
+          this._handleKnowledgeBaseFormSubmit(e),
+        );
       }
       if (this.elements.modelSelect) {
-        EH.trackListener(this.elements.modelSelect, "change", () => this._validateSelectedModelDimensions());
+        EH.trackListener(this.elements.modelSelect, "change", () =>
+          this._validateSelectedModelDimensions(),
+        );
       }
       if (this.elements.resultModal) {
         EH.trackListener(this.elements.resultModal, "keydown", (e) => {
           if (e.key === "Escape") this._hideResultDetailModal();
         });
       }
-      // Only the orchestrator/app should dispatch authStateChanged on document—remains compatible
       EH.trackListener(document, "authStateChanged", (e) => {
         this._handleAuthStateChange(e.detail?.authenticated);
       });
     }
 
-    // ------------------------------------------------------------------
-    // Obtain current project ID (forces result via app or projectManager--never window.*)
-    // ------------------------------------------------------------------
+    /**
+     * Get current project UUID
+     * @private
+     * @returns {string|null}
+     */
     _getCurrentProjectId() {
       if (typeof this.app.getProjectId === "function") {
         const pid = this.app.getProjectId();
         if (this.validateUUID(pid)) return pid;
       }
-      if (this.projectManager?.currentProject?.id && this.validateUUID(this.projectManager.currentProject.id)) {
-        return this.projectManager.currentProject.id;
+      const cur = this.projectManager.currentProject;
+      if (cur?.id && this.validateUUID(cur.id)) {
+        return cur.id;
       }
       return null;
     }
 
-    // ------------------------------------------------------------------
-    // Basic DOM validation
-    // ------------------------------------------------------------------
+    /**
+     * Validate presence of required DOM elements
+     * @private
+     */
     _validateDOM() {
       const requiredIds = [
         "knowledgeTab",
         "knowledgeBaseActive",
         "knowledgeBaseInactive",
-        "kbStatusBadge"
+        "kbStatusBadge",
       ];
       requiredIds.forEach((id) => {
         if (!document.getElementById(id)) {
-          console.warn(`[KnowledgeBaseComponent] Missing required element: #${id}`);
+          console.warn(
+            `[KnowledgeBaseComponent] Missing required element: #${id}`,
+          );
         }
       });
     }
 
-    // ------------------------------------------------------------------
-    // Rendering KB info
-    // ------------------------------------------------------------------
+    /**
+     * Render the knowledge base info UI
+     * @param {KnowledgeBaseData} kbData
+     * @param {string|null} [projectId=null]
+     * @returns {Promise<void>}
+     */
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
       if (!kbData) {
         this._showInactiveState();
         return;
       }
 
-      // Update internal state
       this.state.knowledgeBase = kbData;
       const pid = projectId || kbData.project_id || this._getCurrentProjectId();
       if (this.elements.activeSection) {
         this.elements.activeSection.dataset.projectId = pid || "";
       }
 
-      // Update UI
       this._updateBasicInfo(kbData);
       this._updateModelSelection(kbData.embedding_model);
       this._updateStatusIndicator(kbData.is_active !== false);
 
-      // Show active section, hide inactive
       this.elements.activeSection?.classList.remove("hidden");
       this.elements.inactiveSection?.classList.add("hidden");
       if (this.elements.kbToggle) {
-        this.elements.kbToggle.checked = (kbData.is_active !== false);
+        this.elements.kbToggle.checked = kbData.is_active !== false;
       }
 
-      // Check health if active
       if (kbData.is_active !== false && kbData.id) {
         await this._loadKnowledgeBaseHealth(kbData.id);
       }
@@ -305,8 +440,18 @@ export function createKnowledgeBaseComponent(options = {}) {
       this._updateUploadButtonsState();
     }
 
+    /**
+     * Update basic info displays
+     * @param {KnowledgeBaseData} kb
+     * @private
+     */
     _updateBasicInfo(kb) {
-      const { kbNameDisplay, kbModelDisplay, kbVersionDisplay, kbLastUsedDisplay } = this.elements;
+      const {
+        kbNameDisplay,
+        kbModelDisplay,
+        kbVersionDisplay,
+        kbLastUsedDisplay,
+      } = this.elements;
       if (kbNameDisplay) {
         kbNameDisplay.textContent = kb.name || "Project Knowledge Base";
       }
@@ -317,42 +462,17 @@ export function createKnowledgeBaseComponent(options = {}) {
         kbVersionDisplay.textContent = kb.version ? `v${kb.version}` : "v1";
       }
       if (kbLastUsedDisplay) {
-        kbLastUsedDisplay.textContent = kb.last_used ? this.formatDate(kb.last_used) : "Never used";
+        kbLastUsedDisplay.textContent = kb.last_used
+          ? this.formatDate(kb.last_used)
+          : "Never used";
       }
     }
 
-    _updateModelSelection(selectedModel) {
-      const modelSelect = this.elements.modelSelect;
-      if (!modelSelect) return;
-
-      // Example available models
-      const models = [
-        { value: "all-MiniLM-L6-v2", text: "Local: all-MiniLM-L6-v2 (384d, Fast, Default)", dim: 384 },
-        { value: "text-embedding-3-small", text: "OpenAI: text-embedding-3-small (1536d, Recommended)", dim: 1536 },
-        { value: "text-embedding-3-large", text: "OpenAI: text-embedding-3-large (3072d, Largest)", dim: 3072 }
-      ];
-
-      modelSelect.innerHTML = "";
-      const existingDim = this.state.knowledgeBase?.embedding_dimension;
-      const hasExistingVectors = this.state.knowledgeBase?.stats?.chunk_count > 0;
-
-      models.forEach((m) => {
-        const option = document.createElement("option");
-        option.value = m.value;
-        option.textContent = m.text;
-        if (selectedModel === m.value) option.selected = true;
-
-        // If dimension mismatch with existing vectors, disable
-        if (hasExistingVectors && existingDim && existingDim !== m.dim) {
-          option.disabled = true;
-          option.classList.add("kb-disabled-option");
-        }
-        modelSelect.appendChild(option);
-      });
-
-      this._validateSelectedModelDimensions();
-    }
-
+    /**
+     * Update the status badge indicator
+     * @param {boolean} isActive
+     * @private
+     */
     _updateStatusIndicator(isActive) {
       const badge = this.elements.statusBadge;
       if (!badge) return;
@@ -360,29 +480,129 @@ export function createKnowledgeBaseComponent(options = {}) {
       badge.textContent = isActive ? "Active" : "Inactive";
     }
 
-    // ------------------------------------------------------------------
-    // Searching
-    // ------------------------------------------------------------------
+    /**
+     * Show inactive state UI
+     * @private
+     */
+    _showInactiveState() {
+      this.state.knowledgeBase = null;
+      this.elements.activeSection?.classList.add("hidden");
+      this.elements.inactiveSection?.classList.remove("hidden");
+      this._updateStatusIndicator(false);
+      this._showStatusAlert("Knowledge Base needed. Click 'Setup'.", "info");
+      this._updateUploadButtonsState();
+    }
+
+    /**
+     * Update upload/reprocess button states based on KB status
+     * @private
+     */
+    _updateUploadButtonsState() {
+      const hasKB = !!this.state.knowledgeBase;
+      const isActive = hasKB && this.state.knowledgeBase.is_active !== false;
+
+      const kbDependentEls = document.querySelectorAll(
+        "[data-requires-kb='true']",
+      );
+      kbDependentEls.forEach((el) => {
+        const disabled = !hasKB || !isActive;
+        el.disabled = disabled;
+        el.classList.toggle("opacity-50", disabled);
+        el.classList.toggle("cursor-not-allowed", disabled);
+        el.title = disabled
+          ? !hasKB
+            ? "Setup Knowledge Base first."
+            : "Knowledge Base must be active."
+          : "Ready to use Knowledge Base features.";
+      });
+
+      if (this.elements.reprocessButton) {
+        const fileCountEl = document.getElementById("knowledgeFileCount");
+        const fileCount = parseInt(fileCountEl?.textContent || "0", 10);
+        const reDisabled = !hasKB || !isActive || fileCount === 0;
+
+        this.elements.reprocessButton.disabled = reDisabled;
+        this.elements.reprocessButton.classList.toggle(
+          "opacity-50",
+          reDisabled,
+        );
+        this.elements.reprocessButton.classList.toggle(
+          "cursor-not-allowed",
+          reDisabled,
+        );
+
+        if (!hasKB) {
+          this.elements.reprocessButton.title = "Setup Knowledge Base first.";
+        } else if (!isActive) {
+          this.elements.reprocessButton.title =
+            "Knowledge Base must be active.";
+        } else if (fileCount === 0) {
+          this.elements.reprocessButton.title = "No files to reprocess.";
+        } else {
+          this.elements.reprocessButton.title = "Reprocess files.";
+        }
+      }
+    }
+
+    /**
+     * Update status alerts based on KB stats
+     * @param {KnowledgeBaseData} kb
+     * @private
+     */
+    _updateStatusAlerts(kb) {
+      if (kb.is_active !== false) {
+        if (kb.stats.file_count === 0) {
+          this.showNotification?.(
+            "Knowledge Base is empty. Upload files via 'Files' tab.",
+            "warning",
+          );
+        } else if (
+          kb.stats.file_count > 0 &&
+          kb.stats.chunk_count === 0 &&
+          kb.stats.unprocessed_files > 0
+        ) {
+          this.showNotification?.(
+            "Files need processing. Click 'Reprocess Files'.",
+            "warning",
+          );
+        } else if (kb.stats.unprocessed_files > 0) {
+          this.showNotification?.(
+            `${kb.stats.unprocessed_files} file(s) need processing.`,
+            "info",
+          );
+        }
+      } else {
+        this.showNotification?.(
+          "Knowledge Base is disabled. Enable it to use search.",
+          "warning",
+        );
+      }
+    }
+
+    /**
+     * Perform a search against the knowledge base
+     * @param {string} query - Search query
+     * @returns {Promise<void>}
+     */
     async searchKnowledgeBase(query) {
       if (this.state.isSearching) return;
-      const trimmedQuery = (query || "").trim();
+      const trimmed = (query || "").trim();
       if (
-        !trimmedQuery ||
-        trimmedQuery.length < this.config.minQueryLength ||
-        trimmedQuery.length > this.config.maxQueryLength
+        !trimmed ||
+        trimmed.length < this.config.minQueryLength ||
+        trimmed.length > this.config.maxQueryLength
       ) {
         this._showNoResults();
         return;
       }
 
-      const projectId = this._getCurrentProjectId();
-      if (!projectId) {
+      const pid = this._getCurrentProjectId();
+      if (!pid) {
         this._showError("No valid project selected for KB search");
         return;
       }
 
-      // Caching
-      const cacheKey = `${projectId}-${trimmedQuery}`;
+      const cacheKey = `${pid}-${trimmed}`;
       if (this.state.searchCache.has(cacheKey)) {
         this._renderSearchResults(this.state.searchCache.get(cacheKey));
         return;
@@ -392,26 +612,25 @@ export function createKnowledgeBaseComponent(options = {}) {
       this._showSearchLoading();
 
       try {
-        const response = await this.apiRequest(
-          `/api/projects/${projectId}/knowledge-bases/search`,
+        const resp = await this.apiRequest(
+          `/api/projects/${pid}/knowledge-bases/search`,
           {
             method: "POST",
-            body: {
-              query: trimmedQuery,
-              top_k: this._getSelectedTopKValue()
-            }
+            body: { query: trimmed, top_k: this._getSelectedTopKValue() },
           },
-          false
+          false,
         );
-        const results = Array.isArray(response?.data?.results) ? response.data.results : [];
+        const results = Array.isArray(resp?.data?.results)
+          ? resp.data.results
+          : [];
         if (results.length) {
           this.state.searchCache.set(cacheKey, results);
           this._renderSearchResults(results);
         } else {
           this._showNoResults();
         }
-      } catch (error) {
-        console.error("[KB] Search failed:", error);
+      } catch (err) {
+        console.error("[KB] Search failed:", err);
         this.showNotification?.("Search failed. Please try again.", "error");
       } finally {
         this.state.isSearching = false;
@@ -419,34 +638,43 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
     }
 
+    /**
+     * Trigger search from input field
+     * @private
+     */
     _triggerSearch() {
       if (this.elements.searchInput) {
         this.searchKnowledgeBase(this.elements.searchInput.value);
       }
     }
 
+    /**
+     * Render search results in the UI
+     * @param {SearchResult[]} results
+     * @private
+     */
     _renderSearchResults(results) {
-      const { resultsContainer, resultsSection, noResultsSection } = this.elements;
+      const { resultsContainer, resultsSection, noResultsSection } =
+        this.elements;
       if (!resultsContainer) return;
 
       resultsContainer.innerHTML = "";
-      if (!Array.isArray(results) || !results.length) {
+      if (!results.length) {
         this._showNoResults();
         return;
       }
 
       results.forEach((res) => {
         const item = this._createResultItem(res);
-
-        // Instead of direct item.addEventListener, use eventHandlers:
-        this.eventHandlers.trackListener(item, "click", () => this._showResultDetail(res));
+        this.eventHandlers.trackListener(item, "click", () =>
+          this._showResultDetail(res),
+        );
         this.eventHandlers.trackListener(item, "keydown", (e) => {
-          if (e.key === "Enter" || e.key === " ") {
+          if (["Enter", " "].includes(e.key)) {
             e.preventDefault();
             this._showResultDetail(res);
           }
         });
-
         resultsContainer.appendChild(item);
       });
 
@@ -454,6 +682,12 @@ export function createKnowledgeBaseComponent(options = {}) {
       noResultsSection?.classList.add("hidden");
     }
 
+    /**
+     * Create a single result card element
+     * @param {SearchResult} result
+     * @returns {HTMLElement}
+     * @private
+     */
     _createResultItem(result) {
       const item = document.createElement("div");
       item.className =
@@ -462,12 +696,13 @@ export function createKnowledgeBaseComponent(options = {}) {
       item.setAttribute("tabindex", "0");
 
       const fileInfo = result.file_info || {};
-      const filename = fileInfo.filename || result.metadata?.file_name || "Unknown source";
-      const scorePercentage = Math.round((result.score || 0) * 100);
+      const filename =
+        fileInfo.filename || result.metadata?.file_name || "Unknown source";
+      const scorePct = Math.round((result.score || 0) * 100);
 
-      let scoreBadgeClass = "badge-ghost";
-      if (scorePercentage >= 80) scoreBadgeClass = "badge-success";
-      else if (scorePercentage >= 60) scoreBadgeClass = "badge-warning";
+      let badgeClass = "badge-ghost";
+      if (scorePct >= 80) badgeClass = "badge-success";
+      else if (scorePct >= 60) badgeClass = "badge-warning";
 
       item.innerHTML = `
         <div class="card-body p-3">
@@ -476,9 +711,8 @@ export function createKnowledgeBaseComponent(options = {}) {
               <span class="text-lg">${this.fileIcon(fileInfo.file_type)}</span>
               <span class="truncate" title="${filename}">${filename}</span>
             </div>
-            <div class="badge ${scoreBadgeClass} badge-sm"
-                 title="Relevance: ${scorePercentage}%">
-              ${scorePercentage}%
+            <div class="badge ${badgeClass} badge-sm" title="Relevance: ${scorePct}%">
+              ${scorePct}%
             </div>
           </div>
           <p class="text-xs text-base-content/80 kb-line-clamp-3 mb-2">
@@ -489,6 +723,11 @@ export function createKnowledgeBaseComponent(options = {}) {
       return item;
     }
 
+    /**
+     * Show detailed view of a search result
+     * @param {SearchResult} result
+     * @private
+     */
     _showResultDetail(result) {
       const modal = this.elements.resultModal;
       if (!modal || typeof modal.showModal !== "function") {
@@ -496,21 +735,29 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      const { resultTitle, resultSource, resultScore, resultContent, useInChatBtn } = this.elements;
-      if (!resultTitle || !resultSource || !resultScore || !resultContent) return;
+      const {
+        resultTitle,
+        resultSource,
+        resultScore,
+        resultContent,
+        useInChatBtn,
+      } = this.elements;
+      if (!resultTitle || !resultSource || !resultScore || !resultContent)
+        return;
 
       const fileInfo = result.file_info || {};
-      const filename = fileInfo.filename || result.metadata?.file_name || "Unknown Source";
-      const scorePercentage = Math.round((result.score || 0) * 100);
+      const filename =
+        fileInfo.filename || result.metadata?.file_name || "Unknown Source";
+      const scorePct = Math.round((result.score || 0) * 100);
 
-      let scoreBadgeClass = "badge-ghost";
-      if (scorePercentage >= 80) scoreBadgeClass = "badge-success";
-      else if (scorePercentage >= 60) scoreBadgeClass = "badge-warning";
+      let badgeClass = "badge-ghost";
+      if (scorePct >= 80) badgeClass = "badge-success";
+      else if (scorePct >= 60) badgeClass = "badge-warning";
 
       resultTitle.textContent = `Detail: ${filename}`;
       resultSource.textContent = filename;
-      resultScore.className = `badge ${scoreBadgeClass}`;
-      resultScore.textContent = `${scorePercentage}%`;
+      resultScore.className = `badge ${badgeClass}`;
+      resultScore.textContent = `${scorePct}%`;
       resultContent.textContent = result.text || "No content available.";
       resultContent.style.whiteSpace = "pre-wrap";
 
@@ -524,6 +771,10 @@ export function createKnowledgeBaseComponent(options = {}) {
       modal.showModal();
     }
 
+    /**
+     * Hide the result detail modal
+     * @private
+     */
     _hideResultDetailModal() {
       const modal = this.elements.resultModal;
       if (modal && typeof modal.close === "function") {
@@ -531,6 +782,11 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
     }
 
+    /**
+     * Insert result reference into chat input
+     * @param {SearchResult} result
+     * @private
+     */
     _useInConversation(result) {
       const chatInput =
         document.getElementById("chatUIInput") ||
@@ -540,108 +796,115 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       if (!chatInput) return;
       const filename = result.metadata?.file_name || "the knowledge base";
-      const referenceText = `Referring to content from "${filename}":\n\n> ${result.text.trim()}\n\nBased on this, `;
-      const currentContent = chatInput.value.trim();
+      const refText = `Referring to content from "${filename}":\n\n> ${result.text.trim()}\n\nBased on this, `;
+      const current = chatInput.value.trim();
 
-      chatInput.value = currentContent
-        ? `${currentContent}\n\n${referenceText}`
-        : referenceText;
+      chatInput.value = current ? `${current}\n\n${refText}` : refText;
       chatInput.focus();
       chatInput.dispatchEvent(new Event("input", { bubbles: true }));
     }
 
-    // ------------------------------------------------------------------
-    // Toggling & Reprocessing
-    // ------------------------------------------------------------------
+    /**
+     * Toggle knowledge base activation
+     * @param {boolean} enabled
+     * @returns {Promise<void>}
+     */
     async toggleKnowledgeBase(enabled) {
-      const projectId = this._getCurrentProjectId();
-      if (!projectId) {
-        this.showNotification?.("No valid project selected for Knowledge Base toggle", "error");
+      const pid = this._getCurrentProjectId();
+      if (!pid) {
+        this.showNotification?.(
+          "No valid project selected for Knowledge Base toggle",
+          "error",
+        );
         return;
       }
 
       try {
-        const response = await this.apiRequest(
-          `/api/projects/${projectId}/knowledge-bases/toggle`,
-          {
-            method: "POST",
-            body: { enable: enabled }
-          }
+        const resp = await this.apiRequest(
+          `/api/projects/${pid}/knowledge-bases/toggle`,
+          { method: "POST", body: { enable: enabled } },
         );
-        if (response.success) {
+        if (resp.success) {
           if (this.state.knowledgeBase) {
             this.state.knowledgeBase.is_active = enabled;
           }
           this._updateStatusIndicator(enabled);
-          // Possibly store the toggle in localStorage if desired
-          localStorage.setItem(`kb_enabled_${projectId}`, String(enabled));
+          localStorage.setItem(`kb_enabled_${pid}`, String(enabled));
 
           if (this.projectManager.loadProjectDetails) {
-            const project = await this.projectManager.loadProjectDetails(projectId);
+            const project = await this.projectManager.loadProjectDetails(pid);
             this.renderKnowledgeBaseInfo(project?.knowledge_base);
-          } else if (this.state.knowledgeBase) {
+          } else {
             this.renderKnowledgeBaseInfo(this.state.knowledgeBase);
           }
         }
-      } catch (error) {
-        console.error("[KB] Toggle failed:", error);
+      } catch (err) {
+        console.error("[KB] Toggle failed:", err);
         this.showNotification?.("Failed to toggle knowledge base", "error");
       }
     }
 
+    /**
+     * Reprocess all files in the knowledge base
+     * @param {string} projectId
+     * @returns {Promise<void>}
+     */
     async reprocessFiles(projectId) {
       if (!this.validateUUID(projectId)) {
-        this.showNotification?.("No valid project selected for reprocessing", "error");
+        this.showNotification?.(
+          "No valid project selected for reprocessing",
+          "error",
+        );
         return;
       }
       try {
         this._showProcessingState();
-        const response = await this.apiRequest(
+        const resp = await this.apiRequest(
           `/api/projects/${projectId}/knowledge-base/reindex`,
-          {
-            method: "POST",
-            body: { force_reindex: true }
-          }
+          { method: "POST", body: { force_reindex: true } },
         );
-        if (response.success) {
+        if (resp.success) {
           this.showNotification?.("Files queued for reprocessing", "success");
-          if (this.projectManager) {
+          if (this.projectManager.loadProjectDetails) {
             const [project] = await Promise.all([
               this.projectManager.loadProjectDetails(projectId),
-              this.projectManager.loadProjectStats?.(projectId)
+              this.projectManager.loadProjectStats?.(projectId),
             ]);
             this.renderKnowledgeBaseInfo(project?.knowledge_base);
           } else if (this.state.knowledgeBase?.id) {
             await this._loadKnowledgeBaseHealth(this.state.knowledgeBase.id);
           }
         }
-      } catch (error) {
-        console.error("[KB] Reprocessing failed:", error);
+      } catch (err) {
+        console.error("[KB] Reprocessing failed:", err);
         this.showNotification?.("Failed to reprocess files", "error");
       } finally {
         this._hideProcessingState();
       }
     }
 
-    // ------------------------------------------------------------------
-    // Knowledge Base Settings (Form + Modal)
-    // ------------------------------------------------------------------
+    /**
+     * Handle settings form submission
+     * @param {Event} e - Form submit event
+     * @private
+     */
     _handleKnowledgeBaseFormSubmit(e) {
       e.preventDefault();
       const form = e.target;
-      if (!form) return;
-
-      const formData = new FormData(form);
       const projectId = form.dataset.projectId || this._getCurrentProjectId();
       if (!this.validateUUID(projectId)) {
-        this.showNotification?.("Cannot save settings: Project ID missing or invalid.", "error");
+        this.showNotification?.(
+          "Cannot save settings: Project ID missing or invalid.",
+          "error",
+        );
         return;
       }
 
+      const data = new FormData(form);
       const payload = {
-        name: formData.get("name"),
-        description: formData.get("description") || null,
-        embedding_model: formData.get("embedding_model")
+        name: data.get("name"),
+        description: data.get("description") || null,
+        embedding_model: data.get("embedding_model"),
       };
 
       if (!payload.name?.trim()) {
@@ -653,21 +916,31 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      const submitButton = form.querySelector('button[type="submit"]');
-      const originalText = submitButton?.textContent;
-      if (submitButton) {
-        submitButton.disabled = true;
-        submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
+      const btn = form.querySelector('button[type="submit"]');
+      const origText = btn?.textContent;
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
       }
 
       this._submitKnowledgeBaseForm(projectId, payload).finally(() => {
-        if (submitButton) {
-          submitButton.disabled = false;
-          if (originalText) submitButton.textContent = originalText;
+        if (btn) {
+          btn.disabled = false;
+          if (origText) btn.textContent = origText;
         }
       });
     }
 
+    /**
+     * Submit settings to the server
+     * @param {string} projectId
+     * @param {Object} payload
+     * @param {string} payload.name
+     * @param {string|null} payload.description
+     * @param {string} payload.embedding_model
+     * @returns {Promise<void>}
+     * @private
+     */
     async _submitKnowledgeBaseForm(projectId, payload) {
       try {
         const isUpdating = !!this.state.knowledgeBase?.id;
@@ -676,27 +949,35 @@ export function createKnowledgeBaseComponent(options = {}) {
           ? `/api/knowledge-bases/${this.state.knowledgeBase.id}`
           : `/api/projects/${projectId}/knowledge-bases`;
 
-        const response = await this.apiRequest(url, { method, body: payload });
-        if (response.data?.id || response.success) {
+        const resp = await this.apiRequest(url, { method, body: payload });
+        if (resp.data?.id || resp.success) {
           this._hideKnowledgeBaseModal();
           this.showNotification?.("Knowledge Base settings saved.", "success");
 
           if (this.projectManager.loadProjectDetails) {
             await this.projectManager.loadProjectDetails(projectId);
-            // Possibly re-render or rely on an event from projectManager
           } else {
-            // Manual fallback
-            this.renderKnowledgeBaseInfo(response.data || { ...this.state.knowledgeBase, ...payload });
+            this.renderKnowledgeBaseInfo({
+              ...this.state.knowledgeBase,
+              ...payload,
+            });
           }
         } else {
-          throw new Error(response.message || "Invalid response from server");
+          throw new Error(resp.message || "Invalid response from server");
         }
-      } catch (error) {
-        console.error("[KB] Save settings failed:", error);
-        this.showNotification?.(`Failed to save settings: ${error.message}`, "error");
+      } catch (err) {
+        console.error("[KB] Save settings failed:", err);
+        this.showNotification?.(
+          `Failed to save settings: ${err.message}`,
+          "error",
+        );
       }
     }
 
+    /**
+     * Show the settings modal
+     * @private
+     */
     _showKnowledgeBaseModal() {
       const modal = this.elements.settingsModal;
       if (!modal || typeof modal.showModal !== "function") {
@@ -707,14 +988,15 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (this.elements.settingsForm) {
         this.elements.settingsForm.reset();
       }
-      this._updateModelSelection(this.state.knowledgeBase?.embedding_model || null);
+      this._updateModelSelection(
+        this.state.knowledgeBase?.embedding_model || null,
+      );
 
       if (this.state.knowledgeBase) {
         const kb = this.state.knowledgeBase;
-        const nameInput = this.elements.settingsForm?.elements["name"];
-        const descInput = this.elements.settingsForm?.elements["description"];
-        if (nameInput) nameInput.value = kb.name || "";
-        if (descInput) descInput.value = kb.description || "";
+        const form = this.elements.settingsForm;
+        form.elements["name"].value = kb.name || "";
+        form.elements["description"].value = kb.description || "";
       }
 
       const pid = this._getCurrentProjectId();
@@ -726,6 +1008,10 @@ export function createKnowledgeBaseComponent(options = {}) {
       this._validateSelectedModelDimensions();
     }
 
+    /**
+     * Hide the settings modal
+     * @private
+     */
     _hideKnowledgeBaseModal() {
       const modal = this.elements.settingsModal;
       if (modal && typeof modal.close === "function") {
@@ -733,144 +1019,81 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
     }
 
-    // ------------------------------------------------------------------
-    // UI States & Status Alerts
-    // ------------------------------------------------------------------
-    _showInactiveState() {
-      this.state.knowledgeBase = null;
-      this.elements.activeSection?.classList.add("hidden");
-      this.elements.inactiveSection?.classList.remove("hidden");
-      this._updateStatusIndicator(false);
-      this._showStatusAlert("Knowledge Base needed. Click 'Setup'.", "info");
-      this._updateUploadButtonsState();
-    }
-
-    _updateUploadButtonsState() {
-      const hasKB = !!this.state.knowledgeBase;
-      const isActive = hasKB && this.state.knowledgeBase.is_active !== false;
-
-      // For any elements that require KB
-      const kbDependentEls = document.querySelectorAll("[data-requires-kb='true']");
-      kbDependentEls.forEach(el => {
-        const disabled = !hasKB || !isActive;
-        el.disabled = disabled;
-        el.classList.toggle("opacity-50", disabled);
-        el.classList.toggle("cursor-not-allowed", disabled);
-        if (disabled) {
-          el.title = !hasKB
-            ? "Setup Knowledge Base first."
-            : "Knowledge Base must be active.";
-        } else {
-          el.title = "Ready to use Knowledge Base features.";
-        }
-      });
-
-      // Reprocess button specifically
-      if (this.elements.reprocessButton) {
-        const fileCountEl = document.getElementById("knowledgeFileCount");
-        const fileCount = parseInt(fileCountEl?.textContent || "0", 10);
-        const reDisabled = !hasKB || !isActive || fileCount === 0;
-
-        this.elements.reprocessButton.disabled = reDisabled;
-        this.elements.reprocessButton.classList.toggle("opacity-50", reDisabled);
-        this.elements.reprocessButton.classList.toggle("cursor-not-allowed", reDisabled);
-
-        if (!hasKB) {
-          this.elements.reprocessButton.title = "Setup Knowledge Base first.";
-        } else if (!isActive) {
-          this.elements.reprocessButton.title = "Knowledge Base must be active.";
-        } else if (fileCount === 0) {
-          this.elements.reprocessButton.title = "No files to reprocess.";
-        } else {
-          this.elements.reprocessButton.title = "Reprocess files.";
-        }
-      }
-    }
-
-    _updateStatusAlerts(kb) {
-      if (kb.is_active !== false) {
-        if (kb.stats?.file_count === 0) {
-          this.showNotification?.("Knowledge Base is empty. Upload files via 'Files' tab.", "warning");
-        } else if (kb.stats?.file_count > 0 && kb.stats?.chunk_count === 0 && kb.stats?.unprocessed_files > 0) {
-          this.showNotification?.("Files need processing. Click 'Reprocess Files'.", "warning");
-        } else if (kb.stats?.unprocessed_files > 0) {
-          this.showNotification?.(`${kb.stats.unprocessed_files} file(s) need processing.`, "info");
-        }
-      } else {
-        this.showNotification?.("Knowledge Base is disabled. Enable it to use search.", "warning");
-      }
-    }
-
-    // ------------------------------------------------------------------
-    // KB Health Check
-    // ------------------------------------------------------------------
+    /**
+     * Load health metrics for the KB
+     * @param {string} kbId
+     * @returns {Promise<Object|null>}
+     * @private
+     */
     async _loadKnowledgeBaseHealth(kbId) {
-      if (!kbId || !this.validateUUID(kbId)) {
-        return null;
-      }
-      if (!this.apiRequest) {
-        console.warn("[KB] apiRequest not available for health check.");
-        return null;
-      }
-
+      if (!kbId || !this.validateUUID(kbId)) return null;
       try {
-        const response = await this.apiRequest(
+        const resp = await this.apiRequest(
           `/api/knowledge-bases/${kbId}/health`,
           { method: "GET" },
-          false
+          false,
         );
-        const health = response?.data;
-        if (!health) throw new Error("Invalid health check response");
-        // Optionally update UI with health info...
-        return health;
+        return resp?.data || null;
       } catch (err) {
         console.error("[KB] health check failed:", err);
-        this._showStatusAlert("Could not verify knowledge base health", "error");
+        this._showStatusAlert(
+          "Could not verify knowledge base health",
+          "error",
+        );
         return null;
       }
     }
 
-    // ------------------------------------------------------------------
-    // Status Alerts
-    // ------------------------------------------------------------------
+    /**
+     * Show status alert in UI
+     * @param {string} message
+     * @param {'info'|'success'|'warning'|'error'} [type='info']
+     * @private
+     */
     _showStatusAlert(message, type = "info") {
-      // If there's a dedicated #kbStatusIndicator
       const statusIndicator = document.getElementById("kbStatusIndicator");
       if (!statusIndicator) {
         this.showNotification?.(message, type);
         return;
       }
-
       statusIndicator.innerHTML = "";
-      let alertClass = "alert-info";
-      if (type === "success") alertClass = "alert-success";
-      else if (type === "warning") alertClass = "alert-warning";
-      else if (type === "error") alertClass = "alert-error";
+      let cls = "alert-info";
+      if (type === "success") cls = "alert-success";
+      else if (type === "warning") cls = "alert-warning";
+      else if (type === "error") cls = "alert-error";
 
       const alertDiv = document.createElement("div");
-      alertDiv.className = `alert ${alertClass} shadow-sm text-sm py-2 px-3`;
+      alertDiv.className = `alert ${cls} shadow-sm text-sm py-2 px-3`;
       alertDiv.setAttribute("role", "alert");
       alertDiv.innerHTML = `<span>${message}</span>`;
 
       if (type !== "error") {
-        const closeButton = document.createElement("button");
-        closeButton.className = "btn btn-xs btn-ghost btn-circle";
-        closeButton.innerHTML = "✕";
-        closeButton.onclick = () => alertDiv.remove();
-        alertDiv.appendChild(closeButton);
+        const btn = document.createElement("button");
+        btn.className = "btn btn-xs btn-ghost btn-circle";
+        btn.innerHTML = "✕";
+        btn.onclick = () => alertDiv.remove();
+        alertDiv.appendChild(btn);
       }
+
       statusIndicator.appendChild(alertDiv);
     }
 
+    /**
+     * Show error alert
+     * @param {string} msg
+     * @private
+     */
     _showError(msg) {
       this._showStatusAlert(msg, "error");
     }
 
-    // ------------------------------------------------------------------
-    // Search Loading / No Results
-    // ------------------------------------------------------------------
+    /**
+     * Show loading indicator for search
+     * @private
+     */
     _showSearchLoading() {
-      const { resultsContainer, resultsSection, noResultsSection } = this.elements;
+      const { resultsContainer, resultsSection, noResultsSection } =
+        this.elements;
       resultsSection?.classList.remove("hidden");
       noResultsSection?.classList.add("hidden");
       if (resultsContainer) {
@@ -883,38 +1106,52 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
     }
 
+    /**
+     * Hide search loading indicator
+     * @private
+     */
     _hideSearchLoading() {
       if (!this.state.isSearching) {
-        const loadingEl = this.elements.resultsContainer?.querySelector(".flex.justify-center.items-center");
+        const loadingEl = this.elements.resultsContainer?.querySelector(
+          ".flex.justify-center.items-center",
+        );
         if (loadingEl && loadingEl.textContent.includes("Searching")) {
           loadingEl.remove();
         }
       }
     }
 
+    /**
+     * Show "no results" UI
+     * @private
+     */
     _showNoResults() {
-      const { resultsSection, noResultsSection, resultsContainer } = this.elements;
-      if (resultsContainer) {
-        resultsContainer.innerHTML = "";
-      }
+      const { resultsSection, noResultsSection, resultsContainer } =
+        this.elements;
+      if (resultsContainer) resultsContainer.innerHTML = "";
       resultsSection?.classList.add("hidden");
       noResultsSection?.classList.remove("hidden");
     }
 
-    // ------------------------------------------------------------------
-    // Processing State / Reprocess
-    // ------------------------------------------------------------------
+    /**
+     * Show processing spinner on reprocess button
+     * @private
+     */
     _showProcessingState() {
       const btn = this.elements.reprocessButton;
       if (!btn) return;
       this._processingState = {
         originalContent: btn.innerHTML,
-        originalDisabled: btn.disabled
+        originalDisabled: btn.disabled,
       };
       btn.disabled = true;
       btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Processing...`;
     }
 
+    /**
+     * Restore reprocess button state
+     * @private
+     */
     _hideProcessingState() {
       const btn = this.elements.reprocessButton;
       if (!btn || !this._processingState) return;
@@ -923,44 +1160,46 @@ export function createKnowledgeBaseComponent(options = {}) {
       this._processingState = null;
     }
 
-    // ------------------------------------------------------------------
-    // Validate model dimension selection
-    // ------------------------------------------------------------------
+    /**
+     * Validate dimension compatibility on model change
+     * @private
+     */
     _validateSelectedModelDimensions() {
-      const modelSelect = this.elements.modelSelect;
-      if (!modelSelect) return;
-
-      const parent = modelSelect.closest(".form-control");
+      const sel = this.elements.modelSelect;
+      if (!sel) return;
+      const parent = sel.closest(".form-control");
       if (!parent) return;
-
-      let warningDiv = parent.querySelector(".model-error");
-      const selectedOption = modelSelect.options[modelSelect.selectedIndex];
-      if (selectedOption && selectedOption.disabled) {
-        // Show dimension mismatch warning
-        if (!warningDiv) {
+      let warning = parent.querySelector(".model-error");
+      const opt = sel.options[sel.selectedIndex];
+      if (opt.disabled) {
+        if (!warning) {
           const labelDiv = parent.querySelector(".label:last-of-type");
           if (labelDiv) {
-            warningDiv = document.createElement("span");
-            warningDiv.className = "label-text-alt text-error model-error";
-            labelDiv.appendChild(warningDiv);
+            warning = document.createElement("span");
+            warning.className = "label-text-alt text-error model-error";
+            labelDiv.appendChild(warning);
           } else {
-            warningDiv = document.createElement("div");
-            warningDiv.className = "text-error text-xs mt-1 model-error";
-            modelSelect.insertAdjacentElement("afterend", warningDiv);
+            warning = document.createElement("div");
+            warning.className = "text-error text-xs mt-1 model-error";
+            sel.insertAdjacentElement("afterend", warning);
           }
         }
-        warningDiv.textContent = "Changing dimensions requires reprocessing all files!";
-        warningDiv.classList.remove("hidden");
-      } else if (warningDiv) {
-        // Hide warning
-        warningDiv.classList.add("hidden");
-        warningDiv.textContent = "";
+        warning.textContent =
+          "Changing dimensions requires reprocessing all files!";
+        warning.classList.remove("hidden");
+      } else if (warning) {
+        warning.classList.add("hidden");
+        warning.textContent = "";
       }
     }
 
-    // ------------------------------------------------------------------
-    // Debounce Helper
-    // ------------------------------------------------------------------
+    /**
+     * Debounce helper
+     * @param {Function} func
+     * @param {number} wait - milliseconds
+     * @returns {Function}
+     * @private
+     */
     _debounce(func, wait) {
       let timeout;
       return (...args) => {
@@ -969,40 +1208,41 @@ export function createKnowledgeBaseComponent(options = {}) {
       };
     }
 
-    // ------------------------------------------------------------------
-    // Helper for topK
-    // ------------------------------------------------------------------
+    /**
+     * Get selected Top-K value
+     * @returns {number}
+     * @private
+     */
     _getSelectedTopKValue() {
-      if (!this.elements.topKSelect) return 5;
-      const val = parseInt(this.elements.topKSelect.value, 10);
+      const val = parseInt(this.elements.topKSelect?.value, 10);
       return isNaN(val) ? 5 : val;
     }
 
-    // ------------------------------------------------------------------
-    // Authentication State Changes
-    // ------------------------------------------------------------------
+    /**
+     * Handle authentication state changes
+     * @param {boolean} authenticated
+     * @private
+     */
     _handleAuthStateChange(authenticated) {
       this.state.authState = authenticated;
       const items = [
         this.elements.searchButton,
         this.elements.reprocessButton,
         this.elements.setupButton,
-        this.elements.kbToggle
+        this.elements.kbToggle,
       ];
       items.forEach((el) => {
-        if (el) {
-          el.disabled = !authenticated;
-          el.classList.toggle("opacity-50", !authenticated);
-          el.classList.toggle("cursor-not-allowed", !authenticated);
-        }
+        if (!el) return;
+        el.disabled = !authenticated;
+        el.classList.toggle("opacity-50", !authenticated);
+        el.classList.toggle("cursor-not-allowed", !authenticated);
       });
       if (!authenticated) {
         this._showStatusAlert("Authentication required", "warning");
       }
     }
-  } // end of KnowledgeBaseComponent class
+  } // end class
 
-  // Return the instance
   return new KnowledgeBaseComponent(options);
 }
 
