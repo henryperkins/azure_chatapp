@@ -552,8 +552,19 @@ class ProjectDetailsComponent {
   /** Loads tab-specific content. */
   _loadTabContent(tabName) {
     const projectId = this.state.currentProject?.id;
-    if (!this.app.validateUUID(projectId) && ['files', 'knowledge', 'conversations', 'artifacts', 'chat'].includes(tabName)) {
-      console.warn(`[ProjectDetailsComponent] Cannot load tab ${tabName} without a valid project ID.`);
+    const needsProject = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'].includes(tabName);
+
+    if (needsProject && !this.app.validateUUID(projectId)) {
+      // If project is still loading, show spinner instead of error or fallback
+      if (!this.state.currentProject) {
+        this._toggleLoadingIndicator(tabName, true);
+        setTimeout(() => this._toggleLoadingIndicator(tabName, false), 2000); // hide after fallback time
+        return;
+      }
+      // If we have some currentProject object but ID is invalid, show error/fallback
+      this.app.showNotification('Cannot view this tab until a project is fully loaded.', 'warning');
+      console.error("[ProjectDetailsComponent] Refusing to show tab due to invalid projectId", { tabName, projectId });
+      this.switchTab('details');
       return;
     }
 
@@ -620,7 +631,7 @@ class ProjectDetailsComponent {
         return;
       }
 
-      console.log('[ProjectDetailsComponent] Initializing or updating chat UI for project:', projectId);
+      console.log('[ProjectDetailsComponent] Preparing chat UI for project:', projectId);
       const chatInitOpts = {
         projectId,
         containerSelector: '#projectChatContainer',
@@ -629,8 +640,17 @@ class ProjectDetailsComponent {
         sendButtonSelector: '#projectChatSendBtn',
         titleSelector: '#chatTitle'
       };
-      await chatManager.initialize(chatInitOpts);
-      chatManager.projectId = projectId;
+
+      // Initialise only if not already, or project switched
+      if (!chatManager.isInitialized || chatManager.projectId !== projectId) {
+        await chatManager.initialize(chatInitOpts);
+        chatManager.projectId = projectId; // keep DI in sync
+      } else {
+        // Already ready – ensure UI elements are visible/bound
+        if (typeof chatManager.showUI === 'function') {
+          chatManager.showUI({ projectId });
+        }
+      }
 
       // Determine which conversation to load
       let targetConversationId = conversationId;
