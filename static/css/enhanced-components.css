@@ -146,20 +146,16 @@ textarea:focus-visible,
   @apply px-4; /* Ensure enough horizontal padding for icon-only buttons */
 }
 
-.btn:hover {
-  @apply shadow-md transform-gpu -translate-y-0.5;
-}
-
-.btn:active, .btn:focus:active {
-  @apply shadow-sm transform-gpu translate-y-0 active:bg-primary/20;
-}
-
-/* Icon-only buttons: ensure touch target and accessibility */
-.btn.btn-circle,
-.btn.btn-square,
+/* Enforce minimum tap target for all icon-only and square buttons */
 .btn-icon,
+.btn-square,
+.btn.btn-circle,
 [aria-label][type="button"]:not(.btn) {
-  @apply min-w-[44px] min-h-[44px] w-[44px] h-[44px] p-0 flex items-center justify-center;
+  min-width: 44px !important;
+  min-height: 44px !important;
+  width: 44px;
+  height: 44px;
+  @apply flex items-center justify-center p-0;
 }
 
 /* Add focus ring for icon-only buttons */
@@ -168,6 +164,14 @@ textarea:focus-visible,
 .btn-icon:focus-visible,
 [aria-label][type="button"]:focus-visible:not(.btn) {
   @apply outline-2 outline-primary outline-offset-2;
+}
+
+.btn:hover {
+  @apply shadow-md transform-gpu -translate-y-0.5;
+}
+
+.btn:active, .btn:focus:active {
+  @apply shadow-sm transform-gpu translate-y-0 active:bg-primary/20;
 }
 
 /* Enhanced form field states */
@@ -208,12 +212,14 @@ textarea:focus-visible,
 .modal-box {
   @apply max-h-[90vh] overflow-y-auto w-full px-2;
   @apply max-w-full; /* Prevent modal overflow on mobile */
+  @apply overflow-x-auto; /* Prevent horizontal overflow on small screens */
 }
 
 @media (max-width: 640px) {
   .modal-box {
     @apply max-w-xs px-2 w-full;
     @apply max-w-full;
+    @apply overflow-x-auto;
   }
 }
 
@@ -260,12 +266,14 @@ textarea:focus-visible,
   /* For accessibility: allow vertical scroll for long content */
   max-height: 60vh;
   overflow-y: auto;
+  @apply overflow-x-auto; /* Prevent horizontal overflow on small screens */
 }
 
 @media (max-width: 640px) {
   .chat-message-container {
     max-height: 40vh;
     @apply p-1;
+    @apply overflow-x-auto;
   }
 }
 
@@ -395,6 +403,16 @@ textarea:focus-visible,
   .file-preview-remove {
     @apply min-w-[44px] min-h-[44px];
   }
+}
+
+/* Enforce minimum tap target for file preview remove buttons */
+.file-preview-delete,
+.file-preview-remove {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  width: 44px;
+  height: 44px;
+  @apply flex items-center justify-center p-0;
 }
 
 .upload-zone-active {
@@ -596,6 +614,7 @@ textarea:focus-visible,
 .file-preview-item,
 .kb-result-card {
   @apply max-w-full w-full;
+  @apply overflow-x-auto;
 }
 
 /* Utility: Avoid text-xs for essential info on mobile */
@@ -604,6 +623,11 @@ textarea:focus-visible,
     font-size: 0.875rem !important; /* Promote to text-sm for readability */
     line-height: 1.25rem !important;
   }
+}
+
+/* Utility: Limit line length for better readability */
+.prose, .prose-lg, .prose-md, .prose-sm, .prose-base, .prose-xl, .prose-2xl, .prose-3xl, .prose-4xl, .prose-5xl, .prose-6xl {
+  max-width: 75ch;
 }
 
 /* Utility: Ensure all images are lazy-loaded by default (for HTML, not CSS) */
