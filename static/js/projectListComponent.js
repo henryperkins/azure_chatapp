@@ -1,10 +1,129 @@
 /**
- * projectListComponent.js
+ * ProjectListComponent
  * Handles rendering and interaction with the project list UI.
  *
- * Refactored to remove direct window.* usage and fallback logic.
- * Dependencies are injected in the constructor. The parent (e.g., app.js)
- * must ensure the DOM element (#projectList) and any dependencies are ready.
+ * =====================================================
+ * REQUIRED DEPENDENCIES:
+ * =====================================================
+ * 1) projectManager (Object):
+ *    - loadProjects(filter: string): Promise<void|Array>
+ *        Should return an array of project data or dispatch a "projectsLoaded" event with the data.
+ *    - deleteProject(projectId: string): Promise<void>
+ *        Deletes the specified project by ID.
+ *
+ * 2) eventHandlers (Object):
+ *    - trackListener(element: HTMLElement|Document, event: string, handler: Function, options?: Object): void
+ *        Handles binding and tracking event listeners with optional metadata.
+ *
+ * =====================================================
+ * OPTIONAL DEPENDENCIES:
+ * =====================================================
+ * 3) modalManager (Object):
+ *    - show(modalKey: string, options?: Object): void
+ *        Shows a modal (e.g. "project"). Use options for updating content, etc.
+ *    - confirmAction(options: {
+ *        title: string,
+ *        message: string,
+ *        confirmText: string,
+ *        confirmClass: string,
+ *        onConfirm: Function
+ *      }): void
+ *        Prompts user confirmation before performing a final action.
+ *
+ * 4) app (Object):
+ *    - config?: { debug: boolean }
+ *        Toggles additional console logging if true.
+ *    - showNotification?(message: string, type: 'success'|'error'|...): void
+ *        Displays a notification message in the app context.
+ *
+ * =====================================================
+ * DOM REQUIREMENTS:
+ * =====================================================
+ * - An element with ID matching "elementId" (default: #projectList) where project cards will render.
+ * - (Optional) A container #projectFilterTabs with .tab[data-filter] for filter controls.
+ * - (Optional) Buttons with IDs (#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn)
+ *   for creating new projects if modals are used.
+ *
+ * =====================================================
+ * CONFIGURATION & USAGE:
+ * =====================================================
+ * Constructor Options (Object):
+ *  - elementId?: string         (Default: 'projectList')
+ *       The DOM element’s ID for rendering projects.
+ *  - onViewProject?: Function   (Default: simple navigation via window.location.href)
+ *       Called when a project card is clicked, unless a button triggers another action.
+ *  - projectManager: Object     (Required)
+ *  - eventHandlers: Object      (Required)
+ *  - modalManager?: Object      (Optional)
+ *  - app?: Object               (Optional)
+ *
+ * Example Usage:
+ * ----------------------------------------------------------------
+ * import { ProjectListComponent } from './projectListComponent.js';
+ *
+ * const projectList = new ProjectListComponent({
+ *   elementId: 'projectList',
+ *   projectManager: myProjectManager,  // must implement loadProjects, deleteProject
+ *   eventHandlers: myEventHandlers,    // must implement trackListener
+ *   modalManager: myModalManager,      // optional, for edit/delete modals
+ *   app: myApp                         // optional, for logging/debug/notifications
+ * });
+ *
+ * // Make sure #projectList is in the DOM before calling initialize().
+ * projectList.initialize();
+ *
+ * =====================================================
+ * METHODS:
+ * =====================================================
+ * - initialize(): void
+ *   Sets up event listeners, locates the container element, and optionally loads projects.
+ *
+ * - renderProjects(data: Object|Array): void
+ *   Renders project items based on the data passed or triggered by a "projectsLoaded" event.
+ *
+ * - show(): void
+ *   Makes the project list (and optional #projectListView) visible.
+ *
+ * - hide(): void
+ *   Hides the project list (and optional #projectListView).
+ *
+ * - _loadProjects(): Promise<void>
+ *   Calls projectManager.loadProjects, handles loading states, and updates the UI.
+ *
+ * - _bindEventListeners(): void
+ *   Attaches event listeners for system events like "projectsLoaded", "projectCreated", etc.
+ *
+ * - _bindFilterEvents(): void
+ *   Wires up filter tabs (if present) under #projectFilterTabs.
+ *
+ * - _bindCreateProjectButtons(): void
+ *   Wires up buttons to open "create project" modals, if modalManager is available.
+ *
+ * - _handleCardClick(e: MouseEvent): void
+ *   Handles clicks on project cards, delegating to onViewProject or a specific button action (view/edit/delete).
+ *
+ * - _openNewProjectModal(): void, _openEditModal(project: Object), _confirmDelete(project: Object)
+ *   Methods that leverage modalManager to create/edit/delete projects with user interaction.
+ *
+ * - _showEmptyState(), _showLoadingState(), _showErrorState(message?), _showLoginRequired()
+ *   Utility methods to update the UI based on various states: empty list, loading, error, or authentication needed.
+ *
+ * =====================================================
+ * EVENTS:
+ * =====================================================
+ * - 'projectsLoaded': fired by projectManager or externally; triggers renderProjects.
+ * - 'projectCreated': appends the new project to the top of the list.
+ * - 'projectUpdated': updates the existing project item with new data.
+ * - 'authStateChanged': can be used to reload projects upon authentication changes.
+ *
+ * =====================================================
+ * NOTES / SPECIAL CONSIDERATIONS:
+ * =====================================================
+ * - Persisted UI customization is loaded/stored from localStorage (theme, showDescription, etc.).
+ * - The method _mygetDefaultCustomization() should be renamed to _getDefaultCustomization(),
+ *   aligning with references in _loadCustomization().
+ * - The default onViewProject callback uses a simple browser navigation fallback.
+ * - Must call initialize() only after the DOM is ready (e.g., DOMContentLoaded).
  */
 
 export class ProjectListComponent {
@@ -18,7 +137,7 @@ export class ProjectListComponent {
      * @param {Object}   [options.app]                      - App instance, typically for notifications, etc.
      */
     constructor({
-        elementId = 'projectList',
+        elementId = "projectList",
         onViewProject = (projectId) => {
             // Example fallback: simple navigation
             window.location.href = `/?project=${projectId}`;
@@ -26,7 +145,7 @@ export class ProjectListComponent {
         projectManager,
         eventHandlers,
         modalManager,
-        app
+        app,
     } = {}) {
         if (!projectManager) {
             throw new Error('[ProjectListComponent] "projectManager" is required.');
@@ -48,10 +167,10 @@ export class ProjectListComponent {
         // State
         this.state = {
             projects: [],
-            filter: 'all',
+            filter: "all",
             loading: false,
             customization: this._loadCustomization(),
-            initialized: false
+            initialized: false,
         };
 
         // DOM element reference
@@ -64,100 +183,99 @@ export class ProjectListComponent {
     initialize() {
         if (this.state.initialized) {
             if (this.app?.config?.debug) {
-                console.log('[ProjectListComponent] Already initialized.');
+                console.log("[ProjectListComponent] Already initialized.");
             }
             return;
         }
 
         this.element = document.getElementById(this.elementId);
         if (!this.element) {
-            throw new Error(`[ProjectListComponent] Element #${this.elementId} not found`);
+            throw new Error(
+                `[ProjectListComponent] Element #${this.elementId} not found`,
+            );
         }
 
         // Bind event listeners
         this._bindEventListeners();
 
-        // If you have a "Create Project" button in the UI, bind it here
+        // Bind "Create Project" buttons if they exist
         this._bindCreateProjectButtons();
 
         // Mark as initialized
         this.state.initialized = true;
         if (this.app?.config?.debug) {
-            console.log('[ProjectListComponent] Initialized successfully.');
+            console.log("[ProjectListComponent] Initialized successfully.");
         }
 
-        // Optionally trigger loading if you want to auto-fetch projects
+        // Optionally auto-load projects
         this._loadProjects();
     }
 
     /**
      * Binds all relevant event listeners for filtering, project events, etc.
-     * This is typically called from initialize().
-     * You can remove or modify any listeners you don’t need.
      */
     _bindEventListeners() {
-        // Document-level listening for 'projectsLoaded'
+        // Listen for 'projectsLoaded'
         const projectsLoadedHandler = (e) => this.renderProjects(e.detail);
         this.eventHandlers.trackListener(
             document,
-            'projectsLoaded',
+            "projectsLoaded",
             projectsLoadedHandler,
-            { description: 'ProjectList: projectsLoaded' }
+            { description: "ProjectList: projectsLoaded" },
         );
 
-        // Delegated click on the main list container for project cards
+        // Handle clicks on project cards
         this.eventHandlers.trackListener(
             this.element,
-            'click',
+            "click",
             (e) => this._handleCardClick(e),
-            { description: 'ProjectList: Card Click' }
+            { description: "ProjectList: Card Click" },
         );
 
-        // Listen for "projectCreated" / "projectUpdated"
+        // Listen for "projectCreated" and "projectUpdated"
         this.eventHandlers.trackListener(
             document,
-            'projectCreated',
+            "projectCreated",
             (e) => this._handleProjectCreated(e.detail),
-            { description: 'ProjectList: projectCreated' }
+            { description: "ProjectList: projectCreated" },
         );
         this.eventHandlers.trackListener(
             document,
-            'projectUpdated',
+            "projectUpdated",
             (e) => this._handleProjectUpdated(e.detail),
-            { description: 'ProjectList: projectUpdated' }
+            { description: "ProjectList: projectUpdated" },
         );
 
-        // Listen for auth changes (optionally reload)
+        // Listen for auth state changes
         this.eventHandlers.trackListener(
             document,
-            'authStateChanged',
+            "authStateChanged",
             (e) => {
                 if (e.detail?.authenticated) {
                     this._loadProjects();
                 }
             },
-            { description: 'ProjectList: authStateChanged' }
+            { description: "ProjectList: authStateChanged" },
         );
 
-        // Filter tabs
+        // Bind filter tab events if present
         this._bindFilterEvents();
     }
 
     /**
-     * If you have filter tabs in your HTML (e.g. #projectFilterTabs), bind their events.
+     * Binds events for filter tabs inside #projectFilterTabs.
      */
     _bindFilterEvents() {
-        const container = document.getElementById('projectFilterTabs');
+        const container = document.getElementById("projectFilterTabs");
         if (!container) return;
 
-        const tabs = container.querySelectorAll('.tab[data-filter]');
+        const tabs = container.querySelectorAll(".tab[data-filter]");
         tabs.forEach((tab) => {
             const filterValue = tab.dataset.filter;
             if (!filterValue) return;
-
             const clickHandler = () => this._setFilter(filterValue);
-            this.eventHandlers.trackListener(tab, 'click', clickHandler, {
-                description: `ProjectList: Filter tab click (${filterValue})`
+            this.eventHandlers.trackListener(tab, "click", clickHandler, {
+                description: `ProjectList: Filter tab click (${filterValue})`,
             });
         });
     }
@@ -170,55 +288,52 @@ export class ProjectListComponent {
     }
 
     _updateActiveTab() {
-        const tabs = document.querySelectorAll('#projectFilterTabs .tab[data-filter]');
+        const tabs = document.querySelectorAll(
+            "#projectFilterTabs .tab[data-filter]",
+        );
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
-            tab.classList.toggle('tab-active', isActive);
-            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            tab.classList.toggle("tab-active", isActive);
+            tab.setAttribute("aria-selected", isActive ? "true" : "false");
         });
     }
 
     _updateUrl(filter) {
         try {
             const url = new URL(window.location);
-            url.searchParams.set('filter', filter);
-            window.history.pushState({}, '', url);
+            url.searchParams.set("filter", filter);
+            window.history.pushState({}, "", url);
         } catch (e) {
             if (this.app?.config?.debug) {
-                console.warn('[ProjectListComponent] Failed to update URL with filter:', e);
+                console.warn(
+                    "[ProjectListComponent] Failed to update URL with filter:",
+                    e,
+                );
             }
         }
     }
 
-    // -------------------------------------------------
-    // Rendering / Show / Hide
-    // -------------------------------------------------
-
     /**
-     * Renders an array of project data onto the component’s container.
+     * Renders projects using the data provided.
      * @param {Object|Array} data - The payload containing projects.
      */
     renderProjects(data) {
-        // Normalize the projects array
-        let projects = this._extractProjects(data);
-
+        const projects = this._extractProjects(data);
         this.state.projects = projects || [];
         if (!this.element) {
-            console.error(`[ProjectListComponent.renderProjects] #${this.elementId} is not in the DOM.`);
+            console.error(
+                `[ProjectListComponent.renderProjects] #${this.elementId} is not in the DOM.`,
+            );
             return;
         }
-
-        // If no projects, show empty state
         if (!projects?.length) {
             this._showEmptyState();
             return;
         }
-
-        // Otherwise, render project cards
-        this.element.innerHTML = '';
+        this.element.innerHTML = "";
         const fragment = document.createDocumentFragment();
         projects.forEach((project) => {
-            if (project && typeof project === 'object') {
+            if (project && typeof project === "object") {
                 fragment.appendChild(this._createProjectCard(project));
             }
         });
@@ -227,84 +342,97 @@ export class ProjectListComponent {
     }
 
     /**
-     * Helper that extracts an array of projects from the given data payload.
-     * Adjust as needed for your backend’s JSON structure.
+     * Refactored extraction method for project data.
+     * Tries multiple paths to find an array of projects.
      * @private
      */
     _extractProjects(data) {
+        // If data is already an array, return it.
         if (Array.isArray(data)) return data;
-        if (Array.isArray(data?.projects)) return data.projects;
-        if (Array.isArray(data?.data?.projects)) return data.data.projects;
-        if (Array.isArray(data?.data)) return data.data;
-        if (Array.isArray(data)) return data;
-        if (data?.data && typeof data.data === "object" && data.data.id) return [data.data];
-        if (data && typeof data === "object" && data.id) return [data];
-        if (data?.projects && typeof data.projects === "object" && data.projects.id) return [data.projects];
-        if (data?.data?.projects && typeof data.data.projects === "object" && data.data.projects.id) return [data.data.projects];
+
+        // List possible paths to retrieve the projects array.
+        const paths = ["projects", "data.projects", "data"];
+
+        for (let path of paths) {
+            const segments = path.split(".");
+            let result = data;
+            let valid = true;
+            for (let seg of segments) {
+                if (result && typeof result === "object" && seg in result) {
+                    result = result[seg];
+                } else {
+                    valid = false;
+                    break;
+                }
+            }
+            if (valid && Array.isArray(result)) {
+                return result;
+            }
+            // If we found an object with an id, wrap it as a project in an array.
+            if (valid && result && typeof result === "object" && result.id) {
+                return [result];
+            }
+        }
         return [];
     }
 
     show() {
         if (!this.element) {
-            console.warn('[ProjectListComponent.show] element is not found.');
+            console.warn("[ProjectListComponent.show] element is not found.");
             return;
         }
-        this.element.classList.remove('hidden');
-        this.element.style.display = '';
+        this.element.classList.remove("hidden");
+        this.element.style.display = "";
 
-        // Optionally unhide parent container
-        const listView = document.getElementById('projectListView');
+        const listView = document.getElementById("projectListView");
         if (listView) {
-            listView.classList.remove('hidden', 'opacity-0');
-            listView.style.display = '';
+            listView.classList.remove("hidden", "opacity-0");
+            listView.style.display = "";
         }
     }
 
     hide() {
         if (this.element) {
-            this.element.classList.add('hidden');
-            this.element.style.display = 'none';
+            this.element.classList.add("hidden");
+            this.element.style.display = "none";
         }
-        const listView = document.getElementById('projectListView');
+        const listView = document.getElementById("projectListView");
         if (listView) {
-            listView.classList.add('hidden', 'opacity-0');
-            listView.style.display = 'none';
+            listView.classList.add("hidden", "opacity-0");
+            listView.style.display = "none";
         }
     }
 
-    // -------------------------------------------------
-    // Loading Projects
-    // -------------------------------------------------
-
+    /**
+     * Loads projects via projectManager.
+     * @private
+     */
     async _loadProjects() {
         if (this.state.loading) return;
         if (!this.projectManager?.loadProjects) {
-            console.warn('[ProjectListComponent] projectManager.loadProjects is missing.');
+            console.warn(
+                "[ProjectListComponent] projectManager.loadProjects is missing.",
+            );
             return;
         }
-
         this.state.loading = true;
         this._showLoadingState();
         try {
-            // loadProjects should dispatch "projectsLoaded" or return data
+            // loadProjects should dispatch "projectsLoaded" or return data.
             await this.projectManager.loadProjects(this.state.filter);
         } catch (error) {
-            console.error('[ProjectListComponent] Error loading projects:', error);
-            this._showErrorState('Failed to load projects');
+            console.error("[ProjectListComponent] Error loading projects:", error);
+            this._showErrorState("Failed to load projects");
         } finally {
             this.state.loading = false;
         }
     }
 
-    // -------------------------------------------------
-    // Event Handlers (Click, CRUD)
-    // -------------------------------------------------
-
     _handleCardClick(e) {
-        const projectCard = e.target.closest('.project-card');
+        const projectCard = e.target.closest(".project-card");
         if (!projectCard) return;
 
-        const actionBtn = e.target.closest('[data-action]');
+        const actionBtn = e.target.closest("[data-action]");
         const projectId = projectCard.dataset.projectId;
         if (!projectId) return;
 
@@ -313,7 +441,6 @@ export class ProjectListComponent {
             const action = actionBtn.dataset.action;
             this._handleAction(action, projectId);
         } else {
-            // If user clicked the card (not a button), we call onViewProject
             this.onViewProject(projectId);
         }
     }
@@ -325,13 +452,13 @@ export class ProjectListComponent {
             return;
         }
         switch (action) {
-            case 'view':
+            case "view":
                 this.onViewProject(projectId);
                 break;
-            case 'edit':
+            case "edit":
                 this._openEditModal(project);
                 break;
-            case 'delete':
+            case "delete":
                 this._confirmDelete(project);
                 break;
             default:
@@ -347,118 +474,107 @@ export class ProjectListComponent {
 
     _handleProjectUpdated(updatedProject) {
         if (!updatedProject) return;
-        const idx = this.state.projects.findIndex((p) => p.id === updatedProject.id);
+        const idx = this.state.projects.findIndex(
+            (p) => p.id === updatedProject.id,
+        );
         if (idx >= 0) {
             this.state.projects[idx] = updatedProject;
             this.renderProjects(this.state.projects);
         }
     }
 
-    // -------------------------------------------------
-    // Modal Integration / Create & Edit
-    // -------------------------------------------------
-
     /**
-     * If you have "Create Project" buttons (#projectListCreateBtn, etc.), attach them here.
-     * This is called once within initialize().
+     * Binds "Create Project" buttons.
+     * @private
      */
     _bindCreateProjectButtons() {
         if (!this.modalManager) return;
-
-        const buttonIds = ['projectListCreateBtn', 'sidebarNewProjectBtn', 'emptyStateCreateBtn'];
+        if (!this.eventHandlers?.trackListener) {
+            throw new Error('[ProjectListComponent] eventHandlers.trackListener is required for button events.');
+        }
+        const buttonIds = [
+            "projectListCreateBtn",
+            "sidebarNewProjectBtn",
+            "emptyStateCreateBtn",
+        ];
         buttonIds.forEach((id) => {
             const btn = document.getElementById(id);
             if (!btn) return;
             const handler = () => this._openNewProjectModal();
-            if (this.eventHandlers?.trackListener) {
-                this.eventHandlers.trackListener(btn, 'click', handler, {
-                    description: `Open New Project Modal (${id})`
-                });
-            } else {
-                btn.addEventListener('click', handler);
-            }
+            this.eventHandlers.trackListener(btn, "click", handler, {
+                description: `Open New Project Modal (${id})`,
+            });
         });
     }
 
     _openNewProjectModal() {
         if (!this.modalManager?.show) {
-            console.error('[ProjectListComponent] modalManager.show is unavailable');
+            console.error("[ProjectListComponent] modalManager.show is unavailable");
             return;
         }
-        this.modalManager.show('project');
+        this.modalManager.show("project");
     }
 
     _openEditModal(project) {
         if (!this.modalManager?.show) {
-            console.error('[ProjectListComponent] modalManager.show is unavailable');
+            console.error("[ProjectListComponent] modalManager.show is unavailable");
             return;
         }
-        // If your ModalManager or ProjectModal expects the project data, you'd pass it here
-        // For example, if you have a specialized "openModal" function:
-        //   this.modalManager.openModal(project)
-        // Or if the modal is identified by a certain key:
-        this.modalManager.show('project', {
+        this.modalManager.show("project", {
             updateContent: (modalEl) => {
-                // Possibly fill fields within the modal if needed. Or rely on your stored logic.
-                // This depends on how your modal is set up.
-                const nameInput = modalEl.querySelector('#projectModalNameInput');
+                const nameInput = modalEl.querySelector("#projectModalNameInput");
                 if (nameInput) {
-                    nameInput.value = project.name ?? '';
+                    nameInput.value = project.name ?? "";
                 }
-                // etc...
-            }
+            },
         });
     }
 
     _confirmDelete(project) {
         if (!this.modalManager?.confirmAction) {
-            // Fallback
             if (confirm(`Delete "${project.name}"? This cannot be undone.`)) {
                 this._executeDelete(project.id);
             }
             return;
         }
         this.modalManager.confirmAction({
-            title: 'Delete Project',
+            title: "Delete Project",
             message: `Are you sure you want to delete "${project.name}"? This cannot be undone.`,
-            confirmText: 'Delete',
-            confirmClass: 'btn-error',
-            onConfirm: () => this._executeDelete(project.id)
+            confirmText: "Delete",
+            confirmClass: "btn-error",
+            onConfirm: () => this._executeDelete(project.id),
         });
     }
 
     async _executeDelete(projectId) {
         if (!this.projectManager?.deleteProject) {
-            console.error('[ProjectListComponent] projectManager.deleteProject is not available.');
+            console.error(
+                "[ProjectListComponent] projectManager.deleteProject is not available.",
+            );
             return;
         }
         try {
             await this.projectManager.deleteProject(projectId);
-            this.app?.showNotification?.('Project deleted', 'success');
-            // Reload the list
+            this.app?.showNotification?.("Project deleted", "success");
             this._loadProjects();
         } catch (err) {
-            console.error('[ProjectListComponent] Failed to delete project:', err);
-            this.app?.showNotification?.('Failed to delete project', 'error');
+            console.error("[ProjectListComponent] Failed to delete project:", err);
+            this.app?.showNotification?.("Failed to delete project", "error");
         }
     }
 
-    // -------------------------------------------------
-    // UI States
-    // -------------------------------------------------
-
     _showLoadingState() {
         if (!this.element) return;
-        this.element.innerHTML = '';
+        this.element.innerHTML = "";
         for (let i = 0; i < 6; i++) {
-            const skeleton = document.createElement('div');
-            skeleton.className = 'bg-base-200 animate-pulse rounded-lg p-4 mb-2';
+            const skeleton = document.createElement("div");
+            skeleton.className = "bg-base-200 animate-pulse rounded-lg p-4 mb-2";
             skeleton.innerHTML = `
-          <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
-          <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-          <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
-          <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
-        `;
+                  <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
+                  <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
+                  <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
+                  <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
+              `;
             this.element.appendChild(skeleton);
         }
     }
@@ -466,158 +582,140 @@ export class ProjectListComponent {
     _showEmptyState() {
         if (!this.element) return;
         this.element.innerHTML = `
-        <div class="col-span-3 text-center py-10">
-          <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor"
-               viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2
-                     0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0
-                     00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2
-                     0 012-2h6a2 2 0 012 2v2M7 7h10"
-            ></path>
-          </svg>
-          <p class="mt-4 text-lg">No projects found</p>
-          <p class="text-base-content/60 mt-1">Create a new project to get started</p>
-          <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
-        </div>
-      `;
-        // If there's a button to create a new project in empty state, handle it
-        const createBtn = document.getElementById('emptyStateCreateBtn');
+              <div class="col-span-3 text-center py-10">
+                <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor"
+                     viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2
+                           0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0
+                           00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2
+                           0 012-2h6a2 2 0 012 2v2M7 7h10"
+                  ></path>
+                </svg>
+                <p class="mt-4 text-lg">No projects found</p>
+                <p class="text-base-content/60 mt-1">Create a new project to get started</p>
+                <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
+              </div>
+          `;
+        const createBtn = document.getElementById("emptyStateCreateBtn");
         if (createBtn && this.eventHandlers?.trackListener) {
-            this.eventHandlers.trackListener(createBtn, 'click', () => this._openNewProjectModal(), {
-                description: 'EmptyState: Create Project'
-            });
+            this.eventHandlers.trackListener(
+                createBtn,
+                "click",
+                () => this._openNewProjectModal(),
+                {
+                    description: "EmptyState: Create Project",
+                },
+            );
         }
     }
 
-    /**
-     * If you want to show a login prompt or notice, call this method.
-     * (Not used if your flow automatically handles auth blocking.)
-     */
     _showLoginRequired() {
         if (!this.element) return;
         this.element.innerHTML = `
-        <div class="col-span-3 text-center py-10">
-          <p class="mt-4 text-lg">Please log in to view your projects</p>
-          <button id="loginButton" class="btn btn-primary mt-4">Login</button>
-        </div>
-      `;
-        const loginBtn = document.getElementById('loginButton');
+              <div class="col-span-3 text-center py-10">
+                <p class="mt-4 text-lg">Please log in to view your projects</p>
+                <button id="loginButton" class="btn btn-primary mt-4">Login</button>
+              </div>
+          `;
+        const loginBtn = document.getElementById("loginButton");
         if (loginBtn && this.eventHandlers?.trackListener) {
-            this.eventHandlers.trackListener(loginBtn, 'click', (e) => {
+            this.eventHandlers.trackListener(loginBtn, "click", (e) => {
                 e.preventDefault();
-                // Possibly open a login modal:
-                // this.modalManager?.show('login');
-                // Or dispatch an event:
-                document.dispatchEvent(new CustomEvent('requestLogin'));
+                document.dispatchEvent(new CustomEvent("requestLogin"));
             });
         }
     }
 
     _showErrorState(message) {
         if (!this.element) return;
-        const msg = message || 'An unknown error occurred.';
+        const msg = message || "An unknown error occurred.";
         this.element.innerHTML = `
-        <div class="col-span-3 text-center py-10">
-          <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor"
-               viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                  d="M12 8v4m0 4h.01M21 12a9 9 0
-                     11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          <p class="mt-4 text-lg text-error">${msg}</p>
-          <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
-        </div>
-      `;
-        const retryBtn = document.getElementById('retryButton');
+              <div class="col-span-3 text-center py-10">
+                <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor"
+                     viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M12 8v4m0 4h.01M21 12a9 9 0
+                           11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <p class="mt-4 text-lg text-error">${msg}</p>
+                <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
+              </div>
+          `;
+        const retryBtn = document.getElementById("retryButton");
         if (retryBtn && this.eventHandlers?.trackListener) {
-            this.eventHandlers.trackListener(retryBtn, 'click', () => this._loadProjects(), {
-                description: 'ProjectList: Retry Load Projects'
-            });
+            this.eventHandlers.trackListener(
+                retryBtn,
+                "click",
+                () => this._loadProjects(),
+                {
+                    description: "ProjectList: Retry Load Projects",
+                },
+            );
         }
     }
 
-    // -------------------------------------------------
-    // Create Project Card
-    // -------------------------------------------------
     _createProjectCard(project) {
-        const theme = this.state.customization.theme || 'default';
-        const themeBg = theme === 'default' ? 'bg-base-100' : `bg-${theme}`;
-        const themeText = theme === 'default' ? 'text-base-content' : `text-${theme}-content`;
+        const theme = this.state.customization.theme || "default";
+        const themeBg = theme === "default" ? "bg-base-100" : `bg-${theme}`;
+        const themeText =
+            theme === "default" ? "text-base-content" : `text-${theme}-content`;
 
-        const card = document.createElement('div');
-        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg
-        transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3`;
+        const card = document.createElement("div");
+        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3`;
         card.dataset.projectId = project.id;
 
         // Header
-        const header = document.createElement('div');
-        header.className = 'flex justify-between items-start';
+        const header = document.createElement("div");
+        header.className = "flex justify-between items-start";
 
-        const title = document.createElement('h3');
-        title.className = 'font-semibold text-xl mb-2 project-name';
-        title.textContent = project.name || 'Unnamed Project';
+        const title = document.createElement("h3");
+        title.className = "font-semibold text-xl mb-2 project-name";
+        title.textContent = project.name || "Unnamed Project";
 
-        // Action buttons
-        const actions = document.createElement('div');
-        actions.className = 'flex gap-1';
+        // Action Buttons
+        const actions = document.createElement("div");
+        actions.className = "flex gap-1";
         [
             {
-                action: 'view',
+                action: "view",
                 icon: `
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                 viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M2.458 12C3.732 7.943 7.523 5
-                       12 5c4.478 0 8.268 2.943
-                       9.542 7-1.274 4.057-5.064
-                       7-9.542 7-4.477 0-8.268
-                       -2.943-9.542-7z"/>
-            </svg>`,
-                title: 'View'
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                           viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                      </svg>
+                  `,
+                title: "View",
             },
             {
-                action: 'edit',
+                action: "edit",
                 icon: `
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                 viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M11 5H6a2 2 0
-                       00-2 2v11a2 2 0
-                       002 2h11a2 2 0
-                       002-2v-5m-1.414
-                       -9.414a2 2 0
-                       112.828 2.828
-                       L11.828 15H9v
-                       -2.828l8.586
-                       -8.586z"/>
-            </svg>`,
-                title: 'Edit'
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                           viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                  `,
+                title: "Edit",
             },
             {
-                action: 'delete',
+                action: "delete",
                 icon: `
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                 viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M19 7l-.867
-                       12.142A2 2 0
-                       0116.138 21H7.862a2 2
-                       0 01-1.995-1.858L5
-                       7m5 4v6m4-6v6m1
-                       -10V4a1 1 0
-                       00-1-1h-4a1 1 0
-                       00-1 1v3M4
-                       7h16"/>
-            </svg>`,
-                title: 'Delete',
-                className: 'text-error hover:bg-error/10'
-            }
+                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                           viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                  `,
+                title: "Delete",
+                className: "text-error hover:bg-error/10",
+            },
         ].forEach((btnDef) => {
-            const btn = document.createElement('button');
-            btn.className = `btn btn-ghost btn-xs btn-square ${btnDef.className || ''}`;
+            const btn = document.createElement("button");
+            btn.className = `btn btn-ghost btn-xs btn-square ${btnDef.className || ""}`;
             btn.dataset.action = btnDef.action;
             btn.title = btnDef.title;
             btn.innerHTML = btnDef.icon;
@@ -629,37 +727,38 @@ export class ProjectListComponent {
         card.appendChild(header);
 
         if (this.state.customization.showDescription && project.description) {
-            const description = document.createElement('p');
-            description.className = ' text-sm text-base-content/80 mb-3 line-clamp-2';
+            const description = document.createElement("p");
+            description.className = "text-sm text-base-content/80 mb-3 line-clamp-2";
             description.textContent = project.description;
             card.appendChild(description);
         }
 
         // Footer
-        const footer = document.createElement('div');
-        footer.className = 'mt-auto pt-2 flex justify-between text-xs text-base-content/70';
+        const footer = document.createElement("div");
+        footer.className =
+            "mt-auto pt-2 flex justify-between text-xs text-base-content/70";
 
         if (this.state.customization.showDate && project.updated_at) {
-            const dateEl = document.createElement('span');
+            const dateEl = document.createElement("span");
             dateEl.textContent = this._formatDate(project.updated_at);
             footer.appendChild(dateEl);
         }
 
-        // optional pinned or archived badges
-        const badges = document.createElement('div');
-        badges.className = 'flex gap-1';
+        // Optional badges for pinned or archived status
+        const badges = document.createElement("div");
+        badges.className = "flex gap-1";
         if (project.pinned) {
-            const pinBadge = document.createElement('span');
-            pinBadge.textContent = '📌';
-            pinBadge.classList.add('tooltip');
-            pinBadge.dataset.tip = 'Pinned';
+            const pinBadge = document.createElement("span");
+            pinBadge.textContent = "📌";
+            pinBadge.classList.add("tooltip");
+            pinBadge.dataset.tip = "Pinned";
             badges.appendChild(pinBadge);
         }
         if (project.archived) {
-            const archiveBadge = document.createElement('span');
-            archiveBadge.textContent = '📦';
-            archiveBadge.classList.add('tooltip');
-            archiveBadge.dataset.tip = 'Archived';
+            const archiveBadge = document.createElement("span");
+            archiveBadge.textContent = "📦";
+            archiveBadge.classList.add("tooltip");
+            archiveBadge.dataset.tip = "Archived";
             badges.appendChild(archiveBadge);
         }
 
@@ -670,7 +769,7 @@ export class ProjectListComponent {
     }
 
     _formatDate(dateString) {
-        if (!dateString) return '';
+        if (!dateString) return "";
         try {
             const date = new Date(dateString);
             return date.toLocaleDateString();
@@ -679,24 +778,23 @@ export class ProjectListComponent {
         }
     }
 
-    // -------------------------------------------------
-    // Customization Storage
-    // -------------------------------------------------
-
     _loadCustomization() {
         try {
-            const saved = localStorage.getItem('projectCardsCustomization');
+            const saved = localStorage.getItem("projectCardsCustomization");
             return saved ? JSON.parse(saved) : this._getDefaultCustomization();
         } catch {
             return this._getDefaultCustomization();
         }
     }
 
-    _mygetDefaultCustomization() {
+    /**
+     * Returns default customization settings for project cards.
+     */
+    _getDefaultCustomization() {
         return {
-            theme: 'default',
+            theme: "default",
             showDescription: true,
-            showDate: true
+            showDate: true,
         };
     }
 }
