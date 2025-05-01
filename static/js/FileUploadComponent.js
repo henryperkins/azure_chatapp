@@ -59,12 +59,12 @@ export class FileUploadComponent {
 
     // --- Elements (all DI or assigned on init, never polled) ---
     this.elements = {
-      fileInput: options.fileInput || null,
-      uploadBtn: options.uploadBtn || null,
-      dragZone: options.dragZone || null,
-      uploadProgress: options.uploadProgress || null,
-      progressBar: options.progressBar || null,
-      uploadStatus: options.uploadStatus || null
+      fileInput: options.fileInput || document.getElementById('fileInput'),
+      uploadBtn: options.uploadBtn || document.getElementById('uploadFileBtn'),
+      dragZone: options.dragZone || document.getElementById('dragDropZone'),
+      uploadProgress: options.uploadProgress || document.getElementById('filesUploadProgress'),
+      progressBar: options.progressBar || document.getElementById('fileProgressBar'),
+      uploadStatus: options.uploadStatus || document.getElementById('uploadStatus')
     };
 
     /** @type {{total:number, completed:number, failed:number}} */
