@@ -639,17 +639,9 @@ class ProjectDetailsComponent {
         sendButtonSelector: '#projectChatSendBtn',
         titleSelector: '#chatTitle'
       };
-      if (!chatManager.isInitialized || chatManager.projectId !== projectId) {
-        console.log(`[ProjectDetailsComponent] Calling chatManager.initialize with projectId ${projectId}`);
-        await chatManager.initialize(chatInitOpts);
-      } else {
-        // If already initialized, update projectId and rebind UI elements
-        chatManager.projectId = projectId;
-        // Re-run UI setup in case DOM elements are new
-        if (typeof chatManager._setupUIElements === 'function') {
-          chatManager._setupUIElements(chatInitOpts);
-        }
-      }
+      // Always run chatManager.initialize (it is idempotent per-project & will rebind if projectId changes)
+      console.log(`[ProjectDetailsComponent] Calling chatManager.initialize with projectId ${projectId}`);
+      await chatManager.initialize(chatInitOpts);
 
       // Determine which conversation to load
       const urlParams = new URLSearchParams(window.location.search);

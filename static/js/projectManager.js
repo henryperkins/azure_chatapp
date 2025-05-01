@@ -462,6 +462,17 @@ class ProjectManager {
         return [];
       }
 
+      // ---------- NEW: auto-select first project if none selected ----------
+      if (!this.currentProject && normalizedProjects.length) {
+        this.setCurrentProject?.(normalizedProjects[0]);
+      }
+      // Always emit an event so listeners can safely wait for it
+      document.dispatchEvent(
+        new CustomEvent('currentProjectReady', {
+          detail: { project: this.currentProject }
+        })
+      );
+
       this._emitEvent("projectsLoaded", {
         projects: normalizedProjects,
         filter
