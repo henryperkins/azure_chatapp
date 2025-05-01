@@ -312,6 +312,28 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async initialize(isVisible, kbData = null, projectId = null) {
+      // Fail fast if critical DOM elements are missing
+      const requiredIds = [
+        "knowledgeTab",
+        "knowledgeBaseActive",
+        "knowledgeBaseInactive",
+        "kbStatusBadge",
+        "knowledgeSearchInput",
+        "runKnowledgeSearchBtn",
+        "knowledgeResultsList",
+        "knowledgeSearchResults",
+        "knowledgeNoResults",
+        "knowledgeTopK"
+      ];
+      for (const id of requiredIds) {
+        if (!document.getElementById(id)) {
+          this._showPersistentErrorBanner(
+            `Critical Knowledge Base UI element missing: #${id}. Please contact support.`
+          );
+          throw new Error(`[KnowledgeBaseComponent] Required element missing: #${id}`);
+        }
+      }
+
       if (this.state.isInitialized && !isVisible) {
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
@@ -342,53 +364,32 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @private
      */
     _bindEventHandlers() {
+      // Track all listeners for cleanup
+      this._boundListeners = this._boundListeners || [];
       const EH = this.eventHandlers;
 
-      if (this.elements.searchButton) {
-        EH.trackListener(this.elements.searchButton, "click", () =>
-          this._triggerSearch(),
-        );
-      }
-      if (this.elements.searchInput) {
-        EH.trackListener(this.elements.searchInput, "input", (e) => {
-          this.debouncedSearch(e.target.value);
-        });
-        EH.trackListener(this.elements.searchInput, "keyup", (e) => {
-          if (e.key === "Enter") this._triggerSearch();
-        });
-      }
-      if (this.elements.kbToggle) {
-        EH.trackListener(this.elements.kbToggle, "change", (e) => {
-          this.toggleKnowledgeBase(e.target.checked);
-        });
-      }
-      if (this.elements.reprocessButton) {
-        EH.trackListener(this.elements.reprocessButton, "click", () => {
-          const pid = this._getCurrentProjectId();
-          if (pid) this.reprocessFiles(pid);
-        });
-      }
-      if (this.elements.setupButton) {
-        EH.trackListener(this.elements.setupButton, "click", () =>
-          this._showKnowledgeBaseModal(),
-        );
-      }
-      if (this.elements.settingsForm) {
-        EH.trackListener(this.elements.settingsForm, "submit", (e) =>
-          this._handleKnowledgeBaseFormSubmit(e),
-        );
-      }
-      if (this.elements.modelSelect) {
-        EH.trackListener(this.elements.modelSelect, "change", () =>
-          this._validateSelectedModelDimensions(),
-        );
-      }
-      if (this.elements.resultModal) {
-        EH.trackListener(this.elements.resultModal, "keydown", (e) => {
-          if (e.key === "Escape") this._hideResultDetailModal();
-        });
-      }
-      EH.trackListener(document, "authStateChanged", (e) => {
+      const addListener = (el, type, fn, opts) => {
+        if (el) {
+          const handler = EH.trackListener(el, type, fn, opts);
+          this._boundListeners.push({ el, type, handler, opts });
+        }
+      };
+
+      addListener(this.elements.searchButton, "click", () => this._triggerSearch());
+      addListener(this.elements.searchInput, "input", (e) => this.debouncedSearch(e.target.value));
+      addListener(this.elements.searchInput, "keyup", (e) => { if (e.key === "Enter") this._triggerSearch(); });
+      addListener(this.elements.kbToggle, "change", (e) => this.toggleKnowledgeBase(e.target.checked));
+      addListener(this.elements.reprocessButton, "click", () => {
+        const pid = this._getCurrentProjectId();
+        if (pid) this.reprocessFiles(pid);
+      });
+      addListener(this.elements.setupButton, "click", () => this._showKnowledgeBaseModal());
+      addListener(this.elements.settingsForm, "submit", (e) => this._handleKnowledgeBaseFormSubmit(e));
+      addListener(this.elements.modelSelect, "change", () => this._validateSelectedModelDimensions());
+      addListener(this.elements.resultModal, "keydown", (e) => {
+        if (e.key === "Escape") this._hideResultDetailModal();
+      });
+      addListener(document, "authStateChanged", (e) => {
         this._handleAuthStateChange(e.detail?.authenticated);
       });
     }
@@ -423,9 +424,10 @@ export function createKnowledgeBaseComponent(options = {}) {
       ];
       requiredIds.forEach((id) => {
         if (!document.getElementById(id)) {
-          console.warn(
-            `[KnowledgeBaseComponent] Missing required element: #${id}`,
+          this._showPersistentErrorBanner(
+            `Critical Knowledge Base UI element missing: #${id}. Please contact support.`
           );
+          throw new Error(`[KnowledgeBaseComponent] Required element missing: #${id}`);
         }
       });
     }
@@ -1089,6 +1091,33 @@ export function createKnowledgeBaseComponent(options = {}) {
      */
     _showError(msg) {
       this._showStatusAlert(msg, "error");
+      this._showPersistentErrorBanner(msg);
+    }
+
+    /**
+     * Show a persistent error banner in the KB tab for critical failures.
+     * @param {string} message
+     * @private
+     */
+    _showPersistentErrorBanner(message) {
+      const container = this.elements.container || document.getElementById("knowledgeTab");
+      if (!container) return;
+      let banner = container.querySelector('.kb-persistent-error-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.className = 'kb-persistent-error-banner bg-error text-error-content p-3 mb-3 rounded shadow';
+        banner.setAttribute('role', 'alert');
+        container.prepend(banner);
+      }
+      banner.innerHTML = `
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <span>${message}</span>
+        </div>
+      `;
+      banner.classList.remove('hidden');
     }
 
     /**
@@ -1247,7 +1276,30 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
   } // end class
 
-  return new KnowledgeBaseComponent(options);
+  // Add destroy/cleanup method to remove all event listeners and persistent error banners
+  class KnowledgeBaseComponentWithDestroy extends KnowledgeBaseComponent {
+    destroy() {
+      // Remove all tracked event listeners
+      if (this._boundListeners) {
+        for (const { el, type, handler, opts } of this._boundListeners) {
+          if (el && handler) {
+            el.removeEventListener(type, handler, opts);
+          }
+        }
+        this._boundListeners = [];
+      }
+      // Remove persistent error banner if present
+      const container = this.elements.container || document.getElementById("knowledgeTab");
+      if (container) {
+        const banner = container.querySelector('.kb-persistent-error-banner');
+        if (banner) banner.remove();
+      }
+      // Reset state
+      this.state.isInitialized = false;
+    }
+  }
+
+  return new KnowledgeBaseComponentWithDestroy(options);
 }
 
 export default createKnowledgeBaseComponent;
