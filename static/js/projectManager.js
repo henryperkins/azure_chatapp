@@ -974,6 +974,7 @@ class ProjectManager {
 
 /**
  * Factory function for dependency-injected ProjectManager construction.
+ * 
  * Typically called in an orchestrator (like app.js), which then registers
  * the instance with the DependencySystem.
  *

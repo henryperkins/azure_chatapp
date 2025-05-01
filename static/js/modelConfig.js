@@ -177,6 +177,71 @@ export function createModelConfig({ DependencySystem, eventHandlers } = {}) {
     panel.append(toggle, label);
   }
 
+  // --- Quick Model Config Panel Renderer ---
+  function renderQuickConfig(container) {
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Model Select Dropdown
+    const modelLabel = Object.assign(document.createElement('label'), { htmlFor: 'quickModelSelect', className: 'block text-sm mb-1', textContent: 'Model:' });
+    const modelSelect = Object.assign(document.createElement('select'), { id: 'quickModelSelect', className: 'select select-sm w-full mb-1' });
+    getModelOptions().forEach(opt => {
+      const option = document.createElement('option');
+      option.value = opt.id;
+      option.text = opt.name;
+      modelSelect.appendChild(option);
+    });
+    modelSelect.value = modelConfigState.modelName;
+    modelSelect.addEventListener('change', () => updateModelConfig({ modelName: modelSelect.value }));
+
+    // Max Tokens Slider
+    const maxTokensDiv = document.createElement('div');
+    maxTokensDiv.className = 'my-2 flex flex-col';
+    const maxTokensLabel = Object.assign(document.createElement('label'), { htmlFor: 'quickMaxTokens', className: 'text-xs mb-1', textContent: 'Max Tokens:' });
+    const maxTokensValue = Object.assign(document.createElement('span'), { className: 'ml-1 text-xs', textContent: modelConfigState.maxTokens });
+    const maxTokensInput = Object.assign(document.createElement('input'), {
+      id: 'quickMaxTokens',
+      type: 'range',
+      min: 100,
+      max: 100000,
+      value: modelConfigState.maxTokens,
+      className: 'range range-xs'
+    });
+    maxTokensInput.addEventListener('input', e => {
+      maxTokensValue.textContent = e.target.value;
+      updateModelConfig({ maxTokens: parseInt(e.target.value, 10) });
+    });
+    maxTokensDiv.append(maxTokensLabel, maxTokensInput, maxTokensValue);
+
+    // Vision toggle if supported
+    const current = getConfig();
+    const supportsVision = getModelOptions().find(m => m.id === current.modelName)?.supportsVision;
+    let visionDiv = null;
+    if (supportsVision) {
+      visionDiv = document.createElement('div');
+      visionDiv.className = 'mt-2';
+      const toggle = Object.assign(document.createElement('input'), {
+        type: 'checkbox',
+        id: 'quickVisionToggle',
+        className: 'mr-2',
+        checked: current.visionEnabled
+      });
+      const toggleLabel = Object.assign(document.createElement('label'), {
+        htmlFor: 'quickVisionToggle', className: 'text-xs', textContent: 'Enable Vision'
+      });
+      toggle.addEventListener('change', () =>
+        updateModelConfig({ visionEnabled: toggle.checked })
+      );
+      visionDiv.append(toggle, toggleLabel);
+    }
+
+    // Append all to panel
+    container.appendChild(modelLabel);
+    container.appendChild(modelSelect);
+    container.appendChild(maxTokensDiv);
+    if (visionDiv) container.appendChild(visionDiv);
+  }
+
   // --- Module API ---
   return {
     getConfig,
@@ -184,5 +249,6 @@ export function createModelConfig({ DependencySystem, eventHandlers } = {}) {
     getModelOptions,
     onConfigChange,
     initializeUI,
+    renderQuickConfig
   };
 }
