@@ -488,10 +488,10 @@
                     if (typeof modalElement.close === 'function') {
                         modalElement.close();
                     } else {
-                         modalElement.classList.add('hidden');
-                         modalElement.style.display = "none";
-                         modalElement.removeAttribute("open");
-                         document.body.style.overflow = '';
+                        modalElement.classList.add('hidden');
+                        modalElement.style.display = "none";
+                        modalElement.removeAttribute("open");
+                        document.body.style.overflow = '';
                     }
                 }
             } else {
@@ -501,17 +501,38 @@
     });
 
 
+    // DRY helper for button loading state
+    function setButtonLoading(btn, isLoading, loadingText = "Saving...") {
+      if (!btn) return;
+      if (isLoading) {
+        btn.disabled = true;
+        btn.dataset.originalText = btn.textContent;
+        btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+      } else {
+        btn.disabled = false;
+        if (btn.dataset.originalText) {
+          btn.textContent = btn.dataset.originalText;
+          delete btn.dataset.originalText;
+        }
+      }
+    }
+    // DRY helper for notification fallback
+    function notify(type, message) {
+      if (window.showNotification) {
+        window.showNotification(message, type);
+      } else {
+        if (type === "error") alert(message);
+        else console.log(message);
+      }
+    }
+
     // Knowledge base form submit (using dialog structure)
     const knowledgeBaseForm = document.getElementById('knowledgeBaseForm');
     if (knowledgeBaseForm) {
       knowledgeBaseForm.addEventListener('submit', function(e) {
         e.preventDefault();
         const submitButton = this.querySelector('button[type="submit"]');
-        const originalButtonText = submitButton?.textContent;
-        if (submitButton) {
-            submitButton.disabled = true;
-            submitButton.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
-        }
+        setButtonLoading(submitButton, true);
 
         const formData = new FormData(this);
         const data = {};
@@ -541,28 +562,22 @@
 
           window.apiRequest(endpoint, method, data)
             .then(() => {
-              window.showNotification?.('Knowledge base settings saved', 'success');
+              notify('success', 'Knowledge base settings saved');
               // Close the modal using the manager
               window.modalManager?.hide('knowledge');
               // Reload project details to reflect changes
               window.projectManager.loadProjectDetails(projectId);
             })
             .catch(err => {
-              window.showNotification?.(`Failed to save settings: ${err.message}`, 'error');
+              notify('error', `Failed to save settings: ${err.message}`);
                console.error("Error saving KB settings:", err);
             })
             .finally(() => {
-                 if (submitButton) {
-                    submitButton.disabled = false;
-                    submitButton.textContent = originalButtonText; // Restore original text
-                }
+                setButtonLoading(submitButton, false);
             });
         } else {
-             window.showNotification?.('Error: Project context not found.', 'error');
-             if (submitButton) {
-                submitButton.disabled = false;
-                submitButton.textContent = originalButtonText;
-             }
+             notify('error', 'Error: Project context not found.');
+             setButtonLoading(submitButton, false);
         }
       });
     }
