@@ -1,10 +1,10 @@
 /**
- * projectDetailsComponent.js - Refactored (Dependency Injection Version)
+ * projectDetailsComponent.js - Refactored (DependencySystem Version)
  *
  * Component for displaying project details, files, conversations, artifacts, and knowledge base content.
- * Uses Dependency Injection: all logic, API access, and UI events rely on injected dependencies.
+ * All dependencies are now exclusively retrieved from the global DependencySystem.
  *
- * ## Dependencies (Injected via Constructor Options):
+ * ## Dependencies (Resolved from DependencySystem):
  * - app: Core app module (state, notifications, apiRequest, utilities, validation)
  * - projectManager: Project data operations and event emitting (files, conversations, artifacts, chat, stats).
  * - eventHandlers: Centralized event listener management (trackListener, delegate, cleanupListeners).
@@ -13,7 +13,7 @@
  * - knowledgeBaseComponent: (Optional) Instance of the injected knowledge base UI logic.
  *
  * ## Integration Contract:
- * - Orchestrator must inject all dependencies via the constructor.
+ * - All dependencies are resolved from DependencySystem at construction.
  * - Orchestrator must inject the base DOM structure for #projectDetailsView and children before .initialize().
  * - Component manages its internal subcomponents, listeners, loading indicators, and tab navigation, but not container mounting.
  * - Component provides methods: initialize(), show()/hide(), destroy(),
@@ -29,16 +29,12 @@
 
 class ProjectDetailsComponent {
   /**
-   * @param {Object} options - Component options & dependencies
-   * @param {Function} options.onBack - Callback for back navigation (Required)
-   * @param {Object} options.app - Core Application instance (Required)
-   * @param {Object} options.projectManager - ProjectManager instance (Required)
-   * @param {Object} options.eventHandlers - EventHandler instance (Required)
-   * @param {Function|Object} options.FileUploadComponentClass - FileUploadComponent class/factory (Required)
-   * @param {Object} options.modalManager - ModalManager instance (Required)
-   * @param {Object} [options.knowledgeBaseComponent] - Optional KnowledgeBaseComponent instance
+   * ProjectDetailsComponent constructor.
+   * All dependencies are resolved from DependencySystem.
+   * The only accepted parameter is an optional onBack callback.
+   * @param {Object} [options] - (Unused, kept for compatibility; all dependencies are resolved from DependencySystem)
    */
-  constructor(options = {}) {
+  constructor() {
     // Retrieve all required dependencies solely from the DependencySystem
     this.onBack = window.DependencySystem.modules.get('onBack')
                    || (() => { console.warn("onBack callback not registered."); });
@@ -906,7 +902,7 @@ class ProjectDetailsComponent {
 } // End ProjectDetailsComponent Class
 
 /**
- * Factory function for dependency-injected ProjectDetailsComponent construction.
+ * Factory function for DependencySystem-based ProjectDetailsComponent construction.
  *
  * @returns {ProjectDetailsComponent} A new ProjectDetailsComponent instance.
  */
