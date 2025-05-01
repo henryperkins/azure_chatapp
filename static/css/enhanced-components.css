@@ -503,7 +503,7 @@ textarea:focus-visible,
 }
 
 .kbd-shortcut {
-  @apply kbd kbd-base; /* Use base size for better readability on mobile */
+  @apply kbd kbd-md; /* Use medium size for better readability on mobile */
 }
 
 /* Better Tables for Data */
