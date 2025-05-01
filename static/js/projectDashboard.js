@@ -35,12 +35,11 @@ class ProjectDashboard {
 
     this.app = getModule('app');
     this.projectManager = getModule('projectManager');
-    this.ProjectListComponent = getModule('ProjectListComponent');
+    // Use the already-registered instance for ProjectListComponent
+    this.components = { projectList: null, projectDetails: null };
     this.ProjectDetailsComponent = getModule('ProjectDetailsComponent');
     this.eventHandlers = getModule('eventHandlers');
     this.auth = getModule('auth');
-
-    this.components = { projectList: null, projectDetails: null };
 
     this.state = {
       currentView: null,      // 'list' or 'details'
@@ -268,21 +267,20 @@ class ProjectDashboard {
     const projectListEl = document.getElementById('projectList');
     if (!projectListEl) throw new Error('Missing #projectList element in DOM after injecting project_list.html');
 
-    if (this.ProjectListComponent) {
-      this.components.projectList = new this.ProjectListComponent({
-        elementId: 'projectList',
-        onViewProject: this._handleViewProject.bind(this)
-      });
-      try {
+    // Use the already-registered instance for ProjectListComponent
+    this.components.projectList = getModule('projectListComponent');
+    if (this.components.projectList) {
+      // Optionally set the onViewProject callback if needed:
+      this.components.projectList.onViewProject = this._handleViewProject.bind(this);
+      // Optionally call initialize if not already done:
+      if (!this.components.projectList.state?.initialized) {
         await this.components.projectList.initialize();
-        console.log('[ProjectDashboard] ProjectListComponent created and initialized.');
-      } catch (err) {
-        console.error('[ProjectDashboard] ProjectListComponent failed to initialize:', err);
-        throw new Error('ProjectListComponent failed to initialize.');
+        console.log('[ProjectDashboard] ProjectListComponent initialized.');
       }
     } else {
-      console.error('[ProjectDashboard] ProjectListComponent not found (DependencySystem).');
+      console.error('[ProjectDashboard] projectListComponent not found (DependencySystem).');
     }
+
     if (this.ProjectDetailsComponent) {
       this.components.projectDetails = new this.ProjectDetailsComponent({
         onBack: this._handleBackToList.bind(this)
