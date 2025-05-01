@@ -12,38 +12,46 @@
  * No reliance on window.* globals for shared modules. No event replay cabinet.
  */
 
-/** @typedef {Object} Project
- *  @property {string} id
- *  @property {string} name
- *  @property {boolean} [archived]
- *  @property {boolean} [pinned]
- *  @property {any} [otherProps]
+/**
+ * @typedef {Object} Project
+ * @property {string} id               - Unique project ID (UUID).
+ * @property {string} name             - Human-readable project name.
+ * @property {boolean} [archived]      - Flag indicating the project is archived.
+ * @property {boolean} [pinned]        - Flag indicating if the project is pinned.
+ * @property {*} [otherProps]          - Additional arbitrary properties.
  */
-
-/** @typedef {Object} ProjectStats
- *  @property {string} projectId
- *  @property {number} [fileCount]
- *  @property {number} [conversationCount]
- *  @property {any} [otherStats]
- */
-
-/** @typedef {Object} FileUploadResult
- *  @property {Array<{file: File}>} validatedFiles
- *  @property {Array<{file: File, reason: string}>} invalidFiles
- */
-
 
 /**
- * Strongly-normalize project fetch/create API responses. Throws if no valid project ID found.
- * See: unified frontend remediation spec.
+ * @typedef {Object} ProjectStats
+ * @property {string} projectId        - ID of the project to which stats belong.
+ * @property {number} [fileCount]      - Number of files in this project.
+ * @property {number} [conversationCount] - Number of conversations in this project.
+ * @property {*} [otherStats]          - Any additional arbitrary statistics.
+ */
+
+/**
+ * @typedef {Object} FileUploadResult
+ * @property {Array<{file: File}>} validatedFiles      - Files deemed valid for upload.
+ * @property {Array<{file: File, reason: string}>} invalidFiles  - Files deemed invalid, including reason.
+ */
+
+/**
+ * Strongly-normalize project fetch/create API responses. Throws if no valid project ID is found.
+ * Ensures that the resulting object has a properly validated `projectData.id` string.
+ *
+ * @param {*} response - The raw API response, possibly containing project data in various shapes.
+ * @returns {Object} A normalized project object guaranteed to have a valid `.id`.
+ * @throws {Error} If no valid project ID can be extracted.
  */
 export function normalizeProjectResponse(response) {
   let projectData = null;
+
+  // Attempt to find project data in array or object shapes
   if (Array.isArray(response)) projectData = response[0];
   if (!projectData || !projectData.id) projectData = response?.data?.id ? response.data : null;
   if (!projectData || !projectData.id) projectData = response?.id ? response : null;
 
-  // Coerce and check for all known keys (uuid, project_id, projectId, id)
+  // Normalize ID field among known properties (e.g., uuid, project_id, projectId)
   projectData &&= {
     ...projectData,
     id: String(
@@ -54,7 +62,8 @@ export function normalizeProjectResponse(response) {
       ''
     ).trim()
   };
-  // Accept only "strong" UUID/project IDs, not 'null', not empty, not loose types
+
+  // Accept only strong UUID/IDs, reject 'null' etc.
   if (
     !projectData ||
     !projectData.id ||
@@ -64,11 +73,22 @@ export function normalizeProjectResponse(response) {
     console.error('[ProjectManager] Invalid project data/ID', { response, projectData });
     throw new Error('Invalid or missing project ID after project load');
   }
+
   return projectData;
 }
 
 /**
- * Utility: Normalizes any API response to a uniform array of records—or single object—for resource loaders.
+ * Utility: Normalizes any API response to a uniform array of records—or a single object
+ * for resource loaders. Searches common property keys like 'projects', 'conversations',
+ * 'files', etc., to produce an array.
+ *
+ * @param {*} response - The raw API response.
+ * @param {Object} [options={}] - Configuration for list extraction.
+ * @param {string[]} [options.listKeys=["projects","conversations","artifacts","files"]]
+ *   Common keys in the response where a list of items might be found.
+ * @param {string} [options.dataKey="data"] - The property name at which data might exist (e.g., response.data).
+ * @param {string|null} [options.singularKey=null] - A fallback key if the data is singular instead of an array.
+ * @returns {?Array<*>} An array of items if found/extracted, or null if not found.
  */
 function extractResourceList(response, options = {}) {
   const {
@@ -77,40 +97,53 @@ function extractResourceList(response, options = {}) {
     singularKey = null
   } = options;
 
-  // List at root or inside .data, or named key
+  // Try to locate arrays in possible known structures
   for (const key of listKeys) {
     if (Array.isArray(response?.[key])) return response[key];
     if (Array.isArray(response?.[dataKey]?.[key])) return response[dataKey][key];
     if (Array.isArray(response?.data)) return response.data;
     if (Array.isArray(response?.data?.[key])) return response.data[key];
-    if (response?.[key] && typeof response[key] === "object" && response[key].id)
+
+    // If we find a single object with .id under these keys, wrap it in an array
+    if (response?.[key] && typeof response[key] === "object" && response[key].id) {
       return [response[key]];
-    if (response?.[dataKey]?.[key] && typeof response[dataKey][key] === "object" && response[dataKey][key].id)
+    }
+    if (response?.[dataKey]?.[key] && typeof response[dataKey][key] === "object" && response[dataKey][key].id) {
       return [response[dataKey][key]];
+    }
   }
-  // fallback for arrays directly
+
+  // Other fallbacks
   if (Array.isArray(response?.[dataKey])) return response[dataKey];
   if (Array.isArray(response)) return response;
-  // fallback for unique object with id
   if (response?.[dataKey]?.id) return [response[dataKey]];
   if (response?.id) return [response];
-  // expanded for wrapped or singular key results
+
+  // Additional loop for nested data
   if (listKeys) {
     for (const key of listKeys) {
       if (Array.isArray(response?.data?.[key])) return response.data[key];
-      if (response?.data?.[key] && typeof response.data[key] === "object" && response.data[key].id)
+      if (response?.data?.[key] && typeof response.data[key] === "object" && response.data[key].id) {
         return [response.data[key]];
+      }
     }
   }
+
+  // Optionally handle a singular key
   if (singularKey && response?.[singularKey]) return [response[singularKey]];
   if (singularKey && response?.[dataKey]?.[singularKey]) return [response[dataKey][singularKey]];
 
-  return null; // Unable to produce an array
+  // If none matched, fallback null
+  return null;
 }
 
-/** True UUID (canonical, not just non-empty string) validator. */
+/**
+ * Checks if the provided ID string is a valid project UUID format.
+ * @function
+ * @param {string} id - Potential project ID to validate.
+ * @returns {boolean} True if it matches a 32- or 36-char hex/UUID format and is not 'null'.
+ */
 export function isValidProjectId(id) {
-  // Accept 32/36-cc UUIDs, not 'null', not empty, not accidental number/undefined
   return (
     typeof id === 'string' &&
     /^[0-9a-f-]{32,36}$/i.test(id) &&
@@ -118,7 +151,23 @@ export function isValidProjectId(id) {
   );
 }
 
+/**
+ * The ProjectManager class orchestrates loading, creating, and managing projects
+ * within the dependency injection context. It also delegates conversation creation
+ * to the chatManager and handles knowledge base initialization, file uploading, etc.
+ */
 class ProjectManager {
+  /**
+   * Constructs the ProjectManager with provided dependencies or retrieves them from
+   * the DependencySystem if not passed explicitly.
+   *
+   * @param {Object} deps - Dependency injection object
+   * @param {Object} [deps.app] - The main application instance (API, state mgmt, notifications)
+   * @param {Object} [deps.chatManager] - The chat/conversation manager instance
+   * @param {Object} [deps.modelConfig] - Optional model config manager
+   * @param {Object} [deps.DependencySystem] - Required dependency injection system
+   * @throws {Error} If DependencySystem is not provided or if required dependencies are missing.
+   */
   constructor({ app, chatManager, modelConfig, DependencySystem } = {}) {
     if (!DependencySystem) {
       throw new Error("DependencySystem is required for ProjectManager");
@@ -128,11 +177,18 @@ class ProjectManager {
     this.chatManager = chatManager || this.DependencySystem.modules.get("chatManager");
     this.modelConfig = modelConfig || this.DependencySystem.modules.get("modelConfig");
 
-    // Defensive: warn if any required dependency missing
-    if (!this.app) throw new Error("ProjectManager constructor: 'app' dependency missing.");
-    if (!this.chatManager) throw new Error("ProjectManager constructor: 'chatManager' dependency missing.");
+    // Verify required dependencies
+    if (!this.app) {
+      throw new Error("ProjectManager constructor: 'app' dependency missing.");
+    }
+    if (!this.chatManager) {
+      throw new Error("ProjectManager constructor: 'chatManager' dependency missing.");
+    }
 
-    // Configuration constants
+    /**
+     * Configuration constants, including endpoints for project operations.
+     * @type {Object}
+     */
     this.CONFIG = {
       DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
       ENDPOINTS: {
@@ -145,32 +201,63 @@ class ProjectManager {
       }
     };
 
+    /**
+     * @type {Project|null}
+     * Holds the currently loaded project, if any.
+     */
     this.currentProject = null;
+
+    /**
+     * @type {boolean}
+     * Tracks whether a project list load is in progress (to prevent duplicates).
+     */
     this.projectLoadingInProgress = false;
   }
 
-  // --- Always-create full workflow, user-supplied ---
+  /**
+   * Initialize the ProjectManager. Useful for one-time setup tasks.
+   * Called by the orchestrator (e.g., app.js) after instantiating ProjectManager.
+   * @async
+   * @returns {Promise<void>}
+   */
+  async initialize() {
+    console.log('[ProjectManager] Initializing...');
+    // Any future one-time startup logic can be placed here
+  }
 
+  // --------------------------------------------------------------------------
+  // Core Project Lifecycle
+  // --------------------------------------------------------------------------
+
+  /**
+   * Create a brand-new project, optionally ensuring a default conversation
+   * and knowledge base are also created. Dispatches "projectCreated" and
+   * "projectConversationsLoaded" events on success.
+   *
+   * @async
+   * @param {Object} projectData - Key-value pairs for the new project's data.
+   * @returns {Promise<Project>} The newly created project object (merged with conversation and KB).
+   * @throws {Error} If project creation fails.
+   */
   async createProject(projectData) {
     try {
       const response = await this.app.apiRequest('/api/projects', {
         method: 'POST',
         body: projectData
       });
-
       const project = response.data || response;
 
       if (!project || !project.id) {
         throw new Error('Invalid project response');
       }
-
       console.log('[ProjectManager] Project created:', project.id);
 
-      // 1. Ensure a KB and at least one conversation, idempotent
+      // 1. Optionally ensure a conversation and knowledge base
       const ensureConversation = async () => {
         const hasConvo =
-          (Array.isArray(project.conversations) && project.conversations.length) ||
+          (Array.isArray(project.conversations) && project.conversations.length > 0) ||
           Number(project.conversation_count) > 0;
+
         if (hasConvo) return project.conversations?.[0];
         return await this.createDefaultConversation(project.id);
       };
@@ -185,7 +272,7 @@ class ProjectManager {
         ensureKnowledgeBase()
       ]);
 
-      // 2. Merge into project object for downstream consumers
+      // Merge conversation and KB into the project object
       if (conversation) {
         project.conversations = [conversation];
         project.conversation_count = 1;
@@ -195,7 +282,7 @@ class ProjectManager {
       this._emitEvent('projectCreated', project);
       document.dispatchEvent(
         new CustomEvent('projectConversationsLoaded', {
-          detail: { projectId: project.id, conversations: project.conversations },
+          detail: { projectId: project.id, conversations: project.conversations }
         })
       );
 
@@ -207,6 +294,13 @@ class ProjectManager {
     }
   }
 
+  /**
+   * Creates a default conversation for a given project, using the model configuration if available.
+   *
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<Object|null>} The conversation object, or null if creation fails.
+   */
   async createDefaultConversation(projectId) {
     try {
       const response = await this.app.apiRequest(
@@ -230,15 +324,21 @@ class ProjectManager {
       if (!conversation || !conversation.id) {
         throw new Error('Failed to create default conversation');
       }
-
       console.log('[ProjectManager] Default conversation created:', conversation.id);
       return conversation;
     } catch (error) {
       console.error('[ProjectManager] Failed to create default conversation:', error);
       this.app?.showNotification('Default conversation creation failed', 'error');
+      return null;
     }
   }
 
+  /**
+   * Initializes a default knowledge base for the given project.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<Object|null>} The knowledge base object, or null if initialization fails.
+   */
   async initializeKnowledgeBase(projectId) {
     try {
       const response = await this.app.apiRequest(
@@ -261,23 +361,21 @@ class ProjectManager {
     } catch (error) {
       console.error('[ProjectManager] Failed to initialize knowledge base:', error);
       this.app?.showNotification('Knowledge base initialization failed', 'error');
+      return null;
     }
   }
 
-  /**
-   * Initialize the project manager
-   * @returns {Promise<void>}
-   */
-  async initialize() {
-    console.log('[ProjectManager] Initializing...');
-    // Any one-time setup code can go here
-  }
+  // --------------------------------------------------------------------------
+  // Project Loading
+  // --------------------------------------------------------------------------
 
   /**
-   * Load a list of projects, optionally filtered.
+   * Loads a list of projects from the server, optionally filtered (e.g., archived or pinned).
+   * Dispatches "projectsLoading" before fetch, and "projectsLoaded" (or error event) afterwards.
    *
-   * @param {string} [filter='all'] - Filter type (e.g., 'all', 'archived', etc.)
-   * @returns {Promise<Project[]>} - Resolves to an array of projects.
+   * @async
+   * @param {string} [filter='all'] - Filter type string used by API (e.g., 'all', 'archived').
+   * @returns {Promise<Project[]>} An array of loaded project objects.
    */
   async loadProjects(filter = 'all') {
     if (this.projectLoadingInProgress) {
@@ -286,7 +384,7 @@ class ProjectManager {
       return [];
     }
 
-    // Check authentication from centralized state
+    // Ensure user is authenticated
     if (!this.app.state.isAuthenticated) {
       console.warn("[ProjectManager] Not authenticated, can't load projects");
       this._emitEvent("projectsLoaded", {
@@ -300,27 +398,26 @@ class ProjectManager {
     this._emitEvent("projectsLoading", { filter });
 
     try {
-      // Build API endpoint with filter and pagination
+      // Build API endpoint with filter/pagination
       const params = new URLSearchParams();
       params.append("filter", filter);
       params.append("skip", "0");
       params.append("limit", "100");
 
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
-      this.CONFIG.DEBUG &&
-        console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
+      this.CONFIG.DEBUG && console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
+
       const response = await this.app.apiRequest(endpoint);
 
-      // Always log the full API response for debugging
+      // Always log raw response if in debug mode
       console.log(
         '%c[FULL /api/projects RESPONSE]',
         'color: orange; font-weight: bold',
         JSON.stringify(response)
       );
-      this.CONFIG.DEBUG &&
-        console.log('[ProjectManager] Raw projects response:', response);
+      this.CONFIG.DEBUG && console.log('[ProjectManager] Raw projects response:', response);
 
-      // Support various API response shapes
+      // Attempt to parse the response in typical shapes
       let projects = [];
       if (Array.isArray(response?.data?.projects)) {
         projects = response.data.projects;
@@ -334,15 +431,23 @@ class ProjectManager {
         projects = [response.data];
       } else if (response && typeof response === "object" && response.id) {
         projects = [response];
-      } else if (response?.data?.projects && typeof response.data.projects === "object" && response.data.projects.id) {
+      } else if (
+        response?.data?.projects &&
+        typeof response.data.projects === "object" &&
+        response.data.projects.id
+      ) {
         projects = [response.data.projects];
-      } else if (response?.projects && typeof response.projects === "object" && response.projects.id) {
+      } else if (
+        response?.projects &&
+        typeof response.projects === "object" &&
+        response.projects.id
+      ) {
         projects = [response.projects];
       } else {
         projects = [];
       }
 
-      // PATCH: Accept valid single-object project, warn only if neither array nor object with .id
+      // If we still don't have an array, handle it
       let normalizedProjects = projects;
       if (Array.isArray(projects)) {
         // proceed
@@ -361,7 +466,6 @@ class ProjectManager {
         projects: normalizedProjects,
         filter
       });
-
       return normalizedProjects;
     } catch (error) {
       console.error("[ProjectManager] Error loading projects:", error);
@@ -376,14 +480,16 @@ class ProjectManager {
       this.projectLoadingInProgress = false;
     }
   }
+
   /**
-   * Load details for a specific project, including related data.
+   * Loads details for a specific project, including stats, files, conversations, and artifacts.
+   * Dispatches "projectDetailsLoading" initially, then either "projectLoaded" or "projectDetailsError".
    *
+   * @async
    * @param {string} projectId - The project UUID.
-   * @returns {Promise<Project|null>} - Resolves to the project object or null on error.
+   * @returns {Promise<Project|null>} The loaded project, or null if errors occur.
    */
   async loadProjectDetails(projectId) {
-    // Defensive: reject empty or loosely-supplied projectId up front
     if (!isValidProjectId(projectId)) {
       console.error("[ProjectManager] Empty or invalid project ID supplied");
       this._emitEvent("projectDetailsError", {
@@ -393,7 +499,6 @@ class ProjectManager {
       return null;
     }
 
-    // Check authentication from centralized state
     if (!this.app.state.isAuthenticated) {
       console.warn("[ProjectManager] Not authenticated, can't load project details");
       this._emitEvent("projectDetailsError", {
@@ -409,12 +514,11 @@ class ProjectManager {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
       const response = await this.app.apiRequest(endpoint);
-
       if (!response) return null;
 
-      // Use strict normalization/validation
       let projectData;
       try {
+        // Strict ID normalization
         projectData = normalizeProjectResponse(response);
       } catch (err) {
         this._emitEvent("projectDetailsError", {
@@ -424,7 +528,7 @@ class ProjectManager {
         return null;
       }
 
-      // Normalize both sides to lowercase string to allow 42/UUID, etc.
+      // Potential ID mismatch check
       const parsedId = String(projectData.id).toLowerCase();
       const requestedId = String(projectId).toLowerCase();
       if (parsedId !== requestedId) {
@@ -443,9 +547,9 @@ class ProjectManager {
         return JSON.parse(JSON.stringify(this.currentProject));
       }
 
-      // Load related data in parallel (stats, files, conversations, artifacts)
+      // Load related data in parallel
       await Promise.allSettled([
-        this.loadProjectStats(projectData.id), // use normalized/validated id
+        this.loadProjectStats(projectData.id),
         this.loadProjectFiles(projectData.id),
         this.loadProjectConversations(projectData.id),
         this.loadProjectArtifacts(projectData.id)
@@ -467,10 +571,12 @@ class ProjectManager {
   }
 
   /**
-   * Load statistics for a project.
+   * Load project statistics such as file counts, conversation counts, etc.
+   * Dispatches "projectStatsLoaded" or "projectStatsError".
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<ProjectStats>} - Resolves to stats object.
+   * @async
+   * @param {string} projectId - The project’s UUID.
+   * @returns {Promise<ProjectStats>} A stats object (may be empty on error).
    */
   async loadProjectStats(projectId) {
     try {
@@ -494,10 +600,12 @@ class ProjectManager {
   }
 
   /**
-   * Load files for a project.
+   * Load files for a project, returning an array of file objects.
+   * Dispatches "projectFilesLoaded" or "projectFilesError".
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<Array>} - Resolves to an array of files.
+   * @async
+   * @param {string} projectId - The project’s UUID.
+   * @returns {Promise<Array>} Array of file objects.
    */
   async loadProjectFiles(projectId) {
     try {
@@ -523,16 +631,17 @@ class ProjectManager {
   }
 
   /**
-   * Load conversations for a project.
+   * Load all conversations for the specified project, returning an array of conversation objects.
+   * Dispatches "projectConversationsLoaded" or "projectConversationsError".
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<Array>} - Resolves to an array of conversations.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<Array>} An array of conversation objects.
    */
   async loadProjectConversations(projectId) {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
       const response = await this.app.apiRequest(endpoint);
-
       if (!response) return [];
 
       let conversations = extractResourceList(response, { listKeys: ["conversations", "conversation"] });
@@ -554,16 +663,17 @@ class ProjectManager {
   }
 
   /**
-   * Load artifacts for a project.
+   * Load all artifacts associated with a project.
+   * Dispatches "projectArtifactsLoaded" or "projectArtifactsError".
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<Array>} - Resolves to an array of artifacts.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<Array>} An array of artifacts or empty on error.
    */
   async loadProjectArtifacts(projectId) {
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
       const response = await this.app.apiRequest(endpoint);
-
       if (!response) return [];
 
       let artifacts = extractResourceList(response, { listKeys: ["artifacts", "artifact"] });
@@ -584,12 +694,19 @@ class ProjectManager {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Project Create/Update/Delete
+  // --------------------------------------------------------------------------
+
   /**
-   * Create a new project or update an existing one.
+   * Create a new project or update an existing one. Dispatches "projectUpdated" or "projectCreated"
+   * depending on whether it's an update or new creation.
    *
-   * @param {string|null} projectId - The project UUID (null for create).
-   * @param {Object} projectData - The project data to save.
-   * @returns {Promise<Project>} - Resolves to the saved project object.
+   * @async
+   * @param {string|null} projectId - UUID of the project to update, or null for creation.
+   * @param {Object} projectData - New data for creating/updating.
+   * @returns {Promise<Project>} The saved project object.
+   * @throws {Error} If user is not authenticated or if the server response is invalid.
    */
   async createOrUpdateProject(projectId, projectData) {
     if (!this.app.state.isAuthenticated) {
@@ -610,6 +727,7 @@ class ProjectManager {
         throw new Error("Invalid response after project save");
       }
 
+      // If updating the current loaded project, merge changes
       if (isUpdate && this.currentProject?.id === projectId) {
         this.currentProject = { ...this.currentProject, ...resultData };
         this._emitEvent("projectUpdated", JSON.parse(JSON.stringify(this.currentProject)));
@@ -625,10 +743,12 @@ class ProjectManager {
   }
 
   /**
-   * Delete a project.
+   * Deletes a project from the server. Emits "projectDeleted" on success.
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<any>} - Resolves to API response.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<any>} The server response, often an empty object or success message.
+   * @throws {Error} If user is not authenticated or server operation fails.
    */
   async deleteProject(projectId) {
     if (!this.app.state.isAuthenticated) {
@@ -651,11 +771,17 @@ class ProjectManager {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Pin & Archive Toggling
+  // --------------------------------------------------------------------------
+
   /**
-   * Toggle the pin status for a project.
+   * Toggle the 'pinned' status of a project. Emits "projectPinToggled" with updated pin state.
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<any>} - Resolves to API response.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<any>} The server response containing the pinned status.
+   * @throws {Error} If user is not authenticated or server operation fails.
    */
   async togglePinProject(projectId) {
     if (!this.app.state.isAuthenticated) {
@@ -670,7 +796,6 @@ class ProjectManager {
         projectId,
         pinned: response?.pinned ?? !this.currentProject?.pinned
       });
-
       return response;
     } catch (error) {
       console.error("[ProjectManager] Error toggling project pin:", error);
@@ -679,10 +804,12 @@ class ProjectManager {
   }
 
   /**
-   * Toggle the archive status for a project.
+   * Toggle the 'archived' status of a project. Emits "projectArchiveToggled" with updated archived state.
    *
-   * @param {string} projectId - The project UUID.
-   * @returns {Promise<any>} - Resolves to API response.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @returns {Promise<any>} The API response containing the archived status.
+   * @throws {Error} If user is not authenticated or server operation fails.
    */
   async toggleArchiveProject(projectId) {
     if (!this.app.state.isAuthenticated) {
@@ -697,7 +824,6 @@ class ProjectManager {
         projectId,
         archived: response?.archived ?? !this.currentProject?.archived
       });
-
       return response;
     } catch (error) {
       console.error("[ProjectManager] Error toggling project archive:", error);
@@ -705,12 +831,18 @@ class ProjectManager {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Conversation Management (delegates to chatManager)
+  // --------------------------------------------------------------------------
+
   /**
-   * Create a new conversation for a project (delegated to chatManager).
+   * Creates a new conversation for the project, delegating to chatManager but updating localStorage
+   * for "selectedProjectId".
    *
-   * @param {string} projectId - The project UUID.
-   * @param {Object} [options={}] - Conversation options.
-   * @returns {Promise<any>} - Resolves to the new conversation.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @param {Object} [options={}] - Additional conversation options for chatManager.
+   * @returns {Promise<Object>} The newly created conversation object.
    */
   async createConversation(projectId, options = {}) {
     try {
@@ -723,11 +855,12 @@ class ProjectManager {
   }
 
   /**
-   * Delete a conversation from a project (delegated to chatManager).
+   * Deletes a conversation in the chatManager context.
    *
-   * @param {string} projectId - The project UUID.
-   * @param {string} conversationId - The conversation UUID.
-   * @returns {Promise<boolean>} - Resolves to true on success.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @param {string} conversationId - The conversation to delete.
+   * @returns {Promise<boolean>} True if deleted successfully, otherwise throws.
    */
   async deleteProjectConversation(projectId, conversationId) {
     try {
@@ -740,21 +873,27 @@ class ProjectManager {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Getters & File Handling
+  // --------------------------------------------------------------------------
+
   /**
-   * Get the currently loaded project.
+   * Returns the currently loaded project (or null if none is loaded).
    *
-   * @returns {Project|null} - The current project or null.
+   * @returns {Project|null} The active project object, or null.
    */
   getCurrentProject() {
     return this.currentProject ? JSON.parse(JSON.stringify(this.currentProject)) : null;
   }
 
   /**
-   * Validate and prepare files for upload.
+   * Prepares files for upload by checking size constraints and categorizing them
+   * as valid or invalid.
    *
-   * @param {string} projectId - The project UUID.
-   * @param {FileList|Array<File>} fileList - List of files to validate.
-   * @returns {Promise<FileUploadResult>} - Object with validated and invalid files.
+   * @async
+   * @param {string} projectId - The project's UUID (not used in this example, but typically required server-side).
+   * @param {FileList|Array<File>} fileList - List of files selected for upload.
+   * @returns {Promise<FileUploadResult>} Contains arrays of validated and invalid files.
    */
   async prepareFileUploads(projectId, fileList) {
     const validatedFiles = [];
@@ -771,13 +910,14 @@ class ProjectManager {
   }
 
   /**
-   * Upload a file to a project, with retry and exponential backoff.
+   * Uploads a file to the server with retry logic (exponential backoff).
    *
-   * @param {string} projectId - The project UUID.
-   * @param {{file: File}} fileObj - Object containing the file to upload.
-   * @param {number} [maxRetries=3] - Maximum number of retries.
-   * @returns {Promise<boolean>} - Resolves to true on success.
-   * @throws {Error} - If upload fails after all retries.
+   * @async
+   * @param {string} projectId - The project's UUID.
+   * @param {{file: File}} fileObj - An object containing the file to be uploaded.
+   * @param {number} [maxRetries=3] - Maximum number of retry attempts.
+   * @returns {Promise<boolean>} True if the file is uploaded successfully.
+   * @throws {Error} If retries are exhausted.
    */
   async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
     let attempt = 0;
@@ -800,45 +940,47 @@ class ProjectManager {
     }
   }
 
+  // --------------------------------------------------------------------------
+  // Internal Utilities
+  // --------------------------------------------------------------------------
+
   /**
-   * Emit a custom DOM event for projectManager state changes.
+   * Emits a custom DOM event representing a state change or action in ProjectManager.
    * @private
-   * @param {string} eventName - The event name.
-   * @param {Object} detail - Event detail object.
+   * @param {string} eventName - The name of the event (e.g., "projectCreated").
+   * @param {Object} detail - Additional data to attach to the event's payload.
    */
   _emitEvent(eventName, detail) {
-    // Build event object once (for both dispatches and cache)
     const evt = new CustomEvent(eventName, {
       detail,
       bubbles: false,
       composed: false
     });
     evt.timestamp = Date.now();
-
-    // Dispatch on document so UI components can hear it
     document.dispatchEvent(evt);
   }
 }
 
 /**
  * Factory function for dependency-injected ProjectManager construction.
+ * Typically called in an orchestrator (like app.js), which then registers
+ * the instance with the DependencySystem.
  *
- * Usage from orchestrator (in app.js):
+ * Usage:
+ *   const projectManager = createProjectManager({ app, chatManager, DependencySystem });
+ *   DependencySystem.register('projectManager', projectManager);
  *
- *    const projectManager = createProjectManager();
- *    DependencySystem.register('projectManager', projectManager);
+ * @param {Object} deps - Dependency object for ProjectManager constructor.
+ * @returns {ProjectManager} A new instance of ProjectManager.
  */
 export function createProjectManager(deps = {}) {
   return new ProjectManager(deps);
 }
 
-// For backward compatibility and module registration, app.js will use this code
-// instead of having the module self-initialize:
-/*
-const projectManager = createProjectManager();
-await projectManager.initialize();
-window.projectManager = projectManager;
-DependencySystem.register('projectManager', projectManager);
-*/
+// For backward compatibility and module registration example:
+// const projectManager = createProjectManager();
+// await projectManager.initialize();
+// window.projectManager = projectManager;
+// DependencySystem.register('projectManager', projectManager);
 
 export default createProjectManager;
