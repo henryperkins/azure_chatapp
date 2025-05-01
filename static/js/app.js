@@ -114,6 +114,41 @@ const appState = {
 };
 
 /* ---------------------------------------------------------------------
+ * Header Rendering based on Auth State
+ * ------------------------------------------------------------------- */
+function renderAuthHeader() {
+    try {
+        const authMod = DependencySystem.modules.get('auth');
+        const isAuth = typeof authMod?.isAuthenticated === 'function' && authMod.isAuthenticated();
+        // Auth button
+        const btn = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || document.querySelector('#loginButton');
+        if (btn) {
+            btn.textContent = isAuth ? 'Logout' : 'Login';
+            btn.onclick = (e) => {
+                e.preventDefault();
+                if (isAuth) {
+                    authMod.logout();
+                } else {
+                    const modal = DependencySystem.modules.get('modalManager');
+                    if (modal?.show) modal.show('login');
+                }
+            };
+        }
+        // Status spans
+        const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
+        const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
+        if (authStatus) {
+            authStatus.textContent = isAuth ? 'Signed in' : 'Not signed in';
+        }
+        if (userStatus) {
+            userStatus.textContent = isAuth ? `Hello, ${authMod.getCurrentUser()}` : '';
+        }
+    } catch (e) {
+        console.error('[App] renderAuthHeader error:', e);
+    }
+}
+
+/* ---------------------------------------------------------------------
  * Core Utilities
  * ------------------------------------------------------------------- */
 function debounce(fn, wait = 250) {
@@ -493,15 +528,18 @@ DependencySystem.register('chatManager', chatManager);
     const projectManager = createProjectManager({ DependencySystem, chatManager });
     DependencySystem.register('projectManager', projectManager);
 
+    // Create and register the project modal (DOM markup will arrive asynchronously)
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
-
-    document.dispatchEvent(new Event('modalsLoaded'));
+    // Wait for actual modal HTML to be loaded into the DOM
+    const modalsReady = new Promise(resolve => document.addEventListener('modalsLoaded', resolve, { once: true }));
 
     // PHASE 2: Initialize in order
     if (typeof modalManager.init === 'function') {
         await modalManager.init();
     }
+    // Ensure modal HTML is present before initializing projectModal
+    await modalsReady;
     if (typeof projectModal.init === 'function') {
         await projectModal.init();
     }
@@ -533,6 +571,16 @@ async function initializeAuthSystem() {
         }
         appState.isAuthenticated = auth.isAuthenticated();
         console.log(`[App] Initial authentication state: ${appState.isAuthenticated}`);
+        // Subscribe to future auth state changes to re-render header
+        const bus = auth.AuthBus;
+        if (bus && typeof bus.addEventListener === 'function') {
+            bus.addEventListener('authStateChanged', () => {
+                appState.isAuthenticated = auth.isAuthenticated();
+                renderAuthHeader();
+            });
+        }
+        // Render initial header UI based on auth state
+        renderAuthHeader();
     } catch (err) {
         console.error('[App] Auth system initialization/check failed:', err);
         appState.isAuthenticated = false;

@@ -43,10 +43,19 @@
               await auth.login(username, password);
               window.location.href = '/';
             } catch (error) {
-              if (window.showNotification) {
-                window.showNotification(error.message || 'Login failed. Please try again.', 'error');
+              // Determine friendly message
+              let msg;
+              if (error.status === 401) {
+                msg = 'Incorrect username or password.';
+              } else if (error.status === 400) {
+                msg = (error.data && error.data.detail) || 'Invalid login request.';
               } else {
-                alert(error.message || 'Login failed. Please try again.');
+                msg = (error.data && error.data.detail) || error.message || 'Login failed. Please try again.';
+              }
+              if (window.showNotification) {
+                window.showNotification(msg, 'error');
+              } else {
+                alert(msg);
               }
             }
           });
