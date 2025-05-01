@@ -126,13 +126,40 @@ class ModalManager {
   }
 
   /**
-   * An internal utility to toggle body scroll on/off while a modal is visible.
-   * @param {boolean} enableScroll - True to enable scroll, false to disable it.
+   * Robust scroll lock: Disables background scroll for all devices (including iOS).
+   * Uses position: fixed trick and restores scroll position on unlock.
+   * @param {boolean} enableScroll - True to enable scroll, false to lock it.
    * @private
    */
   _manageBodyScroll(enableScroll) {
-    document.body.style.overflow = enableScroll ? "" : "hidden";
-    document.documentElement.style.overflow = enableScroll ? "" : "hidden";
+    if (!enableScroll) {
+      // Lock scrolling (modal open)
+      if (typeof window !== "undefined" && window.scrollY !== undefined) {
+        this._scrollLockY = window.scrollY;
+        document.body.style.position = "fixed";
+        document.body.style.top = `-${this._scrollLockY}px`;
+        document.body.style.width = "100vw";
+        document.body.style.overflow = "hidden";
+      } else {
+        document.body.style.overflow = "hidden";
+      }
+      document.documentElement.style.overflow = "hidden";
+    } else {
+      // Unlock scrolling (modal close)
+      // Restore scroll position and reset styles
+      if (typeof window !== "undefined" && this._scrollLockY !== undefined) {
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+        window.scrollTo(0, this._scrollLockY);
+        this._scrollLockY = undefined;
+      } else {
+        document.body.style.overflow = "";
+        document.documentElement.style.overflow = "";
+      }
+    }
   }
 
   /**
