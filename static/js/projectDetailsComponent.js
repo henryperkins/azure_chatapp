@@ -363,6 +363,7 @@ class ProjectDetailsComponent {
       const isActive = btn.dataset.tab === tabName;
       btn.classList.toggle('tab-active', isActive); // Use appropriate active class
       btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      btn.classList.add('min-w-[44px]', 'min-h-[44px]', 'px-3');
     });
 
     // Update visibility of tab content panels
@@ -391,7 +392,7 @@ class ProjectDetailsComponent {
 
     if (!files.length) {
       container.innerHTML = `
-        <div class="text-center py-8 text-base-content/70">
+        <div class="text-center py-8 text-base-content/60 max-w-full w-full">
           <svg class="w-12 h-12 mx-auto opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
           </svg>
@@ -426,7 +427,7 @@ class ProjectDetailsComponent {
 
     if (!conversations.length) {
       container.innerHTML = `
-        <div class="text-center py-8 text-base-content/70">
+        <div class="text-center py-8 text-base-content/60 max-w-full w-full">
            <p>No conversations yet.</p>
            <p class="text-sm mt-1">Click 'New Chat' to start.</p>
         </div>`;
@@ -458,7 +459,7 @@ class ProjectDetailsComponent {
 
     if (!artifacts.length) {
       container.innerHTML = `
-        <div class="text-center py-8 text-base-content/70">
+        <div class="text-center py-8 text-base-content/60 max-w-full w-full">
           <p>No artifacts generated yet.</p>
         </div>`;
       return;
@@ -770,7 +771,7 @@ class ProjectDetailsComponent {
   _createFileItemElement(file) {
     const item = document.createElement('div');
     // Use CSS classes from your framework (e.g., Tailwind, Bootstrap)
-    item.className = 'flex items-center justify-between gap-3 p-3 bg-base-100 rounded-md shadow-sm hover:bg-base-200 transition-colors';
+    item.className = 'flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-sm hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto';
     item.dataset.fileId = file.id;
 
     // Use injected app/formatting utilities if available
@@ -788,10 +789,10 @@ class ProjectDetailsComponent {
             </div>
         </div>
         <div class="flex gap-1">
-            <button class="btn btn-ghost btn-sm btn-square text-info hover:bg-info/10 data-download-btn" title="Download file">
+            <button class="btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] text-info hover:bg-info/10 data-download-btn" title="Download file" aria-label="Download file">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
             </button>
-            <button class="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10 data-delete-btn" title="Delete file">
+            <button class="btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] text-error hover:bg-error/10 data-delete-btn" title="Delete file" aria-label="Delete file">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
         </div>
@@ -834,7 +835,7 @@ class ProjectDetailsComponent {
   /** Creates the DOM element for a single conversation item. @private */
   _createConversationItemElement(conversation) {
     const item = document.createElement('div');
-    item.className = 'p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors';
+    item.className = 'p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors max-w-full w-full overflow-x-auto';
     item.dataset.conversationId = conversation.id;
 
     const formatDate = this.app?.formatDate || ((d) => new Date(d).toLocaleDateString());
@@ -857,7 +858,7 @@ class ProjectDetailsComponent {
   /** Creates the DOM element for a single artifact item. @private */
   _createArtifactItemElement(artifact) {
     const item = document.createElement('div');
-    item.className = 'p-3 border-b border-base-300 hover:bg-base-200 transition-colors';
+    item.className = 'p-3 border-b border-base-300 hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto';
     item.dataset.artifactId = artifact.id;
 
     const formatDate = this.app?.formatDate || ((d) => new Date(d).toLocaleDateString());
@@ -869,7 +870,7 @@ class ProjectDetailsComponent {
         </div>
         <p class="text-sm text-base-content/70 truncate mt-1">${artifact.description || artifact.type || 'No description'}</p>
         <div class="mt-2 flex gap-2">
-            <button class="btn btn-xs btn-outline data-download-artifact-btn">Download</button>
+            <button class="btn btn-xs btn-outline min-w-[44px] min-h-[44px] data-download-artifact-btn" aria-label="Download artifact">Download</button>
             </div>
     `;
 
