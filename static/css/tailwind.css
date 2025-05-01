@@ -14,13 +14,7 @@
 /* 2) DaisyUI plugin config (optional).
    If you want DaisyUI built-in themes, for example: */
 @plugin "daisyui" {
-  themes: ["light", "dark"];
-  /*
-     Additional config possible:
-     prefix: daisy-;
-     logs: false;
-     exclude: ...;
-  */
+  themes: ["azure-light", "dracula-enhanced"];
 }
 
 /* 3) Define a custom fade+zoom animation utility in Tailwind v4 style */
