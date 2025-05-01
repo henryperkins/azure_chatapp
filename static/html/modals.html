@@ -26,7 +26,7 @@
                        aria-describedby="projectModalNameInput-hint" />
                 <p id="projectModalNameInput-hint" class="validator-hint hidden" role="alert"></p>
             </div>
-            
+
             <div class="form-control-enhanced">
                 <label for="projectModalDescInput" class="block text-sm font-medium text-base-content">
                     Description
@@ -37,7 +37,7 @@
                           placeholder="Description helps organize and understand project purpose"
                           class="textarea textarea-bordered w-full"></textarea>
             </div>
-            
+
             <div class="form-control-enhanced">
                 <label for="projectModalGoalsInput" class="block text-sm font-medium text-base-content">
                     Goals
@@ -48,7 +48,7 @@
                           placeholder="What are the main objectives of this project?"
                           class="textarea textarea-bordered w-full"></textarea>
             </div>
-            
+
             <div class="form-control-enhanced">
                 <label for="projectModalMaxTokensInput" class="block text-sm font-medium text-base-content">
                     Maximum Tokens
@@ -57,7 +57,7 @@
                        name="maxTokens"
                        type="number"
                        value="200000"
-                       min="50000" 
+                       min="50000"
                        max="500000"
                        autocomplete="off"
                        class="input input-bordered w-full validator" />
@@ -65,13 +65,13 @@
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
             </div>
-            
+
             <!-- Loading indicator -->
             <div id="projectModalLoading" class="loading-container hidden my-4">
                 <div class="loading loading-spinner loading-md text-primary"></div>
                 <span class="ml-2">Processing request...</span>
             </div>
-            
+
             <div class="modal-action">
                 <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
                     <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
@@ -204,14 +204,14 @@
                 <label for="knowledgeBaseNameInput" class="block text-sm font-medium text-base-content">
                     Knowledge Base Name <span class="text-error">*</span>
                 </label>
-                <input id="knowledgeBaseNameInput" 
-                       name="name" 
-                       type="text" 
+                <input id="knowledgeBaseNameInput"
+                       name="name"
+                       type="text"
                        required
-                       aria-required="true" 
+                       aria-required="true"
                        autocomplete="off"
                        placeholder="Enter a descriptive name for this knowledge base"
-                       class="input input-bordered w-full validator" 
+                       class="input input-bordered w-full validator"
                        aria-describedby="knowledgeBaseNameInput-hint" />
                 <p id="knowledgeBaseNameInput-hint" class="validator-hint hidden" role="alert"></p>
             </div>
@@ -220,8 +220,8 @@
                 <label for="knowledgeBaseDescInput" class="block text-sm font-medium text-base-content">
                     Description
                 </label>
-                <textarea id="knowledgeBaseDescInput" 
-                          name="description" 
+                <textarea id="knowledgeBaseDescInput"
+                          name="description"
                           rows="3"
                           placeholder="Describe the purpose and content of this knowledge base"
                           class="textarea textarea-bordered w-full"></textarea>
@@ -231,7 +231,7 @@
                 <label for="embeddingModelSelect" class="block text-sm font-medium text-base-content">
                     Embedding Model
                 </label>
-                <select id="embeddingModelSelect" 
+                <select id="embeddingModelSelect"
                         name="embedding_model"
                         class="select select-bordered w-full">
                     <option value="all-MiniLM-L6-v2" selected>all-MiniLM-L6-v2 (384d • Fast • Default)</option>
@@ -247,7 +247,7 @@
 
             <fieldset class="border border-base-300 rounded-box p-3 mt-4">
                 <legend class="text-sm font-medium px-1">Processing Options</legend>
-                
+
                 <div class="form-control mb-2">
                     <label class="flex items-center space-x-2 cursor-pointer">
                         <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files"
@@ -275,9 +275,9 @@
 
             <!-- Processing status indicator -->
             <div id="kbProcessingStatus" class="alert alert-info shadow-xs mt-4 hidden">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" 
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                      class="stroke-info shrink-0 w-5 h-5" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                           d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
@@ -310,7 +310,38 @@
 </dialog>
 
 <!-- Knowledge Result Detail Modal (Enhanced) -->
-<dialog id="knowledgeResultModal" class="modal" data-kb-debug="true">
+<dialog id="loginModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="loginModalTitle">
+  <form id="loginModalForm" method="dialog" class="modal-box max-w-sm w-full space-y-3">
+    <div class="flex justify-between items-center mb-1">
+      <h3 id="loginModalTitle" class="text-xl font-bold">Login</h3>
+      <button id="loginModalCancelBtn" type="button" class="btn btn-ghost btn-sm btn-square" aria-label="Close login dialog">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="form-control-enhanced">
+      <label for="loginModalUsername" class="label font-medium">Username</label>
+      <input type="text" id="loginModalUsername" name="username" required aria-required="true" class="input input-bordered w-full validator" autocomplete="username"/>
+      <p id="loginModalUsername-hint" class="validator-hint hidden" role="alert"></p>
+    </div>
+    <div class="form-control-enhanced">
+      <label for="loginModalPassword" class="label font-medium">Password</label>
+      <input type="password" id="loginModalPassword" name="password" required aria-required="true" class="input input-bordered w-full validator" autocomplete="current-password"/>
+      <p id="loginModalPassword-hint" class="validator-hint hidden" role="alert"></p>
+    </div>
+    <div id="loginModalError" class="hidden text-error text-sm" role="alert"></div>
+
+    <div class="modal-action justify-end gap-2 pt-4">
+      <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
+        <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
+      </kbd>
+      <button id="loginModalSubmitBtn" type="submit" class="btn btn-primary w-full sm:w-auto">Login</button>
+      <button id="loginModalCancelBtn2" type="button" class="btn btn-ghost w-full sm:w-auto">Cancel</button>
+    </div>
+  </form>
+</dialog>
+
     <div class="modal-box max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
             <h3 id="knowledgeResultTitle" class="text-xl font-semibold">Knowledge Result</h3>
@@ -321,7 +352,7 @@
                 </svg>
             </button>
         </div>
-        
+
         <div class="card card-compact bg-base-200 shadow-sm mb-4">
             <div class="card-body p-3">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -333,7 +364,7 @@
                         <div class="badge badge-neutral">Relevance</div>
                         <div id="knowledgeResultScore" class="badge badge-lg kb-result-relevance-high">92%</div>
                     </div>
-                    
+
                     <div id="knowledgeResultMetadata" class="col-span-1 md:col-span-2 flex flex-wrap gap-2 text-xs text-base-content/70 border-t border-base-300 pt-2 mt-1">
                         <span class="badge badge-ghost badge-sm">Type: <span id="knowledgeResultType">text</span></span>
                         <span class="badge badge-ghost badge-sm">Last Modified: <span id="knowledgeResultDate">2024-04-12</span></span>
@@ -342,11 +373,11 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-base-100 border border-base-300 p-4 rounded-box overflow-x-auto mb-4">
             <pre id="knowledgeResultContent" class="whitespace-pre-wrap text-sm" data-sanitize="true"></pre>
         </div>
-        
+
         <div class="modal-action">
             <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
                 <kbd class="kbd kbd-sm">Ctrl</kbd> + <kbd class="kbd kbd-sm">C</kbd> <span class="mx-1">to copy</span>
@@ -364,7 +395,7 @@
                 Use in Conversation
             </button>
         </div>
-        
+
         <!-- Feedback message for clipboard operations -->
         <div id="copyFeedback" class="alert alert-success shadow-xs mt-2 hidden" role="alert">
             <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24">
