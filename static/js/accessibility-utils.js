@@ -1,8 +1,15 @@
 /**
- * accessibility-utils.js – centralised accessibility helpers & keyboard shortcuts
+ * accessibility-utils.js – centralized accessibility helpers & keyboard shortcuts
  *
- * Nothing is attached to window except initAccessibilityEnhancements; the
- * singleton is registered with DependencySystem as “accessibilityUtils”.
+ * This refactored version addresses:
+ *  - A teardown method for SPA usage
+ *  - Replacing direct addEventListener calls with eventHandlers.trackListener
+ *  - Error handling on async code
+ *  - More modular keyboard shortcut logic
+ *
+ * Exports:
+ *   initAccessibilityEnhancements(opts)
+ *   destroyAccessibilityEnhancements()
  */
 
 let keyboardShortcutsEnabled = true;
@@ -12,6 +19,13 @@ let eventHandlers;
 let DependencySystem;
 
 /**
+ * Stores references to key event bindings so we can untrack them during teardown.
+ * If your "eventHandlers" utility has thorough ways to remove events by
+ * element/type/description, you may not need to store them individually here.
+ */
+const registeredHandlers = [];
+
+/**
  * Initialize all accessibility enhancements.
  * Should be called once during app bootstrap.
  * @param {Object} opts - Optional dependencies
@@ -19,9 +33,13 @@ let DependencySystem;
  * @param {Object} opts.DependencySystem - Dependency system (optional)
  */
 export function initAccessibilityEnhancements(opts = {}) {
-  DependencySystem = opts.DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
-  eventHandlers = opts.eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers'));
-  if (!eventHandlers) throw new Error('eventHandlers required for accessibility-utils');
+  DependencySystem =
+    opts.DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
+  eventHandlers =
+    opts.eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers'));
+  if (!eventHandlers) {
+    throw new Error('eventHandlers required for accessibility-utils');
+  }
 
   bindGlobalShortcuts();
   enhanceFormAccessibility();
@@ -35,18 +53,49 @@ export function initAccessibilityEnhancements(opts = {}) {
       trapFocus,
       toggleKeyboardShortcuts,
       announce,
+      destroyAccessibilityEnhancements
     });
   }
+}
+
+/**
+ * Unregister all tracked event listeners and reset internal state if needed.
+ * Call this when the SPA is about to unload or re-initialize.
+ */
+export function destroyAccessibilityEnhancements() {
+  // Remove each tracked listener using eventHandlers.cleanupListeners() or untrack manually
+  registeredHandlers.forEach(h => {
+    try {
+      eventHandlers.cleanupListeners(
+        h.element,
+        h.type,
+        h.description
+      );
+    } catch (err) {
+      console.warn('[Accessibility] Failed removing listener:', h, err);
+    }
+  });
+  registeredHandlers.length = 0;
+
+  // Optionally reset any global states:
+  keyboardShortcutsEnabled = true;
+  lastFocusedElement = null;
 }
 
 /**
  * Bind all global keyboard shortcuts (including sidebar controls).
  */
 function bindGlobalShortcuts() {
-  eventHandlers.trackListener(document, 'keydown', async e => {
+  const handler = async function handleGlobalKeydown(e) {
     if (!keyboardShortcutsEnabled || isInput(e.target)) return;
 
-    const sidebar = await DependencySystem?.waitFor?.('sidebar', null, 3000);
+    let sidebar = null;
+    try {
+      sidebar = await DependencySystem?.waitFor?.('sidebar', null, 3000);
+    } catch (err) {
+      console.error('Sidebar waitFor failed:', err);
+      // Gracefully continue without sidebar.
+    }
 
     // toggle sidebar: `/`, `` ` ``, or `\`
     if ((e.key === '/' || e.key === '`' || e.key === '\\') && noMods(e)) {
@@ -96,14 +145,26 @@ function bindGlobalShortcuts() {
       closeKeyboardHelpIfOpen();
       return;
     }
-  }, { description: 'Global keyboard shortcuts' });
+  };
+
+  trackListenerWithRegister(document, 'keydown', handler, {
+    description: 'Global keyboard shortcuts'
+  });
 
   // click on close button inside help dialog
-  eventHandlers.trackListener(document, 'click', e => {
-    if (e.target.closest('#keyboardHelp button')) closeKeyboardHelpIfOpen();
-  }, { description: 'Help close click' });
+  const closeHelpHandler = function handleHelpDialogCloseClick(e) {
+    if (e.target.closest('#keyboardHelp button')) {
+      closeKeyboardHelpIfOpen();
+    }
+  };
+  trackListenerWithRegister(document, 'click', closeHelpHandler, {
+    description: 'Help close click'
+  });
 }
 
+/**
+ * Helper to ensure event has no Ctrl/Alt/Meta
+ */
 function noMods(e) {
   return !e.ctrlKey && !e.altKey && !e.metaKey;
 }
@@ -131,6 +192,9 @@ function toggleKeyboardHelp(show) {
   }
 }
 
+/**
+ * Close the keyboard-help dialog if it's open.
+ */
 function closeKeyboardHelpIfOpen() {
   toggleKeyboardHelp(false);
 }
@@ -141,7 +205,8 @@ function closeKeyboardHelpIfOpen() {
  * @returns {boolean} current state
  */
 function toggleKeyboardShortcuts(enable) {
-  keyboardShortcutsEnabled = enable === undefined ? !keyboardShortcutsEnabled : !!enable;
+  keyboardShortcutsEnabled =
+    enable === undefined ? !keyboardShortcutsEnabled : !!enable;
   return keyboardShortcutsEnabled;
 }
 
@@ -149,17 +214,17 @@ function toggleKeyboardShortcuts(enable) {
  * Add real-time validation feedback to form inputs.
  */
 function enhanceFormAccessibility() {
-  document.addEventListener('invalid', e => {
+  trackListenerWithRegister(document, 'invalid', e => {
     if (e.target.classList.contains('validator')) {
       handleFormValidation(e.target, false);
     }
-  }, true);
+  }, { capture: true, description: 'Form validator invalid' });
 
-  document.addEventListener('change', e => {
+  trackListenerWithRegister(document, 'change', e => {
     if (e.target.classList.contains('validator')) {
       handleFormValidation(e.target, e.target.validity.valid);
     }
-  });
+  }, { description: 'Form validator change' });
 }
 
 function handleFormValidation(input, isValid) {
@@ -181,18 +246,25 @@ function handleFormValidation(input, isValid) {
     input.classList.add('validator-error');
     input.classList.remove('validator-success');
     hint.className = 'validator-hint validator-hint-error';
-    if (input.validity.valueMissing) hint.textContent = 'This field is required';
-    else if (input.validity.typeMismatch) hint.textContent = `Please enter a valid ${input.type}`;
-    else if (input.validity.tooShort) hint.textContent = `Must be at least ${input.minLength} characters`;
-    else if (input.validity.tooLong) hint.textContent = `Must be at most ${input.maxLength} characters`;
-    else if (input.validity.patternMismatch) hint.textContent = input.title || 'Please match the requested format';
-    else hint.textContent = 'Please enter a valid value';
+    if (input.validity.valueMissing) {
+      hint.textContent = 'This field is required';
+    } else if (input.validity.typeMismatch) {
+      hint.textContent = `Please enter a valid ${input.type}`;
+    } else if (input.validity.tooShort) {
+      hint.textContent = `Must be at least ${input.minLength} characters`;
+    } else if (input.validity.tooLong) {
+      hint.textContent = `Must be at most ${input.maxLength} characters`;
+    } else if (input.validity.patternMismatch) {
+      hint.textContent = input.title || 'Please match the requested format';
+    } else {
+      hint.textContent = 'Please enter a valid value';
+    }
     hint.setAttribute('aria-live', 'assertive');
   }
 }
 
 /**
- * Trap focus inside dialogs when opened.
+ * Observes dialog elements for 'open' attribute changes to trap focus.
  */
 function improveModalAccessibility() {
   const observer = new MutationObserver(mutations => {
@@ -203,16 +275,23 @@ function improveModalAccessibility() {
     });
   });
 
-  document.querySelectorAll('dialog').forEach(d => observer.observe(d, { attributes: true }));
+  document.querySelectorAll('dialog').forEach(d => {
+    observer.observe(d, { attributes: true });
+  });
 
-  new MutationObserver(muts => {
+  // Watch for new dialogs being added dynamically
+  const bodyObserver = new MutationObserver(muts => {
     muts.forEach(m => {
       m.addedNodes.forEach(node => {
-        if (node.tagName === 'DIALOG') observer.observe(node, { attributes: true });
-        else if (node.querySelectorAll) node.querySelectorAll('dialog').forEach(d => observer.observe(d, { attributes: true }));
+        if (node.tagName === 'DIALOG') {
+          observer.observe(node, { attributes: true });
+        } else if (node.querySelectorAll) {
+          node.querySelectorAll('dialog').forEach(d => observer.observe(d, { attributes: true }));
+        }
       });
     });
-  }).observe(document.body, { childList: true, subtree: true });
+  });
+  bodyObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 /**
@@ -221,13 +300,16 @@ function improveModalAccessibility() {
 function setupSkipLinks() {
   const skip = document.querySelector('.skip-to-content');
   if (!skip) return;
-  skip.addEventListener('click', e => {
+  const skipHandler = e => {
     e.preventDefault();
     const target = document.getElementById(skip.getAttribute('href').substring(1));
     if (target) {
       target.tabIndex = -1;
       target.focus();
     }
+  };
+  trackListenerWithRegister(skip, 'click', skipHandler, {
+    description: 'Skip to content link'
   });
 }
 
@@ -240,16 +322,23 @@ function trapFocus(container) {
   const focusables = getFocusable(container);
   if (!focusables.length) return;
 
-  const first = focusables[0], last = focusables[focusables.length - 1];
-  container.addEventListener('keydown', e => {
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+
+  const keydownHandler = e => {
     if (e.key === 'Tab') {
       if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault(); last.focus();
+        e.preventDefault();
+        last.focus();
       } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault(); first.focus();
+        e.preventDefault();
+        first.focus();
       }
     }
-  });
+  };
+  container.addEventListener('keydown', keydownHandler);
+
+  // Ensure focus is inside container
   setTimeout(() => {
     if (!container.contains(document.activeElement)) first.focus();
   }, 50);
@@ -262,12 +351,11 @@ function trapFocus(container) {
  */
 function getFocusable(container) {
   const sel = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-  return Array.from(container.querySelectorAll(sel))
-    .filter(el =>
-      !el.disabled &&
+  return Array.from(container.querySelectorAll(sel)).filter(el => {
+    return !el.disabled &&
       el.offsetParent !== null &&
-      getComputedStyle(el).visibility !== 'hidden'
-    );
+      getComputedStyle(el).visibility !== 'hidden';
+  });
 }
 
 /**
@@ -279,8 +367,11 @@ function getFocusable(container) {
 function focusElement(target, delay = 0) {
   const el = typeof target === 'string' ? document.querySelector(target) : target;
   if (!el || typeof el.focus !== 'function') return false;
-  if (delay) setTimeout(() => el.focus(), delay);
-  else el.focus();
+  if (delay) {
+    setTimeout(() => el.focus(), delay);
+  } else {
+    el.focus();
+  }
   return true;
 }
 
@@ -310,5 +401,21 @@ function announce(text, mode = 'polite') {
     document.body.appendChild(region);
   }
   region.textContent = '';
-  setTimeout(() => region.textContent = text, 50);
+  setTimeout(() => {
+    region.textContent = text;
+  }, 50);
+}
+
+/**
+ * Helper for registering event listeners via eventHandlers.
+ * Adds each registration to 'registeredHandlers' to allow cleanup later.
+ */
+function trackListenerWithRegister(element, type, handler, options = {}) {
+  const wrappedHandler = eventHandlers.trackListener(element, type, handler, options);
+  if (!wrappedHandler) return;
+  registeredHandlers.push({
+    element,
+    type,
+    description: options.description || ''
+  });
 }

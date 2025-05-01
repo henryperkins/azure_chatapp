@@ -199,11 +199,16 @@ class ProjectDetailsComponent {
     const newChatBtn = this.elements.container?.querySelector('#projectNewConversationBtn');
     if (newChatBtn) {
       this.eventHandlers.cleanupListeners(newChatBtn, 'click');
+      // Initialize the button as disabled until the project is fully loaded
+      newChatBtn.disabled = true;
+      newChatBtn.classList.add('btn-disabled');
+      
       this.eventHandlers.trackListener(
         newChatBtn,
         'click',
         () => {
-          if (this.state.currentProject?.id) {
+          const projectManager = this.projectManager;
+          if (this.state.currentProject?.id && !projectManager?.projectLoadingInProgress) {
             this.createNewConversation();
           } else {
             this.app.showNotification("Please wait for project details to load first.", "warning");
@@ -217,26 +222,80 @@ class ProjectDetailsComponent {
     this.eventHandlers.trackListener(
       document,
       'projectConversationsLoaded',
-      (e) => this.renderConversations(e.detail?.conversations || []),
+      (e) => {
+        this.renderConversations(e.detail?.conversations || []);
+        // Emit rendering completion event
+        document.dispatchEvent(new CustomEvent('projectConversationsRendered', {
+          detail: { projectId: e.detail?.projectId }
+        }));
+      },
       { description: 'ProjectDetails_HandleConversationsLoaded' }
     );
     this.eventHandlers.trackListener(
       document,
       'projectFilesLoaded',
-      (e) => this.renderFiles(e.detail?.files || []),
+      (e) => {
+        this.renderFiles(e.detail?.files || []);
+        // Emit rendering completion event
+        document.dispatchEvent(new CustomEvent('projectFilesRendered', {
+          detail: { projectId: e.detail?.projectId }
+        }));
+      },
       { description: 'ProjectDetails_HandleFilesLoaded' }
     );
     this.eventHandlers.trackListener(
       document,
       'projectArtifactsLoaded',
-      (e) => this.renderArtifacts(e.detail?.artifacts || []),
+      (e) => {
+        this.renderArtifacts(e.detail?.artifacts || []);
+        // Emit rendering completion event
+        document.dispatchEvent(new CustomEvent('projectArtifactsRendered', {
+          detail: { projectId: e.detail?.projectId }
+        }));
+      },
       { description: 'ProjectDetails_HandleArtifactsLoaded' }
     );
     this.eventHandlers.trackListener(
       document,
       'projectStatsLoaded',
-      (e) => this.renderStats(e.detail || {}),
+      (e) => {
+        this.renderStats(e.detail || {});
+        // Emit rendering completion event
+        document.dispatchEvent(new CustomEvent('projectStatsRendered', {
+          detail: { projectId: e.detail?.projectId }
+        }));
+      },
       { description: 'ProjectDetails_HandleStatsLoaded' }
+    );
+    this.eventHandlers.trackListener(
+      document,
+      'projectKnowledgeBaseLoaded',
+      (e) => {
+        if (this.knowledgeBaseComponent) {
+          this.knowledgeBaseComponent.renderKnowledgeBaseInfo?.(e.detail?.knowledgeBase, e.detail?.projectId);
+        }
+        // Emit rendering completion event (even if component doesn't exist)
+        document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+          detail: { projectId: e.detail?.projectId }
+        }));
+      },
+      { description: 'ProjectDetails_HandleKnowledgeBaseLoaded' }
+    );
+    
+    // Listen for the full project loading completion
+    this.eventHandlers.trackListener(
+      document,
+      'projectDetailsFullyLoaded',
+      (e) => {
+        console.log(`[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded, UI ready`);
+        // Enable UI elements that were waiting for project load
+        const newChatBtn = this.elements.container?.querySelector('#projectNewConversationBtn');
+        if (newChatBtn) {
+          newChatBtn.disabled = false;
+          newChatBtn.classList.remove('btn-disabled');
+        }
+      },
+      { description: 'ProjectDetails_FullyLoaded' }
     );
   }
 
@@ -355,7 +414,7 @@ class ProjectDetailsComponent {
       return;
     }
 
-    const projectId = this.state.currentProject?.id;
+    const projectId = this.state.currentProject?.id || this.app.getProjectId?.();
     const requiresProject = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'].includes(tabName);
     if (requiresProject && !this.app.validateUUID(projectId)) {
       this.app.showNotification('Cannot view this tab until a project is loaded.', 'warning');
@@ -422,6 +481,14 @@ class ProjectDetailsComponent {
       return;
     }
 
+    if (!this.state.currentProject) {
+      container.innerHTML = `
+        <div class="text-center py-8">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>`;
+      return;
+    }
+
     while (container.firstChild) container.removeChild(container.firstChild);
     if (!conversations.length) {
       container.innerHTML = `
@@ -473,14 +540,34 @@ class ProjectDetailsComponent {
    * Create a new conversation for the current project.
    */
   async createNewConversation() {
-    const projectId = this.state.currentProject?.id;
+    const projectId = this.state.currentProject?.id || this.app.getProjectId?.();
     if (!this.app.validateUUID(projectId)) {
       this.app.showNotification('Cannot create conversation: invalid project.', 'warning');
       return;
     }
+    
+    // Add timeout for projectLoadingInProgress check
+    if (this.projectManager?.projectLoadingInProgress) {
+      console.log('[ProjectDetailsComponent] Waiting for project loading to complete...');
+      const startTime = Date.now();
+      // Wait up to 5 seconds for loading to complete
+      while (this.projectManager.projectLoadingInProgress && Date.now() - startTime < 5000) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      // Force proceed after timeout
+      if (this.projectManager.projectLoadingInProgress) {
+        console.warn('[ProjectDetailsComponent] Force proceeding with conversation creation despite projectLoadingInProgress flag');
+        // Force reset the flag to prevent deadlocks
+        this.projectManager.projectLoadingInProgress = false;
+      }
+    }
+    
     try {
+      console.log(`[ProjectDetailsComponent] Creating new conversation for project ${projectId}`);
       const convo = await this.projectManager.createConversation(projectId);
+      
       if (convo && convo.id) {
+        console.log(`[ProjectDetailsComponent] New conversation created: ${convo.id}`);
         this.app.showNotification(`Conversation "${convo.title || 'Untitled'}" created.`, 'success');
         this.switchTab('conversations');
         this.projectManager.loadProjectConversations(projectId);
@@ -528,7 +615,7 @@ class ProjectDetailsComponent {
 
   /** Lazy-load content for a tab on activation. */
   _loadTabContent(tabName) {
-    const projectId = this.state.currentProject?.id;
+    const projectId = this.state.currentProject?.id || this.app.getProjectId?.();
     // Some tabs require project data
     const needsProject = ['files', 'knowledge', 'conversations', 'artifacts', 'chat'].includes(tabName);
 
@@ -541,9 +628,12 @@ class ProjectDetailsComponent {
     if (this.knowledgeBaseComponent) {
       if (tabName === 'knowledge') {
         const kbData = this.state.currentProject?.knowledge_base || null;
+        // Don't await knowledge base initialization - it can happen asynchronously
+        // This prevents it from blocking the rest of the tab loading
         this.knowledgeBaseComponent.initialize(true, kbData, projectId)
           .catch(e => console.error("[ProjectDetailsComponent] KB init failed:", e));
       } else {
+        // Don't await hiding the knowledge base either
         this.knowledgeBaseComponent.initialize(false)
           .catch(e => console.error("[ProjectDetailsComponent] KB de-init failed:", e));
       }
@@ -555,9 +645,25 @@ class ProjectDetailsComponent {
         this._withLoading('files', () => this.projectManager.loadProjectFiles(projectId));
         break;
       case 'conversations':
+        // Handle model config rendering asynchronously
         if (this.modelConfig?.renderQuickConfig) {
           const panel = document.getElementById('modelConfigPanel');
-          this.modelConfig.renderQuickConfig(panel);
+          if (panel) {
+            // Use setTimeout to prevent blocking the UI thread
+            setTimeout(() => {
+              try {
+                console.log("[ProjectDetailsComponent] Rendering model config panel");
+                this.modelConfig.renderQuickConfig(panel);
+              } catch (error) {
+                console.error("[ProjectDetailsComponent] Error rendering model config:", error);
+              }
+              
+              // Emit rendering event for the model config panel, even if there was an error
+              document.dispatchEvent(new CustomEvent('modelConfigRendered', {
+                detail: { projectId }
+              }));
+            }, 0);
+          }
         }
         this._withLoading('conversations', () => this.projectManager.loadProjectConversations(projectId));
         break;
@@ -660,7 +766,7 @@ class ProjectDetailsComponent {
 
   /** Confirms and deletes a file belonging to the current project. */
   _confirmDeleteFile(fileId, fileName) {
-    const projectId = this.state.currentProject?.id;
+    const projectId = this.state.currentProject?.id || this.app.getProjectId?.();
     if (!this.app.validateUUID(projectId) || !fileId) {
       console.error(`[ProjectDetailsComponent] Cannot delete file: invalid project or file ID.`, { projectId, fileId });
       return;
@@ -733,7 +839,18 @@ class ProjectDetailsComponent {
   async _handleConversationClick(conversation) {
     const projectId = this.state.currentProject?.id;
     if (!this.app.validateUUID(projectId) || !conversation?.id) {
+      console.error("[ProjectDetailsComponent] Conversation click while projectId invalid", {
+        currentProject: this.state.currentProject,
+        conversation
+      });
       this.app.showNotification('Cannot load conversation: invalid project or conversation ID.', 'error');
+      return;
+    }
+
+    // Check if project is fully loaded
+    const projectManager = this.projectManager;
+    if (projectManager?.projectLoadingInProgress) {
+      this.app.showNotification("Please wait for project details to load first.", "warning");
       return;
     }
 

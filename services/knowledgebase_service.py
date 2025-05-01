@@ -59,7 +59,7 @@ class KBConfig:
                 config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2"
             ),
             "vector_db_storage_path": getattr(
-                config, "VECTOR_DB_STORAGE_PATH", "./data/vector_db"
+                config, "VECTOR_DB_STORAGE_PATH", "./storage/vector_db"
             ),
             "default_chunk_size": getattr(config, "DEFAULT_CHUNK_SIZE", 1000),
             "default_chunk_overlap": getattr(config, "DEFAULT_CHUNK_OVERLAP", 200),
