@@ -174,15 +174,31 @@ class ProjectManager {
     }
     this.DependencySystem = DependencySystem;
     this.app = app || this.DependencySystem.modules.get("app");
-    this.chatManager = chatManager || this.DependencySystem.modules.get("chatManager");
+
+    // Defensive: Always get chatManager from param or DI—but verify it's not the factory
+    let resolvedChatManager = chatManager || this.DependencySystem.modules.get("chatManager");
+    // Defensive: if it's the factory or missing .loadConversation, try to self-heal with DI layer
+    if (
+      typeof resolvedChatManager !== 'object' ||
+      typeof resolvedChatManager.loadConversation !== 'function'
+    ) {
+      // Attempt to fix by pulling fresh from DependencySystem (could be re-patched already)
+      resolvedChatManager = this.DependencySystem.modules.get("chatManager");
+      if (
+        typeof resolvedChatManager !== 'object' ||
+        typeof resolvedChatManager.loadConversation !== 'function'
+      ) {
+        // Fatal if still not valid
+        throw new Error("ProjectManager constructor: 'chatManager' dependency missing or invalid (expected instance with .loadConversation).");
+      }
+    }
+    this.chatManager = resolvedChatManager;
+
     this.modelConfig = modelConfig || this.DependencySystem.modules.get("modelConfig");
 
     // Verify required dependencies
     if (!this.app) {
       throw new Error("ProjectManager constructor: 'app' dependency missing.");
-    }
-    if (!this.chatManager) {
-      throw new Error("ProjectManager constructor: 'chatManager' dependency missing.");
     }
 
     /**
@@ -974,7 +990,7 @@ class ProjectManager {
 
 /**
  * Factory function for dependency-injected ProjectManager construction.
- * 
+ *
  * Typically called in an orchestrator (like app.js), which then registers
  * the instance with the DependencySystem.
  *

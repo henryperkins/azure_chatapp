@@ -9366,7 +9366,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     transition-duration: var(--tw-duration, var(--default-transition-duration));
     --tw-duration: 300ms;
     transition-duration: 300ms;
-    background: rgba(0,0,0,0.3);
+    background-color: var(--color-base-100);
   }
   .sidebar-nav {
     padding: calc(var(--spacing) * 4);
