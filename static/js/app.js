@@ -261,6 +261,27 @@ if (!DependencySystem) {
 }
 const waitFor = DependencySystem.waitFor.bind(DependencySystem);
 
+// ------------------------------------------------------------------
+// Guard against accidental overwriting of the chatManager instance
+// ------------------------------------------------------------------
+(function patchDependencySystem(ds){
+    const originalRegister = ds.register.bind(ds);
+
+    ds.register = function(key, value){
+        if (key === 'chatManager' && ds.modules.has('chatManager')){
+            const current = ds.modules.get('chatManager');
+            // If the current value is a *valid* instance keep it.
+            if (current && typeof current.loadConversation === 'function'){
+                if (APP_CONFIG.DEBUG){
+                    console.warn('[App] Prevented overwriting of valid chatManager instance.');
+                }
+                return current;              // silently ignore the bad overwrite
+            }
+        }
+        return originalRegister(key, value);
+    };
+})(DependencySystem);
+
 // Register apiRequest in DependencySystem for clean DI (after DependencySystem is defined)
 DependencySystem.register('apiRequest', apiRequest);
 
@@ -436,7 +457,8 @@ const app = {
     validateUUID,
     navigateToConversation: async (conversationId) => {
         try {
-            const chatManager = await waitFor('chatManager', null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+            // waitFor always returns an array of resolved modules. Destructure to get the instance.
+            const [chatManager] = await waitFor(['chatManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
             if (!chatManager) throw new Error('Chat Manager dependency not available.');
             const success = await chatManager.loadConversation(conversationId);
             if (!success && APP_CONFIG.DEBUG) {
@@ -477,14 +499,27 @@ const chatManager = createChatManager({
         }
     }
 });
-// Defensive: ensure real instance, not the factory
-if (typeof chatManager.initialize !== 'function') {
-    throw new Error('[App] createChatManager() did not return a valid instance');
+// Defensive: ensure real instance, not the factory and has required method
+if (
+    typeof chatManager !== 'object' ||
+    typeof chatManager.initialize !== 'function' ||
+    typeof chatManager.loadConversation !== 'function'
+) {
+    throw new Error('[App] createChatManager() did not return a valid ChatManager instance.');
 }
-DependencySystem.register('chatManager', chatManager);
+// Only allow instance registration
+if (
+    typeof chatManager === 'object' &&
+    typeof chatManager.loadConversation === 'function'
+) {
+    DependencySystem.register('chatManager', chatManager);
+} else {
+    throw new Error('[App] Refusing to register chatManager: not a valid instance with .loadConversation');
+}
 // Harden: fix if some module or late load registered the factory by accident
-if (DependencySystem.modules.get('chatManager') === createChatManager) {
-    console.error('[App] ERROR: chatManager registered as factory – fixing.');
+let regChatManager = DependencySystem.modules.get('chatManager');
+if (regChatManager === createChatManager || typeof regChatManager.loadConversation !== 'function') {
+    console.error('[App] ERROR: chatManager registered incorrectly – fixing.');
     DependencySystem.modules.delete('chatManager');
     DependencySystem.register('chatManager', chatManager);
 }
@@ -1116,9 +1151,24 @@ async function handleNavigationChange() {
         console.log('[App] showProjectDetails:', typeof projectDashboard.showProjectDetails);
         console.log('[App] showProjectList:', typeof projectDashboard.showProjectList);
 
-        if (projectId && validateUUID(projectId) && typeof projectDashboard.showProjectDetails === 'function') {
-            console.log(`[App] Navigating to project details: ${projectId}, chatId=${chatId||'none'}`);
-            await projectDashboard.showProjectDetails(projectId);
+        // Patch: Ensure project details are fully loaded before continuing to project UI and chat
+        let projectManager;
+        try {
+            [projectManager] = await waitFor(['projectManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+        } catch (e) {
+            console.error('[App] ProjectManager unavailable for navigation:', e);
+            showNotification('UI Project Error.', 'error');
+            return;
+        }
+
+        if (projectId && validateUUID(projectId)) {
+            // Load project details and only then show project/dashboard/chat
+            console.log(`[App] Ensuring project ${projectId} details are loaded before UI...`);
+            await projectManager.loadProjectDetails(projectId);
+            if (typeof projectDashboard.showProjectDetails === 'function') {
+                console.log(`[App] Navigating to project details: ${projectId}, chatId=${chatId||'none'}`);
+                await projectDashboard.showProjectDetails(projectId);
+            }
         } else if (typeof projectDashboard.showProjectList === 'function') {
             console.log('[App] Navigating to project list view.');
             await projectDashboard.showProjectList();
@@ -1127,6 +1177,19 @@ async function handleNavigationChange() {
             toggleElement('PROJECT_DETAILS_VIEW', false);
             toggleElement('PROJECT_LIST_VIEW', true);
         }
+
+        // After project is loaded and visible, if chatId exists, safe to trigger chat logic
+        if (projectId && validateUUID(projectId) && chatId) {
+            try {
+                const success = await app.navigateToConversation(chatId);
+                if (!success) {
+                    console.warn("[App] Chat load failed for chatId:", chatId);
+                }
+            } catch (e) {
+                console.warn("[App] Error loading chatId after project ready:", e);
+            }
+        }
+
     } catch (navError) {
         console.error('[App] Error during navigation handling:', navError);
         showNotification(`Navigation failed: ${navError.message}`, 'error');
