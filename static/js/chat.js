@@ -155,7 +155,8 @@ export function createChatManager({
   eventHandlers,
   modelConfig,
   projectDetailsComponent,
-  DependencySystem
+  DependencySystem,
+  apiRequest // <-- accept apiRequest as param
 } = {}) {
   if (!DependencySystem) {
     throw new Error("DependencySystem must be provided to createChatManager");
@@ -175,6 +176,7 @@ export function createChatManager({
   eventHandlers = eventHandlers || resolveDep('eventHandlers');
   modelConfig = modelConfig || resolveDep('modelConfig');
   projectDetailsComponent = projectDetailsComponent || resolveDep('projectDetailsComponent');
+  apiRequest = apiRequest || resolveDep('apiRequest');
 
   /**
    * Returns the current model config or a fallback stub if not present
@@ -196,6 +198,11 @@ export function createChatManager({
    */
   class ChatManager {
     constructor() {
+      /**
+       * Set up dependency-injected apiRequest for all ChatManager methods
+       */
+      this.apiRequest = apiRequest;
+
       /**
        * @type {string|null}
        * The currently loaded conversation ID
@@ -410,8 +417,8 @@ export function createChatManager({
 
           // Parallel fetch: conversation data + messages
           const [conversation, messagesResponse] = await Promise.all([
-            app.apiRequest(API_ENDPOINTS.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
-            app.apiRequest(API_ENDPOINTS.MESSAGES(this.projectId, conversationId), { method: "GET" })
+            this.apiRequest(API_ENDPOINTS.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
+            this.apiRequest(API_ENDPOINTS.MESSAGES(this.projectId, conversationId), { method: "GET" })
           ]);
 
           const messages = messagesResponse.data?.messages || [];
@@ -473,7 +480,7 @@ export function createChatManager({
           model_id: config.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
 
-        const response = await app.apiRequest(
+        const response = await this.apiRequest(
           API_ENDPOINTS.CONVERSATIONS(this.projectId),
           { method: "POST", body: payload }
         );
@@ -583,7 +590,7 @@ export function createChatManager({
         };
       }
 
-      return app.apiRequest(
+      return this.apiRequest(
         API_ENDPOINTS.MESSAGES(this.projectId, this.currentConversationId),
         { method: "POST", body: messagePayload }
       );
@@ -654,7 +661,7 @@ export function createChatManager({
       }
 
       try {
-        await app.apiRequest(
+        await this.apiRequest(
           API_ENDPOINTS.CONVERSATION(this.projectId, this.currentConversationId),
           { method: "DELETE" }
         );
