@@ -282,27 +282,6 @@ const auth = createAuthModule({
 });
 DependencySystem.register('auth', auth);
 
-/* -------------------------------------------------------------------
- * ChatManager: Register instance early, before anything else needs it
- * ------------------------------------------------------------------- */
-const chatManager = createChatManager({
-    DependencySystem,
-    apiRequest,
-    auth,
-    eventHandlers,
-    showNotification: notificationHandler.show
-});
-// Defensive: ensure real instance, not the factory
-if (typeof chatManager.initialize !== 'function') {
-    throw new Error('[App] createChatManager() did not return a valid instance');
-}
-DependencySystem.register('chatManager', chatManager);
-// Harden: fix if some module or late load registered the factory by accident
-if (DependencySystem.modules.get('chatManager') === createChatManager) {
-    console.error('[App] ERROR: chatManager registered as factory – fixing.');
-    DependencySystem.modules.delete('chatManager');
-    DependencySystem.register('chatManager', chatManager);
-}
 
 /* ---------------------------------------------------------------------
  * Configuration
@@ -477,6 +456,38 @@ const app = {
     }),
     toggleElement
 };
+
+// -------------------------------------------------------------------
+// ChatManager: Register instance AFTER app is constructed (fixes DI)
+// -------------------------------------------------------------------
+const chatManager = createChatManager({
+    DependencySystem,
+    apiRequest,
+    auth,
+    eventHandlers,
+    app,
+    isValidProjectId: validateUUID,
+    isAuthenticated: () => {
+        try {
+            return typeof auth?.isAuthenticated === 'function'
+                ? auth.isAuthenticated()
+                : false;
+        } catch (e) {
+            return false;
+        }
+    }
+});
+// Defensive: ensure real instance, not the factory
+if (typeof chatManager.initialize !== 'function') {
+    throw new Error('[App] createChatManager() did not return a valid instance');
+}
+DependencySystem.register('chatManager', chatManager);
+// Harden: fix if some module or late load registered the factory by accident
+if (DependencySystem.modules.get('chatManager') === createChatManager) {
+    console.error('[App] ERROR: chatManager registered as factory – fixing.');
+    DependencySystem.modules.delete('chatManager');
+    DependencySystem.register('chatManager', chatManager);
+}
 
 /* -------------------------------------------------------------------
  * Initialization Sequence
@@ -785,7 +796,12 @@ async function initializeUIComponents() {
 
     // Instantiate and register ProjectListComponent
     if (typeof ProjectListComponent === 'function') {
-        const projectListComponent = new ProjectListComponent();
+        const projectListComponent = new ProjectListComponent({
+            projectManager,
+            eventHandlers,
+            modalManager,
+            app: appRef
+        });
         DependencySystem.register('projectListComponent', projectListComponent);
     }
 

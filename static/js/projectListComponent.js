@@ -2,32 +2,39 @@
  * ProjectListComponent
  * Handles rendering and interaction with the project list UI.
  *
- * All dependencies are now exclusively retrieved from the global DependencySystem.
- * No constructor options or dependency injection is supported.
+ * All dependencies must now be passed explicitly (NO window.* DI or fallback).
  *
  * Usage:
  *   import { ProjectListComponent } from './projectListComponent.js';
- *   const projectList = new ProjectListComponent();
+ *   const projectList = new ProjectListComponent({
+ *     projectManager,
+ *     eventHandlers,
+ *     modalManager,
+ *     app
+ *   });
  *   projectList.initialize();
  */
 
 export class ProjectListComponent {
     /**
      * ProjectListComponent constructor.
-     * All dependencies are resolved from DependencySystem.
+     * All dependencies are passed explicitly.
+     * @param {Object} deps - Required dependencies.
+     * @param {Object} deps.projectManager - ProjectManager instance (required)
+     * @param {Object} deps.eventHandlers - EventHandlers instance (required)
+     * @param {Object} deps.modalManager - ModalManager instance (optional)
+     * @param {Object} deps.app - App instance (optional)
      */
-    constructor() {
-        // Retrieve all dependencies exclusively from DependencySystem
-        this.projectManager = window.DependencySystem.modules.get('projectManager');
-        this.eventHandlers = window.DependencySystem.modules.get('eventHandlers');
-        this.modalManager = window.DependencySystem.modules.get('modalManager');
-        this.app = window.DependencySystem.modules.get('app');
-
-        if (!this.projectManager || !this.eventHandlers) {
+    constructor({ projectManager, eventHandlers, modalManager, app } = {}) {
+        if (!projectManager || !eventHandlers) {
             throw new Error(
-              "[ProjectListComponent] Missing required dependencies from the DependencySystem."
+              "[ProjectListComponent] Missing required dependencies: projectManager and eventHandlers are required."
             );
         }
+        this.projectManager = projectManager;
+        this.eventHandlers = eventHandlers;
+        this.modalManager = modalManager;
+        this.app = app;
 
         // Set default onViewProject callback
         this.onViewProject = (projectId) => {
