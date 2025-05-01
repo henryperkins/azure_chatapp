@@ -42,6 +42,7 @@ class ModalManager {
       knowledgeResult: "knowledgeResultModal",
       instructions: "instructionsModal",
       contentView: "contentViewModal",
+      login: "loginModal", // Added login modal mapping
     };
 
     this.activeModal = null;
