@@ -38,7 +38,6 @@ class ProjectDashboard {
     this.projectManager = getModule('projectManager');
     // Use the already-registered instance for ProjectListComponent
     this.components = { projectList: null, projectDetails: null };
-    this.ProjectDetailsComponent = getModule('ProjectDetailsComponent');
     this.eventHandlers = getModule('eventHandlers');
     this.auth = getModule('auth');
 
@@ -282,13 +281,18 @@ class ProjectDashboard {
       console.error('[ProjectDashboard] projectListComponent not found (DependencySystem).');
     }
 
-    if (this.ProjectDetailsComponent) {
-      this.components.projectDetails = new this.ProjectDetailsComponent({
-        onBack: this._handleBackToList.bind(this)
-      });
-      console.log('[ProjectDashboard] ProjectDetailsComponent created.');
+    // Use the already-registered instance for ProjectDetailsComponent
+    this.components.projectDetails = this.getModule('projectDetailsComponent');
+    if (this.components.projectDetails) {
+      // Optionally set the onBack callback if needed:
+      this.components.projectDetails.onBack = this._handleBackToList.bind(this);
+      // Optionally call initialize if not already done:
+      if (!this.components.projectDetails.state?.initialized) {
+        await this.components.projectDetails.initialize();
+        console.log('[ProjectDashboard] ProjectDetailsComponent initialized.');
+      }
     } else {
-      console.error('[ProjectDashboard] ProjectDetailsComponent not found (DependencySystem).');
+      console.error('[ProjectDashboard] projectDetailsComponent not found (DependencySystem).');
     }
     console.log('[ProjectDashboard] Components initialized.');
   }
