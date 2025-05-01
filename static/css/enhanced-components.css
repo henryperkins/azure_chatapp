@@ -9,62 +9,62 @@
 
 /* Enhanced Dracula theme with better contrast ratios for accessibility */
 @plugin "daisyui/theme" {
-  name: "dracula-enhanced";
+  name: dracula-enhanced;
   default: false;
   prefersdark: true;
-  color-scheme: "dark";
-  
+  color-scheme: dark;
+
   /* Enhanced base colors with slightly better contrast */
   --color-base-100: oklch(28.8% 0.025 277.5);
   --color-base-200: oklch(25.8% 0.023 277.5);
   --color-base-300: oklch(22.8% 0.021 277.5);
   --color-base-content: oklch(98% 0.01 106.5);
-  
+
   /* Vibrant primary (pink) */
   --color-primary: oklch(76% 0.19 346.8);
   --color-primary-content: oklch(15% 0.036 346.8);
   --color-primary-focus: oklch(78% 0.21 346.8);
-  
+
   /* Enhanced secondary (purple) */
   --color-secondary: oklch(75% 0.155 301.9);
   --color-secondary-content: oklch(15% 0.03 301.9);
   --color-secondary-focus: oklch(77% 0.17 301.9);
-  
+
   /* Brightened accent (yellow) */
   --color-accent: oklch(84% 0.13 66.6);
   --color-accent-content: oklch(16.7% 0.024 66.6);
   --color-accent-focus: oklch(86% 0.14 66.6);
-  
+
   /* Other UI colors */
   --color-neutral: oklch(39.5% 0.035 275.5);
   --color-neutral-content: oklch(88% 0.01 275.5);
-  
+
   /* Enhanced status colors */
   --color-info: oklch(88.3% 0.1 212.8);
   --color-info-content: oklch(17.7% 0.02 212.8);
-  
+
   --color-success: oklch(87.1% 0.22 148);
   --color-success-content: oklch(17.4% 0.045 148);
-  
+
   --color-warning: oklch(95.5% 0.14 112.8);
   --color-warning-content: oklch(19.1% 0.03 112.8);
-  
+
   --color-error: oklch(68.2% 0.21 24.4);
   --color-error-content: oklch(13.6% 0.045 24.4);
-  
+
   /* Improved UI elements */
   --radius-selector: 0.3rem;
   --radius-field: 0.3rem;
   --radius-box: 0.3rem;
-  
+
   --size-selector: 0.25rem;
   --size-field: 0.25rem;
-  
+
   /* Added shadow for depth */
   --border: 0.5px;
   --depth: 0.2;
   --noise: 1;
-  
+
   /* New variables for enhanced usability */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
@@ -74,10 +74,10 @@
 
 /* Light mode theme */
 @plugin "daisyui/theme" {
-  name: "azure-light";
+  name: azure-light;
   default: true;
   prefersdark: false;
-  color-scheme: "light";
+  color-scheme: light;
 
   /* Base colors */
   --color-base-100: oklch(98% 0.01 270);
