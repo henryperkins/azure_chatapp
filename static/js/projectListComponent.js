@@ -441,7 +441,7 @@ export class ProjectListComponent {
         this.element.innerHTML = "";
         for (let i = 0; i < 6; i++) {
             const skeleton = document.createElement("div");
-            skeleton.className = "bg-base-200 animate-pulse rounded-lg p-4 mb-2";
+            skeleton.className = "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
             skeleton.innerHTML = `
                   <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
                   <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
@@ -455,7 +455,7 @@ export class ProjectListComponent {
     _showEmptyState() {
         if (!this.element) return;
         this.element.innerHTML = `
-              <div class="col-span-3 text-center py-10">
+              <div class="col-span-3 text-center py-10 text-base-content/60">
                 <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor"
                      viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -465,8 +465,8 @@ export class ProjectListComponent {
                            0 012-2h6a2 2 0 012 2v2M7 7h10"
                   ></path>
                 </svg>
-                <p class="mt-4 text-lg">No projects found</p>
-                <p class="text-base-content/60 mt-1">Create a new project to get started</p>
+                <p class="mt-4 text-lg text-base-content">No projects found</p>
+                <p class="mt-1">Create a new project to get started</p>
                 <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
               </div>
           `;
@@ -535,7 +535,7 @@ export class ProjectListComponent {
             theme === "default" ? "text-base-content" : `text-${theme}-content`;
 
         const card = document.createElement("div");
-        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3`;
+        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-x-auto`;
         card.dataset.projectId = project.id;
 
         // Header
@@ -543,7 +543,7 @@ export class ProjectListComponent {
         header.className = "flex justify-between items-start";
 
         const title = document.createElement("h3");
-        title.className = "font-semibold text-xl mb-2 project-name";
+        title.className = "font-semibold text-lg sm:text-xl mb-2 project-name truncate";
         title.textContent = project.name || "Unnamed Project";
 
         // Action Buttons
@@ -588,7 +588,8 @@ export class ProjectListComponent {
             },
         ].forEach((btnDef) => {
             const btn = document.createElement("button");
-            btn.className = `btn btn-ghost btn-xs btn-square ${btnDef.className || ""}`;
+            btn.className = `btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] ${btnDef.className || ""}`;
+            btn.setAttribute('aria-label', btnDef.title);
             btn.dataset.action = btnDef.action;
             btn.title = btnDef.title;
             btn.innerHTML = btnDef.icon;
@@ -601,7 +602,7 @@ export class ProjectListComponent {
 
         if (this.state.customization.showDescription && project.description) {
             const description = document.createElement("p");
-            description.className = "text-sm text-base-content/80 mb-3 line-clamp-2";
+            description.className = "text-sm text-base-content/70 mb-3 line-clamp-2";
             description.textContent = project.description;
             card.appendChild(description);
         }
