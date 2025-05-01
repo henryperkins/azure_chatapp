@@ -12,6 +12,8 @@
  *   sidebar.init();
  */
 
+import { safeParseJSON } from './utils/globalUtils.js';
+
 export function createSidebar({
   eventHandlers,
   app,
@@ -38,10 +40,7 @@ export function createSidebar({
   let pinned = false;  // stays open when true
   let visible = false; // current visual state
 
-  function safeParseJSON(jsonString, defaultVal) {
-    if (typeof jsonString !== 'string') return defaultVal;
-    try { return JSON.parse(jsonString); } catch { return defaultVal; }
-  }
+  // Use shared safeParseJSON to avoid duplication
   const starred = new Set(
     safeParseJSON(localStorage?.getItem('starredConversations'), [])
   );

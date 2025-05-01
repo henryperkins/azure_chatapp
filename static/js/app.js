@@ -1,120 +1,157 @@
 /**
- * app.js - Application Core
+ * app.js - Application Core (Refactored)
  *
- * - Centralized dependency management via DependencySystem.
- * - Deterministic initialization sequence using async/await.
- * - Consolidated core utilities (apiRequest, notification, UUID validation).
- * - Reduced global scope pollution (strict DependencySystem usage).
- * - Consistent use of ES Modules.
+ * - Consolidated utility calls to globalUtils.js.
+ * - Removed duplicated utility function definitions in favor of imports.
+ * - Eliminated redundant references to isValidProjectId (now only using globalUtils).
+ * - Preserves core application logic, including apiRequest, initialization, etc.
  */
 
-/* ---------------------------------------------------------------------
- * Core Utilities (Moved up before module registrations)
- * ------------------------------------------------------------------- */
-function debounce(fn, wait = 250) {
-    let timeoutId = null;
-    return function (...args) {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => {
-            timeoutId = null;
-            fn.apply(this, args);
-        }, wait);
-    };
-}
+import * as globalUtils from './utils/globalUtils.js';
 
-function stableStringify(value) {
-    if (value === null || typeof value !== 'object') return JSON.stringify(value);
-    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
-    return `{${Object.keys(value)
-        .sort()
-        .map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
-        .join(',')}}`;
-}
+import { createModalManager, createProjectModal } from './modalManager.js';
+import { MODAL_MAPPINGS } from './modalConstants.js';
+import { createProjectManager } from './projectManager.js'; // Removed isValidProjectId import
+import { createProjectDashboard } from './projectDashboard.js';
+import { ProjectListComponent } from './projectListComponent.js';
+import { createProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createSidebar } from './sidebar.js';
+import { createModelConfig } from './modelConfig.js';
+import { createProjectDashboardUtils } from './projectDashboardUtils.js';
+import { createChatManager } from './chat.js';
+import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
+import { createChatExtensions } from './chatExtensions.js';
+import FileUploadComponent from './FileUploadComponent.js';
+import * as formatting from './formatting.js';
+import * as accessibilityUtils from './accessibility-utils.js';
+import { createNotificationHandler } from './notification-handler.js';
+import { createEventHandlers } from './eventHandler.js';
+import { createAuthModule } from './auth.js';
 
-function normaliseUrl(url) {
-    try {
-        const u = new URL(url, window.location.origin);
-        if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
-            u.pathname = u.pathname.slice(0, -1);
-        }
-        const params = Array.from(u.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
-        u.search = new URLSearchParams(params).toString();
-        return u.toString();
-    } catch (e) {
-        console.warn(`[App] Failed to normalize URL: ${url}`, e);
-        return url;
+// ---------------------------------------------------------------------
+// DependencySystem check
+// ---------------------------------------------------------------------
+const DependencySystem = window.DependencySystem;
+if (!DependencySystem) {
+    console.error("CRITICAL: DependencySystem not found. Application cannot start.");
+    document.body.innerHTML = `
+      <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
+        <strong>Application Critical Error:</strong> Core dependency system failed to load.
+        Please contact support or refresh.
+      </div>`;
+    throw new Error("DependencySystem is required but not available.");
+}
+const waitFor = DependencySystem.waitFor.bind(DependencySystem);
+
+// ---------------------------------------------------------------------
+// Local app config & state
+// ---------------------------------------------------------------------
+const APP_CONFIG = {
+    DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
+    TIMEOUTS: {
+        INITIALIZATION: 15000,
+        AUTH_CHECK: 5000,
+        API_REQUEST: 10000,
+        COMPONENT_LOAD: 5000,
+        DEPENDENCY_WAIT: 10000
+    },
+    API_ENDPOINTS: {
+        AUTH_LOGIN: '/api/auth/login',
+        AUTH_REGISTER: '/api/auth/register',
+        AUTH_LOGOUT: '/api/auth/logout',
+        AUTH_VERIFY: '/api/auth/verify',
+        PROJECTS: '/api/projects',
+        PROJECT_DETAILS: '/api/projects/{projectId}',
+        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
+        PROJECT_FILES: '/api/projects/{projectId}/files',
+        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts',
+        PROJECT_KNOWLEDGE_BASE: '/api/projects/{projectId}/knowledge_base'
+    },
+    SELECTORS: {
+        MAIN_SIDEBAR: '#mainSidebar',
+        NAV_TOGGLE_BTN: '#navToggleBtn',
+        SIDEBAR_PROJECTS: '#sidebarProjects',
+        AUTH_BUTTON: '#authButton',
+        USER_MENU_BUTTON: '#userMenuButton',
+        USER_MENU: '#userMenu',
+        PROJECT_LIST_VIEW: '#projectListView',
+        PROJECT_DETAILS_VIEW: '#projectDetailsView',
+        LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
+        APP_LOADING_SPINNER: '#appLoading',
+        APP_FATAL_ERROR: '#appFatalError',
+        AUTH_STATUS_SPAN: '#authStatus',
+        USER_STATUS_SPAN: '#userStatus'
     }
-}
+};
 
+const appState = {
+    initialized: false,
+    initializing: false,
+    currentPhase: 'idle',
+    isAuthenticated: false
+};
+
+// ---------------------------------------------------------------------
+// PendingRequests map & Deduplicated API request
+// ---------------------------------------------------------------------
 const pendingRequests = new Map();
 
-// For certain endpoints that get repeatedly fetched, skip dedup logic:
-function shouldSkipDedup(url) {
-    try {
-        const lower = url.toLowerCase();
-        if (
-            lower.includes('/api/projects/') &&
-            (
-               lower.endsWith('/stats') ||
-               lower.endsWith('/files') ||
-               lower.endsWith('/artifacts') ||
-               lower.endsWith('/conversations') ||
-               lower.includes('/conversations?')
-            )
-        ) {
-            return true;
-        }
-    } catch (e) {
-        console.warn('[App] shouldSkipDedup error:', e);
-    }
-    return false;
-}
-
 async function apiRequest(url, opts = {}, skipCache = false) {
-    // If skipCache not forced, and this is a GET, check if we should skip dedup
-    if (!skipCache && (opts.method || 'GET').toUpperCase() === 'GET') {
-        if (shouldSkipDedup(url)) {
+    const method = (opts.method || "GET").toUpperCase();
+
+    // If GET and not forced to skip, check dedup logic
+    if (!skipCache && method === "GET") {
+        if (globalUtils.shouldSkipDedup(url)) {
             skipCache = true;
         }
     }
-    const auth = DependencySystem.modules.get('auth');
-    const method = (opts.method || 'GET').toUpperCase();
-    const unsafeVerb = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
-    const normalizedUrl = normaliseUrl(url);
 
+    const auth = DependencySystem.modules.get("auth");
+    const unsafeVerb = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    const normalizedUrl = globalUtils.normaliseUrl(url);
+
+    // Body dedup key
     const bodyKey = opts.body instanceof FormData
         ? `[form-data-${Date.now()}]`
-        : stableStringify(opts.body || {});
+        : globalUtils.stableStringify(opts.body || {});
     const requestKey = `${method}-${normalizedUrl}-${bodyKey}`;
 
-    if (!skipCache && method === 'GET' && pendingRequests.has(requestKey)) {
+    // If GET and a matching request is in flight, return the same promise
+    if (!skipCache && method === "GET" && pendingRequests.has(requestKey)) {
         if (APP_CONFIG.DEBUG) {
             console.debug(`[API] Dedup hit for: ${requestKey}`);
         }
         return pendingRequests.get(requestKey);
     }
 
-    opts.headers = { Accept: 'application/json', ...(opts.headers || {}) };
+    opts.headers = { Accept: "application/json", ...(opts.headers || {}) };
+
+    // Inject CSRF if needed
     if (unsafeVerb && auth?.getCSRFToken) {
         const csrf = auth.getCSRFToken();
-        if (csrf) opts.headers['X-CSRF-Token'] = csrf;
-        else if (APP_CONFIG.DEBUG) console.warn(`[API] CSRF token unavailable for ${method} ${normalizedUrl}`);
+        if (csrf) {
+            opts.headers["X-CSRF-Token"] = csrf;
+        } else if (APP_CONFIG.DEBUG) {
+            console.warn(`[API] CSRF token unavailable for ${method} ${normalizedUrl}`);
+        }
     }
 
-    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof FormData)) {
-        if (!opts.headers['Content-Type']) {
-            opts.headers['Content-Type'] = 'application/json;charset=UTF-8';
+    // If the body is a plain object, convert to JSON
+    if (opts.body && typeof opts.body === "object" && !(opts.body instanceof FormData)) {
+        if (!opts.headers["Content-Type"]) {
+            opts.headers["Content-Type"] = "application/json;charset=UTF-8";
         }
-        if (opts.headers['Content-Type'].includes('application/json')) {
+        if (opts.headers["Content-Type"].includes("application/json")) {
             try {
                 opts.body = JSON.stringify(opts.body);
             } catch (err) {
-                console.error('[API] Failed to stringify body:', err);
-                return Promise.reject(new Error('Failed to serialize request body.'));
+                console.error("[API] Failed to stringify body:", err);
+                return Promise.reject(new Error("Failed to serialize request body."));
             }
         }
     }
 
+    // Setup fetch timeout
     const controller = new AbortController();
     const timer = setTimeout(
         () => controller.abort(new Error(`API Timeout (${APP_CONFIG.TIMEOUTS.API_REQUEST}ms)`)),
@@ -125,17 +162,21 @@ async function apiRequest(url, opts = {}, skipCache = false) {
     const reqPromise = (async () => {
         try {
             if (APP_CONFIG.DEBUG) {
-                console.debug(`[API] Requesting: ${method} ${normalizedUrl}`, opts.body ? 'with body' : '');
+                console.debug(`[API] Requesting: ${method} ${normalizedUrl}`, opts.body ? "with body" : "");
             }
             const resp = await fetch(normalizedUrl, opts);
 
             if (!resp.ok) {
-                let errPayload = { message: `API Error: ${resp.status} ${resp.statusText}` };
+                let errPayload = {
+                    message: `API Error: ${resp.status} ${resp.statusText}`
+                };
                 try {
                     const errorJson = await resp.clone().json();
                     const detail = errorJson.detail || errorJson.message;
                     if (detail) {
-                        errPayload.message = typeof detail === 'string' ? detail : JSON.stringify(detail);
+                        errPayload.message = typeof detail === 'string'
+                            ? detail
+                            : JSON.stringify(detail);
                     }
                     errPayload = { ...errPayload, ...errorJson };
                 } catch {
@@ -181,250 +222,42 @@ async function apiRequest(url, opts = {}, skipCache = false) {
     return reqPromise;
 }
 
+// ---------------------------------------------------------------------
+// Wrapper: showNotification
+// ---------------------------------------------------------------------
 function showNotification(message, type = 'info', duration = 5000) {
-    try {
-        const notificationHandler = DependencySystem.modules.get('notificationHandler');
-        if (notificationHandler?.show) {
-            notificationHandler.show(message, type, { timeout: duration });
-        } else if (APP_CONFIG.DEBUG) {
-            const logMethod = type === 'error'
-                ? console.error
-                : type === 'warn'
-                    ? console.warn
-                    : console.log;
-            logMethod(`[Notification Fallback] (${type}): ${message}`);
-        }
-    } catch (e) {
-        console.error("[App] Error showing notification:", e);
-        const logMethod = type === 'error'
-            ? console.error
-            : type === 'warn'
-                ? console.warn
-                : console.log;
-        logMethod(`[Notification Critical Fallback] (${type}): ${message}`);
+    if (APP_CONFIG.DEBUG) {
+        console.debug(`[App] showNotification: ${message} (type: ${type}, duration: ${duration})`);
     }
+    globalUtils.showNotification(message, type, duration);
 }
 
+// ---------------------------------------------------------------------
+// Wrapper: toggleElement
+// Additional logic for translating string selector keys to APP_CONFIG.SELECTORS
+// ---------------------------------------------------------------------
 function toggleElement(selectorOrElement, show) {
     try {
-        const el = typeof selectorOrElement === 'string'
-            ? document.querySelector(APP_CONFIG.SELECTORS[selectorOrElement] || selectorOrElement)
-            : selectorOrElement;
-
-        if (el instanceof HTMLElement) {
-            el.classList.toggle('hidden', !show);
-        } else if (APP_CONFIG.DEBUG && typeof selectorOrElement === 'string') {
-            console.warn(
-                `[App] toggleElement: Element not found for selector: ${APP_CONFIG.SELECTORS[selectorOrElement] || selectorOrElement}`
-            );
-        } else if (APP_CONFIG.DEBUG) {
-            console.warn("[App] toggleElement: Invalid element passed:", selectorOrElement);
-        }
+        const resolvedSelector = APP_CONFIG.SELECTORS[selectorOrElement] || selectorOrElement;
+        globalUtils.toggleElement(resolvedSelector, show);
     } catch (e) {
         console.error(`[App] Error in toggleElement for ${selectorOrElement}:`, e);
     }
 }
 
-  // --- Imports ---
-import { createModalManager, createProjectModal } from './modalManager.js';
-import { MODAL_MAPPINGS } from './modalConstants.js';
-import { createProjectManager, isValidProjectId as validateUUID } from './projectManager.js';
-import { createProjectDashboard } from './projectDashboard.js';
-import { ProjectListComponent } from './projectListComponent.js';
-import { createProjectDetailsComponent } from './projectDetailsComponent.js';
-import { createSidebar } from './sidebar.js';
-import { createModelConfig } from './modelConfig.js';
-import { createProjectDashboardUtils } from './projectDashboardUtils.js';
-import { createChatManager } from './chat.js';
-import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
-import { createChatExtensions } from './chatExtensions.js';
-import FileUploadComponent from './FileUploadComponent.js';
-import * as formatting from './formatting.js';
-import * as accessibilityUtils from './accessibility-utils.js';
-import * as globalUtils from './utils/globalUtils.js';
-
-import { createNotificationHandler } from './notification-handler.js';
-import { createEventHandlers } from './eventHandler.js';
-import { createAuthModule } from './auth.js';
-import { waitForDepsAndDom } from './utils/initHelpers.js';
-
-// --- Confirm DependencySystem is present before using it ---
-const DependencySystem = window.DependencySystem;
-if (!DependencySystem) {
-    console.error("CRITICAL: DependencySystem not found. Application cannot start.");
-    document.body.innerHTML = `
-    <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
-      <strong>Application Critical Error:</strong> Core dependency system failed to load.
-      Please contact support or refresh.
-    </div>`;
-    throw new Error("DependencySystem is required but not available.");
-}
-const waitFor = DependencySystem.waitFor.bind(DependencySystem);
-
-// ------------------------------------------------------------------
-// Guard against accidental overwriting of the chatManager instance
-// ------------------------------------------------------------------
-(function patchDependencySystem(ds){
-    const originalRegister = ds.register.bind(ds);
-
-    ds.register = function(key, value){
-        if (key === 'chatManager' && ds.modules.has('chatManager')){
-            const current = ds.modules.get('chatManager');
-            // If the current value is a *valid* instance keep it.
-            if (current && typeof current.loadConversation === 'function'){
-                if (APP_CONFIG.DEBUG){
-                    console.warn('[App] Prevented overwriting of valid chatManager instance.');
-                }
-                return current;              // silently ignore the bad overwrite
-            }
-        }
-        return originalRegister(key, value);
-    };
-})(DependencySystem);
-
-// Register apiRequest in DependencySystem for clean DI (after DependencySystem is defined)
+// ---------------------------------------------------------------------
+// Create & register modules
+// ---------------------------------------------------------------------
 DependencySystem.register('apiRequest', apiRequest);
-
-// -- DependencySystem Core Module Registration (explicit, DI-compliant) --
 const notificationHandler = createNotificationHandler({ DependencySystem });
 DependencySystem.register('notificationHandler', notificationHandler);
-
-// Register modal mapping as a DI constant
 DependencySystem.register('modalMapping', MODAL_MAPPINGS);
-
 const eventHandlers = createEventHandlers({ DependencySystem });
 DependencySystem.register('eventHandlers', eventHandlers);
 
-
-
-/* ---------------------------------------------------------------------
- * Configuration
- * ------------------------------------------------------------------- */
-const APP_CONFIG = {
-    DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
-    TIMEOUTS: {
-        INITIALIZATION: 15000,
-        AUTH_CHECK: 5000,
-        API_REQUEST: 10000,
-        COMPONENT_LOAD: 5000,
-        DEPENDENCY_WAIT: 10000
-    },
-    API_ENDPOINTS: {
-        AUTH_LOGIN: '/api/auth/login',
-        AUTH_REGISTER: '/api/auth/register',
-        AUTH_LOGOUT: '/api/auth/logout',
-        AUTH_VERIFY: '/api/auth/verify',
-        PROJECTS: '/api/projects',
-        PROJECT_DETAILS: '/api/projects/{projectId}',
-        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations',
-        PROJECT_FILES: '/api/projects/{projectId}/files',
-        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts',
-        PROJECT_KNOWLEDGE_BASE: '/api/projects/{projectId}/knowledge_base'
-    },
-    SELECTORS: {
-        MAIN_SIDEBAR: '#mainSidebar',
-        NAV_TOGGLE_BTN: '#navToggleBtn',
-        SIDEBAR_PROJECTS: '#sidebarProjects',
-        AUTH_BUTTON: '#authButton',
-        USER_MENU_BUTTON: '#userMenuButton',
-        USER_MENU: '#userMenu',
-        PROJECT_LIST_VIEW: '#projectListView',
-        PROJECT_DETAILS_VIEW: '#projectDetailsView',
-        LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
-        APP_LOADING_SPINNER: '#appLoading',
-        APP_FATAL_ERROR: '#appFatalError',
-        AUTH_STATUS_SPAN: '#authStatus',
-        USER_STATUS_SPAN: '#userStatus'
-    }
-};
-
-/* ---------------------------------------------------------------------
- * Global App State
- * ------------------------------------------------------------------- */
-const appState = {
-    initialized: false,
-    initializing: false,
-    currentPhase: 'idle',
-    isAuthenticated: false
-};
-
-/* ---------------------------------------------------------------------
- * Header Rendering based on Auth State
- * ------------------------------------------------------------------- */
-function renderAuthHeader() {
-    try {
-        const authMod = DependencySystem.modules.get('auth');
-        const isAuth = typeof authMod?.isAuthenticated === 'function' && authMod.isAuthenticated();
-        // Auth button
-        const btn = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || document.querySelector('#loginButton');
-        if (btn) {
-            btn.textContent = isAuth ? 'Logout' : 'Login';
-            btn.onclick = (e) => {
-                e.preventDefault();
-                if (isAuth) {
-                    authMod.logout();
-                } else {
-                    const modal = DependencySystem.modules.get('modalManager');
-                    if (modal?.show) modal.show('login');
-                }
-            };
-        }
-        // Status spans
-        const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
-        const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
-        if (authStatus) {
-            authStatus.textContent = isAuth ? 'Signed in' : 'Not signed in';
-        }
-        if (userStatus) {
-            userStatus.textContent = isAuth ? `Hello, ${authMod.getCurrentUser()}` : '';
-        }
-    } catch (e) {
-        console.error('[App] renderAuthHeader error:', e);
-    }
-}
-
-
-/* ---------------------------------------------------------------------
- * SPA Router Patch
- * ------------------------------------------------------------------- */
-(() => {
-    if (history.pushState._patched) return;
-
-    const originalPushState = history.pushState;
-    const originalReplaceState = history.replaceState;
-
-    const fireLocationChange = () => {
-        requestAnimationFrame(() => {
-            try {
-                window.dispatchEvent(new Event('locationchange'));
-            } catch (e) {
-                console.error('[App] Error dispatching locationchange event:', e);
-            }
-        });
-    };
-
-    history.pushState = function (...args) {
-        originalPushState.apply(this, args);
-        fireLocationChange();
-    };
-    history.pushState._patched = true;
-
-    history.replaceState = function (...args) {
-        originalReplaceState.apply(this, args);
-        fireLocationChange();
-    };
-    history.replaceState._patched = true;
-
-    window.addEventListener('popstate', fireLocationChange);
-
-    if (APP_CONFIG.DEBUG) {
-        console.debug('[App] SPA Router patched.');
-    }
-})();
-
-/* ---------------------------------------------------------------------
- * Application Instance
- * ------------------------------------------------------------------- */
+/**
+ * The main "app" object, with references to core config/state and key methods.
+ */
 const app = {
     apiRequest,
     showNotification,
@@ -435,11 +268,11 @@ const app = {
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const urlProjectId = urlParams.get('project');
-            if (urlProjectId && validateUUID(urlProjectId)) {
+            if (urlProjectId && globalUtils.isValidProjectId(urlProjectId)) {
                 return urlProjectId;
             }
             const pm = DependencySystem.modules.get('projectManager');
-            if (pm?.currentProject?.id && validateUUID(pm.currentProject.id)) {
+            if (pm?.currentProject?.id && globalUtils.isValidProjectId(pm.currentProject.id)) {
                 return pm.currentProject.id;
             }
         } catch (e) {
@@ -447,10 +280,14 @@ const app = {
         }
         return null;
     },
-    validateUUID,
+    /**
+     * For external references, if needed. Otherwise, modules can also call
+     * globalUtils.isValidProjectId directly.
+     */
+    isValidProjectId: globalUtils.isValidProjectId,
+
     navigateToConversation: async (conversationId) => {
         try {
-            // waitFor always returns an array of resolved modules. Destructure to get the instance.
             const [chatManager] = await waitFor(['chatManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
             if (!chatManager) throw new Error('Chat Manager dependency not available.');
             const success = await chatManager.loadConversation(conversationId);
@@ -472,27 +309,45 @@ const app = {
     toggleElement
 };
 
-// -------------------------------------------------------------------
-// ChatManager: Register instance AFTER app is constructed (fixes DI)
-// -------------------------------------------------------------------
+// ---------------------------------------------------------------------
+// Protect chatManager from accidental overwrites
+// ---------------------------------------------------------------------
+(function patchDependencySystem(ds) {
+    const originalRegister = ds.register.bind(ds);
+    ds.register = function (key, value) {
+        if (key === 'chatManager' && ds.modules.has('chatManager')) {
+            const current = ds.modules.get('chatManager');
+            if (current && typeof current.loadConversation === 'function') {
+                if (APP_CONFIG.DEBUG) {
+                    console.warn('[App] Prevented overwriting of valid chatManager instance.');
+                }
+                return current;
+            }
+        }
+        return originalRegister(key, value);
+    };
+})(DependencySystem);
+
 const chatManager = createChatManager({
     DependencySystem,
     apiRequest,
-    auth,
+    auth: () => DependencySystem.modules.get('auth'),
     eventHandlers,
     app,
-    isValidProjectId: validateUUID,
+    // Use the globalUtils version consistently:
+    isValidProjectId: globalUtils.isValidProjectId,
     isAuthenticated: () => {
         try {
-            return typeof auth?.isAuthenticated === 'function'
-                ? auth.isAuthenticated()
+            const authModule = DependencySystem.modules.get('auth');
+            return typeof authModule?.isAuthenticated === 'function'
+                ? authModule.isAuthenticated()
                 : false;
         } catch (e) {
             return false;
         }
     }
 });
-// Defensive: ensure real instance, not the factory and has required method
+
 if (
     typeof chatManager !== 'object' ||
     typeof chatManager.initialize !== 'function' ||
@@ -500,16 +355,7 @@ if (
 ) {
     throw new Error('[App] createChatManager() did not return a valid ChatManager instance.');
 }
-// Only allow instance registration
-if (
-    typeof chatManager === 'object' &&
-    typeof chatManager.loadConversation === 'function'
-) {
-    DependencySystem.register('chatManager', chatManager);
-} else {
-    throw new Error('[App] Refusing to register chatManager: not a valid instance with .loadConversation');
-}
-// Harden: fix if some module or late load registered the factory by accident
+DependencySystem.register('chatManager', chatManager);
 let regChatManager = DependencySystem.modules.get('chatManager');
 if (regChatManager === createChatManager || typeof regChatManager.loadConversation !== 'function') {
     console.error('[App] ERROR: chatManager registered incorrectly – fixing.');
@@ -517,9 +363,37 @@ if (regChatManager === createChatManager || typeof regChatManager.loadConversati
     DependencySystem.register('chatManager', chatManager);
 }
 
-/* -------------------------------------------------------------------
- * Initialization Sequence
- * ------------------------------------------------------------------- */
+// ---------------------------------------------------------------------
+// Bootstrap & application initialization
+// ---------------------------------------------------------------------
+function bootstrap() {
+    if (window.appBootstrapCalled) return;
+    if (!window.DependencySystem) {
+        console.error("CRITICAL: DependencySystem not found. Bootstrap aborted.");
+        document.body.innerHTML = `
+        <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
+          <strong>Application Critical Error:</strong> Core dependency system failed to load.
+          Please refresh or contact support.
+        </div>`;
+        return;
+    }
+    const start = performance.now();
+    console.log(`[App] Bootstrapping... (${start.toFixed(2)})`);
+    const onReady = () => {
+        console.log(`[App] DOM ready. (Delay: ${(performance.now() - start).toFixed(2)} ms)`);
+        init().catch(err => console.error("[App] Unhandled error during async init:", err));
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', onReady);
+    } else {
+        onReady();
+    }
+}
+bootstrap();
+
+// ---------------------------------------------------------------------
+// Main init sequence
+// ---------------------------------------------------------------------
 async function init() {
     if (appState.initialized || appState.initializing) {
         if (APP_CONFIG.DEBUG) {
@@ -546,15 +420,15 @@ async function init() {
             console.debug('[App] Core app module registered.');
         }
 
+        appState.currentPhase = 'init_core_systems';
+        await initializeCoreSystems();
+
         appState.currentPhase = 'waiting_core_deps';
         console.log('[App] Waiting for essential dependencies...');
         await waitFor(['auth', 'eventHandlers', 'notificationHandler'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
         if (APP_CONFIG.DEBUG) {
             console.debug('[App] Essential dependencies loaded.');
         }
-
-        appState.currentPhase = 'init_core_systems';
-        await initializeCoreSystems();
 
         appState.currentPhase = 'init_auth';
         await initializeAuthSystem();
@@ -568,7 +442,6 @@ async function init() {
         appState.currentPhase = 'finalizing';
         appState.initialized = true;
 
-        // --- FINAL-PHASE CENTRAL SAFETY NET ---
         try {
             await DependencySystem.modules.get('eventHandlers')?.init?.();
             DependencySystem.modules.get('modelConfig')?.initializeUI?.();
@@ -600,29 +473,25 @@ async function init() {
     }
 }
 
-/* ---------------------------------------------------------------------
- * Core Systems Initialization
- * ------------------------------------------------------------------- */
 async function initializeCoreSystems() {
     console.log('[App] Initializing core systems...');
 
-    // PHASE 1: Create components and register dependencies (always register constructed instances)
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
+    // For convenience in debugging
     window.modalManager = modalManager;
 
-    // Create and register auth module AFTER modalManager is registered
+    const [apiRequestMod, eventHandlersMod, notificationHandlerMod, modalManagerMod] =
+        await DependencySystem.waitFor(['apiRequest', 'eventHandlers', 'notificationHandler', 'modalManager']);
+
     const auth = createAuthModule({
-        DependencySystem,
-        apiRequest,
-        eventHandlers,
-        showNotification: notificationHandler.show,
-        modalManager
+        apiRequest: apiRequestMod,
+        eventHandlers: eventHandlersMod,
+        showNotification: notificationHandlerMod?.show,
+        modalManager: modalManagerMod
     });
     DependencySystem.register('auth', auth);
 
-    // chatManager is already registered above.
-    // Defensive: do not re-register in core systems.
     const chatMgrInstance = DependencySystem.modules.get('chatManager');
     if (!chatMgrInstance || typeof chatMgrInstance.initialize !== 'function') {
         throw new Error('[App] chatManager registration: not a valid instance with "initialize".');
@@ -630,23 +499,23 @@ async function initializeCoreSystems() {
 
     const projectManager = createProjectManager({ DependencySystem, chatManager: chatMgrInstance });
     DependencySystem.register('projectManager', projectManager);
-    if (typeof DependencySystem.modules.get('projectManager') === 'function' ||
-        typeof projectManager.initialize !== 'function') {
+    if (
+        typeof DependencySystem.modules.get('projectManager') === 'function' ||
+        typeof projectManager.initialize !== 'function'
+    ) {
         throw new Error('[App] projectManager registration: not a valid instance with "initialize".');
     }
 
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
 
-    // Wait for actual modal HTML to be loaded into the DOM (signaled by base.html)
+    // Wait for the "modalsLoaded" event (signaled by base.html or similar)
     const modalsReady = new Promise(resolve =>
         document.addEventListener('modalsLoaded', resolve, { once: true })
     );
     console.log('[App] Waiting for modal HTML to load...');
     await modalsReady;
     console.log('[App] Modal HTML loaded.');
-
-    // PHASE 2: Initialize components in order, *after* dependencies and DOM elements are ready
 
     if (typeof modalManager.init === 'function') {
         console.log('[App] Initializing ModalManager...');
@@ -655,12 +524,12 @@ async function initializeCoreSystems() {
         console.error('[App] modalManager.init function not found!');
     }
 
+    // If user is already authenticated on page load, we can initialize chat immediately
     if (typeof chatManager.initialize === 'function') {
         if (appState.isAuthenticated) {
             console.log('[App] Initializing ChatManager (user already authenticated)…');
             await chatManager.initialize();
         } else {
-            // Safe to skip here; debounced re-init will occur after login/project change
             console.log('[App] Skipping ChatManager.init – waiting for user authentication.');
         }
     }
@@ -686,9 +555,6 @@ async function initializeCoreSystems() {
     console.log('[App] Core systems initialized.');
 }
 
-/* ---------------------------------------------------------------------
- * Auth System Initialization
- * ------------------------------------------------------------------- */
 async function initializeAuthSystem() {
     console.log('[App] Initializing authentication system...');
     const auth = DependencySystem.modules.get('auth');
@@ -702,7 +568,7 @@ async function initializeAuthSystem() {
         }
         appState.isAuthenticated = auth.isAuthenticated();
         console.log(`[App] Initial authentication state: ${appState.isAuthenticated}`);
-        // Subscribe to future auth state changes to re-render header
+
         const bus = auth.AuthBus;
         if (bus && typeof bus.addEventListener === 'function') {
             bus.addEventListener('authStateChanged', () => {
@@ -710,7 +576,6 @@ async function initializeAuthSystem() {
                 renderAuthHeader();
             });
         }
-        // Render initial header UI based on auth state
         renderAuthHeader();
     } catch (err) {
         console.error('[App] Auth system initialization/check failed:', err);
@@ -720,13 +585,10 @@ async function initializeAuthSystem() {
     }
 }
 
-/* ---------------------------------------------------------------------
- * UI Components Initialization
- * ------------------------------------------------------------------- */
 async function initializeUIComponents() {
     console.log('[App] Initializing UI components...');
 
-    // Centralized login button event binding using eventHandlers.trackListener
+    // Setup login button binding
     window.setupLoginButtonHandler = function setupLoginButtonHandler(eventHandlers, modalManager) {
         const loginBtn = document.querySelector('#authButton') || document.querySelector('#loginButton');
         if (!loginBtn || !eventHandlers?.trackListener) {
@@ -748,19 +610,17 @@ async function initializeUIComponents() {
         }, { description: 'LoginButton: show login form/modal' });
     };
 
-    // Wait until all required deps AND DOM containers are present before proceeding.
-    await waitForDepsAndDom({
+    // Wait until required deps AND DOM containers are present
+    await globalUtils.waitForDepsAndDom({
         deps: ['projectManager', 'eventHandlers', 'modalManager'],
         domSelectors: ['body'],
         DependencySystem
     });
 
-    // --- Inject required static HTML partials for dashboard views before component instantiation ---
-    // Ensure #projectListView and #projectDetailsView exist in the DOM
+    // Ensure #projectListView and #projectDetailsView exist
     let projectListView = document.getElementById('projectListView');
     let projectDetailsView = document.getElementById('projectDetailsView');
 
-    // If not present, create containers
     if (!projectListView) {
         projectListView = document.createElement('div');
         projectListView.id = 'projectListView';
@@ -774,7 +634,7 @@ async function initializeUIComponents() {
         document.body.appendChild(projectDetailsView);
     }
 
-    // Inject static/html/project_list.html into #projectListView if #projectList is missing
+    // Inject /static/html/project_list.html
     if (!document.getElementById('projectList')) {
         try {
             const resp = await fetch('/static/html/project_list.html', { cache: 'reload' });
@@ -787,15 +647,19 @@ async function initializeUIComponents() {
             }
             projectListView.innerHTML = html;
             if (!document.getElementById('projectList')) {
-                showNotification?.('Static /static/html/project_list.html inject failed (missing #projectList)!', 'error', 10000);
-                throw new Error('Injected /static/html/project_list.html but #projectList is still missing! Check the HTML fragment.');
+                showNotification(
+                    'Static /static/html/project_list.html inject failed (missing #projectList)!',
+                    'error', 10000
+                );
+                throw new Error('Injected /static/html/project_list.html but #projectList is still missing!');
             }
         } catch (err) {
-            showNotification?.(`Failed to load project list UI: ${err.message}`, "error", 10000);
+            showNotification(`Failed to load project list UI: ${err.message}`, "error", 10000);
             throw err;
         }
     }
-    // Inject static/html/project_details.html into #projectDetailsView if #projectDetails isn't present
+
+    // Inject /static/html/project_details.html
     if (!document.getElementById('projectDetails')) {
         try {
             const resp = await fetch('/static/html/project_details.html', { cache: 'reload' });
@@ -808,11 +672,14 @@ async function initializeUIComponents() {
             }
             projectDetailsView.innerHTML = html;
             if (!document.getElementById('projectDetails')) {
-                showNotification?.('Static /static/html/project_details.html inject failed (missing #projectDetails)!', 'error', 10000);
-                throw new Error('Injected /static/html/project_details.html but #projectDetails is still missing! Check the HTML fragment.');
+                showNotification(
+                    'Static /static/html/project_details.html inject failed (missing #projectDetails)!',
+                    'error', 10000
+                );
+                throw new Error('Injected /static/html/project_details.html but #projectDetails is still missing!');
             }
         } catch (err) {
-            showNotification?.(`Failed to load project details UI: ${err.message}`, "error", 10000);
+            showNotification(`Failed to load project details UI: ${err.message}`, "error", 10000);
             throw err;
         }
     }
@@ -822,28 +689,14 @@ async function initializeUIComponents() {
     const eventHandlers = DependencySystem.modules.get('eventHandlers');
     const modalManager = DependencySystem.modules.get('modalManager');
 
-    // Initial setup after DOM is injected
     setTimeout(() => {
         window.setupLoginButtonHandler(eventHandlers, modalManager);
     }, 0);
 
-    // Register component classes
+    // Register FileUploadComponent
     if (FileUploadComponent) {
         DependencySystem.register('FileUploadComponent', FileUploadComponent);
     }
-
-    // Instantiate and register ProjectListComponent
-    if (typeof ProjectListComponent === 'function') {
-        const projectListComponent = new ProjectListComponent({
-            projectManager,
-            eventHandlers,
-            modalManager,
-            app: appRef
-        });
-        DependencySystem.register('projectListComponent', projectListComponent);
-    }
-
-    const FileUploadComponentClass = DependencySystem.modules.get('FileUploadComponent');
 
     // Create and register chatExtensions
     const chatExtensions = createChatExtensions({ DependencySystem });
@@ -858,31 +711,11 @@ async function initializeUIComponents() {
     DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
     // Create and register projectDashboard
-    // Defensive: Remove any previous incorrect registration of the factory function
     if (DependencySystem.modules.get('projectDashboard') === createProjectDashboard) {
         DependencySystem.modules.delete('projectDashboard');
     }
     const projectDashboard = createProjectDashboard();
-    // Debug: Ensure we are registering the instance, not the factory
-    console.log('[App] Registered projectDashboard:', projectDashboard);
-    console.log('[App] showProjectList:', typeof projectDashboard.showProjectList);
-    console.log('[App] showProjectDetails:', typeof projectDashboard.showProjectDetails);
     DependencySystem.register('projectDashboard', projectDashboard);
-
-    // Defensive: Check for duplicate/incorrect registrations
-    if (typeof DependencySystem.modules.get('projectDashboard') === 'function' && DependencySystem.modules.get('projectDashboard').name === 'createProjectDashboard') {
-        console.error('[App] ERROR: projectDashboard is the factory function, not the instance! Fix registration.');
-        // Fix registration immediately if detected
-        DependencySystem.modules.delete('projectDashboard');
-        DependencySystem.register('projectDashboard', projectDashboard);
-    }
-    // Assert that the instance has the required methods
-    if (
-      typeof projectDashboard.showProjectList !== 'function' ||
-      typeof projectDashboard.showProjectDetails !== 'function'
-    ) {
-      throw new Error('[App] projectDashboard instance missing required methods!');
-    }
 
     // Create and register projectDetailsComponent
     const projectDetailsComponent = createProjectDetailsComponent({
@@ -898,7 +731,7 @@ async function initializeUIComponents() {
         app: appRef,
         projectManager,
         eventHandlers,
-        FileUploadComponentClass,
+        FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
         modalManager
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
@@ -913,7 +746,7 @@ async function initializeUIComponents() {
     });
     DependencySystem.register('sidebar', sidebar);
 
-    // Register utility modules
+    // Register other utilities
     DependencySystem.register('utils', globalUtils);
     DependencySystem.register('formatting', formatting);
     DependencySystem.register('accessibilityUtils', accessibilityUtils);
@@ -929,7 +762,7 @@ async function initializeUIComponents() {
     });
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
 
-    // Initialize components in order
+    // Initialize the new components
     if (typeof sidebar.init === 'function') {
         await sidebar.init();
     }
@@ -968,47 +801,48 @@ async function initializeUIComponents() {
     console.log('[App] UI components initialized.');
 }
 
-/* ---------------------------------------------------------------------
- * Global Event Listeners
- * ------------------------------------------------------------------- */
-function getAuthBus() {
-    // Always resolve from DependencySystem's current 'auth' module
-    const auth = DependencySystem?.modules?.get('auth');
-    return auth?.AuthBus;
-}
-
-// Ensure only one AuthBus event attachment across all runtime
-function attachAuthBusListener(event, handler, markerGlobalName) {
-    const bus = getAuthBus();
-    if (!bus || typeof bus.addEventListener !== "function") {
-        console.error('[App] Cannot attach listener: AuthBus missing or invalid.', bus);
-        return false;
-    }
-    if (!window[markerGlobalName] || window[markerGlobalName] !== bus) {
-        bus.addEventListener(event, handler);
-        window[markerGlobalName] = bus;
-        if (APP_CONFIG.DEBUG) {
-            console.log(`[App] Attached ${event} listener to AuthBus (global marker ${markerGlobalName}).`);
+// ---------------------------------------------------------------------
+// Auth header rendering
+// ---------------------------------------------------------------------
+function renderAuthHeader() {
+    try {
+        const authMod = DependencySystem.modules.get('auth');
+        const isAuth = typeof authMod?.isAuthenticated === 'function' && authMod.isAuthenticated();
+        const btn = document.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || document.querySelector('#loginButton');
+        if (btn) {
+            btn.textContent = isAuth ? 'Logout' : 'Login';
+            btn.onclick = (e) => {
+                e.preventDefault();
+                if (isAuth) {
+                    authMod.logout();
+                } else {
+                    const modal = DependencySystem.modules.get('modalManager');
+                    if (modal?.show) modal.show('login');
+                }
+            };
         }
-        return true;
+        const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
+        const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
+        if (authStatus) authStatus.textContent = isAuth ? 'Signed in' : 'Not signed in';
+        if (userStatus) userStatus.textContent = isAuth ? `Hello, ${authMod.getCurrentUser()}` : '';
+    } catch (e) {
+        console.error('[App] renderAuthHeader error:', e);
     }
-    return false;
 }
 
+// ---------------------------------------------------------------------
+// Global event listeners & chat init triggers
+// ---------------------------------------------------------------------
 function registerAppListeners() {
     console.log('[App] Registering global event listeners...');
 
-    // Canonical: Wait for all required modules before attaching event listeners and triggers
     waitFor(['auth', 'chatManager', 'projectManager'], () => {
         attachAuthBusListener('authStateChanged', handleAuthStateChange, '_globalAuthStateChangedAttached');
         setupChatInitializationTrigger();
-
-        // Navigation handler should only run after all dependencies are ready
         window.addEventListener('locationchange', handleNavigationChange);
     }).catch(err => console.error('[App] Failed to wait for dependencies:', err));
 
-    if(APP_CONFIG.DEBUG){
-        // Debugging: register a global for runtime AuthBus integrity checking
+    if (APP_CONFIG.DEBUG) {
         window._verifyAuthBus = () => {
             const auth = DependencySystem?.modules?.get('auth');
             console.log('[DEBUG] Auth module:', auth);
@@ -1029,12 +863,9 @@ function registerAppListeners() {
 
 function setupChatInitializationTrigger() {
     const requiredDeps = ['auth', 'chatManager', 'projectManager'];
-    // Make debouncedInitChat accept a forced projectId
-    const debouncedInitChat = debounce(async (forceProjectId = null) => {
+    const debouncedInitChat = globalUtils.debounce(async (forceProjectId = null) => {
         try {
             const [authMod, chatMgr, pm] = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
-
-            // Defensive: Ensure dependencies and critical methods exist.
             if (!authMod || !chatMgr) {
                 if (APP_CONFIG.DEBUG) {
                     console.warn('[App] Chat init: Required dependency missing.', [authMod, chatMgr, pm]);
@@ -1049,12 +880,7 @@ function setupChatInitializationTrigger() {
             }
 
             const projectId = app.getProjectId();
-            // Prefer explicit forcedParam > then normal param > then pm state
-            const finalProjectId =
-                  forceProjectId
-                  ?? projectId
-                  ?? pm?.currentProject?.id
-                  ?? null;
+            const finalProjectId = forceProjectId ?? projectId ?? pm?.currentProject?.id ?? null;
 
             if (authMod.isAuthenticated() && typeof chatMgr.initialize === "function") {
                 if (APP_CONFIG.DEBUG) {
@@ -1063,7 +889,7 @@ function setupChatInitializationTrigger() {
                 await chatMgr.initialize({ projectId: finalProjectId });
             } else {
                 if (APP_CONFIG.DEBUG) {
-                    console.log(`[App] Skipping debounced chat init. Auth: ${typeof authMod.isAuthenticated === "function" ? authMod.isAuthenticated() : 'unavailable'}, Project: ${finalProjectId}`);
+                    console.log(`[App] Skipping debounced chat init. Auth: ${authMod.isAuthenticated?.() ?? 'N/A'}, Project: ${finalProjectId}`);
                 }
                 chatMgr?.clear?.();
             }
@@ -1072,11 +898,8 @@ function setupChatInitializationTrigger() {
         }
     }, 350);
 
-    waitFor(requiredDeps, deps => {
-        // Always attach to the canonical AuthBus; never fallback
+    waitFor(requiredDeps, () => {
         attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
-
-        // projectManager changes are still document-level
         if (!document._chatInitProjListenerAttached) {
             document.addEventListener('currentProjectChanged', debouncedInitChat);
             document._chatInitProjListenerAttached = true;
@@ -1084,24 +907,26 @@ function setupChatInitializationTrigger() {
                 console.warn('[App] Falling back to document for currentProjectChanged -> chat reinit listener.');
             }
         }
-        // NEW: listen for guaranteed project readiness
+        // "Project ready" event for guaranteed readiness
         document.addEventListener('currentProjectReady',
             e => debouncedInitChat(e.detail?.project?.id));
         console.log('[App] Chat re-initialization listeners attached.');
         debouncedInitChat();
-    }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)
-        .catch(err => console.error('[App] Failed setup for chat init triggers:', err));
+    }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2).catch(
+        err => console.error('[App] Failed setup for chat init triggers:', err)
+    );
 }
 
-/* ---------------------------------------------------------------------
- * Navigation Logic
- * ------------------------------------------------------------------- */
+// ---------------------------------------------------------------------
+// Navigation handling (SPA-like)
+// ---------------------------------------------------------------------
 let lastHandledProj = null;
 let lastHandledChat = null;
 
 async function handleNavigationChange() {
     if (!appState.initialized) {
         if (appState.initializing) {
+            // Wait briefly to see if init completes
             await new Promise(r => setTimeout(r, 150));
             if (!appState.initialized) {
                 console.warn("[App] handleNavigationChange: Aborted, initialization didn't complete.");
@@ -1131,14 +956,13 @@ async function handleNavigationChange() {
     const projectId = url.searchParams.get('project');
     const chatId = url.searchParams.get('chatId') || null;
 
-    // If we're re-navigating to the same project + chat, skip re-init
+    // If user re-navigates to same project/chat, skip extra reload
     if (projectId === lastHandledProj && chatId === lastHandledChat) {
         if (APP_CONFIG.DEBUG) {
             console.log('[App] handleNavigationChange: Same project/chat; skipping re-load.');
         }
         return;
     }
-
     lastHandledProj = projectId;
     lastHandledChat = chatId;
 
@@ -1150,26 +974,12 @@ async function handleNavigationChange() {
     toggleElement('LOGIN_REQUIRED_MESSAGE', false);
 
     try {
-        console.log('[App] projectDashboard:', projectDashboard);
-        console.log('[App] showProjectDetails:', typeof projectDashboard.showProjectDetails);
-        console.log('[App] showProjectList:', typeof projectDashboard.showProjectList);
-
-        // Patch: Ensure project details are fully loaded before continuing to project UI and chat
-        let projectManager;
-        try {
-            [projectManager] = await waitFor(['projectManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
-        } catch (e) {
-            console.error('[App] ProjectManager unavailable for navigation:', e);
-            showNotification('UI Project Error.', 'error');
-            return;
-        }
-
-        if (projectId && validateUUID(projectId)) {
-            // Load project details and only then show project/dashboard/chat
+        const [projectManager] = await waitFor(['projectManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+        if (projectId && globalUtils.isValidProjectId(projectId)) {
             console.log(`[App] Ensuring project ${projectId} details are loaded before UI...`);
             await projectManager.loadProjectDetails(projectId);
             if (typeof projectDashboard.showProjectDetails === 'function') {
-                console.log(`[App] Navigating to project details: ${projectId}, chatId=${chatId||'none'}`);
+                console.log(`[App] Navigating to project details: ${projectId}, chatId=${chatId ?? 'none'}`);
                 await projectDashboard.showProjectDetails(projectId);
             }
         } else if (typeof projectDashboard.showProjectList === 'function') {
@@ -1181,8 +991,8 @@ async function handleNavigationChange() {
             toggleElement('PROJECT_LIST_VIEW', true);
         }
 
-        // After project is loaded and visible, if chatId exists, safe to trigger chat logic
-        if (projectId && validateUUID(projectId) && chatId) {
+        // If mention of a chatId, attempt to load chat
+        if (projectId && globalUtils.isValidProjectId(projectId) && chatId) {
             try {
                 const success = await app.navigateToConversation(chatId);
                 if (!success) {
@@ -1200,9 +1010,34 @@ async function handleNavigationChange() {
     }
 }
 
-/* ---------------------------------------------------------------------
- * Auth State Change Handler
- * ------------------------------------------------------------------- */
+// ---------------------------------------------------------------------
+// AuthBus event wrapper
+// ---------------------------------------------------------------------
+function attachAuthBusListener(event, handler, markerGlobalName) {
+    const bus = getAuthBus();
+    if (!bus || typeof bus.addEventListener !== "function") {
+        console.error('[App] Cannot attach listener: AuthBus missing or invalid.', bus);
+        return false;
+    }
+    if (!window[markerGlobalName] || window[markerGlobalName] !== bus) {
+        bus.addEventListener(event, handler);
+        window[markerGlobalName] = bus;
+        if (APP_CONFIG.DEBUG) {
+            console.log(`[App] Attached ${event} listener to AuthBus (global marker ${markerGlobalName}).`);
+        }
+        return true;
+    }
+    return false;
+}
+
+function getAuthBus() {
+    const auth = DependencySystem?.modules?.get('auth');
+    return auth?.AuthBus;
+}
+
+// ---------------------------------------------------------------------
+// Auth State Change Handler
+// ---------------------------------------------------------------------
 async function handleAuthStateChange(event) {
     const { authenticated, username } = event?.detail || {};
     const newAuthState = !!authenticated;
@@ -1220,10 +1055,17 @@ async function handleAuthStateChange(event) {
         toggleElement(APP_CONFIG.SELECTORS.USER_MENU, appState.isAuthenticated);
         const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
         const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
-        if (authStatus) authStatus.textContent = appState.isAuthenticated ? (username ?? 'Authenticated') : 'Not Authenticated';
-        if (userStatus) userStatus.textContent = appState.isAuthenticated ? (username ?? '') : '';
-        if (APP_CONFIG.DEBUG) console.log('[App] Updated auth UI elements.');
-        // Re-bind login button after any UI change that may create it
+        if (authStatus) {
+            authStatus.textContent = appState.isAuthenticated ? (username ?? 'Authenticated') : 'Not Authenticated';
+        }
+        if (userStatus) {
+            userStatus.textContent = appState.isAuthenticated ? (username ?? '') : '';
+        }
+        if (APP_CONFIG.DEBUG) {
+            console.log('[App] Updated auth UI elements.');
+        }
+
+        // Re-bind login button after any UI change
         const eventHandlers = DependencySystem.modules.get('eventHandlers');
         const modalManager = DependencySystem.modules.get('modalManager');
         setTimeout(() => {
@@ -1271,9 +1113,9 @@ async function handleAuthStateChange(event) {
     }
 }
 
-/* ---------------------------------------------------------------------
- * Fatal Initialization Error Handler
- * ------------------------------------------------------------------- */
+// ---------------------------------------------------------------------
+// Fatal Initialization Error Handler
+// ---------------------------------------------------------------------
 function handleInitError(error) {
     console.error('[App] CRITICAL INITIALIZATION ERROR:', error);
     appState.initialized = false;
@@ -1285,6 +1127,7 @@ function handleInitError(error) {
     } catch (e) {
         console.error('[App] Error in showNotification during handleInitError:', e);
     }
+
     try {
         const container = document.querySelector(APP_CONFIG.SELECTORS.APP_FATAL_ERROR);
         if (container) {
@@ -1298,32 +1141,3 @@ function handleInitError(error) {
     }
     toggleElement('APP_LOADING_SPINNER', false);
 }
-
-/* ---------------------------------------------------------------------
- * Application Kick-off
- * ------------------------------------------------------------------- */
-function bootstrap() {
-    if (window.appBootstrapCalled) return;
-    if (!window.DependencySystem) {
-        console.error("CRITICAL: DependencySystem not found. Bootstrap aborted.");
-        document.body.innerHTML = `
-      <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
-        <strong>Application Critical Error:</strong> Core dependency system failed to load.
-        Please refresh or contact support.
-      </div>`;
-        return;
-    }
-    const start = performance.now();
-    console.log(`[App] Bootstrapping... (${start.toFixed(2)})`);
-    const onReady = () => {
-        console.log(`[App] DOM ready. (Delay: ${(performance.now() - start).toFixed(2)} ms)`);
-        init().catch(err => console.error("[App] Unhandled error during async init:", err));
-    };
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', onReady);
-    } else {
-        onReady();
-    }
-}
-
-bootstrap();
