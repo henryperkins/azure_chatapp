@@ -617,7 +617,9 @@ class ProjectDetailsComponent {
   async _initializeOrUpdateChatUI() {
     const projectId = this.state.currentProject?.id;
     if (!this.app.validateUUID(projectId)) {
-      this._disableChatUI("Cannot initialize chat: No valid project selected.");
+      this.app.showNotification('Chat could not start because the project ID is invalid.', 'error');
+      console.error('[ProjectDetailsComponent] Invalid project ID. Cannot proceed with chat initialization.');
+      this._disableChatUI("No valid project selected");
       return;
     }
 
@@ -627,7 +629,10 @@ class ProjectDetailsComponent {
       const chatManager = this.projectManager?.chatManager || this.app?.DependencySystem?.modules?.get('chatManager');
 
       if (!chatManager) {
-        throw new Error("Chat Manager dependency not available.");
+        console.error("[ProjectDetailsComponent] chatManager not found in projectManager or DependencySystem. Please ensure chatManager is registered.");
+        this.app.showNotification("Chat Manager missing. Please check your project configuration.", "error");
+        this._disableChatUI("Chat manager missing. Please check your project config.");
+        return;
       }
       // Debug log before initializing chatManager
       console.log('[ProjectDetailsComponent] Initializing or updating chat UI for project:', projectId);
@@ -643,6 +648,8 @@ class ProjectDetailsComponent {
       // Always run chatManager.initialize (it is idempotent per-project & will rebind if projectId changes)
       console.log(`[ProjectDetailsComponent] Calling chatManager.initialize with projectId ${projectId}`);
       await chatManager.initialize(chatInitOpts);
+      // Force-update the projectId after initialization to avoid any mismatch
+      chatManager.projectId = projectId;
 
       // Determine which conversation to load
       const urlParams = new URLSearchParams(window.location.search);
@@ -661,12 +668,27 @@ class ProjectDetailsComponent {
           chatManager.projectId = projectId;
           await chatManager.loadConversation(conversations[0].id);
         } else {
-          console.log("[ProjectDetailsComponent] No conversations found, prompting creation (or handled by createNewConversation).");
-          // Optionally call createNewConversation here if desired behavior
-          // await this.createNewConversation();
+          console.log("[ProjectDetailsComponent] No conversations found. Prompt user to create a new conversation.");
+          this.app.showNotification("No existing conversations for this project. You can start a new one from the 'Conversations' tab or by calling createNewConversation().", "info");
         }
       } else {
-        console.log(`[ProjectDetailsComponent] Chat UI updated, conversation ${chatManager.currentConversationId} already loaded.`);
+        console.log(`[ProjectDetailsComponent] Chat already initialized for conversation ${chatManager.currentConversationId}. Forcing UI show...`);
+        if (typeof chatManager.showUI === 'function') {
+          chatManager.showUI({ projectId });
+        } else {
+          console.warn("[ProjectDetailsComponent] chatManager.showUI is not a function. Forcing DOM to show chat UI...");
+          const chatTabEl = this.elements.tabContents?.chat;
+          if (chatTabEl) {
+            chatTabEl.classList.remove('hidden');
+            // Also forcibly show the chat container
+            const chatContainerEl = chatTabEl.querySelector('#projectChatContainer');
+            if (chatContainerEl) {
+              chatContainerEl.classList.remove('hidden');
+              chatContainerEl.style.display = 'block';
+            }
+          }
+        }
+        this._enableChatUI();
       }
       this._enableChatUI(); // Ensure UI is enabled after successful init/load
     } catch (error) {
