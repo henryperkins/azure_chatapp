@@ -8,6 +8,9 @@ module.exports = {
         ecmaVersion: 2021,    // Match the env setting
         sourceType: 'module', // Enable ES module syntax
     },
+    globals: {
+        Sentry: 'readonly'
+    },
     plugins: [
         'import',            // For import/no-unresolved and other import rules
     ],
