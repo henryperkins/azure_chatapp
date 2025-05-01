@@ -1,5 +1,5 @@
 /**
- * auth.js - DependencySystem Refactored Edition
+ * auth.js - DI-Strict, No window.* for Dependency/Module lookup
  *
  * Handles user authentication state based solely on backend HttpOnly cookies and server verification.
  *
@@ -8,33 +8,25 @@
  * - CSRF protection for all state-changing requests
  * - Periodic session verification and automatic refresh
  * - Event system for auth state changes
- * - Graceful fallback for optional dependencies
+ * - Graceful fallback for optional eventHandlers only
  *
- * ## Dependencies (resolved via DependencySystem or injection - no window.* globals):
+ * ## Dependencies (resolved via DI, never window.*):
  * - apiRequest (required)
  * - showNotification (optional, for error toast)
  * - eventHandlers (optional, for listener tracking)
- * - DependencySystem (recommended)
+ * - modalManager (optional ONLY for modal closure UX; orchestrator should provide as needed)
  *
  * Exports:
  * - createAuthModule: factory for main API for authentication actions and state
  */
 
-/**
- * Factory for constructing the Auth Module with dependency injection.
- * @param {Object} deps
- *   @param {function} deps.apiRequest - API request function (required)
- *   @param {function} [deps.showNotification] - Notification function (optional)
- *   @param {Object} [deps.eventHandlers] - Event handler utility (optional)
- *   @param {Object} [deps.DependencySystem] - Dependency manager, preferred if present
- * @returns {Object} Public Auth API
- */
-export function createAuthModule({ apiRequest, showNotification, eventHandlers, DependencySystem } = {}) {
-  // Dependency resolution
-  const _DependencySystem = DependencySystem || (typeof window !== 'undefined' ? window.DependencySystem : undefined);
-  apiRequest = apiRequest || (_DependencySystem?.modules?.get('app')?.apiRequest);
-  showNotification = showNotification || (_DependencySystem?.modules?.get('app')?.showNotification);
-
+export function createAuthModule({
+  apiRequest,
+  showNotification,
+  eventHandlers,
+  modalManager // if needed, pass explicitly for modal close UX
+} = {}) {
+  // No fallback to window.DependencySystem or window.*
   if (!apiRequest) {
     throw new Error('Auth module requires apiRequest as a dependency');
   }
@@ -50,7 +42,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Internal State
      ========================= */
-
   const authState = {
     isAuthenticated: false,
     username: null,
@@ -68,7 +59,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      CSRF Token Management
      ========================= */
-
   async function fetchCsrfToken() {
     try {
       const response = await fetch(`/api/auth/csrf?ts=${Date.now()}`, {
@@ -117,7 +107,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      API Request Wrapper
      ========================= */
-
   async function authRequest(endpoint, method, body = null) {
     const AUTH_PROTECTED_ENDPOINTS = [
       '/api/auth/login', '/api/auth/register', '/api/auth/logout', '/api/auth/refresh'
@@ -182,7 +171,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Token Refresh
      ========================= */
-
   async function refreshTokens() {
     if (tokenRefreshInProgress) return tokenRefreshPromise;
 
@@ -211,7 +199,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Auth State Management
      ========================= */
-
   function broadcastAuth(authenticated, username = null, source = 'unknown') {
     const previous = authState.isAuthenticated;
     const changed = authenticated !== previous || authState.username !== username;
@@ -243,7 +230,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Auth Verification
      ========================= */
-
   async function verifyAuthState(forceVerify = false) {
     if (authCheckInProgress && !forceVerify) {
       return authState.isAuthenticated;
@@ -274,10 +260,10 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
         try {
           await refreshTokens();
           return verifyAuthState(true);
-       } catch {
-         await clearTokenState({ source: 'refresh_failed' });
-         return false;
-       }
+        } catch {
+          await clearTokenState({ source: 'refresh_failed' });
+          return false;
+        }
       }
 
       // For other errors, maintain current state
@@ -290,7 +276,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Public Auth Actions
      ========================= */
-
   async function loginUser(username, password) {
     console.log('[Auth] Attempting login for user:', username);
     try {
@@ -330,6 +315,7 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
     } catch (err) {
       console.warn('[Auth] Backend logout call failed:', err);
     } finally {
+      // Cosmetic: Allow UI to paint, then redirect user after logout
       setTimeout(() => {
         if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
           window.location.href = '/login?loggedout=true';
@@ -365,7 +351,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Initialization
      ========================= */
-
   async function init() {
     if (authState.isReady) {
       console.warn('[Auth] init called multiple times.');
@@ -429,13 +414,9 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
             try {
               await publicAuth.login(username, password);
 
-              // On success, close modal if used
-              if (loginForm.id === 'loginModalForm') {
-                // Try to resolve modalManager from DependencySystem or window
-                const modalManager =
-                  (typeof window !== 'undefined' && window.DependencySystem?.modules?.get('modalManager')) ||
-                  (typeof window !== 'undefined' && window.modalManager);
-                modalManager?.hide?.('login');
+              // On success, close modal if used – orchestrator or DI must provide modalManager if wanted
+              if (loginForm.id === 'loginModalForm' && modalManager?.hide) {
+                modalManager.hide('login');
               }
             } catch (error) {
               // Determine user-friendly message
@@ -513,7 +494,6 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
   /* =========================
      Public API
      ========================= */
-
   const publicAuth = {
     isAuthenticated: () => authState.isAuthenticated,
     getCurrentUser: () => authState.username,

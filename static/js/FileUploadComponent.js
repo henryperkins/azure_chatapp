@@ -1,8 +1,8 @@
 /**
- * FileUploadComponent.js (DependencySystem/DI Refactored)
+ * FileUploadComponent.js (DependencySystem/DI Strict, NO window.*)
  * Handles file upload functionality for projects.
  *
- * Dependencies (DI or via DependencySystem, NO window.*):
+ * Dependencies (DI ONLY, NO window.*):
  * - app: required (for notification, utility, API)
  * - eventHandlers: required (for listener binding)
  * - projectManager: required (for file upload workflows)
@@ -31,12 +31,11 @@ export class FileUploadComponent {
    * @param {HTMLElement} [options.uploadStatus]
    */
   constructor(options = {}) {
-    // --- Dependency resolution ---
-    const DS = options.DependencySystem || (typeof window !== "undefined" && window.DependencySystem);
+    // --- Dependency resolution (DI only; no window/global fallback) ---
     const getDep = (name, fallback) =>
-      options[name] ||
-      (DS?.modules?.get && DS.modules.get(name)) ||
-      (typeof fallback === "function" ? fallback() : fallback);
+      options[name] !== undefined
+        ? options[name]
+        : (typeof fallback === "function" ? fallback() : fallback);
 
     /** @type {Object} */
     this.app = getDep('app');
@@ -45,7 +44,9 @@ export class FileUploadComponent {
     /** @type {Object} */
     this.projectManager = getDep('projectManager');
     if (!this.app || !this.eventHandlers || !this.projectManager) {
-      throw new Error("FileUploadComponent requires 'app', 'eventHandlers', and 'projectManager' dependencies.");
+      throw new Error(
+        "FileUploadComponent requires explicit 'app', 'eventHandlers', and 'projectManager' dependencies passed via options."
+      );
     }
 
     this.projectId = options.projectId || null;
@@ -281,7 +282,8 @@ export class FileUploadComponent {
     if (statusEl) {
       statusEl.textContent = `Uploading ${completed}/${total} files${totalFailed > 0 ? ` (${totalFailed} failed)` : ''}`;
     }
-    // Hide progress UX only after all are done and shortly after for visibility
+    // Cosmetic: Keep the progress bar visible for 2 seconds after all uploads finish for user feedback.
+    // If you want a CSS fadeout/transition instead, prefer to add it in CSS and remove this timer for a snappier UI.
     if (completed === total && uploadProgress) {
       setTimeout(() => {
         uploadProgress.classList.add('hidden');
