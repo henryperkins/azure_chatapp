@@ -628,17 +628,27 @@ class ProjectDetailsComponent {
       if (!chatManager) {
         throw new Error("Chat Manager dependency not available.");
       }
-
       // Debug log before initializing chatManager
-      console.log('[ProjectDetailsComponent] Initializing chat with projectId:', projectId);
-
-      // Check if chat manager is already initialized for this project
+      console.log('[ProjectDetailsComponent] Initializing or updating chat UI for project:', projectId);
+      // Provide explicit selectors so ChatManager binds to project-scoped DOM elements
+      const chatInitOpts = {
+        projectId,
+        containerSelector: '#projectChatContainer',
+        messageContainerSelector: '#projectChatMessages',
+        inputSelector: '#projectChatInput',
+        sendButtonSelector: '#projectChatSendBtn',
+        titleSelector: '#chatTitle'
+      };
       if (!chatManager.isInitialized || chatManager.projectId !== projectId) {
-        console.log(`[ProjectDetailsComponent] Initializing Chat Manager for project ${projectId}`);
-        await chatManager.initialize({ projectId }); // Initialize if needed
+        console.log(`[ProjectDetailsComponent] Calling chatManager.initialize with projectId ${projectId}`);
+        await chatManager.initialize(chatInitOpts);
       } else {
-        // Always update projectId in case it changed
+        // If already initialized, update projectId and rebind UI elements
         chatManager.projectId = projectId;
+        // Re-run UI setup in case DOM elements are new
+        if (typeof chatManager._setupUIElements === 'function') {
+          chatManager._setupUIElements(chatInitOpts);
+        }
       }
 
       // Determine which conversation to load
