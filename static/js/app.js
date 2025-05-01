@@ -645,7 +645,16 @@ async function initializeUIComponents() {
 
     // Create and register projectDashboard
     const projectDashboard = createProjectDashboard();
+    // Debug: Ensure we are registering the instance, not the factory
+    console.log('[App] Registered projectDashboard:', projectDashboard);
+    console.log('[App] showProjectList:', typeof projectDashboard.showProjectList);
+    console.log('[App] showProjectDetails:', typeof projectDashboard.showProjectDetails);
     DependencySystem.register('projectDashboard', projectDashboard);
+
+    // Defensive: Check for duplicate/incorrect registrations
+    if (typeof DependencySystem.modules.get('projectDashboard') === 'function' && DependencySystem.modules.get('projectDashboard').name === 'createProjectDashboard') {
+        console.error('[App] ERROR: projectDashboard is the factory function, not the instance! Fix registration.');
+    }
 
     // Create and register projectDetailsComponent
     const projectDetailsComponent = createProjectDetailsComponent({
