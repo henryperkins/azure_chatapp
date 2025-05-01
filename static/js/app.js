@@ -48,7 +48,35 @@ function normaliseUrl(url) {
 
 const pendingRequests = new Map();
 
+// For certain endpoints that get repeatedly fetched, skip dedup logic:
+function shouldSkipDedup(url) {
+    try {
+        const lower = url.toLowerCase();
+        if (
+            lower.includes('/api/projects/') &&
+            (
+               lower.endsWith('/stats') ||
+               lower.endsWith('/files') ||
+               lower.endsWith('/artifacts') ||
+               lower.endsWith('/conversations') ||
+               lower.includes('/conversations?')
+            )
+        ) {
+            return true;
+        }
+    } catch (e) {
+        console.warn('[App] shouldSkipDedup error:', e);
+    }
+    return false;
+}
+
 async function apiRequest(url, opts = {}, skipCache = false) {
+    // If skipCache not forced, and this is a GET, check if we should skip dedup
+    if (!skipCache && (opts.method || 'GET').toUpperCase() === 'GET') {
+        if (shouldSkipDedup(url)) {
+            skipCache = true;
+        }
+    }
     const auth = DependencySystem.modules.get('auth');
     const method = (opts.method || 'GET').toUpperCase();
     const unsafeVerb = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
@@ -950,42 +978,40 @@ function setupChatInitializationTrigger() {
     // Make debouncedInitChat accept a forced projectId
     const debouncedInitChat = debounce(async (forceProjectId = null) => {
         try {
-            const deps = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
+            const [authMod, chatMgr, pm] = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
 
-            // Defensive: Ensure dependencies and their critical methods exist.
-            if (!deps || !deps.auth || !deps.chatManager) {
+            // Defensive: Ensure dependencies and critical methods exist.
+            if (!authMod || !chatMgr) {
                 if (APP_CONFIG.DEBUG) {
-                    console.warn('[App] Chat init: Required dependency missing.', deps);
+                    console.warn('[App] Chat init: Required dependency missing.', [authMod, chatMgr, pm]);
                 }
                 return;
             }
-            if (typeof deps.auth.isAuthenticated !== "function") {
+            if (typeof authMod.isAuthenticated !== "function") {
                 if (APP_CONFIG.DEBUG) {
-                    console.warn('[App] Chat init: auth.isAuthenticated is not a function.', deps.auth);
+                    console.warn('[App] Chat init: auth.isAuthenticated is not a function.', authMod);
                 }
                 return;
             }
 
             const projectId = app.getProjectId();
-            // New: prefer explicit (forced) projectId > then regular > then deps.projectManager state
+            // Prefer explicit forcedParam > then normal param > then pm state
             const finalProjectId =
                   forceProjectId
                   ?? projectId
-                  ?? deps.projectManager?.currentProject?.id
+                  ?? pm?.currentProject?.id
                   ?? null;
 
-            if (deps.auth.isAuthenticated() && typeof deps.chatManager.initialize === "function") {
+            if (authMod.isAuthenticated() && typeof chatMgr.initialize === "function") {
                 if (APP_CONFIG.DEBUG) {
                     console.log(`[App] Debounced chat init triggered. Project: ${finalProjectId}`);
                 }
-                await deps.chatManager.initialize({ projectId: finalProjectId });
+                await chatMgr.initialize({ projectId: finalProjectId });
             } else {
                 if (APP_CONFIG.DEBUG) {
-                    console.log(
-                        `[App] Skipping debounced chat init. Auth: ${typeof deps.auth.isAuthenticated === "function" ? deps.auth.isAuthenticated() : 'unavailable'}, Project: ${finalProjectId}`
-                    );
+                    console.log(`[App] Skipping debounced chat init. Auth: ${typeof authMod.isAuthenticated === "function" ? authMod.isAuthenticated() : 'unavailable'}, Project: ${finalProjectId}`);
                 }
-                deps.chatManager?.clear?.();
+                chatMgr?.clear?.();
             }
         } catch (err) {
             console.error('[App] Error during debounced chat initialization:', err);
@@ -1016,6 +1042,9 @@ function setupChatInitializationTrigger() {
 /* ---------------------------------------------------------------------
  * Navigation Logic
  * ------------------------------------------------------------------- */
+let lastHandledProj = null;
+let lastHandledChat = null;
+
 async function handleNavigationChange() {
     if (!appState.initialized) {
         if (appState.initializing) {
@@ -1030,10 +1059,10 @@ async function handleNavigationChange() {
         }
     }
 
-    console.log(`[App] Handling navigation change. URL: ${window.location.href}`);
+    const currentUrl = window.location.href;
+    console.log(`[App] Handling navigation change. URL: ${currentUrl}`);
     let projectDashboard;
     try {
-        // Fix 1: Make sure we destructure the array out of waitFor
         [projectDashboard] = await waitFor(['projectDashboard'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
     } catch (e) {
         console.error('[App] Project Dashboard unavailable for navigation:', e);
@@ -1044,8 +1073,20 @@ async function handleNavigationChange() {
         return;
     }
 
-    const url = new URL(window.location.href);
+    const url = new URL(currentUrl);
     const projectId = url.searchParams.get('project');
+    const chatId = url.searchParams.get('chatId') || null;
+
+    // If we're re-navigating to the same project + chat, skip re-init
+    if (projectId === lastHandledProj && chatId === lastHandledChat) {
+        if (APP_CONFIG.DEBUG) {
+            console.log('[App] handleNavigationChange: Same project/chat; skipping re-load.');
+        }
+        return;
+    }
+
+    lastHandledProj = projectId;
+    lastHandledChat = chatId;
 
     if (!appState.isAuthenticated) {
         console.log('[App] Navigation change: User not authenticated.');
@@ -1055,13 +1096,12 @@ async function handleNavigationChange() {
     toggleElement('LOGIN_REQUIRED_MESSAGE', false);
 
     try {
-        // Debug logging to help diagnose missing methods
         console.log('[App] projectDashboard:', projectDashboard);
         console.log('[App] showProjectDetails:', typeof projectDashboard.showProjectDetails);
         console.log('[App] showProjectList:', typeof projectDashboard.showProjectList);
 
         if (projectId && validateUUID(projectId) && typeof projectDashboard.showProjectDetails === 'function') {
-            console.log(`[App] Navigating to project details: ${projectId}`);
+            console.log(`[App] Navigating to project details: ${projectId}, chatId=${chatId||'none'}`);
             await projectDashboard.showProjectDetails(projectId);
         } else if (typeof projectDashboard.showProjectList === 'function') {
             console.log('[App] Navigating to project list view.');

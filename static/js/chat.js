@@ -522,7 +522,9 @@ export function createChatManager({
 
         const conversation = response?.data?.conversation || response?.data || response?.conversation || response;
         if (!conversation?.id) {
-          throw new Error("[Chat] Invalid response from server creating conversation");
+          console.error("[ChatManager] Server response missing conversation ID or was invalid:", responseData);
+          throw new Error("[Chat] Invalid response from server creating conversation. Full response: "
+            + JSON.stringify(responseData));
         }
 
         this.currentConversationId = conversation.id;
