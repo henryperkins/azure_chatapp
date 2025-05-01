@@ -316,11 +316,12 @@ export function createAuthModule({
       console.warn('[Auth] Backend logout call failed:', err);
     } finally {
       // Cosmetic: Allow UI to paint, then redirect user after logout
-      setTimeout(() => {
-        if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-          window.location.href = '/login?loggedout=true';
-        }
-      }, 150);
+      // Do not redirect; just update UI and let SPA handle login modal if user clicks login
+      // setTimeout(() => {
+      //   if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+      //     window.location.href = '/login?loggedout=true';
+      //   }
+      // }, 150);
     }
   }
 
