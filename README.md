@@ -1,39 +1,42 @@
-# Azure Chat Application
+# Azure OpenAI Chat Application
 
-A full-stack chat application leveraging Azure OpenAI services with JWT authentication and project-based organization.
+A full-stack, project-based chat and knowledge management application leveraging Azure OpenAI, Anthropic Claude, JWT authentication, and modular ES6 frontend with Tailwind CSS and DaisyUI.
 
 ## Features
-- Real-time chat via WebSocket connections
-- Azure OpenAI integration with streaming responses
-- JWT authentication with refresh tokens
-- Project management with file attachments
-- Tailwind CSS with custom theme configuration
-- FastAPI backend with SQLAlchemy ORM
-- Redis caching for performance
-- Docker-based CI/CD pipeline
+
+- Project-based organization: each user can manage multiple projects
+- Real-time chat with AI models (Claude, GPT, Azure OpenAI, etc.)
+- JWT authentication with secure HttpOnly cookies and CSRF protection
+- File and artifact management per project
+- Knowledge base per project with file upload, search, and reindexing
+- Modular, event-driven frontend (ES6 modules, DependencySystem DI)
+- Tailwind CSS with DaisyUI for theming
+- Sentry integration for error and performance monitoring (backend & frontend)
+- Docker-based deployment and local development support
 
 ## Project Structure
+
 ```
 azure_chatapp/
-├── models/           # Database models
-│   ├── chat.py       # Chat sessions and messages
-│   ├── user.py       # User authentication
-│   ├── project.py    # Project metadata
-│   ├── chat_project.py # Chat-project relationships
-│   └── project_file.py # Project file attachments
-├── routes/           # API endpoints
-│   ├── auth.py       # Authentication routes
-│   ├── chat.py       # Chat operations
-│   └── project_routes.py # Project management
-├── static/           # Frontend assets
-│   ├── js/           # ES6 modules
-│   │   ├── auth.js   # Token management
-│   │   ├── chat.js   # WebSocket handling
-│   │   └── project.js # Project UI logic
-│   └── css/          # Tailwind styles
-└── utils/            # Shared utilities
-    ├── auth_deps.py  # JWT middleware
-    └── openai.py     # Azure client
+├── models/                # Database models (User, Project, Conversation, File, Artifact, KnowledgeBase, etc.)
+├── routes/                # API endpoints (auth, projects, files, artifacts, knowledge base, conversations, preferences, sentry test)
+│   ├── projects/          # Project subroutes (projects.py, files.py, artifacts.py)
+│   ├── knowledge_base_routes.py
+│   ├── unified_conversations.py
+│   ├── user_preferences.py
+│   ├── sentry_test.py
+│   └── admin.py
+├── services/              # Business logic/services (conversation_service, project_service, file_storage, knowledgebase_service, etc.)
+├── db/                    # Database connection and session management (db.py)
+├── utils/                 # Shared utilities (auth_utils, db_utils, sentry_utils, serializers, etc.)
+├── static/                # Frontend assets
+│   ├── html/              # HTML templates (base.html, project_list.html, project_details.html, modals.html)
+│   ├── js/                # ES6 modules (app.js, projectManager.js, chat.js, modelConfig.js, etc.)
+│   └── css/               # Tailwind styles
+├── config.py              # Application configuration (insecure/debug for local/dev)
+├── main.py                # FastAPI application entrypoint
+├── requirements.txt       # Python dependencies
+└── package.json           # Frontend dependencies and scripts
 ```
 
 ## Core API Endpoints
@@ -110,20 +113,30 @@ Response Stream:
 }
 ```
 
+## Frontend Architecture
+
+- Modular ES6 codebase with strict dependency injection (`DependencySystem`)
+- Main entrypoint: `static/js/app.js`
+- Core modules: `projectManager.js`, `chat.js`, `modelConfig.js`, `projectDashboard.js`, `projectListComponent.js`, `projectDetailsComponent.js`, `sidebar.js`, `knowledgeBaseComponent.js`
+- UI is dynamically injected/enhanced after DOM and dependencies are ready
+- Sentry monitoring for frontend errors and performance
+
 ## Deployment
+
 ```bash
 # Build production image
-docker build -t chat-app:prod --target production .
+docker build -t azure-chatapp:prod --target production .
 
 # Run with environment variables
 docker run -d -p 80:80 \
-  -e DATABASE_URL="postgresql://user:pass@db:5432/chatdb" \
-  -e REDIS_URL="redis://redis:6379" \
-  -e AZURE_OPENAI_KEY="your-key-here" \
-  chat-app:prod
+  -e DATABASE_URL="postgresql+asyncpg://user:pass@db:5432/azure_chatapp?sslmode=disable" \
+  -e SESSION_SECRET="your-session-secret" \
+  -e JWT_SECRET="your-jwt-secret" \
+  azure-chatapp:prod
 ```
 
 ## Development Setup
+
 ```bash
 # Backend
 python -m venv venv
@@ -132,11 +145,13 @@ pip install -r requirements.txt
 
 # Frontend
 npm install
-npm run dev:css -- --watch
+npm run watch:css
 
-# Start services
-flask run --port 5000 --debug
+# Start FastAPI app
+uvicorn main:app --reload
 ```
+
+> **WARNING:** This codebase uses insecure/debug configuration by default (relaxed CORS, cookies, and session settings). Do NOT use in production without hardening security settings in `config.py` and environment variables.
 
 ## Contributing
 1. Create feature branch: `git checkout -b feature/your-idea`
