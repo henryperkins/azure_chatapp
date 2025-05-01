@@ -27,7 +27,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
       container.id = 'notificationContainer';
       container.className = 'toast toast-top toast-end z-[100]';
       document.body.appendChild(container);
-      console.log('Notification container created');
+      console.debug('Notification container created');
     }
     return container;
   }
@@ -44,6 +44,8 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     notification.id = notificationId;
     notification.className = `alert ${getAlertClass(type)} shadow-md my-2 notification-item`;
     notification.setAttribute('role', 'alert');
+    notification.setAttribute('aria-live', 'assertive');
+    notification.setAttribute('tabindex', '0');
 
     const iconSvg = getIconForType(type);
     notification.innerHTML = `${iconSvg}<span>${message}</span>`;
@@ -82,6 +84,11 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     notification.addEventListener('click', () => {
       hide(notificationId);
     });
+
+    // Focus the notification for screen readers
+    setTimeout(() => {
+      notification.focus();
+    }, 100);
 
     return notificationId;
   }
