@@ -8,7 +8,8 @@
 /* Do NOT "@import 'tailwindcss';" here. This file is included by tailwind.css. */
 
 /* Enhanced Dracula theme with better contrast ratios for accessibility */
-@plugin "daisyui/theme" dracula-enhanced {
+@plugin "daisyui/theme" {
+  name: "dracula-enhanced";
   default: true;
   prefersdark: true;
   color-scheme: "dark";
