@@ -212,8 +212,12 @@ async def on_shutdown():
         logger.error(f"Shutdown error: {exc}", exc_info=True)
 
 
-# Serve static files with minimal safeguards
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Serve static files with directory check (always absolute, robust for debug and prod)
+STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+if not os.path.isdir(STATIC_DIR):
+    logger.critical(f"Static directory not found: {STATIC_DIR}. Aborting startup.")
+    raise RuntimeError(f"Static directory not found: {STATIC_DIR}")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)

@@ -513,17 +513,13 @@ async function init() {
 async function initializeCoreSystems() {
     console.log('[App] Initializing core systems...');
 
-    // PHASE 1: Create components in correct order
-    const modalManager = createModalManager();
+    // PHASE 1: Create components and register dependencies
+    const modalManager = createModalManager(); // Create instance (init() is NOT called here anymore)
     DependencySystem.register('modalManager', modalManager);
-    window.modalManager = modalManager; // <-- Ensure modalManager is globally available for login modal close
+    window.modalManager = modalManager; // Keep global ref if needed, though DependencySystem is preferred
 
-const chatManager = createChatManager({ DependencySystem });
-DependencySystem.register('chatManager', chatManager);
-
-    if (typeof chatManager.initialize === 'function') {
-        chatManager.initialize = debounce(chatManager.initialize.bind(chatManager), 300);
-    }
+    const chatManager = createChatManager({ DependencySystem });
+    DependencySystem.register('chatManager', chatManager);
 
     const projectManager = createProjectManager({ DependencySystem, chatManager });
     DependencySystem.register('projectManager', projectManager);
@@ -531,25 +527,50 @@ DependencySystem.register('chatManager', chatManager);
     // Create and register the project modal (DOM markup will arrive asynchronously)
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
-    // Wait for actual modal HTML to be loaded into the DOM
-    const modalsReady = new Promise(resolve => document.addEventListener('modalsLoaded', resolve, { once: true }));
 
-    // PHASE 2: Initialize in order
-    if (typeof modalManager.init === 'function') {
-        await modalManager.init();
-    }
-    // Ensure modal HTML is present before initializing projectModal
+    // Wait for actual modal HTML to be loaded into the DOM (signaled by base.html)
+    const modalsReady = new Promise(resolve =>
+        document.addEventListener('modalsLoaded', resolve, { once: true })
+    );
+    console.log('[App] Waiting for modal HTML to load...');
     await modalsReady;
-    if (typeof projectModal.init === 'function') {
-        await projectModal.init();
+    console.log('[App] Modal HTML loaded.');
+
+    // PHASE 2: Initialize components in order, *after* dependencies and DOM elements are ready
+
+    // Initialize modalManager *after* modalsReady promise resolves
+    if (typeof modalManager.init === 'function') {
+        console.log('[App] Initializing ModalManager...');
+        modalManager.init(); // Now safe to call init()
+    } else {
+        console.error('[App] modalManager.init function not found!');
     }
+
+    // Initialize chatManager
+    if (typeof chatManager.initialize === 'function') {
+        console.log('[App] Initializing ChatManager...');
+        await chatManager.initialize();
+    }
+
+    // Initialize projectModal *after* modalsReady promise resolves
+    if (typeof projectModal.init === 'function') {
+        console.log('[App] Initializing ProjectModal...');
+        projectModal.init(); // Now safe to call init()
+    } else {
+        console.error('[App] projectModal.init function not found!');
+    }
+
+    // Initialize projectManager
     if (typeof projectManager.initialize === 'function') {
+        console.log('[App] Initializing ProjectManager...');
         await projectManager.initialize();
     }
 
+    // Initialize eventHandlers
     const eh = DependencySystem.modules.get('eventHandlers');
     if (typeof eh?.init === 'function') {
-        await eh.init();
+        console.log('[App] Initializing EventHandlers...');
+        eh.init();
     }
 
     console.log('[App] Core systems initialized.');
@@ -645,15 +666,45 @@ async function initializeUIComponents() {
 
     // Inject static/html/project_list.html into #projectListView if #projectList is missing
     if (!document.getElementById('projectList')) {
-        await fetch('/static/html/project_list.html')
-            .then(r => r.text())
-            .then(html => { projectListView.innerHTML = html; });
+        try {
+            const resp = await fetch('/static/html/project_list.html', { cache: 'reload' });
+            if (!resp.ok) {
+                throw new Error(`[UI] Failed to fetch project_list.html: HTTP ${resp.status}`);
+            }
+            const html = await resp.text();
+            if (!html || !html.includes('id="projectList"')) {
+                throw new Error('[UI] Fetched project_list.html missing required #projectList element.');
+            }
+            projectListView.innerHTML = html;
+            if (!document.getElementById('projectList')) {
+                showNotification?.('Static /static/html/project_list.html inject failed (missing #projectList)!', 'error', 10000);
+                throw new Error('Injected /static/html/project_list.html but #projectList is still missing! Check the HTML fragment.');
+            }
+        } catch (err) {
+            showNotification?.(`Failed to load project list UI: ${err.message}`, "error", 10000);
+            throw err;
+        }
     }
     // Inject static/html/project_details.html into #projectDetailsView if #projectDetails isn't present
     if (!document.getElementById('projectDetails')) {
-        await fetch('/static/html/project_details.html')
-            .then(r => r.text())
-            .then(html => { projectDetailsView.innerHTML = html; });
+        try {
+            const resp = await fetch('/static/html/project_details.html', { cache: 'reload' });
+            if (!resp.ok) {
+                throw new Error(`[UI] Failed to fetch project_details.html: HTTP ${resp.status}`);
+            }
+            const html = await resp.text();
+            if (!html || !html.includes('id="projectDetails"')) {
+                throw new Error('[UI] Fetched project_details.html missing required #projectDetails element.');
+            }
+            projectDetailsView.innerHTML = html;
+            if (!document.getElementById('projectDetails')) {
+                showNotification?.('Static /static/html/project_details.html inject failed (missing #projectDetails)!', 'error', 10000);
+                throw new Error('Injected /static/html/project_details.html but #projectDetails is still missing! Check the HTML fragment.');
+            }
+        } catch (err) {
+            showNotification?.(`Failed to load project details UI: ${err.message}`, "error", 10000);
+            throw err;
+        }
     }
 
     const appRef = app;

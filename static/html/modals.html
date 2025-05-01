@@ -600,3 +600,8 @@
 
   });
 </script>
+
+<!-- Dispatch the modalsLoaded event once all modal HTML and scripts are ready -->
+<script>
+document.dispatchEvent(new Event('modalsLoaded'));
+</script>
