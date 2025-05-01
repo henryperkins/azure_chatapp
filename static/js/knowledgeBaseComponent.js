@@ -578,10 +578,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _updateStatusAlerts(kb) {
       if (kb.is_active !== false) {
         if (kb.stats.file_count === 0) {
-          this.showNotification?.(
-            "Knowledge Base is empty. Upload files via 'Files' tab.",
-            "warning",
-          );
+          this._notify("warning", "Knowledge Base is empty. Upload files via 'Files' tab.");
         } else if (
           kb.stats.file_count > 0 &&
           kb.stats.chunk_count === 0 &&
