@@ -295,13 +295,6 @@ DependencySystem.register('modalMapping', MODAL_MAPPINGS);
 const eventHandlers = createEventHandlers({ DependencySystem });
 DependencySystem.register('eventHandlers', eventHandlers);
 
-const auth = createAuthModule({
-    DependencySystem,
-    apiRequest,
-    eventHandlers,
-    showNotification: notificationHandler.show
-});
-DependencySystem.register('auth', auth);
 
 
 /* ---------------------------------------------------------------------
@@ -617,6 +610,16 @@ async function initializeCoreSystems() {
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
     window.modalManager = modalManager;
+
+    // Create and register auth module AFTER modalManager is registered
+    const auth = createAuthModule({
+        DependencySystem,
+        apiRequest,
+        eventHandlers,
+        showNotification: notificationHandler.show,
+        modalManager
+    });
+    DependencySystem.register('auth', auth);
 
     // chatManager is already registered above.
     // Defensive: do not re-register in core systems.
