@@ -152,7 +152,7 @@ class ProjectDetailsComponent {
     };
 
     // File upload elements
-    this.elements.fileInput = this.elements.container.querySelector('#file-upload-input');
+    this.elements.fileInput = this.elements.container.querySelector('#fileInput');
     this.elements.uploadBtn = this.elements.container.querySelector('#uploadFileBtn');
     this.elements.dragZone = this.elements.container.querySelector('#dragDropZone');
     this.elements.uploadProgress = this.elements.container.querySelector('#filesUploadProgress');
