@@ -159,6 +159,32 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.config = config;
 
       // --------------------------------------------------------------
+      // DRY helpers for loading state and notification fallback
+      // --------------------------------------------------------------
+      this._setButtonLoading = function(btn, isLoading, loadingText = "Saving...") {
+        if (!btn) return;
+        if (isLoading) {
+          btn.disabled = true;
+          btn.dataset.originalText = btn.textContent;
+          btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+        } else {
+          btn.disabled = false;
+          if (btn.dataset.originalText) {
+            btn.textContent = btn.dataset.originalText;
+            delete btn.dataset.originalText;
+          }
+        }
+      };
+      this._notify = function(type, message) {
+        if (this.showNotification) {
+          this.showNotification(message, type);
+        } else {
+          if (type === "error") alert(message);
+          else console.log(message);
+        }
+      };
+
+      // --------------------------------------------------------------
       // DOM Element References
       // All elements are either injected or looked up by ID
       // --------------------------------------------------------------
@@ -561,21 +587,12 @@ export function createKnowledgeBaseComponent(options = {}) {
           kb.stats.chunk_count === 0 &&
           kb.stats.unprocessed_files > 0
         ) {
-          this.showNotification?.(
-            "Files need processing. Click 'Reprocess Files'.",
-            "warning",
-          );
+          this._notify("warning", "Files need processing. Click 'Reprocess Files'.");
         } else if (kb.stats.unprocessed_files > 0) {
-          this.showNotification?.(
-            `${kb.stats.unprocessed_files} file(s) need processing.`,
-            "info",
-          );
+          this._notify("info", `${kb.stats.unprocessed_files} file(s) need processing.`);
         }
       } else {
-        this.showNotification?.(
-          "Knowledge Base is disabled. Enable it to use search.",
-          "warning",
-        );
+        this._notify("warning", "Knowledge Base is disabled. Enable it to use search.");
       }
     }
 
@@ -631,7 +648,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         }
       } catch (err) {
         console.error("[KB] Search failed:", err);
-        this.showNotification?.("Search failed. Please try again.", "error");
+        this._notify("error", "Search failed. Please try again.");
       } finally {
         this.state.isSearching = false;
         this._hideSearchLoading();
@@ -840,7 +857,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         }
       } catch (err) {
         console.error("[KB] Toggle failed:", err);
-        this.showNotification?.("Failed to toggle knowledge base", "error");
+        this._notify("error", "Failed to toggle knowledge base");
       }
     }
 
@@ -864,7 +881,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           { method: "POST", body: { force_reindex: true } },
         );
         if (resp.success) {
-          this.showNotification?.("Files queued for reprocessing", "success");
+          this._notify("success", "Files queued for reprocessing");
           if (this.projectManager.loadProjectDetails) {
             const [project] = await Promise.all([
               this.projectManager.loadProjectDetails(projectId),
@@ -877,7 +894,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         }
       } catch (err) {
         console.error("[KB] Reprocessing failed:", err);
-        this.showNotification?.("Failed to reprocess files", "error");
+        this._notify("error", "Failed to reprocess files");
       } finally {
         this._hideProcessingState();
       }
@@ -908,26 +925,19 @@ export function createKnowledgeBaseComponent(options = {}) {
       };
 
       if (!payload.name?.trim()) {
-        this.showNotification?.("Knowledge Base name is required.", "error");
+        this._notify("error", "Knowledge Base name is required.");
         return;
       }
       if (!payload.embedding_model) {
-        this.showNotification?.("Embedding model must be selected.", "error");
+        this._notify("error", "Embedding model must be selected.");
         return;
       }
 
       const btn = form.querySelector('button[type="submit"]');
-      const origText = btn?.textContent;
-      if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
-      }
+      this._setButtonLoading(btn, true);
 
       this._submitKnowledgeBaseForm(projectId, payload).finally(() => {
-        if (btn) {
-          btn.disabled = false;
-          if (origText) btn.textContent = origText;
-        }
+        this._setButtonLoading(btn, false);
       });
     }
 
@@ -952,7 +962,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         const resp = await this.apiRequest(url, { method, body: payload });
         if (resp.data?.id || resp.success) {
           this._hideKnowledgeBaseModal();
-          this.showNotification?.("Knowledge Base settings saved.", "success");
+          this._notify("success", "Knowledge Base settings saved.");
 
           if (this.projectManager.loadProjectDetails) {
             await this.projectManager.loadProjectDetails(projectId);
@@ -967,10 +977,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         }
       } catch (err) {
         console.error("[KB] Save settings failed:", err);
-        this.showNotification?.(
-          `Failed to save settings: ${err.message}`,
-          "error",
-        );
+        this._notify("error", `Failed to save settings: ${err.message}`);
       }
     }
 
