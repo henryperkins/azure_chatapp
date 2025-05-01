@@ -1,25 +1,28 @@
 /**
  * projectDetailsComponent.js - Refactored (Dependency Injection Version)
  *
- * Component for displaying project details, files, conversations, and other content.
- * Relies exclusively on Dependency Injection via constructor options for dependencies.
- * Assumes the orchestrator (ProjectDashboard or App) handles HTML injection and
- * ensures DOM readiness before calling initialize().
+ * Component for displaying project details, files, conversations, artifacts, and knowledge base content.
+ * Uses Dependency Injection: all logic, API access, and UI events rely on injected dependencies.
  *
  * ## Dependencies (Injected via Constructor Options):
- * - app: Core app module (state, notifications, apiRequest, utilities like formatting)
- * - projectManager: Project data operations and event emitting.
- * - eventHandlers: Centralized event listener management (trackListener).
- * - FileUploadComponentClass: The class/factory for FileUploadComponent.
- * - modalManager: Handles confirmation dialogs.
- * - knowledgeBaseComponent: (Optional) Instance of the KB component.
+ * - app: Core app module (state, notifications, apiRequest, utilities, validation)
+ * - projectManager: Project data operations and event emitting (files, conversations, artifacts, chat, stats).
+ * - eventHandlers: Centralized event listener management (trackListener, delegate, cleanupListeners).
+ * - FileUploadComponentClass: Class/factory for file upload (needs relevant DOM nodes).
+ * - modalManager: Manages modal dialogs, including confirmation.
+ * - knowledgeBaseComponent: (Optional) Instance of the injected knowledge base UI logic.
  *
- * ## Initialization/Integration Contract:
- * - The orchestrator MUST inject all required dependencies via the constructor options.
- * - The orchestrator MUST ensure the main container (#projectDetailsView) exists and
- *   is populated with the necessary base HTML structure (tabs, lists, etc.) *before*
- *   calling the `initialize()` method of this component instance.
- * - This component does NOT fetch or inject its own base HTML.
+ * ## Integration Contract:
+ * - Orchestrator must inject all dependencies via the constructor.
+ * - Orchestrator must inject the base DOM structure for #projectDetailsView and children before .initialize().
+ * - Component manages its internal subcomponents, listeners, loading indicators, and tab navigation, but not container mounting.
+ * - Component provides methods: initialize(), show()/hide(), destroy(),
+ *   and content rendering (renderProject, renderFiles, renderConversations, renderArtifacts, renderStats).
+ *
+ * ## Validation:
+ * - Project ID and similar critical values are always validated using injected app.validateUUID.
+ *
+ * Note: This component does not perform any root HTML injection or container population.
  */
 
 /* Project ID validation uses injected this.app.validateUUID utility */
