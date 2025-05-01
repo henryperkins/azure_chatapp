@@ -178,6 +178,17 @@ export function createChatManager({
   projectDetailsComponent = projectDetailsComponent || resolveDep('projectDetailsComponent');
   apiRequest = apiRequest || resolveDep('apiRequest');
 
+  // Ensure apiRequest is always available via closure to all methods
+  if (!apiRequest) {
+    console.error("[ChatManager] No apiRequest provided or available in DependencySystem!");
+    // Register a backup function that will report errors rather than fail silently
+    apiRequest = async (url, opts = {}) => {
+      const error = new Error("apiRequest is not available - API operation failed");
+      console.error(`[ChatManager] API Request failed (${opts.method || 'GET'} ${url}):`, error);
+      throw error;
+    }
+  }
+
   /**
    * Returns the current model config or a fallback stub if not present
    * @returns {Object} - An object with getConfig, updateConfig, etc.
@@ -202,6 +213,29 @@ export function createChatManager({
        * Set up dependency-injected apiRequest for all ChatManager methods
        */
       this.apiRequest = apiRequest;
+
+      // Create a safe method that ensures apiRequest is always available
+      this._safeApiRequest = async (url, opts = {}) => {
+        // First try instance property
+        if (this.apiRequest) {
+          return this.apiRequest(url, opts);
+        }
+        // Fall back to closure variable
+        else if (apiRequest) {
+          return apiRequest(url, opts);
+        }
+        // Last resort: try to get it from DependencySystem again
+        else {
+          const resolvedApiRequest = resolveDep('apiRequest');
+          if (resolvedApiRequest) {
+            // Fix the instance
+            this.apiRequest = resolvedApiRequest;
+            return resolvedApiRequest(url, opts);
+          } else {
+            throw new Error(`API Request to ${url} failed - No apiRequest available`);
+          }
+        }
+      };
 
       /**
        * @type {string|null}
@@ -417,8 +451,8 @@ export function createChatManager({
 
           // Parallel fetch: conversation data + messages
           const [conversation, messagesResponse] = await Promise.all([
-            this.apiRequest(API_ENDPOINTS.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
-            this.apiRequest(API_ENDPOINTS.MESSAGES(this.projectId, conversationId), { method: "GET" })
+            this._safeApiRequest(API_ENDPOINTS.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
+            this._safeApiRequest(API_ENDPOINTS.MESSAGES(this.projectId, conversationId), { method: "GET" })
           ]);
 
           const messages = messagesResponse.data?.messages || [];
@@ -480,7 +514,7 @@ export function createChatManager({
           model_id: config.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
 
-        const response = await this.apiRequest(
+        const response = await this._safeApiRequest(
           API_ENDPOINTS.CONVERSATIONS(this.projectId),
           { method: "POST", body: payload }
         );
@@ -590,7 +624,7 @@ export function createChatManager({
         };
       }
 
-      return this.apiRequest(
+      return this._safeApiRequest(
         API_ENDPOINTS.MESSAGES(this.projectId, this.currentConversationId),
         { method: "POST", body: messagePayload }
       );
@@ -661,7 +695,7 @@ export function createChatManager({
       }
 
       try {
-        await this.apiRequest(
+        await this._safeApiRequest(
           API_ENDPOINTS.CONVERSATION(this.projectId, this.currentConversationId),
           { method: "DELETE" }
         );

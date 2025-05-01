@@ -916,14 +916,14 @@ function attachAuthBusListener(event, handler, markerGlobalName) {
 function registerAppListeners() {
     console.log('[App] Registering global event listeners...');
 
-    window.addEventListener('locationchange', handleNavigationChange);
-
-    // Canonical attachment to AuthBus (never to document)
-    waitFor('auth', () => {
+    // Canonical: Wait for all required modules before attaching event listeners and triggers
+    waitFor(['auth', 'chatManager', 'projectManager'], () => {
         attachAuthBusListener('authStateChanged', handleAuthStateChange, '_globalAuthStateChangedAttached');
-    }).catch(err => console.error('[App] Failed to wait for AuthBus:', err));
+        setupChatInitializationTrigger();
 
-    setupChatInitializationTrigger();
+        // Navigation handler should only run after all dependencies are ready
+        window.addEventListener('locationchange', handleNavigationChange);
+    }).catch(err => console.error('[App] Failed to wait for dependencies:', err));
 
     if(APP_CONFIG.DEBUG){
         // Debugging: register a global for runtime AuthBus integrity checking

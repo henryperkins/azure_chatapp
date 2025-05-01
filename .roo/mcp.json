@@ -274,31 +274,6 @@
       ],
       "transportType": "stdio"
     },
-    "github.com/modelcontextprotocol/servers/tree/main/src/git": {
-      "autoApprove": [
-        "git_status",
-        "git_diff_unstaged",
-        "git_diff_staged",
-        "git_diff",
-        "git_add",
-        "git_commit",
-        "git_reset",
-        "git_log",
-        "git_create_branch",
-        "git_show",
-        "git_checkout"
-      ],
-      "disabled": false,
-      "timeout": 60,
-      "command": "/home/azureuser/azure_chatapp/venv/bin/python",
-      "args": [
-        "-m",
-        "mcp_server_git",
-        "--repository",
-        "/home/azureuser/azure_chatapp"
-      ],
-      "transportType": "stdio"
-    },
     "github.com/modelcontextprotocol/servers/tree/main/src/github": {
       "autoApprove": [
         "create_or_update_file",
