@@ -46,6 +46,30 @@ class ModalManager {
     this.activeModal = null;
   }
 
+  // --- DRY Modal Show/Hide helpers ---
+  _showModalElement(modalEl) {
+    if (typeof modalEl.showModal === "function") {
+      modalEl.showModal();
+      this._manageBodyScroll(false);
+    } else {
+      modalEl.classList.remove("hidden");
+      modalEl.style.display = "flex";
+      modalEl.setAttribute("open", "true");
+      this._manageBodyScroll(false);
+    }
+  }
+
+  _hideModalElement(modalEl) {
+    if (typeof modalEl.close === "function") {
+      modalEl.close();
+    } else {
+      modalEl.classList.add("hidden");
+      modalEl.style.display = "none";
+      modalEl.removeAttribute("open");
+    }
+    this._manageBodyScroll(true);
+  }
+
   /**
    * Initialize and attach 'close' listeners to dialogs. Orchestrator must call after DOM ready.
    * Also validates modal mappings for missing/duplicate IDs.
@@ -145,20 +169,9 @@ class ModalManager {
         options.updateContent(modalEl);
       }
 
-      // Attempt to show as a native <dialog>
-      if (typeof modalEl.showModal === "function") {
-        modalEl.showModal();
-        this.activeModal = modalId;
-        this._manageBodyScroll(false);
-      } else {
-        // Fallback if <dialog>.showModal() isn’t available
-        console.warn(
-          `[ModalManager] .showModal() not available for ID='${modalId}', using fallback.`
-        );
-        modalEl.style.display = "flex";
-        modalEl.setAttribute("open", "true");
-        this.activeModal = modalId;
-      }
+      // Use DRY helper for showing modal
+      this._showModalElement(modalEl);
+      this.activeModal = modalId;
 
       console.log(`[ModalManager] Successfully showed modal: ${modalName}`);
       return true;
@@ -187,15 +200,10 @@ class ModalManager {
     }
 
     console.log(`[ModalManager] Hiding modal '${modalName}' (#${modalId})`);
-    if (typeof modalEl.close === "function") {
-      modalEl.close();
-    } else {
-      modalEl.style.display = "none";
-    }
+    this._hideModalElement(modalEl);
 
     if (this.activeModal === modalId) {
       this.activeModal = null;
-      this._manageBodyScroll(true);
     }
     return true;
   }
@@ -237,11 +245,13 @@ class ModalManager {
     }
 
     // To avoid leftover event handlers, we replace the buttons with clones
-    const newConfirmBtn = confirmBtn.cloneNode(true);
-    confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
-
-    const newCancelBtn = cancelBtn.cloneNode(true);
-    cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+    function replaceWithClone(btn) {
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      return newBtn;
+    }
+    const newConfirmBtn = replaceWithClone(confirmBtn);
+    const newCancelBtn = replaceWithClone(cancelBtn);
 
     // Handlers for Confirm/Cancel
     const confirmHandler = () => {
@@ -327,6 +337,53 @@ class ProjectModal {
     this.currentProjectId = null;
   }
 
+  // --- DRY Modal Show/Hide helpers ---
+  _showModalElement() {
+    if (typeof this.modalElement.showModal === "function") {
+      this.modalElement.showModal();
+    } else {
+      this.modalElement.classList.remove("hidden");
+      this.modalElement.style.display = "flex";
+      this.modalElement.setAttribute("open", "true");
+    }
+  }
+
+  _hideModalElement() {
+    if (typeof this.modalElement.close === "function") {
+      this.modalElement.close();
+    } else {
+      this.modalElement.classList.add("hidden");
+      this.modalElement.style.display = "none";
+      this.modalElement.removeAttribute("open");
+    }
+  }
+
+  // DRY notification fallback
+  _notify(type, message) {
+    if (this.showNotification) {
+      this.showNotification(message, type);
+    } else {
+      if (type === "error") alert(message);
+      else console.log(message);
+    }
+  }
+
+  // DRY loading state for buttons
+  _setButtonLoading(btn, isLoading, loadingText = "Saving...") {
+    if (!btn) return;
+    if (isLoading) {
+      btn.disabled = true;
+      btn.dataset.originalText = btn.textContent;
+      btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.originalText) {
+        btn.textContent = btn.dataset.originalText;
+        delete btn.dataset.originalText;
+      }
+    }
+  }
+
   /**
    * Initialize after DOM is ready. Throws if modal/form elements not found.
    */
@@ -382,11 +439,7 @@ class ProjectModal {
     }
 
     // Show the dialog (native or fallback)
-    if (typeof this.modalElement.showModal === "function") {
-      this.modalElement.showModal();
-    } else {
-      this.modalElement.style.display = "flex";
-    }
+    this._showModalElement();
     this.isOpen = true;
   }
 
@@ -456,11 +509,7 @@ class ProjectModal {
   closeModal() {
     if (!this.modalElement) return;
 
-    if (typeof this.modalElement.close === "function") {
-      this.modalElement.close();
-    } else {
-      this.modalElement.style.display = "none";
-    }
+    this._hideModalElement();
     this.isOpen = false;
     this.currentProjectId = null;
   }
@@ -487,20 +536,23 @@ class ProjectModal {
       const projectId = formData.get("projectId");
 
       if (!projectData.name.trim()) {
-        this.showError("Project name is required");
+        this._notify("error", "Project name is required");
         return;
       }
 
-      this.setLoading(true);
+      const saveBtn = this.modalElement.querySelector("#projectSaveBtn");
+      this._setButtonLoading(saveBtn, true);
+
       await this.saveProject(projectId, projectData);
 
       this.closeModal();
-      this.showSuccess(projectId ? "Project updated" : "Project created");
+      this._notify("success", projectId ? "Project updated" : "Project created");
     } catch (error) {
       console.error("[ProjectModal] Save error:", error);
-      this.showError("Failed to save project");
+      this._notify("error", "Failed to save project");
     } finally {
-      this.setLoading(false);
+      const saveBtn = this.modalElement.querySelector("#projectSaveBtn");
+      this._setButtonLoading(saveBtn, false);
     }
   }
 
@@ -533,25 +585,7 @@ class ProjectModal {
     }
   }
 
-  /**
-   * Utility to show an error message. Prefers showNotification for user feedback.
-   * @param {string} message - The error text.
-   */
-  showError(message) {
-    if (this.showNotification) {
-      this.showNotification(message, "error");
-    } else {
-      alert(message);
-    }
-  }
-
-  showSuccess(message) {
-    if (this.showNotification) {
-      this.showNotification(message, "success");
-    } else {
-      console.log(message);
-    }
-  }
+  // showError and showSuccess are now replaced by _notify
 }
 
 /**

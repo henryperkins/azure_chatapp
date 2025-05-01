@@ -489,7 +489,9 @@
                         modalElement.close();
                     } else {
                          modalElement.classList.add('hidden');
-                         document.body.style.overflow = ''; // Reset overflow as a fallback
+                         modalElement.style.display = "none";
+                         modalElement.removeAttribute("open");
+                         document.body.style.overflow = '';
                     }
                 }
             } else {
