@@ -33,6 +33,7 @@
  *   @param {Object} deps.DependencySystem - Preferred for DI dependency registry
  */
 import { waitForDepsAndDom } from './utils/initHelpers.js';
+import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
 
 export function createEventHandlers({ app, auth, projectManager, sidebar, modalManager, DependencySystem } = {}) {
   // Helper for optional DI from DependencySystem if not provided at construction time
@@ -170,15 +171,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     });
   }
 
-  function debounce(func, wait = 250) {
-    let timeout;
-    return function (...args) {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => {
-        func.apply(this, args);
-      }, wait);
-    };
-  }
+  // No-op: use globalUtils version below
 
   function delegate(container, eventType, selector, handler, options = {}) {
     if (!container) return;
@@ -195,14 +188,11 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     return trackListener(container, eventType, delegatedHandler, options);
   }
 
+  // Forward to globalUtils.toggleElement for deduplication
   function toggleVisible(element, show) {
-    if (typeof element === 'string') {
-      document.querySelectorAll(element).forEach(el => {
-        el.classList.toggle('hidden', !show);
-      });
-    } else if (element) {
-      element.classList.toggle('hidden', !show);
-    }
+    // Toggle compatibility: in eventHandler, the API allows selector string or element
+    // Pass through to globalUtils.toggleElement
+    return globalToggleElement(element, show);
   }
 
   function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
@@ -540,7 +530,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     cleanupListeners,
     listTrackedListeners,
     delegate,
-    debounce,
+    debounce: globalDebounce,
     toggleVisible,
     setupCollapsible,
     setupModal,
