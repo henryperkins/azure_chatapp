@@ -279,36 +279,76 @@ export function createChatManager({
      * @throws {Error} If projectId is invalid or user is not authenticated
      */
     async initialize(options = {}) {
-      this.projectId = options.projectId && isValidProjectId(options.projectId)
-        ? options.projectId
-        : getCurrentProjectId(DependencySystem);
+      const requestedProjectId =
+        options.projectId && isValidProjectId(options.projectId)
+          ? options.projectId
+          : getCurrentProjectId(DependencySystem);
 
-      if (!isValidProjectId(this.projectId)) {
-        const msg = "[Chat] Project ID required before initializing chat.";
-        this._showErrorMessage(msg);
-        this._handleError("initialization", msg);
-        projectDetailsComponent?.disableChatUI?.("Chat unavailable: project not loaded.");
-        throw new Error(msg);
-      }
-
-      if (this.isInitialized) {
-        console.warn("[Chat] System already initialized");
+      // Only skip if already initialized for this project
+      if (this.isInitialized && this.projectId === requestedProjectId) {
+        console.warn(`[Chat] System already initialized for this project (${requestedProjectId}).`);
+        // Still ensure DOM/UI is rebound in case view changed:
+        this._setupUIElements(options);
+        this._bindEvents();
         return true;
       }
 
-      console.log("[Chat] Initializing chat system with projectId:", this.projectId);
+      const previousProjectId = this.projectId;
+      this.projectId = requestedProjectId;
+
+      // Allow global/no-project mode: if no valid projectId, set global mode, skip project-specific logic.
+      this.isGlobalMode = !isValidProjectId(this.projectId);
+
+      // If switching projects (or first time), reset relevant state
+      if (
+        this.isInitialized &&
+        previousProjectId !== requestedProjectId
+      ) {
+        this.isInitialized = false;
+        this.currentConversationId = null;
+        this.loadPromise = null;
+        this.isLoading = false;
+        this.messageContainer?.replaceChildren?.();
+        // Optionally, unbind events/UI if you use delegated listeners (not strictly necessary if ._setupUIElements will always re-bind on each init)
+        if (typeof this._unbindEvents === "function") {
+          this._unbindEvents();
+        }
+      }
+
+      if (!isAuthenticated()) {
+        const msg = "[Chat] User not authenticated";
+        this._showErrorMessage(msg);
+        this._handleError("initialization", msg);
+        projectDetailsComponent?.disableChatUI?.("Chat unavailable: not authenticated.");
+        throw new Error(msg);
+      }
+
+      if (this.isGlobalMode) {
+        // In global (no-project) mode: Log, wire up UI, skip history/conversation loads
+        console.info("[Chat] Starting in global (no-project) mode.");
+        try {
+          this._setupUIElements(options);
+          this._bindEvents();
+        } catch (convError) {
+          console.error("[Chat] Failed to initialize global chat UI:", convError);
+          this._showErrorMessage(
+            "Could not initialize chat UI in global mode. Please contact support."
+          );
+        }
+        this.isInitialized = true;
+        return true;
+      }
+
+      // Project-specific mode: always fresh setup
+      console.log(`[Chat] Initializing chat system for projectId: ${this.projectId}`);
 
       try {
-        if (!isAuthenticated()) {
-          throw new Error("User not authenticated");
-        }
-
         // Set up DOM references and event bindings
         this._setupUIElements(options);
         this._bindEvents();
 
         try {
-          // Optionally create a default empty conversation
+          // Always create or load default conversation
           await this.createNewConversation();
         } catch (convError) {
           console.error("[Chat] Failed to create default conversation:", convError);
