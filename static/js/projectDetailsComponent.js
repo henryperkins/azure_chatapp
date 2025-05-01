@@ -39,21 +39,20 @@ class ProjectDetailsComponent {
    * @param {Object} [options.knowledgeBaseComponent] - Optional KnowledgeBaseComponent instance
    */
   constructor(options = {}) {
-    // --- Validate and Store Dependencies ---
-    if (!options.onBack) throw new Error("[ProjectDetailsComponent] Missing required 'onBack' callback.");
-    if (!options.app) throw new Error("[ProjectDetailsComponent] Missing required 'app' dependency.");
-    if (!options.projectManager) throw new Error("[ProjectDetailsComponent] Missing required 'projectManager' dependency.");
-    if (!options.eventHandlers) throw new Error("[ProjectDetailsComponent] Missing required 'eventHandlers' dependency.");
-    if (!options.FileUploadComponentClass) throw new Error("[ProjectDetailsComponent] Missing required 'FileUploadComponentClass' dependency.");
-    if (!options.modalManager) throw new Error("[ProjectDetailsComponent] Missing required 'modalManager' dependency.");
+    // Retrieve all required dependencies solely from the DependencySystem
+    this.onBack = window.DependencySystem.modules.get('onBack')
+                   || (() => { console.warn("onBack callback not registered."); });
+    this.app = window.DependencySystem.modules.get('app');
+    this.projectManager = window.DependencySystem.modules.get('projectManager');
+    this.eventHandlers = window.DependencySystem.modules.get('eventHandlers');
+    this.modalManager = window.DependencySystem.modules.get('modalManager');
+    this.FileUploadComponentClass = window.DependencySystem.modules.get('FileUploadComponent');
+    this.knowledgeBaseComponent = window.DependencySystem.modules.get('knowledgeBaseComponent') || null;
 
-    this.onBack = options.onBack;
-    this.app = options.app;
-    this.projectManager = options.projectManager;
-    this.eventHandlers = options.eventHandlers;
-    this.FileUploadComponentClass = options.FileUploadComponentClass;
-    this.modalManager = options.modalManager;
-    this.knowledgeBaseComponent = options.knowledgeBaseComponent || null; // Optional
+    if (!this.app || !this.projectManager || !this.eventHandlers ||
+        !this.modalManager || !this.FileUploadComponentClass) {
+      throw new Error("[ProjectDetailsComponent] Missing one or more required dependencies from the DependencySystem.");
+    }
 
     // --- Internal State ---
     this.state = {
@@ -909,17 +908,10 @@ class ProjectDetailsComponent {
 /**
  * Factory function for dependency-injected ProjectDetailsComponent construction.
  *
- * @param {Object} options - Component options & dependencies (see constructor JSDoc)
  * @returns {ProjectDetailsComponent} A new ProjectDetailsComponent instance.
  */
-export function createProjectDetailsComponent(options = {}) {
-  // Basic validation of required dependencies for easier debugging
-  if (!options.app) console.error("createProjectDetailsComponent requires 'app' option.");
-  if (!options.projectManager) console.error("createProjectDetailsComponent requires 'projectManager' option.");
-  if (!options.eventHandlers) console.error("createProjectDetailsComponent requires 'eventHandlers' option.");
-  // etc. for other required dependencies...
-
-  return new ProjectDetailsComponent(options);
+export function createProjectDetailsComponent() {
+  return new ProjectDetailsComponent();
 }
 
 // Default export remains the factory
