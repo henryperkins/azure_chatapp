@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const themeNow = document.documentElement.getAttribute('data-theme');
       const newTheme = (themeNow === DARK_THEME) ? LIGHT_THEME : DARK_THEME;
       setTheme(newTheme);
+      updateThemeUI(isCurrentThemeDark(newTheme)); // Ensure icon updates immediately
     });
   }
 
