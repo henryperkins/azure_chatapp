@@ -865,6 +865,11 @@ async function handleNavigationChange() {
     toggleElement('LOGIN_REQUIRED_MESSAGE', false);
 
     try {
+        // Debug logging to help diagnose missing methods
+        console.log('[App] projectDashboard:', projectDashboard);
+        console.log('[App] showProjectDetails:', typeof projectDashboard.showProjectDetails);
+        console.log('[App] showProjectList:', typeof projectDashboard.showProjectList);
+
         if (projectId && validateUUID(projectId) && typeof projectDashboard.showProjectDetails === 'function') {
             console.log(`[App] Navigating to project details: ${projectId}`);
             await projectDashboard.showProjectDetails(projectId);
