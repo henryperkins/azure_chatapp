@@ -329,7 +329,7 @@
                          required
                          aria-required="true"
                          minlength="12"
-                         pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?])[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]{12,}$"
+                         pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?])[A-Za-z\\d!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?]{12,}$"
                          title="Password must be at least 12 characters with uppercase, lowercase, number and special character"
                          class="input input-bordered w-full validator"
                          autocomplete="new-password" />
@@ -756,7 +756,7 @@
   </div>
   <div id="chatUIContainer" class="hidden" data-requires-chat="true"></div>
 
-  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" role="status"
+  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" role="status">
     <div class="text-center">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
       <p class="text-lg">Loading application...</p>
