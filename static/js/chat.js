@@ -437,8 +437,9 @@ export function createChatManager({
           API_ENDPOINTS.CONVERSATIONS(this.projectId),
           { method: "POST", body: payload }
         );
+        console.log('[Chat] createNewConversation response:', response);
 
-        const conversation = response?.data?.conversation || response?.data || response;
+        const conversation = response?.data?.conversation || response?.data || response?.conversation || response;
         if (!conversation?.id) {
           throw new Error("[Chat] Invalid response from server creating conversation");
         }

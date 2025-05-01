@@ -629,6 +629,9 @@ class ProjectDetailsComponent {
         throw new Error("Chat Manager dependency not available.");
       }
 
+      // Debug log before initializing chatManager
+      console.log('[ProjectDetailsComponent] Initializing chat with projectId:', projectId);
+
       // Check if chat manager is already initialized for this project
       if (!chatManager.isInitialized || chatManager.projectId !== projectId) {
         console.log(`[ProjectDetailsComponent] Initializing Chat Manager for project ${projectId}`);
