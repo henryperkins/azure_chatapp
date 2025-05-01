@@ -98,8 +98,8 @@ const APP_CONFIG = {
         LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
         APP_LOADING_SPINNER: '#appLoading',
         APP_FATAL_ERROR: '#appFatalError',
-        AUTH_STATUS_SPAN: '[data-auth-status]',
-        USER_STATUS_SPAN: '[data-user-status]'
+        AUTH_STATUS_SPAN: '#authStatus',
+        USER_STATUS_SPAN: '#userStatus'
     }
 };
 
