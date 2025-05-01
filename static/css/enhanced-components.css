@@ -345,8 +345,8 @@ textarea:focus-visible,
 @media (max-width: 640px) {
   .sidebar {
     @apply w-4/5 max-w-xs fixed inset-0 z-50 transition-transform duration-300;
-    /* Overlay effect for mobile sidebar */
-    background: rgba(0,0,0,0.3);
+    @apply bg-base-100; /* Use theme background */
+    /* Removed hardcoded background: rgba(0,0,0,0.3); */
   }
   .sidebar-nav {
     @apply p-4;
