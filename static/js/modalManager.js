@@ -18,14 +18,17 @@
  *  - document (built-in) for DOM queries and events.
  */
 
+import { MODAL_MAPPINGS } from './modalConstants.js';
+
 class ModalManager {
   /**
    * @constructor
    * @param {Object} opts - Dependency injection object.
    *   @param {object} [opts.eventHandlers] - For managed event binding.
    *   @param {object} [opts.DependencySystem] - Optional for DI.
+   *   @param {object} [opts.modalMapping] - Optional, overrides default modal mapping.
    */
-  constructor({ eventHandlers, DependencySystem } = {}) {
+  constructor({ eventHandlers, DependencySystem, modalMapping } = {}) {
     this.DependencySystem =
       DependencySystem ||
       (typeof window !== "undefined" ? window.DependencySystem : undefined);
@@ -34,25 +37,23 @@ class ModalManager {
       (this.DependencySystem?.modules?.get?.("eventHandlers")) ||
       undefined;
 
-    this.modalMappings = {
-      project: "projectModal",
-      delete: "deleteConfirmModal",
-      confirm: "confirmActionModal",
-      knowledge: "knowledgeBaseSettingsModal",
-      knowledgeResult: "knowledgeResultModal",
-      instructions: "instructionsModal",
-      contentView: "contentViewModal",
-      login: "loginModal", // Added login modal mapping
-    };
+    // Use injected mapping, DI, or fallback to imported constant
+    this.modalMappings =
+      modalMapping ||
+      (this.DependencySystem?.modules?.get?.('modalMapping')) ||
+      MODAL_MAPPINGS;
 
     this.activeModal = null;
   }
 
   /**
    * Initialize and attach 'close' listeners to dialogs. Orchestrator must call after DOM ready.
+   * Also validates modal mappings for missing/duplicate IDs.
    */
   init() {
     console.log("[ModalManager] init() called. Setting up modals...");
+
+    this.validateModalMappings(this.modalMappings);
 
     Object.values(this.modalMappings).forEach((modalId) => {
       const modalEl = document.getElementById(modalId);
@@ -71,6 +72,21 @@ class ModalManager {
     });
 
     console.log("[ModalManager] Initialization complete.");
+  }
+
+  /**
+   * Validates the modal mapping for missing or duplicate IDs.
+   * @param {Object} modalMapping
+   */
+  validateModalMappings(modalMapping) {
+    Object.entries(modalMapping).forEach(([key, modalId]) => {
+      const elements = document.querySelectorAll(`#${modalId}`);
+      if (elements.length === 0) {
+        console.error(`ModalManager: No element found for ${key} with ID "${modalId}"`);
+      } else if (elements.length > 1) {
+        console.error(`ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`);
+      }
+    });
   }
 
   /**
