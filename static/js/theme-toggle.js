@@ -18,17 +18,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // Set icon based on current theme
   function updateThemeUI(isDark) {
     if (!darkModeIcon) return;
+    // Remove all children (old paths)
+    while (darkModeIcon.firstChild) {
+      darkModeIcon.removeChild(darkModeIcon.firstChild);
+    }
+    // Create new path
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+    path.setAttribute("stroke-width", "2");
     if (isDark) {
       // Sun (light) icon for dark mode
-      darkModeIcon.innerHTML = `
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-      `;
+      path.setAttribute("d", "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z");
     } else {
       // Moon (dark) icon for light mode
-      darkModeIcon.innerHTML = `
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-      `;
+      path.setAttribute("d", "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z");
     }
+    darkModeIcon.appendChild(path);
   }
 
   // Which DaisyUI theme name is considered "dark"?
