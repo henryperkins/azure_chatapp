@@ -32,6 +32,7 @@ class ProjectDashboard {
     const getModule = (key) =>
       this.DependencySystem.modules.get(key) ||
       this.DependencySystem.modules.get(key.charAt(0).toLowerCase() + key.slice(1));
+    this.getModule = getModule;
 
     this.app = getModule('app');
     this.projectManager = getModule('projectManager');
@@ -268,7 +269,7 @@ class ProjectDashboard {
     if (!projectListEl) throw new Error('Missing #projectList element in DOM after injecting project_list.html');
 
     // Use the already-registered instance for ProjectListComponent
-    this.components.projectList = getModule('projectListComponent');
+    this.components.projectList = this.getModule('projectListComponent');
     if (this.components.projectList) {
       // Optionally set the onViewProject callback if needed:
       this.components.projectList.onViewProject = this._handleViewProject.bind(this);
