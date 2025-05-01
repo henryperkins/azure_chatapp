@@ -620,13 +620,7 @@ async function initializeUIComponents() {
 
     // Instantiate and register ProjectListComponent
     if (typeof ProjectListComponent === 'function') {
-        const projectListComponent = new ProjectListComponent({
-            projectManager,
-            eventHandlers,
-            modalManager,
-            app: appRef,
-            onViewProject: id => appRef.navigateToConversation(id)
-        });
+        const projectListComponent = new ProjectListComponent();
         DependencySystem.register('projectListComponent', projectListComponent);
     }
 
