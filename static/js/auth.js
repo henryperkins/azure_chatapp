@@ -431,7 +431,11 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
 
               // On success, close modal if used
               if (loginForm.id === 'loginModalForm') {
-                window.modalManager?.hide?.('login');
+                // Try to resolve modalManager from DependencySystem or window
+                const modalManager =
+                  (typeof window !== 'undefined' && window.DependencySystem?.modules?.get('modalManager')) ||
+                  (typeof window !== 'undefined' && window.modalManager);
+                modalManager?.hide?.('login');
               }
             } catch (error) {
               if (loginForm.id === 'loginModalForm') {

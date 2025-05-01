@@ -481,6 +481,7 @@ async function initializeCoreSystems() {
     // PHASE 1: Create components in correct order
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
+    window.modalManager = modalManager; // <-- Ensure modalManager is globally available for login modal close
 
 const chatManager = createChatManager({ DependencySystem });
 DependencySystem.register('chatManager', chatManager);
@@ -895,6 +896,9 @@ async function handleAuthStateChange(event) {
     console.log(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}, User: ${username || 'N/A'}`);
 
     requestAnimationFrame(() => {
+        if (APP_CONFIG.DEBUG) {
+            console.log('[App] handleAuthStateChange running. Authenticated:', appState.isAuthenticated, 'Username:', username);
+        }
         toggleElement(APP_CONFIG.SELECTORS.AUTH_BUTTON, !appState.isAuthenticated);
         toggleElement(APP_CONFIG.SELECTORS.USER_MENU, appState.isAuthenticated);
         const authStatus = document.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
