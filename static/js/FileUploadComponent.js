@@ -74,6 +74,14 @@ export class FileUploadComponent {
   }
 
   /**
+   * Set the current project ID for uploads.
+   * @param {string} projectId
+   */
+  setProjectId(projectId) {
+    this.projectId = projectId;
+  }
+
+  /**
    * Initialize component: (re)binds events, checks required DOM is present.
    * Should be called only when elements are ready.
    */
