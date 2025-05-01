@@ -229,7 +229,13 @@ textarea:focus-visible,
 /* Enhanced Chat UI */
 .chat-container {
   @apply flex flex-col space-y-4 p-4;
-  @apply max-w-full;
+  @apply max-w-full w-full;
+}
+
+@media (max-width: 640px) {
+  .chat-container {
+    @apply p-2 space-y-2;
+  }
 }
 
 .chat-user {
@@ -248,8 +254,43 @@ textarea:focus-visible,
   @apply chat-bubble-neutral;
 }
 
+.chat-message-container {
+  @apply w-full max-w-full overflow-x-auto whitespace-pre-wrap;
+  /* For accessibility: allow vertical scroll for long content */
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+@media (max-width: 640px) {
+  .chat-message-container {
+    max-height: 40vh;
+    @apply p-1;
+  }
+}
+
 .chat-timestamp {
   @apply text-sm opacity-70 mt-1; /* Use text-sm for better readability on mobile */
+}
+
+/* Sticky chat input bar for mobile */
+@media (max-width: 640px) {
+  #projectChatContainer .flex.items-center.border-t,
+  #globalChatContainer .flex.items-center.border-t {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-base-100, #fff);
+    z-index: 10;
+    @apply p-2;
+  }
+  #projectChatInput,
+  #chatUIInput {
+    @apply text-base;
+  }
+}
+
+/* Ensure chat bubbles never overflow horizontally */
+.chat-bubble {
+  @apply max-w-full break-words;
 }
 
 /* Enhanced Knowledge Base UI */
