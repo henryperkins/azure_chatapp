@@ -2,167 +2,40 @@
  * ProjectListComponent
  * Handles rendering and interaction with the project list UI.
  *
- * =====================================================
- * REQUIRED DEPENDENCIES:
- * =====================================================
- * 1) projectManager (Object):
- *    - loadProjects(filter: string): Promise<void|Array>
- *        Should return an array of project data or dispatch a "projectsLoaded" event with the data.
- *    - deleteProject(projectId: string): Promise<void>
- *        Deletes the specified project by ID.
+ * All dependencies are now exclusively retrieved from the global DependencySystem.
+ * No constructor options or dependency injection is supported.
  *
- * 2) eventHandlers (Object):
- *    - trackListener(element: HTMLElement|Document, event: string, handler: Function, options?: Object): void
- *        Handles binding and tracking event listeners with optional metadata.
- *
- * =====================================================
- * OPTIONAL DEPENDENCIES:
- * =====================================================
- * 3) modalManager (Object):
- *    - show(modalKey: string, options?: Object): void
- *        Shows a modal (e.g. "project"). Use options for updating content, etc.
- *    - confirmAction(options: {
- *        title: string,
- *        message: string,
- *        confirmText: string,
- *        confirmClass: string,
- *        onConfirm: Function
- *      }): void
- *        Prompts user confirmation before performing a final action.
- *
- * 4) app (Object):
- *    - config?: { debug: boolean }
- *        Toggles additional console logging if true.
- *    - showNotification?(message: string, type: 'success'|'error'|...): void
- *        Displays a notification message in the app context.
- *
- * =====================================================
- * DOM REQUIREMENTS:
- * =====================================================
- * - An element with ID matching "elementId" (default: #projectList) where project cards will render.
- * - (Optional) A container #projectFilterTabs with .tab[data-filter] for filter controls.
- * - (Optional) Buttons with IDs (#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn)
- *   for creating new projects if modals are used.
- *
- * =====================================================
- * CONFIGURATION & USAGE:
- * =====================================================
- * Constructor Options (Object):
- *  - elementId?: string         (Default: 'projectList')
- *       The DOM element’s ID for rendering projects.
- *  - onViewProject?: Function   (Default: simple navigation via window.location.href)
- *       Called when a project card is clicked, unless a button triggers another action.
- *  - projectManager: Object     (Required)
- *  - eventHandlers: Object      (Required)
- *  - modalManager?: Object      (Optional)
- *  - app?: Object               (Optional)
- *
- * Example Usage:
- * ----------------------------------------------------------------
- * import { ProjectListComponent } from './projectListComponent.js';
- *
- * const projectList = new ProjectListComponent({
- *   elementId: 'projectList',
- *   projectManager: myProjectManager,  // must implement loadProjects, deleteProject
- *   eventHandlers: myEventHandlers,    // must implement trackListener
- *   modalManager: myModalManager,      // optional, for edit/delete modals
- *   app: myApp                         // optional, for logging/debug/notifications
- * });
- *
- * // Make sure #projectList is in the DOM before calling initialize().
- * projectList.initialize();
- *
- * =====================================================
- * METHODS:
- * =====================================================
- * - initialize(): void
- *   Sets up event listeners, locates the container element, and optionally loads projects.
- *
- * - renderProjects(data: Object|Array): void
- *   Renders project items based on the data passed or triggered by a "projectsLoaded" event.
- *
- * - show(): void
- *   Makes the project list (and optional #projectListView) visible.
- *
- * - hide(): void
- *   Hides the project list (and optional #projectListView).
- *
- * - _loadProjects(): Promise<void>
- *   Calls projectManager.loadProjects, handles loading states, and updates the UI.
- *
- * - _bindEventListeners(): void
- *   Attaches event listeners for system events like "projectsLoaded", "projectCreated", etc.
- *
- * - _bindFilterEvents(): void
- *   Wires up filter tabs (if present) under #projectFilterTabs.
- *
- * - _bindCreateProjectButtons(): void
- *   Wires up buttons to open "create project" modals, if modalManager is available.
- *
- * - _handleCardClick(e: MouseEvent): void
- *   Handles clicks on project cards, delegating to onViewProject or a specific button action (view/edit/delete).
- *
- * - _openNewProjectModal(): void, _openEditModal(project: Object), _confirmDelete(project: Object)
- *   Methods that leverage modalManager to create/edit/delete projects with user interaction.
- *
- * - _showEmptyState(), _showLoadingState(), _showErrorState(message?), _showLoginRequired()
- *   Utility methods to update the UI based on various states: empty list, loading, error, or authentication needed.
- *
- * =====================================================
- * EVENTS:
- * =====================================================
- * - 'projectsLoaded': fired by projectManager or externally; triggers renderProjects.
- * - 'projectCreated': appends the new project to the top of the list.
- * - 'projectUpdated': updates the existing project item with new data.
- * - 'authStateChanged': can be used to reload projects upon authentication changes.
- *
- * =====================================================
- * NOTES / SPECIAL CONSIDERATIONS:
- * =====================================================
- * - Persisted UI customization is loaded/stored from localStorage (theme, showDescription, etc.).
- * - The method _mygetDefaultCustomization() should be renamed to _getDefaultCustomization(),
- *   aligning with references in _loadCustomization().
- * - The default onViewProject callback uses a simple browser navigation fallback.
- * - Must call initialize() only after the DOM is ready (e.g., DOMContentLoaded).
+ * Usage:
+ *   import { ProjectListComponent } from './projectListComponent.js';
+ *   const projectList = new ProjectListComponent();
+ *   projectList.initialize();
  */
 
 export class ProjectListComponent {
     /**
-     * @param {Object} options
-     * @param {string}   [options.elementId='projectList']  - The DOM element ID where the project list will be rendered.
-     * @param {Function} [options.onViewProject]            - Callback for when a project card is clicked.
-     * @param {Object}   options.projectManager             - Project management API (required).
-     * @param {Object}   options.eventHandlers              - Event handling utility (required).
-     * @param {Object}   [options.modalManager]             - Modal manager for create/edit modals.
-     * @param {Object}   [options.app]                      - App instance, typically for notifications, etc.
+     * ProjectListComponent constructor.
+     * All dependencies are resolved from DependencySystem.
      */
-    constructor({
-        elementId = "projectList",
-        onViewProject = (projectId) => {
-            // Example fallback: simple navigation
-            window.location.href = `/?project=${projectId}`;
-        },
-        projectManager,
-        eventHandlers,
-        modalManager,
-        app,
-    } = {}) {
-        if (!projectManager) {
-            throw new Error('[ProjectListComponent] "projectManager" is required.');
-        }
-        if (!eventHandlers) {
-            throw new Error('[ProjectListComponent] "eventHandlers" is required.');
+    constructor() {
+        // Retrieve all dependencies exclusively from DependencySystem
+        this.projectManager = window.DependencySystem.modules.get('projectManager');
+        this.eventHandlers = window.DependencySystem.modules.get('eventHandlers');
+        this.modalManager = window.DependencySystem.modules.get('modalManager');
+        this.app = window.DependencySystem.modules.get('app');
+
+        if (!this.projectManager || !this.eventHandlers) {
+            throw new Error(
+              "[ProjectListComponent] Missing required dependencies from the DependencySystem."
+            );
         }
 
-        // Dependencies
-        this.projectManager = projectManager;
-        this.eventHandlers = eventHandlers;
-        this.modalManager = modalManager;
-        this.app = app;
+        // Set default onViewProject callback
+        this.onViewProject = (projectId) => {
+           window.location.href = `/?project=${projectId}`;
+        };
 
-        // Config
-        this.elementId = elementId;
-        this.onViewProject = onViewProject;
+        // Element ID is now a fixed value.
+        this.elementId = "projectList";
 
         // State
         this.state = {
