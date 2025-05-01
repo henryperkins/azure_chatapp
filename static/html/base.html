@@ -44,6 +44,8 @@
   <a href="#mainContent" class="skip-to-content">Skip to content</a>
 
   <!-- DaisyUI theme initialization (MUST match theme-toggle.js) -->
+  <!-- Removed theme initialization script to avoid conflict with theme-toggle.js -->
+  <!--
   <script>
     // Only valid DaisyUI themes: 'azure-light' (light), 'dracula-enhanced' (dark)
     const LIGHT_THEME = 'azure-light';
@@ -54,6 +56,7 @@
     }
     document.documentElement.setAttribute('data-theme', initTheme);
   </script>
+  -->
 
   <style>
     /* Add transition for project list visibility */
@@ -160,6 +163,9 @@
 
   <!-- KB Result Handlers are now loaded and initialized via app.js/orchestrator,
        do NOT include as a global script. -->
+
+  <!-- Theme toggle script -->
+  <script src="/static/js/theme-toggle.js"></script>
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col font-sans">
