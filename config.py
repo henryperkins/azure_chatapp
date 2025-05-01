@@ -20,6 +20,8 @@ env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
 
+VECTOR_DB_STORAGE_PATH = "./storage/vector_db"
+
 class Settings:
     """
     Insecure / Debug Configuration Class

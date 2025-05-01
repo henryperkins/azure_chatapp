@@ -343,12 +343,14 @@ class ProjectManager {
     }
 
     this.currentProject = null;
+    this.projectLoadingInProgress = true;
     this._emitEvent("projectDetailsLoading", { projectId });
 
     try {
       const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
       const response = await this.app.apiRequest(endpoint);
       if (!response) {
+        this.projectLoadingInProgress = false;
         return this.handleError(
           "projectDetailsError",
           new Error("No response returned"),
@@ -370,23 +372,119 @@ class ProjectManager {
 
       if (this.currentProject.archived) {
         this._emitEvent("projectArchivedNotice", { id: this.currentProject.id });
+        this.projectLoadingInProgress = false;
         return { ...this.currentProject };
       }
 
-      await Promise.allSettled([
+      // Create promises for both data loading and UI rendering
+      const loadPromises = [
         this.loadProjectStats(projectData.id),
         this.loadProjectFiles(projectData.id),
         this.loadProjectConversations(projectData.id),
-        this.loadProjectArtifacts(projectData.id)
+        this.loadProjectArtifacts(projectData.id),
+        // Add knowledgebase loading if not already loaded with the project
+        projectData.knowledge_base ? Promise.resolve(projectData.knowledge_base) : this.loadProjectKnowledgeBase(projectData.id)
+      ];
+
+      // First, wait for all data to be loaded
+      const loadResults = await Promise.allSettled(loadPromises);
+      
+      // Track if any critical components failed to load
+      const criticalErrors = loadResults
+        .filter((result, index) => result.status === 'rejected' && index < 4) // Stats, files, conversations, artifacts
+        .map(result => result.reason);
+      
+      if (criticalErrors.length > 0) {
+        console.error("[ProjectManager] Critical component load errors:", criticalErrors);
+        this._emitEvent("projectDetailsLoadError", { 
+          projectId: projectData.id, 
+          errors: criticalErrors 
+        });
+      }
+
+      // Create a promise that resolves when all rendering events have occurred
+      const renderingComplete = Promise.all([
+        this._createRenderPromise("projectStatsRendered", projectData.id),
+        this._createRenderPromise("projectFilesRendered", projectData.id),
+        this._createRenderPromise("projectConversationsRendered", projectData.id),
+        this._createRenderPromise("projectArtifactsRendered", projectData.id),
+        this._createRenderPromise("projectKnowledgeBaseRendered", projectData.id)
       ]);
 
+      // Wait for rendering to complete with a timeout
+      try {
+        await Promise.race([
+          renderingComplete,
+          new Promise((_, reject) => setTimeout(() => 
+            reject(new Error("Rendering timeout")), 5000))
+        ]);
+        // All components have been rendered
+        this._emitEvent("projectDetailsFullyLoaded", { 
+          projectId: projectData.id, 
+          success: true 
+        });
+      } catch (renderError) {
+        console.warn("[ProjectManager] Not all components rendered:", renderError);
+        // Still signal readiness but with warning flag
+        this._emitEvent("projectDetailsFullyLoaded", { 
+          projectId: projectData.id, 
+          success: false,
+          error: renderError
+        });
+      } finally {
+        // CRITICAL: Always reset loading flag, even if rendering fails or times out
+        this.projectLoadingInProgress = false;
+      }
       return { ...this.currentProject };
     } catch (error) {
+      this.projectLoadingInProgress = false;
       this.handleError("projectDetailsError", error, null, { projectId });
       if (error.status === 404) {
         this._emitEvent("projectNotFound", { projectId });
       }
       return null;
+    }
+  }
+  
+  // Helper method to create a promise that resolves when a specific rendering event occurs
+  _createRenderPromise(eventName, projectId) {
+    return new Promise((resolve) => {
+      const handleEvent = (event) => {
+        if (event.detail?.projectId === projectId) {
+          document.removeEventListener(eventName, handleEvent);
+          resolve();
+        }
+      };
+      document.addEventListener(eventName, handleEvent);
+      
+      // Also resolve if the event already occurred
+      if (this._eventOccurred?.[`${eventName}_${projectId}`]) {
+        resolve();
+      }
+    });
+  }
+
+  async loadProjectKnowledgeBase(projectId) {
+    try {
+      console.log(`[ProjectManager] Loading knowledge base for project ${projectId}...`);
+      const endpoint = `/api/projects/${projectId}/knowledge-bases/`;
+      const response = await this.app.apiRequest(endpoint);
+      const kb = response?.data || response;
+      if (!kb) {
+        console.warn("[ProjectManager] No knowledge base found for project:", projectId);
+        // Even if no KB found, emit the loaded event with null data
+        // so the rendering complete promise can resolve
+        this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
+      } else {
+        console.log(`[ProjectManager] Knowledge base loaded for project ${projectId}:`, kb.id);
+        this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: kb });
+      }
+      return kb;
+    } catch (error) {
+      console.error(`[ProjectManager] Error loading knowledge base for project ${projectId}:`, error);
+      // Even if there's an error, emit the event so rendering can complete
+      this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
+      return this.handleError("projectKnowledgeBaseError", error, null, { projectId });
     }
   }
 
@@ -732,4 +830,5 @@ export function createProjectManager(deps = {}) {
   return new ProjectManager(deps);
 }
 
+export { isValidProjectId };
 export default createProjectManager;

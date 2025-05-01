@@ -312,31 +312,43 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async initialize(isVisible, kbData = null, projectId = null) {
-      // Fail fast if critical DOM elements are missing
+      console.log(`[KnowledgeBaseComponent] Initializing, isVisible: ${isVisible}, projectId: ${projectId}`);
+      
+      // Fast path for hiding
+      if (this.state.isInitialized && !isVisible) {
+        this.elements.activeSection?.classList.add("hidden");
+        this.elements.inactiveSection?.classList.add("hidden");
+        return;
+      }
+      
+      // Check for critical elements but don't throw errors
+      // Instead, emit the rendered event so the UI can continue loading
       const requiredIds = [
         "knowledgeTab",
         "knowledgeBaseActive",
         "knowledgeBaseInactive",
-        "kbStatusBadge",
-        "knowledgeSearchInput",
-        "runKnowledgeSearchBtn",
-        "knowledgeResultsList",
-        "knowledgeSearchResults",
-        "knowledgeNoResults",
-        "knowledgeTopK"
+        "kbStatusBadge"
       ];
+      
+      let hasMissingElements = false;
       for (const id of requiredIds) {
         if (!document.getElementById(id)) {
-          this._showPersistentErrorBanner(
-            `Critical Knowledge Base UI element missing: #${id}. Please contact support.`
-          );
-          throw new Error(`[KnowledgeBaseComponent] Required element missing: #${id}`);
+          console.warn(`[KnowledgeBaseComponent] Required element missing: #${id}`);
+          hasMissingElements = true;
         }
       }
-
-      if (this.state.isInitialized && !isVisible) {
-        this.elements.activeSection?.classList.add("hidden");
-        this.elements.inactiveSection?.classList.add("hidden");
+      
+      if (hasMissingElements) {
+        // Don't throw an error, just log it and continue
+        console.error("[KnowledgeBaseComponent] Some critical elements are missing, but continuing initialization");
+        
+        // Emit rendered event to unblock the project loading process
+        if (projectId) {
+          document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+            detail: { projectId }
+          }));
+        }
+        
         return;
       }
 
@@ -350,6 +362,13 @@ export function createKnowledgeBaseComponent(options = {}) {
       } else {
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
+        
+        // Always emit the rendered event, even if we don't have data
+        if (projectId) {
+          document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+            detail: { projectId }
+          }));
+        }
       }
 
       this.elements.container?.classList.toggle("hidden", !isVisible);
@@ -357,6 +376,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         "pointer-events-none",
         !isVisible,
       );
+      
+      console.log(`[KnowledgeBaseComponent] Initialization complete for projectId: ${projectId}`);
     }
 
     /**
@@ -439,8 +460,17 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
+      console.log(`[KnowledgeBaseComponent] Rendering KB info for projectId: ${projectId}`);
+      
       if (!kbData) {
         this._showInactiveState();
+        
+        // Always emit rendered event even if no KB data
+        if (projectId) {
+          document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+            detail: { projectId }
+          }));
+        }
         return;
       }
 
@@ -460,12 +490,34 @@ export function createKnowledgeBaseComponent(options = {}) {
         this.elements.kbToggle.checked = kbData.is_active !== false;
       }
 
-      if (kbData.is_active !== false && kbData.id) {
-        await this._loadKnowledgeBaseHealth(kbData.id);
+      try {
+        if (kbData.is_active !== false && kbData.id) {
+          // Don't await this call - it's not critical to load health info before continuing
+          // This allows the rendering to complete faster
+          this._loadKnowledgeBaseHealth(kbData.id)
+            .catch(err => console.warn("[KnowledgeBaseComponent] Failed to load KB health:", err));
+        }
+        
+        this._updateStatusAlerts(kbData);
+        this._updateUploadButtonsState();
+        
+        // Emit rendered event now that the core rendering is done
+        if (pid) {
+          console.log(`[KnowledgeBaseComponent] Emitting projectKnowledgeBaseRendered for projectId: ${pid}`);
+          document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+            detail: { projectId: pid }
+          }));
+        }
+      } catch (error) {
+        console.error("[KnowledgeBaseComponent] Error while rendering KB info:", error);
+        
+        // Emit rendered event even if there was an error
+        if (pid) {
+          document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+            detail: { projectId: pid }
+          }));
+        }
       }
-
-      this._updateStatusAlerts(kbData);
-      this._updateUploadButtonsState();
     }
 
     /**
