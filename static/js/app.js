@@ -10,6 +10,7 @@
 
 // --- Imports ---
 import { createModalManager, createProjectModal } from './modalManager.js';
+import { MODAL_MAPPINGS } from './modalConstants.js';
 import { createProjectManager, isValidProjectId as validateUUID } from './projectManager.js';
 import { createProjectDashboard } from './projectDashboard.js';
 import { ProjectListComponent } from './projectListComponent.js';
@@ -46,6 +47,9 @@ const waitFor = DependencySystem.waitFor.bind(DependencySystem);
 // -- DependencySystem Core Module Registration (explicit, DI-compliant) --
 const notificationHandler = createNotificationHandler({ DependencySystem });
 DependencySystem.register('notificationHandler', notificationHandler);
+
+// Register modal mapping as a DI constant
+DependencySystem.register('modalMapping', MODAL_MAPPINGS);
 
 const eventHandlers = createEventHandlers({ DependencySystem });
 DependencySystem.register('eventHandlers', eventHandlers);
