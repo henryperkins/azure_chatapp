@@ -375,31 +375,89 @@ export function createAuthModule({ apiRequest, showNotification, eventHandlers, 
 
     // Set up login form handler (if present)
     const setupLoginForm = () => {
-      const loginForm = document.getElementById('loginForm');
-    if (loginForm && !loginForm._listenerAttached) {
-      loginForm._listenerAttached = true;
-      loginForm.action = '/api/auth/login';
-      loginForm.method = 'POST';
+      const loginForms = [
+        document.getElementById('loginForm'),
+        document.getElementById('loginModalForm')
+      ];
+      loginForms.forEach(loginForm => {
+        if (loginForm && !loginForm._listenerAttached) {
+          loginForm._listenerAttached = true;
+          loginForm.action = '/api/auth/login';
+          loginForm.method = 'POST';
 
-      const handler = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(loginForm);
-        try {
-          await publicAuth.login(
-            formData.get('username'),
-            formData.get('password')
-          );
-        } catch (error) {
-          showNotification?.('Login failed: ' + error.message, 'error');
+          const handler = async (e) => {
+            e.preventDefault();
+
+            // Hide any previous error message
+            if (loginForm.id === 'loginModalForm') {
+              const errorEl = document.getElementById('loginModalError');
+              if (errorEl) {
+                errorEl.textContent = '';
+                errorEl.classList.add('hidden');
+              }
+            }
+
+            // Prevent double submission
+            const submitBtn = loginForm.querySelector('button[type="submit"]');
+            if (submitBtn) {
+              submitBtn.disabled = true;
+              submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Logging in...`;
+            }
+
+            const formData = new FormData(loginForm);
+            const username = formData.get('username');
+            const password = formData.get('password');
+
+            // Basic validation
+            if (!username || !password) {
+              if (loginForm.id === 'loginModalForm') {
+                const errorEl = document.getElementById('loginModalError');
+                if (errorEl) {
+                  errorEl.textContent = 'Username and password are required.';
+                  errorEl.classList.remove('hidden');
+                }
+              } else {
+                showNotification?.('Username and password are required.', 'error');
+              }
+              if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+              }
+              return;
+            }
+
+            try {
+              await publicAuth.login(username, password);
+
+              // On success, close modal if used
+              if (loginForm.id === 'loginModalForm') {
+                window.modalManager?.hide?.('login');
+              }
+            } catch (error) {
+              if (loginForm.id === 'loginModalForm') {
+                const errorEl = document.getElementById('loginModalError');
+                if (errorEl) {
+                  errorEl.textContent = 'Login failed: ' + (error.message || 'Unknown error');
+                  errorEl.classList.remove('hidden');
+                }
+              } else {
+                showNotification?.('Login failed: ' + error.message, 'error');
+              }
+            } finally {
+              if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Login';
+              }
+            }
+          };
+
+          if (eventHandlers?.trackListener) {
+            eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false });
+          } else {
+            loginForm.addEventListener('submit', handler, { passive: false });
+          }
         }
-      };
-
-      if (eventHandlers?.trackListener) {
-        eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false });
-      } else {
-        loginForm.addEventListener('submit', handler, { passive: false });
-      }
-    }
+      });
     };
 
     setupLoginForm();
