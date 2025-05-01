@@ -256,6 +256,16 @@ textarea:focus-visible,
   @apply badge-ghost;
 }
 
+/* Responsive Stats Panel */
+@media (max-width: 640px) {
+  .stats {
+    @apply flex flex-col space-y-4;
+  }
+  .stat {
+    @apply w-full;
+  }
+}
+
 /* Enhanced Sidebar Navigation */
 .sidebar-nav {
   @apply menu menu-vertical p-2 bg-base-200 w-full rounded-box;
@@ -490,6 +500,20 @@ textarea:focus-visible,
 
 .data-table-actions {
   @apply flex gap-1 justify-end;
+}
+
+/* Table/Code Overflow Scroll Indicator */
+@media (max-width: 640px) {
+  .data-table-container::after,
+  pre[data-sanitize="true"]::after {
+    content: "← scroll for more →";
+    display: block;
+    text-align: center;
+    color: #888;
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+    opacity: 0.7;
+  }
 }
 
 /* Include DaisyUI plugin at the end if not in aggregator */
