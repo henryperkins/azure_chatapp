@@ -545,5 +545,27 @@ textarea:focus-visible,
   }
 }
 
+/* Utility: Ensure all cards, modals, and fixed-width containers are responsive */
+.card,
+.stats,
+.modal,
+.modal-box,
+.project-card,
+.file-preview-item,
+.kb-result-card {
+  @apply max-w-full w-full;
+}
+
+/* Utility: Avoid text-xs for essential info on mobile */
+@media (max-width: 640px) {
+  .text-xs {
+    font-size: 0.875rem !important; /* Promote to text-sm for readability */
+    line-height: 1.25rem !important;
+  }
+}
+
+/* Utility: Ensure all images are lazy-loaded by default (for HTML, not CSS) */
+/* [No CSS needed, but document for devs: use loading="lazy" on <img> tags] */
+
 /* Include DaisyUI plugin at the end if not in aggregator */
 /* @plugin "daisyui"; */
