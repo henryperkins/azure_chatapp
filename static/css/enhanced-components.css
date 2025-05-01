@@ -140,15 +140,15 @@ textarea:focus-visible,
 
 /* Buttons */
 .btn {
-  @apply transition duration-200;
+  @apply transition duration-200 min-w-[44px] min-h-[44px];
 }
 
 .btn:hover {
   @apply shadow-md transform-gpu -translate-y-0.5;
 }
 
-.btn:active {
-  @apply shadow-sm transform-gpu translate-y-0;
+.btn:active, .btn:focus:active {
+  @apply shadow-sm transform-gpu translate-y-0 active:bg-primary/20;
 }
 
 /* Enhanced form field states */
@@ -187,7 +187,13 @@ textarea:focus-visible,
 
 /* Enhanced Modals */
 .modal-box {
-  @apply max-h-[85vh] overflow-y-auto;
+  @apply max-h-[90vh] overflow-y-auto w-full px-2;
+}
+
+@media (max-width: 640px) {
+  .modal-box {
+    @apply max-w-xs px-2;
+  }
 }
 
 /* Enhanced Loading States */
@@ -255,8 +261,19 @@ textarea:focus-visible,
   @apply menu menu-vertical p-2 bg-base-200 w-full rounded-box;
 }
 
+@media (max-width: 640px) {
+  .sidebar {
+    @apply w-4/5 max-w-xs fixed inset-0 z-50 transition-transform duration-300;
+    /* Overlay effect for mobile sidebar */
+    background: rgba(0,0,0,0.3);
+  }
+  .sidebar-nav {
+    @apply p-4;
+  }
+}
+
 .sidebar-nav-item {
-  @apply font-medium;
+  @apply font-medium min-h-[44px] min-w-[44px];
 }
 
 .sidebar-nav-item.active {
@@ -265,11 +282,12 @@ textarea:focus-visible,
 
 /* Enhanced Tabs */
 .enhanced-tabs {
-  @apply gap-1;
+  @apply gap-1 overflow-x-auto whitespace-nowrap;
+  -webkit-overflow-scrolling: touch;
 }
 
 .enhanced-tab {
-  @apply transition-all duration-200;
+  @apply transition-all duration-200 min-w-[44px] min-h-[44px] px-3;
 }
 
 .enhanced-tab.tab-active {
@@ -294,6 +312,18 @@ textarea:focus-visible,
   @apply border-2 border-dashed border-base-300 rounded-box p-8 text-center transition-all duration-300;
 }
 
+@media (max-width: 640px) {
+  .upload-zone {
+    @apply p-4;
+  }
+  .file-preview {
+    @apply flex-col items-start gap-2 w-full;
+  }
+  .file-preview-remove {
+    @apply min-w-[44px] min-h-[44px];
+  }
+}
+
 .upload-zone-active {
   @apply border-primary bg-primary;
   /* For partial opacity, use e.g. border-primary/70 bg-primary/5 in HTML. */
@@ -304,7 +334,7 @@ textarea:focus-visible,
 }
 
 .file-preview {
-  @apply p-2 border border-base-300 rounded-box flex items-center gap-2 bg-base-100 mt-2;
+  @apply p-2 border border-base-300 rounded-box flex items-center gap-2 bg-base-100 mt-2 w-full;
 }
 
 .file-preview-icon {
@@ -320,7 +350,7 @@ textarea:focus-visible,
 }
 
 .file-preview-remove {
-  @apply btn btn-ghost btn-xs btn-square text-error;
+  @apply btn btn-ghost btn-md btn-square text-error min-w-[44px] min-h-[44px];
 }
 
 /* Enhanced Notification Styling */
@@ -350,17 +380,17 @@ textarea:focus-visible,
 }
 
 .form-control-enhanced label {
-  @apply block text-sm font-medium mb-1;
+  @apply block text-base font-semibold mb-1;
 }
 
 .form-control-enhanced .input,
 .form-control-enhanced .select,
 .form-control-enhanced .textarea {
-  @apply w-full;
+  @apply w-full text-sm;
 }
 
 .form-control-enhanced .error-message {
-  @apply text-xs text-error mt-1 absolute -bottom-5;
+  @apply text-sm text-error mt-1 absolute -bottom-5;
 }
 
 /* More accessible floating labels */
@@ -370,7 +400,7 @@ textarea:focus-visible,
 
 .floating-label input,
 .floating-label textarea {
-  @apply placeholder-transparent;
+  @apply placeholder-transparent text-sm;
 }
 
 .floating-label span {
@@ -394,6 +424,13 @@ textarea:focus-visible,
 
 .skip-to-content {
   @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:p-2 focus:bg-primary focus:text-primary-content focus:rounded;
+}
+
+/* Responsive vertical spacing for stacked elements */
+@media (max-width: 640px) {
+  .space-y-mobile {
+    @apply space-y-4;
+  }
 }
 
 /* Status Indicators */
@@ -423,7 +460,7 @@ textarea:focus-visible,
 
 /* Keyboard Shortcuts */
 .kbd-container {
-  @apply flex flex-wrap gap-1 text-xs text-base-content/70;
+  @apply flex flex-wrap gap-1 text-sm text-base-content/70;
 }
 
 .kbd-shortcut {
@@ -432,7 +469,7 @@ textarea:focus-visible,
 
 /* Better Tables for Data */
 .data-table {
-  @apply table table-zebra w-full;
+  @apply table table-zebra w-full text-sm;
 }
 
 .data-table-container {
@@ -440,7 +477,7 @@ textarea:focus-visible,
 }
 
 .data-table-heading {
-  @apply text-xs uppercase tracking-wider;
+  @apply text-sm uppercase tracking-wider;
 }
 
 .data-table-row {
