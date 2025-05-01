@@ -636,6 +636,9 @@ class ProjectDetailsComponent {
       if (!chatManager.isInitialized || chatManager.projectId !== projectId) {
         console.log(`[ProjectDetailsComponent] Initializing Chat Manager for project ${projectId}`);
         await chatManager.initialize({ projectId }); // Initialize if needed
+      } else {
+        // Always update projectId in case it changed
+        chatManager.projectId = projectId;
       }
 
       // Determine which conversation to load
@@ -643,6 +646,8 @@ class ProjectDetailsComponent {
       const chatIdFromUrl = urlParams.get('chatId');
 
       if (chatIdFromUrl && chatManager.currentConversationId !== chatIdFromUrl) {
+        // Ensure projectId is set before loading conversation
+        chatManager.projectId = projectId;
         console.log(`[ProjectDetailsComponent] Loading conversation ${chatIdFromUrl} from URL.`);
         await chatManager.loadConversation(chatIdFromUrl);
       } else if (!chatManager.currentConversationId) {
@@ -650,6 +655,7 @@ class ProjectDetailsComponent {
         const conversations = await this.projectManager.loadProjectConversations(projectId);
         if (conversations && conversations.length > 0) {
           console.log(`[ProjectDetailsComponent] Loading first conversation: ${conversations[0].id}`);
+          chatManager.projectId = projectId;
           await chatManager.loadConversation(conversations[0].id);
         } else {
           console.log("[ProjectDetailsComponent] No conversations found, prompting creation (or handled by createNewConversation).");
