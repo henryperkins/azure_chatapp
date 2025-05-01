@@ -1,57 +1,108 @@
-/****
- * Chat Manager Module - Strict DI Version (No window.*, No global DependencySystem)
+/**
+ * chat.js (Remediated DI Edition)
  *
- * Provides a complete chat interface implementation with conversation management,
- * message handling, and UI integration. All dependencies must be passed as options
- * to the factory function createChatManager().
+ * A strict-DI version of the Chat Manager, which:
+ *  - Injects all external dependencies (DOM, Navigation, app, etc.)
+ *  - Does not directly reference window.*, document.*, or other globals
+ *  - Uses a trackListener for event bindings and provides cleanup()
+ *  - Uses DOMPurify for HTML sanitization (also injected by default, but can be overridden)
+ *  - Optionally supports “global mode” (no valid projectId) or “project mode”
  *
- * Key Features:
- * - Manages chat conversations (create, load, delete)
- * - Handles message sending with queuing and error handling
- * - Supports image attachments with size validation
- * - Provides UI integration for chat display and input
- * - Implements model configuration management
- * - Includes comprehensive error handling and user feedback
+ * Usage:
+ *   import { createChatManager } from './chat.js';
  *
- * Dependencies passed as options to createChatManager():
- *  - apiRequest (required): Async function for making HTTP requests
- *  - app (required): Contains showNotification, optional formatters, etc.
- *  - eventHandlers (optional): Provides trackListener, etc.
- *  - modelConfig (optional): If absent, a stub config is used
- *  - projectDetailsComponent (optional): For disabling UI or other integration
- *  - isValidProjectId, isAuthenticated (functions) from your own validation/auth modules
+ *   const chatManager = createChatManager({
+ *     apiRequest,
+ *     app,
+ *     eventHandlers,
+ *     modelConfig,
+ *     projectDetailsComponent,
+ *     isValidProjectId,
+ *     isAuthenticated,
+ *     domAPI,
+ *     navAPI,
+ *     DOMPurify
+ *   });
+ *   await chatManager.initialize({ projectId: '123' });
  *
- * Usage Example:
- * ```
- * import { createChatManager } from './chatManager.js';
- * import { isValidProjectId, isAuthenticated } from './utils/globalUtils.js';
- *
- * const chatManager = createChatManager({
- *   apiRequest: myApiRequestFunction, // required
- *   app,
- *   eventHandlers,
- *   modelConfig,
- *   projectDetailsComponent,
- *   isValidProjectId,
- *   isAuthenticated
- * });
- *
- * await chatManager.initialize({ projectId: '123' });
- * ```
- ****/
+ *   // Later, if needed:
+ *   chatManager.cleanup();  // Unbinds all event listeners
+ */
 
-import DOMPurify from './vendor/dompurify.es.js';
+/**
+ * @typedef {Object} DomAPI
+ * @property {function(string): HTMLElement|null} querySelector
+ * @property {function(string): HTMLElement|null} getElementById
+ * @property {function(string): NodeListOf<HTMLElement>} querySelectorAll
+ * @property {function(HTMLElement, HTMLElement): void} appendChild
+ * @property {function(HTMLElement): HTMLElement[]} replaceChildren
+ * @property {function(string): HTMLElement} createElement
+ * @property {function(HTMLElement, string): void} removeChild
+ * @property {function(HTMLElement, string): void} setInnerHTML
+ * ... (define as many DOM operations as you need)
+ *
+ * @typedef {Object} NavAPI
+ * @property {function(): string} getSearch
+ * @property {function(): string} getHref
+ * @property {function(url: string): void} pushState
+ * @property {function(): string} getPathname
+ *
+ * @typedef {Object} EventHandlers
+ * @property {function(HTMLElement, string, Function, Object=): any} trackListener
+ * @property {function(HTMLElement, string, any): void} untrackListener
+ */
 
-// Constants for API endpoints
+/**
+ * Default no-op DomAPI fallback if none provided.
+ */
+function createDefaultDomAPI() {
+  return {
+    querySelector: () => null,
+    getElementById: () => null,
+    querySelectorAll: () => [],
+    appendChild: () => { },
+    replaceChildren: () => [],
+    createElement: () => ({ style: {}, classList: { add() { }, remove() { }, toggle() { } } }),
+    removeChild: () => { },
+    setInnerHTML: () => { }
+  };
+}
+
+/**
+ * Default no-op NavAPI fallback if none provided.
+ */
+function createDefaultNavAPI() {
+  return {
+    getSearch: () => "",
+    getHref: () => "",
+    pushState: () => { },
+    getPathname: () => ""
+  };
+}
+
+/**
+ * Default no-op eventHandlers if none provided.
+ */
+function createDefaultEventHandlers() {
+  return {
+    trackListener: (el, type, fn) => el && el.addEventListener(type, fn),
+    untrackListener: (el, type, fn) => el && el.removeEventListener(type, fn)
+  };
+}
+
+/**
+ * Constants for API endpoints.
+ * If your system expects more DI for endpoints, factor them out similarly.
+ */
 const API_ENDPOINTS = {
   CONVERSATIONS: (projectId) => `/api/projects/${projectId}/conversations/`,
-  CONVERSATION: (projectId, conversationId) =>
-    `/api/projects/${projectId}/conversations/${conversationId}/`,
-  MESSAGES: (projectId, conversationId) =>
-    `/api/projects/${projectId}/conversations/${conversationId}/messages/`
+  CONVERSATION: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/`,
+  MESSAGES: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/messages/`
 };
 
-// Defaults for chat
+/**
+ * Defaults for chat if modelConfig is not provided or incomplete.
+ */
 const CHAT_CONFIG = {
   DEFAULT_MODEL: "claude-3-sonnet-20240229",
   MAX_TOKENS: 4096,
@@ -61,7 +112,7 @@ const CHAT_CONFIG = {
 };
 
 /**
- * MessageQueue enforces sequential processing of tasks (e.g., sending messages).
+ * Simple queue to enforce sequential message sending.
  */
 class MessageQueue {
   constructor() {
@@ -91,16 +142,19 @@ class MessageQueue {
 }
 
 /**
- * Strict DI version of createChatManager().
+ * Factory function for the ChatManager, with Strict DI approach.
  * @param {Object} options
- * @param {Function} options.apiRequest - Required async function that executes http requests
- * @param {Object} options.app - Required main application service (for showNotification, etc.)
- * @param {Object} [options.eventHandlers] - Optional event handling utility
- * @param {Object} [options.modelConfig] - Optional model config manager
- * @param {Object} [options.projectDetailsComponent] - Optional UI component to disable/enable chat
- * @param {Function} options.isValidProjectId - Required validation function for project IDs
- * @param {Function} options.isAuthenticated - Required function that returns true if user is logged in
- * @returns {ChatManager} - New instance of ChatManager
+ * @param {Function} options.apiRequest - Required (async for HTTP requests).
+ * @param {Object} options.app - Required (has showNotification, etc.).
+ * @param {EventHandlers} [options.eventHandlers] - For event tracking/untracking.
+ * @param {Object} [options.modelConfig] - Model config manager with getConfig, updateConfig, etc.
+ * @param {Object} [options.projectDetailsComponent] - Optional for broader UI integration (enable/disable chat).
+ * @param {Function} options.isValidProjectId - Required ID validator.
+ * @param {Function} options.isAuthenticated - Required auth checker.
+ * @param {DomAPI} [options.domAPI] - DOM abstraction. No direct document usage.
+ * @param {NavAPI} [options.navAPI] - Navigation / history abstraction. No direct window usage.
+ * @param {Object} [options.DOMPurify] - If omitted, tries to import from the environment or fallback.
+ * @returns {ChatManager} An instance with initialize, sendMessage, etc.
  */
 export function createChatManager({
   apiRequest,
@@ -109,22 +163,46 @@ export function createChatManager({
   modelConfig,
   projectDetailsComponent,
   isValidProjectId,
-  isAuthenticated
+  isAuthenticated,
+  domAPI,
+  navAPI,
+  DOMPurify
 } = {}) {
+  // Basic validation
   if (typeof apiRequest !== 'function') {
-    throw new Error("[ChatManager] 'apiRequest' must be provided and be a function.");
+    throw new Error("[ChatManager] 'apiRequest' must be a function.");
   }
   if (!app) {
-    throw new Error("[ChatManager] 'app' is required. Provide at least an object with showNotification().");
+    throw new Error("[ChatManager] 'app' is required; provide at least showNotification().");
   }
   if (typeof isValidProjectId !== 'function' || typeof isAuthenticated !== 'function') {
-    throw new Error("[ChatManager] 'isValidProjectId' and 'isAuthenticated' must be provided as functions.");
+    throw new Error("[ChatManager] 'isValidProjectId' and 'isAuthenticated' must be functions.");
+  }
+
+  // Provide fallback DOM, Nav, and event handlers if not supplied
+  const _domAPI = domAPI || createDefaultDomAPI();
+  const _navAPI = navAPI || createDefaultNavAPI();
+  const _EH = eventHandlers || createDefaultEventHandlers();
+
+  // Provide a fallback DOMPurify if not provided
+  let _DOMPurify = DOMPurify;
+  if (!_DOMPurify) {
+    try {
+      // Try dynamic import or use a global if absolutely needed
+      // For truly strict DI, you'd remove this fallback and require injection
+      _DOMPurify = window?.DOMPurify;
+      if (!_DOMPurify) {
+        throw new Error("DOMPurify not available");
+      }
+    } catch {
+      throw new Error("[ChatManager] DOMPurify not provided or accessible.");
+    }
   }
 
   /**
-   * Returns the modelConfig object or a stub if missing.
+   * Return the modelConfig object or a stub if unavailable.
    */
-  function getModelConfig() {
+  function getInjectedModelConfig() {
     return modelConfig || {
       getConfig: () => ({}),
       updateConfig: () => { },
@@ -134,13 +212,23 @@ export function createChatManager({
   }
 
   /**
-   * The main ChatManager class, entirely constructed via DI.
+   * The main ChatManager class, constructed with all DI references enclosed.
    */
   class ChatManager {
     constructor() {
-      this.apiRequest = apiRequest; // guaranteed from closure
-      this.currentConversationId = null;
+      this.apiRequest = apiRequest;
+      this.app = app;
+      this.modelConfigAPI = getInjectedModelConfig();
+      this.domAPI = _domAPI;
+      this.navAPI = _navAPI;
+      this.eventHandlers = _EH;
+      this.projectDetails = projectDetailsComponent;
+      this.isValidProjectId = isValidProjectId;
+      this.isAuthenticated = isAuthenticated;
+      this.DOMPurify = _DOMPurify;
+
       this.projectId = null;
+      this.currentConversationId = null;
       this.isInitialized = false;
       this.isLoading = false;
       this.isGlobalMode = false;
@@ -148,29 +236,37 @@ export function createChatManager({
       this.loadPromise = null;
       this.currentRequestId = 0;
       this.messageQueue = new MessageQueue();
+
+      // UI references
       this.container = null;
       this.messageContainer = null;
       this.inputField = null;
       this.sendButton = null;
       this.titleElement = null;
-      this.modelConfig = getModelConfig().getConfig();
+
+      // Local copy of the model config
+      this.modelConfig = this.modelConfigAPI.getConfig();
+
+      // Track event listeners for cleanup
+      this._listeners = [];
     }
 
     /**
-     * Basic initialization: sets projectId, sets up UI, ensures authentication, etc.
-     * @param {Object} [options]
-     * @param {string} [options.projectId] - If provided, use this project ID
-     * @param {string} [options.containerSelector] - Optional CSS selector for the chat container
-     * @param {string} [options.messageContainerSelector] - Optional CSS selector for messages
-     * @param {string} [options.inputSelector] - Optional CSS selector for input field
-     * @param {string} [options.sendButtonSelector] - Optional selector for send button
-     * @param {string} [options.titleSelector] - Optional selector for conversation title
+     * Initialize the chat manager with optional UI selectors or overrides.
+     * @param {Object} [options={}]
+     * @param {string} [options.projectId]
+     * @param {string} [options.containerSelector] - If not provided, a default is created.
+     * @param {string} [options.messageContainerSelector] - If not provided, a default is created.
+     * @param {string} [options.inputSelector]
+     * @param {string} [options.sendButtonSelector]
+     * @param {string} [options.titleSelector]
      */
     async initialize(options = {}) {
-      const requestedProjectId = (options.projectId && isValidProjectId(options.projectId))
+      const requestedProjectId = options.projectId && this.isValidProjectId(options.projectId)
         ? options.projectId
         : null;
 
+      // If re-initialize with the same project, re-bind UI
       if (this.isInitialized && this.projectId === requestedProjectId) {
         console.warn(`[ChatManager] Already initialized for project ${requestedProjectId}. Re-binding UI...`);
         this._setupUIElements(options);
@@ -181,7 +277,7 @@ export function createChatManager({
       // If switching or first load:
       const previousProjectId = this.projectId;
       this.projectId = requestedProjectId;
-      this.isGlobalMode = !isValidProjectId(this.projectId); // allow "no project" mode
+      this.isGlobalMode = !this.isValidProjectId(this.projectId);
 
       if (this.isInitialized && previousProjectId !== requestedProjectId) {
         // Reset relevant state
@@ -189,44 +285,63 @@ export function createChatManager({
         this.currentConversationId = null;
         this.loadPromise = null;
         this.isLoading = false;
-        this.messageContainer?.replaceChildren?.();
+        this._clearMessages();
       }
 
-      if (!isAuthenticated()) {
-        const msg = "[ChatManager] User not authenticated";
+      if (!this.isAuthenticated()) {
+        const msg = "[ChatManager] User not authenticated.";
         this._showErrorMessage(msg);
         this._handleError("initialization", msg);
-        projectDetailsComponent?.disableChatUI?.("Not authenticated");
+        this.projectDetails?.disableChatUI?.("Not authenticated");
         throw new Error(msg);
       }
 
-      // If no valid project, run "global" mode
+      this._setupUIElements(options);
+      this._bindEvents();
+
+      // If no valid project, run "global" (no-project) mode:
       if (this.isGlobalMode) {
         console.info("[ChatManager] Starting in global (no-project) mode.");
-        this._setupUIElements(options);
-        this._bindEvents();
         this.isInitialized = true;
         return true;
       }
 
-      // Otherwise, do a full project-based init:
+      // Otherwise, do a normal project-based init
       console.log(`[ChatManager] Initializing for projectId: ${this.projectId}`);
       try {
-        this._setupUIElements(options);
-        this._bindEvents();
-        // Create or load a first conversation if you prefer automatically:
+        // For example, create a new conversation automatically
         await this.createNewConversation();
         this.isInitialized = true;
         return true;
       } catch (error) {
         this._handleError("initialization", error);
-        projectDetailsComponent?.disableChatUI?.("Chat error: " + (error.message || error));
+        this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
         throw error;
       }
     }
 
     /**
-     * Loads an existing conversation by ID, retrieving messages from the server.
+     * Cleanup method to remove all tracked event listeners, etc.
+     */
+    cleanup() {
+      // Unbind all tracked listeners
+      for (const { element, event, handler, options } of this._listeners) {
+        this.eventHandlers.untrackListener(element, event, handler, options);
+      }
+      this._listeners = [];
+
+      // Optionally clear UI references or remove container if it's dynamically created
+      // e.g., this.domAPI.removeChild(someParent, this.container) if needed
+
+      this.isInitialized = false;
+      this.currentConversationId = null;
+      this.projectId = null;
+      this.isGlobalMode = false;
+      this._clearMessages();
+    }
+
+    /**
+     * Loads an existing conversation by ID.
      * @param {string} conversationId
      */
     async loadConversation(conversationId) {
@@ -234,19 +349,19 @@ export function createChatManager({
         console.error("[ChatManager] Invalid conversationId");
         return false;
       }
-      if (!isAuthenticated()) {
-        console.warn("[ChatManager] loadConversation: user not authenticated");
+      if (!this.isAuthenticated()) {
+        console.warn("[ChatManager] loadConversation: not authenticated");
         return false;
       }
-      if (!isValidProjectId(this.projectId)) {
+      if (!this.isValidProjectId(this.projectId)) {
         this._handleError("loading conversation", "No valid projectId set");
-        this._showErrorMessage("Cannot load conversation: invalid or missing project ID.");
+        this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
         return false;
       }
 
       const requestId = ++this.currentRequestId;
       if (this.loadPromise) {
-        console.warn("[ChatManager] Already loading; waiting for existing loadPromise");
+        console.warn("[ChatManager] Already loading; awaiting existing loadPromise.");
         const result = await this.loadPromise;
         return requestId === this.currentRequestId ? result : false;
       }
@@ -256,8 +371,8 @@ export function createChatManager({
 
       this.loadPromise = (async () => {
         try {
-          // Clear existing
           this._clearMessages();
+
           // Parallel fetch conversation + messages
           const [conversation, messagesResponse] = await Promise.all([
             this.apiRequest(API_ENDPOINTS.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
@@ -286,40 +401,38 @@ export function createChatManager({
     }
 
     /**
-     * Creates a new conversation for the current project.
+     * Creates a new conversation on the server for the current project.
      * @param {string} [overrideProjectId]
      */
     async createNewConversation(overrideProjectId) {
       if (overrideProjectId) {
-        this.projectId = isValidProjectId(overrideProjectId) ? overrideProjectId : this.projectId;
+        this.projectId = this.isValidProjectId(overrideProjectId) ? overrideProjectId : this.projectId;
       }
-      if (!isAuthenticated()) {
+      if (!this.isAuthenticated()) {
         console.warn("[ChatManager] createNewConversation: not authenticated");
         throw new Error("Not authenticated");
       }
-      if (!isValidProjectId(this.projectId)) {
-        const msg = "[ChatManager] Project ID is invalid or missing, cannot create conversation";
+      if (!this.isValidProjectId(this.projectId)) {
+        const msg = "[ChatManager] Invalid or missing projectId; cannot create conversation.";
         this._showErrorMessage(msg);
         this._handleError("creating conversation", msg);
-        projectDetailsComponent?.disableChatUI?.("No valid project");
+        this.projectDetails?.disableChatUI?.("No valid project");
         throw new Error(msg);
       }
 
-      // Clear UI
       this._clearMessages();
 
       try {
-        const config = getModelConfig().getConfig();
+        const cfg = this.modelConfigAPI.getConfig();
         const payload = {
           title: `New Chat ${new Date().toLocaleString()}`,
-          model_id: config.modelName || CHAT_CONFIG.DEFAULT_MODEL
+          model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
-        const response = await this.apiRequest(API_ENDPOINTS.CONVERSATIONS(this.projectId), {
-          method: "POST",
-          body: payload
-        });
+        const response = await this.apiRequest(
+          API_ENDPOINTS.CONVERSATIONS(this.projectId),
+          { method: "POST", body: payload }
+        );
 
-        // Robustly extract conversation object from response at any level
         let conversation = null;
         if (response?.data?.conversation?.id) {
           conversation = response.data.conversation;
@@ -331,8 +444,9 @@ export function createChatManager({
           conversation = response;
         }
         if (!conversation?.id) {
-          throw new Error("Server response missing conversation ID. Full response: " + JSON.stringify(response));
+          throw new Error("Server response missing conversation ID: " + JSON.stringify(response));
         }
+
         this.currentConversationId = conversation.id;
         if (this.titleElement) {
           this.titleElement.textContent = conversation.title || "New Conversation";
@@ -342,27 +456,27 @@ export function createChatManager({
         return conversation;
       } catch (error) {
         this._handleError("creating conversation", error);
-        projectDetailsComponent?.disableChatUI?.("Chat error: " + (error.message || error));
+        this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
         throw error;
       }
     }
 
     /**
-     * Queued message send. Displays user message, awaits assistant reply.
+     * Sends a user message (queued) and awaits assistant reply.
      * @param {string} messageText
      */
     async sendMessage(messageText) {
       if (!messageText?.trim()) return;
       return this.messageQueue.add(async () => {
-        if (!isAuthenticated()) {
-          app?.showNotification("Please log in to send messages", "error");
+        if (!this.isAuthenticated()) {
+          this.app?.showNotification("Please log in to send messages", "error");
           return;
         }
-        if (!isValidProjectId(this.projectId)) {
-          const msg = "No valid project. Select a project before sending messages.";
+        if (!this.isValidProjectId(this.projectId)) {
+          const msg = "No valid project; select a project before sending messages.";
           this._showErrorMessage(msg);
           this._handleError("sending message", msg);
-          projectDetailsComponent?.disableChatUI?.("No valid project");
+          this.projectDetails?.disableChatUI?.("No valid project");
           return;
         }
         if (!this.currentConversationId) {
@@ -370,12 +484,12 @@ export function createChatManager({
             await this.createNewConversation();
           } catch (error) {
             this._handleError("creating conversation", error);
-            projectDetailsComponent?.disableChatUI?.("Chat error: " + (error.message || error));
+            this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
             return;
           }
         }
 
-        // Show user message
+        // Show user message in UI
         this._showMessage("user", messageText);
         this._clearInputField();
         this._showThinkingIndicator();
@@ -388,18 +502,18 @@ export function createChatManager({
           this._hideThinkingIndicator();
           this._showErrorMessage(error.message);
           this._handleError("sending message", error);
-          projectDetailsComponent?.disableChatUI?.("Chat error: " + (error.message || error));
+          this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
         }
       });
     }
 
     /**
-     * Internal method to call the API for sending a user message.
+     * Internal method that calls the API for sending a user message.
      * @private
      * @param {string} messageText
      */
     async _sendMessageToAPI(messageText) {
-      const cfg = getModelConfig().getConfig();
+      const cfg = this.modelConfigAPI.getConfig();
       const payload = {
         content: messageText,
         role: "user",
@@ -424,7 +538,7 @@ export function createChatManager({
     }
 
     /**
-     * Ensures the attached image is within the max size limit.
+     * Ensure the currently attached image is within size limits.
      * @private
      */
     _validateImageSize() {
@@ -434,14 +548,14 @@ export function createChatManager({
         const sizeBytes = Math.floor((b64.length * 3) / 4);
         if (sizeBytes > CHAT_CONFIG.MAX_IMAGE_SIZE) {
           this._hideThinkingIndicator();
-          app?.showNotification(`Image is too large! (max 4MB)`, "error");
-          throw new Error("Image size exceeds maximum allowed");
+          this.app?.showNotification?.("Image is too large! (max 4MB)", "error");
+          throw new Error("Image size exceeds maximum allowed threshold");
         }
       }
     }
 
     /**
-     * Processes the server's assistant_message response, or shows an error.
+     * Process the API's assistant response or show an error if missing.
      * @private
      * @param {Object} response
      */
@@ -449,7 +563,8 @@ export function createChatManager({
       this._hideThinkingIndicator();
       if (response.data?.assistant_message) {
         const { assistant_message, thinking, redacted_thinking } = response.data;
-        this._showMessage("assistant",
+        this._showMessage(
+          "assistant",
           assistant_message.content,
           null,
           thinking,
@@ -462,15 +577,15 @@ export function createChatManager({
     }
 
     /**
-     * Deletes the current conversation on the server.
+     * Deletes the current conversation (server-side).
      */
     async deleteConversation() {
       if (!this.currentConversationId) return false;
-      if (!isAuthenticated()) {
+      if (!this.isAuthenticated()) {
         console.warn("[ChatManager] deleteConversation: not authenticated");
         return false;
       }
-      if (!isValidProjectId(this.projectId)) {
+      if (!this.isValidProjectId(this.projectId)) {
         this._handleError("deleting conversation", "Invalid projectId");
         this._showErrorMessage("Cannot delete conversation: invalid project ID.");
         return false;
@@ -491,199 +606,231 @@ export function createChatManager({
     }
 
     /**
-     * Not strictly required. If you want to attach an image to the next user message, call this.
+     * For attaching an image to the next user message.
      * @param {string} base64Image
      */
     setImage(base64Image) {
       this.currentImage = base64Image;
-      // Optionally show a small image preview in the UI...
     }
 
     /**
-     * Updates model config and synchronizes UI bits if present.
+     * Update the model config and refresh internal config state.
      * @param {Object} config
      */
     updateModelConfig(config) {
-      getModelConfig().updateConfig(config);
-      this.modelConfig = getModelConfig().getConfig();
-      // Optionally update DOM elements like modelSelect, visionToggle, etc.
+      this.modelConfigAPI.updateConfig(config);
+      this.modelConfig = this.modelConfigAPI.getConfig();
+      // If needed, update UI for model selection, etc.
     }
 
-    // ------------------ UI Methods ------------------
+    // -------------------- UI Methods ----------------------
 
+    /**
+     * Sets up or rebinds references to container, message area, input, etc.
+     * @private
+     * @param {Object} options
+     */
     _setupUIElements(options) {
-      // Find or create main container
-      this.container = document.querySelector(options.containerSelector || "#chatUI") ||
-        this._createChatContainer();
+      const containerSelector = options.containerSelector || "#chatUI";
+      const messageContainerSelector = options.messageContainerSelector || "#conversationArea";
+      const inputSelector = options.inputSelector || "#chatInput";
+      const sendButtonSelector = options.sendButtonSelector || "#sendBtn";
+      const titleSelector = options.titleSelector || "#chatTitle";
 
-      // Force the main container and its parent tab to be visible
-      if (this.container) {
-        this.container.classList.remove('hidden');
-        this.container.style.display = '';
-        // Also try to unhide the tab panel if it's in one
-        let tabEl = this.container.closest('.project-tab-content');
-        if (tabEl) {
-          tabEl.classList.remove('hidden');
-          tabEl.style.display = '';
-        }
+      // Container
+      this.container = this.domAPI.querySelector(containerSelector);
+      if (!this.container) {
+        this.container = this.domAPI.createElement("div");
+        this.container.id = containerSelector.replace('#', '');
+        this.domAPI.appendChild(this.domAPI.querySelector('body') || {}, this.container);
       }
 
-      this.messageContainer = document.querySelector(options.messageContainerSelector || "#conversationArea") ||
-        this._createMessageContainer();
-      if (this.messageContainer) {
-        this.messageContainer.classList.remove('hidden');
-        this.messageContainer.style.display = '';
+      // Message container
+      this.messageContainer = this.domAPI.querySelector(messageContainerSelector);
+      if (!this.messageContainer) {
+        this.messageContainer = this.domAPI.createElement("div");
+        this.messageContainer.id = messageContainerSelector.replace('#', '');
+        this.domAPI.appendChild(this.container, this.messageContainer);
       }
 
-      // Input section
-      const inputSel = options.inputSelector || "#chatInput";
-      this.inputField = document.querySelector(inputSel);
-
+      // Input field
+      this.inputField = this.domAPI.querySelector(inputSelector);
       if (!this.inputField) {
-        const inputArea = document.createElement("div");
+        const inputArea = this.domAPI.createElement("div");
         inputArea.className = "chat-input-area";
-        this.inputField = document.createElement("input");
-        this.inputField.id = inputSel.replace("#", "");
-        this.inputField.className = "chat-input";
-        this.inputField.placeholder = "Type your message...";
-        this.sendButton = document.createElement("button");
-        this.sendButton.className = "chat-send-button";
-        this.sendButton.textContent = "Send";
-        inputArea.append(this.inputField, this.sendButton);
-        this.container.appendChild(inputArea);
+        const field = this.domAPI.createElement("input");
+        field.id = inputSelector.replace('#', '');
+        field.className = "chat-input";
+        field.placeholder = "Type your message...";
+        this.inputField = field;
+
+        const sBtn = this.domAPI.createElement("button");
+        sBtn.className = "chat-send-button";
+        sBtn.textContent = "Send";
+        this.sendButton = sBtn;
+
+        this.domAPI.appendChild(inputArea, field);
+        this.domAPI.appendChild(inputArea, sBtn);
+        this.domAPI.appendChild(this.container, inputArea);
       } else {
-        this.inputField.classList.remove('hidden');
-        this.inputField.style.display = '';
-        this.sendButton = document.querySelector(options.sendButtonSelector || "#sendBtn");
-        if (this.sendButton) {
-          this.sendButton.classList.remove('hidden');
-          this.sendButton.style.display = '';
-        }
+        // If it exists, look for the send button
+        this.sendButton = this.domAPI.querySelector(sendButtonSelector);
       }
 
-      // Title (optional)
-      this.titleElement = document.querySelector(options.titleSelector || "#chatTitle");
-      if (this.titleElement) {
-        this.titleElement.classList.remove("hidden");
-        this.titleElement.style.display = '';
-      }
-
-      // Always rebind events on the latest elements after DOM re-selection
-      this._bindEvents();
+      // Title element
+      this.titleElement = this.domAPI.querySelector(titleSelector);
     }
 
-    _createChatContainer() {
-      const container = document.createElement("div");
-      container.id = "chatUI";
-      container.className = "chat-container";
-      (document.body).appendChild(container);
-      return container;
-    }
-
-    _createMessageContainer() {
-      const container = document.createElement("div");
-      container.id = "conversationArea";
-      this.container.appendChild(container);
-      return container;
-    }
-
+    /**
+     * Bind UI events via eventHandlers (trackListener). Store them for cleanup.
+     * @private
+     */
     _bindEvents() {
-      const trackListener = eventHandlers?.trackListener || ((el, ev, fn) => el.addEventListener(ev, fn));
+      // Clear old references
+      for (const { element, event, handler, options } of this._listeners) {
+        this.eventHandlers.untrackListener(element, event, handler, options);
+      }
+      this._listeners = [];
+
+      const track = (element, event, fn, opts = {}) => {
+        if (!element || !fn) return;
+        this.eventHandlers.trackListener(element, event, fn, opts);
+        this._listeners.push({ element, event, handler: fn, options: opts });
+      };
+
       if (this.inputField) {
-        trackListener(this.inputField, "keydown", (e) => {
+        track(this.inputField, "keydown", (e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             this.sendMessage(this.inputField.value);
           }
-        });
-      }
-      if (this.sendButton) {
-        trackListener(this.sendButton, "click", () => {
-          this.sendMessage(this.inputField.value);
-        });
+        }, { description: 'Chat input Enter key' });
       }
 
-      // Listen for "regenerateChat" event if you want a special re-gen path:
-      trackListener(document, "regenerateChat", () => {
+      if (this.sendButton) {
+        track(this.sendButton, "click", () => {
+          this.sendMessage(this.inputField?.value);
+        }, { description: 'Chat send button' });
+      }
+
+      // Listen for a custom "regenerateChat" event
+      track(this.domAPI.querySelector('body'), "regenerateChat", () => {
         if (!this.currentConversationId) return;
+        if (!this.messageContainer) return;
         const userMessages = Array.from(this.messageContainer.querySelectorAll(".user-message"));
-        if (userMessages.length === 0) return;
+        if (!userMessages.length) return;
         const lastUserMessage = userMessages[userMessages.length - 1];
-        const messageText = lastUserMessage.querySelector(".message-content")?.textContent;
+        const textEl = lastUserMessage?.querySelector(".message-content");
+        const messageText = textEl?.textContent;
         if (messageText) {
-          // remove last assistant response and re-send
+          // remove last assistant response + re-send
           const assistantMsgs = Array.from(this.messageContainer.querySelectorAll(".assistant-message"));
-          if (assistantMsgs.length > 0) assistantMsgs[assistantMsgs.length - 1].remove();
+          if (assistantMsgs.length) {
+            const lastAssist = assistantMsgs[assistantMsgs.length - 1];
+            lastAssist.remove();
+          }
           this.sendMessage(messageText);
         }
-      });
+      }, { description: 'Regenerate chat event' });
 
-      // Listen for "modelConfigChanged" if you want to sync external UI changes:
-      trackListener(document, "modelConfigChanged", (e) => {
+      // Listen for "modelConfigChanged"
+      track(this.domAPI.querySelector('body'), "modelConfigChanged", (e) => {
         if (e.detail) this.updateModelConfig(e.detail);
-      });
+      }, { description: 'Model config changed event' });
     }
 
+    /**
+     * Add a message to the UI.
+     * @private
+     * @param {'user'|'assistant'|'system'} role
+     * @param {string} content
+     * @param {string|null} [id]
+     * @param {string|null} [thinking]
+     * @param {boolean} [redactedThinking=false]
+     */
     _showMessage(role, content, id = null, thinking = null, redactedThinking = false) {
       if (!this.messageContainer) return;
-      const message = document.createElement("div");
+      const message = this.domAPI.createElement("div");
       message.className = `message ${role}-message`;
       if (id) message.id = id;
 
-      const header = document.createElement("div");
+      const header = this.domAPI.createElement("div");
       header.className = "message-header";
-      header.innerHTML = `
-        <span class="message-role">${role === "assistant" ? "Claude" : role === "user" ? "You" : "System"}</span>
-        <span class="message-time">${new Date().toLocaleTimeString()}</span>
-      `;
+      const nowStr = new Date().toLocaleTimeString();
 
-      const contentEl = document.createElement("div");
+      this.domAPI.setInnerHTML(
+        header,
+        `
+          <span class="message-role">${role === "assistant" ? "Claude" : role === "user" ? "You" : "System"}</span>
+          <span class="message-time">${nowStr}</span>
+        `
+      );
+
+      const contentEl = this.domAPI.createElement("div");
       contentEl.className = "message-content";
-      contentEl.innerHTML = DOMPurify.sanitize(content || "", {
-        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'code', 'br', 'p']
-      });
+      this.domAPI.setInnerHTML(
+        contentEl,
+        this.DOMPurify.sanitize(content || "", {
+          ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'code', 'br', 'p']
+        })
+      );
 
-      message.append(header, contentEl);
+      this.domAPI.appendChild(message, header);
+      this.domAPI.appendChild(message, contentEl);
 
       if (thinking || redactedThinking) {
-        message.appendChild(this._createThinkingBlock(thinking, redactedThinking));
+        const thinkingBlock = this._createThinkingBlock(thinking, redactedThinking);
+        this.domAPI.appendChild(message, thinkingBlock);
       }
 
-      this.messageContainer.appendChild(message);
+      this.domAPI.appendChild(this.messageContainer, message);
       this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
     }
 
+    /**
+     * Create a collapsible block for 'thinking' text or 'redacted' notice.
+     * @private
+     */
     _createThinkingBlock(thinking, redacted) {
-      const container = document.createElement("div");
+      const container = this.domAPI.createElement("div");
       container.className = "thinking-container";
 
-      const toggle = document.createElement("button");
+      const toggle = this.domAPI.createElement("button");
       toggle.className = "thinking-toggle";
-      toggle.innerHTML = `
-        <svg class="thinking-chevron" viewBox="0 0 24 24">
-          <path d="M19 9l-7 7-7-7"></path>
-        </svg>
-        <span>${thinking ? "Show detailed reasoning" : "Safety notice"}</span>
-      `;
+      this.domAPI.setInnerHTML(
+        toggle,
+        `
+          <svg class="thinking-chevron" viewBox="0 0 24 24">
+            <path d="M19 9l-7 7-7-7"></path>
+          </svg>
+          <span>${thinking ? "Show detailed reasoning" : "Safety notice"}</span>
+        `
+      );
 
-      const content = document.createElement("div");
+      const content = this.domAPI.createElement("div");
       content.className = "thinking-content hidden";
+
       if (thinking) {
-        content.innerHTML = DOMPurify.sanitize(thinking);
+        this.domAPI.setInnerHTML(content, this.DOMPurify.sanitize(thinking));
       } else if (redacted) {
-        content.innerHTML = `
-          <div class="redacted-notice">
-            <svg viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2
-               12s4.48 10 10 10 10-4.48 10-10S17.52
-               2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
-            </svg>
-            <span>Some reasoning was redacted for safety reasons</span>
-          </div>
-        `;
+        this.domAPI.setInnerHTML(
+          content,
+          `
+            <div class="redacted-notice">
+              <svg viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2
+                  6.48 2 12s4.48 10 10 10 10-4.48
+                  10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z">
+                </path>
+              </svg>
+              <span>Some reasoning was redacted for safety reasons</span>
+            </div>
+          `
+        );
       }
 
-      toggle.addEventListener("click", () => {
+      // Toggle logic
+      const handler = () => {
         content.classList.toggle("hidden");
         const chevron = toggle.querySelector(".thinking-chevron");
         const span = toggle.querySelector("span");
@@ -694,9 +841,12 @@ export function createChatManager({
           span.textContent = thinking ? "Hide detailed reasoning" : "Hide safety notice";
           if (chevron) chevron.style.transform = "rotate(180deg)";
         }
-      });
+      };
+      this.eventHandlers.trackListener(toggle, "click", handler);
+      this._listeners.push({ element: toggle, event: "click", handler });
 
-      container.append(toggle, content);
+      this.domAPI.appendChild(container, toggle);
+      this.domAPI.appendChild(container, content);
       return container;
     }
 
@@ -708,87 +858,106 @@ export function createChatManager({
     }
 
     _updateURLWithConversationId(conversationId) {
-      const urlParams = new URLSearchParams(window.location.search);
+      // Use navAPI to manipulate URL, no direct window.* calls
+      const searchStr = this.navAPI.getSearch();
+      const urlParams = new URLSearchParams(searchStr);
       if (urlParams.get("chatId") !== conversationId) {
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set("chatId", conversationId);
-        window.history.pushState({}, "", newUrl.toString());
+        urlParams.set("chatId", conversationId);
+        const basePath = this.navAPI.getPathname();
+        const newUrl = `${basePath}?${urlParams.toString()}`;
+        this.navAPI.pushState(newUrl);
       }
     }
 
     _removeConversationIdFromURL() {
-      const urlParams = new URLSearchParams(window.location.search);
+      // Use navAPI to manipulate URL
+      const searchStr = this.navAPI.getSearch();
+      const urlParams = new URLSearchParams(searchStr);
       urlParams.delete("chatId");
-      window.history.pushState(
-        {},
-        "",
-        `${window.location.pathname}${urlParams.toString() ? `?${urlParams}` : ""}`
-      );
+      const basePath = this.navAPI.getPathname();
+      let newUrl = basePath;
+      const paramString = urlParams.toString();
+      if (paramString) {
+        newUrl += `?${paramString}`;
+      }
+      this.navAPI.pushState(newUrl);
     }
 
     _showLoadingIndicator() {
       if (!this.messageContainer) return;
-      const indicator = document.createElement("div");
+      const indicator = this.domAPI.createElement("div");
       indicator.id = "chatLoadingIndicator";
       indicator.className = "loading-indicator";
-      indicator.innerHTML = `
+      this.domAPI.setInnerHTML(
+        indicator,
+        `
         <div class="loading-spinner"></div>
         <span>Loading conversation...</span>
-      `;
-      this.messageContainer.appendChild(indicator);
+      `
+      );
+      this.domAPI.appendChild(this.messageContainer, indicator);
     }
 
     _hideLoadingIndicator() {
-      document.getElementById("chatLoadingIndicator")?.remove();
+      const indicator = this.domAPI.querySelector("#chatLoadingIndicator");
+      if (indicator) {
+        indicator.remove();
+      }
     }
 
     _showThinkingIndicator() {
       if (!this.messageContainer) return;
-      const indicator = document.createElement("div");
+      const indicator = this.domAPI.createElement("div");
       indicator.id = "thinkingIndicator";
       indicator.className = "thinking-indicator";
-      indicator.innerHTML = `
-        <div class="thinking-dots">
-          <span></span><span></span><span></span>
-        </div>
-        <span>Claude is thinking...</span>
-      `;
-      this.messageContainer.appendChild(indicator);
+      this.domAPI.setInnerHTML(
+        indicator,
+        `
+          <div class="thinking-dots">
+            <span></span><span></span><span></span>
+          </div>
+          <span>Claude is thinking...</span>
+        `
+      );
+      this.domAPI.appendChild(this.messageContainer, indicator);
       this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
     }
 
     _hideThinkingIndicator() {
-      document.getElementById("thinkingIndicator")?.remove();
+      const el = this.domAPI.querySelector("#thinkingIndicator");
+      if (el) el.remove();
     }
 
     /**
-     * Renders an error message block in the chat UI.
+     * Renders an error block in the chat UI.
      * @private
      * @param {string} message
      */
     _showErrorMessage(message) {
       if (!this.messageContainer) return;
-      const errorEl = document.createElement("div");
+      const errorEl = this.domAPI.createElement("div");
       errorEl.className = "error-message";
-      errorEl.innerHTML = `
+      this.domAPI.setInnerHTML(errorEl, `
         <div class="error-icon">
           <svg viewBox="0 0 24 24">
-            <path d="M12 2C6.48 2 2 6.48 2
-             12s4.48 10 10 10 10-4.48 10-10S17.52 2
-             12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
+            <path d="M12 2C6.48 2 2
+             6.48 2 12s4.48 10 10 10 10-4.48
+             10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"></path>
           </svg>
         </div>
         <div class="error-content">
           <h4>Error</h4>
-          <p>${DOMPurify.sanitize(message)}</p>
+          <p>${this.DOMPurify.sanitize(message)}</p>
         </div>
-      `;
-      this.messageContainer.appendChild(errorEl);
+      `);
+      this.domAPI.appendChild(this.messageContainer, errorEl);
       this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
     }
 
     _clearMessages() {
-      this.messageContainer?.replaceChildren();
+      if (this.messageContainer) {
+        this.domAPI.replaceChildren(this.messageContainer);
+      }
     }
 
     _renderMessages(messages) {
@@ -808,28 +977,24 @@ export function createChatManager({
       });
     }
 
-    _extractErrorMessage(error) {
-      if (!error) return "Unknown error occurred";
-      if (typeof error === "string") return error;
-      if (error.message) return error.message;
-      if (typeof error === "object") {
-        try {
-          return JSON.stringify(error);
-        } catch {
-          return "Unknown error object";
-        }
+    _extractErrorMessage(err) {
+      if (!err) return "Unknown error occurred";
+      if (typeof err === "string") return err;
+      if (err.message) return err.message;
+      try {
+        return JSON.stringify(err);
+      } catch {
+        return "Unknown error object";
       }
-      return String(error);
     }
 
     _handleError(context, error) {
       const message = this._extractErrorMessage(error);
       console.error(`[ChatManager - ${context}]`, error);
-      app?.showNotification?.(message, "error");
+      this.app?.showNotification?.(message, "error");
     }
-  }
+  } // end ChatManager class
 
-  // Return a new ChatManager instance
   return new ChatManager();
 }
 

@@ -7,73 +7,105 @@
  * ## Dependencies (all via DependencySystem):
  * - app: Core app module (state mgmt, notifications, utilities)
  * - projectManager: Project management API
- * - ProjectListComponent: Renders the project list
- * - ProjectDetailsComponent: Renders project details
- * - eventHandlers: Utility for event listener tracking/cleanup (if applicable)
+ * - projectListComponent: Renders the project list
+ * - projectDetailsComponent: Renders project details
+ * - eventHandlers: Utility for event listener tracking/cleanup
  * - auth: Auth module (and AuthBus for state events)
+ * - logger: Logging abstraction (info, warn, error)
  *
  * ## Initialization/Integration contract:
  * - The orchestrator (e.g., app.js) is responsible for:
- *     - Registering all required modules/components before constructing ProjectDashboard.
- *     - Ensuring main dashboard containers (#projectListView, #projectDetailsView) exist in the DOM before initialization.
- *     - Injecting any required HTML content into containers beforehand.
- * - ProjectDashboard only binds listeners, manages its own state, and coordinates component logic/UI—never fetching or injecting HTML itself.
+ *   - Registering all required modules/components before constructing ProjectDashboard.
+ *   - Ensuring main dashboard containers (#projectListView, #projectDetailsView) exist in the DOM before initialization.
+ *   - Injecting any required HTML content into containers beforehand.
+ * - ProjectDashboard only binds listeners, manages its own state, and coordinates component logic/UI—
+ *   never fetching or injecting HTML by itself.
  */
 
 class ProjectDashboard {
-  constructor() {
-    // Dependency references (support both PascalCase/camelCase for orchestrator compatibility)
-    this.DependencySystem = window.DependencySystem;
-    if (!this.DependencySystem) {
-      throw new Error('DependencySystem not available for ProjectDashboard');
+  /**
+   * @constructor
+   * @param {Object} dependencySystem - The injected dependency system instance
+   */
+  constructor(dependencySystem) {
+    if (!dependencySystem) {
+      throw new Error('[ProjectDashboard] dependencySystem is required.');
     }
 
     // Flexible DI resolution (align with orchestrator registration style)
     const getModule = (key) =>
-      this.DependencySystem.modules.get(key) ||
-      this.DependencySystem.modules.get(key.charAt(0).toLowerCase() + key.slice(1));
+      dependencySystem.modules.get(key) ||
+      dependencySystem.modules.get(key.charAt(0).toLowerCase() + key.slice(1));
+
     this.getModule = getModule;
 
+    // Retrieve required modules
     this.app = getModule('app');
     this.projectManager = getModule('projectManager');
-    // Use the already-registered instance for ProjectListComponent
-    this.components = { projectList: null, projectDetails: null };
     this.eventHandlers = getModule('eventHandlers');
     this.auth = getModule('auth');
+    this.logger = getModule('logger') || {
+      info: () => { },
+      warn: () => { },
+      error: () => { }
+    };
 
+    // Retrieve UI components
+    this.components = {
+      projectList: getModule('projectListComponent') || null,
+      projectDetails: getModule('projectDetailsComponent') || null
+    };
+
+    // State management
     this.state = {
       currentView: null,      // 'list' or 'details'
       currentProject: null,   // Project ID or null
       initialized: false
     };
 
-    this._unsubs = []; // For listener cleanup if needed
+    // For tracked listener cleanup
+    this._unsubs = [];
 
-    // Attach listener for authentication state via AuthBus (DependencySystem only)
+    // Ensure eventHandlers is available
+    if (!this.eventHandlers?.trackListener) {
+      throw new Error(
+        '[ProjectDashboard] eventHandlers.trackListener is required for event binding'
+      );
+    }
+
+    // Attach listener for authentication state changes via AuthBus (if available)
     const authBus = this.auth?.AuthBus;
     const handler = (e) => {
       const { authenticated } = e.detail || {};
       if (!authenticated) return;
       if (!this.state.initialized) {
-        console.log('[ProjectDashboard] Authenticated – initializing dashboard');
+        this.logger.info('[ProjectDashboard] Authenticated – initializing dashboard');
         this.initialize();
-        this.projectManager?.loadProjects('all');
+        this._loadProjects();
       } else {
-        console.log('[ProjectDashboard] Authenticated – refreshing project list');
+        this.logger.info('[ProjectDashboard] Authenticated – refreshing project list');
         this.showProjectList();
         this._loadProjects();
       }
     };
-    const eventTarget = (authBus && typeof authBus.addEventListener === 'function') ? authBus : document;
-    const description = (eventTarget === authBus)
-      ? 'ProjectDashboard: authStateChanged (AuthBus)'
-      : 'ProjectDashboard: authStateChanged (doc)';
+    const eventTarget =
+      authBus && typeof authBus.addEventListener === 'function'
+        ? authBus
+        : document;
+    const description =
+      eventTarget === authBus
+        ? 'ProjectDashboard: authStateChanged (AuthBus)'
+        : 'ProjectDashboard: authStateChanged (doc)';
 
-    if (!this.eventHandlers?.trackListener) {
-      throw new Error('[ProjectDashboard] eventHandlers.trackListener is required for authentication event binding');
-    }
-    this.eventHandlers.trackListener(eventTarget, 'authStateChanged', handler, { description });
-    this._unsubs.push(() => eventTarget.removeEventListener('authStateChanged', handler));
+    this.eventHandlers.trackListener(
+      eventTarget,
+      'authStateChanged',
+      handler,
+      { description }
+    );
+    this._unsubs.push(() =>
+      eventTarget.removeEventListener('authStateChanged', handler)
+    );
   }
 
   /**
@@ -83,33 +115,54 @@ class ProjectDashboard {
    */
   async initialize() {
     if (this.state.initialized) {
-      console.log('[ProjectDashboard] Already initialized.');
+      this.logger.info('[ProjectDashboard] Already initialized.');
       return true;
     }
-    console.log('[ProjectDashboard] Initializing...');
+    this.logger.info('[ProjectDashboard] Initializing...');
 
     try {
-      if (!this.app.state.isAuthenticated) {
-        console.log('[ProjectDashboard] Not authenticated, waiting for login...');
+      // Check auth state
+      if (!this.app?.state?.isAuthenticated) {
+        this.logger.info('[ProjectDashboard] Not authenticated, waiting for login...');
         this._showLoginRequiredMessage();
         return false;
       }
+
+      // Ensure required containers exist
       const listView = document.getElementById('projectListView');
       if (!listView) {
-        throw new Error('Missing required #projectListView container during initialization');
+        throw new Error(
+          'Missing required #projectListView container during initialization'
+        );
       }
+
+      // Initialize UI components
       await this._initializeComponents();
+
+      // Process any URL parameters (e.g., ?project=xyz)
       this._processUrlParameters();
+
+      // Set up some internal event listeners
       this._setupEventListeners();
+
+      // Mark as initialized and signal completion
       this.state.initialized = true;
-      document.dispatchEvent(new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
-      console.log('[ProjectDashboard] Initialization complete.');
+      document.dispatchEvent(
+        new CustomEvent('projectDashboardInitialized', {
+          detail: { success: true }
+        })
+      );
+      this.logger.info('[ProjectDashboard] Initialization complete.');
       return true;
     } catch (error) {
-      console.error('[ProjectDashboard] Initialization failed:', error);
+      this.logger.error('[ProjectDashboard] Initialization failed:', error);
       this.app?.showNotification('Dashboard initialization failed', 'error');
       this.state.initialized = false;
-      document.dispatchEvent(new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } }));
+      document.dispatchEvent(
+        new CustomEvent('projectDashboardInitialized', {
+          detail: { success: false, error }
+        })
+      );
       return false;
     }
   }
@@ -119,7 +172,7 @@ class ProjectDashboard {
    */
   cleanup() {
     if (this._unsubs && this._unsubs.length) {
-      this._unsubs.forEach(unsub => typeof unsub === 'function' && unsub());
+      this._unsubs.forEach((unsub) => typeof unsub === 'function' && unsub());
       this._unsubs = [];
     }
     if (this.eventHandlers?.cleanupListeners) {
@@ -132,62 +185,73 @@ class ProjectDashboard {
    * Show the project list view and hide details.
    */
   showProjectList() {
-    console.log('[ProjectDashboard] Showing project list view');
+    this.logger.info('[ProjectDashboard] Showing project list view');
     this.state.currentView = 'list';
     this.state.currentProject = null;
-    localStorage.removeItem('selectedProjectId');
+    this.browserService.removeItem('selectedProjectId');
 
-    // Remove ?project param from URL
-    const currentUrl = new URL(window.location);
+    // Remove ?project from URL
+    const currentUrl = new URL(window.location.href);
     if (currentUrl.searchParams.has('project')) {
       currentUrl.searchParams.delete('project');
       window.history.replaceState({}, '', currentUrl.toString());
-      console.log('[ProjectDashboard] Cleared project param from URL');
+      this.logger.info('[ProjectDashboard] Cleared project param from URL');
     }
 
     this._setView({ showList: true, showDetails: false });
 
-    if (this.components.projectDetails) this.components.projectDetails.hide();
+    if (this.components.projectDetails) {
+      this.components.projectDetails.hide();
+    }
     if (this.components.projectList) {
       this.components.projectList.show();
-      console.log('[ProjectDashboard] ProjectList component shown');
+      this.logger.info('[ProjectDashboard] ProjectList component shown');
     } else {
-      console.warn('[ProjectDashboard] ProjectList component not available');
+      this.logger.warn('[ProjectDashboard] ProjectList component not available');
     }
+
     this._loadProjects();
 
+    // Force minimal reflow for styling transitions
     setTimeout(() => {
       const listView = document.getElementById('projectListView');
       if (listView) {
-        listView.style.display = 'none'; void listView.offsetHeight; listView.style.display = '';
+        listView.style.display = 'none';
+        void listView.offsetHeight;
+        listView.style.display = '';
       }
     }, 50);
   }
 
   /**
    * Shows the project details view for a given project.
-   * Loads HTML, updates URL, and triggers data load.
+   * Loads UI, updates URL, and triggers data load from projectManager.
    * @param {string} projectId
    * @returns {Promise<boolean>}
    */
   async showProjectDetails(projectId) {
-    // Validate with app/UUID helper if present
-    if (!projectId || (this.app.validateUUID && !this.app.validateUUID(projectId))) {
+    // Validate with app/UUID helper if available
+    if (!projectId || (this.app?.validateUUID && !this.app.validateUUID(projectId))) {
       this.app?.showNotification?.('Invalid project ID', 'error');
       this.showProjectList();
       return false;
     }
+
     this.state.currentView = 'details';
-    this.state.currentProject = projectId;
+    // No longer assign projectId directly; currentProject should always be the full object.
 
     try {
-      if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
+      // Initialize details component if needed
+      if (
+        this.components.projectDetails &&
+        !this.components.projectDetails.state?.initialized
+      ) {
         await this.components.projectDetails.initialize();
       }
     } catch (err) {
-      console.error('[ProjectDashboard] Error loading project details page:', err);
+      this.logger.error('[ProjectDashboard] Error loading project details page:', err);
       this.app?.showNotification('Error loading project details UI', 'error');
-      localStorage.removeItem('selectedProjectId');
+      this.browserService.removeItem('selectedProjectId');
       this.showProjectList();
       return false;
     }
@@ -203,35 +267,41 @@ class ProjectDashboard {
       currentUrl.searchParams.set('project', projectId);
       window.history.replaceState({}, '', currentUrl.toString());
     }
-    localStorage.setItem('selectedProjectId', projectId);
 
-    if (this.app.state.isAuthenticated && this.projectManager?.loadProjectDetails) {
+    // Persist selection
+    window.localStorage.setItem('selectedProjectId', projectId);
+
+    // Attempt to load project details if logged in
+    if (this.app?.state?.isAuthenticated && this.projectManager?.loadProjectDetails) {
       try {
         const project = await this.projectManager.loadProjectDetails(projectId);
         if (!project) {
-          console.warn('[ProjectDashboard] Project not found after details load');
+          this.logger.warn('[ProjectDashboard] Project not found after details load');
           this.app?.showNotification('Project not found', 'error');
-          localStorage.removeItem('selectedProjectId');
+          window.localStorage.removeItem('selectedProjectId');
           this.showProjectList();
-        } else if (this.components.projectDetails && this.components.projectDetails.renderProject) {
-          // Directly render project data in case event is missed
+        } else if (
+          this.components.projectDetails &&
+          this.components.projectDetails.renderProject
+        ) {
+          // Directly render project data
           this.components.projectDetails.renderProject(project);
         }
       } catch (error) {
-        console.error('[ProjectDashboard] Failed to load project details:', error);
+        this.logger.error('[ProjectDashboard] Failed to load project details:', error);
         this.app?.showNotification('Failed to load project details', 'error');
-        localStorage.removeItem('selectedProjectId');
+        window.localStorage.removeItem('selectedProjectId');
         this.showProjectList();
       }
     } else {
-      localStorage.removeItem('selectedProjectId');
+      window.localStorage.removeItem('selectedProjectId');
       this.showProjectList();
     }
 
     return true;
   }
 
-  // ============= PRIVATE UTILITY METHODS =============
+  // =================== PRIVATE METHODS ===================
 
   _setView({ showList, showDetails }) {
     const listView = document.getElementById('projectListView');
@@ -257,52 +327,67 @@ class ProjectDashboard {
     if (sidebar && sidebar.contains(document.activeElement)) {
       document.activeElement.blur();
     }
-    const projectViews = document.querySelectorAll('#projectListView, #projectDetailsView');
-    projectViews.forEach(view => view.classList.add('hidden'));
+    const projectViews = document.querySelectorAll(
+      '#projectListView, #projectDetailsView'
+    );
+    projectViews.forEach((view) => view.classList.add('hidden'));
   }
 
-  _loadProjectListHtml() { throw new Error('[ProjectDashboard] HTML loading responsibility has been moved to the orchestrator. This method should not be called.'); }
-  _loadProjectDetailsHtml() { throw new Error('[ProjectDashboard] HTML loading responsibility has been moved to the orchestrator. This method should not be called.'); }
+  _loadProjectListHtml() {
+    throw new Error(
+      '[ProjectDashboard] HTML loading responsibility has been moved to the orchestrator. This method should not be called.'
+    );
+  }
+
+  _loadProjectDetailsHtml() {
+    throw new Error(
+      '[ProjectDashboard] HTML loading responsibility has been moved to the orchestrator. This method should not be called.'
+    );
+  }
 
   async _initializeComponents() {
-    console.log('[ProjectDashboard] Initializing components...');
-    // Ensure #projectList is present in the DOM before initializing the component
-    const projectListEl = document.getElementById('projectList');
-    if (!projectListEl) throw new Error('Missing #projectList element in DOM after injecting project_list.html');
+    this.logger.info('[ProjectDashboard] Initializing components...');
 
-    // Use the already-registered instance for ProjectListComponent
-    this.components.projectList = this.getModule('projectListComponent');
+    // Ensure #projectList is present
+    const projectListEl = document.getElementById('projectList');
+    if (!projectListEl) {
+      throw new Error(
+        'Missing #projectList element in DOM after injecting project_list.html'
+      );
+    }
+
+    // Initialize project list component if available
     if (this.components.projectList) {
-      // Optionally set the onViewProject callback if needed:
       this.components.projectList.onViewProject = this._handleViewProject.bind(this);
-      // Optionally call initialize if not already done:
       if (!this.components.projectList.state?.initialized) {
         await this.components.projectList.initialize();
-        console.log('[ProjectDashboard] ProjectListComponent initialized.');
+        this.logger.info('[ProjectDashboard] ProjectListComponent initialized.');
       }
     } else {
-      console.error('[ProjectDashboard] projectListComponent not found (DependencySystem).');
+      this.logger.error(
+        '[ProjectDashboard] projectListComponent not found (DependencySystem).'
+      );
     }
 
-    // Use the already-registered instance for ProjectDetailsComponent
-    this.components.projectDetails = this.getModule('projectDetailsComponent');
+    // Initialize project details component if available
     if (this.components.projectDetails) {
-      // Optionally set the onBack callback if needed:
       this.components.projectDetails.onBack = this._handleBackToList.bind(this);
-      // Optionally call initialize if not already done:
       if (!this.components.projectDetails.state?.initialized) {
         await this.components.projectDetails.initialize();
-        console.log('[ProjectDashboard] ProjectDetailsComponent initialized.');
+        this.logger.info('[ProjectDashboard] ProjectDetailsComponent initialized.');
       }
     } else {
-      console.error('[ProjectDashboard] projectDetailsComponent not found (DependencySystem).');
+      this.logger.error(
+        '[ProjectDashboard] projectDetailsComponent not found (DependencySystem).'
+      );
     }
-    console.log('[ProjectDashboard] Components initialized.');
+
+    this.logger.info('[ProjectDashboard] Components initialized.');
   }
 
   _processUrlParameters() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const projectId = urlParams.get('project');
+    const currentUrl = new URL(window.location.href);
+    const projectId = currentUrl.searchParams.get('project');
     if (projectId) {
       this.showProjectDetails(projectId);
     } else {
@@ -311,10 +396,12 @@ class ProjectDashboard {
   }
 
   _setupEventListeners() {
-    // Only allow eventHandlers.trackListener for event registration; fail-fast if unavailable
+    // Helper for tracked listeners
     const add = (el, event, handler, opts = {}) => {
       if (!this.eventHandlers?.trackListener) {
-        throw new Error("[ProjectDashboard] eventHandlers.trackListener is required for event binding");
+        throw new Error(
+          '[ProjectDashboard] eventHandlers.trackListener is required for event binding'
+        );
       }
       this.eventHandlers.trackListener(el, event, handler, opts);
       this._unsubs.push(() => el.removeEventListener(event, handler, opts));
@@ -333,35 +420,47 @@ class ProjectDashboard {
 
   _handleProjectCreated(e) {
     const project = e.detail;
-    console.log('[ProjectDashboard] Project created:', project);
+    this.logger.info('[ProjectDashboard] Project created:', project);
     this.showProjectDetails(project.id);
-    localStorage.setItem('selectedProjectId', project.id);
+    window.localStorage.setItem('selectedProjectId', project.id);
   }
 
   _loadProjects() {
-    console.log('[ProjectDashboard] Loading projects...');
+    this.logger.info('[ProjectDashboard] Loading projects...');
     if (!this.app?.state?.isAuthenticated) {
-      console.warn('[ProjectDashboard] Not authenticated, cannot load projects');
+      this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects');
       return;
     }
     if (!this.projectManager?.loadProjects) {
-      console.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
+      this.logger.error(
+        '[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available'
+      );
       return;
     }
     setTimeout(() => {
-      this.projectManager.loadProjects('all')
-        .catch(error => console.error('[ProjectDashboard] Error loading projects:', error));
+      this.projectManager
+        .loadProjects('all')
+        .catch((error) =>
+          this.logger.error('[ProjectDashboard] Error loading projects:', error)
+        );
     }, 100);
   }
 
-  _handlePopState() { this._processUrlParameters(); }
+  _handlePopState() {
+    this._processUrlParameters();
+  }
 
-  _handleViewProject(projectId) { this.showProjectDetails(projectId); }
+  _handleViewProject(projectId) {
+    this.showProjectDetails(projectId);
+  }
 
-  _handleBackToList() { this.showProjectList(); }
+  _handleBackToList() {
+    this.showProjectList();
+  }
 
   _handleAuthStateChange(event) {
     const { authenticated } = event.detail || {};
+    // keep the UI handling for auth changes
     requestAnimationFrame(() => {
       const loginRequiredMessage = document.getElementById('loginRequiredMessage');
       const projectListView = document.getElementById('projectListView');
@@ -372,18 +471,22 @@ class ProjectDashboard {
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
       } else {
         if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
-        localStorage.removeItem('selectedProjectId');
+        window.localStorage.removeItem('selectedProjectId');
         this.state.currentView = 'list';
         this.state.currentProject = null;
-        const url = new URL(window.location);
+        const url = new URL(window.location.href);
         if (url.searchParams.has('project')) {
           url.searchParams.delete('project');
           window.history.replaceState({}, '', url.toString());
         }
         if (projectListView) projectListView.classList.remove('hidden');
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
+
+        // Re-initialize or refresh
         if (!this.components.projectList || !this.components.projectList.initialized) {
-          console.log('[ProjectDashboard] Components not initialized after auth, reinitializing...');
+          this.logger.info(
+            '[ProjectDashboard] Components not initialized after auth, reinitializing...'
+          );
           this._initializeComponents().then(() => {
             if (this.components.projectList) {
               this.components.projectList.show();
@@ -394,7 +497,9 @@ class ProjectDashboard {
           if (this.components.projectList) this.components.projectList.show();
           if (this.components.projectDetails) this.components.projectDetails.hide();
           setTimeout(() => {
-            console.log('[ProjectDashboard] Loading projects after authentication state change');
+            this.logger.info(
+              '[ProjectDashboard] Loading projects after authentication state change'
+            );
             this._loadProjects();
             const plv = document.getElementById('projectListView');
             if (plv) plv.classList.remove('opacity-0');
@@ -407,27 +512,33 @@ class ProjectDashboard {
   _handleProjectsLoaded(event) {
     const { projects = [], error = false, message } = event.detail || {};
     if (error) {
-      console.error('[ProjectDashboard] projectsLoaded event with error:', message);
+      this.logger.error('[ProjectDashboard] projectsLoaded event with error:', message);
       requestAnimationFrame(() => {
         if (this.components.projectList?._showErrorState) {
-          this.components.projectList._showErrorState(message || 'Failed to load projects');
+          this.components.projectList._showErrorState(
+            message || 'Failed to load projects'
+          );
         }
       });
       return;
     }
     requestAnimationFrame(() => {
       if (this.components.projectList) {
-        console.log("[ProjectDashboard] Rendering " + projects.length + " project(s).");
+        this.logger.info(
+          `[ProjectDashboard] Rendering ${projects.length} project(s).`
+        );
         this.components.projectList.renderProjects({ projects });
       } else {
-        console.warn('[ProjectDashboard] ProjectListComponent not available to render projects.');
+        this.logger.warn(
+          '[ProjectDashboard] ProjectListComponent not available to render projects.'
+        );
       }
     });
   }
 
   _handleProjectLoaded(event) {
     const project = event.detail;
-    this.state.currentProject = project?.id || null;
+    this.state.currentProject = project || null;
     requestAnimationFrame(() => {
       if (this.components.projectDetails) {
         this.components.projectDetails.renderProject(project);
@@ -462,9 +573,9 @@ class ProjectDashboard {
 
   _handleProjectNotFound(event) {
     const { projectId } = event.detail || {};
-    console.warn("[ProjectDashboard] Project not found: " + projectId);
+    this.logger.warn('[ProjectDashboard] Project not found:', projectId);
     this.state.currentProject = null;
-    localStorage.removeItem('selectedProjectId');
+    window.localStorage.removeItem('selectedProjectId');
     const detailsView = document.getElementById('projectDetailsView');
     if (detailsView) {
       detailsView.classList.add('hidden');
@@ -477,10 +588,11 @@ class ProjectDashboard {
 
 /**
  * Factory function to create a new ProjectDashboard instance.
+ * @param {Object} dependencySystem - your DependencySystem that holds references to modules
  * @returns {ProjectDashboard}
  */
-export function createProjectDashboard() {
-  return new ProjectDashboard();
+export function createProjectDashboard(dependencySystem) {
+  return new ProjectDashboard(dependencySystem);
 }
 
 export default createProjectDashboard;
