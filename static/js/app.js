@@ -658,6 +658,16 @@ async function initializeUIComponents() {
     // Defensive: Check for duplicate/incorrect registrations
     if (typeof DependencySystem.modules.get('projectDashboard') === 'function' && DependencySystem.modules.get('projectDashboard').name === 'createProjectDashboard') {
         console.error('[App] ERROR: projectDashboard is the factory function, not the instance! Fix registration.');
+        // Fix registration immediately if detected
+        DependencySystem.modules.delete('projectDashboard');
+        DependencySystem.register('projectDashboard', projectDashboard);
+    }
+    // Assert that the instance has the required methods
+    if (
+      typeof projectDashboard.showProjectList !== 'function' ||
+      typeof projectDashboard.showProjectDetails !== 'function'
+    ) {
+      throw new Error('[App] projectDashboard instance missing required methods!');
     }
 
     // Create and register projectDetailsComponent
