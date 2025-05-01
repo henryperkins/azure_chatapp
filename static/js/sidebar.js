@@ -116,6 +116,7 @@ export function createSidebar({
     btnPin.setAttribute('aria-pressed', pinned.toString());
     btnPin.title = pinned ? 'Unpin sidebar' : 'Pin sidebar';
     btnPin.classList.toggle('text-primary', pinned);
+    btnPin.classList.add('btn', 'btn-ghost', 'btn-square', 'btn-sm', 'min-w-[44px]', 'min-h-[44px]');
   }
 
   function toggleSidebar(forceVisible) {
@@ -164,7 +165,7 @@ export function createSidebar({
   function createBackdrop() {
     if (backdrop || window?.innerWidth >= 1024) return;
     backdrop = Object.assign(document.createElement('div'), {
-      className: 'fixed inset-0 bg-black bg-opacity-50 z-40',
+      className: 'fixed inset-0 bg-base-300/70 z-40',
       style: 'cursor:pointer',
     });
 
@@ -277,7 +278,7 @@ export function createSidebar({
 
     if (!uniq.length) {
       cont.appendChild(Object.assign(document.createElement('li'), {
-        className: 'text-gray-500 text-center py-4',
+        className: 'text-base-content/60 text-center py-4',
         textContent: 'No conversations yet',
       }));
       return;
@@ -294,7 +295,7 @@ export function createSidebar({
     const filtered = all.filter(c => c.id && starred.has(c.id));
     if (!filtered.length) {
       cont.appendChild(Object.assign(document.createElement('li'), {
-        className: 'text-gray-500 text-center py-4',
+        className: 'text-base-content/60 text-center py-4',
         textContent: 'No starred conversations yet',
       }));
       return;
@@ -304,7 +305,7 @@ export function createSidebar({
 
   function createConversationLI(item) {
     const li = document.createElement('li');
-    li.className = 'p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer';
+    li.className = 'p-2 hover:bg-base-200 rounded-box cursor-pointer transition-colors';
 
     const flex = Object.assign(document.createElement('div'), { className: 'flex flex-col' });
 
@@ -327,7 +328,7 @@ export function createSidebar({
     });
     head.appendChild(b);
 
-    const sub = Object.assign(document.createElement('div'), { className: 'flex items-center text-xs text-gray-500 mt-1' });
+    const sub = Object.assign(document.createElement('div'), { className: 'flex items-center text-xs text-base-content/60 mt-1' });
     if (item.model_id) {
       sub.appendChild(Object.assign(document.createElement('span'), { className: 'truncate', textContent: item.model_id }));
     }
@@ -363,9 +364,10 @@ export function createSidebar({
   }
 
   function updateStarBtn(btn, on) {
-    btn.className = on
-      ? 'ml-2 text-yellow-500'
-      : 'ml-2 text-gray-300 hover:text-yellow-500';
+    btn.className = (on
+      ? 'ml-2 text-warning'
+      : 'ml-2 text-base-content/30 hover:text-warning');
+    btn.classList.add('btn', 'btn-ghost', 'btn-xs', 'btn-square', 'min-w-[44px]', 'min-h-[44px]');
     btn.innerHTML = `
       <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
            fill="${on ? 'currentColor' : 'none'}"
