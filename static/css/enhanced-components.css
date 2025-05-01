@@ -141,6 +141,8 @@ textarea:focus-visible,
 /* Buttons */
 .btn {
   @apply transition duration-200 min-w-[44px] min-h-[44px];
+  @apply max-w-full w-full sm:w-auto; /* Ensure buttons never overflow on mobile */
+  @apply px-4; /* Ensure enough horizontal padding for icon-only buttons */
 }
 
 .btn:hover {
@@ -149,6 +151,22 @@ textarea:focus-visible,
 
 .btn:active, .btn:focus:active {
   @apply shadow-sm transform-gpu translate-y-0 active:bg-primary/20;
+}
+
+/* Icon-only buttons: ensure touch target and accessibility */
+.btn.btn-circle,
+.btn.btn-square,
+.btn-icon,
+[aria-label][type="button"]:not(.btn) {
+  @apply min-w-[44px] min-h-[44px] w-[44px] h-[44px] p-0 flex items-center justify-center;
+}
+
+/* Add focus ring for icon-only buttons */
+.btn.btn-circle:focus-visible,
+.btn.btn-square:focus-visible,
+.btn-icon:focus-visible,
+[aria-label][type="button"]:focus-visible:not(.btn) {
+  @apply outline-2 outline-primary outline-offset-2;
 }
 
 /* Enhanced form field states */
@@ -188,11 +206,13 @@ textarea:focus-visible,
 /* Enhanced Modals */
 .modal-box {
   @apply max-h-[90vh] overflow-y-auto w-full px-2;
+  @apply max-w-full; /* Prevent modal overflow on mobile */
 }
 
 @media (max-width: 640px) {
   .modal-box {
-    @apply max-w-xs px-2;
+    @apply max-w-xs px-2 w-full;
+    @apply max-w-full;
   }
 }
 
@@ -209,6 +229,7 @@ textarea:focus-visible,
 /* Enhanced Chat UI */
 .chat-container {
   @apply flex flex-col space-y-4 p-4;
+  @apply max-w-full;
 }
 
 .chat-user {
@@ -228,7 +249,7 @@ textarea:focus-visible,
 }
 
 .chat-timestamp {
-  @apply text-xs opacity-70 mt-1;
+  @apply text-sm opacity-70 mt-1; /* Use text-sm for better readability on mobile */
 }
 
 /* Enhanced Knowledge Base UI */
@@ -353,6 +374,7 @@ textarea:focus-visible,
 
 .file-preview-name {
   @apply flex-1 truncate text-sm;
+  @apply max-w-full;
 }
 
 .file-preview-size {
@@ -393,6 +415,12 @@ textarea:focus-visible,
   @apply block text-base font-semibold mb-1;
 }
 
+@media (max-width: 640px) {
+  .form-control-enhanced {
+    @apply space-y-4; /* Add extra vertical spacing between stacked form fields on mobile */
+  }
+}
+
 .form-control-enhanced .input,
 .form-control-enhanced .select,
 .form-control-enhanced .textarea {
@@ -410,11 +438,11 @@ textarea:focus-visible,
 
 .floating-label input,
 .floating-label textarea {
-  @apply placeholder-transparent text-sm;
+  @apply placeholder-transparent text-base; /* Use text-base for better readability */
 }
 
 .floating-label span {
-  @apply absolute left-3 -top-2 px-1 text-xs transition-all pointer-events-none bg-base-100 text-base-content/70;
+  @apply absolute left-3 -top-2 px-1 text-sm transition-all pointer-events-none bg-base-100 text-base-content/70;
 }
 
 .floating-label input:placeholder-shown+span,
@@ -424,7 +452,7 @@ textarea:focus-visible,
 
 .floating-label input:focus+span,
 .floating-label textarea:focus+span {
-  @apply -top-2 text-xs text-primary;
+  @apply -top-2 text-sm text-primary;
 }
 
 /* A11y improvements */
@@ -434,6 +462,7 @@ textarea:focus-visible,
 
 .skip-to-content {
   @apply sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:p-2 focus:bg-primary focus:text-primary-content focus:rounded;
+  @apply max-w-full;
 }
 
 /* Responsive vertical spacing for stacked elements */
@@ -474,7 +503,7 @@ textarea:focus-visible,
 }
 
 .kbd-shortcut {
-  @apply kbd kbd-sm;
+  @apply kbd kbd-base; /* Use base size for better readability on mobile */
 }
 
 /* Better Tables for Data */
@@ -487,7 +516,7 @@ textarea:focus-visible,
 }
 
 .data-table-heading {
-  @apply text-sm uppercase tracking-wider;
+  @apply text-base uppercase tracking-wider;
 }
 
 .data-table-row {
@@ -510,7 +539,7 @@ textarea:focus-visible,
     display: block;
     text-align: center;
     color: #888;
-    font-size: 0.85rem;
+    font-size: 1rem;
     margin-top: 0.25rem;
     opacity: 0.7;
   }
