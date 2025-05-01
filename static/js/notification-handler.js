@@ -13,7 +13,8 @@
  */
 
 export function createNotificationHandler({ DependencySystem } = {}) {
-  // Keep track of active notifications
+  // Keep track of active notifications and their timeouts
+  // Map of notificationId -> { element, timeoutId }
   const activeNotifications = new Map();
   let notificationCounter = 0;
   let _messageListenerAttached = false;
@@ -35,7 +36,10 @@ export function createNotificationHandler({ DependencySystem } = {}) {
   function show(message, type = 'info', options = {}) {
     const container = ensureNotificationContainer();
 
+    // Generate a unique ID each time
     const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
+
+    // Build the notification DOM element
     const notification = document.createElement('div');
     notification.id = notificationId;
     notification.className = `alert ${getAlertClass(type)} shadow-md my-2 notification-item`;
@@ -44,12 +48,13 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     const iconSvg = getIconForType(type);
     notification.innerHTML = `${iconSvg}<span>${message}</span>`;
 
+    // If there's an action button
     if (options.action && typeof options.onAction === 'function') {
       const actionButton = document.createElement('button');
       actionButton.className = 'btn btn-sm btn-ghost';
       actionButton.textContent = options.action;
       actionButton.onclick = (e) => {
-        e.stopPropagation();
+        e.stopPropagation(); // Prevent click from also dismissing the notification
         options.onAction();
         hide(notificationId);
       };
@@ -61,13 +66,19 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
     container.appendChild(notification);
 
-    activeNotifications.set(notificationId, notification);
-
-    const timeout = options.timeout === 0 ? null : (options.timeout || 5000);
-    if (timeout) {
-      setTimeout(() => hide(notificationId), timeout);
+    // Store this notification in the Map along with its timeout ID (if any)
+    const timeoutDuration = options.timeout === 0 ? null : (options.timeout || 5000);
+    let timeoutId = null;
+    if (timeoutDuration) {
+      timeoutId = setTimeout(() => hide(notificationId), timeoutDuration);
     }
 
+    activeNotifications.set(notificationId, {
+      element: notification,
+      timeoutId
+    });
+
+    // Default click-to-dismiss behavior; remove if you want to rely on explicit buttons only
     notification.addEventListener('click', () => {
       hide(notificationId);
     });
@@ -77,32 +88,46 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
   function hide(notificationId) {
     try {
-      const notification = typeof notificationId === 'string'
-        ? document.getElementById(notificationId) || activeNotifications.get(notificationId)
-        : notificationId;
+      // Notification can be a string ID or the HTMLElement itself
+      // Always try to look up by ID in our Map
+      const data = typeof notificationId === 'string'
+        ? activeNotifications.get(notificationId)
+        : null;
 
-      if (!notification) {
-        // Maybe already cleaned up
+      // If we didn't find a match in the Map, try using getElementById (fallback)
+      // This might be a leftover call or partial usage
+      const notificationElement = data?.element ||
+        (typeof notificationId === 'string' ? document.getElementById(notificationId) : notificationId);
+
+      if (!notificationElement) {
         activeNotifications.delete(String(notificationId));
         return false;
       }
 
-      notification.style.transition = 'opacity 0.3s ease-out';
-      notification.style.opacity = '0';
+      // Clear any pending timeout if it exists
+      if (data?.timeoutId) {
+        clearTimeout(data.timeoutId);
+      }
 
+      // Fade out
+      notificationElement.style.transition = 'opacity 0.3s ease-out';
+      notificationElement.style.opacity = '0';
+
+      // Remove from DOM after animation
       setTimeout(() => {
         try {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
+          if (notificationElement.parentNode) {
+            notificationElement.parentNode.removeChild(notificationElement);
           }
           activeNotifications.delete(String(notificationId));
-        } catch {
-          // Safe cleanup if already removed
+        } catch (err) {
+          console.error('[NotificationHandler] hide/timeout removeChild error:', err);
         }
       }, 300);
 
       return true;
-    } catch {
+    } catch (err) {
+      console.error('[NotificationHandler] hide function error:', err);
       return false;
     }
   }
@@ -110,7 +135,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
   function clear() {
     const container = document.getElementById('notificationContainer');
     if (container) {
-      Array.from(container.children).forEach(notification => {
+      Array.from(container.children).forEach((notification) => {
         hide(notification);
       });
       activeNotifications.clear();
@@ -135,14 +160,37 @@ export function createNotificationHandler({ DependencySystem } = {}) {
   function getIconForType(type) {
     switch (type) {
       case 'success':
-        return '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" ' +
+          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
+          'd="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>'
+        );
       case 'warning':
-        return '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" ' +
+          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
+          'd="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 ' +
+          '1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 ' +
+          '1.333.192 3 1.732 3z" /></svg>'
+        );
       case 'error':
-        return '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" ' +
+          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
+          'd="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 ' +
+          '0 9 9 0 0118 0z" /></svg>'
+        );
       case 'info':
       default:
-        return '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" ' +
+          'class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" ' +
+          'stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 ' +
+          '12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+        );
     }
   }
 
@@ -151,8 +199,10 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     try {
       const message = event.data;
       let handled = false;
-      // Hide notification message
+
+      // String-based special command to hide a notification
       if (typeof message === 'string' && message.includes('<hide-notification>')) {
+        // E.g., <hide-notification id="notification-XYZ"> or just <hide-notification>
         const idMatch = message.match(/<hide-notification(?:\s+id="([^"]+)")?\s*>/);
         const id = idMatch && idMatch[1];
         if (id) {
@@ -162,13 +212,16 @@ export function createNotificationHandler({ DependencySystem } = {}) {
         }
         handled = true;
       }
-      // Notification
+
+      // Object-based message, e.g., { type: 'notification', text: 'Hello', level: 'info' }
       else if (message && typeof message === 'object') {
         if (message.type === 'notification') {
           show(message.text, message.level || 'info', message.options || {});
           handled = true;
         }
       }
+
+      // Send a response if we handled something
       if (handled && event.source && event.origin) {
         try {
           event.source.postMessage({
@@ -176,9 +229,12 @@ export function createNotificationHandler({ DependencySystem } = {}) {
             success: true,
             messageId: message.id || null
           }, event.origin);
-        } catch { /* ignored */ }
+        } catch (err) {
+          console.error('[NotificationHandler] postMessage notification-handled error:', err);
+        }
       }
     } catch (err) {
+      // If there's an error, attempt to post back a notification-error
       if (event.source && event.origin) {
         try {
           event.source.postMessage({
@@ -187,8 +243,8 @@ export function createNotificationHandler({ DependencySystem } = {}) {
             error: err.message,
             messageId: event.data?.id || null
           }, event.origin);
-        } catch {
-          // ignore
+        } catch (err2) {
+          console.error('[NotificationHandler] postMessage notification-error:', err2);
         }
       }
     }
@@ -199,6 +255,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     window.addEventListener('message', handleNotificationMessages);
     _messageListenerAttached = true;
   }
+
   function removeMessageListener() {
     if (_messageListenerAttached) {
       window.removeEventListener('message', handleNotificationMessages);
@@ -206,8 +263,8 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     }
   }
 
-  // DependencySystem registration is now always handled in the orchestrator (app.js).
-  // No top-level registration or DependencySystem usage here.
+  // DependencySystem registration is now always handled in orchestrator (app.js).
+  // No top-level registration or usage here.
 
   return {
     show,

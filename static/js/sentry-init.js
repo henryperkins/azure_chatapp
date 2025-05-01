@@ -23,7 +23,7 @@
       // In production, respect user preference
       return userDisabled;
     } catch (e) {
-      // If localStorage is inaccessible (private mode, etc.), default to enabled
+      // If localStorage is inaccessible (private/incognito mode, etc.), default to enabled
       return false;
     }
   }
@@ -35,9 +35,10 @@
    */
   function getDsn() {
     return (
-      // Replace with actual DSN
+      // Replace with actual DSN or remove fallback if you never want a default
       (window.ENV?.SENTRY_DSN ||
-      window.SENTRY_DSN || 'YOUR_SENTRY_DSN_HERE')
+        window.SENTRY_DSN ||
+        'YOUR_SENTRY_DSN_HERE')
     );
   }
 
@@ -98,7 +99,7 @@
     const script = document.createElement('script');
     script.src = 'https://browser.sentry-cdn.com/7.50.0/bundle.min.js';
     script.crossOrigin = 'anonymous';
-    script.integrity = 'sha384-ABC123...'; // optional integrity hash
+    script.integrity = 'sha384-ABC123...'; // optional integrity hash (update with valid hash)
     script.referrerPolicy = 'strict-origin-when-cross-origin';
 
     script.onload = function () {
@@ -153,33 +154,34 @@
           ),
           integrations: [
             // New BrowserTracing integration for automatic performance tracing
+            // Note: This is hypothetical; actual usage may vary by Sentry version
             Sentry.browserTracingIntegration && Sentry.browserTracingIntegration({
-              // tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/], // optional
+              // tracePropagationTargets: [...], // optional
             }),
-            // Browser Tracing (legacy, can be removed if using browserTracingIntegration)
+            // Legacy BrowserTracing if you need it
             Sentry.BrowserTracing && Sentry.BrowserTracing({
               // advanced tracing config
             }),
             // Session Replay
             Sentry.replayIntegration && Sentry.replayIntegration({
-              maskAllText: true,      // Mask all text by default (recommended for privacy)
-              blockAllMedia: true,    // Block all images/media by default
-              // You can add more options here as needed, see docs
+              maskAllText: true,
+              blockAllMedia: true,
             }),
             // Capture console logs as breadcrumbs/events
             Sentry.captureConsoleIntegration && Sentry.captureConsoleIntegration({
-              // Optional: specify levels to capture
               // levels: ['log', 'info', 'warn', 'error', 'debug', 'assert']
             }),
+            // Show code context around errors
             Sentry.contextLinesIntegration && Sentry.contextLinesIntegration({
-              // frameContextLines: 7 // (optional)
+              // frameContextLines: 7,
             }),
           ].filter(Boolean),
           beforeSend(event, hint) {
             // If user disables in real time or we discover dev environment
             if (shouldDisableSentry()) {
-              return null;
+              return null; // discard the event
             }
+
             // Example: scrub sensitive params
             if (event.request?.url) {
               try {
@@ -190,7 +192,9 @@
                   }
                 });
                 event.request.url = url.toString();
-              } catch { /* ignore malformed URLs, just leave event.request.url unchanged */ }
+              } catch (err) {
+                console.error('[Sentry] Error redacting URL parameters:', err);
+              }
             }
             return event;
           }
@@ -222,6 +226,9 @@
         attachGlobalSentryHandlers();
         // Enhance fetch with distributed tracing
         enhanceFetchForSentry();
+
+        // Mark as initialized
+        window._sentryAlreadyInitialized = true;
       }
     };
 
@@ -271,15 +278,17 @@
       }
     });
 
-    // Override console.error
-    // const originalConsoleError = console.error;
-    // console.error = function (...args) {
-    //   const err = args[0] instanceof Error ? args[0] : new Error(args.join(' '));
-    //   if (window.Sentry && typeof Sentry.captureException === 'function') {
-    //     Sentry.captureException(err, { extra: { type: 'console.error', args: args.slice(1) } });
-    //   }
-    //   originalConsoleError.apply(console, args);
-    // };
+    // If desired, override console.error for capturing console-based errors:
+    /*
+    const originalConsoleError = console.error;
+    console.error = function (...args) {
+      const err = args[0] instanceof Error ? args[0] : new Error(args.join(' '));
+      if (window.Sentry && typeof Sentry.captureException === 'function') {
+        Sentry.captureException(err, { extra: { type: 'console.error', args: args.slice(1) } });
+      }
+      originalConsoleError.apply(console, args);
+    };
+    */
 
     // Log user clicks as breadcrumbs
     document.addEventListener('click', (event) => {
@@ -343,12 +352,17 @@
    */
   function enhanceFetchForSentry() {
     if (!window.fetch || !window.Sentry) return;
-
-    // Patch the built-in fetch
+    // Basic example of patching fetch (implementation can vary):
+    // const originalFetch = window.fetch;
+    // window.fetch = function (...args) {
+    //   // Insert Sentry trace headers or do other manipulations
+    //   return originalFetch.apply(this, args);
+    // };
   }
 
   // If a loader script calls sentryOnLoad, link to our init
   if (typeof window.sentryOnLoad === 'function') {
+    // Let the loader script call it explicitly
   } else {
     // Otherwise initialize Sentry immediately
     initializeSentry();
