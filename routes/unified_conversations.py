@@ -831,6 +831,18 @@ async def list_project_conversation_messages(
             }
             return make_sentry_trace_response(payload, span)
 
+        except ConversationError as ce:
+            span.set_tag("error", True)
+            span.set_tag("error.type", "conversation_access")
+            span.set_tag("error.status_code", ce.status_code)
+            capture_exception(ce)
+            metrics.incr("conversation.message_list.failure", 
+                        tags={"reason": "access_denied", "status_code": ce.status_code})
+            logger.warning(f"Conversation access denied: {str(ce)}")
+            raise HTTPException(
+                status_code=ce.status_code,
+                detail=ce.message
+            ) from ce
         except HTTPException:
             raise
         except Exception as e:
