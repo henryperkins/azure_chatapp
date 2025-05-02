@@ -464,7 +464,8 @@ export function createKnowledgeBaseComponent(options = {}) {
       ];
       requiredIds.forEach((id) => {
         if (!document.getElementById(id)) {
-          this._showPersistentErrorBanner(
+          this._notify(
+            "error",
             `Critical Knowledge Base UI element missing: #${id}. Please contact support.`
           );
           throw new Error(`[KnowledgeBaseComponent] Required element missing: #${id}`);
@@ -1143,7 +1144,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       else if (type === "error") cls = "alert-error";
 
       const alertDiv = document.createElement("div");
-      alertDiv.className = `alert ${cls} shadow-sm text-sm py-2 px-3`;
+      alertDiv.className = `alert ${cls} shadow-xs text-sm py-2 px-3`;
       alertDiv.setAttribute("role", "alert");
       setSanitizedHTML(alertDiv, `<span>${message}</span>`);
 
@@ -1165,34 +1166,9 @@ export function createKnowledgeBaseComponent(options = {}) {
      */
     _showError(msg) {
       this._showStatusAlert(msg, "error");
-      this._showPersistentErrorBanner(msg);
     }
 
-    /**
-     * Show a persistent error banner in the KB tab for critical failures.
-     * @param {string} message
-     * @private
-     */
-    _showPersistentErrorBanner(message) {
-      const container = this.elements.container || document.getElementById("knowledgeTab");
-      if (!container) return;
-      let banner = container.querySelector('.kb-persistent-error-banner');
-      if (!banner) {
-        banner = document.createElement('div');
-        banner.className = 'kb-persistent-error-banner bg-error text-error-content p-3 mb-3 rounded shadow';
-        banner.setAttribute('role', 'alert');
-        container.prepend(banner);
-      }
-      setSanitizedHTML(banner, `
-        <div class="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-          </svg>
-          <span>${message}</span>
-        </div>
-      `);
-      banner.classList.remove('hidden');
-    }
+    // (Removed: _showPersistentErrorBanner, now all error banners routed through notification system)
 
     /**
      * Show loading indicator for search
@@ -1362,12 +1338,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         }
         this._boundListeners = [];
       }
-      // Remove persistent error banner if present
-      const container = this.elements.container || document.getElementById("knowledgeTab");
-      if (container) {
-        const banner = container.querySelector('.kb-persistent-error-banner');
-        if (banner) banner.remove();
-      }
+      // No persistent error banner to remove; cleanup now only resets state
       // Reset state
       this.state.isInitialized = false;
     }

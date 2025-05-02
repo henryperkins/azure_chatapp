@@ -66,7 +66,7 @@
   --noise: 1;
 
   /* New variables for enhanced usability */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   --animation-duration: 200ms;
   --border-color: oklch(30% 0.02 277.5);
@@ -167,11 +167,11 @@ textarea:focus-visible,
 }
 
 .btn:hover {
-  @apply shadow-md transform-gpu -translate-y-0.5;
+  @apply shadow-xs transform-gpu -translate-y-0.5; /* v4: shadow-xs is new default, consider shadow-xs if old v3 shadow-xs needed */
 }
 
 .btn:active, .btn:focus:active {
-  @apply shadow-sm transform-gpu translate-y-0 active:bg-primary/20;
+  @apply shadow-xs transform-gpu translate-y-0 active:bg-primary/20; /* see above */
 }
 
 /* Enhanced form field states */
@@ -300,11 +300,12 @@ textarea:focus-visible,
 /* Ensure chat bubbles never overflow horizontally */
 .chat-bubble {
   @apply max-w-full break-words;
+  word-break: break-word; /* Fallback for old browsers lacking break-words */
 }
 
 /* Enhanced Knowledge Base UI */
 .kb-result-card {
-  @apply card bg-base-100 shadow-sm hover:shadow-md transition-all border border-base-300 cursor-pointer;
+  @apply card bg-base-100 shadow-xs hover:shadow-md transition-all border border-base-300 cursor-pointer;
 }
 
 .kb-result-card:focus-visible {
@@ -396,7 +397,7 @@ textarea:focus-visible,
 
 /* Enhanced Skeleton Loading State */
 .skeleton-card {
-  @apply card shadow-sm border border-base-300 animate-pulse p-4 bg-base-200;
+  @apply card shadow-xs border border-base-300 animate-pulse p-4 bg-base-200;
 }
 
 .skeleton-text {
@@ -465,6 +466,15 @@ textarea:focus-visible,
 }
 
 /* Enhanced Notification Styling */
+#notificationContainer .alert {
+  opacity: 0.7;
+}
+
+.alert-info {
+  background-color: transparent !important;
+  background: rgba(56, 189, 248, 0.6) !important;
+}
+
 .notification {
   @apply alert shadow-lg max-w-md duration-300;
 }
@@ -671,8 +681,9 @@ textarea:focus-visible,
 /* Utility: Avoid text-xs for essential info on mobile */
 @media (max-width: 640px) {
   .text-xs {
-    font-size: 0.875rem !important; /* Promote to text-sm for readability */
+    font-size: 0.875rem !important; /* This is text-sm size. Rename the utility or explain via comment. */
     line-height: 1.25rem !important;
+    /* Consider defining a mobile-only text-sm class, or use `text-sm` directly. */
   }
 }
 
