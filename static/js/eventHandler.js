@@ -510,6 +510,73 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
   }
 
 
+  // ---- Modal login/register tab hookup ----
+  function setupModalTabs() {
+    const loginTab = document.getElementById("loginTab");
+    const registerTab = document.getElementById("registerTab");
+    const loginPanel = document.getElementById("loginPanel");
+    const registerPanel = document.getElementById("registerPanel");
+    function showTab(tab) {
+      if (!(loginTab && registerTab && loginPanel && registerPanel)) return;
+      if (tab === "login") {
+        loginTab.classList.add("tab-active");
+        loginTab.setAttribute("aria-selected", "true");
+        registerTab.classList.remove("tab-active");
+        registerTab.setAttribute("aria-selected", "false");
+        loginPanel.style.display = "block";
+        registerPanel.style.display = "none";
+      } else {
+        registerTab.classList.add("tab-active");
+        registerTab.setAttribute("aria-selected", "true");
+        loginTab.classList.remove("tab-active");
+        loginTab.setAttribute("aria-selected", "false");
+        registerPanel.style.display = "block";
+        loginPanel.style.display = "none";
+      }
+    }
+    if (loginTab && registerTab && loginPanel && registerPanel) {
+      // Use trackListener not addEventListener!
+      trackListener(loginTab, "click", () => showTab("login"), { description: "Login modal tab" });
+      trackListener(registerTab, "click", () => showTab("register"), { description: "Register modal tab" });
+
+      // Modal open happens via showModal/show etc., so check global signal to open on register if present
+      const loginModal = document.getElementById("loginModal");
+      if (loginModal) {
+        const ensureTab = () => {
+          if (window && window.showRegisterTab) {
+            showTab("register");
+            window.showRegisterTab = false;
+          } else {
+            showTab("login");
+          }
+        };
+        // Listen for both show and transition to visible
+        loginModal.addEventListener("show", ensureTab);
+        new MutationObserver(() => {
+          if (loginModal.open || loginModal.style.display === "flex" || loginModal.style.display === "block") {
+            ensureTab();
+          }
+        }).observe(loginModal, {attributes: true, attributeFilter: ["open", "style", "class"]});
+      }
+      window.openLoginRegisterModal = function(tab) {
+        const loginModal = document.getElementById("loginModal");
+        if (loginModal) {
+          if (tab === "register") {
+            window.showRegisterTab = true;
+          }
+          if (window.modalManager && window.modalManager.show) {
+            window.modalManager.show("login");
+          } else {
+            loginModal.showModal();
+          }
+        }
+      };
+      window.showRegisterModal = () => window.openLoginRegisterModal("register");
+    }
+  }
+  document.addEventListener('modalsLoaded', setupModalTabs);
+  // ---- end modal tab hookup ----
+
   let initialized = false;
   async function init() {
     if (initialized) return;
@@ -520,6 +587,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     setupCommonElements();
     setupNavigationElements();
     setupContentElements();
+    setupModalTabs(); // catch case where modalsLoaded happens before this point
     initialized = true;
     console.log('[EventHandler] All handlers initialized');
   }

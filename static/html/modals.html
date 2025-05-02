@@ -317,36 +317,67 @@
 </dialog>
 
 <!-- Knowledge Result Detail Modal (Enhanced) -->
-<dialog id="loginModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="loginModalTitle">
-  <form id="loginModalForm" class="modal-box max-w-sm w-full space-y-3">
-    <div class="flex justify-between items-center mb-1">
-      <h3 id="loginModalTitle" class="text-xl font-bold">Login</h3>
-      <button id="loginModalCancelBtn" type="button" class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close login dialog">
-        <span class="sr-only">Close</span>
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-        </svg>
+<dialog id="loginModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="loginRegisterModalTitle">
+  <div class="modal-box max-w-sm">
+    <form method="dialog" class="absolute right-2 top-2">
+      <button class="btn btn-sm btn-circle btn-ghost" aria-label="Close dialog">
+        <span class="sr-only">Close</span>✕
       </button>
+    </form>
+    <h3 id="loginRegisterModalTitle" class="font-bold text-xl mb-3 mt-2 text-center">Welcome</h3>
+    <div class="flex border-b border-base-200 mb-3">
+      <button id="loginTab" type="button" class="tab tab-bordered flex-1 tab-active rounded-t-lg" aria-selected="true">Login</button>
+      <button id="registerTab" type="button" class="tab tab-bordered flex-1 rounded-t-lg" aria-selected="false">Register</button>
     </div>
-    <div class="form-control-enhanced">
-      <label for="loginModalUsername" class="label font-medium">Username</label>
-      <input type="text" id="loginModalUsername" name="username" required aria-required="true" class="input input-bordered w-full validator" autocomplete="username"/>
-      <p id="loginModalUsername-hint" class="validator-hint hidden" role="alert"></p>
+    <div id="loginPanel" class="tab-panel" role="tabpanel" aria-labelledby="loginTab" style="display:block;">
+      <form id="loginModalForm" class="space-y-3">
+        <div class="form-control-enhanced">
+          <label for="loginModalUsername" class="label font-medium">Username</label>
+          <input type="text" id="loginModalUsername" name="username" required aria-required="true" class="input input-bordered w-full validator" autocomplete="username"/>
+          <p id="loginModalUsername-hint" class="validator-hint hidden" role="alert"></p>
+        </div>
+        <div class="form-control-enhanced">
+          <label for="loginModalPassword" class="label font-medium">Password</label>
+          <input type="password" id="loginModalPassword" name="password" required aria-required="true" class="input input-bordered w-full validator" autocomplete="current-password"/>
+          <p id="loginModalPassword-hint" class="validator-hint hidden" role="alert"></p>
+        </div>
+        <div id="loginModalError" class="hidden text-error text-sm" role="alert"></div>
+        <div class="modal-action flex-col sm:flex-row justify-end gap-2 pt-2">
+          <button id="loginModalSubmitBtn" type="submit" class="btn btn-primary w-full sm:w-auto">Login</button>
+        </div>
+      </form>
     </div>
-    <div class="form-control-enhanced">
-      <label for="loginModalPassword" class="label font-medium">Password</label>
-      <input type="password" id="loginModalPassword" name="password" required aria-required="true" class="input input-bordered w-full validator" autocomplete="current-password"/>
-      <p id="loginModalPassword-hint" class="validator-hint hidden" role="alert"></p>
+    <div id="registerPanel" class="tab-panel" role="tabpanel" aria-labelledby="registerTab" style="display:none;">
+      <form id="registerModalForm" class="space-y-3">
+        <div class="form-control-enhanced">
+          <label for="registerModalUsername" class="label font-medium">Username</label>
+          <input type="text" id="registerModalUsername" name="username" required aria-required="true" class="input input-bordered w-full validator" autocomplete="username"/>
+          <p id="registerModalUsername-hint" class="validator-hint hidden" role="alert"></p>
+        </div>
+        <div class="form-control-enhanced">
+          <label for="registerModalEmail" class="label font-medium">Email</label>
+          <input type="email" id="registerModalEmail" name="email" required aria-required="true" class="input input-bordered w-full validator" autocomplete="email"/>
+          <p id="registerModalEmail-hint" class="validator-hint hidden" role="alert"></p>
+        </div>
+        <div class="form-control-enhanced">
+          <label for="registerModalPassword" class="label font-medium">Password</label>
+          <input type="password" id="registerModalPassword" name="password" required aria-required="true" minlength="8" class="input input-bordered w-full validator" autocomplete="new-password"/>
+          <p id="registerModalPassword-hint" class="validator-hint hidden" role="alert"></p>
+        </div>
+        <div class="form-control-enhanced">
+          <label for="registerModalPasswordConfirm" class="label font-medium">Confirm Password</label>
+          <input type="password" id="registerModalPasswordConfirm" name="passwordConfirm" required aria-required="true" minlength="8" class="input input-bordered w-full validator" autocomplete="new-password"/>
+          <p id="registerModalPasswordConfirm-hint" class="validator-hint hidden" role="alert"></p>
+        </div>
+        <div id="registerModalError" class="hidden text-error text-sm" role="alert"></div>
+        <div class="modal-action flex-col sm:flex-row justify-end gap-2 pt-2">
+          <button id="registerModalSubmitBtn" type="submit" class="btn btn-primary w-full sm:w-auto">Register</button>
+        </div>
+      </form>
     </div>
-    <div id="loginModalError" class="hidden text-error text-sm" role="alert"></div>
-
-    <div class="modal-action justify-end gap-2 pt-4">
-      <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
-        <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
-      </kbd>
-      <button id="loginModalSubmitBtn" type="submit" class="btn btn-primary w-full sm:w-auto">Login</button>
-      <button id="loginModalCancelBtn2" type="button" class="btn btn-ghost w-full sm:w-auto">Cancel</button>
-    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button aria-label="Close"></button>
   </form>
 </dialog>
 
@@ -450,6 +481,10 @@
     document.querySelectorAll('dialog.modal').forEach(dialog => {
       dialog.addEventListener('show', () => trapFocus(dialog));
     });
+
+    // Wait for correct HTML, then attach any modal-init logic if needed (tab switching delegated to eventHandler.js)
+    document.addEventListener('modalsLoaded', function() {});
+
     // Initialize modal close buttons
     // Helper function to find the modal name from its ID
     function getModalNameFromId(modalId) {
@@ -558,6 +593,54 @@
         }
       });
     }
+
+    // --- Registration form submit logic (stub, not yet backend integrated) ---
+    const registerForm = document.getElementById('registerModalForm');
+    if (registerForm) {
+      registerForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const submitButton = document.getElementById('registerModalSubmitBtn');
+        setButtonLoading(submitButton, true);
+        // Clear error
+        document.getElementById('registerModalError').classList.add('hidden');
+
+        // Collect form data
+        const formData = new FormData(this);
+        const data = {
+          username: formData.get('username')?.trim(),
+          email: formData.get('email')?.trim(),
+          password: formData.get('password'),
+          passwordConfirm: formData.get('passwordConfirm')
+        };
+
+        // client-side validation (stub example)
+        if (!data.username || !data.email || !data.password || !data.passwordConfirm) {
+          showRegisterError('Please fill in all the fields.');
+          setButtonLoading(submitButton, false);
+          return;
+        }
+        if (data.password !== data.passwordConfirm) {
+          showRegisterError('Passwords do not match.');
+          setButtonLoading(submitButton, false);
+          return;
+        }
+        // TODO: Replace this with actual API registration call
+        notify('info', '[Demo] Registration attempt for user: ' + data.username + ' (not actually sent)');
+        setTimeout(() => {
+          showRegisterError('Registration handling is not yet implemented.');
+          setButtonLoading(submitButton, false);
+        }, 1000);
+      });
+      function showRegisterError(msg) {
+        const el = document.getElementById('registerModalError');
+        if (el) {
+          el.textContent = msg;
+          el.classList.remove('hidden');
+        }
+      }
+    }
+    // --- end registration form hookup ---
+
 
      // Project form submit (ensure it uses the manager to close)
     const projectForm = document.getElementById('projectModalForm');
