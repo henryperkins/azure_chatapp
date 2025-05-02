@@ -26,6 +26,8 @@ class ProjectDashboard {
     };
 
     // Injected browser abstractions
+    // Note: setTimeout & requestAnimationFrame default shims provided for browser environments only.
+    // Prefer explicit scheduling/animation abstractions via DI for testability and portability.
     this.browserService = getModule('browserService') || {
       getLocationHref: () => '',
       setHistory: () => { },
@@ -35,7 +37,13 @@ class ProjectDashboard {
       setItem: () => { },
       getItem: () => null,
       removeItem: () => { },
+      /**
+       * For DOM style/layout flushes or async updates—use ONLY if needed for UI smoothness, else prefer hooks/events.
+       */
       setTimeout: (fn, ms) => setTimeout(fn, ms),
+      /**
+       * For animation frames—prefer explicit DI for tests.
+       */
       requestAnimationFrame: (fn) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(fn) : setTimeout(fn, 0))
     };
 
@@ -309,7 +317,11 @@ class ProjectDashboard {
     add(document, 'projectArtifactsLoaded', this._handleArtifactsLoaded.bind(this));
     add(document, 'projectNotFound', this._handleProjectNotFound.bind(this));
     add(document, 'projectCreated', this._handleProjectCreated.bind(this));
-    add(window, 'popstate', this._handlePopState.bind(this));
+    // Use injected windowObject (from DependencySystem) for popstate; never reference direct global.
+    const win = this.getModule('windowObject') || undefined;
+    if (win) {
+      add(win, 'popstate', this._handlePopState.bind(this));
+    }
     add(document, 'authStateChanged', this._handleAuthStateChange.bind(this));
   }
 
@@ -463,5 +475,3 @@ class ProjectDashboard {
 export function createProjectDashboard(dependencySystem) {
   return new ProjectDashboard(dependencySystem);
 }
-
-export default createProjectDashboard;

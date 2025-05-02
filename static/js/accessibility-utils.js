@@ -1,15 +1,28 @@
 /**
- * accessibility-utils.js – centralized accessibility helpers & keyboard shortcuts
+ * accessibility-utils.js – Centralized accessibility + keyboard shortcut helpers, teardown-safe.
  *
- * This refactored version addresses:
- *  - A teardown method for SPA usage
- *  - Replacing direct addEventListener calls with eventHandlers.trackListener
- *  - Error handling on async code
- *  - More modular keyboard shortcut logic
+ * ## Purpose
+ * Modular accessibility improvement for SPA UIs: keyboard navigation, modal focus, skip links, etc.
  *
- * Exports:
+ * ## Design
+ * - NO direct window/global usage: all dependencies (eventHandlers, DependencySystem, notificationHandler) must be injected.
+ * - NO side-effects on import: must be explicitly initialized by calling `initAccessibilityEnhancements(opts)`.
+ * - All DOM events must register via eventHandlers.trackListener (never use raw addEventListener except in wrapped helper called here via trackListener).
+ * - Notification, warning, and error feedback routed via injected notificationHandler/showNotification (never console.log/error/warn).
+ * - All async handlers have try/catch and propagate errors contextually via notificationHandler.
+ * - All state is internal or closure-bound; nothing leaks to window or global scope.
+ * - Full teardown support: all listeners cleaned via eventHandlers.cleanupListeners in destroyAccessibilityEnhancements.
+ *
+ * ## Exports:
  *   initAccessibilityEnhancements(opts)
  *   destroyAccessibilityEnhancements()
+ *
+ * ## DI requirements (all REQUIRED!):
+ *   - opts.eventHandlers: { trackListener, cleanupListeners }
+ *   - opts.notificationHandler: notification sink (object: .show/.warn/.error or function (msg, type))
+ *   - opts.DependencySystem: Strongly recommended for registration, but not used for global lookup.
+ *
+ * If any checklist item is not met, the module must be revised before deployment or merge.
  */
 
 let keyboardShortcutsEnabled = true;
@@ -17,6 +30,7 @@ let lastFocusedElement = null;
 
 let eventHandlers;
 let DependencySystem;
+let notificationHandler;
 
 /**
  * Stores references to key event bindings so we can untrack them during teardown.
@@ -28,17 +42,21 @@ const registeredHandlers = [];
 /**
  * Initialize all accessibility enhancements.
  * Should be called once during app bootstrap.
- * @param {Object} opts - Optional dependencies
- * @param {Object} opts.eventHandlers - Event handler utilities (required)
- * @param {Object} opts.DependencySystem - Dependency system (optional)
+ * @param {Object} opts - DI dependencies.
+ * @param {Object} opts.eventHandlers - { trackListener, cleanupListeners } (required)
+ * @param {Function|Object} opts.notificationHandler - notificationHandler or showNotification (required)
+ * @param {Object} [opts.DependencySystem] - DependencySystem reference (optional, for DS.register)
  */
 export function initAccessibilityEnhancements(opts = {}) {
-  DependencySystem =
-    opts.DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
-  eventHandlers =
-    opts.eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers'));
-  if (!eventHandlers) {
-    throw new Error('eventHandlers required for accessibility-utils');
+  eventHandlers = opts.eventHandlers;
+  notificationHandler = opts.notificationHandler;
+  DependencySystem = opts.DependencySystem;
+
+  if (!eventHandlers || typeof eventHandlers.trackListener !== 'function') {
+    throw new Error('eventHandlers with trackListener required for accessibility-utils');
+  }
+  if (!notificationHandler) {
+    throw new Error('notificationHandler (or showNotification function) required for accessibility-utils');
   }
 
   bindGlobalShortcuts();
@@ -72,7 +90,13 @@ export function destroyAccessibilityEnhancements() {
         h.description
       );
     } catch (err) {
-      console.warn('[Accessibility] Failed removing listener:', h, err);
+      if (typeof notificationHandler.warn === 'function') {
+        notificationHandler.warn(`[Accessibility] Failed removing listener: ${h.description || ''}`, err);
+      } else if (typeof notificationHandler.show === 'function') {
+        notificationHandler.show(`[Accessibility] Failed removing listener: ${h.description || ''}`, 'warn');
+      } else if (typeof notificationHandler === 'function') {
+        notificationHandler(`[Accessibility] Failed removing listener: ${h.description || ''}`, 'warn');
+      }
     }
   });
   registeredHandlers.length = 0;
@@ -87,63 +111,79 @@ export function destroyAccessibilityEnhancements() {
  */
 function bindGlobalShortcuts() {
   const handler = async function handleGlobalKeydown(e) {
-    if (!keyboardShortcutsEnabled || isInput(e.target)) return;
-
-    let sidebar = null;
     try {
-      sidebar = await DependencySystem?.waitFor?.('sidebar', null, 3000);
-    } catch (err) {
-      console.error('Sidebar waitFor failed:', err);
-      // Gracefully continue without sidebar.
-    }
+      if (!keyboardShortcutsEnabled || isInput(e.target)) return;
 
-    // toggle sidebar: `/`, `` ` ``, or `\`
-    if ((e.key === '/' || e.key === '`' || e.key === '\\') && noMods(e)) {
-      e.preventDefault();
-      sidebar?.toggleSidebar();
-      return;
-    }
+      let sidebar = null;
+      try {
+        sidebar = await DependencySystem?.waitFor?.('sidebar', null, 3000);
+      } catch (err) {
+        if (typeof notificationHandler.error === 'function') {
+          notificationHandler.error('Sidebar waitFor failed:', err);
+        } else if (typeof notificationHandler.show === 'function') {
+          notificationHandler.show(`Sidebar waitFor failed: ${err && err.message ? err.message : err}`, 'error');
+        } else if (typeof notificationHandler === 'function') {
+          notificationHandler(`Sidebar waitFor failed: ${err && err.message ? err.message : err}`, 'error');
+        }
+        // Gracefully continue without sidebar.
+      }
 
-    // switch tabs: 1 → recent, 2 → starred, 3 → projects
-    if (noMods(e) && ['1', '2', '3'].includes(e.key)) {
-      e.preventDefault();
-      const mapping = { '1': 'recent', '2': 'starred', '3': 'projects' };
-      sidebar?.activateTab(mapping[e.key]);
-      return;
-    }
+      // toggle sidebar: `/`, `` ` ``, or `\`
+      if ((e.key === '/' || e.key === '`' || e.key === '\\') && noMods(e)) {
+        e.preventDefault();
+        sidebar?.toggleSidebar();
+        return;
+      }
 
-    // pin/unpin: `p`
-    if (e.key.toLowerCase() === 'p' && noMods(e)) {
-      e.preventDefault();
-      sidebar?.togglePin();
-      return;
-    }
+      // switch tabs: 1 → recent, 2 → starred, 3 → projects
+      if (noMods(e) && ['1', '2', '3'].includes(e.key)) {
+        e.preventDefault();
+        const mapping = { '1': 'recent', '2': 'starred', '3': 'projects' };
+        sidebar?.activateTab(mapping[e.key]);
+        return;
+      }
 
-    // new project/conversation: `n`
-    if (e.key.toLowerCase() === 'n' && noMods(e)) {
-      e.preventDefault();
-      document.getElementById('sidebarNewProjectBtn')?.click();
-      return;
-    }
+      // pin/unpin: `p`
+      if (e.key.toLowerCase() === 'p' && noMods(e)) {
+        e.preventDefault();
+        sidebar?.togglePin();
+        return;
+      }
 
-    // focus search: `s`
-    if (e.key.toLowerCase() === 's' && noMods(e)) {
-      e.preventDefault();
-      focusElement('#sidebarProjectSearch');
-      return;
-    }
+      // new project/conversation: `n`
+      if (e.key.toLowerCase() === 'n' && noMods(e)) {
+        e.preventDefault();
+        document.getElementById('sidebarNewProjectBtn')?.click();
+        return;
+      }
 
-    // toggle keyboard-help: `?`
-    if (e.key === '?' && noMods(e)) {
-      e.preventDefault();
-      toggleKeyboardHelp();
-      return;
-    }
+      // focus search: `s`
+      if (e.key.toLowerCase() === 's' && noMods(e)) {
+        e.preventDefault();
+        focusElement('#sidebarProjectSearch');
+        return;
+      }
 
-    // close keyboard-help: Escape
-    if (e.key === 'Escape') {
-      closeKeyboardHelpIfOpen();
-      return;
+      // toggle keyboard-help: `?`
+      if (e.key === '?' && noMods(e)) {
+        e.preventDefault();
+        toggleKeyboardHelp();
+        return;
+      }
+
+      // close keyboard-help: Escape
+      if (e.key === 'Escape') {
+        closeKeyboardHelpIfOpen();
+        return;
+      }
+    } catch (error) {
+      if (typeof notificationHandler.error === 'function') {
+        notificationHandler.error('[Accessibility] Uncaught error in global keyboard shortcut handler', error);
+      } else if (typeof notificationHandler.show === 'function') {
+        notificationHandler.show('[Accessibility] Keyboard shortcut error: ' + (error && error.message ? error.message : error), 'error');
+      } else if (typeof notificationHandler === 'function') {
+        notificationHandler('[Accessibility] Keyboard shortcut error: ' + (error && error.message ? error.message : error), 'error');
+      }
     }
   };
 
@@ -336,9 +376,14 @@ function trapFocus(container) {
       }
     }
   };
-  container.addEventListener('keydown', keydownHandler);
+  // Register keydown via tracked/teardown-safe handler.
+  trackListenerWithRegister(container, 'keydown', keydownHandler, {
+    description: 'Trap focus Tab handler'
+  });
 
-  // Ensure focus is inside container
+  // Ensure focus is inside container.
+  // Timing hack: Without setTimeout, browser may not be ready to focus immediately after dialog opens.
+  // This is required to ensure focus is visible for assistive tech and keyboard navigation.
   setTimeout(() => {
     if (!container.contains(document.activeElement)) first.focus();
   }, 50);
@@ -368,6 +413,8 @@ function focusElement(target, delay = 0) {
   const el = typeof target === 'string' ? document.querySelector(target) : target;
   if (!el || typeof el.focus !== 'function') return false;
   if (delay) {
+    // Timing hack: Required for cases where element may not be immediately focusable on DOM mutation/dialog open.
+    // For accessibility, this ensures screen readers and keyboard users get expected focus behavior.
     setTimeout(() => el.focus(), delay);
   } else {
     el.focus();
@@ -401,6 +448,8 @@ function announce(text, mode = 'polite') {
     document.body.appendChild(region);
   }
   region.textContent = '';
+  // Timing hack: Needed for ARIA live region announcement (screen readers require DOM mutation separation).
+  // Ensures assistive technology announces the updated string.
   setTimeout(() => {
     region.textContent = text;
   }, 50);

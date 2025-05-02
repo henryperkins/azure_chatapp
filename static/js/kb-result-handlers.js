@@ -1,26 +1,39 @@
 /**
- * kb-result-handlers.js (DependencySystem/ESM Refactored)
+ * kb-result-handlers.js – Modular KB result interaction handlers (fully DI/SPA-compliant)
  *
- * Modular handlers for Knowledge Base result interactions:
- * - Clipboard copy for KB results
- * - Enhanced KB result display styling by relevance
- * - Metadata enrichment for KB result modal
+ * ## Features
+ *  - Clipboard copy for KB results (ARIA/notification, safe DOM APIs)
+ *  - Enhanced KB result display styling by relevance
+ *  - Metadata enrichment for KB result modal
  *
- * Dependencies (supplied via DI/DependencySystem options):
- *   - eventHandlers: REQUIRED (for trackListener)
+ * ## Dependencies (all via DI, none global!)
+ *   - eventHandlers: REQUIRED ({ trackListener })
+ *   - notificationHandler: REQUIRED (object { error, warn, show } or fn(msg, type))
+ *   - DOMPurify: REQUIRED (sanitizer function/class instance for innerHTML)
+ *   - domAPI: OPTIONAL (for window/document access, default: window/document)
  *
- * Usage (in app.js or orchestrator):
- *   import { createKbResultHandlers } from './kb-result-handlers.js';
- *   const kbResultHandlers = createKbResultHandlers({ eventHandlers });
+ * ## Usage
+ *   import createKbResultHandlers from './kb-result-handlers.js';
+ *   const kbResultHandlers = createKbResultHandlers({ eventHandlers, notificationHandler, DOMPurify, domAPI });
  *   kbResultHandlers.init();
  *
- * *DO NOT* use as a global script or with legacy global event listeners!
+ *  - DO NOT use as a global script or legacy script tag.
+ *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-export function createKbResultHandlers({ eventHandlers } = {}) {
+export default function createKbResultHandlers({ eventHandlers, notificationHandler, DOMPurify, domAPI } = {}) {
   if (!eventHandlers) {
     throw new Error('[kb-result-handlers] eventHandlers dependency required');
   }
+  if (!notificationHandler) {
+    throw new Error('[kb-result-handlers] notificationHandler dependency required');
+  }
+  if (!DOMPurify) {
+    throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
+  }
+  const doc = (domAPI && domAPI.document) || (typeof document !== 'undefined' ? document : null);
+  const wnd = (domAPI && domAPI.window) || (typeof window !== 'undefined' ? window : null);
+
 
   // -- Init function, call once when DOM is ready and deps are injected
   function init() {
@@ -42,7 +55,7 @@ export function createKbResultHandlers({ eventHandlers } = {}) {
     if (kbModal) {
       eventHandlers.trackListener(kbModal, 'keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-          const selection = window.getSelection();
+          const selection = wnd.getSelection && wnd.getSelection();
           if (!selection || selection.toString().trim() === '') {
             e.preventDefault();
             copyKnowledgeContent();
@@ -63,7 +76,13 @@ export function createKbResultHandlers({ eventHandlers } = {}) {
         showCopyFeedback(true);
       })
       .catch(err => {
-        console.error('Failed to copy text: ', err);
+        if (typeof notificationHandler.error === 'function') {
+          notificationHandler.error('[KB Clipboard] Failed to copy text:', err);
+        } else if (typeof notificationHandler.show === 'function') {
+          notificationHandler.show('[KB Clipboard] Failed to copy text: ' + (err && err.message ? err.message : err), 'error');
+        } else if (typeof notificationHandler === 'function') {
+          notificationHandler('[KB Clipboard] Failed to copy text: ' + (err && err.message ? err.message : err), 'error');
+        }
         showCopyFeedback(false);
       });
   }
@@ -80,7 +99,7 @@ export function createKbResultHandlers({ eventHandlers } = {}) {
 
       const iconSvg = feedbackEl.querySelector('svg');
       if (iconSvg) {
-        iconSvg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />';
+        iconSvg.innerHTML = DOMPurify.sanitize('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />');
       }
     } else {
       feedbackEl.classList.remove('alert-error');
@@ -89,13 +108,14 @@ export function createKbResultHandlers({ eventHandlers } = {}) {
 
       const iconSvg = feedbackEl.querySelector('svg');
       if (iconSvg) {
-        iconSvg.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />';
+        iconSvg.innerHTML = DOMPurify.sanitize('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />');
       }
     }
 
     feedbackEl.classList.remove('hidden');
 
     // Hide after delay (reset state)
+    // Timing hack: Ensure feedback is visible for a fixed period to all users (including keyboard and screen reader users)
     setTimeout(() => {
       feedbackEl.classList.add('hidden');
     }, 3000);
@@ -186,5 +206,3 @@ export function createKbResultHandlers({ eventHandlers } = {}) {
   // Factory returns API
   return { init };
 }
-
-export default createKbResultHandlers;
