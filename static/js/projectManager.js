@@ -365,14 +365,32 @@ class ProjectManager {
    * @returns {Promise<Project[]>} The loaded projects.
    */
   async loadProjects(filter = 'all') {
+    console.log(`[ProjectManager] loadProjects called with filter: ${filter}`);
+
     if (this.projectLoadingInProgress) {
+      console.log("[ProjectManager] loadProjects: already in progress");
       this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
       return [];
     }
-    if (!this.requireAuthenticatedOrEmit("projectsLoaded", { reason: 'auth_required' })) {
+
+    // Check authentication status and log more details
+    if (!this.app?.state?.isAuthenticated) {
+      console.error("[ProjectManager] Not authenticated, cannot load projects");
+      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects");
+      this._emitEvent("projectsLoaded", {
+        error: true,
+        message: 'Authentication required to load projects',
+        reason: 'auth_required'
+      });
       return [];
     }
 
+    if (!this.requireAuthenticatedOrEmit("projectsLoaded", { reason: 'auth_required' })) {
+      console.error("[ProjectManager] Authentication check failed in requireAuthenticatedOrEmit");
+      return [];
+    }
+
+    console.log("[ProjectManager] Starting to load projects...");
     this.projectLoadingInProgress = true;
     this._emitEvent("projectsLoading", { filter });
 
@@ -380,26 +398,38 @@ class ProjectManager {
       const params = new URLSearchParams({ filter, skip: '0', limit: '100' });
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
 
+      console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
+
+      if (!this.app?.apiRequest) {
+        throw new Error("apiRequest function not available in app dependency");
+      }
+
       const response = await this.app.apiRequest(endpoint);
+      console.log('[ProjectManager] Raw projects response:', response);
       this.notificationHandler.log('[ProjectManager] Raw projects response:', response);
 
-      // Use a standard parse approach
-      const projects = this._parseProjectsArray(response);
+      // Use a standard parse approach - use extractResourceList since _parseProjectsArray doesn't exist
+      const projects = extractResourceList(response, { listKeys: ["projects"] }) || [];
+      console.log(`[ProjectManager] Parsed ${projects ? projects.length : 0} projects`);
 
       // Optionally auto-select the first if none selected
-      if (!this.currentProject && projects.length > 0) {
-        this.setCurrentProject?.(projects[0]);
-        document.dispatchEvent(
-          new CustomEvent('currentProjectReady', {
-            detail: { project: this.currentProject }
-          })
-        );
-      }
+      // if (!this.currentProject && projects.length > 0) {
+      //   console.log(`[ProjectManager] Auto-selecting first project: ${projects[0].id}`);
+      //   this.setCurrentProject?.(projects[0]);
+      //   document.dispatchEvent(
+      //     new CustomEvent('currentProjectReady', {
+      //       detail: { project: this.currentProject }
+      //     })
+      //   );
+      // }
+
       this._emitEvent("projectsLoaded", { projects, filter });
       return projects;
     } catch (error) {
+      console.error("[ProjectManager] Error loading projects:", error);
       return this.handleError("projectsLoaded", error, []);
     } finally {
+      console.log("[ProjectManager] Finished loadProjects operation, resetting loading flag");
       this.projectLoadingInProgress = false;
     }
   }
@@ -718,6 +748,38 @@ class ProjectManager {
     return this.currentProject ? JSON.parse(JSON.stringify(this.currentProject)) : null;
   }
 
+  /**
+   * Sets the current active project and triggers relevant events
+   * @param {Project} project - The project to set as current
+   */
+  setCurrentProject(project) {
+    if (!project || !project.id) {
+      console.error('[ProjectManager] Cannot set invalid project as current', project);
+      return;
+    }
+
+    console.log(`[ProjectManager] Setting current project: ${project.id}`);
+    const previousProject = this.currentProject;
+    this.currentProject = project;
+
+    // Save current project ID to storage if available
+    if (this.storage?.setItem) {
+      this.storage.setItem('selectedProjectId', project.id);
+    }
+
+    // Emit event for project change
+    document.dispatchEvent(
+      new CustomEvent('currentProjectChanged', {
+        detail: {
+          project,
+          previousProject
+        }
+      })
+    );
+
+    return project;
+  }
+
   async prepareFileUploads(projectId, fileList) {
     const validatedFiles = [];
     const invalidFiles = [];
@@ -889,6 +951,35 @@ class ProjectManager {
  * This is checklist-compliant: always returns a new instance, not a singleton; never runs logic on import.
  */
 function createProjectManager(deps = {}) {
+  // Add additional validation to ensure DependencySystem is provided
+  if (!deps.DependencySystem) {
+    console.error('[ProjectManager] DependencySystem is missing in createProjectManager', deps);
+    throw new Error('DependencySystem is required for ProjectManager');
+  }
+
+  // Validate app from DependencySystem if not directly provided
+  if (!deps.app) {
+    const app = deps.DependencySystem.modules.get('app');
+    if (!app) {
+      console.error('[ProjectManager] app module not found in DependencySystem');
+      throw new Error('app module not found in DependencySystem or direct dependency');
+    }
+    deps.app = app;
+  }
+
+  // Validate chatManager
+  if (!deps.chatManager) {
+    const chatManager = deps.DependencySystem.modules.get('chatManager');
+    if (!chatManager || typeof chatManager.loadConversation !== 'function') {
+      console.error('[ProjectManager] chatManager not found or invalid in DependencySystem');
+      throw new Error('chatManager is required for ProjectManager');
+    }
+    deps.chatManager = chatManager;
+  }
+
+  console.log('[ProjectManager] Creating new ProjectManager instance with deps:',
+              Object.keys(deps).join(', '));
+
   return new ProjectManager(deps);
 }
 

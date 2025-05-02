@@ -473,43 +473,10 @@
         return null; // Return null if no mapping found
     }
 
-    // Initialize modal close buttons to use ModalManager
-    // Select buttons intended to close modals: close buttons, cancel buttons
-    const closeButtons = document.querySelectorAll(
-        'dialog .modal-action button[type="button"]:not([id^="confirm"]), dialog form[method="dialog"] button, dialog button[id$="CloseBtn"], dialog button[id^="close"], dialog button[id$="CancelBtn"]'
-    );
-
-    closeButtons.forEach(button => {
-        // Prevent adding listener to the backdrop close button if it's handled natively
-        if (button.closest('.modal-backdrop')) return;
-
-        button.addEventListener('click', function(event) {
-            // Find the parent dialog element
-            const modalElement = this.closest('dialog[id$="Modal"], dialog[id="confirmActionModal"]');
-            if (modalElement && modalElement.id) {
-                const modalName = getModalNameFromId(modalElement.id);
-                if (modalName && window.modalManager?.hide) {
-                    console.log(`[Modals Init] Closing modal '${modalName}' via button click.`);
-                    // Let the ModalManager handle hiding, which calls dialog.close()
-                    window.modalManager.hide(modalName);
-                } else {
-                    console.warn(`[Modals Init] Could not hide modal with ID ${modalElement.id}. ModalManager or mapping missing.`);
-                    // Fallback to direct closing if manager fails
-                    if (typeof modalElement.close === 'function') {
-                        modalElement.close();
-                    } else {
-                        modalElement.classList.add('hidden');
-                        modalElement.style.display = "none";
-                        modalElement.removeAttribute("open");
-                        document.body.style.overflow = '';
-                    }
-                }
-            } else {
-                 console.warn('[Modals Init] Could not find parent modal element for button:', this);
-            }
-        });
-    });
-
+    // [REMOVED] Centralized modal close logic for close/cancel buttons is now handled EXCLUSIVELY via ModalManager and DI,
+    // to avoid duplication, race conditions, and unreliable modal state cleanup.
+    // All modals must be closed via modalManager.hide(modalName), which tracks events and uses DI for cleanup.
+    // No direct DOM event listeners for modal closure are attached in this script.
 
     // DRY helper for button loading state
     function setButtonLoading(btn, isLoading, loadingText = "Saving...") {

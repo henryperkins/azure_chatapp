@@ -146,9 +146,10 @@ export function createElement(tag, options = {}, trackListener) {
   Object.entries(options).forEach(([key, val]) => {
     if (key.startsWith('on') && typeof val === 'function') {
       const evt = key.slice(2).toLowerCase();
-      trackListener
-        ? trackListener(el, evt, val)
-        : el.addEventListener(evt, val);
+      if (!trackListener) {
+        throw new Error(`[globalUtils] createElement requires a trackListener for event: ${evt}`);
+      }
+      trackListener(el, evt, val);
     }
   });
 

@@ -570,10 +570,12 @@ export class ProjectDetailsComponent {
       const conv = await this.projectManager.createConversation(pid);
       if (conv?.id) {
         this.app.showNotification(`Conversation “${conv.title || "Untitled"}” created.`, "success");
-        this.switchTab("conversations");
-        this.projectManager.loadProjectConversations(pid);
+        // Navigate to the new conversation instead of just refreshing the list
+        this._openConversation(conv);
+        // Optionally reload the list in the background if needed, but prioritize navigation
+        // this.projectManager.loadProjectConversations(pid);
       } else {
-        throw new Error("Invalid response");
+        throw new Error("Invalid response from createConversation");
       }
     } catch (err) {
       this.notification.error("[ProjectDetailsComponent] createConversation failed:", err);

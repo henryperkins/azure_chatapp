@@ -172,12 +172,12 @@
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col font-sans">
   <!-- Top Navbar -->
-  <header role="banner" class="bg-base-100 shadow-md border-b border-base-300">
-    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-      <div class="flex items-center gap-3">
+  <header role="banner" class="bg-base-100 shadow-md border-b border-base-300 sticky top-0 z-30 transition-all duration-300">
+    <div class="max-w-7xl mx-auto px-2 sm:px-3 md:px-4 py-2 sm:py-3 md:py-4 flex flex-wrap items-center justify-between gap-y-2 gap-x-2 overflow-x-auto scrollbar-none select-none min-h-[56px]">
+      <div class="flex items-center gap-2 sm:gap-3 min-w-0 flex-shrink">
         <!-- Enhanced sidebar toggle button -->
         <button id="navToggleBtn" type="button"
-                class="btn btn-ghost btn-sm btn-circle md:hidden"
+                class="btn btn-ghost btn-sm btn-circle md:hidden min-w-[44px] min-h-[44px]"
                 aria-label="Toggle sidebar navigation"
                 aria-expanded="false"
                 aria-controls="mainSidebar">
@@ -189,25 +189,25 @@
         </button>
 
         <!-- App title with logo -->
-        <div class="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary"
+        <div class="flex items-center gap-1 sm:gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-primary flex-shrink-0"
                fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                   d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <h1 class="text-xl font-semibold text-base-content">Azure OpenAI Chat</h1>
+          <h1 class="text-base sm:text-lg md:text-xl font-semibold text-base-content truncate max-w-[10ch] sm:max-w-none">Azure OpenAI Chat</h1>
         </div>
 
         <!-- Keyboard shortcut hint (only visible on larger screens) -->
-        <kbd class="kbd-shortcut hidden sm:flex items-center text-xs text-base-content/70">
+        <kbd class="kbd-shortcut hidden sm:flex items-center text-xs text-base-content/70 ml-2">
           <kbd class="kbd kbd-xs">/</kbd> <span class="mx-1">or</span> <kbd class="kbd kbd-xs">`</kbd> <span class="mx-1">to toggle sidebar</span>
         </kbd>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1 sm:gap-2 flex-shrink-0">
         <!-- Help button -->
         <button id="keyboardHelpBtn" type="button"
-                class="btn btn-ghost btn-sm btn-circle"
+                class="btn btn-ghost btn-sm btn-circle min-w-[44px] min-h-[44px]"
                 aria-label="Show keyboard shortcuts">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5"
                fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -218,7 +218,7 @@
 
         <!-- Dark mode toggle with updated styling -->
         <button id="darkModeToggle" type="button"
-                class="btn btn-ghost btn-sm btn-circle"
+                class="btn btn-ghost btn-sm btn-circle min-w-[44px] min-h-[44px] transition-colors duration-200"
                 aria-label="Toggle dark mode">
           <svg id="darkModeIcon" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                stroke="currentColor" aria-hidden="true">
@@ -227,17 +227,17 @@
           </svg>
         </button>
 
-        <!-- Status badge with enhanced styling -->
-        <div class="status-indicator">
-          <div class="status-indicator-dot-inactive status-xs"></div>
-          <span id="userStatus" class="status-indicator-text hidden sm:inline">Offline</span>
+        <!-- Status badge with enhanced styling and minimum tap target -->
+        <div class="status-indicator flex items-center">
+          <div class="status-indicator-dot-inactive status-xs min-w-[20px] min-h-[20px] animate-pulse"></div>
+          <span id="userStatus" class="status-indicator-text hidden sm:inline ml-1">Offline</span>
         </div>
 
         <!-- Auth container -->
         <div class="relative z-[101]" id="authContainer">
           <!-- When logged out: Auth Button -->
           <button id="authButton" type="button"
-                  class="btn btn-primary btn-sm"
+                  class="btn btn-primary btn-sm min-w-[44px] min-h-[44px]"
                   aria-haspopup="true"
                   aria-expanded="false">
             <span class="flex items-center gap-1">
@@ -373,9 +373,9 @@
   <div class="flex flex-1 overflow-hidden container-md">
     <!-- Enhanced Sidebar -->
     <nav id="mainSidebar" aria-labelledby="sidebarHeading" aria-hidden="true"
-         class="fixed md:relative inset-y-0 left-0 z-50 w-64 md:w-72 bg-base-100 shadow-xl md:shadow-none
-                border-r border-base-300 transform transition-transform duration-300 ease-in-out
-                -translate-x-full md:translate-x-0 overflow-y-auto h-full sidebar focus-within:ring-2 focus-within:ring-primary focus-within:outline-none">
+         class="fixed md:relative inset-0 md:inset-y-0 md:left-0 z-50 w-4/5 max-w-xs md:w-72 bg-base-100 shadow-xl md:shadow-none border-r border-base-300 transform transition-transform duration-300 ease-in-out
+                -translate-x-full md:translate-x-0 overflow-y-auto h-[100dvh] md:h-full flex flex-col sidebar focus-within:ring-2 focus-within:ring-primary focus-within:outline-none
+                p-0 md:p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] touch-pan-y overscroll-contain">
       <h2 id="sidebarHeading" class="sr-only">Site Navigation</h2>
 
       <button id="closeSidebarBtn" type="button"
