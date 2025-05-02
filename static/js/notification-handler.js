@@ -41,7 +41,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
     // Build the notification DOM element
     const notification = document.createElement('div');
-    const notificationClass = `alert ${getAlertClass(type)} shadow-md my-2 notification-item notification-${type}`;
+    const notificationClass = `alert ${getAlertClass(type)} shadow-md my-2 notification-item notification-${type} max-w-lg w-full`;
     notification.id = notificationId;
     notification.className = notificationClass;
     notification.setAttribute('role', 'alert');
