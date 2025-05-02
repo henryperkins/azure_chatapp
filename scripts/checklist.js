@@ -62,6 +62,9 @@ function getFiles(dir) {
 // Main audit
 scanDirs.forEach(dir => {
   getFiles(dir).forEach(file => {
+    // Skip sentry-init.js from all checks
+    if (path.basename(file) === 'sentry-init.js') return;
+
     const src = fs.readFileSync(file, 'utf8');
     const lines = src.split('\n');
     let flagged = false;

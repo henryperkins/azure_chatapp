@@ -108,8 +108,23 @@ export function createKnowledgeBaseComponent(options = {}) {
   const getDep = (name) =>
     // Strictly require via options, else from DependencySystem (never window.*)
     name in options ? options[name] : DS.modules.get(name);
-// DOMPurify global sanitizer for innerHTML
-const DOMPurify = getDep("DOMPurify");
+  // DOMPurify global sanitizer for innerHTML
+  const DOMPurify = getDep("DOMPurify");
+
+  /**
+   * Safely set element innerHTML, using DOMPurify if available or stripping tags as fallback.
+   * @param {HTMLElement} el
+   * @param {string} html
+   */
+  function setSanitizedHTML(el, html) {
+    if (!el) return;
+    if (DOMPurify && typeof DOMPurify.sanitize === 'function') {
+      el.innerHTML = DOMPurify.sanitize(html);
+    } else {
+      // Fallback: strip basic tags as minimal defense.
+      el.innerHTML = String(html).replace(/<[^>]+>/g, '');
+    }
+  }
 
   // Required dependencies
   const app = getDep("app");
@@ -168,7 +183,7 @@ const DOMPurify = getDep("DOMPurify");
         if (isLoading) {
           btn.disabled = true;
           btn.dataset.originalText = btn.textContent;
-          btn.innerHTML = DOMPurify.sanitize(`<span class="loading loading-spinner loading-xs"></span> ${loadingText}`);
+          setSanitizedHTML(btn, `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`);
         } else {
           btn.disabled = false;
           if (btn.dataset.originalText) {
@@ -1132,7 +1147,7 @@ const DOMPurify = getDep("DOMPurify");
       const alertDiv = document.createElement("div");
       alertDiv.className = `alert ${cls} shadow-sm text-sm py-2 px-3`;
       alertDiv.setAttribute("role", "alert");
-      alertDiv.innerHTML = DOMPurify.sanitize(`<span>${message}</span>`);
+      setSanitizedHTML(alertDiv, `<span>${message}</span>`);
 
       if (type !== "error") {
         const btn = document.createElement("button");
@@ -1170,7 +1185,7 @@ const DOMPurify = getDep("DOMPurify");
         banner.setAttribute('role', 'alert');
         container.prepend(banner);
       }
-      banner.innerHTML = DOMPurify.sanitize(`
+      setSanitizedHTML(banner, `
         <div class="flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -1191,7 +1206,7 @@ const DOMPurify = getDep("DOMPurify");
       resultsSection?.classList.remove("hidden");
       noResultsSection?.classList.add("hidden");
       if (resultsContainer) {
-        resultsContainer.innerHTML = DOMPurify.sanitize(`
+        setSanitizedHTML(resultsContainer, `
           <div class="flex justify-center items-center p-4 text-base-content/70">
             <span class="loading loading-dots loading-md mr-2"></span>
             <span>Searching knowledge base...</span>

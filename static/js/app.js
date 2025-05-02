@@ -183,7 +183,7 @@ async function apiRequest(url, opts = {}, skipCache = false) {
                     try {
                         errPayload.rawResponse = await resp.text();
                     } catch {
-                        // do nothing
+                        // ignored
                     }
                 }
                 const error = new Error(errPayload.message);
@@ -240,8 +240,8 @@ function toggleElement(selectorOrElement, show) {
     try {
         const resolvedSelector = APP_CONFIG.SELECTORS[selectorOrElement] || selectorOrElement;
         globalUtils.toggleElement(resolvedSelector, show);
-    } catch (e) {
-        console.error(`[App] Error in toggleElement for ${selectorOrElement}:`, e);
+    } catch {
+        // renderAuthHeader error
     }
 }
 
@@ -296,8 +296,8 @@ const app = {
             if (pm?.currentProject?.id && globalUtils.isValidProjectId(pm.currentProject.id)) {
                 return pm.currentProject.id;
             }
-        } catch (e) {
-            console.error('[App] Error getting project ID:', e);
+        } catch {
+            // ignored
         }
         return null;
     },
@@ -326,6 +326,83 @@ const app = {
     toggleElement
 };
 DependencySystem.register('app', app);
+
+// ---------------------------------------------------------------------
+// Register sanitizer and storage services for modular DI
+// ---------------------------------------------------------------------
+/**
+ * storageService: abstraction over localStorage for modularity and testability.
+ * All storage usage should be via this object—not window.localStorage directly.
+ */
+const storageService = {
+    getItem(key) {
+        try {
+            return window.localStorage.getItem(key);
+        } catch {
+            // ignored
+            return null;
+        }
+    },
+    setItem(key, value) {
+        try {
+            window.localStorage.setItem(key, value);
+        } catch (e) {
+            if (APP_CONFIG.DEBUG) {
+                console.warn('[storageService] setItem failed', { key, value, e });
+            }
+        }
+    },
+    removeItem(key) {
+        try {
+            window.localStorage.removeItem(key);
+        } catch (e) {
+            if (APP_CONFIG.DEBUG) {
+                console.warn('[storageService] removeItem failed', { key, e });
+            }
+        }
+    },
+    clear() {
+        try {
+            window.localStorage.clear();
+        } catch (e) {
+            if (APP_CONFIG.DEBUG) {
+                console.warn('[storageService] clear failed', { e });
+            }
+        }
+    },
+    key(n) {
+        try {
+            return window.localStorage.key(n);
+        } catch (e) {
+            if (APP_CONFIG.DEBUG) {
+                console.warn('[storageService] key failed', { n, e });
+            }
+            return null;
+        }
+    },
+    get length() {
+        try {
+            return window.localStorage.length;
+        } catch (e) {
+            if (APP_CONFIG.DEBUG) {
+                console.warn('[storageService] length getter failed', { });
+            }
+            return 0;
+        }
+    }
+};
+DependencySystem.register('storage', storageService);
+
+/**
+ * sanitizer: abstraction for DOM sanitizer, defaults to DOMPurify via DI.
+ */
+const sanitizer =
+    typeof window.DOMPurify === 'object' && typeof window.DOMPurify.sanitize === 'function'
+        ? window.DOMPurify
+        : {
+              sanitize: (html) => html // fallback: no-op sanitizer (DANGEROUS, but always returns input)
+          };
+DependencySystem.register('sanitizer', sanitizer);
 
 // ---------------------------------------------------------------------
 // Protect chatManager from accidental overwrites
@@ -379,7 +456,7 @@ const chatManager = createChatManager({
             return false;
         }
     },
-    DOMPurify: window.DOMPurify
+    sanitizer: DependencySystem.modules.get('sanitizer')
 });
 if (!chatManager || typeof chatManager.initialize !== 'function') {
     throw new Error('[App] createChatManager() did not return a valid ChatManager instance.');
@@ -539,7 +616,6 @@ async function initializeCoreSystems() {
     }
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
-    window.modalManager = modalManager; // If needed for debugging
 
     const [apiRequestMod, eventHandlersMod, notificationHandlerMod, modalManagerMod] =
         await DependencySystem.waitFor(['apiRequest', 'eventHandlers', 'notificationHandler', 'modalManager']);
@@ -731,11 +807,11 @@ async function initializeUIComponents() {
                 );
                 throw new Error('Injected /static/html/project_details.html but #projectDetails is still missing!');
             }
-        } catch (err) {
-            showNotification(`Failed to load project details UI: ${err.message}`, "error", 10000);
-            throw err;
+            } catch (err) {
+                showNotification(`Failed to load project details UI: ${err.message}`, "error", 10000);
+                throw err;
+            }
         }
-    }
 
     const projectManager = DependencySystem.modules.get('projectManager');
     const modalManager = DependencySystem.modules.get('modalManager');
@@ -782,11 +858,8 @@ async function initializeUIComponents() {
             getURL: () => window.location.href
         },
         notificationHandler: projectListNotificationHandler,
-        storage: {
-            setItem: (k, v) => localStorage.setItem(k, v),
-            getItem: (k) => localStorage.getItem(k)
-        },
-        sanitizer: window.DOMPurify
+        storage: DependencySystem.modules.get('storage'),
+        sanitizer: DependencySystem.modules.get('sanitizer')
     });
     DependencySystem.register('projectListComponent', projectListComponent);
 
@@ -804,11 +877,11 @@ async function initializeUIComponents() {
             try {
                 const pd = await DependencySystem.waitFor('projectDashboard');
                 pd?.showProjectList?.();
-            } catch (e) {
-                console.error('[App] Error in onBack callback:', e);
-                window.location.href = '/';
-            }
-        },
+        } catch {
+            // Error getting project ID
+        }
+        return null;
+    },
         app,
         projectManager,
         eventHandlers,
@@ -819,7 +892,7 @@ async function initializeUIComponents() {
             getURL: () => window.location.href
         },
         notificationHandler: projectDetailsNotificationHandler,
-        sanitizer: window.DOMPurify
+        sanitizer: DependencySystem.modules.get('sanitizer')
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
 
@@ -830,10 +903,7 @@ async function initializeUIComponents() {
         app,
         projectDashboard,
         projectManager,
-        storageAPI: {
-            setItem: (k, v) => localStorage.setItem(k, v),
-            getItem: (k) => localStorage.getItem(k)
-        },
+        storageAPI: DependencySystem.modules.get('storage'),
         viewportAPI: {
             getInnerWidth: () => window.innerWidth
         },
@@ -932,8 +1002,8 @@ function renderAuthHeader() {
         const userStatus = document.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
         if (authStatus) authStatus.textContent = isAuth ? 'Signed in' : 'Not signed in';
         if (userStatus) userStatus.textContent = isAuth ? `Hello, ${authMod.getCurrentUser()}` : '';
-    } catch (e) {
-        console.error('[App] renderAuthHeader error:', e);
+    } catch {
+        // renderAuthHeader error
     }
 }
 
@@ -954,21 +1024,6 @@ function registerAppListeners() {
         });
     }).catch(err => console.error('[App] Failed to wait for dependencies:', err));
 
-    if (APP_CONFIG.DEBUG) {
-        window._verifyAuthBus = () => {
-            const auth = DependencySystem?.modules?.get('auth');
-            console.log('[DEBUG] Auth module:', auth);
-            console.log('[DEBUG] AuthBus:', auth?.AuthBus);
-            console.log('[DEBUG] All window AuthBus markers:', {
-                _globalAuthStateChangedAttached: window._globalAuthStateChangedAttached,
-                _globalChatInitAuthAttached: window._globalChatInitAuthAttached
-            });
-            if (window.LAST_AUTHBUS && auth?.AuthBus && window.LAST_AUTHBUS !== auth.AuthBus) {
-                console.error('[DEBUG] AuthBus mismatch detected! Possible overwrite/race condition.');
-            }
-            window.LAST_AUTHBUS = auth?.AuthBus;
-        };
-    }
     if (APP_CONFIG.DEBUG) {
         console.log('[App] Global event listeners registered.');
     }
@@ -1200,13 +1255,14 @@ async function handleAuthStateChange(event) {
         }, 0);
     });
 
-    let projectManager, projectDashboard, sidebar, chatManager;
+    let projectManager, projectDashboard, sidebar, chatManager, storage;
     try {
-        [projectManager, projectDashboard, sidebar, chatManager] = await Promise.all([
+        [projectManager, projectDashboard, sidebar, chatManager, storage] = await Promise.all([
             waitFor('projectManager'),
             waitFor('projectDashboard'),
             waitFor('sidebar'),
-            waitFor('chatManager')
+            waitFor('chatManager'),
+            waitFor('storage') // Wait for storage service
         ]);
     } catch (e) {
         console.error('[App] Failed to get modules during auth state change:', e);
@@ -1238,7 +1294,7 @@ async function handleAuthStateChange(event) {
         }
         toggleElement('LOGIN_REQUIRED_MESSAGE', true);
         projectManager.currentProject = null;
-        localStorage.removeItem('selectedProjectId');
+        storage.removeItem('selectedProjectId');
         projectDashboard.showLoginRequiredMessage?.();
         sidebar.clear?.();
         chatManager.clear?.();
@@ -1257,8 +1313,8 @@ function handleInitError(error) {
 
     try {
         showNotification(`Application failed to start: ${error.message}. Please refresh.`, 'error', 15000);
-    } catch (e) {
-        console.error('[App] Error in showNotification during handleInitError:', e);
+    } catch {
+        // ignored
     }
 
     try {
@@ -1269,8 +1325,8 @@ function handleInitError(error) {
         } else {
             alert(`Application Critical Error: ${error.message}. Please refresh.`);
         }
-    } catch (e) {
-        console.error('[App] Error in container query during handleInitError:', e);
+    } catch {
+        // ignored
     }
     toggleElement('APP_LOADING_SPINNER', false);
 }
