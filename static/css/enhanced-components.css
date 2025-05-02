@@ -467,34 +467,88 @@ textarea:focus-visible,
 
 /* Enhanced Notification Styling */
 #notificationContainer .alert {
-  opacity: 0.7;
+  opacity: 1;
 }
 
-.alert-info {
-  background-color: transparent !important;
-  background: rgba(56, 189, 248, 0.6) !important;
-}
-
-.notification {
-  @apply alert shadow-lg max-w-md duration-300;
-}
-
-.notification-success {
-  @apply alert-success;
-}
-
-.notification-error {
-  @apply alert-error;
-}
-
-.notification-warning {
-  @apply alert-warning;
-}
-
+/* HIGH CONTRAST NOTIFICATION VARIANTS */
+.notification-success,
+.notification-error,
+.notification-warning,
 .notification-info {
-  @apply alert-info;
-  background-color: transparent !important;
-  background: rgba(56, 189, 248, 0.6) !important; /* 60% opaque info blue */
+  background: #fff !important;
+  color: #1a1a1a !important;
+  @apply shadow-md max-w-sm duration-300 text-sm font-normal px-3 py-2 flex items-center border-l-[4px];
+  border-radius: 0.33rem;
+  min-width: 220px;
+  max-width: 90vw;
+  word-break: break-word;
+}
+.notification-success {
+  border-left: 6px solid #047857 !important; /* emerald-700 dark/green */
+}
+.notification-error {
+  border-left: 6px solid #d32f2f !important; /* red-700 */
+}
+.notification-warning {
+  border-left: 6px solid #f59e42 !important; /* orange-400 */
+}
+.notification-info {
+  border-left: 6px solid #2563eb !important; /* blue-700 */
+}
+
+.notification-heading {
+  font-weight: 700;
+  font-size: 1em;
+  margin-right: 0.6em;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+
+/* Increase icon size and keep type color for icon only */
+.notification-success svg {
+  color: #047857 !important;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.notification-error svg {
+  color: #d32f2f !important;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.notification-warning svg {
+  color: #f59e42 !important;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.notification-info svg {
+  color: #2563eb !important;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.notification-item span:not(.notification-heading) {
+  font-size: 0.98em;
+  font-weight: 400;
+  color: #212121 !important;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .notification-success,
+  .notification-error,
+  .notification-warning,
+  .notification-info {
+    font-size: 0.96rem;
+    padding: 0.79em 0.9em;
+    min-width: 0;
+    border-radius: 0.22rem;
+  }
+}
+
+
+/* Remove alert-info background override for all but pure alert-info to avoid color leaks */
+.alert-info {
+  background: rgba(56, 189, 248, 0.15) !important;
 }
 
 /* Enhanced Form Control Styling */

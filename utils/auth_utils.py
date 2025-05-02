@@ -9,7 +9,7 @@ Includes improved logging, diagnostics, and detailed error messages.
 
 import logging
 from datetime import datetime
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Any, Tuple
 
 from config import settings
 if not getattr(settings, 'DEBUG', False):
@@ -77,7 +77,7 @@ async def verify_token(
     expected_type: Optional[str] = None,
     request: Optional[Request] = None,
     db_session: Optional[AsyncSession] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Verifies and decodes a JWT token.
 

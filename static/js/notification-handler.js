@@ -41,14 +41,16 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
     // Build the notification DOM element
     const notification = document.createElement('div');
+    const notificationClass = `alert ${getAlertClass(type)} shadow-md my-2 notification-item notification-${type}`;
     notification.id = notificationId;
-    notification.className = `alert ${getAlertClass(type)} shadow-md my-2 notification-item`;
+    notification.className = notificationClass;
     notification.setAttribute('role', 'alert');
     notification.setAttribute('aria-live', 'assertive');
     notification.setAttribute('tabindex', '0');
 
     const iconSvg = getIconForType(type);
-    notification.innerHTML = `${iconSvg}<span>${message}</span>`;
+    const statusHeading = `<span class="notification-heading font-bold mr-2">${getHeadingForType(type)}</span>`;
+    notification.innerHTML = `${iconSvg}${statusHeading}<span>${message}</span>`;
 
     // If there's an action button
     if (options.action && typeof options.onAction === 'function') {
@@ -61,12 +63,15 @@ export function createNotificationHandler({ DependencySystem } = {}) {
         hide(notificationId);
       };
 
-      notification.innerHTML = `<div class="flex-1">${iconSvg}<span>${message}</span></div>`;
+      notification.innerHTML = `<div class="flex-1 flex items-center">${iconSvg}${statusHeading}<span>${message}</span></div>`;
       notification.appendChild(actionButton);
       notification.classList.add('flex', 'justify-between', 'items-center');
     }
 
     container.appendChild(notification);
+
+    // Add extra visible class to help style "pop"
+    notification.classList.add(`notification-${type}`);
 
     // Store this notification in the Map along with its timeout ID (if any)
     const timeoutDuration = options.timeout === 0 ? null : (options.timeout || 5000);
@@ -199,6 +204,16 @@ export function createNotificationHandler({ DependencySystem } = {}) {
           'stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 ' +
           '12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
         );
+    }
+  }
+
+  function getHeadingForType(type) {
+    switch (type) {
+      case 'success': return 'Success';
+      case 'warning': return 'Warning';
+      case 'error': return 'Error';
+      case 'info':
+      default: return 'Info';
     }
   }
 

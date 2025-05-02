@@ -287,20 +287,40 @@ export function createChatManager({
       // If no valid project, run "global" (no-project) mode:
       if (this.isGlobalMode) {
         this.notify("[ChatManager] Starting in global (no-project) mode.", "info");
+        this._clearMessages(); // Ensure clean state
+        this._showMessage("system", "Select a project or start a new global chat."); // Placeholder message
         this.isInitialized = true;
         return true;
       }
 
-      // Otherwise, do a normal project-based init
+      // Otherwise, do a normal project-based init. Check if URL has a chat ID.
       this.notify(`[ChatManager] Initializing for projectId: ${this.projectId}`, "info");
       try {
-        await this.createNewConversation();
+        const urlParams = new URLSearchParams(this.navAPI.getSearch());
+        const urlChatId = urlParams.get('chatId');
+        if (urlChatId) {
+          this.notify(`[ChatManager] Found chatId=${urlChatId} in URL, loading conversation...`, "info");
+          // Don't await here directly, let loadConversation handle errors/state
+          this.loadConversation(urlChatId).catch(loadErr => {
+              this._handleError("initialization (load from URL)", loadErr);
+              // Show empty state if load fails
+               this._clearMessages();
+               this._showMessage("system", "Failed to load chat from URL.");
+          });
+        } else {
+          this.notify(`[ChatManager] No chatId in URL. Ready for new chat or selection.`, "info");
+          this._clearMessages(); // Start with empty state
+          // Optional: Load latest conversation here instead of empty state?
+          // For now, keep it empty until user action.
+        }
+        // Mark initialized regardless of whether chat loaded, UI is ready.
         this.isInitialized = true;
         return true;
       } catch (error) {
-        this._handleError("initialization", error);
-        this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
-        throw error;
+         // Catch synchronous errors during setup, though less likely now
+        this._handleError("initialization (sync setup)", error);
+        this.projectDetails?.disableChatUI?.("Chat setup error: " + (error.message || error));
+        throw error; // Re-throw sync errors
       }
     }
 

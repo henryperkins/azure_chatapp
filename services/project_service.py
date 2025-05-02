@@ -9,7 +9,7 @@ We now clarify:
 """
 
 from uuid import UUID
-from typing import Optional, Any, List, Dict, Type
+from typing import Optional, Any, List, Type
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -56,7 +56,7 @@ async def validate_knowledge_base_access(
 
 async def check_knowledge_base_status(
     project_id: UUID, db: AsyncSession
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Check if project's knowledge base has indexed content"""
     # Count processed files and total chunks
     stmt = select(
@@ -319,7 +319,7 @@ async def get_paginated_resources(
     limit: int = 100,
     additional_filters: Optional[Any] = None,
     serializer_func=None,
-) -> List[Dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """
     Generic method to retrieve items for a given project,
     sorted & paginated. We assume the model has a project_id field.

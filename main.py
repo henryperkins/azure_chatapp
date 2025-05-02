@@ -40,7 +40,9 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
     allowed_origins = getattr(settings, "CORS_ORIGINS", None)
     if allowed_origins:
         if isinstance(allowed_origins, str):
-            allowed_origins = [o.strip() for o in allowed_origins.split(",") if o.strip()]
+            allowed_origins = [
+                o.strip() for o in allowed_origins.split(",") if o.strip()
+            ]
     else:
         allowed_origins = [
             "http://localhost",
@@ -213,7 +215,7 @@ async def on_shutdown():
 
 
 # Serve static files with directory check (always absolute, robust for debug and prod)
-STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if not os.path.isdir(STATIC_DIR):
     logger.critical(f"Static directory not found: {STATIC_DIR}. Aborting startup.")
     raise RuntimeError(f"Static directory not found: {STATIC_DIR}")
@@ -275,7 +277,6 @@ app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring
 @app.get("/debug/routes", include_in_schema=False)
 async def debug_routes() -> list[Dict[str, Any]]:
     """List all registered routes for debugging."""
-    from fastapi.routing import APIRoute
 
     return [
         {

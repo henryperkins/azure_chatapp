@@ -9,7 +9,7 @@ This version has been updated to use db_utils.py functions instead of direct DB 
 
 import logging
 import base64
-from typing import Dict, Optional, List
+from typing import Optional, List
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -91,7 +91,7 @@ async def create_user_message(
 
 async def get_conversation_messages(
     conversation_id: UUID, db: AsyncSession, include_system_prompt: bool = True
-) -> List[Dict[str, str]]:
+) -> List[dict[str, str]]:
     """
     Get all messages for a conversation formatted for OpenAI API.
 

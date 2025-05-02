@@ -74,11 +74,12 @@ export class ProjectListComponent {
 
         // Default navigation callback - now prefers passing project object if possible
         this.onViewProject = (projectObjOrId) => {
-            if (typeof projectObjOrId === "object" && projectObjOrId.id) {
-                this.router.navigate(`/?project=${projectObjOrId.id}`);
-            } else {
-                this.router.navigate(`/?project=${projectObjOrId}`);
-            }
+            // Always clear chatId when switching projects!
+            const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
+            const url = new URL(window.location.href);
+            url.searchParams.set('project', projectId);
+            url.searchParams.delete('chatId'); // Remove any stale chat
+            this.router.navigate(url.pathname + '?' + url.searchParams.toString());
         };
 
         this.elementId = "projectList";
@@ -115,6 +116,14 @@ export class ProjectListComponent {
             );
         }
 
+        // New: Use only the real project grid for cards, not the root
+        this.gridElement = this.element.querySelector('.grid');
+        if (!this.gridElement) {
+            throw new Error(
+                `[ProjectListComponent] '.grid' container not found inside #${this.elementId}`
+            );
+        }
+
         this._bindEventListeners();
         this._bindCreateProjectButtons();
 
@@ -146,8 +155,9 @@ export class ProjectListComponent {
             { description: "ProjectList: projectsLoaded" }
         );
 
+        // Fix: Attach the click handler to the grid, not #projectList root
         this.eventHandlers.trackListener(
-            this.element,
+            this.gridElement,
             "click",
             (e) => this._handleCardClick(e),
             { description: "ProjectList: Card Click" }
@@ -236,9 +246,9 @@ export class ProjectListComponent {
         const projects = this._extractProjects(data);
         this.state.projects = projects || [];
 
-        if (!this.element) {
+        if (!this.gridElement) {
             this.notification.error(
-                "[ProjectListComponent.renderProjects] Element not found."
+                "[ProjectListComponent.renderProjects] Grid element not found."
             );
             return;
         }
@@ -247,14 +257,14 @@ export class ProjectListComponent {
             return;
         }
 
-        this._clearElement(this.element);
+        this._clearElement(this.gridElement);
         const fragment = document.createDocumentFragment();
         projects.forEach((project) => {
             if (project && typeof project === "object") {
                 fragment.appendChild(this._createProjectCard(project));
             }
         });
-        this.element.appendChild(fragment);
+        this.gridElement.appendChild(fragment);
         this.show();
     }
 
@@ -284,10 +294,12 @@ export class ProjectListComponent {
 
     /** Show the list container */
     show() {
-        if (!this.element) {
-            this.notification.warn("[ProjectListComponent.show] element not found.");
+        if (!this.gridElement) {
+            this.notification.warn("[ProjectListComponent.show] grid element not found.");
             return;
         }
+        this.gridElement.classList.remove("hidden");
+        this.gridElement.style.display = "";
         this.element.classList.remove("hidden");
         this.element.style.display = "";
         const listView = document.getElementById("projectListView");
@@ -299,6 +311,10 @@ export class ProjectListComponent {
 
     /** Hide the list container */
     hide() {
+        if (this.gridElement) {
+            this.gridElement.classList.add("hidden");
+            this.gridElement.style.display = "none";
+        }
         if (this.element) {
             this.element.classList.add("hidden");
             this.element.style.display = "none";
@@ -337,20 +353,31 @@ export class ProjectListComponent {
     /** Handle click on project cards */
     _handleCardClick(e) {
         const projectCard = e.target.closest(".project-card");
-        if (!projectCard) return;
+        if (!projectCard) {
+            this.notification.warn('[Debug] No .project-card ancestor on click event.');
+            return;
+        }
 
         const actionBtn = e.target.closest("[data-action]");
         const projectId = projectCard.dataset.projectId;
-        if (!projectId) return;
+        if (!projectId) {
+            this.notification.error('[Debug] Clicked card with missing data-project-id.');
+            return;
+        }
 
         // Try to find the full project object
         const projectObj = this.state.projects?.find((p) => p.id === projectId);
+
+        // Debug log actual click
+        this.notification.log(`[Debug] Project card clicked: projectId=${projectId}; isActionBtn=${!!actionBtn}`);
 
         if (actionBtn) {
             e.stopPropagation();
             const action = actionBtn.dataset.action;
             this._handleAction(action, projectId);
         } else {
+            // Debug before navigation
+            this.notification.log(`[Debug] Navigating to project details for: ${projectId}...`);
             // Prefer passing the project object to the navigation callback
             this.onViewProject(projectObj || projectId);
         }
@@ -477,11 +504,11 @@ export class ProjectListComponent {
 
     /** Loading skeletons */
     _showLoadingState() {
-        if (!this.element) return;
-        this._clearElement(this.element);
+        if (!this.gridElement) return;
+        this._clearElement(this.gridElement);
 
         // Use a responsive grid container for loading state
-        this.element.classList.add("grid", "project-list");
+        this.gridElement.classList.add("grid", "project-list");
         for (let i = 0; i < 6; i++) {
             const skeleton = document.createElement("div");
             skeleton.className = "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
@@ -492,15 +519,15 @@ export class ProjectListComponent {
               <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
             `;
             this._setElementHTML(skeleton, raw);
-            this.element.appendChild(skeleton);
+            this.gridElement.appendChild(skeleton);
         }
     }
 
     /** Empty state UI */
     _showEmptyState() {
-        if (!this.element) return;
-        this._clearElement(this.element);
-        this.element.classList.add("grid", "project-list");
+        if (!this.gridElement) return;
+        this._clearElement(this.gridElement);
+        this.gridElement.classList.add("grid", "project-list");
         const emptyDiv = document.createElement("div");
         emptyDiv.className = "project-list-empty";
         emptyDiv.innerHTML = `
@@ -511,7 +538,7 @@ export class ProjectListComponent {
           <p class="mt-1">Create a new project to get started</p>
           <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
         `;
-        this.element.appendChild(emptyDiv);
+        this.gridElement.appendChild(emptyDiv);
 
         const createBtn = document.getElementById("emptyStateCreateBtn");
         if (createBtn) {

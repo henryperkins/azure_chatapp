@@ -5,7 +5,7 @@
 # generating AI responses.
 
 import logging
-from typing import Dict, List, Optional, Any, Union
+from typing import List, Optional, Any, Union
 from uuid import UUID
 from datetime import datetime
 
@@ -38,7 +38,7 @@ class ConversationError(Exception):
         super().__init__(message)
 
 
-def validate_model_and_params(model_id: str, params: Dict[str, Any]) -> None:
+def validate_model_and_params(model_id: str, params: dict[str, Any]) -> None:
     """
     Validate if the model exists in config and if provided params are supported.
     Raises ConversationError on failure.
@@ -179,7 +179,7 @@ class ConversationService:
         model_id: str,
         project_id: Optional[UUID] = None,
         use_knowledge_base: bool = False,
-        ai_settings: Optional[Dict[str, Any]] = None,
+        ai_settings: Optional[dict[str, Any]] = None,
     ) -> Conversation:
         """Create new conversation with validation and optional AI settings."""
         try:
@@ -220,7 +220,7 @@ class ConversationService:
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
-    ) -> Dict:
+    ) -> dict:
         """Get single conversation with validation."""
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
@@ -259,8 +259,8 @@ class ConversationService:
         title: Optional[str] = None,
         model_id: Optional[str] = None,
         use_knowledge_base: Optional[bool] = None,
-        ai_settings: Optional[Dict[str, Any]] = None,
-    ) -> Dict:
+        ai_settings: Optional[dict[str, Any]] = None,
+    ) -> dict:
         """Update conversation attributes."""
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
@@ -367,7 +367,7 @@ class ConversationService:
         conversation_id: UUID,
         user_id: int,
         project_id: Optional[UUID] = None,
-    ) -> Dict:
+    ) -> dict:
         """Restore a previously soft-deleted conversation."""
         if not project_id:
             raise ConversationError(
@@ -395,7 +395,7 @@ class ConversationService:
         project_id: Optional[UUID] = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[Dict]:
+    ) -> List[dict]:
         """List messages in a conversation."""
         # Validate conversation
         await self._validate_conversation_access(conversation_id, user_id, project_id)
@@ -424,7 +424,7 @@ class ConversationService:
         reasoning_effort: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-    ) -> Dict:
+    ) -> dict:
         """Create a new message in the conversation and, if role=user, generate AI response."""
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
@@ -603,7 +603,7 @@ class ConversationService:
 
     async def _get_conversation_context(
         self, conversation_id: UUID, include_system_prompt: bool = False
-    ) -> List[Dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """Get formatted message history for AI context."""
         messages = await get_all_by_condition(
             self.db,
@@ -633,7 +633,7 @@ class ConversationService:
         return context
 
     async def generate_conversation_title(
-        self, conversation_id: UUID, messages: List[Dict[str, Any]], model_id: str
+        self, conversation_id: UUID, messages: List[dict[str, Any]], model_id: str
     ) -> str:
         """
         Generate a suggested title for the conversation by calling AI with a prompt.
@@ -673,7 +673,7 @@ class ConversationService:
     async def generate_conversation_summary(
         self,
         conversation_id: UUID,
-        messages: List[Dict[str, Any]],
+        messages: List[dict[str, Any]],
         model_id: str,
         max_length: int = 200,
     ) -> str:
@@ -720,7 +720,7 @@ class ConversationService:
         include_messages: bool,
         skip: int,
         limit: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Search for conversations by title and optionally by message content.
         Returns a dict with keys: 'conversations', 'total', 'highlighted_messages'.

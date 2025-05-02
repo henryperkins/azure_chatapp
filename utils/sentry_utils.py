@@ -15,7 +15,7 @@ import time
 import contextlib
 import re
 import asyncio
-from typing import Dict, Any, Optional, Generator, Union, Set, AsyncGenerator, TYPE_CHECKING
+from typing import Any, Optional, Generator, Union, Set, AsyncGenerator, TYPE_CHECKING
 from fastapi import Request, Response
 
 import sentry_sdk
@@ -59,8 +59,8 @@ except ImportError:
         yield  # unreachable: required only for typing (see Pylint W0101 suppression)
 
 # Type aliases
-SentryEvent = Dict[str, Any]  # Kept for backward compatibility
-SentryHint = Optional[Dict[str, Any]]  # Kept for backward compatibility
+SentryEvent = dict[str, Any]  # Kept for backward compatibility
+SentryHint = Optional[dict[str, Any]]  # Kept for backward compatibility
 
 # Constants
 NOISY_LOGGERS = {
@@ -209,7 +209,7 @@ def check_sentry_mcp_connection(timeout: float = 2.0) -> bool:
         return False
 
 
-def extract_sentry_trace(request: Request) -> Dict[str, str]:
+def extract_sentry_trace(request: Request) -> dict[str, str]:
     """
     Extract distributed tracing headers with validation.
     """
@@ -238,7 +238,7 @@ def inject_sentry_trace_headers(response: Response) -> None:
 
 # --- USER/TAG/CONTEXT HELPERS ---
 
-def set_sentry_user(user: Dict[str, Any]) -> None:
+def set_sentry_user(user: dict[str, Any]) -> None:
     """
     Set the current Sentry user context for the request.
     Use in request-lifecycle middleware.
@@ -258,7 +258,7 @@ def set_sentry_tag(key: str, value: Union[str, int, float, bool]) -> None:
         # If used outside request context
         pass
 
-def set_sentry_context(key: str, ctx: Dict[str, Any]) -> None:
+def set_sentry_context(key: str, ctx: dict[str, Any]) -> None:
     """
     Attach a dict as custom context under the specified key.
     """
@@ -323,7 +323,7 @@ def capture_breadcrumb(
     category: str,
     message: str,
     level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
-    data: Optional[Dict[str, Any]] = None,
+    data: Optional[dict[str, Any]] = None,
 ) -> None:
     """
     Add a manual Sentry breadcrumb. Useful for important business actions.
@@ -347,7 +347,7 @@ def capture_breadcrumb(
 def capture_custom_message(
     message: str,
     level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
-    extra: Optional[Dict[str, Any]] = None,
+    extra: Optional[dict[str, Any]] = None,
 ) -> Optional[str]:
     """
     Capture a custom message to Sentry with optional extra context.
@@ -370,7 +370,7 @@ def capture_custom_message(
         return None
 
 
-def _set_span_data(span: Union[Span, Transaction], data: Dict[str, Any]) -> None:
+def _set_span_data(span: Union[Span, Transaction], data: dict[str, Any]) -> None:
     """Helper to safely add data to spans"""
     for key, value in data.items():
         try:
@@ -514,7 +514,7 @@ def filter_sensitive_event(
     return _filter_event_data(event) # Ensure sensitive data filtering still runs
 
 
-def _filter_request_data(request: Dict[str, Any]) -> None:
+def _filter_request_data(request: dict[str, Any]) -> None:
     """Filter sensitive data from request payload"""
     if isinstance((data := request.get("data")), dict):
         for key in list(data.keys()):
@@ -532,7 +532,7 @@ def _filter_request_data(request: Dict[str, Any]) -> None:
         }
 
 
-def _filter_user_data(user: Dict[str, Any]) -> Dict[str, Any]:
+def _filter_user_data(user: dict[str, Any]) -> dict[str, Any]:
     """Preserve only safe user identifiers"""
     return {
         "id": user.get("id"),
@@ -541,7 +541,7 @@ def _filter_user_data(user: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _filter_contexts(contexts: Dict[str, Any]) -> Dict[str, Any]:
+def _filter_contexts(contexts: dict[str, Any]) -> dict[str, Any]:
     """Filter sensitive data from contexts"""
     return {
         k: (

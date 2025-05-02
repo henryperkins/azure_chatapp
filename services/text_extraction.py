@@ -11,7 +11,7 @@ import csv
 import re
 import io
 import logging
-from typing import Union, Dict, Any, Optional, BinaryIO, List, Tuple
+from typing import Union, Any, Optional, BinaryIO, List, Tuple
 from utils.file_validation import FileValidator
 import mimetypes
 import chardet
@@ -83,7 +83,7 @@ class TextExtractor:
                 "Token counting will be approximate: tiktoken not installed. Install with 'pip install tiktoken'"
             )
 
-    def get_file_info(self, filename: str) -> Dict[str, Any]:
+    def get_file_info(self, filename: str) -> dict[str, Any]:
         """
         Get file information based on filename or content.
 
@@ -207,7 +207,7 @@ class TextExtractor:
         mimetype: Optional[str] = None,
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
-    ) -> Tuple[List[str], Dict[str, Any]]:
+    ) -> Tuple[List[str], dict[str, Any]]:
         """
         Extract text from file content based on file type.
 
@@ -345,8 +345,8 @@ class TextExtractor:
             raise TextExtractionError(f"Failed to extract text: {str(e)}") from e
 
     def _extract_from_text(
-        self, content: bytes, file_info: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any]]:
+        self, content: bytes, file_info: dict[str, Any]
+    ) -> Tuple[str, dict[str, Any]]:
         """Extract text from plain text files."""
         # Detect encoding if not already provided
         encoding = file_info.get("encoding")
@@ -377,8 +377,8 @@ class TextExtractor:
         return text, metadata
 
     def _extract_from_pdf(
-        self, file_obj: BinaryIO, file_info: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any]]:
+        self, file_obj: BinaryIO, file_info: dict[str, Any]
+    ) -> Tuple[str, dict[str, Any]]:
         """Extract text from PDF files."""
         if not PDF_AVAILABLE:
             logger.error("PDF extraction failed: missing dependencies")
@@ -447,8 +447,8 @@ class TextExtractor:
             )
 
     def _extract_from_docx(
-        self, file_obj: BinaryIO, file_info: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any]]:
+        self, file_obj: BinaryIO, file_info: dict[str, Any]
+    ) -> Tuple[str, dict[str, Any]]:
         """Extract text from DOCX files."""
         if not DOCX_AVAILABLE:
             logger.error("DOCX extraction failed: missing dependencies")
@@ -498,8 +498,8 @@ class TextExtractor:
             )
 
     def _extract_from_json(
-        self, content: bytes, file_info: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any]]:
+        self, content: bytes, file_info: dict[str, Any]
+    ) -> Tuple[str, dict[str, Any]]:
         """Extract text from JSON files."""
         try:
             # First try UTF-8 decoding
@@ -557,8 +557,8 @@ class TextExtractor:
             }
 
     def _extract_from_csv(
-        self, content: bytes, file_info: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any]]:
+        self, content: bytes, file_info: dict[str, Any]
+    ) -> Tuple[str, dict[str, Any]]:
         """Extract text from CSV files."""
         try:
             # Try common encodings
@@ -623,8 +623,8 @@ class TextExtractor:
             }
 
     def _extract_from_code(
-        self, content: bytes, file_info: Dict[str, Any]
-    ) -> Tuple[str, Dict[str, Any]]:
+        self, content: bytes, file_info: dict[str, Any]
+    ) -> Tuple[str, dict[str, Any]]:
         """Extract text from code files with rudimentary parsing."""
         try:
             # Decode content

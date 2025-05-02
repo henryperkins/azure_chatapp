@@ -729,6 +729,39 @@ class ProjectManager {
     }
   }
 
+  /**
+   * Fetches details for a single conversation.
+   * @param {string} conversationId
+   * @returns {Promise<Object|null>} Conversation details or null on error.
+   */
+  async getConversation(conversationId) {
+    if (!this.requireAuthenticatedOrEmit("conversationLoadError", { conversationId })) {
+        throw new Error("Authentication required");
+    }
+    const projectId = this.currentProject?.id;
+    if (!isValidProjectId(projectId)) {
+        this.notificationHandler.error("[ProjectManager] Cannot get conversation without a valid current project ID.");
+        throw new Error("No valid project context");
+    }
+
+    try {
+        const endpoint = `/api/projects/${projectId}/conversations/${conversationId}/`;
+        const response = await this.app.apiRequest(endpoint);
+        const conversation = response?.data || response;
+        if (!conversation || !conversation.id) {
+            throw new Error("Invalid conversation data received");
+        }
+        this.notificationHandler.log(`[ProjectManager] Conversation ${conversationId} fetched.`);
+        // Optionally emit an event if needed, though likely not necessary just for getting details
+        // this._emitEvent("conversationDetailsLoaded", { projectId, conversation });
+        return conversation;
+    } catch (error) {
+        this.notificationHandler.error(`[ProjectManager] Failed to get conversation ${conversationId}:`, error);
+        // Re-throw the error so the caller knows it failed
+        throw error;
+    }
+  }
+
   async deleteProjectConversation(projectId, conversationId) {
     try {
       this.storage.setItem("selectedProjectId", projectId);
