@@ -1,8 +1,12 @@
 /**
  * ProjectListComponent
- * Handles rendering and interaction with the project list UI.
  *
- * All dependencies must now be passed explicitly (NO window.* DI or fallback).
+ * Refactored to remove direct usage of:
+ *   - window.location
+ *   - localStorage
+ *   - console.log
+ *
+ * All dependencies must be injected explicitly.
  *
  * Usage:
  *   import { ProjectListComponent } from './projectListComponent.js';
@@ -10,6 +14,9 @@
  *     projectManager,
  *     eventHandlers,
  *     modalManager,
+ *     loggerService,
+ *     storageService,
+ *     navigationService,
  *     app
  *   });
  *   projectList.initialize();
@@ -18,30 +25,53 @@
 export class ProjectListComponent {
     /**
      * ProjectListComponent constructor.
-     * All dependencies are passed explicitly.
-     * @param {Object} deps - Required dependencies.
-     * @param {Object} deps.projectManager - ProjectManager instance (required)
-     * @param {Object} deps.eventHandlers - EventHandlers instance (required)
-     * @param {Object} deps.modalManager - ModalManager instance (optional)
-     * @param {Object} deps.app - App instance (optional)
+     * @param {Object} deps
+     * @param {Object} deps.projectManager        - ProjectManager instance (required)
+     * @param {Object} deps.eventHandlers         - EventHandlers instance (required, must have trackListener)
+     * @param {Object} [deps.modalManager]        - ModalManager instance (optional)
+     * @param {Object} [deps.storageService]      - Storage service for saving/loading customization, no localStorage fallback
+     * @param {Object} [deps.loggerService]       - Logger or notification service (no direct console usage)
+     * @param {Object} [deps.navigationService]   - For changing URL or handling project navigation
+     * @param {Object} [deps.app]                 - Optional main app (for config or showNotification)
      */
-    constructor({ projectManager, eventHandlers, modalManager, app } = {}) {
+    constructor({
+        projectManager,
+        eventHandlers,
+        modalManager,
+        storageService,
+        loggerService,
+        navigationService,
+        app
+    } = {}) {
         if (!projectManager || !eventHandlers) {
             throw new Error(
-              "[ProjectListComponent] Missing required dependencies: projectManager and eventHandlers are required."
+                "[ProjectListComponent] Missing required dependencies: 'projectManager' and 'eventHandlers'."
             );
         }
         this.projectManager = projectManager;
         this.eventHandlers = eventHandlers;
-        this.modalManager = modalManager;
-        this.app = app;
+        this.modalManager = modalManager || null;
+        this.storage = storageService || null;
+        this.logger = loggerService || null;
+        this.navigator = navigationService || null;
+        this.app = app || null;
 
-        // Set default onViewProject callback
+        /**
+         * onViewProject callback:
+         * Instead of using window.location, rely on an injected navigation function
+         * or no-op if not provided.
+         */
         this.onViewProject = (projectId) => {
-           window.location.href = `/?project=${projectId}`;
+            if (this.navigator?.goToProject) {
+                this.navigator.goToProject(projectId);
+            } else {
+                this._logInfo(
+                    `[ProjectListComponent] No navigationService.goToProject provided. Project ID: ${projectId}`
+                );
+            }
         };
 
-        // Element ID is now a fixed value.
+        // Element ID is fixed
         this.elementId = "projectList";
 
         // State
@@ -58,21 +88,17 @@ export class ProjectListComponent {
     }
 
     /**
-     * Call once the DOM is guaranteed to have #projectList (elementId) in place.
+     * Call once the DOM is guaranteed to have #projectList in place.
      */
     initialize() {
         if (this.state.initialized) {
-            if (this.app?.config?.debug) {
-                console.log("[ProjectListComponent] Already initialized.");
-            }
+            this._logInfo("[ProjectListComponent] Already initialized.");
             return;
         }
 
         this.element = document.getElementById(this.elementId);
         if (!this.element) {
-            throw new Error(
-                `[ProjectListComponent] Element #${this.elementId} not found`,
-            );
+            throw new Error(`[ProjectListComponent] Element #${this.elementId} not found`);
         }
 
         // Bind event listeners
@@ -83,9 +109,7 @@ export class ProjectListComponent {
 
         // Mark as initialized
         this.state.initialized = true;
-        if (this.app?.config?.debug) {
-            console.log("[ProjectListComponent] Initialized successfully.");
-        }
+        this._logInfo("[ProjectListComponent] Initialized successfully.");
 
         // Optionally auto-load projects
         this._loadProjects();
@@ -95,38 +119,35 @@ export class ProjectListComponent {
      * Binds all relevant event listeners for filtering, project events, etc.
      */
     _bindEventListeners() {
-        // Listen for 'projectsLoaded'
+        // (1) Listen for 'projectsLoaded'
         const projectsLoadedHandler = (e) => this.renderProjects(e.detail);
-        this.eventHandlers.trackListener(
-            document,
-            "projectsLoaded",
-            projectsLoadedHandler,
-            { description: "ProjectList: projectsLoaded" },
-        );
+        this.eventHandlers.trackListener(document, "projectsLoaded", projectsLoadedHandler, {
+            description: "ProjectList: projectsLoaded",
+        });
 
-        // Handle clicks on project cards
+        // (2) Handle clicks on project cards
         this.eventHandlers.trackListener(
             this.element,
             "click",
             (e) => this._handleCardClick(e),
-            { description: "ProjectList: Card Click" },
+            { description: "ProjectList: Card Click" }
         );
 
-        // Listen for "projectCreated" and "projectUpdated"
+        // (3) Listen for "projectCreated" and "projectUpdated"
         this.eventHandlers.trackListener(
             document,
             "projectCreated",
             (e) => this._handleProjectCreated(e.detail),
-            { description: "ProjectList: projectCreated" },
+            { description: "ProjectList: projectCreated" }
         );
         this.eventHandlers.trackListener(
             document,
             "projectUpdated",
             (e) => this._handleProjectUpdated(e.detail),
-            { description: "ProjectList: projectUpdated" },
+            { description: "ProjectList: projectUpdated" }
         );
 
-        // Listen for auth state changes
+        // (4) Listen for auth state changes
         this.eventHandlers.trackListener(
             document,
             "authStateChanged",
@@ -135,10 +156,10 @@ export class ProjectListComponent {
                     this._loadProjects();
                 }
             },
-            { description: "ProjectList: authStateChanged" },
+            { description: "ProjectList: authStateChanged" }
         );
 
-        // Bind filter tab events if present
+        // (5) Bind filter tab events if present
         this._bindFilterEvents();
     }
 
@@ -168,9 +189,7 @@ export class ProjectListComponent {
     }
 
     _updateActiveTab() {
-        const tabs = document.querySelectorAll(
-            "#projectFilterTabs .tab[data-filter]",
-        );
+        const tabs = document.querySelectorAll("#projectFilterTabs .tab[data-filter]");
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
             tab.classList.toggle("tab-active", isActive);
@@ -178,18 +197,20 @@ export class ProjectListComponent {
         });
     }
 
+    /**
+     * Instead of direct window.location usage,
+     * we rely on an injected navigation service or just catch errors.
+     */
     _updateUrl(filter) {
+        if (!this.navigator?.updateUrl) {
+            // fallback: log a warning or no-op
+            this._logInfo("[ProjectListComponent] No navigator.updateUrl provided, cannot update URL with filter.");
+            return;
+        }
         try {
-            const url = new URL(window.location);
-            url.searchParams.set("filter", filter);
-            window.history.pushState({}, "", url);
-        } catch (e) {
-            if (this.app?.config?.debug) {
-                console.warn(
-                    "[ProjectListComponent] Failed to update URL with filter:",
-                    e,
-                );
-            }
+            this.navigator.updateUrl({ filter });
+        } catch (err) {
+            this._logWarn("[ProjectListComponent] Failed to update URL with filter:", err);
         }
     }
 
@@ -201,9 +222,7 @@ export class ProjectListComponent {
         const projects = this._extractProjects(data);
         this.state.projects = projects || [];
         if (!this.element) {
-            console.error(
-                `[ProjectListComponent.renderProjects] #${this.elementId} is not in the DOM.`,
-            );
+            this._logError(`[ProjectListComponent.renderProjects] #${this.elementId} is not in the DOM.`);
             return;
         }
         if (!projects?.length) {
@@ -222,17 +241,14 @@ export class ProjectListComponent {
     }
 
     /**
-     * Refactored extraction method for project data.
-     * Tries multiple paths to find an array of projects.
+     * Extract projects from the data payload.
      * @private
      */
     _extractProjects(data) {
-        // If data is already an array, return it.
         if (Array.isArray(data)) return data;
 
-        // List possible paths to retrieve the projects array.
+        // List possible paths
         const paths = ["projects", "data.projects", "data"];
-
         for (let path of paths) {
             const segments = path.split(".");
             let result = data;
@@ -245,20 +261,15 @@ export class ProjectListComponent {
                     break;
                 }
             }
-            if (valid && Array.isArray(result)) {
-                return result;
-            }
-            // If we found an object with an id, wrap it as a project in an array.
-            if (valid && result && typeof result === "object" && result.id) {
-                return [result];
-            }
+            if (valid && Array.isArray(result)) return result;
+            if (valid && result?.id) return [result];
         }
         return [];
     }
 
     show() {
         if (!this.element) {
-            console.warn("[ProjectListComponent.show] element is not found.");
+            this._logWarn("[ProjectListComponent.show] element is not found.");
             return;
         }
         this.element.classList.remove("hidden");
@@ -290,18 +301,16 @@ export class ProjectListComponent {
     async _loadProjects() {
         if (this.state.loading) return;
         if (!this.projectManager?.loadProjects) {
-            console.warn(
-                "[ProjectListComponent] projectManager.loadProjects is missing.",
-            );
+            this._logWarn("[ProjectListComponent] projectManager.loadProjects is missing.");
             return;
         }
         this.state.loading = true;
         this._showLoadingState();
         try {
-            // loadProjects should dispatch "projectsLoaded" or return data.
+            // loadProjects will dispatch "projectsLoaded" or return data.
             await this.projectManager.loadProjects(this.state.filter);
         } catch (error) {
-            console.error("[ProjectListComponent] Error loading projects:", error);
+            this._logError("[ProjectListComponent] Error loading projects:", error);
             this._showErrorState("Failed to load projects");
         } finally {
             this.state.loading = false;
@@ -328,7 +337,7 @@ export class ProjectListComponent {
     _handleAction(action, projectId) {
         const project = this.state.projects.find((p) => p.id === projectId);
         if (!project) {
-            console.warn(`[ProjectListComponent] Project not found: ${projectId}`);
+            this._logWarn(`[ProjectListComponent] Project not found: ${projectId}`);
             return;
         }
         switch (action) {
@@ -342,7 +351,7 @@ export class ProjectListComponent {
                 this._confirmDelete(project);
                 break;
             default:
-                console.warn(`[ProjectListComponent] Unknown action: ${action}`);
+                this._logWarn(`[ProjectListComponent] Unknown action: ${action}`);
         }
     }
 
@@ -354,9 +363,7 @@ export class ProjectListComponent {
 
     _handleProjectUpdated(updatedProject) {
         if (!updatedProject) return;
-        const idx = this.state.projects.findIndex(
-            (p) => p.id === updatedProject.id,
-        );
+        const idx = this.state.projects.findIndex((p) => p.id === updatedProject.id);
         if (idx >= 0) {
             this.state.projects[idx] = updatedProject;
             this.renderProjects(this.state.projects);
@@ -365,7 +372,6 @@ export class ProjectListComponent {
 
     /**
      * Binds "Create Project" buttons.
-     * @private
      */
     _bindCreateProjectButtons() {
         if (!this.modalManager) return;
@@ -389,7 +395,7 @@ export class ProjectListComponent {
 
     _openNewProjectModal() {
         if (!this.modalManager?.show) {
-            console.error("[ProjectListComponent] modalManager.show is unavailable");
+            this._logError("[ProjectListComponent] modalManager.show is unavailable");
             return;
         }
         this.modalManager.show("project");
@@ -397,7 +403,7 @@ export class ProjectListComponent {
 
     _openEditModal(project) {
         if (!this.modalManager?.show) {
-            console.error("[ProjectListComponent] modalManager.show is unavailable");
+            this._logError("[ProjectListComponent] modalManager.show is unavailable");
             return;
         }
         this.modalManager.show("project", {
@@ -412,7 +418,9 @@ export class ProjectListComponent {
 
     _confirmDelete(project) {
         if (!this.modalManager?.confirmAction) {
-            if (confirm(`Delete "${project.name}"? This cannot be undone.`)) {
+            // fallback: use built-in confirm
+            if (typeof window !== 'undefined'
+                && window.confirm(`Delete "${project.name}"? This cannot be undone.`)) {
                 this._executeDelete(project.id);
             }
             return;
@@ -428,9 +436,7 @@ export class ProjectListComponent {
 
     async _executeDelete(projectId) {
         if (!this.projectManager?.deleteProject) {
-            console.error(
-                "[ProjectListComponent] projectManager.deleteProject is not available.",
-            );
+            this._logError("[ProjectListComponent] projectManager.deleteProject is not available.");
             return;
         }
         try {
@@ -438,7 +444,7 @@ export class ProjectListComponent {
             this.app?.showNotification?.("Project deleted", "success");
             this._loadProjects();
         } catch (err) {
-            console.error("[ProjectListComponent] Failed to delete project:", err);
+            this._logError("[ProjectListComponent] Failed to delete project:", err);
             this.app?.showNotification?.("Failed to delete project", "error");
         }
     }
@@ -450,11 +456,11 @@ export class ProjectListComponent {
             const skeleton = document.createElement("div");
             skeleton.className = "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
             skeleton.innerHTML = `
-                  <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
-                  <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-                  <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
-                  <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
-              `;
+            <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
+            <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
+            <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
+            <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
+          `;
             this.element.appendChild(skeleton);
         }
     }
@@ -462,48 +468,30 @@ export class ProjectListComponent {
     _showEmptyState() {
         if (!this.element) return;
         this.element.innerHTML = `
-              <div class="col-span-3 text-center py-10 text-base-content/60">
-                <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor"
-                     viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2
-                           0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0
-                           00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2
-                           0 012-2h6a2 2 0 012 2v2M7 7h10"
-                  ></path>
-                </svg>
-                <p class="mt-4 text-lg text-base-content">No projects found</p>
-                <p class="mt-1">Create a new project to get started</p>
-                <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
-              </div>
-          `;
+        <div class="col-span-3 text-center py-10 text-base-content/60">
+          <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor"
+              viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M19 11H5m14 0a2 2 0 012 2v6a2 2
+                     0 01-2 2H5a2 2 0 01-2-2v-6a2 2
+                     0 012-2m14 0V9a2 2 0
+                     00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2
+                     0 012-2h6a2 2 0 012 2v2M7 7h10"
+            ></path>
+          </svg>
+          <p class="mt-4 text-lg text-base-content">No projects found</p>
+          <p class="mt-1">Create a new project to get started</p>
+          <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
+        </div>
+      `;
         const createBtn = document.getElementById("emptyStateCreateBtn");
-        if (createBtn && this.eventHandlers?.trackListener) {
+        if (createBtn) {
             this.eventHandlers.trackListener(
                 createBtn,
                 "click",
                 () => this._openNewProjectModal(),
-                {
-                    description: "EmptyState: Create Project",
-                },
+                { description: "EmptyState: Create Project" }
             );
-        }
-    }
-
-    _showLoginRequired() {
-        if (!this.element) return;
-        this.element.innerHTML = `
-              <div class="col-span-3 text-center py-10">
-                <p class="mt-4 text-lg">Please log in to view your projects</p>
-                <button id="loginButton" class="btn btn-primary mt-4">Login</button>
-              </div>
-          `;
-        const loginBtn = document.getElementById("loginButton");
-        if (loginBtn && this.eventHandlers?.trackListener) {
-            this.eventHandlers.trackListener(loginBtn, "click", (e) => {
-                e.preventDefault();
-                document.dispatchEvent(new CustomEvent("requestLogin"));
-            });
         }
     }
 
@@ -511,26 +499,24 @@ export class ProjectListComponent {
         if (!this.element) return;
         const msg = message || "An unknown error occurred.";
         this.element.innerHTML = `
-              <div class="col-span-3 text-center py-10">
-                <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor"
-                     viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M12 8v4m0 4h.01M21 12a9 9 0
-                           11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                <p class="mt-4 text-lg text-error">${msg}</p>
-                <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
-              </div>
-          `;
+        <div class="col-span-3 text-center py-10">
+          <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor"
+              viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M12 8v4m0 4h.01M21 12a9 9 0
+                     11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p class="mt-4 text-lg text-error">${msg}</p>
+          <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
+        </div>
+      `;
         const retryBtn = document.getElementById("retryButton");
-        if (retryBtn && this.eventHandlers?.trackListener) {
+        if (retryBtn) {
             this.eventHandlers.trackListener(
                 retryBtn,
                 "click",
                 () => this._loadProjects(),
-                {
-                    description: "ProjectList: Retry Load Projects",
-                },
+                { description: "ProjectList: Retry Load Projects" }
             );
         }
     }
@@ -538,8 +524,7 @@ export class ProjectListComponent {
     _createProjectCard(project) {
         const theme = this.state.customization.theme || "default";
         const themeBg = theme === "default" ? "bg-base-100" : `bg-${theme}`;
-        const themeText =
-            theme === "default" ? "text-base-content" : `text-${theme}-content`;
+        const themeText = theme === "default" ? "text-base-content" : `text-${theme}-content`;
 
         const card = document.createElement("div");
         card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-x-auto`;
@@ -560,36 +545,46 @@ export class ProjectListComponent {
             {
                 action: "view",
                 icon: `
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                           viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                      </svg>
-                  `,
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0
+                       8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7
+                       -4.477 0-8.268-2.943-9.542-7z"/>
+            </svg>
+          `,
                 title: "View",
             },
             {
                 action: "edit",
                 icon: `
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                           viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                      </svg>
-                  `,
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M11 5H6a2 2 0
+                       00-2 2v11a2 2 0
+                       002 2h11a2 2 0
+                       002-2v-5m-1.414-9.414a2 2
+                       0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            </svg>
+          `,
                 title: "Edit",
             },
             {
                 action: "delete",
                 icon: `
-                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                           viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                      </svg>
-                  `,
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                 viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0
+                       0116.138 21H7.862a2 2 0
+                       01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1
+                       0 00-1-1h-4a1 1 0
+                       00-1 1v3M4 7h16"/>
+            </svg>
+          `,
                 title: "Delete",
                 className: "text-error hover:bg-error/10",
             },
@@ -616,8 +611,7 @@ export class ProjectListComponent {
 
         // Footer
         const footer = document.createElement("div");
-        footer.className =
-            "mt-auto pt-2 flex justify-between text-xs text-base-content/70";
+        footer.className = "mt-auto pt-2 flex justify-between text-xs text-base-content/70";
 
         if (this.state.customization.showDate && project.updated_at) {
             const dateEl = document.createElement("span");
@@ -625,7 +619,7 @@ export class ProjectListComponent {
             footer.appendChild(dateEl);
         }
 
-        // Optional badges for pinned or archived status
+        // Optional badges for pinned/archived status
         const badges = document.createElement("div");
         badges.className = "flex gap-1";
         if (project.pinned) {
@@ -645,7 +639,6 @@ export class ProjectListComponent {
 
         footer.appendChild(badges);
         card.appendChild(footer);
-
         return card;
     }
 
@@ -659,23 +652,51 @@ export class ProjectListComponent {
         }
     }
 
+    /**
+     * Loads customization from injected storageService (no direct localStorage).
+     */
     _loadCustomization() {
+        if (!this.storage?.getItem) {
+            // fallback to defaults
+            this._logWarn("[ProjectListComponent] No storageService provided, using default customization.");
+            return this._getDefaultCustomization();
+        }
         try {
-            const saved = localStorage.getItem("projectCardsCustomization");
+            const saved = this.storage.getItem("projectCardsCustomization");
             return saved ? JSON.parse(saved) : this._getDefaultCustomization();
-        } catch {
+        } catch (err) {
+            this._logError("[ProjectListComponent] Failed to load customization:", err);
             return this._getDefaultCustomization();
         }
     }
 
-    /**
-     * Returns default customization settings for project cards.
-     */
     _getDefaultCustomization() {
         return {
             theme: "default",
             showDescription: true,
             showDate: true,
         };
+    }
+
+    // -------------------------------------------------------------------------
+    // Logging Helpers to replace direct console.*
+    // -------------------------------------------------------------------------
+
+    _logInfo(msg, ...args) {
+        if (this.logger?.info) {
+            this.logger.info(msg, ...args);
+        }
+    }
+
+    _logWarn(msg, ...args) {
+        if (this.logger?.warn) {
+            this.logger.warn(msg, ...args);
+        }
+    }
+
+    _logError(msg, ...args) {
+        if (this.logger?.error) {
+            this.logger.error(msg, ...args);
+        }
     }
 }
