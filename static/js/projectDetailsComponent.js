@@ -661,7 +661,7 @@ export class ProjectDetailsComponent {
 
   _fileItem(file) {
     const div = document.createElement("div");
-    div.className = "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-sm hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
+    div.className = "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-xs hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.fileId = file.id;
 
     const fmtB = this.app.formatBytes || (b => `${b} B`);

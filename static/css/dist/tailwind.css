@@ -6427,9 +6427,6 @@
   .bg-blue-500 {
     background-color: var(--color-blue-500);
   }
-  .bg-error {
-    background-color: var(--color-error);
-  }
   .bg-gray-100 {
     background-color: var(--color-gray-100);
   }
@@ -7262,9 +7259,6 @@
   .text-error {
     color: var(--color-error);
   }
-  .text-error-content {
-    color: var(--color-error-content);
-  }
   .text-error\/60 {
     color: var(--color-error);
     @supports (color: color-mix(in lab, red, red)) {
@@ -7362,10 +7356,6 @@
   }
   .shadow-md {
     --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
-    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
-  }
-  .shadow-sm {
-    --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
   .shadow-xl {
@@ -8626,14 +8616,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --tw-translate-y: calc(var(--spacing) * -0.5);
   translate: var(--tw-translate-x) var(--tw-translate-y);
   transform: translateZ(0) var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
-  --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 .btn:active, .btn:focus:active {
   --tw-translate-y: calc(var(--spacing) * 0);
   translate: var(--tw-translate-x) var(--tw-translate-y);
   transform: translateZ(0) var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,);
-  --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   &:active {
     background-color: var(--color-primary);
@@ -8824,6 +8814,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .chat-bubble {
   max-width: 100%;
   overflow-wrap: break-word;
+  word-break: break-word;
 }
 .kb-result-card {
   position: relative;
@@ -8905,7 +8896,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-width: 1px;
   border-color: var(--color-base-300);
   background-color: var(--color-base-100);
-  --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   transition-property: all;
   transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
@@ -9343,7 +9334,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: var(--color-base-300);
   background-color: var(--color-base-200);
   padding: calc(var(--spacing) * 4);
-  --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 .skeleton-text {
@@ -9586,6 +9577,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   --fontsize: 0.875rem;
   --btn-p: 1rem;
   --size: calc(var(--size-field, 0.25rem) * 10);
+}
+#notificationContainer .alert {
+  opacity: 0.7;
+}
+.alert-info {
+  background-color: transparent !important;
+  background: rgba(56, 189, 248, 0.6) !important;
 }
 .notification {
   display: grid;
@@ -10337,7 +10335,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   border-color: var(--color-base-300);
   background-color: var(--color-base-100);
   padding: calc(var(--spacing) * 2);
-  --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
+  --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
   box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 .file-preview-icon {
@@ -10780,7 +10778,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       --border: 0.5px;
       --depth: 0.2;
       --noise: 1;
-      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+      --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
       --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
       --animation-duration: 200ms;
       --border-color: oklch(30% 0.02 277.5);
@@ -10821,7 +10819,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     --border: 0.5px;
     --depth: 0.2;
     --noise: 1;
-    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
     --animation-duration: 200ms;
     --border-color: oklch(30% 0.02 277.5);
