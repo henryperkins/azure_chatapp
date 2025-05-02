@@ -104,6 +104,9 @@ async def create_project(
     Create a new project with full monitoring and always create a knowledge base.
     """
     current_user, _token = current_user_tuple
+    # --- BEGIN ADDED LOGGING ---
+    logger.info(f"[PROJECT_CREATE_START] User ID {current_user.id} ({current_user.username}) creating project '{project_data.name}'")
+    # --- END ADDED LOGGING ---
     transaction = start_transaction(
         op="project",
         name="Create Project",
@@ -214,6 +217,9 @@ async def list_projects(
 ):
     """List projects with performance tracing"""
     current_user, _token = current_user_tuple
+    # --- BEGIN ADDED LOGGING ---
+    logger.info(f"[PROJECT_LIST_START] User ID {current_user.id} ({current_user.username}) listing projects with filter: {filter_type.value}")
+    # --- END ADDED LOGGING ---
     with sentry_span(
         op="project",
         name="List Projects",
@@ -709,7 +715,7 @@ async def get_project_stats(
             # Get file statistics
             files_result = await db.execute(
                 select(
-                    func.count(), func.sum(ProjectFile.file_size)
+                    func.count(ProjectFile.id), func.sum(ProjectFile.file_size)
                 )
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)

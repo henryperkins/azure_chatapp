@@ -192,7 +192,8 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
         .where(TokenBlacklist.expires >= now)
         .group_by(TokenBlacklist.token_type)
     )
-    token_counts = await db.execute(token_count_query)
+    result = await db.execute(token_count_query)
+    token_counts = result.all() if hasattr(result, "all") else []
     for token_type, count in token_counts:
         logger.info(f"Active blacklisted tokens of type '{token_type}': {count}")
 
@@ -255,14 +256,26 @@ def extract_token(request_or_websocket, token_type="access"):
     cookie_name = f"{token_type}_token"
     token = None
     source = None
+    raw_cookie_header = "[Not Available]" # Default
 
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
+
+    # --- BEGIN ADDED LOGGING ---
+    if hasattr(request_or_websocket, "headers"):
+        raw_cookie_header = request_or_websocket.headers.get("cookie", "[No Cookie Header]")
+        if debugging:
+            logger.debug(f"[AUTH_EXTRACT] Incoming raw cookie header for {token_type}: {raw_cookie_header}")
+    # --- END ADDED LOGGING ---
 
     # First check standard cookies (HTTP)
     if hasattr(request_or_websocket, "cookies") and request_or_websocket.cookies:
         token = request_or_websocket.cookies.get(cookie_name)
         if token:
             source = "cookie"
+            # --- BEGIN ADDED LOGGING ---
+            if debugging:
+                logger.debug(f"[AUTH_EXTRACT] Found '{cookie_name}' in parsed cookies.")
+            # --- END ADDED LOGGING ---
 
     # Then check Authorization header (for access tokens)
     if not token and hasattr(request_or_websocket, "headers"):
@@ -270,6 +283,10 @@ def extract_token(request_or_websocket, token_type="access"):
         if auth_header.lower().startswith("bearer ") and token_type == "access":
             token = auth_header[7:]
             source = "auth_header"
+            # --- BEGIN ADDED LOGGING ---
+            if debugging:
+                logger.debug(f"[AUTH_EXTRACT] Found token in Authorization header.")
+            # --- END ADDED LOGGING ---
 
     # For WebSockets, parse cookie header if still no token found
     if not token and hasattr(request_or_websocket, "headers"):
@@ -277,18 +294,26 @@ def extract_token(request_or_websocket, token_type="access"):
         if cookie_header:
             # Use SimpleCookie for robust cookie parsing
             import http.cookies
-            parsed_cookies = http.cookies.SimpleCookie()
-            parsed_cookies.load(cookie_header)
-            if cookie_name in parsed_cookies:
-                token = parsed_cookies[cookie_name].value
-                source = "ws_cookie_header"
+            try:
+                parsed_cookies = http.cookies.SimpleCookie()
+                parsed_cookies.load(cookie_header)
+                if cookie_name in parsed_cookies:
+                    token = parsed_cookies[cookie_name].value
+                    source = "ws_cookie_header"
+                    # --- BEGIN ADDED LOGGING ---
+                    if debugging:
+                        logger.debug(f"[AUTH_EXTRACT] Found '{cookie_name}' via manual header parse.")
+                    # --- END ADDED LOGGING ---
+            except Exception as parse_err:
+                if debugging:
+                    logger.warning(f"[AUTH_EXTRACT] Error parsing cookie header: {parse_err}")
 
     # Log outcome in debug mode
     if debugging:
         if token:
-            logger.debug(f"Token ({token_type}) found in {source}: {token[:10]}...")
+            logger.debug(f"[AUTH_EXTRACT_RESULT] Token ({token_type}) found via {source}: {token[:10]}...")
         else:
-            logger.debug(f"No {token_type} token found in request")
+            logger.debug(f"[AUTH_EXTRACT_RESULT] No {token_type} token found in request. Raw Header: {raw_cookie_header}")
 
     return token
 
