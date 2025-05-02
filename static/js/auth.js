@@ -375,8 +375,9 @@ export function createAuthModule({
     }
     console.log('[Auth] Initializing auth module...');
 
-    // Set up login form handler (if present)
-    const setupLoginForm = () => {
+    // Set up login & register modal form handlers (if present)
+    const setupAuthForms = () => {
+      // ----- Login
       const loginForms = [
         document.getElementById('loginForm'),
         document.getElementById('loginModalForm')
@@ -470,10 +471,86 @@ export function createAuthModule({
           }
         }
       });
+
+      // ----- Register Modal
+      const registerModalForm = document.getElementById('registerModalForm');
+      if (registerModalForm && !registerModalForm._listenerAttached) {
+        registerModalForm._listenerAttached = true;
+        const handler = async (e) => {
+          e.preventDefault();
+          const errorEl = document.getElementById('registerModalError');
+          const submitBtn = document.getElementById('registerModalSubmitBtn');
+          if (errorEl) errorEl.classList.add('hidden');
+
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Registering...`;
+          }
+
+          const formData = new FormData(registerModalForm);
+          const username = formData.get('username')?.trim();
+          const email = formData.get('email')?.trim();
+          const password = formData.get('password');
+          const passwordConfirm = formData.get('passwordConfirm');
+
+          // Basic validation
+          if (!username || !email || !password || !passwordConfirm) {
+            if (errorEl) {
+              errorEl.textContent = 'All fields are required.';
+              errorEl.classList.remove('hidden');
+            }
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Register';
+            }
+            return;
+          }
+          if (password !== passwordConfirm) {
+            if (errorEl) {
+              errorEl.textContent = 'Passwords do not match.';
+              errorEl.classList.remove('hidden');
+            }
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Register';
+            }
+            return;
+          }
+
+          try {
+            await publicAuth.register({ username, password });
+            if (modalManager?.hide) modalManager.hide('login');
+            showNotification?.('Registration successful. You may now log in.', 'success');
+          } catch (error) {
+            let msg;
+            if (error.status === 409) {
+              msg = 'A user with that username already exists.';
+            } else if (error.status === 400) {
+              msg = (error.data && error.data.detail) || 'Invalid registration data.';
+            } else {
+              msg = (error.data && error.data.detail) || error.message || 'Registration failed due to server error.';
+            }
+            if (errorEl) {
+              errorEl.textContent = msg;
+              errorEl.classList.remove('hidden');
+            }
+          } finally {
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              submitBtn.textContent = 'Register';
+            }
+          }
+        };
+        if (eventHandlers?.trackListener) {
+          eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false });
+        } else {
+          registerModalForm.addEventListener('submit', handler, { passive: false });
+        }
+      }
     };
 
-    setupLoginForm();
-    document.addEventListener('modalsLoaded', setupLoginForm);
+    setupAuthForms();
+    document.addEventListener('modalsLoaded', setupAuthForms);
 
     try {
       await getCSRFTokenAsync();
