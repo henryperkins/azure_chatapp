@@ -326,8 +326,8 @@
     </form>
     <h3 id="loginRegisterModalTitle" class="font-bold text-xl mb-3 mt-2 text-center">Welcome</h3>
     <div class="flex border-b border-base-200 mb-3">
-      <button id="loginTab" type="button" class="tab tab-bordered flex-1 tab-active rounded-t-lg" aria-selected="true">Login</button>
-      <button id="registerTab" type="button" class="tab tab-bordered flex-1 rounded-t-lg" aria-selected="false">Register</button>
+      <button id="modalLoginTab" type="button" class="tab tab-bordered flex-1 tab-active rounded-t-lg" aria-selected="true">Login</button>
+      <button id="modalRegisterTab" type="button" class="tab tab-bordered flex-1 rounded-t-lg" aria-selected="false">Register</button>
     </div>
     <div id="loginPanel" class="tab-panel" role="tabpanel" aria-labelledby="loginTab" style="display:block;">
       <form id="loginModalForm" class="space-y-3">
@@ -594,51 +594,8 @@
       });
     }
 
-    // --- Registration form submit logic (stub, not yet backend integrated) ---
-    const registerForm = document.getElementById('registerModalForm');
-    if (registerForm) {
-      registerForm.addEventListener('submit', function(e) {
-        e.preventDefault();
-        const submitButton = document.getElementById('registerModalSubmitBtn');
-        setButtonLoading(submitButton, true);
-        // Clear error
-        document.getElementById('registerModalError').classList.add('hidden');
-
-        // Collect form data
-        const formData = new FormData(this);
-        const data = {
-          username: formData.get('username')?.trim(),
-          email: formData.get('email')?.trim(),
-          password: formData.get('password'),
-          passwordConfirm: formData.get('passwordConfirm')
-        };
-
-        // client-side validation (stub example)
-        if (!data.username || !data.email || !data.password || !data.passwordConfirm) {
-          showRegisterError('Please fill in all the fields.');
-          setButtonLoading(submitButton, false);
-          return;
-        }
-        if (data.password !== data.passwordConfirm) {
-          showRegisterError('Passwords do not match.');
-          setButtonLoading(submitButton, false);
-          return;
-        }
-        // TODO: Replace this with actual API registration call
-        notify('info', '[Demo] Registration attempt for user: ' + data.username + ' (not actually sent)');
-        setTimeout(() => {
-          showRegisterError('Registration handling is not yet implemented.');
-          setButtonLoading(submitButton, false);
-        }, 1000);
-      });
-      function showRegisterError(msg) {
-        const el = document.getElementById('registerModalError');
-        if (el) {
-          el.textContent = msg;
-          el.classList.remove('hidden');
-        }
-      }
-    }
+    // --- Registration form submit logic removed: now handled in auth.js & eventHandler.js DI.
+    // See eventHandler.js and auth.js for real registration submission, error display, and feedback.
     // --- end registration form hookup ---
 
 

@@ -34,9 +34,31 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     return container;
   }
 
+  // Utility: Async log notification to backend (fire-and-forget)
+  async function logNotificationToServer(message, type, user) {
+    try {
+      const logPayload = {
+        message,
+        type,
+        timestamp: Date.now() / 1000,
+        user: user || (window.currentUser?.username ?? "unknown")
+      };
+      await fetch("/api/log_notification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(logPayload)
+      });
+    } catch (_) {
+      // Fail silently. Do not block or throw; UI is always primary.
+    }
+  }
+
   // Show a notification
   function show(message, type = 'info', options = {}) {
     const container = ensureNotificationContainer();
+
+    // Fire-and-forget backend log
+    logNotificationToServer(message, type, options.user);
 
     // Group by type and time window if options.groupByTypeAndTime is true
     if (options.groupByTypeAndTime) {

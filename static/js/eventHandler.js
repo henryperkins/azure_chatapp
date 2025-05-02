@@ -512,8 +512,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
 
   // ---- Modal login/register tab hookup ----
   function setupModalTabs() {
-    const loginTab = document.getElementById("loginTab");
-    const registerTab = document.getElementById("registerTab");
+    const loginTab = document.getElementById("modalLoginTab");
+    const registerTab = document.getElementById("modalRegisterTab");
     const loginPanel = document.getElementById("loginPanel");
     const registerPanel = document.getElementById("registerPanel");
     function showTab(tab) {
@@ -575,6 +575,12 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     }
   }
   document.addEventListener('modalsLoaded', setupModalTabs);
+  // Also ensure modal tabs init after DOMContentLoaded for static/app shell builds:
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    setTimeout(setupModalTabs, 0);
+  } else {
+    document.addEventListener('DOMContentLoaded', setupModalTabs, { once: true });
+  }
   // ---- end modal tab hookup ----
 
   let initialized = false;
