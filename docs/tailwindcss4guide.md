@@ -43,7 +43,7 @@ This guide combines a quickstart to set up Tailwind CSS v4 with a deep reference
   - Replace deprecated directives (e.g., use `@import` instead of `@tailwind`).
   - Shift from JavaScript-based configuration to CSS-based configuration using `@theme`.
 - **Utility Renames:**
-  - Update renamed utilities (eg. `shadow-sm` → `shadow-xs`, `outline-none` → `outline-hidden`).
+  - Update renamed utilities (eg. `shadow-xs` → `shadow-xs`, `outline-none` → `outline-hidden`).
 - **Content Detection:**
   - No need for an explicit `content` array—Tailwind auto-detects files.
   - Use `@source` if you need explicit control.
