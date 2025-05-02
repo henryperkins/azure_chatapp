@@ -536,7 +536,9 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     setupModal,
     setupForm,
     init,
-    PRIORITY
+    PRIORITY,
+    // DI compatibility for consumers requiring untrackListener
+    untrackListener: () => {}
   };
 }
 

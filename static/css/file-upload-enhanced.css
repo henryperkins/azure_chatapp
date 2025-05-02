@@ -55,7 +55,7 @@
 /* Old "animate-in fade-in-0 zoom-in-95" is invalid in Tailwind v4
    Replaced with "fade-zoom-in" (defined in tailwind.css) */
 .file-preview-item {
-  @apply p-2 bg-base-100 rounded-box shadow-sm flex items-center gap-2 border border-base-300 fade-zoom-in;
+  @apply p-2 bg-base-100 rounded-box shadow-sm flex items-center gap-2 border border-base-300 animate-fadeZoomIn;
 }
 
 .file-preview-icon {

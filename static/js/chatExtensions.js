@@ -59,10 +59,11 @@ export function createChatExtensions({
         : undefined)
     );
 
-  // Helper - consistent trackListener fallback
-  const trackListener = eventHandlers && eventHandlers.trackListener
-    ? eventHandlers.trackListener.bind(eventHandlers)
-    : (el, evt, fn, opts) => el && el.addEventListener && el.addEventListener(evt, fn, opts);
+  // Helper - require trackListener, no fallback to direct .addEventListener allowed
+  if (!eventHandlers || !eventHandlers.trackListener) {
+    throw new Error("[chatExtensions] eventHandlers.trackListener is required (no direct addEventListener fallback permitted)");
+  }
+  const trackListener = eventHandlers.trackListener.bind(eventHandlers);
 
   // Helper - consistent showNotification fallback
   const showNotification = notificationHandler

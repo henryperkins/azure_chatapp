@@ -347,9 +347,28 @@ textarea:focus-visible,
     @apply w-4/5 max-w-xs fixed inset-0 z-50 transition-transform duration-300;
     @apply bg-base-100; /* Use theme background */
     /* Removed hardcoded background: rgba(0,0,0,0.3); */
+    height: 100dvh;
+    min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    @apply flex flex-col overflow-y-auto touch-pan-y;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
   }
   .sidebar-nav {
     @apply p-4;
+  }
+  /* Sidebar Backdrop Overlay for Mobile (if applicable) */
+  .sidebar-backdrop {
+    @apply fixed inset-0 z-40 bg-base-300/70;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  /* Sidebar sticky dock (bottom nav bar for actions) */
+  .sidebar-dock {
+    @apply fixed bottom-0 left-0 w-full bg-base-100 border-t border-base-300 z-50 flex justify-around items-center;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+    min-height: 56px;
+    gap: 0.5rem;
   }
 }
 
@@ -464,6 +483,8 @@ textarea:focus-visible,
 
 .notification-info {
   @apply alert-info;
+  background-color: transparent !important;
+  background: rgba(56, 189, 248, 0.6) !important; /* 60% opaque info blue */
 }
 
 /* Enhanced Form Control Styling */
@@ -616,6 +637,36 @@ textarea:focus-visible,
   @apply max-w-full w-full;
   @apply overflow-x-auto;
 }
+
+/* Enhanced Responsive Project List Grid */
+.project-list, /* for main projectList grid container */
+.grid.project-list, /* fallback: for dynamically rendered container */
+#projectList > .grid,
+#projectList .grid {
+  @apply grid grid-cols-1 gap-6 py-2 overflow-x-hidden;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
+/* Responsive adjustments for project cards in grid */
+@media (max-width: 640px) {
+  .project-card {
+    @apply min-w-0 max-w-full w-full rounded-box;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+  .project-list {
+    @apply gap-3 py-2;
+  }
+}
+
+/* Make sure loading/error/empty state is always centered and responsive */
+.project-list-fallback,
+.project-list-error,
+.project-list-empty {
+  @apply col-span-1 text-center py-8 text-base-content/60 text-sm font-medium flex flex-col items-center justify-center w-full;
+}
+
 
 /* Utility: Avoid text-xs for essential info on mobile */
 @media (max-width: 640px) {

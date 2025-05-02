@@ -120,7 +120,7 @@ class ProjectDashboard {
     this.logger.info('[ProjectDashboard] Showing project list view');
     this.state.currentView = 'list';
     this.state.currentProject = null;
-    this.browserService.removeItem('selectedProjectId');
+    // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
 
     // Remove ?project from URL
     this.browserService.removeSearchParam('project');
@@ -192,20 +192,31 @@ class ProjectDashboard {
       return false;
     }
 
-    this._setView({ showList: false, showDetails: true });
+    // Delay setting view until project data is confirmed ready
+    // this._setView({ showList: false, showDetails: true }); // Moved down
 
-    if (this.components.projectList) this.components.projectList.hide();
-    if (this.components.projectDetails) this.components.projectDetails.show();
+    // if (this.components.projectList) this.components.projectList.hide(); // Moved down
+    // if (this.components.projectDetails) this.components.projectDetails.show(); // Moved down
 
     // Update URL param
     this.browserService.setSearchParam('project', projectId);
 
-    // Persist selection
-    this.browserService.setItem('selectedProjectId', projectId);
+    // Persist selection - REMOVED
+    // this.browserService.setItem('selectedProjectId', projectId);
 
     // If we already have a project object, use it directly
     if (project) {
+      // Always set as current project to trigger downstream events
+      if (this.projectManager && typeof this.projectManager.setCurrentProject === 'function') {
+        this.projectManager.setCurrentProject(project);
+      }
+
       if (this.components.projectDetails && this.components.projectDetails.renderProject) {
+        // Set view AFTER project is ready to be rendered
+        this._setView({ showList: false, showDetails: true });
+        if (this.components.projectList) this.components.projectList.hide();
+        if (this.components.projectDetails) this.components.projectDetails.show(); // Ensure component is shown
+
         this.components.projectDetails.renderProject(project);
       }
       // Optionally, emit projectLoaded event for consistency
@@ -220,19 +231,29 @@ class ProjectDashboard {
         if (!project) {
           this.logger.warn('[ProjectDashboard] Project not found after details load');
           this.app?.showNotification('Project not found', 'error');
-          this.browserService.removeItem('selectedProjectId');
+          // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
           this.showProjectList();
-        } else if (this.components.projectDetails && this.components.projectDetails.renderProject) {
+        }
+        if (project && this.components.projectDetails && this.components.projectDetails.renderProject) {
+          // Always set as current project to trigger downstream events
+          if (this.projectManager && typeof this.projectManager.setCurrentProject === 'function') {
+            this.projectManager.setCurrentProject(project);
+          }
+          // Set view AFTER project is loaded and ready to be rendered (always do this if project is valid)
+          this._setView({ showList: false, showDetails: true });
+          if (this.components.projectList) this.components.projectList.hide();
+          if (this.components.projectDetails) this.components.projectDetails.show(); // Ensure component is shown
+
           this.components.projectDetails.renderProject(project);
         }
       } catch (error) {
         this.logger.error('[ProjectDashboard] Failed to load project details:', error);
         this.app?.showNotification('Failed to load project details', 'error');
-        this.browserService.removeItem('selectedProjectId');
+        // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
         this.showProjectList();
       }
     } else {
-      this.browserService.removeItem('selectedProjectId');
+      // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
       this.showProjectList();
     }
 
@@ -242,6 +263,7 @@ class ProjectDashboard {
   // =================== PRIVATE METHODS ===================
 
   _setView({ showList, showDetails }) {
+    console.log('[ProjectDashboard] _setView called with:', { showList, showDetails, stack: (new Error()).stack });
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
     if (listView) {
@@ -274,10 +296,16 @@ class ProjectDashboard {
     const projectListEl = document.getElementById('projectList');
     if (!projectListEl) throw new Error('Missing #projectList element in DOM after injecting project_list.html');
     if (this.components.projectList) {
+      // Always re-assign navigation handler
       this.components.projectList.onViewProject = this._handleViewProject.bind(this);
       if (!this.components.projectList.state?.initialized) {
         await this.components.projectList.initialize();
+        // Reassign again after possible re-init, to account for internal overwrites
+        this.components.projectList.onViewProject = this._handleViewProject.bind(this);
         this.logger.info('[ProjectDashboard] ProjectListComponent initialized.');
+      } else {
+        // Defensive re-assign even for initialized instances
+        this.components.projectList.onViewProject = this._handleViewProject.bind(this);
       }
     } else {
       this.logger.error('[ProjectDashboard] projectListComponent not found (DependencySystem).');
@@ -295,11 +323,19 @@ class ProjectDashboard {
   }
 
   _processUrlParameters() {
-    const projectId = this.browserService.getSearchParam('project');
-    if (projectId) {
-      this.showProjectDetails(projectId);
+    const projectIdFromUrl = this.browserService.getSearchParam('project');
+
+    // Only navigate if the URL explicitly requests a project *and* we aren't already showing it
+    if (projectIdFromUrl && this.state.currentView !== 'details' && this.state.currentProject?.id !== projectIdFromUrl) {
+        this.logger.info(`[ProjectDashboard] Processing URL parameter: project=${projectIdFromUrl}`);
+        this.showProjectDetails(projectIdFromUrl);
+    } else if (!projectIdFromUrl && this.state.currentView !== 'list') {
+        // If no project in URL, ensure we are showing the list view
+        this.logger.info(`[ProjectDashboard] No project in URL, ensuring list view is shown.`);
+        this.showProjectList();
     } else {
-      this.showProjectList();
+         this.logger.info(`[ProjectDashboard] URL processing skipped: URL=${projectIdFromUrl}, CurrentView=${this.state.currentView}, CurrentProject=${this.state.currentProject?.id}`);
+         // If already on the correct view based on URL, do nothing to prevent loops
     }
   }
 
@@ -333,19 +369,43 @@ class ProjectDashboard {
   }
 
   _loadProjects() {
+    console.log('[ProjectDashboard] Loading projects...');  // Enhanced console log for debugging
     this.logger.info('[ProjectDashboard] Loading projects...');
+
+    if (!this.app) {
+      console.error('[ProjectDashboard] app is null or undefined');
+      this.logger.error('[ProjectDashboard] app is null or undefined');
+      return;
+    }
+
     if (!this.app?.state?.isAuthenticated) {
+      console.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', this.app?.state);
       this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects');
       return;
     }
+
+    if (!this.projectManager) {
+      console.error('[ProjectDashboard] projectManager is null or undefined');
+      this.logger.error('[ProjectDashboard] projectManager is null or undefined');
+      return;
+    }
+
     if (!this.projectManager?.loadProjects) {
+      console.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available', this.projectManager);
       this.logger.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
       return;
     }
+
     this.browserService.setTimeout(() => {
-      this.projectManager.loadProjects('all').catch((error) =>
-        this.logger.error('[ProjectDashboard] Error loading projects:', error)
-      );
+      console.log('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
+      this.projectManager.loadProjects('all')
+        .then(projects => {
+          console.log('[ProjectDashboard] Projects loaded successfully:', projects);
+        })
+        .catch((error) => {
+          console.error('[ProjectDashboard] Error loading projects:', error);
+          this.logger.error('[ProjectDashboard] Error loading projects:', error);
+        });
     }, 100);
   }
 
@@ -373,7 +433,7 @@ class ProjectDashboard {
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
       } else {
         if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
-        this.browserService.removeItem('selectedProjectId');
+        // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
         this.state.currentView = 'list';
         this.state.currentProject = null;
         this.browserService.removeSearchParam('project');
@@ -461,7 +521,7 @@ class ProjectDashboard {
     const { projectId } = event.detail || {};
     this.logger.warn('[ProjectDashboard] Project not found:', projectId);
     this.state.currentProject = null;
-    this.browserService.removeItem('selectedProjectId');
+    // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
     const detailsView = document.getElementById('projectDetailsView');
     if (detailsView) {
       detailsView.classList.add('hidden');

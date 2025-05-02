@@ -17,28 +17,28 @@
   themes: azure-light --default, dracula-enhanced --prefersdark;
 }
 
-/* 3) Define a custom fade+zoom animation utility in Tailwind v4 style */
-
-/* a) Keyframes for fade+zoom in */
-@keyframes fadeZoomIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* b) Utility class for fade+zoom in */
-@utility fade-zoom-in {
-  animation: fadeZoomIn 0.3s ease-out forwards;
-}
+/* Custom "fadeZoomIn" animation is now defined in tailwind.config.js for use as "animate-fadeZoomIn". */
+/* Remove manual CSS keyframes and use utility class in markup per Tailwind best practices. */
 
 /* 4) Import partial CSS files: enhanced-components, file-upload, legacy-dracula-theme. */
 @import "./enhanced-components.css";
 @import "./file-upload-enhanced.css";
 
 /* Done! "npm run build:css" will compile into a single dist/tailwind.css file. */
+
+/* Custom animation: fadeZoomIn, configured for Tailwind v4+.
+   Use as class="animate-fadeZoomIn" per https://tailwindcss.com/docs/animation#customizing-utilities
+*/
+@keyframes fadeZoomIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@utility animate-fadeZoomIn {
+  animation: fadeZoomIn 0.3s ease-out forwards;
+}
