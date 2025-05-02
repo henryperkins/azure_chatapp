@@ -441,6 +441,24 @@ export class ProjectDetailsComponent {
 
     /* lazy load */
     this._loadTabContent(tabName);
+
+    // ----- ChatManager initialization for conversations tab -----
+    if (tabName === "conversations") {
+      const chatManager = window.DependencySystem?.modules?.get('chatManager');
+      if (chatManager && typeof chatManager.initialize === "function") {
+        chatManager.initialize({
+          projectId: this.state.currentProject?.id,
+          containerSelector: "#projectChatUI",
+          messageContainerSelector: "#projectChatMessages",
+          inputSelector: "#projectChatInput",
+          sendButtonSelector: "#projectChatSendBtn"
+        }).catch((err) => {
+          this.notification.error("[ProjectDetailsComponent] Failed to initialize chatManager for conversations tab:", err);
+        });
+      } else {
+        this.notification.error("[ProjectDetailsComponent] chatManager DI missing or invalid during conversations tab init.");
+      }
+    }
   }
 
   /**

@@ -101,6 +101,16 @@ export function createSidebar({
       restorePersistentState();
       bindDomEvents();
 
+      // --- Enhancement: get initial context from URL if needed ---
+      if (app && typeof app.getInitialSidebarContext === 'function') {
+        // Accepts { projectId, chatId }, returns object or null
+        const { projectId, chatId } = app.getInitialSidebarContext() || {};
+        if (projectId && projectManager && typeof projectManager.setCurrentProjectId === 'function') {
+          projectManager.setCurrentProjectId(projectId);
+        }
+        // Optionally: handle chatId for sidebar if sidebar supports chat highlighting
+      }
+
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
 

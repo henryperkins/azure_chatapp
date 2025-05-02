@@ -128,7 +128,11 @@ async def list_project_conversations(
             payload = {
                 "status": "success",
                 "conversations": [
-                    serialize_conversation(conv) for conv in conversations
+                    {
+                        **serialize_conversation(conv),
+                        "project_id": str(getattr(conv, "project_id", "")),
+                        "user_id": str(getattr(conv, "user_id", "")),
+                    } for conv in conversations
                 ],
                 "count": len(conversations),
             }
@@ -227,7 +231,11 @@ async def create_conversation(
             logger.info(f"Created conversation {conv.id} in project {project_id}")
             payload = {
                 "status": "success",
-                "conversation": serialize_conversation(conv),
+                "conversation": {
+                    **serialize_conversation(conv),
+                    "project_id": str(getattr(conv, "project_id", "")),
+                    "user_id": str(getattr(conv, "user_id", "")),
+                },
             }
             return make_sentry_trace_response(payload, transaction)
 
@@ -280,7 +288,14 @@ async def get_project_conversation(
             )
 
             metrics.incr("conversation.viewed")
-            payload = {"status": "success", "conversation": conv_data}
+            payload = {
+                "status": "success",
+                "conversation": {
+                    **conv_data,
+                    "project_id": str(project_id),
+                    # user_id usually in conv_data already
+                },
+            }
             return make_sentry_trace_response(payload, span)
 
         except HTTPException:
