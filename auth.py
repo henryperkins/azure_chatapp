@@ -107,8 +107,8 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: Optiona
     if not is_production:
         # Always use permissive settings for dev/staging/test
         secure = False
-        domain = None
-        samesite = "lax"
+        domain = None  # Let browser default for localhost usually works best
+        samesite = "lax"  # Changed from 'none' which often requires Secure=True
         httponly = True
         path = "/"
     else:
@@ -120,17 +120,25 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: Optiona
         path = cookie_attrs["path"]
 
     try:
+        # --- BEGIN ADDED LOGGING ---
+        log_value_short = f"{value[:8]}..." if value else "'' (clearing)"
+        logger.info(
+            f"[AUTH_COOKIE_SET] Setting cookie '{key}': value={log_value_short}, max_age={max_age}, "
+            f"httpOnly={httponly}, secure={secure}, domain={domain or 'Default'}, samesite={samesite}, path={path}"
+        )
+        # --- END ADDED LOGGING ---
+
         if value == "":
             # Clear cookie
+            # --- ADDED LOGGING ---
+            logger.info(f"[AUTH_COOKIE_CLEAR] Clearing cookie {key}, domain={domain}, path={path}")
+            # --- END ADDED LOGGING ---
             if domain:
                 response.delete_cookie(key=key, path=path, domain=str(domain))
             else:
                 response.delete_cookie(key=key, path=path)
-            logger.info(f"[auth] Clearing cookie {key}, domain={domain}, path={path}")
             return
 
-        logger.info(f"[auth] Setting cookie '{key}': value={value[:8]}..., max_age={max_age}, "
-                    f"httpOnly={httponly}, secure={secure}, domain={domain}, samesite={samesite}, path={path}")
         response.set_cookie(
             key=key,
             value=value,
@@ -138,7 +146,7 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: Optiona
             secure=secure,
             path=path,
             max_age=max_age or 0,
-            domain=(domain if domain else None),
+            domain=(domain if domain else None),  # Pass None if domain is None/empty
             samesite=samesite,
         )
     except Exception as e:
