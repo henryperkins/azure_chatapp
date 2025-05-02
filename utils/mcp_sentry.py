@@ -52,6 +52,7 @@ def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, An
         logger.error(f"Error using MCP tool {tool_name}: {e}")
         raise ServerConnectionError(f"Failed to use MCP tool {tool_name}: {str(e)}")
 
+
 logger = logging.getLogger(__name__)
 
 # Constants for MCP server operations

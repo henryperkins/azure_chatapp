@@ -837,12 +837,14 @@ async function initializeUIComponents() {
         viewportAPI: {
             getInnerWidth: () => window.innerWidth
         },
-        domAPI: {
-            getElementById: (id) => document.getElementById(id),
-            createElement: (tag) => document.createElement(tag),
-            querySelector: (selector) => document.querySelector(selector),
-            body: document.body
-        }
+      domAPI: {
+          getElementById: (id) => document.getElementById(id),
+          createElement: (tag) => document.createElement(tag),
+          querySelector: (selector) => document.querySelector(selector),
+          getActiveElement: () => document.activeElement,
+          ownerDocument: document,
+          body: document.body
+      }
     });
     DependencySystem.register('sidebar', sidebar);
 

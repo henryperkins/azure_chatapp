@@ -1,18 +1,3 @@
-// NOTE:
-// This version removes all direct references to window or console, uses eventHandlers trackListener
-// (no bare addEventListener), replaces alert() with a notify approach, sanitizes innerHTML assignment,
-// and breaks down the large confirmAction method to ensure each sub-function is under 40 lines.
-//
-// Dependencies:
-//  - eventHandlers with .trackListener(element, type, handler, { description })
-//  - showNotification(message, type) for logging/error/warn messages, if present
-//  - Possibly an app object with .isInitializing, used in place of window.__appInitializing
-//  - Optionally domPurify or a similar sanitize function if we want to safely set HTML
-//  - Removal of direct references to window scroll (using document.scrollingElement instead)
-//  - Removal of fallback addEventListener usage
-//
-// Adheres to the user's custom instructions for Modularity & Dependency Injection, etc.
-
 import { MODAL_MAPPINGS } from './modalConstants.js';
 
 /**
@@ -237,7 +222,6 @@ class ModalManager {
             });
           }
         } else {
-          // Remove fallback bare addEventListener
           this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`);
         }
       }
@@ -311,20 +295,34 @@ class ModalManager {
       return false;
     }
 
-   *   @param {Function} [options.onCancel] - Callback for cancel
-   *   @param {boolean} [options.showDuringInitialization] - Show even if app is in init phase
+    this._showModalElement(modalEl);
+    this.activeModal = modalName;
+    return true;
+  }
+
+  /**
+   * Show a confirmation modal with custom text and handlers.
+   * @param {Object} options
+   *   @param {string} [options.title]
+   *   @param {string} [options.message]
+   *   @param {string} [options.confirmText]
+   *   @param {string} [options.cancelText]
+   *   @param {string} [options.confirmClass]
+   *   @param {Function} [options.onConfirm]
+   *   @param {Function} [options.onCancel]
+   *   @param {boolean} [options.showDuringInitialization]
    */
   confirmAction(options) {
     const modalName = 'confirm';
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      console.error('[ModalManager] Confirm modal ID not mapped.');
+      this._notify('error', '[ModalManager] Confirm modal ID not mapped.');
       return;
     }
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      console.error('[ModalManager] Confirm modal element not found.');
+      this._notify('error', '[ModalManager] Confirm modal element not found.');
       return;
     }
 
@@ -368,7 +366,7 @@ class ModalManager {
       }
     };
 
-    // Attach handlers with eventHandlers->trackListener if available, otherwise fallback
+    // Attach handlers with eventHandlers->trackListener if available, otherwise throw
     if (this.eventHandlers?.trackListener) {
       if (newConfirmBtn) {
         this.eventHandlers.trackListener(newConfirmBtn, 'click', confirmHandler, {
@@ -381,14 +379,34 @@ class ModalManager {
         });
       }
     } else {
-      newConfirmBtn?.addEventListener('click', confirmHandler);
-      newCancelBtn?.addEventListener('click', cancelHandler);
+      throw new Error('[ModalManager] eventHandlers.trackListener is required for confirmAction');
     }
 
     // Finally, show the modal
     this.show(modalName, {
       showDuringInitialization: options.showDuringInitialization,
     });
+  }
+
+  /**
+   * Hide a modal by its name (from modalMappings).
+   * @param {string} modalName
+   */
+  hide(modalName) {
+    const modalId = this.modalMappings[modalName];
+    if (!modalId) {
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`);
+      return;
+    }
+    const modalEl = document.getElementById(modalId);
+    if (!modalEl) {
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`);
+      return;
+    }
+    this._hideModalElement(modalEl);
+    if (this.activeModal === modalName) {
+      this.activeModal = null;
+    }
   }
 }
 
@@ -484,10 +502,8 @@ class ProjectModal {
   _notify(type, message) {
     if (this.showNotification) {
       this.showNotification(message, type);
-    } else {
-      if (type === 'error') alert(message);
-      else if (this._isDebug()) console.log(message);
     }
+    // else do nothing (no direct alert/console)
   }
 
   /**
@@ -525,7 +541,7 @@ class ProjectModal {
     this.setupEventListeners();
 
     if (this._isDebug()) {
-      console.log('[ProjectModal] Initialized successfully');
+      this._notify('info', '[ProjectModal] Initialized successfully');
     }
   }
 
@@ -535,7 +551,7 @@ class ProjectModal {
   destroy() {
     if (!this.eventHandlers?.cleanupListeners) {
       if (this._isDebug()) {
-        console.warn('[ProjectModal] destroy() called but eventHandlers.cleanupListeners is unavailable.');
+        this._notify('warn', '[ProjectModal] destroy() called but eventHandlers.cleanupListeners is unavailable.');
       }
       return;
     }
@@ -544,7 +560,7 @@ class ProjectModal {
     });
     this._trackedEvents = [];
     if (this._isDebug()) {
-      console.log('[ProjectModal] destroyed: all tracked listeners removed.');
+      this._notify('info', '[ProjectModal] destroyed: all tracked listeners removed.');
     }
   }
 
@@ -554,7 +570,7 @@ class ProjectModal {
    */
   openModal(project = null) {
     if (!this.modalElement) {
-      console.error('[ProjectModal] No modalElement found!');
+      this._notify('error', '[ProjectModal] No modalElement found!');
       return;
     }
 
@@ -645,7 +661,7 @@ class ProjectModal {
   async handleSubmit(e) {
     e.preventDefault();
     if (!this.formElement) {
-      console.error('[ProjectModal] No formElement found!');
+      this._notify('error', '[ProjectModal] No formElement found!');
       return;
     }
 
@@ -672,7 +688,6 @@ class ProjectModal {
       this.closeModal();
       this._notify('success', projectId ? 'Project updated' : 'Project created');
     } catch (error) {
-      console.error('[ProjectModal] Save error:', error);
       this._notify('error', 'Failed to save project');
     } finally {
       const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
@@ -710,7 +725,7 @@ class ProjectModal {
   }
 
   /**
-   * Helper for binding an event. Uses eventHandlers if available, else fallback to addEventListener.
+   * Helper for binding an event. Uses eventHandlers if available, else throws.
    * @private
    * @param {HTMLElement|Document} element - The element to bind.
    * @param {string} type - The event type.
@@ -728,9 +743,7 @@ class ProjectModal {
         this._trackedEvents.push({ element, type, description });
       }
     } else {
-      element.addEventListener(type, handler, options);
-      // No trackedEvents unbinding if no eventHandlers.
-      // For a robust fallback, you'd store references and removeEventListener in destroy().
+      throw new Error('[ProjectModal] eventHandlers.trackListener is required');
     }
   }
 }
