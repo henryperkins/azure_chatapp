@@ -1,17 +1,11 @@
 /**
- * sidebar.js – DI/DependencySystem Refactored Edition
+ * sidebar.js – Strict DI/DependencySystem Refactored Edition
  *
- * A modular sidebar controller with no hard-coded window.* usage (except for
- * an optional fallback to check window.innerWidth). All dependencies
- * (eventHandlers, app, projectDashboard, projectManager, uiRenderer, DependencySystem)
- * are injected or resolved once from DependencySystem if not provided.
+ * A modular sidebar controller with no hard-coded window.*, document.*, or localStorage usage.
+ * All dependencies (eventHandlers, app, projectDashboard, projectManager, uiRenderer, DependencySystem,
+ * notificationHandler, storageAPI, viewportAPI, domAPI) are injected or resolved from DependencySystem if not provided.
  *
  * Exported as a factory function: createSidebar(opts).
- *
- * Checklist Compliance Highlights:
- * - Modularity & DI: All external references injected, no global mutation.
- * - Event & Listener Management: Uses trackListener, destroy() cleanup added.
- * - Logging: Wrapped in app?.config?.debug checks.
  */
 
 import { safeParseJSON } from './utils/globalUtils.js';
@@ -25,6 +19,16 @@ import { safeParseJSON } from './utils/globalUtils.js';
  * @param {Object} options.projectManager - For project data (optional).
  * @param {Object} options.uiRenderer - For rendering DOM elements (optional).
  * @param {Object} options.DependencySystem - The DI container reference (required).
+ * @param {Function} options.notificationHandler - For notifications (optional).
+ * @param {Object} options.storageAPI - For persistent storage (required).
+ * @param {Object} options.viewportAPI - For viewport info (required).
+ * @param {Object} options.domAPI - For DOM operations (required). Must provide:
+ *    - getElementById(id)
+ *    - createElement(tag)
+ *    - querySelector(selector)
+ *    - body: reference to <body>
+ *    - getActiveElement(): HTMLElement (required, replaces use of document.activeElement)
+ *    - ownerDocument: Document reference (required for event dispatch)
  * @returns {Object} The sidebar module with init(), destroy(), and other controls.
  */
 export function createSidebar({
@@ -33,13 +37,22 @@ export function createSidebar({
   projectDashboard,
   projectManager,
   uiRenderer,
-  DependencySystem
+  DependencySystem,
+  notificationHandler,
+  storageAPI,
+  viewportAPI,
+  domAPI
 } = {}) {
-  if (!DependencySystem) {
-    throw new Error('[sidebar] DependencySystem is required.');
+  if (!DependencySystem) throw new Error('[sidebar] DependencySystem is required.');
+  if (!eventHandlers) throw new Error('[sidebar] eventHandlers is required.');
+  if (!storageAPI) throw new Error('[sidebar] storageAPI (getItem/setItem) must be injected.');
+  if (!viewportAPI) throw new Error('[sidebar] viewportAPI (getInnerWidth) must be injected.');
+  if (!domAPI) throw new Error('[sidebar] domAPI (getElementById/createElement/querySelector/body/getActiveElement/ownerDocument) must be injected.');
+  if (typeof domAPI.getActiveElement !== 'function') {
+    throw new Error('[sidebar] domAPI.getActiveElement() must be provided to avoid using document.activeElement');
   }
-  if (!eventHandlers) {
-    throw new Error('[sidebar] eventHandlers is required.');
+  if (!domAPI.ownerDocument || typeof domAPI.ownerDocument.dispatchEvent !== 'function') {
+    throw new Error('[sidebar] domAPI.ownerDocument with dispatchEvent() must be provided to avoid using window/document globals');
   }
 
   // Dependency resolution helpers
@@ -54,6 +67,8 @@ export function createSidebar({
   projectDashboard = projectDashboard || resolveDep('projectDashboard');
   projectManager = projectManager || resolveDep('projectManager');
   uiRenderer = uiRenderer || resolveDep('uiRenderer');
+  notificationHandler = notificationHandler ||
+    (app && app.showNotification ? app.showNotification.bind(app) : (msg, type) => { });
 
   /** @type {HTMLElement|null} */
   let el = null;
@@ -70,9 +85,9 @@ export function createSidebar({
   // Track all event registrations for cleanup
   let trackedEvents = [];
 
-  // Instead of direct localStorage, you could inject storage, but we keep this for brevity.
+  // Starred conversations (from storage)
   const starred = new Set(
-    safeParseJSON(localStorage?.getItem('starredConversations'), [])
+    safeParseJSON(storageAPI.getItem('starredConversations'), [])
   );
 
   /**
@@ -86,16 +101,13 @@ export function createSidebar({
       restorePersistentState();
       bindDomEvents();
 
-      const activeTab = localStorage?.getItem('sidebarActiveTab') || 'recent';
+      const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
 
-      if (app?.config?.debug) {
-        console.log('[sidebar] initialized successfully');
-      }
+      notificationHandler('[sidebar] initialized successfully', 'info');
       return true;
     } catch (err) {
-      console.error('[sidebar] Initialization failed:', err);
-      // If you have a notification system, you could do: app.showNotification(...)
+      notificationHandler('[sidebar] Initialization failed: ' + (err && err.message ? err.message : err), 'error');
       return false;
     }
   }
@@ -107,7 +119,7 @@ export function createSidebar({
   function destroy() {
     // Unregister all tracked listeners
     trackedEvents.forEach(evt => {
-      eventHandlers.cleanupListeners(evt.element, evt.type, evt.description);
+      eventHandlers.cleanupListeners?.(evt.element, evt.type, evt.description);
     });
     trackedEvents = [];
 
@@ -121,9 +133,7 @@ export function createSidebar({
     pinned = false;
     visible = false;
 
-    if (app?.config?.debug) {
-      console.log('[sidebar] destroyed');
-    }
+    notificationHandler('[sidebar] destroyed', 'info');
   }
 
   /**
@@ -131,10 +141,10 @@ export function createSidebar({
    * Throws an error on missing critical nodes.
    */
   function findDom() {
-    el = document.getElementById('mainSidebar');
-    btnToggle = document.getElementById('navToggleBtn');
-    btnClose = document.getElementById('closeSidebarBtn');
-    btnPin = document.getElementById('pinSidebarBtn');
+    el = domAPI.getElementById('mainSidebar');
+    btnToggle = domAPI.getElementById('navToggleBtn');
+    btnClose = domAPI.getElementById('closeSidebarBtn');
+    btnPin = domAPI.getElementById('pinSidebarBtn');
 
     if (!el || !btnToggle) {
       throw new Error('sidebar: critical DOM nodes missing (#mainSidebar or #navToggleBtn)');
@@ -142,11 +152,11 @@ export function createSidebar({
   }
 
   /**
-   * Restores pinned/visible states from localStorage if present.
+   * Restores pinned/visible states from storage if present.
    * Updates classes and pinned visuals accordingly.
    */
   function restorePersistentState() {
-    pinned = localStorage?.getItem('sidebarPinned') === 'true';
+    pinned = storageAPI.getItem('sidebarPinned') === 'true';
     if (pinned) {
       el.classList.add('sidebar-pinned', 'translate-x-0');
       visible = true;
@@ -170,14 +180,17 @@ export function createSidebar({
     track(btnToggle, 'click', () => toggleSidebar(), 'Sidebar toggle');
     track(btnClose, 'click', () => closeSidebar(), 'Sidebar close');
     track(btnPin, 'click', () => togglePin(), 'Sidebar pin');
-    track(window, 'resize', handleResize, 'Sidebar resize');
+    if (viewportAPI && viewportAPI.onResize) {
+      // If viewportAPI provides an event, use it
+      track(viewportAPI, 'resize', handleResize, 'Sidebar resize');
+    }
 
     [
       { name: 'recent', id: 'recentChatsTab' },
       { name: 'starred', id: 'starredChatsTab' },
       { name: 'projects', id: 'projectsTab' },
     ].forEach(({ name, id }) => {
-      const btn = document.getElementById(id);
+      const btn = domAPI.getElementById(id);
       track(btn, 'click', () => activateTab(name), `Sidebar tab ${name}`);
     });
   }
@@ -188,9 +201,7 @@ export function createSidebar({
    */
   function togglePin(force) {
     pinned = (force !== undefined) ? !!force : !pinned;
-    if (localStorage) {
-      localStorage.setItem('sidebarPinned', pinned);
-    }
+    storageAPI.setItem('sidebarPinned', pinned);
     el.classList.toggle('sidebar-pinned', pinned);
     updatePinButtonVisual();
 
@@ -231,10 +242,10 @@ export function createSidebar({
     btnToggle.setAttribute('aria-expanded', 'true');
     createBackdrop();
 
-    const activeTab = localStorage?.getItem('sidebarActiveTab') || 'recent';
+    const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
     if (activeTab === 'projects') {
       ensureProjectDashboard();
-      const projSearch = document.getElementById('sidebarProjectSearch');
+      const projSearch = domAPI.getElementById('sidebarProjectSearch');
       if (projSearch) projSearch.focus();
     }
 
@@ -246,9 +257,10 @@ export function createSidebar({
    */
   function closeSidebar() {
     if (!visible || pinned) return;
-    if (el.contains(document.activeElement)) {
+    const activeEl = domAPI.getActiveElement();
+    if (el.contains(activeEl)) {
       // blur any focused element inside the sidebar
-      document.activeElement.blur();
+      activeEl.blur();
     }
     visible = false;
     el.classList.add('-translate-x-full');
@@ -259,10 +271,10 @@ export function createSidebar({
   }
 
   /**
-   * Handles window resize events to remove the backdrop if width is large enough (desktop).
+   * Handles viewport resize events to remove the backdrop if width is large enough (desktop).
    */
   function handleResize() {
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+    if (viewportAPI.getInnerWidth() >= 1024) {
       removeBackdrop();
     }
   }
@@ -272,10 +284,11 @@ export function createSidebar({
    */
   function createBackdrop() {
     if (backdrop) return;
-    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+    if (viewportAPI.getInnerWidth() >= 1024) {
       return; // No backdrop in large screens
     }
-    backdrop = Object.assign(document.createElement('div'), {
+    backdrop = domAPI.createElement('div');
+    Object.assign(backdrop, {
       className: 'fixed inset-0 bg-base-300/70 z-40',
       style: 'cursor:pointer',
     });
@@ -291,7 +304,7 @@ export function createSidebar({
         description: 'Sidebar backdrop'
       });
     }
-    document.body.appendChild(backdrop);
+    domAPI.body && domAPI.body.appendChild(backdrop);
   }
 
   /**
@@ -306,46 +319,48 @@ export function createSidebar({
 
   /**
    * Activate one of the sidebar's tabs: 'recent', 'starred', or 'projects'.
-   * Saves the active tab in localStorage and ensures the proper UI panels are shown.
+   * Saves the active tab in storage and ensures the proper UI panels are shown.
    * @param {string} name - The tab name to activate
    */
   async function activateTab(name = 'recent') {
-    const map = {
-      recent: { btn: 'recentChatsTab', panel: 'recentChatsSection' },
-      starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
-      projects: { btn: 'projectsTab', panel: 'projectsSection' },
-    };
-    if (!map[name]) {
-      name = 'recent';
-    }
-
-    Object.entries(map).forEach(([key, ids]) => {
-      const btn = document.getElementById(ids.btn);
-      const panel = document.getElementById(ids.panel);
-      if (btn && panel) {
-        const isActive = (key === name);
-        btn.classList.toggle('tab-active', isActive);
-        btn.setAttribute('aria-selected', String(isActive));
-        btn.tabIndex = isActive ? 0 : -1;
-        panel.classList.toggle('hidden', !isActive);
-        panel.classList.toggle('flex', isActive);
-
-        // On 'projects' tab active, ensure project dashboard is loaded
-        if (isActive && name === 'projects' && el.getAttribute('aria-hidden') === 'false') {
-          ensureProjectDashboard();
-        }
+    try {
+      const map = {
+        recent: { btn: 'recentChatsTab', panel: 'recentChatsSection' },
+        starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
+        projects: { btn: 'projectsTab', panel: 'projectsSection' },
+      };
+      if (!map[name]) {
+        name = 'recent';
       }
-    });
 
-    if (localStorage) {
-      localStorage.setItem('sidebarActiveTab', name);
-    }
-    dispatch('sidebarTabChanged', { tab: name });
+      Object.entries(map).forEach(([key, ids]) => {
+        const btn = domAPI.getElementById(ids.btn);
+        const panel = domAPI.getElementById(ids.panel);
+        if (btn && panel) {
+          const isActive = (key === name);
+          btn.classList.toggle('tab-active', isActive);
+          btn.setAttribute('aria-selected', String(isActive));
+          btn.tabIndex = isActive ? 0 : -1;
+          panel.classList.toggle('hidden', !isActive);
+          panel.classList.toggle('flex', isActive);
 
-    if (name === 'recent') {
-      maybeRenderRecentConversations();
-    } else if (name === 'starred') {
-      maybeRenderStarredConversations();
+          // On 'projects' tab active, ensure project dashboard is loaded
+          if (isActive && name === 'projects' && el.getAttribute('aria-hidden') === 'false') {
+            ensureProjectDashboard();
+          }
+        }
+      });
+
+      storageAPI.setItem('sidebarActiveTab', name);
+      dispatch('sidebarTabChanged', { tab: name });
+
+      if (name === 'recent') {
+        maybeRenderRecentConversations();
+      } else if (name === 'starred') {
+        maybeRenderStarredConversations();
+      }
+    } catch (err) {
+      notificationHandler('[sidebar] Failed to activate tab: ' + (err && err.message ? err.message : err), 'error');
     }
   }
 
@@ -354,14 +369,18 @@ export function createSidebar({
    * and triggers any needed UI rendering for projects.
    */
   async function ensureProjectDashboard() {
-    if (!projectDashboard || typeof projectDashboard.initialize !== 'function') return;
-    const section = document.getElementById('projectsSection');
-    if (section && !section.dataset.initialised) {
-      await projectDashboard.initialize();
-      section.dataset.initialised = 'true';
-    }
-    if (projectManager?.projects && uiRenderer?.renderProjects) {
-      uiRenderer.renderProjects(projectManager.projects);
+    try {
+      if (!projectDashboard || typeof projectDashboard.initialize !== 'function') return;
+      const section = domAPI.getElementById('projectsSection');
+      if (section && !section.dataset.initialised) {
+        await projectDashboard.initialize();
+        section.dataset.initialised = 'true';
+      }
+      if (projectManager?.projects && uiRenderer?.renderProjects) {
+        uiRenderer.renderProjects(projectManager.projects);
+      }
+    } catch (err) {
+      notificationHandler('[sidebar] Failed to ensure project dashboard: ' + (err && err.message ? err.message : err), 'error');
     }
   }
 
@@ -387,7 +406,7 @@ export function createSidebar({
   }
 
   /**
-   * Toggles the 'starred' status of a conversation, saving to localStorage.
+   * Toggles the 'starred' status of a conversation, saving to storage.
    * @param {string|number} id - conversation ID
    * @returns {boolean} - whether it is starred after toggling
    */
@@ -397,9 +416,7 @@ export function createSidebar({
     } else {
       starred.add(id);
     }
-    if (localStorage) {
-      localStorage.setItem('starredConversations', JSON.stringify([...starred]));
-    }
+    storageAPI.setItem('starredConversations', JSON.stringify([...starred]));
     maybeRenderStarredConversations();
     dispatch('sidebarStarredChanged', { id, starred: starred.has(id) });
     return starred.has(id);
@@ -411,22 +428,14 @@ export function createSidebar({
    * @param {Object} detail - event detail payload
    */
   function dispatch(name, detail) {
-    if (typeof document !== 'undefined') {
-      document.dispatchEvent(new CustomEvent(name, { detail }));
+    if (domAPI && domAPI.ownerDocument && typeof CustomEvent !== 'undefined') {
+      domAPI.ownerDocument.dispatchEvent(new CustomEvent(name, { detail }));
     }
   }
 
   // Return the public interface of the sidebar module
   return {
-    /**
-     * @function init
-     * @description Initializes the sidebar (DOM queries, event binding, etc.).
-     */
     init,
-    /**
-     * @function destroy
-     * @description Cleans up event listeners, DOM elements, and resets state.
-     */
     destroy,
     toggleSidebar,
     closeSidebar,

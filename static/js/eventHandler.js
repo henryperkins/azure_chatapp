@@ -32,7 +32,7 @@
  *   @param {Object} deps.modalManager - Modal handler
  *   @param {Object} deps.DependencySystem - Preferred for DI dependency registry
  */
-import { waitForDepsAndDom } from './utils/initHelpers.js';
+import { waitForDepsAndDom } from './utils/globalUtils.js';
 import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
 
 export function createEventHandlers({ app, auth, projectManager, sidebar, modalManager, DependencySystem } = {}) {

@@ -11,41 +11,85 @@
  *   chatExtensions.init(); // call after DOM is ready
  */
 
-export function createChatExtensions({ DependencySystem, eventHandlers, chatManager, auth, app, notificationHandler } = {}) {
+export function createChatExtensions({
+  DependencySystem,
+  eventHandlers,
+  chatManager,
+  auth,
+  app,
+  notificationHandler,
+  domAPI
+} = {}) {
   // Dependency resolution fallback if not provided
   DependencySystem = DependencySystem || (typeof window !== 'undefined' ? window.DependencySystem : undefined);
 
-  eventHandlers = eventHandlers || (DependencySystem?.get?.('eventHandlers') || DependencySystem?.modules?.get?.('eventHandlers') || undefined);
-  chatManager = chatManager || (DependencySystem?.get?.('chatManager') || DependencySystem?.modules?.get?.('chatManager') || undefined);
-  auth = auth || (DependencySystem?.get?.('auth') || DependencySystem?.modules?.get?.('auth') || undefined);
-  app = app || (DependencySystem?.get?.('app') || DependencySystem?.modules?.get?.('app') || undefined);
-  notificationHandler = notificationHandler || (DependencySystem?.get?.('notificationHandler') || DependencySystem?.modules?.get?.('notificationHandler') || undefined);
+  eventHandlers = eventHandlers ||
+    (DependencySystem?.get?.('eventHandlers') ||
+      DependencySystem?.modules?.get?.('eventHandlers') ||
+      undefined);
+
+  chatManager = chatManager ||
+    (DependencySystem?.get?.('chatManager') ||
+      DependencySystem?.modules?.get?.('chatManager') ||
+      undefined);
+
+  auth = auth ||
+    (DependencySystem?.get?.('auth') ||
+      DependencySystem?.modules?.get?.('auth') ||
+      undefined);
+
+  app = app ||
+    (DependencySystem?.get?.('app') ||
+      DependencySystem?.modules?.get?.('app') ||
+      undefined);
+
+  notificationHandler = notificationHandler ||
+    (DependencySystem?.get?.('notificationHandler') ||
+      DependencySystem?.modules?.get?.('notificationHandler') ||
+      undefined);
+
+  domAPI = domAPI ||
+    (DependencySystem?.get?.('domAPI') ||
+      DependencySystem?.modules?.get?.('domAPI') ||
+      (typeof document !== "undefined"
+        ? {
+          getElementById: (id) => document.getElementById(id),
+          querySelector: (sel) => document.querySelector(sel),
+        }
+        : undefined)
+    );
 
   // Helper - consistent trackListener fallback
   const trackListener = eventHandlers && eventHandlers.trackListener
     ? eventHandlers.trackListener.bind(eventHandlers)
-    : (el, evt, fn, opts) => el.addEventListener(evt, fn, opts);
+    : (el, evt, fn, opts) => el && el.addEventListener && el.addEventListener(evt, fn, opts);
 
   // Helper - consistent showNotification fallback
-  const showNotification = notificationHandler && notificationHandler.show
-    ? notificationHandler.show.bind(notificationHandler)
-    : (msg, type = 'info') => console.log(`[${type}] ${msg}`);
+  const showNotification = notificationHandler
+    ? (msg, type = 'info') => notificationHandler(msg, type)
+    : (app && typeof app.showNotification === "function")
+      ? (msg, type = 'info') => app.showNotification(msg, type)
+      : (msg, type = 'info') => { };
 
   function init() {
     try {
       setupChatTitleEditing();
-      if (app?.config?.debug) console.log('[ChatExtensions] Initialized');
+      showNotification('[ChatExtensions] Initialized', 'debug');
     } catch (error) {
-      console.error("[ChatExtensions] Initialization failed:", error);
+      showNotification("[ChatExtensions] Initialization failed: " + (error && error.message ? error.message : error), "error");
     }
   }
 
   function setupChatTitleEditing() {
-    const editTitleBtn = document.getElementById("chatTitleEditBtn");
-    const chatTitleEl = document.getElementById("chatTitle");
+    const editTitleBtn = domAPI && domAPI.getElementById
+      ? domAPI.getElementById("chatTitleEditBtn")
+      : null;
+    const chatTitleEl = domAPI && domAPI.getElementById
+      ? domAPI.getElementById("chatTitle")
+      : null;
 
     if (!editTitleBtn || !chatTitleEl) {
-      if (app?.config?.debug) console.warn("[ChatExtensions] Chat title edit elements not found in DOM");
+      showNotification("[ChatExtensions] Chat title edit elements not found in DOM", "warn");
       return;
     }
     if (editTitleBtn.hasAttribute("data-chat-title-handler-bound")) return;
@@ -75,19 +119,23 @@ export function createChatExtensions({ DependencySystem, eventHandlers, chatMana
     );
     chatTitleEl.focus();
 
-    // Select all text
-    const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(chatTitleEl);
-    selection.removeAllRanges();
-    selection.addRange(range);
+    // Select all text (DI-pure fallback)
+    if (typeof window !== "undefined" && window.getSelection && document.createRange) {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(chatTitleEl);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
 
     editTitleBtn.textContent = "Save";
 
     // Save/cancel logic
     const completeEditing = async (shouldSave) => {
       chatTitleEl.removeEventListener('keydown', keyHandler);
-      document.removeEventListener('click', clickOutsideHandler);
+      if (typeof document !== "undefined") {
+        document.removeEventListener('click', clickOutsideHandler);
+      }
 
       chatTitleEl.setAttribute("contenteditable", "false");
       chatTitleEl.classList.remove(
@@ -134,15 +182,15 @@ export function createChatExtensions({ DependencySystem, eventHandlers, chatMana
         }
 
         const endpoint = `/api/projects/${projectId}/conversations/${conversationId}`;
+        if (!app?.apiRequest) throw new Error("No apiRequest available");
         await app.apiRequest(endpoint, "PATCH", { title: newTitle });
         showNotification("Conversation title updated", "success");
-        if (typeof window.loadConversationList === "function") {
+        if (typeof window !== "undefined" && typeof window.loadConversationList === "function") {
           setTimeout(() => window.loadConversationList(), 500);
         }
       } catch (err) {
-        if (app?.config?.debug) console.error("[ChatExtensions] Failed to update conversation title:", err);
         chatTitleEl.textContent = originalTitle;
-        showNotification(err.message || "Error updating conversation title", "error");
+        showNotification((err && err.message) || "Error updating conversation title", "error");
       }
     };
 
@@ -165,9 +213,11 @@ export function createChatExtensions({ DependencySystem, eventHandlers, chatMana
     trackListener(chatTitleEl, "keydown", keyHandler, {
       description: "Chat title editing keydown"
     });
-    trackListener(document, "click", clickOutsideHandler, {
-      description: "Chat title outside click", once: true
-    });
+    if (typeof document !== "undefined") {
+      trackListener(document, "click", clickOutsideHandler, {
+        description: "Chat title outside click", once: true
+      });
+    }
     trackListener(editTitleBtn, "click", () => completeEditing(true), {
       description: "Chat title save", once: true
     });

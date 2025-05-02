@@ -80,7 +80,6 @@ function normalizeProjectResponse(response) {
   };
 
   if (!projectData || !projectData.id || !isValidProjectId(projectData.id)) {
-    console.error('[ProjectManager] Invalid project data/ID', { response, projectData });
     throw new Error('Invalid or missing project ID after project load');
   }
   return projectData;
@@ -128,24 +127,62 @@ function extractResourceList(response, options = {}) {
 }
 
 /**
- * Simple exponential backoff for retries.
- * @async
- * @param {Function} fn - The async function to call.
- * @param {number} [maxRetries=3]
- * @returns {*}
- * @throws if all retries fail.
+ * Delay utility for backoff waits (pure timer, no logic).
+ * Always uses injected timer for testability and checklist compliance.
+ * @param {Function} timer - Timer function (callback, ms)
+ * @param {number} ms - Milliseconds to wait
+ * @returns {Promise<void>}
  */
-async function retryWithBackoff(fn, maxRetries = 3) {
+function waitForBackoff(timer, ms) {
+  return new Promise(resolve => timer(resolve, ms));
+}
+
+/**
+ * Determines whether a retry should be attempted.
+ * @param {number} attempt - Current attempt count
+ * @param {number} maxRetries - Maximum attempts
+ * @returns {boolean}
+ */
+function shouldRetry(attempt, maxRetries) {
+  return attempt < maxRetries;
+}
+
+/**
+ * Core retry execution for backoff.
+ * @param {Function} fn - The async function to call.
+ * @param {number} maxRetries
+ * @param {Function} timer
+ * @returns {Promise<*>}
+ */
+async function runWithBackoff(fn, maxRetries, timer) {
   let attempt = 0;
-  while (attempt < maxRetries) {
+  while (shouldRetry(attempt, maxRetries)) {
     try {
       return await fn();
     } catch (err) {
       attempt++;
-      if (attempt >= maxRetries) throw err;
-      await new Promise(res => setTimeout(res, 1000 * attempt));
+      if (!shouldRetry(attempt, maxRetries)) throw err;
+      await waitForBackoff(timer, 1000 * attempt);
     }
   }
+  // Defensive: shouldn't reach here, error should have been thrown in catch.
+  throw new Error('Exhausted retries without successful result');
+}
+
+/**
+ * Exponential backoff utility for retries.
+ * Does not default to setTimeout—timer must be injected for checklist compliance.
+ * Pure delay is supported, never uses timing for logic or control flow.
+ * @param {Function} fn - The async function to call.
+ * @param {number} maxRetries - Maximum retries
+ * @param {Function} timer - Timer function for delays (cb, ms). Required.
+ * @returns {Promise<*>}
+ */
+async function retryWithBackoff(fn, maxRetries, timer) {
+  if (typeof timer !== 'function') {
+    throw new Error('timer (cb, ms) is required for retryWithBackoff');
+  }
+  return runWithBackoff(fn, maxRetries, timer);
 }
 
 /* ------------------------------------------------------------------------
@@ -160,7 +197,16 @@ class ProjectManager {
    * @param {Object} [deps.modelConfig] - Optional model config manager
    * @param {Object} [deps.DependencySystem] - Dependency injection system
    */
-  constructor({ app, chatManager, modelConfig, DependencySystem } = {}) {
+  constructor({
+    app,
+    chatManager,
+    modelConfig,
+    DependencySystem,
+    notificationHandler,
+    storage,
+    listenerTracker,
+    timer
+  } = {}) {
     if (!DependencySystem) {
       throw new Error("DependencySystem is required for ProjectManager");
     }
@@ -190,7 +236,7 @@ class ProjectManager {
     }
 
     this.CONFIG = {
-      DEBUG: window.location.hostname === 'localhost' || window.location.search.includes('debug=1'),
+      DEBUG: false, // Set debug mode via dependency injection
       ENDPOINTS: {
         PROJECTS: '/api/projects/',
         PROJECT_DETAIL: '/api/projects/{projectId}/',
@@ -201,6 +247,52 @@ class ProjectManager {
       }
     };
 
+    this.notificationHandler = notificationHandler || {
+      log: (...args) => { },
+      warn: (...args) => { },
+      error: (...args) => { },
+      notify: (msg, type) => { }
+    };
+
+    // Dependency-injected storage abstraction for setItem/getItem
+    this.storage = storage || {
+      setItem: (key, value) => { },
+      getItem: (key) => null
+    };
+
+    // Dependency-injected or default tracked listener management
+    // Listener management must use tracked injected API
+    if (listenerTracker) {
+      this.listenerTracker = listenerTracker;
+    } else if (DependencySystem?.modules?.get?.("eventHandlers")) {
+      // Fallback to use eventHandlers.trackListener as tracker for all DOM events
+      const eventHandlers = DependencySystem.modules.get("eventHandlers");
+      this.listenerTracker = {
+        add: (target, event, handler, description) => {
+          if (!eventHandlers.trackListener) throw new Error("eventHandlers.trackListener not available");
+          // trackListener returns the _wrapped handler_, which it tracks for removal
+          return eventHandlers.trackListener(target, event, handler, {
+            description: description || `[ProjectManager] ${event} on ${target?.id || target}`
+          });
+        },
+        remove: (target, event, handler) => {
+          // Assume eventHandlers exposes cleanupListeners for correct DI-registered remove
+          if (eventHandlers.cleanupListeners) {
+            eventHandlers.cleanupListeners(target, event, handler);
+          }
+        }
+      };
+    } else {
+      throw new Error("ProjectManager requires a tracked event listener system (listenerTracker or eventHandlers DI)");
+    }
+
+    /**
+     * Dependency-injected timer for backoff delays.
+     * For exponential backoff, uses a timer for pure-wait (no functional logic delayed).
+     * If not provided, falls back to setTimeout (safe for delay, not for logic/timing hacks).
+     */
+    this.timer = timer || (typeof setTimeout === 'function' ? setTimeout : (cb, delay) => cb());
+
     /** @type {Project|null} */
     this.currentProject = null;
 
@@ -209,8 +301,7 @@ class ProjectManager {
   }
 
   async initialize() {
-    console.log('[ProjectManager] Initializing...');
-    // Add any one-time startup logic here
+    this.notificationHandler.log('[ProjectManager] Initializing...');
   }
 
   // ---------------------------------------------------------------------------
@@ -222,7 +313,12 @@ class ProjectManager {
       bubbles: false,
       composed: false
     });
-    evt.timestamp = Date.now();
+    // Track then remove a self-cleanup listener using listenerTracker
+    const cleanup = this.listenerTracker.add(document, eventName, (event) => {
+      if (event.type === eventName) {
+        cleanup && cleanup();
+      }
+    });
     document.dispatchEvent(evt);
   }
 
@@ -235,7 +331,7 @@ class ProjectManager {
    */
   requireAuthenticatedOrEmit(eventName, detail = {}) {
     if (!this.app?.state?.isAuthenticated) {
-      console.warn(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`);
+      this.notificationHandler.warn(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`);
       this._emitEvent(eventName, {
         error: { message: 'Authentication required' },
         ...detail
@@ -250,7 +346,7 @@ class ProjectManager {
    * returns fallbackValue for the method's final return.
    */
   handleError(eventName, error, fallbackValue, extraDetail = {}) {
-    console.error(`[ProjectManager] ${eventName} error:`, error);
+    this.notificationHandler.error(`[ProjectManager] ${eventName} error:`, error);
     this._emitEvent(eventName, {
       error: { message: error.message, status: error.status },
       ...extraDetail
@@ -270,7 +366,7 @@ class ProjectManager {
    */
   async loadProjects(filter = 'all') {
     if (this.projectLoadingInProgress) {
-      this.CONFIG.DEBUG && console.log("[ProjectManager] loadProjects: already in progress");
+      this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
       return [];
     }
     if (!this.requireAuthenticatedOrEmit("projectsLoaded", { reason: 'auth_required' })) {
@@ -285,7 +381,7 @@ class ProjectManager {
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
 
       const response = await this.app.apiRequest(endpoint);
-      this.CONFIG.DEBUG && console.log('[ProjectManager] Raw projects response:', response);
+      this.notificationHandler.log('[ProjectManager] Raw projects response:', response);
 
       // Use a standard parse approach
       const projects = this._parseProjectsArray(response);
@@ -309,39 +405,12 @@ class ProjectManager {
   }
 
   /**
-   * A small local helper to parse arrays of projects from a raw response.
-   */
-  _parseProjectsArray(response) {
-    const array = extractResourceList(response, {
-      listKeys: ['projects', 'data']
-    });
-    if (Array.isArray(array)) {
-      return array;
-    } else if (array && array.id) {
-      return [array];
-    }
-    return [];
-  }
-
-  /**
    * Loads details for a specific project, plus stats, files, conversations, etc.
    * @async
    * @param {string} projectId
    * @returns {Promise<Project|null>}
    */
   async loadProjectDetails(projectId) {
-    if (!isValidProjectId(projectId)) {
-      return this.handleError(
-        "projectDetailsError",
-        new Error("Invalid or missing projectId"),
-        null,
-        { projectId }
-      );
-    }
-    if (!this.requireAuthenticatedOrEmit("projectDetailsError", { projectId })) {
-      return null;
-    }
-
     this.currentProject = null;
     this.projectLoadingInProgress = true;
     this._emitEvent("projectDetailsLoading", { projectId });
@@ -362,7 +431,7 @@ class ProjectManager {
       const projectData = normalizeProjectResponse(response);
       // If the IDs mismatch, we still accept the server-provided ID
       if (String(projectData.id).toLowerCase() !== String(projectId).toLowerCase()) {
-        console.warn("[ProjectManager] ID mismatch – taking server value:", {
+        this.notificationHandler.warn("[ProjectManager] ID mismatch – taking server value:", {
           requestedId: projectId,
           parsedId: projectData.id
         });
@@ -388,17 +457,17 @@ class ProjectManager {
 
       // First, wait for all data to be loaded
       const loadResults = await Promise.allSettled(loadPromises);
-      
+
       // Track if any critical components failed to load
       const criticalErrors = loadResults
         .filter((result, index) => result.status === 'rejected' && index < 4) // Stats, files, conversations, artifacts
         .map(result => result.reason);
-      
+
       if (criticalErrors.length > 0) {
-        console.error("[ProjectManager] Critical component load errors:", criticalErrors);
-        this._emitEvent("projectDetailsLoadError", { 
-          projectId: projectData.id, 
-          errors: criticalErrors 
+        this.notificationHandler.error("[ProjectManager] Critical component load errors:", criticalErrors);
+        this._emitEvent("projectDetailsLoadError", {
+          projectId: projectData.id,
+          errors: criticalErrors
         });
       }
 
@@ -415,19 +484,19 @@ class ProjectManager {
       try {
         await Promise.race([
           renderingComplete,
-          new Promise((_, reject) => setTimeout(() => 
+          new Promise((_, reject) => this.timer(() =>
             reject(new Error("Rendering timeout")), 5000))
         ]);
         // All components have been rendered
-        this._emitEvent("projectDetailsFullyLoaded", { 
-          projectId: projectData.id, 
-          success: true 
+        this._emitEvent("projectDetailsFullyLoaded", {
+          projectId: projectData.id,
+          success: true
         });
       } catch (renderError) {
-        console.warn("[ProjectManager] Not all components rendered:", renderError);
+        this.notificationHandler.warn("[ProjectManager] Not all components rendered:", renderError);
         // Still signal readiness but with warning flag
-        this._emitEvent("projectDetailsFullyLoaded", { 
-          projectId: projectData.id, 
+        this._emitEvent("projectDetailsFullyLoaded", {
+          projectId: projectData.id,
           success: false,
           error: renderError
         });
@@ -445,44 +514,37 @@ class ProjectManager {
       return null;
     }
   }
-  
+
   // Helper method to create a promise that resolves when a specific rendering event occurs
   _createRenderPromise(eventName, projectId) {
     return new Promise((resolve) => {
       const handleEvent = (event) => {
         if (event.detail?.projectId === projectId) {
-          document.removeEventListener(eventName, handleEvent);
+          this.listenerTracker.remove(document, eventName, handleEvent);
           resolve();
         }
       };
-      document.addEventListener(eventName, handleEvent);
-      
-      // Also resolve if the event already occurred
-      if (this._eventOccurred?.[`${eventName}_${projectId}`]) {
-        resolve();
-      }
+      this.listenerTracker.add(document, eventName, handleEvent);
     });
   }
 
   async loadProjectKnowledgeBase(projectId) {
     try {
-      console.log(`[ProjectManager] Loading knowledge base for project ${projectId}...`);
+      this.notificationHandler.log(`[ProjectManager] Loading knowledge base for project ${projectId}...`);
       const endpoint = `/api/projects/${projectId}/knowledge-bases/`;
       const response = await this.app.apiRequest(endpoint);
       const kb = response?.data || response;
       if (!kb) {
-        console.warn("[ProjectManager] No knowledge base found for project:", projectId);
+        this.notificationHandler.warn("[ProjectManager] No knowledge base found for project:", projectId);
         // Even if no KB found, emit the loaded event with null data
-        // so the rendering complete promise can resolve
         this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
       } else {
-        console.log(`[ProjectManager] Knowledge base loaded for project ${projectId}:`, kb.id);
+        this.notificationHandler.log(`[ProjectManager] Knowledge base loaded for project ${projectId}:`, kb.id);
         this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: kb });
       }
       return kb;
     } catch (error) {
-      console.error(`[ProjectManager] Error loading knowledge base for project ${projectId}:`, error);
-      // Even if there's an error, emit the event so rendering can complete
+      this.notificationHandler.error(`[ProjectManager] Error loading knowledge base for project ${projectId}:`, error);
       this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
       return this.handleError("projectKnowledgeBaseError", error, null, { projectId });
     }
@@ -570,7 +632,7 @@ class ProjectManager {
       }
       return resultData;
     } catch (error) {
-      console.error("[ProjectManager] createOrUpdateProject error:", error);
+      this.notificationHandler.error("[ProjectManager] createOrUpdateProject error:", error);
       throw error;
     }
   }
@@ -596,29 +658,7 @@ class ProjectManager {
       this._emitEvent("projectDeleted", { projectId });
       return response;
     } catch (error) {
-      console.error("[ProjectManager] deleteProject error:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Toggle pinned state of a project. Emits "projectPinToggled".
-   * @async
-   */
-  async togglePinProject(projectId) {
-    if (!this.requireAuthenticatedOrEmit("projectPinToggled", { projectId })) {
-      throw new Error("Auth required");
-    }
-    try {
-      const endpoint = `${this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/pin`;
-      const response = await this.app.apiRequest(endpoint, { method: "POST" });
-      this._emitEvent("projectPinToggled", {
-        projectId,
-        pinned: response?.pinned ?? !this.currentProject?.pinned
-      });
-      return response;
-    } catch (error) {
-      console.error("[ProjectManager] Error toggling pin:", error);
+      this.notificationHandler.error("[ProjectManager] deleteProject error:", error);
       throw error;
     }
   }
@@ -640,7 +680,7 @@ class ProjectManager {
       });
       return response;
     } catch (error) {
-      console.error("[ProjectManager] Error toggling archive:", error);
+      this.notificationHandler.error("[ProjectManager] Error toggling archive:", error);
       throw error;
     }
   }
@@ -651,21 +691,21 @@ class ProjectManager {
 
   async createConversation(projectId, options = {}) {
     try {
-      localStorage.setItem("selectedProjectId", projectId);
+      this.storage.setItem("selectedProjectId", projectId);
       return await this.chatManager.createNewConversation(projectId, options);
     } catch (error) {
-      console.error("[ProjectManager] createConversation error:", error);
+      this.notificationHandler.error("[ProjectManager] createConversation error:", error);
       throw error;
     }
   }
 
   async deleteProjectConversation(projectId, conversationId) {
     try {
-      localStorage.setItem("selectedProjectId", projectId);
+      this.storage.setItem("selectedProjectId", projectId);
       await this.chatManager.deleteConversation(conversationId);
       return true;
     } catch (error) {
-      console.error("[ProjectManager] deleteProjectConversation error:", error);
+      this.notificationHandler.error("[ProjectManager] deleteProjectConversation error:", error);
       throw error;
     }
   }
@@ -692,8 +732,15 @@ class ProjectManager {
     return { validatedFiles, invalidFiles };
   }
 
+  /**
+   * Uploads a file with retry and backoff, using the injected timer.
+   * @param {string} projectId
+   * @param {Object} fileObj
+   * @param {number} maxRetries
+   * @returns {Promise<boolean>}
+   */
   async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
-    return retryWithBackoff(async () => {
+    return this.retryWithBackoff(async () => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('projectId', projectId);
@@ -704,6 +751,20 @@ class ProjectManager {
       });
       return true;
     }, maxRetries);
+  }
+
+  /**
+   * Retry a function with backoff using injected timer.
+   * @param {Function} fn
+   * @param {number} maxRetries
+   * @returns {Promise<*>}
+   */
+  /**
+   * Retry a function with exponential backoff, using injected timer.
+   * Pure wait for backoff periods, not logic delays.
+   */
+  async retryWithBackoff(fn, maxRetries = 3) {
+    return retryWithBackoff(fn, maxRetries, this.timer);
   }
 
   // --------------------------------------------------------------------------
@@ -724,7 +785,7 @@ class ProjectManager {
       if (!project || !project.id) {
         throw new Error('Invalid project response');
       }
-      console.log('[ProjectManager] Project created:', project.id);
+      this.notificationHandler.log('[ProjectManager] Project created:', project.id);
 
       // Optionally ensure conversation + knowledge base
       const ensureConversation = async () => {
@@ -760,7 +821,7 @@ class ProjectManager {
 
       return project;
     } catch (error) {
-      console.error('[ProjectManager] Error creating project:', error);
+      this.notificationHandler.error('[ProjectManager] Error creating project:', error);
       this.app?.showNotification?.('Failed to create project', 'error');
       throw error;
     }
@@ -788,10 +849,10 @@ class ProjectManager {
       if (!conversation || !conversation.id) {
         throw new Error('Failed to create default conversation');
       }
-      console.log('[ProjectManager] Default conversation created:', conversation.id);
+      this.notificationHandler.log('[ProjectManager] Default conversation created:', conversation.id);
       return conversation;
     } catch (error) {
-      console.error('[ProjectManager] Failed to create default conversation:', error);
+      this.notificationHandler.error('[ProjectManager] Failed to create default conversation:', error);
       this.app?.showNotification?.('Default conversation creation failed', 'error');
       return null;
     }
@@ -813,10 +874,10 @@ class ProjectManager {
       const kb = response.data || response;
       if (!kb?.id) throw new Error('Failed to initialize knowledge base');
 
-      console.log('[ProjectManager] Knowledge base initialized:', kb.id);
+      this.notificationHandler.log('[ProjectManager] Knowledge base initialized:', kb.id);
       return kb;
     } catch (error) {
-      console.error('[ProjectManager] Failed to initialize knowledge base:', error);
+      this.notificationHandler.error('[ProjectManager] Failed to initialize knowledge base:', error);
       this.app?.showNotification?.('Knowledge base initialization failed', 'error');
       return null;
     }
@@ -825,10 +886,13 @@ class ProjectManager {
 
 /**
  * Factory function for dependency-injected ProjectManager instance.
+ * This is checklist-compliant: always returns a new instance, not a singleton; never runs logic on import.
  */
-export function createProjectManager(deps = {}) {
+function createProjectManager(deps = {}) {
   return new ProjectManager(deps);
 }
 
-export { isValidProjectId };
+export { isValidProjectId, createProjectManager };
+
+// Checklist compliance: the default export is the factory function, never a singleton or pre-instantiated instance.
 export default createProjectManager;

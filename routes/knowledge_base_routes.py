@@ -103,7 +103,7 @@ class SearchRequest(BaseModel):
 
 
 @router.post(
-    "/projects/{project_id}/knowledge-bases",
+    "/{project_id}/knowledge-bases",
     response_model=Dict,
     status_code=status.HTTP_201_CREATED,
 )
@@ -176,7 +176,7 @@ async def create_project_knowledge_base(
         ) from e
 
 
-@router.get("/projects/{project_id}/knowledge-bases", response_model=Dict)
+@router.get("/{project_id}/knowledge-bases", response_model=Dict)
 async def get_project_knowledge_bases(
     project_id: UUID,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
@@ -205,7 +205,7 @@ async def get_project_knowledge_bases(
         ) from e
 
 
-@router.get("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
+@router.get("/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
 async def get_project_knowledge_base(
     project_id: UUID,
     kb_id: UUID,
@@ -238,7 +238,7 @@ async def get_project_knowledge_base(
         ) from e
 
 
-@router.patch("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
+@router.patch("/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
 async def update_knowledge_base(
     project_id: UUID,
     kb_id: UUID,
@@ -279,7 +279,7 @@ async def update_knowledge_base(
         ) from e
 
 
-@router.delete("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
+@router.delete("/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)
 async def delete_knowledge_base(
     project_id: UUID,
     kb_id: UUID,
@@ -328,7 +328,7 @@ async def delete_knowledge_base(
 # ----------------------------------------------------------------------
 
 
-@router.get("/projects/{project_id}/knowledge-bases/status", response_model=Dict)
+@router.get("/{project_id}/knowledge-bases/status", response_model=Dict)
 async def get_knowledge_base_status(
     project_id: UUID,
     detailed: bool = Query(False, description="Include detailed status"),
@@ -377,7 +377,7 @@ async def get_knowledge_base_status(
 # ----------------------------------------------------------------------
 
 
-@router.post("/projects/{project_id}/knowledge-bases/search", response_model=Dict)
+@router.post("/{project_id}/knowledge-bases/search", response_model=Dict)
 async def search_project_knowledge(
     project_id: UUID,
     search_request: SearchRequest,
@@ -420,7 +420,7 @@ async def search_project_knowledge(
 
 
 @router.post(
-    "/projects/{project_id}/knowledge-bases/files",
+    "/{project_id}/knowledge-bases/files",
     response_model=Dict,
     status_code=status.HTTP_201_CREATED,
 )
@@ -460,7 +460,7 @@ async def upload_knowledge_base_file(
         raise HTTPException(status_code=500, detail="Failed to upload file") from e
 
 
-@router.post("/projects/{project_id}/knowledge-bases/reindex", response_model=Dict)
+@router.post("/{project_id}/knowledge-bases/reindex", response_model=Dict)
 async def reindex_knowledge_base(
     project_id: UUID,
     force: bool = Body(False, embed=True),
@@ -508,7 +508,7 @@ async def reindex_knowledge_base(
 
 
 @router.delete(
-    "/projects/{project_id}/knowledge-bases/files/{file_id}", response_model=Dict
+    "/{project_id}/knowledge-bases/files/{file_id}", response_model=Dict
 )
 async def delete_knowledge_base_file(
     project_id: UUID,
@@ -543,7 +543,7 @@ async def delete_knowledge_base_file(
 # ----------------------------------------------------------------------
 
 
-@router.post("/projects/{project_id}/knowledge-bases/toggle", response_model=Dict)
+@router.post("/{project_id}/knowledge-bases/toggle", response_model=Dict)
 async def toggle_knowledge_base(
     project_id: UUID,
     enable: bool = Body(..., embed=True),
