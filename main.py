@@ -252,7 +252,7 @@ async def health_check() -> Dict[str, Any]:
 # Include your API routers (includes insecure auth, etc.)
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(
-    knowledge_base_router, prefix="/api/knowledge-bases", tags=["knowledge-bases"]
+    knowledge_base_router, prefix="/api/projects", tags=["knowledge-bases"]
 )
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(

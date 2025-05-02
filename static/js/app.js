@@ -254,6 +254,24 @@ const notificationHandler = createNotificationHandler({ DependencySystem });
 DependencySystem.register('notificationHandler', notificationHandler);
 DependencySystem.register('modalMapping', MODAL_MAPPINGS);
 
+/**
+ * Per-component notification handler with .log/.warn/.error/.confirm,
+ * mapped for compatibility with legacy component APIs.
+ * Each handler only affects notifications in its own container.
+ */
+function createBannerHandlerWithLog(containerSelector) {
+    const container = typeof containerSelector === "string" ?
+        document.querySelector(containerSelector) :
+        containerSelector;
+    const h = createNotificationHandler({ container });
+    return {
+        log: (...args) => h.info?.(...args),
+        warn: (...args) => h.warn?.(...args),
+        error: (...args) => h.error?.(...args),
+        confirm: (...args) => h.confirm?.(...args)
+    };
+}
+
 const eventHandlers = createEventHandlers({ DependencySystem });
 DependencySystem.register('eventHandlers', eventHandlers);
 
@@ -344,6 +362,12 @@ const chatManager = createChatManager({
         removeChild: (parent, child) => parent && child && parent.removeChild(child),
         setInnerHTML: (el, html) => { if (el) el.innerHTML = html; }
     },
+    navAPI: {
+        getSearch: () => window.location.search,
+        getHref: () => window.location.href,
+        pushState: (url) => window.history.pushState({}, '', url),
+        getPathname: () => window.location.pathname
+    },
     isValidProjectId: globalUtils.isValidProjectId,
     isAuthenticated: () => {
         try {
@@ -354,7 +378,8 @@ const chatManager = createChatManager({
         } catch (e) {
             return false;
         }
-    }
+    },
+    DOMPurify: window.DOMPurify
 });
 if (!chatManager || typeof chatManager.initialize !== 'function') {
     throw new Error('[App] createChatManager() did not return a valid ChatManager instance.');
@@ -448,9 +473,7 @@ async function init() {
             const eh = DependencySystem.modules.get('eventHandlers');
             eh?.init?.();
             DependencySystem.modules.get('modelConfig')?.initializeUI?.();
-            DependencySystem.modules.get('chatExtensions')?.init?.();
-            DependencySystem.modules.get('projectListComponent')?.initialize?.();
-            DependencySystem.modules.get('projectDetailsComponent')?.initialize?.();
+            // No calls to .init() or .initialize() here; handled explicitly in initializeUIComponents only
         } catch (err) {
             console.warn('[App] Post-initialization safety net failed:', err);
         }
@@ -629,7 +652,15 @@ async function initializeAuthSystem() {
 // ---------------------------------------------------------------------
 // UI Components Initialization
 // ---------------------------------------------------------------------
+let _uiComponentsInitialized = false;
 async function initializeUIComponents() {
+    if (_uiComponentsInitialized) {
+        if (APP_CONFIG.DEBUG) {
+            console.warn('[App] initializeUIComponents called twice, skipping.');
+        }
+        return;
+    }
+    _uiComponentsInitialized = true;
     if (APP_CONFIG.DEBUG) {
         console.log('[App] Initializing UI components...');
     }
@@ -719,7 +750,10 @@ async function initializeUIComponents() {
     }
 
     // Chat Extensions
-    const chatExtensions = createChatExtensions({ DependencySystem });
+    const chatExtensions = createChatExtensions({
+        DependencySystem,
+        notificationHandler: notificationHandler.show.bind(notificationHandler)
+    });
     DependencySystem.register('chatExtensions', chatExtensions);
 
     // Model Config
@@ -727,15 +761,32 @@ async function initializeUIComponents() {
     DependencySystem.register('modelConfig', modelConfig);
 
     // Project Dashboard Utils
-    const projectDashboardUtils = createProjectDashboardUtils();
+    const projectDashboardUtils = createProjectDashboardUtils({ DependencySystem });
     DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
-    // Project List Component (MISSING - ADD THIS)
+    // Project List Component
+    const projectListNotificationHandlerRaw = createBannerHandlerWithLog('#projectListView');
+    const projectListNotificationHandler = {
+        log: (...args) => projectListNotificationHandlerRaw.log?.(...args),
+        warn: (...args) => projectListNotificationHandlerRaw.warn?.(...args),
+        error: (...args) => projectListNotificationHandlerRaw.error?.(...args),
+        confirm: (...args) => projectListNotificationHandlerRaw.confirm?.(...args)
+    };
     const projectListComponent = new ProjectListComponent({
         projectManager,
         eventHandlers,
         modalManager,
-        app
+        app,
+        router: {
+            navigate: (url) => window.history.pushState({}, '', url),
+            getURL: () => window.location.href
+        },
+        notificationHandler: projectListNotificationHandler,
+        storage: {
+            setItem: (k, v) => localStorage.setItem(k, v),
+            getItem: (k) => localStorage.getItem(k)
+        },
+        sanitizer: window.DOMPurify
     });
     DependencySystem.register('projectListComponent', projectListComponent);
 
@@ -747,6 +798,7 @@ async function initializeUIComponents() {
     DependencySystem.register('projectDashboard', projectDashboard);
 
     // Project Details Component
+    const projectDetailsNotificationHandler = createBannerHandlerWithLog('#projectDetailsView');
     const projectDetailsComponent = createProjectDetailsComponent({
         onBack: async () => {
             try {
@@ -760,8 +812,14 @@ async function initializeUIComponents() {
         app,
         projectManager,
         eventHandlers,
+        modalManager,
         FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
-        modalManager
+        router: {
+            navigate: (url) => window.history.pushState({}, '', url),
+            getURL: () => window.location.href
+        },
+        notificationHandler: projectDetailsNotificationHandler,
+        sanitizer: window.DOMPurify
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
 
@@ -771,7 +829,20 @@ async function initializeUIComponents() {
         eventHandlers,
         app,
         projectDashboard,
-        projectManager
+        projectManager,
+        storageAPI: {
+            setItem: (k, v) => localStorage.setItem(k, v),
+            getItem: (k) => localStorage.getItem(k)
+        },
+        viewportAPI: {
+            getInnerWidth: () => window.innerWidth
+        },
+        domAPI: {
+            getElementById: (id) => document.getElementById(id),
+            createElement: (tag) => document.createElement(tag),
+            querySelector: (selector) => document.querySelector(selector),
+            body: document.body
+        }
     });
     DependencySystem.register('sidebar', sidebar);
 

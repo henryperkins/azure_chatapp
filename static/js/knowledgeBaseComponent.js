@@ -108,6 +108,8 @@ export function createKnowledgeBaseComponent(options = {}) {
   const getDep = (name) =>
     // Strictly require via options, else from DependencySystem (never window.*)
     name in options ? options[name] : DS.modules.get(name);
+// DOMPurify global sanitizer for innerHTML
+const DOMPurify = getDep("DOMPurify");
 
   // Required dependencies
   const app = getDep("app");
@@ -166,7 +168,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         if (isLoading) {
           btn.disabled = true;
           btn.dataset.originalText = btn.textContent;
-          btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+          btn.innerHTML = DOMPurify.sanitize(`<span class="loading loading-spinner loading-xs"></span> ${loadingText}`);
         } else {
           btn.disabled = false;
           if (btn.dataset.originalText) {
@@ -175,12 +177,10 @@ export function createKnowledgeBaseComponent(options = {}) {
           }
         }
       };
+      // Use only showNotification; remove direct alert/console
       this._notify = function(type, message) {
         if (this.showNotification) {
           this.showNotification(message, type);
-        } else {
-          if (type === "error") alert(message);
-          else console.log(message);
         }
       };
 
@@ -312,15 +312,15 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async initialize(isVisible, kbData = null, projectId = null) {
-      console.log(`[KnowledgeBaseComponent] Initializing, isVisible: ${isVisible}, projectId: ${projectId}`);
-      
+      this._notify('info', `[KnowledgeBaseComponent] Initializing, isVisible: ${isVisible}, projectId: ${projectId}`);
+
       // Fast path for hiding
       if (this.state.isInitialized && !isVisible) {
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
         return;
       }
-      
+
       // Check for critical elements but don't throw errors
       // Instead, emit the rendered event so the UI can continue loading
       const requiredIds = [
@@ -329,26 +329,32 @@ export function createKnowledgeBaseComponent(options = {}) {
         "knowledgeBaseInactive",
         "kbStatusBadge"
       ];
-      
+
       let hasMissingElements = false;
       for (const id of requiredIds) {
         if (!document.getElementById(id)) {
-          console.warn(`[KnowledgeBaseComponent] Required element missing: #${id}`);
+          this._notify('warning', `[KnowledgeBaseComponent] Required element missing: #${id}`);
           hasMissingElements = true;
         }
       }
-      
+
       if (hasMissingElements) {
         // Don't throw an error, just log it and continue
-        console.error("[KnowledgeBaseComponent] Some critical elements are missing, but continuing initialization");
-        
-        // Emit rendered event to unblock the project loading process
-        if (projectId) {
+        this._notify('error', "[KnowledgeBaseComponent] Some critical elements are missing, but continuing initialization");
+
+        // Ensure projectId is always set for event, fallback to _getCurrentProjectId() if needed
+        const fallbackProjectId = projectId || this._getCurrentProjectId() || null;
+        if (fallbackProjectId) {
           document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
-            detail: { projectId }
+            detail: { projectId: fallbackProjectId }
+          }));
+        } else {
+          // Still emit event with null/undefined as projectId to unblock promises downstream
+          document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
+            detail: { projectId: null }
           }));
         }
-        
+
         return;
       }
 
@@ -362,7 +368,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       } else {
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
-        
+
         // Always emit the rendered event, even if we don't have data
         if (projectId) {
           document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
@@ -376,8 +382,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         "pointer-events-none",
         !isVisible,
       );
-      
-      console.log(`[KnowledgeBaseComponent] Initialization complete for projectId: ${projectId}`);
+
+      this._notify('info', `[KnowledgeBaseComponent] Initialization complete for projectId: ${projectId}`);
     }
 
     /**
@@ -460,11 +466,11 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
-      console.log(`[KnowledgeBaseComponent] Rendering KB info for projectId: ${projectId}`);
-      
+      this._notify('info', `[KnowledgeBaseComponent] Rendering KB info for projectId: ${projectId}`);
+
       if (!kbData) {
         this._showInactiveState();
-        
+
         // Always emit rendered event even if no KB data
         if (projectId) {
           document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
@@ -495,22 +501,22 @@ export function createKnowledgeBaseComponent(options = {}) {
           // Don't await this call - it's not critical to load health info before continuing
           // This allows the rendering to complete faster
           this._loadKnowledgeBaseHealth(kbData.id)
-            .catch(err => console.warn("[KnowledgeBaseComponent] Failed to load KB health:", err));
+            .catch(err => this._notify("warning", "Failed to load KB health"));
         }
-        
+
         this._updateStatusAlerts(kbData);
         this._updateUploadButtonsState();
-        
+
         // Emit rendered event now that the core rendering is done
         if (pid) {
-          console.log(`[KnowledgeBaseComponent] Emitting projectKnowledgeBaseRendered for projectId: ${pid}`);
+          this._notify('info', `[KnowledgeBaseComponent] Emitting projectKnowledgeBaseRendered for projectId: ${pid}`);
           document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
             detail: { projectId: pid }
           }));
         }
       } catch (error) {
-        console.error("[KnowledgeBaseComponent] Error while rendering KB info:", error);
-        
+        this._notify("error", "Error while rendering KB info");
+
         // Emit rendered event even if there was an error
         if (pid) {
           document.dispatchEvent(new CustomEvent('projectKnowledgeBaseRendered', {
@@ -698,7 +704,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           this._showNoResults();
         }
       } catch (err) {
-        console.error("[KB] Search failed:", err);
+        this._notify('error', "Search failed. Please try again.");
         this._notify("error", "Search failed. Please try again.");
       } finally {
         this.state.isSearching = false;
@@ -726,7 +732,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         this.elements;
       if (!resultsContainer) return;
 
-      resultsContainer.innerHTML = "";
+      resultsContainer.textContent = "";
       if (!results.length) {
         this._showNoResults();
         return;
@@ -772,7 +778,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (scorePct >= 80) badgeClass = "badge-success";
       else if (scorePct >= 60) badgeClass = "badge-warning";
 
-      item.innerHTML = `
+      item.innerHTML = DOMPurify.sanitize(`
         <div class="card-body p-3">
           <div class="card-title text-sm justify-between items-center mb-1">
             <div class="flex items-center gap-2 truncate">
@@ -787,7 +793,7 @@ export function createKnowledgeBaseComponent(options = {}) {
             ${result.text || "No content available."}
           </p>
         </div>
-      `;
+      `);
       return item;
     }
 
@@ -799,7 +805,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _showResultDetail(result) {
       const modal = this.elements.resultModal;
       if (!modal || typeof modal.showModal !== "function") {
-        console.error("[KB] Result detail modal not found or invalid.");
+        this._notify('error', "[KB] Result detail modal not found or invalid.");
         return;
       }
 
@@ -897,7 +903,10 @@ export function createKnowledgeBaseComponent(options = {}) {
             this.state.knowledgeBase.is_active = enabled;
           }
           this._updateStatusIndicator(enabled);
-          localStorage.setItem(`kb_enabled_${pid}`, String(enabled));
+          const storage = getDep("storage");
+          if (storage && typeof storage.setItem === "function") {
+            storage.setItem(`kb_enabled_${pid}`, String(enabled));
+          }
 
           if (this.projectManager.loadProjectDetails) {
             const project = await this.projectManager.loadProjectDetails(pid);
@@ -907,7 +916,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           }
         }
       } catch (err) {
-        console.error("[KB] Toggle failed:", err);
+        this._notify('error', "Failed to toggle knowledge base");
         this._notify("error", "Failed to toggle knowledge base");
       }
     }
@@ -944,7 +953,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           }
         }
       } catch (err) {
-        console.error("[KB] Reprocessing failed:", err);
+        this._notify('error', "Failed to reprocess files");
         this._notify("error", "Failed to reprocess files");
       } finally {
         this._hideProcessingState();
@@ -1027,7 +1036,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           throw new Error(resp.message || "Invalid response from server");
         }
       } catch (err) {
-        console.error("[KB] Save settings failed:", err);
+        this._notify('error', `Failed to save settings: ${err.message}`);
         this._notify("error", `Failed to save settings: ${err.message}`);
       }
     }
@@ -1039,7 +1048,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _showKnowledgeBaseModal() {
       const modal = this.elements.settingsModal;
       if (!modal || typeof modal.showModal !== "function") {
-        console.error("[KB] Settings modal not found or invalid.");
+        this._notify('error', "[KB] Settings modal not found or invalid.");
         return;
       }
 
@@ -1093,7 +1102,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         );
         return resp?.data || null;
       } catch (err) {
-        console.error("[KB] health check failed:", err);
+        this._notify('error', "Could not verify knowledge base health");
         this._showStatusAlert(
           "Could not verify knowledge base health",
           "error",
@@ -1114,7 +1123,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         this.showNotification?.(message, type);
         return;
       }
-      statusIndicator.innerHTML = "";
+      statusIndicator.textContent = "";
       let cls = "alert-info";
       if (type === "success") cls = "alert-success";
       else if (type === "warning") cls = "alert-warning";
@@ -1123,12 +1132,12 @@ export function createKnowledgeBaseComponent(options = {}) {
       const alertDiv = document.createElement("div");
       alertDiv.className = `alert ${cls} shadow-sm text-sm py-2 px-3`;
       alertDiv.setAttribute("role", "alert");
-      alertDiv.innerHTML = `<span>${message}</span>`;
+      alertDiv.innerHTML = DOMPurify.sanitize(`<span>${message}</span>`);
 
       if (type !== "error") {
         const btn = document.createElement("button");
         btn.className = "btn btn-xs btn-ghost btn-circle";
-        btn.innerHTML = "✕";
+        btn.textContent = "✕";
         btn.onclick = () => alertDiv.remove();
         alertDiv.appendChild(btn);
       }
@@ -1161,14 +1170,14 @@ export function createKnowledgeBaseComponent(options = {}) {
         banner.setAttribute('role', 'alert');
         container.prepend(banner);
       }
-      banner.innerHTML = `
+      banner.innerHTML = DOMPurify.sanitize(`
         <div class="flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
           </svg>
           <span>${message}</span>
         </div>
-      `;
+      `);
       banner.classList.remove('hidden');
     }
 
@@ -1182,12 +1191,12 @@ export function createKnowledgeBaseComponent(options = {}) {
       resultsSection?.classList.remove("hidden");
       noResultsSection?.classList.add("hidden");
       if (resultsContainer) {
-        resultsContainer.innerHTML = `
+        resultsContainer.innerHTML = DOMPurify.sanitize(`
           <div class="flex justify-center items-center p-4 text-base-content/70">
             <span class="loading loading-dots loading-md mr-2"></span>
             <span>Searching knowledge base...</span>
           </div>
-        `;
+        `);
       }
     }
 
@@ -1213,7 +1222,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _showNoResults() {
       const { resultsSection, noResultsSection, resultsContainer } =
         this.elements;
-      if (resultsContainer) resultsContainer.innerHTML = "";
+      if (resultsContainer) resultsContainer.textContent = "";
       resultsSection?.classList.add("hidden");
       noResultsSection?.classList.remove("hidden");
     }
@@ -1230,7 +1239,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         originalDisabled: btn.disabled,
       };
       btn.disabled = true;
-      btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Processing...`;
+      btn.innerHTML = DOMPurify.sanitize(`<span class="loading loading-spinner loading-xs"></span> Processing...`);
     }
 
     /**
@@ -1241,7 +1250,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       const btn = this.elements.reprocessButton;
       if (!btn || !this._processingState) return;
       btn.disabled = this._processingState.originalDisabled;
-      btn.innerHTML = this._processingState.originalContent;
+      btn.innerHTML = DOMPurify.sanitize(this._processingState.originalContent);
       this._processingState = null;
     }
 
@@ -1354,4 +1363,4 @@ export function createKnowledgeBaseComponent(options = {}) {
   return new KnowledgeBaseComponentWithDestroy(options);
 }
 
-export default createKnowledgeBaseComponent;
+export default KnowledgeBaseComponentWithDestroy;

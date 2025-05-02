@@ -1,12 +1,5 @@
 /**
- * chat.js (Remediated DI Edition)
- *
- * A strict-DI version of the Chat Manager, which:
- *  - Injects all external dependencies (DOM, Navigation, app, etc.)
- *  - Does not directly reference window.*, document.*, or other globals
- *  - Uses a trackListener for event bindings and provides cleanup()
- *  - Uses DOMPurify for HTML sanitization (also injected by default, but can be overridden)
- *  - Optionally supports “global mode” (no valid projectId) or “project mode”
+ * chat.js (Strict DI, Linted Edition)
  *
  * Usage:
  *   import { createChatManager } from './chat.js';
@@ -21,12 +14,11 @@
  *     isAuthenticated,
  *     domAPI,
  *     navAPI,
- *     DOMPurify
+ *     DOMPurify,
+ *     notificationHandler
  *   });
  *   await chatManager.initialize({ projectId: '123' });
- *
- *   // Later, if needed:
- *   chatManager.cleanup();  // Unbinds all event listeners
+ *   chatManager.cleanup();
  */
 
 /**
@@ -39,14 +31,17 @@
  * @property {function(string): HTMLElement} createElement
  * @property {function(HTMLElement, string): void} removeChild
  * @property {function(HTMLElement, string): void} setInnerHTML
- * ... (define as many DOM operations as you need)
- *
+ */
+
+/**
  * @typedef {Object} NavAPI
  * @property {function(): string} getSearch
  * @property {function(): string} getHref
  * @property {function(url: string): void} pushState
  * @property {function(): string} getPathname
- *
+ */
+
+/**
  * @typedef {Object} EventHandlers
  * @property {function(HTMLElement, string, Function, Object=): any} trackListener
  * @property {function(HTMLElement, string, any): void} untrackListener
@@ -56,43 +51,44 @@
  * Default no-op DomAPI fallback if none provided.
  */
 function createDefaultDomAPI() {
-  return {
-    querySelector: () => null,
-    getElementById: () => null,
-    querySelectorAll: () => [],
-    appendChild: () => { },
-    replaceChildren: () => [],
-    createElement: () => ({ style: {}, classList: { add() { }, remove() { }, toggle() { } } }),
-    removeChild: () => { },
-    setInnerHTML: () => { }
-  };
+  throw new Error("[ChatManager] No domAPI provided. All DOM operations must be injected.");
 }
 
 /**
  * Default no-op NavAPI fallback if none provided.
  */
 function createDefaultNavAPI() {
-  return {
-    getSearch: () => "",
-    getHref: () => "",
-    pushState: () => { },
-    getPathname: () => ""
-  };
+  throw new Error("[ChatManager] No navAPI provided. All navigation operations must be injected.");
 }
 
 /**
  * Default no-op eventHandlers if none provided.
  */
 function createDefaultEventHandlers() {
+  function trackListener() {
+    throw new Error("[ChatManager] No eventHandlers.trackListener provided.");
+  }
+  function untrackListener() {
+    throw new Error("[ChatManager] No eventHandlers.untrackListener provided.");
+  }
+  return { trackListener, untrackListener };
+}
+
+/**
+ * Returns the injected modelConfig or a stub if unavailable.
+ */
+function getInjectedModelConfig(modelConfig) {
+  if (modelConfig) return modelConfig;
   return {
-    trackListener: (el, type, fn) => el && el.addEventListener(type, fn),
-    untrackListener: (el, type, fn) => el && el.removeEventListener(type, fn)
+    getConfig: () => ({}),
+    updateConfig: () => { },
+    getModelOptions: () => [],
+    onConfigChange: () => { }
   };
 }
 
 /**
  * Constants for API endpoints.
- * If your system expects more DI for endpoints, factor them out similarly.
  */
 const API_ENDPOINTS = {
   CONVERSATIONS: (projectId) => `/api/projects/${projectId}/conversations/`,
@@ -153,7 +149,8 @@ class MessageQueue {
  * @param {Function} options.isAuthenticated - Required auth checker.
  * @param {DomAPI} [options.domAPI] - DOM abstraction. No direct document usage.
  * @param {NavAPI} [options.navAPI] - Navigation / history abstraction. No direct window usage.
- * @param {Object} [options.DOMPurify] - If omitted, tries to import from the environment or fallback.
+ * @param {Object} [options.DOMPurify] - Must be provided.
+ * @param {Function} [options.notificationHandler] - For all user/dev notifications.
  * @returns {ChatManager} An instance with initialize, sendMessage, etc.
  */
 export function createChatManager({
@@ -166,7 +163,8 @@ export function createChatManager({
   isAuthenticated,
   domAPI,
   navAPI,
-  DOMPurify
+  DOMPurify,
+  notificationHandler
 } = {}) {
   // Basic validation
   if (typeof apiRequest !== 'function') {
@@ -178,38 +176,24 @@ export function createChatManager({
   if (typeof isValidProjectId !== 'function' || typeof isAuthenticated !== 'function') {
     throw new Error("[ChatManager] 'isValidProjectId' and 'isAuthenticated' must be functions.");
   }
+  if (!DOMPurify) {
+    throw new Error("[ChatManager] DOMPurify must be provided via DI.");
+  }
 
   // Provide fallback DOM, Nav, and event handlers if not supplied
   const _domAPI = domAPI || createDefaultDomAPI();
   const _navAPI = navAPI || createDefaultNavAPI();
   const _EH = eventHandlers || createDefaultEventHandlers();
 
-  // Provide a fallback DOMPurify if not provided
-  let _DOMPurify = DOMPurify;
-  if (!_DOMPurify) {
-    try {
-      // Try dynamic import or use a global if absolutely needed
-      // For truly strict DI, you'd remove this fallback and require injection
-      _DOMPurify = window?.DOMPurify;
-      if (!_DOMPurify) {
-        throw new Error("DOMPurify not available");
+  // Notification handler: prefer injected, then app.showNotification, else throw
+  const notify = notificationHandler ||
+    ((msg, type = "info", ...args) => {
+      if (typeof app.showNotification === "function") {
+        app.showNotification(msg, type, ...args);
+      } else {
+        throw new Error(`[ChatManager] Notification: ${msg}`);
       }
-    } catch {
-      throw new Error("[ChatManager] DOMPurify not provided or accessible.");
-    }
-  }
-
-  /**
-   * Return the modelConfig object or a stub if unavailable.
-   */
-  function getInjectedModelConfig() {
-    return modelConfig || {
-      getConfig: () => ({}),
-      updateConfig: () => { },
-      getModelOptions: () => [],
-      onConfigChange: () => { }
-    };
-  }
+    });
 
   /**
    * The main ChatManager class, constructed with all DI references enclosed.
@@ -218,14 +202,15 @@ export function createChatManager({
     constructor() {
       this.apiRequest = apiRequest;
       this.app = app;
-      this.modelConfigAPI = getInjectedModelConfig();
+      this.modelConfigAPI = getInjectedModelConfig(modelConfig);
       this.domAPI = _domAPI;
       this.navAPI = _navAPI;
       this.eventHandlers = _EH;
       this.projectDetails = projectDetailsComponent;
       this.isValidProjectId = isValidProjectId;
       this.isAuthenticated = isAuthenticated;
-      this.DOMPurify = _DOMPurify;
+      this.DOMPurify = DOMPurify;
+      this.notify = notify;
 
       this.projectId = null;
       this.currentConversationId = null;
@@ -255,8 +240,8 @@ export function createChatManager({
      * Initialize the chat manager with optional UI selectors or overrides.
      * @param {Object} [options={}]
      * @param {string} [options.projectId]
-     * @param {string} [options.containerSelector] - If not provided, a default is created.
-     * @param {string} [options.messageContainerSelector] - If not provided, a default is created.
+     * @param {string} [options.containerSelector]
+     * @param {string} [options.messageContainerSelector]
      * @param {string} [options.inputSelector]
      * @param {string} [options.sendButtonSelector]
      * @param {string} [options.titleSelector]
@@ -268,7 +253,7 @@ export function createChatManager({
 
       // If re-initialize with the same project, re-bind UI
       if (this.isInitialized && this.projectId === requestedProjectId) {
-        console.warn(`[ChatManager] Already initialized for project ${requestedProjectId}. Re-binding UI...`);
+        this.notify(`[ChatManager] Already initialized for project ${requestedProjectId}. Re-binding UI...`, "warn");
         this._setupUIElements(options);
         this._bindEvents();
         return true;
@@ -301,15 +286,14 @@ export function createChatManager({
 
       // If no valid project, run "global" (no-project) mode:
       if (this.isGlobalMode) {
-        console.info("[ChatManager] Starting in global (no-project) mode.");
+        this.notify("[ChatManager] Starting in global (no-project) mode.", "info");
         this.isInitialized = true;
         return true;
       }
 
       // Otherwise, do a normal project-based init
-      console.log(`[ChatManager] Initializing for projectId: ${this.projectId}`);
+      this.notify(`[ChatManager] Initializing for projectId: ${this.projectId}`, "info");
       try {
-        // For example, create a new conversation automatically
         await this.createNewConversation();
         this.isInitialized = true;
         return true;
@@ -324,15 +308,10 @@ export function createChatManager({
      * Cleanup method to remove all tracked event listeners, etc.
      */
     cleanup() {
-      // Unbind all tracked listeners
       for (const { element, event, handler, options } of this._listeners) {
         this.eventHandlers.untrackListener(element, event, handler, options);
       }
       this._listeners = [];
-
-      // Optionally clear UI references or remove container if it's dynamically created
-      // e.g., this.domAPI.removeChild(someParent, this.container) if needed
-
       this.isInitialized = false;
       this.currentConversationId = null;
       this.projectId = null;
@@ -346,11 +325,11 @@ export function createChatManager({
      */
     async loadConversation(conversationId) {
       if (!conversationId) {
-        console.error("[ChatManager] Invalid conversationId");
+        this.notify("[ChatManager] Invalid conversationId", "error");
         return false;
       }
       if (!this.isAuthenticated()) {
-        console.warn("[ChatManager] loadConversation: not authenticated");
+        this.notify("[ChatManager] loadConversation: not authenticated", "warn");
         return false;
       }
       if (!this.isValidProjectId(this.projectId)) {
@@ -361,7 +340,7 @@ export function createChatManager({
 
       const requestId = ++this.currentRequestId;
       if (this.loadPromise) {
-        console.warn("[ChatManager] Already loading; awaiting existing loadPromise.");
+        this.notify("[ChatManager] Already loading; awaiting existing loadPromise.", "warn");
         const result = await this.loadPromise;
         return requestId === this.currentRequestId ? result : false;
       }
@@ -409,7 +388,7 @@ export function createChatManager({
         this.projectId = this.isValidProjectId(overrideProjectId) ? overrideProjectId : this.projectId;
       }
       if (!this.isAuthenticated()) {
-        console.warn("[ChatManager] createNewConversation: not authenticated");
+        this.notify("[ChatManager] createNewConversation: not authenticated", "warn");
         throw new Error("Not authenticated");
       }
       if (!this.isValidProjectId(this.projectId)) {
@@ -452,7 +431,7 @@ export function createChatManager({
           this.titleElement.textContent = conversation.title || "New Conversation";
         }
         this._updateURLWithConversationId(conversation.id);
-        console.log(`[ChatManager] New conversation created: ${conversation.id}`);
+        this.notify(`[ChatManager] New conversation created: ${conversation.id}`, "info");
         return conversation;
       } catch (error) {
         this._handleError("creating conversation", error);
@@ -469,7 +448,7 @@ export function createChatManager({
       if (!messageText?.trim()) return;
       return this.messageQueue.add(async () => {
         if (!this.isAuthenticated()) {
-          this.app?.showNotification("Please log in to send messages", "error");
+          this.notify("Please log in to send messages", "error");
           return;
         }
         if (!this.isValidProjectId(this.projectId)) {
@@ -548,7 +527,7 @@ export function createChatManager({
         const sizeBytes = Math.floor((b64.length * 3) / 4);
         if (sizeBytes > CHAT_CONFIG.MAX_IMAGE_SIZE) {
           this._hideThinkingIndicator();
-          this.app?.showNotification?.("Image is too large! (max 4MB)", "error");
+          this.notify("Image is too large! (max 4MB)", "error");
           throw new Error("Image size exceeds maximum allowed threshold");
         }
       }
@@ -582,7 +561,7 @@ export function createChatManager({
     async deleteConversation() {
       if (!this.currentConversationId) return false;
       if (!this.isAuthenticated()) {
-        console.warn("[ChatManager] deleteConversation: not authenticated");
+        this.notify("[ChatManager] deleteConversation: not authenticated", "warn");
         return false;
       }
       if (!this.isValidProjectId(this.projectId)) {
@@ -620,7 +599,6 @@ export function createChatManager({
     updateModelConfig(config) {
       this.modelConfigAPI.updateConfig(config);
       this.modelConfig = this.modelConfigAPI.getConfig();
-      // If needed, update UI for model selection, etc.
     }
 
     // -------------------- UI Methods ----------------------
@@ -662,18 +640,19 @@ export function createChatManager({
         field.id = inputSelector.replace('#', '');
         field.className = "chat-input";
         field.placeholder = "Type your message...";
+        field.setAttribute("aria-label", "Chat input");
         this.inputField = field;
 
         const sBtn = this.domAPI.createElement("button");
         sBtn.className = "chat-send-button";
         sBtn.textContent = "Send";
+        sBtn.setAttribute("aria-label", "Send message");
         this.sendButton = sBtn;
 
         this.domAPI.appendChild(inputArea, field);
         this.domAPI.appendChild(inputArea, sBtn);
         this.domAPI.appendChild(this.container, inputArea);
       } else {
-        // If it exists, look for the send button
         this.sendButton = this.domAPI.querySelector(sendButtonSelector);
       }
 
@@ -686,7 +665,6 @@ export function createChatManager({
      * @private
      */
     _bindEvents() {
-      // Clear old references
       for (const { element, event, handler, options } of this._listeners) {
         this.eventHandlers.untrackListener(element, event, handler, options);
       }
@@ -797,6 +775,7 @@ export function createChatManager({
 
       const toggle = this.domAPI.createElement("button");
       toggle.className = "thinking-toggle";
+      toggle.setAttribute("aria-label", "Toggle reasoning details");
       this.domAPI.setInnerHTML(
         toggle,
         `
@@ -857,8 +836,8 @@ export function createChatManager({
       }
     }
 
+    // Uses navAPI for URL manipulation (no direct window/document access)
     _updateURLWithConversationId(conversationId) {
-      // Use navAPI to manipulate URL, no direct window.* calls
       const searchStr = this.navAPI.getSearch();
       const urlParams = new URLSearchParams(searchStr);
       if (urlParams.get("chatId") !== conversationId) {
@@ -870,7 +849,6 @@ export function createChatManager({
     }
 
     _removeConversationIdFromURL() {
-      // Use navAPI to manipulate URL
       const searchStr = this.navAPI.getSearch();
       const urlParams = new URLSearchParams(searchStr);
       urlParams.delete("chatId");
@@ -990,12 +968,9 @@ export function createChatManager({
 
     _handleError(context, error) {
       const message = this._extractErrorMessage(error);
-      console.error(`[ChatManager - ${context}]`, error);
-      this.app?.showNotification?.(message, "error");
+      this.notify(`[ChatManager - ${context}] ${message}`, "error", error);
     }
   } // end ChatManager class
 
   return new ChatManager();
 }
-
-export default createChatManager;

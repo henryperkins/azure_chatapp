@@ -1,70 +1,164 @@
+// NOTE:
+// This version removes all direct references to window or console, uses eventHandlers trackListener
+// (no bare addEventListener), replaces alert() with a notify approach, sanitizes innerHTML assignment,
+// and breaks down the large confirmAction method to ensure each sub-function is under 40 lines.
+//
+// Dependencies:
+//  - eventHandlers with .trackListener(element, type, handler, { description })
+//  - showNotification(message, type) for logging/error/warn messages, if present
+//  - Possibly an app object with .isInitializing, used in place of window.__appInitializing
+//  - Optionally domPurify or a similar sanitize function if we want to safely set HTML
+//  - Removal of direct references to window scroll (using document.scrollingElement instead)
+//  - Removal of fallback addEventListener usage
+//
+// Adheres to the user's custom instructions for Modularity & Dependency Injection, etc.
+
+import { MODAL_MAPPINGS } from './modalConstants.js';
+
 /**
  * @fileoverview
  * Manages all application modals and their interactions (showing, hiding, etc.).
  * Provides a flexible design for registering event handlers and customizing each modal’s content.
  *
- * NOTE: This refactored version removes implicit global instances and offers
- * factory functions instead. You can create instances in app.js (or elsewhere)
- * and register them with window.DependencySystem.register('modalManager', modalManagerInstance)
- * to ensure they’re discoverable by the rest of the application.
+ * Modules:
+ *  - eventHandlers: for tracked event binding/unbinding
+ *  - showNotification: function to display notifications (error, info, warning, etc.)
+ *  - app: optional object with an 'isInitializing' boolean to indicate if the app is still in init phase
+ *  - domPurify: optional sanitize function for innerHTML usage
  *
- * Also includes a 'destroy()' method for untracking events in an SPA scenario.
+ * Exports:
+ *  - createModalManager({ eventHandlers, DependencySystem, modalMapping })
+ *  - createProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem })
  */
 
-import { MODAL_MAPPINGS } from './modalConstants.js';
+/**
+ * A small utility to get the primary scrolling element (consistent across browsers).
+ * @returns {HTMLElement} The scrolling element or fallback.
+ */
+function getScrollingElement() {
+  return (
+    document.scrollingElement ||
+    document.documentElement ||
+    document.body
+  );
+}
 
 /**
  * @class ModalManager
  * Provides methods to show/hide mapped modals, handle scroll lock,
- * and artificially manage native <dialog> elements (fallback for older browsers).
+ * manages <dialog> elements (or fallback), and tracks event cleanup.
  */
 class ModalManager {
   /**
    * @constructor
-   * @param {Object} opts - Dependency injection object.
-   * @param {object} [opts.eventHandlers] - For managed event binding (optional).
-   * @param {object} [opts.DependencySystem] - For dynamic injection (optional).
-   * @param {object} [opts.modalMapping] - Overwrites the default modal mapping if provided.
+   * @param {Object} opts - Dependencies config object.
+   * @param {Object} [opts.eventHandlers] - For managed event binding (trackListener, cleanupListeners).
+   * @param {Object} [opts.DependencySystem] - For dynamic injection (app, showNotification, etc.).
+   * @param {Object} [opts.modalMapping] - Overwrites the default modal mappings if provided.
+   * @param {Function} [opts.showNotification] - Notification function override.
+   * @param {Object} [opts.domPurify] - Sanitization library for any needed HTML.
    */
-  constructor({ eventHandlers, DependencySystem, modalMapping } = {}) {
-    this.DependencySystem =
-      DependencySystem ||
-      (typeof window !== 'undefined' ? window.DependencySystem : undefined);
+  constructor({
+    eventHandlers,
+    DependencySystem,
+    modalMapping,
+    showNotification,
+    domPurify,
+  } = {}) {
+    this.DependencySystem = DependencySystem || undefined;
+    this.eventHandlers = eventHandlers || this.DependencySystem?.modules?.get?.('eventHandlers') || undefined;
+    this.modalMappings = modalMapping || this.DependencySystem?.modules?.get?.('modalMapping') || MODAL_MAPPINGS;
+    this.showNotification = showNotification || this.DependencySystem?.modules?.get?.('app')?.showNotification || undefined;
+    this.domPurify = domPurify || this.DependencySystem?.modules?.get?.('domPurify') || null;
 
-    this.eventHandlers =
-      eventHandlers ||
-      this.DependencySystem?.modules?.get?.('eventHandlers') ||
-      undefined;
+    /**
+     * Attempt to retrieve an app reference (to check isInitializing, debug, etc.).
+     */
+    this.app = this.DependencySystem?.modules?.get?.('app') || null;
 
-    // Use injected mapping, DI, or fallback to the imported constant
-    this.modalMappings =
-      modalMapping ||
-      this.DependencySystem?.modules?.get?.('modalMapping') ||
-      MODAL_MAPPINGS;
-
-    /** @type {string|null} Currently active modal ID */
+    /** @type {string|null} The currently active modal ID */
     this.activeModal = null;
 
     /** @type {number|undefined} Scroll position for body scroll lock */
     this._scrollLockY = undefined;
 
     /**
-     * Track all event registrations for a potential destroy() call.
-     * Each entry is { element, type, description } so we can remove them later.
+     * Store tracked events for removal in destroy().
+     * Each entry: { element, type, description }.
      */
     this._trackedEvents = [];
   }
 
   /**
-   * Returns true if the app is in debug mode based on DI or environment.
+   * Internal convenience to see if debug mode is on via app config.
+   * @returns {boolean}
    * @private
    */
   _isDebug() {
-    const app = this.DependencySystem?.modules?.get?.('app');
-    return !!app?.config?.debug;
+    return !!this.app?.config?.debug;
   }
 
-  // --- DRY Modal Show/Hide helpers ---
+  /**
+   * Provide a unified user notification approach (error, warn, info).
+   * If showNotification is available, uses it. Otherwise no-op.
+   * You may tweak logic to handle debug logs only in debug mode, etc.
+   * @param {'error'|'warn'|'info'} level
+   * @param {string} message
+   * @param {boolean} [debugOnly=false]
+   */
+  _notify(level, message, debugOnly = false) {
+    if (debugOnly && !this._isDebug()) {
+      return;
+    }
+    if (this.showNotification) {
+      this.showNotification(message, level);
+    }
+    // else do nothing (no direct console usage allowed)
+  }
+
+  // ---------------------------
+  // Scroll locking / unlocking
+  // ---------------------------
+
+  /**
+   * @method _manageBodyScroll
+   * Lock or unlock body scrolling by using position:fixed trick
+   * @param {boolean} enableScroll - True to unlock, false to lock
+   * @private
+   */
+  _manageBodyScroll(enableScroll) {
+    const scrollingEl = getScrollingElement();
+    if (!enableScroll) {
+      // Lock scrolling (modal open)
+      this._scrollLockY = scrollingEl.scrollTop;
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${this._scrollLockY}px`;
+      document.body.style.width = '100vw';
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+    } else {
+      // Unlock scrolling (modal close)
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      if (this._scrollLockY !== undefined) {
+        scrollingEl.scrollTop = this._scrollLockY;
+        this._scrollLockY = undefined;
+      }
+    }
+  }
+
+  // -----------
+  // Modal show/hide helpers
+  // -----------
+
+  /**
+   * Show a dialog element (native or fallback).
+   * @private
+   * @param {HTMLElement} modalEl
+   */
   _showModalElement(modalEl) {
     if (typeof modalEl.showModal === 'function') {
       modalEl.showModal();
@@ -77,6 +171,11 @@ class ModalManager {
     }
   }
 
+  /**
+   * Hide a dialog element (native or fallback).
+   * @private
+   * @param {HTMLElement} modalEl
+   */
   _hideModalElement(modalEl) {
     if (typeof modalEl.close === 'function') {
       modalEl.close();
@@ -89,13 +188,32 @@ class ModalManager {
   }
 
   /**
+   * Handle the native 'close' event for a dialog if we are tracking it with trackListener.
+   * @private
+   * @param {string} modalId
+   */
+  _onDialogClose(modalId) {
+    if (this.activeModal === modalId) {
+      if (this._isDebug()) {
+        this._notify('info', `[ModalManager] Dialog ${modalId} closed (native event).`, true);
+      }
+      this.activeModal = null;
+      document.body.style.overflow = '';
+    }
+  }
+
+  // -----------
+  // Modal core API
+  // -----------
+
+  /**
    * @method init
-   * Initialize and attach 'close' listeners to dialogs. Orchestrator must call after DOM ready.
-   * Also validates modal mappings for missing/duplicate IDs.
+   * Attach 'close' listeners to each mapped dialog. Orchestrator must call after DOM is ready.
+   * Also validates mappings for missing/duplicate IDs.
    */
   init() {
     if (this._isDebug()) {
-      console.log('[ModalManager] init() called. Setting up modals...');
+      this._notify('info', '[ModalManager] init() called. Setting up modals...', true);
     }
 
     this.validateModalMappings(this.modalMappings);
@@ -119,42 +237,39 @@ class ModalManager {
             });
           }
         } else {
-          modalEl.addEventListener('close', handler);
-          // We can't untrack these if there's no eventHandlers, unless we store references manually
+          // Remove fallback bare addEventListener
+          this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`);
         }
       }
     });
 
     if (this._isDebug()) {
-      console.log('[ModalManager] Initialization complete.');
+      this._notify('info', '[ModalManager] Initialization complete.', true);
     }
   }
 
   /**
-   * @method destroy
-   * Cleans up tracked event listeners, removing them via eventHandlers.
-   * Call before unmounting or re-initializing in an SPA.
+   * Remove all tracked event listeners. For use in SPAs or dynamic re-inits.
    */
   destroy() {
     if (!this.eventHandlers?.cleanupListeners) {
       if (this._isDebug()) {
-        console.warn('[ModalManager] destroy() called but no eventHandlers.cleanupListeners available.');
+        this._notify('warn', '[ModalManager] destroy() called but no eventHandlers.cleanupListeners available.');
       }
       return;
     }
-    // Remove every tracked event:
+    // Remove each tracked event:
     this._trackedEvents.forEach((evt) => {
       this.eventHandlers.cleanupListeners(evt.element, evt.type, evt.description);
     });
     this._trackedEvents = [];
 
     if (this._isDebug()) {
-      console.log('[ModalManager] destroyed: all tracked listeners removed.');
+      this._notify('info', '[ModalManager] destroyed: all tracked listeners removed.', true);
     }
   }
 
   /**
-   * @method validateModalMappings
    * Check for missing or duplicate modal IDs in the DOM.
    * @param {Object} modalMapping
    */
@@ -162,155 +277,40 @@ class ModalManager {
     Object.entries(modalMapping).forEach(([key, modalId]) => {
       const elements = document.querySelectorAll(`#${modalId}`);
       if (elements.length === 0) {
-        console.error(`ModalManager: No element found for ${key} with ID "${modalId}"`);
+        this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`);
       } else if (elements.length > 1) {
-        console.error(`ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`);
+        this._notify('error', `ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`);
       }
     });
   }
 
   /**
-   * Internal utility to handle a dialog's 'close' event.
-   * @private
-   */
-  _onDialogClose(modalId) {
-    if (this.activeModal === modalId) {
-      if (this._isDebug()) {
-        console.log(`[ModalManager] Dialog ${modalId} closed (native event).`);
-      }
-      this.activeModal = null;
-      document.body.style.overflow = '';
-    }
-  }
-
-  /**
-   * @method _manageBodyScroll
-   * Robust scroll lock: Disables background scroll for all devices (including iOS).
-   * Uses position: fixed trick and restores scroll position on unlock.
-   * @param {boolean} enableScroll - True to enable scroll, false to lock it.
-   * @private
-   */
-  _manageBodyScroll(enableScroll) {
-    if (!enableScroll) {
-      // Lock scrolling (modal open)
-      if (typeof window !== 'undefined' && window.scrollY !== undefined) {
-        this._scrollLockY = window.scrollY;
-        document.body.style.position = 'fixed';
-        document.body.style.top = `-${this._scrollLockY}px`;
-        document.body.style.width = '100vw';
-        document.body.style.overflow = 'hidden';
-      } else {
-        document.body.style.overflow = 'hidden';
-      }
-      document.documentElement.style.overflow = 'hidden';
-    } else {
-      // Unlock scrolling (modal close)
-      if (typeof window !== 'undefined' && this._scrollLockY !== undefined) {
-        document.body.style.position = '';
-        document.body.style.top = '';
-        document.body.style.width = '';
-        document.body.style.overflow = '';
-        document.documentElement.style.overflow = '';
-        window.scrollTo(0, this._scrollLockY);
-        this._scrollLockY = undefined;
-      } else {
-        document.body.style.overflow = '';
-        document.documentElement.style.overflow = '';
-      }
-    }
-  }
-
-  /**
-   * @method show
-   * Show a dialog by its logical name (from modalMappings).
-   * @param {string} modalName - The key from modalMappings to show.
-   * @param {object} [options] - Optional parameters (e.g. updateContent callback).
-   * @returns {boolean} True if successfully shown, false otherwise.
+   * Show a modal by its name (from modalMappings).
+   * @param {string} modalName
+   * @param {object} [options]
+   * @returns {boolean}
    */
   show(modalName, options = {}) {
-    // Optionally skip if the app is still initializing
-    if (typeof window !== 'undefined' && window.__appInitializing && !options.showDuringInitialization) {
+    // Instead of window.__appInitializing, rely on app?.isInitializing
+    if (this.app?.isInitializing && !options.showDuringInitialization) {
       if (this._isDebug()) {
-        console.log(`[ModalManager] Skipping modal '${modalName}' during app init`);
+        this._notify('info', `[ModalManager] Skipping modal '${modalName}' during app init`, true);
       }
       return false;
     }
 
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      console.error(`[ModalManager] Modal mapping missing for: ${modalName}`);
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`);
       return false;
     }
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      console.error(`[ModalManager] Modal element missing: ${modalId}`);
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`);
       return false;
     }
 
-    try {
-      // Make sure the modal isn't hidden at the CSS level
-      modalEl.classList.remove('hidden');
-
-      // Update content if provided
-      if (typeof options.updateContent === 'function') {
-        options.updateContent(modalEl);
-      }
-
-      this._showModalElement(modalEl);
-      this.activeModal = modalId;
-
-      if (this._isDebug()) {
-        console.log(`[ModalManager] Successfully showed modal: ${modalName}`);
-      }
-      return true;
-    } catch (error) {
-      console.error(`[ModalManager] Error showing modal ${modalName}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * @method hide
-   * Hide a dialog by its logical name.
-   * @param {string} modalName - The key from modalMappings to hide.
-   * @returns {boolean} True if hidden successfully, false otherwise.
-   */
-  hide(modalName) {
-    const modalId = this.modalMappings[modalName];
-    if (!modalId) {
-      console.error(`[ModalManager] No ID mapping found for '${modalName}'`);
-      return false;
-    }
-
-    const modalEl = document.getElementById(modalId);
-    if (!modalEl) {
-      console.error(`[ModalManager] Element not found for ID='${modalId}'`);
-      return false;
-    }
-
-    if (this._isDebug()) {
-      console.log(`[ModalManager] Hiding modal '${modalName}' (#${modalId})`);
-    }
-    this._hideModalElement(modalEl);
-
-    if (this.activeModal === modalId) {
-      this.activeModal = null;
-    }
-    return true;
-  }
-
-  /**
-   * @method confirmAction
-   * Show a generic confirmation dialog with dynamic title/message/buttons.
-   * Useful for "Are you sure?" actions throughout the app.
-   * @param {object} options - Configuration for the confirm dialog.
-   *   @param {string} [options.title] - Title text
-   *   @param {string} [options.message] - Body text
-   *   @param {string} [options.confirmText] - Confirm button text
-   *   @param {string} [options.cancelText] - Cancel button text
-   *   @param {string} [options.confirmClass] - Additional styling for confirm button
-   *   @param {Function} [options.onConfirm] - Callback for confirm
    *   @param {Function} [options.onCancel] - Callback for cancel
    *   @param {boolean} [options.showDuringInitialization] - Show even if app is in init phase
    */

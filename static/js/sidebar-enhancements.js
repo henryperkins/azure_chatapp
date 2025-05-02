@@ -1,68 +1,59 @@
 /**
  * sidebar-enhancements.js
- * UI scaffolding for the sidebar:
- *  - migrate old chevron toggles to new checkbox-based collapse controls
- *  - wire “Manage Projects” link to the centralized sidebar controller
  *
- * This file is loaded as a plain <script>, so we attach only to window,
- * no ES module exports.
+ * Strict DI/Modularity checklist-compliant edition.
+ *
+ * Provides API for sidebar UI enhancements:
+ *   - Migrates legacy chevron toggles to new checkbox-collapse panels.
+ *   - Wires "Manage Projects" to the sidebar tab logic.
+ *
+ * **No use of window, document, or global scope.**
+ * All dependencies (eventHandlers, DependencySystem, domAPI) must be provided by DI/explicit parameter.
+ *
+ * Usage:
+ *   import { createSidebarEnhancements } from './sidebar-enhancements.js';
+ *   const se = createSidebarEnhancements({ eventHandlers, DependencySystem, domAPI });
+ *   se.initSidebarEnhancements();
+ *
+ * No globals are attached by this module.
  */
-(function({ eventHandlers, DependencySystem } = {}) {
-  DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
-  eventHandlers = eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers'));
-  if (!eventHandlers) throw new Error('eventHandlers required for sidebar-enhancements');
 
-  // Helper for tracking events: use injected eventHandlers
+export function createSidebarEnhancements({ eventHandlers, DependencySystem, domAPI }) {
+  if (!eventHandlers) throw new Error('eventHandlers required for sidebar-enhancements');
+  if (!domAPI) throw new Error('domAPI required for sidebar-enhancements');
   const EH = eventHandlers;
 
-  function initSidebarEnhancements() {
-    initCollapseControls();
-    initManageProjectsLink();
+  function migrateLegacyToggle({ oldToggleId, newCheckboxId, chevronId }) {
+    const oldToggle = domAPI.getElementById(oldToggleId);
+    const newCheckbox = domAPI.getElementById(newCheckboxId);
+    const chevron = domAPI.getElementById(chevronId);
+    if (oldToggle && newCheckbox) {
+      EH.trackListener(oldToggle, 'click', () => {
+        newCheckbox.checked = !newCheckbox.checked;
+        updateChevronRotation(chevron, newCheckbox.checked);
+      }, `sidebar-enhancements: migrate legacy toggle ${oldToggleId}`);
+    }
+    if (newCheckbox) {
+      EH.trackListener(newCheckbox, 'change', () => {
+        updateChevronRotation(chevron, newCheckbox.checked);
+      }, `sidebar-enhancements: checkbox change ${newCheckboxId}`);
+    }
   }
 
   /**
-   * Migrate legacy toggle elements to the new checkbox-based collapse panels,
-   * updating chevron rotation accordingly.
+   * Migrate all collapse controls from legacy toggles to checkbox+chevron.
    */
   function initCollapseControls() {
-    const oldModelToggle   = document.getElementById('toggleModelConfig');
-    const oldInstrToggle   = document.getElementById('toggleCustomInstructions');
-    const newModelCheckbox = document.getElementById('modelConfigToggle');
-    const newInstrCheckbox = document.getElementById('customInstructionsToggle');
-
-    // Legacy → new toggle: Model Config
-    if (oldModelToggle && newModelCheckbox) {
-      const chevron = document.getElementById('modelConfigChevron');
-      EH.trackListener(oldModelToggle, 'click', () => {
-        newModelCheckbox.checked = !newModelCheckbox.checked;
-        updateChevronRotation(chevron, newModelCheckbox.checked);
-      });
-    }
-
-    // Legacy → new toggle: Custom Instructions
-    if (oldInstrToggle && newInstrCheckbox) {
-      const chevron = document.getElementById('customInstructionsChevron');
-      EH.trackListener(oldInstrToggle, 'click', () => {
-        newInstrCheckbox.checked = !newInstrCheckbox.checked;
-        updateChevronRotation(chevron, newInstrCheckbox.checked);
-      });
-    }
-
-    // Checkbox change → update chevron: Model Config
-    if (newModelCheckbox) {
-      const chevron = document.getElementById('modelConfigChevron');
-      EH.trackListener(newModelCheckbox, 'change', () => {
-        updateChevronRotation(chevron, newModelCheckbox.checked);
-      });
-    }
-
-    // Checkbox change → update chevron: Custom Instructions
-    if (newInstrCheckbox) {
-      const chevron = document.getElementById('customInstructionsChevron');
-      EH.trackListener(newInstrCheckbox, 'change', () => {
-        updateChevronRotation(chevron, newInstrCheckbox.checked);
-      });
-    }
+    migrateLegacyToggle({
+      oldToggleId: 'toggleModelConfig',
+      newCheckboxId: 'modelConfigToggle',
+      chevronId: 'modelConfigChevron'
+    });
+    migrateLegacyToggle({
+      oldToggleId: 'toggleCustomInstructions',
+      newCheckboxId: 'customInstructionsToggle',
+      chevronId: 'customInstructionsChevron'
+    });
   }
 
   /**
@@ -79,18 +70,22 @@
    * Wire the “Manage Projects” link to the sidebar controller’s tab logic.
    */
   function initManageProjectsLink() {
-    const btn = document.getElementById('manageProjectsLink');
+    const btn = domAPI.getElementById('manageProjectsLink');
     if (!btn) return;
-
     EH.trackListener(btn, 'click', e => {
       e.preventDefault();
       const sidebar = DependencySystem?.modules?.get('sidebar');
       sidebar?.activateTab('projects');
-    });
+    }, 'sidebar-enhancements: manage projects link');
   }
 
-  // Expose init function globally for legacy usage
-  if (typeof window !== 'undefined') {
-    window.initSidebarEnhancements = initSidebarEnhancements;
+  function initSidebarEnhancements() {
+    initCollapseControls();
+    initManageProjectsLink();
   }
-})();
+
+  // API exposed for composition/testing; never attached to global scope.
+  return {
+    initSidebarEnhancements
+  };
+}
