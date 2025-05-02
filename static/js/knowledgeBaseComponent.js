@@ -514,7 +514,7 @@ const DOMPurify = getDep("DOMPurify");
             detail: { projectId: pid }
           }));
         }
-      } catch (error) {
+      } catch {
         this._notify("error", "Error while rendering KB info");
 
         // Emit rendered event even if there was an error
@@ -703,7 +703,7 @@ const DOMPurify = getDep("DOMPurify");
         } else {
           this._showNoResults();
         }
-      } catch (err) {
+      } catch {
         this._notify('error', "Search failed. Please try again.");
         this._notify("error", "Search failed. Please try again.");
       } finally {
@@ -952,7 +952,7 @@ const DOMPurify = getDep("DOMPurify");
             await this._loadKnowledgeBaseHealth(this.state.knowledgeBase.id);
           }
         }
-      } catch (err) {
+      } catch {
         this._notify('error', "Failed to reprocess files");
         this._notify("error", "Failed to reprocess files");
       } finally {
@@ -1363,4 +1363,4 @@ const DOMPurify = getDep("DOMPurify");
   return new KnowledgeBaseComponentWithDestroy(options);
 }
 
-export default KnowledgeBaseComponentWithDestroy;
+export default createKnowledgeBaseComponent;

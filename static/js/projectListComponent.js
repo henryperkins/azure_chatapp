@@ -41,26 +41,7 @@ export class ProjectListComponent {
         storage,
         sanitizer
     } = {}) {
-        // --- DEBUG LOG ---
-        if (this.appConfig && this.appConfig.DEBUG) {
-            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`, { stack: (new Error()).stack });
-        } else {
-            // fallback basic log
-            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`);
-        }
-        if (
-            !projectManager ||
-            !eventHandlers ||
-            !router ||
-            !notificationHandler ||
-            !storage ||
-            !sanitizer
-        ) {
-            throw new Error(
-                "[ProjectListComponent] Missing required dependencies: " +
-                "projectManager, eventHandlers, router, notificationHandler, storage, sanitizer are required."
-            );
-        }
+        // Assign DI fields before any usage
         this.projectManager = projectManager;
         this.eventHandlers = eventHandlers;
         this.modalManager = modalManager;
@@ -69,6 +50,27 @@ export class ProjectListComponent {
         this.notification = notificationHandler;
         this.storage = storage;
         this.sanitizer = sanitizer;
+
+        // --- DEBUG LOG ---
+        if (this.appConfig && this.appConfig.DEBUG) {
+            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`, { stack: (new Error()).stack });
+        } else {
+            // fallback basic log
+            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`);
+        }
+        if (
+            !this.projectManager ||
+            !this.eventHandlers ||
+            !this.router ||
+            !this.notification ||
+            !this.storage ||
+            !this.sanitizer
+        ) {
+            throw new Error(
+                "[ProjectListComponent] Missing required dependencies: " +
+                "projectManager, eventHandlers, router, notificationHandler, storage, sanitizer are required."
+            );
+        }
 
         // Default navigation callback - now prefers passing project object if possible
         this.onViewProject = (projectObjOrId) => {

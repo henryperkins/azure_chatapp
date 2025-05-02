@@ -81,9 +81,10 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     });
 
     // Default click-to-dismiss behavior; remove if you want to rely on explicit buttons only
-    notification.addEventListener('click', () => {
-      hide(notificationId);
-    });
+    // Use DI event handler if provided, else fallback to raw addEventListener
+    (options.trackListener || notification.addEventListener.bind(notification))(
+      'click', () => { hide(notificationId); }
+    );
 
     // Focus the notification for screen readers
     setTimeout(() => {
@@ -257,9 +258,13 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     }
   }
 
-  function addMessageListener() {
+  function addMessageListener(target = window, trackListener = null) {
     if (_messageListenerAttached) return;
-    window.addEventListener('message', handleNotificationMessages);
+    if (trackListener) {
+      trackListener(target, 'message', handleNotificationMessages, { description: 'NotificationHandler: message' });
+    } else {
+      target.addEventListener('message', handleNotificationMessages);
+    }
     _messageListenerAttached = true;
   }
 

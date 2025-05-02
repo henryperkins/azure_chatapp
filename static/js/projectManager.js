@@ -315,7 +315,7 @@ class ProjectManager {
     });
     // Track then remove a self-cleanup listener using listenerTracker
     const cleanup = this.listenerTracker.add(document, eventName, (event) => {
-      if (event.type === eventName) {
+      if (event && event.type === eventName) {
         cleanup && cleanup();
       }
     });
