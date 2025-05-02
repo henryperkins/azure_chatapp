@@ -5,7 +5,7 @@
 import logging
 import random
 import time
-from typing import List, Dict, Optional, Any, Literal, AsyncGenerator, Union
+from typing import List, Optional, Any, Literal, AsyncGenerator, Union
 
 import httpx
 from fastapi import HTTPException
@@ -34,7 +34,7 @@ CLAUDE_SAMPLE_RATE = 1.0   # Always sample Claude calls
 # Model Config Helpers
 # -----------------------------
 
-def get_model_config(model_name: str) -> Optional[Dict[str, Any]]:
+def get_model_config(model_name: str) -> Optional[dict[str, Any]]:
     """Retrieve model configuration from settings."""
     if model_name in settings.AZURE_OPENAI_MODELS:
         return settings.AZURE_OPENAI_MODELS[model_name]
@@ -42,7 +42,7 @@ def get_model_config(model_name: str) -> Optional[Dict[str, Any]]:
         return settings.CLAUDE_MODELS[model_name]
     return None
 
-def get_azure_api_version(model_config: Dict[str, Any]) -> str:
+def get_azure_api_version(model_config: dict[str, Any]) -> str:
     """Get the Azure API version from model config or fallback to default."""
     return model_config.get("api_version", settings.AZURE_DEFAULT_API_VERSION)
 
@@ -51,10 +51,10 @@ def get_azure_api_version(model_config: Dict[str, Any]) -> str:
 # -----------------------------
 
 async def openai_chat(
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     model_name: str,
     **kwargs
-) -> Union[Dict[str, Any], AsyncGenerator[bytes, None]]:
+) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """
     Route to the appropriate provider handler based on the model_name.
     Includes Sentry-based tracing, error monitoring, and usage metrics.
@@ -135,11 +135,11 @@ async def openai_chat(
 # -----------------------------
 
 async def azure_chat(
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     model_name: str,
-    model_config: Dict[str, Any],
+    model_config: dict[str, Any],
     **kwargs
-) -> Union[Dict[str, Any], AsyncGenerator[bytes, None]]:
+) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """
     Handle Azure OpenAI chat completions with Sentry-based monitoring.
     """
@@ -195,7 +195,7 @@ async def azure_chat(
 
 async def validate_azure_params(
     model_name: str,
-    model_config: Dict[str, Any],
+    model_config: dict[str, Any],
     kwargs: dict
 ) -> None:
     """Validate Azure-specific parameters against model capabilities."""
@@ -233,17 +233,17 @@ async def validate_azure_params(
                 )
 
 def build_azure_payload(
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     model_name: str,
-    model_config: Dict[str, Any],
+    model_config: dict[str, Any],
     **kwargs
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Construct the Azure request payload with error handling and default logic.
     Includes max_tokens, temperature, streaming, etc.
     """
     with sentry_span(op="ai.azure.build_payload", description="Build Azure Payload"):
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "messages": list(messages),
         }
 
@@ -306,10 +306,10 @@ def build_azure_payload(
         return payload
 
 def process_vision_messages(
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     image_data: Union[str, List[str]],
     vision_detail: str = "auto"
-) -> List[Dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """
     Insert images into the last user message for Azure vision models.
     If no existing user message, create one.
@@ -357,10 +357,10 @@ def extract_base64_data(image_data: str) -> Optional[str]:
     return None
 
 async def _send_azure_request(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     model_name: str,
     api_version: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Send non-streaming Azure request with Sentry context."""
     if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
         raise HTTPException(
@@ -407,7 +407,7 @@ async def _send_azure_request(
         raise HTTPException(status_code=e.response.status_code, detail=detail) from e
 
 async def _stream_azure_response(
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     model_name: str,
     api_version: str
 ) -> AsyncGenerator[bytes, None]:
@@ -446,11 +446,11 @@ async def _stream_azure_response(
 # -----------------------------
 
 async def claude_chat(
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     model_name: str,
-    model_config: Dict[str, Any],
+    model_config: dict[str, Any],
     **kwargs
-) -> Union[Dict[str, Any], AsyncGenerator[bytes, None]]:
+) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """Handle Claude requests with Sentry-based tracing."""
     transaction = start_transaction(
         op="ai.claude",
@@ -514,11 +514,11 @@ async def claude_chat(
         ) from e
 
 def build_claude_payload(
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     model_name: str,
-    model_config: Dict[str, Any],
+    model_config: dict[str, Any],
     **kwargs
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Construct the payload for Claude requests, including extended thinking and streaming."""
     with sentry_span(op="ai.claude.build_payload", description="Build Claude Payload"):
         payload = {
@@ -555,7 +555,7 @@ def build_claude_payload(
 
         return payload
 
-def _filter_claude_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _filter_claude_messages(messages: List[dict[str, Any]]) -> List[dict[str, Any]]:
     """
     Filter/transform messages to meet Claude's expected structure.
     Possibly handle vision data or advanced content here.
@@ -570,7 +570,7 @@ def _filter_claude_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, An
         filtered.append({"role": role, "content": content})
     return filtered
 
-def _parse_claude_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
+def _parse_claude_response(response_data: dict[str, Any]) -> dict[str, Any]:
     """Parse a non-streaming Claude response into a standard format."""
     parsed = {
         "id": response_data.get("id"),
@@ -626,7 +626,7 @@ def _parse_claude_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
         ]
     return parsed
 
-async def claude_stream_generator(payload: Dict[str, Any], headers: Dict[str, str]) -> AsyncGenerator[bytes, None]:
+async def claude_stream_generator(payload: dict[str, Any], headers: dict[str, str]) -> AsyncGenerator[bytes, None]:
     """Return a streaming async generator for Claude responses."""
     async with httpx.AsyncClient() as client:
         resp = await client.post(
@@ -644,7 +644,7 @@ async def claude_stream_generator(payload: Dict[str, Any], headers: Dict[str, st
 # Misc Utilities
 # -----------------------------
 
-async def count_claude_tokens(messages: List[Dict[str, Any]], model_name: str) -> int:
+async def count_claude_tokens(messages: List[dict[str, Any]], model_name: str) -> int:
     """
     Rough token estimation for Claude if official token counting isn't available.
     """
@@ -655,7 +655,7 @@ async def count_claude_tokens(messages: List[Dict[str, Any]], model_name: str) -
             total_chars += len(c)
     return total_chars // 4  # ~4 chars per token
 
-async def get_moderation(text: str) -> Dict[str, Any]:
+async def get_moderation(text: str) -> dict[str, Any]:
     """
     Example function calling Azure or other moderation endpoint.
     """

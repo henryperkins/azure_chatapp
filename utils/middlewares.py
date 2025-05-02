@@ -10,7 +10,7 @@ import logging
 import time
 import os
 from urllib.parse import urlparse
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from config import settings
 if not getattr(settings, 'DEBUG', False):

@@ -13,7 +13,7 @@ Contains:
 
 import os
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +31,7 @@ class KBConfig:
     """Centralized configuration for knowledge base service"""
 
     @staticmethod
-    def get() -> Dict[str, Any]:
+    def get() -> dict[str, Any]:
         """
         Get all configuration values with defaults.
 
@@ -211,7 +211,7 @@ class MetadataHelper:
     def extract_file_metadata(
         file_record: ProjectFile,
         include_token_count: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Extract standardized metadata from file record.
 

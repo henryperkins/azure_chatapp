@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Optional, List, Any, Union, AsyncGenerator, cast
+from typing import Optional, List, Any, Union, AsyncGenerator, cast
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 async def generate_ai_response(
     conversation_id: UUID,
-    messages: List[Dict[str, Any]],
+    messages: List[dict[str, Any]],
     model_id: str,
     db: AsyncSession,
     image_data: Optional[Union[str, List[str]]] = None,
@@ -102,8 +102,8 @@ async def generate_ai_response(
                 logger.error(f"Failed to inject knowledge context: {e}")
 
     # Prepare API parameters with type hints
-    api_params: Dict[str, Any] = {
-        "messages": final_messages,  # List[Dict[str, Any]]
+    api_params: dict[str, Any] = {
+        "messages": final_messages,  # List[dict[str, Any]]
         "model_name": str(model_id),  # str
         "stream": stream,  # bool
     }
@@ -217,7 +217,7 @@ async def generate_ai_response(
             stop_reason = "error"
 
         # Construct metadata
-        metadata: Dict[str, Any] = {}
+        metadata: dict[str, Any] = {}
         if knowledge_context:
             metadata["used_knowledge_context"] = True
         if has_thinking:

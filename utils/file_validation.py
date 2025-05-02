@@ -11,7 +11,7 @@ Centralized file validation utilities including:
 import os
 import re
 import logging
-from typing import Dict, Any, List
+from typing import Any, List
 from fastapi import UploadFile
 import mimetypes
 from config import settings
@@ -68,7 +68,7 @@ class FileValidator:
         return file_size <= cls.MAX_FILE_SIZE
 
     @classmethod
-    def get_file_info(cls, filename: str) -> Dict[str, Any]:
+    def get_file_info(cls, filename: str) -> dict[str, Any]:
         """
         Get standardized file info including:
         - extension
@@ -110,7 +110,7 @@ class FileValidator:
         file: UploadFile,
         scan_content: bool = True,
         preserve_spaces: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Comprehensive validation for uploaded files with enhanced security.
         Features:

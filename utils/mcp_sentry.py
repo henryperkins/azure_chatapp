@@ -11,13 +11,13 @@ import json
 import os
 import time
 import importlib
-from typing import Any, Dict, Optional, Union, List, Tuple, Callable
+from typing import Any, Optional, Union, List, Tuple, Callable
 
 import sentry_sdk
 from sentry_sdk import configure_scope
 
 # Helper function to safely use MCP tools
-def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """
     Safely use an MCP tool without direct imports, handling the case when the function
     is not available in the global scope.
@@ -134,7 +134,7 @@ def with_retry(func: Callable) -> Callable:
 
 
 # Cache configuration
-ISSUE_CACHE: Dict[str, Tuple[Dict[str, Any], float]] = {}
+ISSUE_CACHE: dict[str, Tuple[dict[str, Any], float]] = {}
 CACHE_TTL = 300  # 5 minutes
 
 
@@ -151,7 +151,7 @@ def _clear_expired_cache():
 @with_retry
 def get_issue_details(
     issue_id_or_url: Union[str, List[str]], use_cache: bool = True
-) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+) -> Union[dict[str, Any], List[dict[str, Any]]]:
     """
     Get detailed information about a Sentry issue using the MCP server.
     Supports caching to reduce load on the MCP server.
@@ -219,7 +219,7 @@ def get_issue_details(
 
 
 @with_retry
-def search_issues(query: str, limit: int = 10) -> List[Dict[str, Any]]:
+def search_issues(query: str, limit: int = 10) -> List[dict[str, Any]]:
     """
     Search for Sentry issues using the MCP server.
 
@@ -272,7 +272,7 @@ def search_issues(query: str, limit: int = 10) -> List[Dict[str, Any]]:
 
 
 @with_retry
-def get_issue_events(issue_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+def get_issue_events(issue_id: str, limit: int = 10) -> List[dict[str, Any]]:
     """
     Get events for a specific issue using the MCP server.
 
@@ -326,7 +326,7 @@ def get_issue_events(issue_id: str, limit: int = 10) -> List[Dict[str, Any]]:
 
 def get_project_stats(
     project_id: str, stat_type: str = "error", days: int = 14
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get project statistics from Sentry.
 
@@ -374,7 +374,7 @@ def get_project_stats(
             raise ServerResponseError(f"Failed to get project stats: {str(e)}") from e
 
 
-def resolve_issue(issue_id: str) -> Dict[str, Any]:
+def resolve_issue(issue_id: str) -> dict[str, Any]:
     """
     Mark a Sentry issue as resolved.
 
@@ -416,7 +416,7 @@ def resolve_issue(issue_id: str) -> Dict[str, Any]:
             raise ServerResponseError(f"Failed to resolve issue: {str(e)}") from e
 
 
-def get_breadcrumbs(event_id: str) -> Dict[str, Any]:
+def get_breadcrumbs(event_id: str) -> dict[str, Any]:
     """
     Get breadcrumbs for a specific Sentry event.
 
@@ -505,7 +505,7 @@ def enable_mcp_integrations() -> bool:
         return False
 
 
-def get_mcp_status() -> Optional[Dict[str, Any]]:
+def get_mcp_status() -> Optional[dict[str, Any]]:
     """
     Get the current status of the Sentry MCP server.
 

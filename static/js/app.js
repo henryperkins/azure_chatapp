@@ -889,7 +889,10 @@ async function initializeUIComponents() {
         modalManager,
         app,
         router: {
-            navigate: (url) => window.history.pushState({}, '', url),
+            navigate: (url) => {
+                window.history.pushState({}, '', url);
+                window.dispatchEvent(new Event('locationchange'));
+            },
             getURL: () => window.location.href
         },
         notificationHandler: projectListNotificationHandler,
@@ -923,7 +926,10 @@ async function initializeUIComponents() {
         modalManager,
         FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
         router: {
-            navigate: (url) => window.history.pushState({}, '', url),
+            navigate: (url) => {
+                window.history.pushState({}, '', url);
+                window.dispatchEvent(new Event('locationchange'));
+            },
             getURL: () => window.location.href
         },
         notificationHandler: projectDetailsNotificationHandler,

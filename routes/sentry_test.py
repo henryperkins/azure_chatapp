@@ -9,7 +9,7 @@ and demonstrate various Sentry features.
 import logging
 import sentry_sdk
 from fastapi import APIRouter, HTTPException, Response
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 import random
 import time
 import uuid
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class SentryTestException(Exception):
     """Custom exception for testing Sentry integration."""
 
-@router.get("/test-error", response_model=Dict[str, str])
+@router.get("/test-error", response_model=dict[str, str])
 async def test_sentry_error():
     """
     Test endpoint that raises an exception to verify Sentry error tracking.
@@ -55,7 +55,7 @@ async def test_sentry_error():
         raise HTTPException(status_code=500, detail=f"Test error raised with ID: {error_id}") from e
 
 
-@router.get("/test-message", response_model=Dict[str, str])
+@router.get("/test-message", response_model=dict[str, str])
 async def test_sentry_message():
     """
     Test endpoint that sends a custom message to Sentry.
@@ -83,7 +83,7 @@ async def test_sentry_message():
     return {"message": f"Test message sent to Sentry with ID: {message_id}"}
 
 
-@router.get("/test-performance", response_model=Dict[str, str])
+@router.get("/test-performance", response_model=dict[str, str])
 async def test_sentry_performance(response: Response):
     """
     Test endpoint that creates spans to verify Sentry performance monitoring.
@@ -144,7 +144,7 @@ async def test_sentry_performance(response: Response):
     }
 
 
-@router.get("/test-profiling", response_model=Dict[str, str])
+@router.get("/test-profiling", response_model=dict[str, str])
 async def test_sentry_profiling():
     """
     Test endpoint to verify Sentry profiling capabilities.
@@ -208,7 +208,7 @@ async def test_sentry_profiling():
     }
 
 
-@router.get("/test-mcp", response_model=Dict[str, Any])
+@router.get("/test-mcp", response_model=dict[str, Any])
 async def test_sentry_mcp(issue_id: Optional[str] = None):
     """
     Test endpoint to verify Sentry MCP server integration.

@@ -11,7 +11,7 @@ import logging
 import random
 import time
 from uuid import UUID
-from typing import Optional, Dict, Tuple
+from typing import Optional, Tuple
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
@@ -94,7 +94,7 @@ class ProjectFilter(str, Enum):
 # ============================
 
 
-@router.post("/", response_model=Dict, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
     project_data: ProjectCreate,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -189,7 +189,7 @@ async def create_project(
         ) from e
 
 
-@router.get("/", response_model=Dict)
+@router.get("/", response_model=dict)
 async def list_projects(
     request: Request,
     filter_type: ProjectFilter = Query(
@@ -266,7 +266,7 @@ async def list_projects(
             ) from e
 
 
-@router.get("/{project_id}/", response_model=Dict)
+@router.get("/{project_id}/", response_model=dict)
 async def get_project(
     project_id: UUID,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -312,7 +312,7 @@ async def get_project(
             ) from e
 
 
-@router.patch("/{project_id}/", response_model=Dict)
+@router.patch("/{project_id}/", response_model=dict)
 async def update_project(
     project_id: UUID,
     update_data: ProjectUpdate,
@@ -396,7 +396,7 @@ async def update_project(
         ) from e
 
 
-@router.delete("/{project_id}/", response_model=Dict)
+@router.delete("/{project_id}/", response_model=dict)
 async def delete_project(
     project_id: UUID,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -495,7 +495,7 @@ async def delete_project(
 # ============================
 
 
-@router.patch("/{project_id}/archive", response_model=Dict)
+@router.patch("/{project_id}/archive", response_model=dict)
 async def toggle_archive_project(
     project_id: UUID,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
@@ -551,7 +551,7 @@ async def toggle_archive_project(
             ) from e
 
 
-@router.post("/{project_id}/pin", response_model=Dict)
+@router.post("/{project_id}/pin", response_model=dict)
 async def toggle_pin_project(
     project_id: UUID,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),

@@ -18,7 +18,7 @@ Key Improvements:
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional, Tuple, List
+from typing import Any, Optional, Tuple, List
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, BackgroundTasks
@@ -51,7 +51,7 @@ class KBConfig:
     """Centralized configuration for knowledge base service"""
 
     @staticmethod
-    def get() -> Dict[str, Any]:
+    def get() -> dict[str, Any]:
         return {
             "max_file_bytes": getattr(config, "MAX_FILE_SIZE", 30_000_000),
             "stream_threshold": getattr(config, "STREAM_THRESHOLD", 10_000_000),
@@ -120,7 +120,7 @@ class TokenManager:
 
 def extract_file_metadata(
     file_record: ProjectFile, include_token_count: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Extract standardized metadata from file record"""
     metadata = {
         "filename": file_record.filename,
@@ -284,7 +284,7 @@ async def upload_file_to_project(
     db: AsyncSession,
     user_id: Optional[int] = None,
     background_tasks: Optional[BackgroundTasks] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Upload and process a file for a project"""
     # Validate access and get KB
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
@@ -406,7 +406,7 @@ async def delete_project_file(
     file_id: UUID,
     db: AsyncSession,
     user_id: Optional[int] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Delete a project file and its vectors"""
     project, file_record = await _validate_file_access(project_id, file_id, user_id, db)
     if not file_record:
@@ -438,7 +438,7 @@ async def delete_project_file(
 @handle_service_errors("Error searching project context")
 async def search_project_context(
     project_id: UUID, query: str, db: AsyncSession, top_k: int = 5
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Search project knowledge base"""
     if not query or len(query.strip()) < 2:
         raise ValueError("Query must be at least 2 characters")
@@ -528,7 +528,7 @@ async def _validate_file_access(
     return project, file_record
 
 
-async def _process_upload_file_info(file: UploadFile) -> Dict[str, Any]:
+async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
     """Process and validate uploaded file"""
     file_info = await FileValidator.validate_upload_file(file)
     filename, ext = os.path.splitext(file.filename or "untitled")
@@ -541,7 +541,7 @@ async def _process_upload_file_info(file: UploadFile) -> Dict[str, Any]:
 
 async def _estimate_file_tokens(
     contents: bytes, filename: str, file: UploadFile, project: Project
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Estimate token count for file"""
     from services.text_extraction import (
         get_text_extractor,
@@ -577,10 +577,10 @@ async def _store_uploaded_file(
 
 async def _create_file_record(
     project_id: UUID,
-    file_info: Dict[str, Any],
+    file_info: dict[str, Any],
     stored_path: str,
     file_size: int,
-    token_data: Dict[str, Any],
+    token_data: dict[str, Any],
 ) -> ProjectFile:
     """Create ProjectFile record from upload data"""
     return ProjectFile(
@@ -622,8 +622,8 @@ async def _delete_file_vectors(project_id: UUID, file_id: UUID) -> None:
 
 
 async def _execute_search(
-    vector_db: VectorDB, query: str, filter_metadata: Dict[str, Any], top_k: int
-) -> List[Dict[str, Any]]:
+    vector_db: VectorDB, query: str, filter_metadata: dict[str, Any], top_k: int
+) -> List[dict[str, Any]]:
     """Execute search with query expansion"""
     clean_query = (
         await _expand_query(query) if len(query.split()) > 3 else query.strip()
@@ -650,8 +650,8 @@ async def _execute_search(
 
 
 async def _enhance_with_file_info(
-    results: List[Dict[str, Any]], db: AsyncSession
-) -> List[Dict[str, Any]]:
+    results: List[dict[str, Any]], db: AsyncSession
+) -> List[dict[str, Any]]:
     """Add file metadata to search results"""
     enhanced = []
     for res in results:
@@ -692,7 +692,7 @@ async def _expand_query(original_query: str) -> str:
 
 
 @handle_service_errors("Error cleaning up KB references")
-async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
+async def cleanup_orphaned_kb_references(db: AsyncSession) -> dict[str, int]:
     """Clean up invalid knowledge base references"""
     # Fix projects with invalid KB references
     project_result = await db.execute(
@@ -727,7 +727,7 @@ async def cleanup_orphaned_kb_references(db: AsyncSession) -> Dict[str, int]:
 
 
 @handle_service_errors("Error retrieving KB status")
-async def get_kb_status(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
+async def get_kb_status(project_id: UUID, db: AsyncSession) -> dict[str, Any]:
     """Get basic status of knowledge base for a project"""
     project = await get_by_id(db, Project, project_id)
     if not project:
@@ -753,7 +753,7 @@ async def get_kb_status(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
 @handle_service_errors("Error retrieving KB health")
 async def get_knowledge_base_health(
     knowledge_base_id: UUID, db: AsyncSession
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get detailed health status of a knowledge base"""
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
@@ -773,7 +773,7 @@ async def get_knowledge_base_health(
 
 
 @handle_service_errors("Error getting project files stats")
-async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[str, Any]:
+async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> dict[str, Any]:
     """Get statistics about files in a project including processing status.
 
     Returns:
@@ -825,7 +825,7 @@ async def get_project_files_stats(project_id: UUID, db: AsyncSession) -> Dict[st
 @handle_service_errors("Error listing knowledge bases")
 async def list_knowledge_bases(
     db: AsyncSession, skip: int = 0, limit: int = 100, active_only: bool = True
-) -> List[Dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """List knowledge bases with optional filtering"""
     query = select(KnowledgeBase)
     if active_only:
@@ -855,7 +855,7 @@ async def list_knowledge_bases(
 @handle_service_errors("Error getting knowledge base")
 async def get_knowledge_base(
     knowledge_base_id: UUID, db: AsyncSession
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get a knowledge base by ID"""
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
@@ -874,8 +874,8 @@ async def get_knowledge_base(
 
 @handle_service_errors("Error updating knowledge base")
 async def update_knowledge_base(
-    knowledge_base_id: UUID, update_data: Dict[str, Any], db: AsyncSession
-) -> Dict[str, Any]:
+    knowledge_base_id: UUID, update_data: dict[str, Any], db: AsyncSession
+) -> dict[str, Any]:
     """Update a knowledge base"""
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
@@ -913,7 +913,7 @@ async def toggle_project_kb(
     enable: bool,
     user_id: Optional[int] = None,
     db: Optional[AsyncSession] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Enable/disable knowledge base for a project"""
     if db is None:
         raise ValueError("Database session is required")
@@ -946,7 +946,7 @@ async def get_project_file_list(
     skip: int = 0,
     limit: int = 100,
     file_type: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Retrieve a list of files for a specific project with pagination and optional filtering.
 
