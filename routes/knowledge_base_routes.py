@@ -175,7 +175,6 @@ async def create_project_knowledge_base(
             status_code=500, detail="Failed to create knowledge base"
         ) from e
 
-
 @router.get("/projects/{project_id}/knowledge-bases", response_model=Dict)
 async def get_project_knowledge_bases(
     project_id: UUID,
@@ -203,6 +202,33 @@ async def get_project_knowledge_bases(
         raise HTTPException(
             status_code=500, detail="Failed to retrieve knowledge bases"
         ) from e
+
+@router.get("/projects/{project_id}/knowledge-base", response_model=Dict)
+async def get_project_canonical_knowledge_base(
+    project_id: UUID,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Retrieve the single knowledge base associated with a project.
+    Returns 200 + data: null if no KB is yet attached.
+    """
+    try:
+        current_user = current_user_tuple[0]
+        project: Project = await validate_project_access(project_id, current_user, db)
+        if not project.knowledge_base_id:
+            # Return null KB if none assigned
+            return await create_standard_response(None)
+        kb = await get_knowledge_base(knowledge_base_id=project.knowledge_base_id, db=db)
+        if not kb:
+            # Return null KB if referenced KB does not exist
+            return await create_standard_response(None)
+        return await create_standard_response(kb)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get canonical project knowledge base: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve knowledge base") from e
 
 
 @router.get("/projects/{project_id}/knowledge-bases/{kb_id}", response_model=Dict)

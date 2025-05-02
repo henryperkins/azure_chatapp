@@ -162,6 +162,7 @@ from routes.projects.artifacts import router as project_artifacts_router
 from routes.user_preferences import router as user_preferences_router
 from routes.unified_conversations import router as conversations_router
 from routes.sentry_test import router as sentry_test_router
+from routes.admin import router as admin_router
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
@@ -252,7 +253,7 @@ async def health_check() -> Dict[str, Any]:
 # Include your API routers (includes insecure auth, etc.)
 app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
 app.include_router(
-    knowledge_base_router, prefix="/api/knowledge-bases", tags=["knowledge-bases"]
+    knowledge_base_router, prefix="/api", tags=["knowledge-bases"]
 )
 app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
 app.include_router(
@@ -267,6 +268,8 @@ app.include_router(
     user_preferences_router, prefix="/api/preferences", tags=["preferences"]
 )
 app.include_router(conversations_router, prefix="/api/projects", tags=["conversations"])
+# Expose admin endpoints for backend repair
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 
 # Debug-only Sentry test routes
 app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring"])

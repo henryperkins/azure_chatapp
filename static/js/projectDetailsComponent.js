@@ -1,16 +1,18 @@
 /**
- * projectDetailsComponent.js - DI Strict Version (No window.* for dependencies)
+ * projectDetailsComponent.js - DI Strict Version (No window.* references)
  *
  * Component for displaying project details, files, conversations, artifacts, and knowledge base content.
- * All dependencies are now injected via DI, never by global or window.DependencySystem.
+ * All dependencies must be injected—no referencing window, global objects, or "DependencySystem".
  *
- * ## Dependencies (All passed as constructor/injection):
+ * ## Dependencies (All passed as constructor options):
  * - app: Core app module (state, notifications, apiRequest, utilities, validation)
  * - projectManager: Project data operations and event emitting (files, conversations, artifacts, chat, stats)
  * - eventHandlers: Centralized event listener management (trackListener, delegate, cleanupListeners)
- * - FileUploadComponentClass: Class/factory for file uploading (needs relevant DOM nodes)
  * - modalManager: Manages modal dialogs, including confirmations
+ * - FileUploadComponentClass: Class/factory for file uploading (needs relevant DOM nodes)
  * - knowledgeBaseComponent: (Optional) instance of knowledge base UI logic
+ * - modelConfig: (Optional) model config manager
+ * - navService: (Optional) navigation handler with methods like getCurrentUrl(), pushState(), etc.
  * - onBack: (Optional) callback for navigation “Back” button
  */
 
@@ -25,20 +27,38 @@ class ProjectDetailsComponent {
    * @param {Function} options.FileUploadComponentClass - File upload component factory/constructor
    * @param {Object} [options.knowledgeBaseComponent]    - Optional knowledge base UI logic
    * @param {Object} [options.modelConfig]               - Optional model config manager
+   * @param {Object} [options.navService]                - Optional navigation service
    */
   constructor(options = {}) {
-    this.onBack = options.onBack || (() => { console.warn("onBack callback not registered."); });
-    this.app = options.app;
-    this.projectManager = options.projectManager;
-    this.eventHandlers = options.eventHandlers;
-    this.modalManager = options.modalManager;
-    this.FileUploadComponentClass = options.FileUploadComponentClass;
-    this.knowledgeBaseComponent = options.knowledgeBaseComponent || null;
+    const {
+      onBack,
+      app,
+      projectManager,
+      eventHandlers,
+      modalManager,
+      FileUploadComponentClass,
+      knowledgeBaseComponent,
+      modelConfig,
+      navService
+    } = options;
 
-    if (!this.app || !this.projectManager || !this.eventHandlers ||
-      !this.modalManager || !this.FileUploadComponentClass) {
-      throw new Error("[ProjectDetailsComponent] Missing one or more required DI dependencies (app, projectManager, eventHandlers, modalManager, FileUploadComponentClass).");
+    // Required DI
+    if (!app || !projectManager || !eventHandlers || !modalManager || !FileUploadComponentClass) {
+      throw new Error(
+        "[ProjectDetailsComponent] Missing one or more required DI dependencies: " +
+        "app, projectManager, eventHandlers, modalManager, FileUploadComponentClass."
+      );
     }
+
+    this.onBack = onBack || (() => { console.warn("onBack callback not registered."); });
+    this.app = app;
+    this.projectManager = projectManager;
+    this.eventHandlers = eventHandlers;
+    this.modalManager = modalManager;
+    this.FileUploadComponentClass = FileUploadComponentClass;
+    this.knowledgeBaseComponent = knowledgeBaseComponent || null;
+    this.modelConfig = modelConfig || null;
+    this.navService = navService || null;
 
     // Internal component state
     this.state = {
@@ -69,13 +89,6 @@ class ProjectDetailsComponent {
     };
 
     this.fileUploadComponent = null;
-
-    // Optional injection or fallback for modelConfig
-    this.modelConfig = options.modelConfig ||
-      (typeof DependencySystem !== 'undefined' && DependencySystem?.modules?.get?.('modelConfig'));
-    if (!this.modelConfig) {
-      console.warn('[ProjectDetailsComponent] modelConfig dependency not found or not injected. Chat model config panel may be skipped.');
-    }
   }
 
   /**
@@ -202,7 +215,7 @@ class ProjectDetailsComponent {
       // Initialize the button as disabled until the project is fully loaded
       newChatBtn.disabled = true;
       newChatBtn.classList.add('btn-disabled');
-      
+
       this.eventHandlers.trackListener(
         newChatBtn,
         'click',
@@ -281,7 +294,7 @@ class ProjectDetailsComponent {
       },
       { description: 'ProjectDetails_HandleKnowledgeBaseLoaded' }
     );
-    
+
     // Listen for the full project loading completion
     this.eventHandlers.trackListener(
       document,
@@ -289,10 +302,10 @@ class ProjectDetailsComponent {
       (e) => {
         console.log(`[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded, UI ready`);
         // Enable UI elements that were waiting for project load
-        const newChatBtn = this.elements.container?.querySelector('#projectNewConversationBtn');
-        if (newChatBtn) {
-          newChatBtn.disabled = false;
-          newChatBtn.classList.remove('btn-disabled');
+        const newChatBtn2 = this.elements.container?.querySelector('#projectNewConversationBtn');
+        if (newChatBtn2) {
+          newChatBtn2.disabled = false;
+          newChatBtn2.classList.remove('btn-disabled');
         }
       },
       { description: 'ProjectDetails_FullyLoaded' }
@@ -305,18 +318,18 @@ class ProjectDetailsComponent {
    */
   _initializeSubComponents() {
     if (this.FileUploadComponentClass && !this.fileUploadComponent) {
+      const el = this.elements;
       if (
-        this.elements.fileInput && this.elements.uploadBtn &&
-        this.elements.dragZone && this.elements.uploadProgress &&
-        this.elements.progressBar && this.elements.uploadStatus
+        el.fileInput && el.uploadBtn && el.dragZone &&
+        el.uploadProgress && el.progressBar && el.uploadStatus
       ) {
         this.fileUploadComponent = new this.FileUploadComponentClass({
-          fileInput: this.elements.fileInput,
-          uploadBtn: this.elements.uploadBtn,
-          dragZone: this.elements.dragZone,
-          uploadProgress: this.elements.uploadProgress,
-          progressBar: this.elements.progressBar,
-          uploadStatus: this.elements.uploadStatus,
+          fileInput: el.fileInput,
+          uploadBtn: el.uploadBtn,
+          dragZone: el.dragZone,
+          uploadProgress: el.uploadProgress,
+          progressBar: el.progressBar,
+          uploadStatus: el.uploadStatus,
           projectManager: this.projectManager,
           app: this.app,
           eventHandlers: this.eventHandlers,
@@ -545,7 +558,7 @@ class ProjectDetailsComponent {
       this.app.showNotification('Cannot create conversation: invalid project.', 'warning');
       return;
     }
-    
+
     // Add timeout for projectLoadingInProgress check
     if (this.projectManager?.projectLoadingInProgress) {
       console.log('[ProjectDetailsComponent] Waiting for project loading to complete...');
@@ -561,11 +574,11 @@ class ProjectDetailsComponent {
         this.projectManager.projectLoadingInProgress = false;
       }
     }
-    
+
     try {
       console.log(`[ProjectDetailsComponent] Creating new conversation for project ${projectId}`);
       const convo = await this.projectManager.createConversation(projectId);
-      
+
       if (convo && convo.id) {
         console.log(`[ProjectDetailsComponent] New conversation created: ${convo.id}`);
         this.app.showNotification(`Conversation "${convo.title || 'Untitled'}" created.`, 'success');
@@ -586,6 +599,7 @@ class ProjectDetailsComponent {
   destroy() {
     console.log("[ProjectDetailsComponent] Destroying...");
     if (this.eventHandlers?.cleanupListeners) {
+      // Cleanup any tracked listeners on container, doc, etc.
       this.eventHandlers.cleanupListeners(this.elements.container, null, null);
       this.eventHandlers.cleanupListeners(document, null, 'ProjectDetails_HandleConversationsLoaded');
       this.eventHandlers.cleanupListeners(document, null, 'ProjectDetails_HandleFilesLoaded');
@@ -628,12 +642,11 @@ class ProjectDetailsComponent {
     if (this.knowledgeBaseComponent) {
       if (tabName === 'knowledge') {
         const kbData = this.state.currentProject?.knowledge_base || null;
-        // Don't await knowledge base initialization - it can happen asynchronously
-        // This prevents it from blocking the rest of the tab loading
+        // Initialize knowledge base in background
         this.knowledgeBaseComponent.initialize(true, kbData, projectId)
           .catch(e => console.error("[ProjectDetailsComponent] KB init failed:", e));
       } else {
-        // Don't await hiding the knowledge base either
+        // Hide or unload knowledge base
         this.knowledgeBaseComponent.initialize(false)
           .catch(e => console.error("[ProjectDetailsComponent] KB de-init failed:", e));
       }
@@ -641,15 +654,13 @@ class ProjectDetailsComponent {
 
     switch (tabName) {
       case 'files':
-        // Show spinner, call manager, hide spinner afterward
         this._withLoading('files', () => this.projectManager.loadProjectFiles(projectId));
         break;
       case 'conversations':
-        // Handle model config rendering asynchronously
+        // Render model config panel (async) if provided
         if (this.modelConfig?.renderQuickConfig) {
           const panel = document.getElementById('modelConfigPanel');
           if (panel) {
-            // Use setTimeout to prevent blocking the UI thread
             setTimeout(() => {
               try {
                 console.log("[ProjectDetailsComponent] Rendering model config panel");
@@ -657,8 +668,7 @@ class ProjectDetailsComponent {
               } catch (error) {
                 console.error("[ProjectDetailsComponent] Error rendering model config:", error);
               }
-              
-              // Emit rendering event for the model config panel, even if there was an error
+              // Fire an event for modelConfig rendered
               document.dispatchEvent(new CustomEvent('modelConfigRendered', {
                 detail: { projectId }
               }));
@@ -671,14 +681,13 @@ class ProjectDetailsComponent {
         this._withLoading('artifacts', () => this.projectManager.loadProjectArtifacts(projectId));
         break;
       case 'knowledge':
-        // already handled above
+        // Handled above
         break;
       case 'details':
         // Possibly load stats
         this._withLoading('stats', () => this.projectManager.loadProjectStats(projectId));
         break;
       default:
-        // No further action
         break;
     }
   }
@@ -835,7 +844,7 @@ class ProjectDetailsComponent {
     return item;
   }
 
-  /** Fires when a conversation item is clicked, navigates to chat. */
+  /** Fires when a conversation item is clicked, navigates to chat (using injected navService). */
   async _handleConversationClick(conversation) {
     const projectId = this.state.currentProject?.id;
     if (!this.app.validateUUID(projectId) || !conversation?.id) {
@@ -847,21 +856,27 @@ class ProjectDetailsComponent {
       return;
     }
 
-    // Check if project is fully loaded
-    const projectManager = this.projectManager;
-    if (projectManager?.projectLoadingInProgress) {
+    // Alert if project still loading
+    if (this.projectManager?.projectLoadingInProgress) {
       this.app.showNotification("Please wait for project details to load first.", "warning");
       return;
     }
 
-    // Update URL param for chatId
-    const url = new URL(window.location.href);
-    url.searchParams.set('chatId', conversation.id);
-    window.history.pushState({ conversationId: conversation.id }, '', url.toString());
+    // Update the URL param for chatId using the injected navService
+    if (this.navService) {
+      try {
+        const currentUrl = this.navService.getCurrentUrl();
+        currentUrl.searchParams.set('chatId', conversation.id);
+        this.navService.pushState({ conversationId: conversation.id }, '', currentUrl.toString());
+        console.log(`[ProjectDetailsComponent] Conversation clicked. ID: ${conversation.id}`);
+      } catch (err) {
+        console.error("[ProjectDetailsComponent] navService error:", err);
+      }
+    } else {
+      console.warn("[ProjectDetailsComponent] navService not provided, cannot update URL for conversation.");
+    }
 
-    // Could initialize or update your Chat UI here
-    // e.g. chatManager.initializeIfNeeded({ projectId, conversationId: conversation.id });
-    console.log(`[ProjectDetailsComponent] Conversation clicked. ID: ${conversation.id}`);
+    // Additional logic to initialize chat UI, if needed...
   }
 
   /** Creates a DOM item for an artifact. */
@@ -907,6 +922,10 @@ class ProjectDetailsComponent {
   }
 }
 
+/**
+ * Factory function that returns a new ProjectDetailsComponent instance.
+ * @param {Object} options Configuration and dependencies
+ */
 export function createProjectDetailsComponent(options) {
   return new ProjectDetailsComponent(options);
 }
