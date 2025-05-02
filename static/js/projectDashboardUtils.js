@@ -9,42 +9,47 @@
  *   const utils = createProjectDashboardUtils({...});
  */
 
-export function createProjectDashboardUtils({ DependencySystem, eventHandlers, projectManager, modalManager, notificationHandler, app, formatDate, formatBytes } = {}) {
-  // Dependency resolution
-  DependencySystem = DependencySystem || (typeof window !== "undefined" ? window.DependencySystem : undefined);
+function getDependency(dep, name, DependencySystem) {
+  return dep || DependencySystem?.modules?.get?.(name) || DependencySystem?.get?.(name);
+}
 
-  eventHandlers = eventHandlers || (DependencySystem?.modules?.get?.('eventHandlers') || DependencySystem?.get?.('eventHandlers'));
-  projectManager = projectManager || (DependencySystem?.modules?.get?.('projectManager') || DependencySystem?.get?.('projectManager'));
-  modalManager = modalManager || (DependencySystem?.modules?.get?.('modalManager') || DependencySystem?.get?.('modalManager'));
-  notificationHandler = notificationHandler || (DependencySystem?.modules?.get?.('notificationHandler') || DependencySystem?.get?.('notificationHandler'));
-  app = app || (DependencySystem?.modules?.get?.('app') || DependencySystem?.get?.('app'));
+function createShowNotification(notificationHandler, app) {
+  return (msg, type = 'info') => {
+    if (notificationHandler?.show) {
+      notificationHandler.show(msg, type);
+    } else if (app?.showNotification) {
+      app.showNotification(msg, type);
+    }
+    // else: no-op (no console.log)
+  };
+}
 
-  formatDate = formatDate || (DependencySystem?.modules?.get?.('formatDate') || DependencySystem?.get?.('formatDate'));
-  formatBytes = formatBytes || (DependencySystem?.modules?.get?.('formatBytes') || DependencySystem?.get?.('formatBytes'));
+function createTrackListener(eventHandlers) {
+  if (eventHandlers?.trackListener) {
+    return eventHandlers.trackListener.bind(eventHandlers);
+  }
+  throw new Error('trackListener is required for event handling');
+}
 
-  // Notification utility fallback
-  const showNotification = notificationHandler?.show
-    || app?.showNotification
-    || ((msg, type) => console.log(`[${type||'info'}] ${msg}`));
+function sanitizeHTMLContent(html, sanitizeHTML) {
+  if (sanitizeHTML) return sanitizeHTML(html);
+  // If no sanitizer is provided, refuse to set innerHTML
+  throw new Error('sanitizeHTML function is required for setting innerHTML');
+}
 
-  // Event handler fallback
-  const trackListener = eventHandlers?.trackListener
-    ? eventHandlers.trackListener.bind(eventHandlers)
-    : (el, evt, fn, opts) => el.addEventListener(evt, fn, opts);
-
-  // Dashboard utilities namespace
-  const ProjectDashboard = {};
-
-  ProjectDashboard.UIUtils = {
+function createUIUtils({ trackListener, formatDate, formatBytes, sanitizeHTML }) {
+  return {
     createElement(tag, options = {}) {
       const element = document.createElement(tag);
 
       if (options.className) element.className = options.className;
       if (options.id) element.id = options.id;
       if (options.textContent !== undefined) element.textContent = options.textContent;
-      if (options.innerHTML !== undefined) element.innerHTML = options.innerHTML;
+      if (options.innerHTML !== undefined) {
+        element.innerHTML = sanitizeHTMLContent(options.innerHTML, sanitizeHTML);
+      }
 
-      // Events
+      // Events: onClick, onChange, etc.
       Object.entries(options).forEach(([key, handler]) => {
         if (key.startsWith('on') && typeof handler === 'function') {
           const eventType = key.slice(2).toLowerCase();
@@ -52,7 +57,7 @@ export function createProjectDashboardUtils({ DependencySystem, eventHandlers, p
         }
       });
 
-      // Data attributes
+      // Data attributes: data-*
       Object.entries(options).forEach(([key, value]) => {
         if (key.startsWith('data-')) {
           element.setAttribute(key, value);
@@ -64,11 +69,19 @@ export function createProjectDashboardUtils({ DependencySystem, eventHandlers, p
         if (options[prop] !== undefined) element[prop] = options[prop];
       });
 
+      // Optional: support options.data = {foo: "bar"} for dataset
+      if (options.data && typeof options.data === 'object') {
+        Object.entries(options.data).forEach(([k, v]) => {
+          element.dataset[k] = v;
+        });
+      }
+
       return element;
     },
 
     formatNumber(number) {
-      return new Intl.NumberFormat().format(number || 0);
+      if (typeof number !== 'number' || isNaN(number)) return '';
+      return new Intl.NumberFormat().format(number);
     },
 
     formatDate(date) {
@@ -78,11 +91,10 @@ export function createProjectDashboardUtils({ DependencySystem, eventHandlers, p
 
     formatBytes(num) {
       if (formatBytes) return formatBytes(num);
-      if (!num && num !== 0) return '';
-      // Simple fallback
+      if (typeof num !== 'number' || isNaN(num)) return '';
       const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
       if (num === 0) return '0 B';
-      const i = Math.floor(Math.log(num) / Math.log(1024));
+      const i = Math.min(Math.floor(Math.log(num) / Math.log(1024)), sizes.length - 1);
       return (num / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
     },
 
@@ -105,80 +117,134 @@ export function createProjectDashboardUtils({ DependencySystem, eventHandlers, p
         gif: '🖼️',
         zip: '📦',
       };
-      return icons[String(fileType||'').toLowerCase()] || '📄';
+      return icons[String(fileType || '').toLowerCase()] || '📄';
     },
   };
+}
+
+function setupEventListeners({
+  projectManager,
+  modalManager,
+  showNotification,
+  trackListener,
+  DependencySystem
+}) {
+  // Edit project
+  const editBtn = typeof document !== 'undefined' ? document.getElementById('editProjectBtn') : null;
+  if (editBtn) {
+    trackListener(editBtn, 'click', () => {
+      const currentProject = projectManager?.currentProject;
+      const pm = getDependency(undefined, 'projectModal', DependencySystem);
+      if (currentProject && pm?.openModal) {
+        pm.openModal(currentProject);
+      } else {
+        showNotification('[projectDashboardUtils] projectModal.openModal not available', 'error');
+      }
+    });
+  }
+
+  // Pin project
+  const pinBtn = typeof document !== 'undefined' ? document.getElementById('pinProjectBtn') : null;
+  if (pinBtn) {
+    trackListener(pinBtn, 'click', async () => {
+      const currentProject = projectManager?.currentProject;
+      if (currentProject?.id && projectManager?.togglePinProject) {
+        try {
+          const updatedProject = await projectManager.togglePinProject(currentProject.id);
+          showNotification(
+            `Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}`,
+            'success'
+          );
+        } catch (error) {
+          showNotification('Failed to toggle pin: ' + (error?.message || error), 'error');
+        }
+      }
+    });
+  }
+
+  // Archive project
+  const archiveBtn = typeof document !== 'undefined' ? document.getElementById('archiveProjectBtn') : null;
+  if (archiveBtn) {
+    trackListener(archiveBtn, 'click', async () => {
+      const currentProject = projectManager?.currentProject;
+      if (currentProject?.id && projectManager?.toggleArchiveProject && modalManager) {
+        modalManager.confirmAction({
+          title: currentProject.archived ? 'Unarchive Project?' : 'Archive Project?',
+          message: currentProject.archived
+            ? `Are you sure you want to unarchive "${currentProject.name}"?`
+            : `Are you sure you want to archive "${currentProject.name}"? Archived projects are hidden by default.`,
+          confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
+          confirmClass: currentProject.archived ? 'btn-success' : 'btn-warning',
+          onConfirm: async () => {
+            try {
+              await projectManager.toggleArchiveProject(currentProject.id);
+              showNotification(
+                `Project ${currentProject.archived ? 'unarchived' : 'archived'}`,
+                'success'
+              );
+            } catch (error) {
+              showNotification('Failed to toggle archive: ' + (error?.message || error), 'error');
+            }
+          },
+        });
+      }
+    });
+  }
+}
+
+export function createProjectDashboardUtils({
+  DependencySystem,
+  eventHandlers,
+  projectManager,
+  modalManager,
+  notificationHandler,
+  app,
+  formatDate,
+  formatBytes,
+  sanitizeHTML
+} = {}) {
+  if (!DependencySystem) throw new Error('DependencySystem is required');
+  eventHandlers = getDependency(eventHandlers, 'eventHandlers', DependencySystem);
+  projectManager = getDependency(projectManager, 'projectManager', DependencySystem);
+  modalManager = getDependency(modalManager, 'modalManager', DependencySystem);
+  notificationHandler = getDependency(notificationHandler, 'notificationHandler', DependencySystem);
+  app = getDependency(app, 'app', DependencySystem);
+  formatDate = getDependency(formatDate, 'formatDate', DependencySystem);
+  formatBytes = getDependency(formatBytes, 'formatBytes', DependencySystem);
+  sanitizeHTML = getDependency(sanitizeHTML, 'sanitizeHTML', DependencySystem);
+
+  const showNotification = createShowNotification(notificationHandler, app);
+  const trackListener = createTrackListener(eventHandlers);
+
+  const ProjectDashboard = {};
+
+  ProjectDashboard.UIUtils = createUIUtils({
+    trackListener,
+    formatDate,
+    formatBytes,
+    sanitizeHTML
+  });
+
+  let initialized = false;
 
   ProjectDashboard.setupEventListeners = () => {
-    // Edit project
-    const editBtn = document.getElementById('editProjectBtn');
-    if (editBtn) {
-      trackListener(editBtn, 'click', () => {
-        const currentProject = projectManager?.currentProject;
-        const pm = (DependencySystem?.modules?.get?.('projectModal') || DependencySystem?.get?.('projectModal') || undefined);
-        if (currentProject && pm?.openModal) {
-          pm.openModal(currentProject);
-        } else {
-          console.error('[projectDashboardUtils] projectModal.openModal not available');
-        }
-      });
-    }
-
-    // Pin project
-    const pinBtn = document.getElementById('pinProjectBtn');
-    if (pinBtn) {
-      trackListener(pinBtn, 'click', async () => {
-        const currentProject = projectManager?.currentProject;
-        if (currentProject?.id && projectManager?.togglePinProject) {
-          try {
-            const updatedProject = await projectManager.togglePinProject(currentProject.id);
-            showNotification(
-              `Project ${updatedProject.pinned ? 'pinned' : 'unpinned'}`,
-              'success'
-            );
-          } catch (error) {
-            console.error('Failed to toggle pin:', error);
-            showNotification('Failed to toggle pin', 'error');
-          }
-        }
-      });
-    }
-
-    // Archive project
-    const archiveBtn = document.getElementById('archiveProjectBtn');
-    if (archiveBtn) {
-      trackListener(archiveBtn, 'click', async () => {
-        const currentProject = projectManager?.currentProject;
-        if (currentProject?.id && projectManager?.toggleArchiveProject && modalManager) {
-          modalManager.confirmAction({
-            title: currentProject.archived ? 'Unarchive Project?' : 'Archive Project?',
-            message: currentProject.archived
-              ? `Are you sure you want to unarchive "${currentProject.name}"?`
-              : `Are you sure you want to archive "${currentProject.name}"? Archived projects are hidden by default.`,
-            confirmText: currentProject.archived ? 'Unarchive' : 'Archive',
-            confirmClass: currentProject.archived ? 'btn-success' : 'btn-warning',
-            onConfirm: async () => {
-              try {
-                await projectManager.toggleArchiveProject(currentProject.id);
-                showNotification(
-                  `Project ${currentProject.archived ? 'unarchived' : 'archived'}`,
-                  'success'
-                );
-              } catch (error) {
-                console.error('Failed to toggle archive:', error);
-                showNotification('Failed to toggle archive', 'error');
-              }
-            },
-          });
-        }
-      });
-    }
+    setupEventListeners({
+      projectManager,
+      modalManager,
+      showNotification,
+      trackListener,
+      DependencySystem
+    });
   };
 
   ProjectDashboard.init = function () {
-    if (app?.config?.debug) console.log('[ProjectDashboard] Initializing...');
+    if (initialized) return this;
+    initialized = true;
+    if (app?.config?.debug) showNotification('[ProjectDashboard] Initializing...', 'info');
     ProjectDashboard.setupEventListeners();
-    document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+    if (typeof document !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
+    }
     return this;
   };
 
