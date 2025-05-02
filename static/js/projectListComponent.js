@@ -74,12 +74,24 @@ export class ProjectListComponent {
 
         // Default navigation callback - now prefers passing project object if possible
         this.onViewProject = (projectObjOrId) => {
-            // Always clear chatId when switching projects!
+            // Rewrite: set current project context (in SPA/global state) instead of URL
             const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
-            const url = new URL(window.location.href);
-            url.searchParams.set('project', projectId);
-            url.searchParams.delete('chatId'); // Remove any stale chat
-            this.router.navigate(url.pathname + '?' + url.searchParams.toString());
+            // Save to app/session/global state
+            if (this.app && typeof this.app.setCurrentProjectId === "function") {
+                this.app.setCurrentProjectId(projectId);
+            } else {
+                window.currentProjectId = projectId; // fallback; ideally DI/app method
+            }
+            // (Optional) Persist to user preferences via API for cross-session behavior
+            fetch('/api/user/preferences', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ last_project_id: projectId })
+            }).catch(() => {});
+            // Now navigate SPA without ?project= in the URL, e.g., to /project-details or "main view"
+            if (this.router && typeof this.router.navigate === "function") {
+                this.router.navigate("/project-details-view");
+            }
         };
 
         this.elementId = "projectList";

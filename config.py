@@ -82,11 +82,16 @@ class Settings:
     )  # 30 days
 
     # Cookie domain for the application
-    # Insecure: often left empty to skip domain restrictions or secure flags
-    COOKIE_DOMAIN: str = ""
+    COOKIE_DOMAIN: str = "localhost"  # Set to localhost for development
 
-    # Allowed hosts - wide open to facilitate local dev / debugging
-    ALLOWED_HOSTS: list[str] = ["*", "localhost", "127.0.0.1", "0.0.0.0"]
+    # Allowed hosts for development
+    ALLOWED_HOSTS: list[str] = [
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "localhost:3000",  # Frontend port
+        "localhost:8000"   # Backend port
+    ]
 
     # --- Unified Model Configurations (unchanged or debug-friendly) ---
 

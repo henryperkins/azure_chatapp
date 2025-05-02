@@ -171,6 +171,18 @@ async def create_project(
                 set_tag("project.id", str(project.id))
                 set_tag("kb.id", str(kb.id))
 
+            # Update user preferences with last_project_id and chronologically ordered projects array
+            user = current_user
+            if user.preferences is None:
+                user.preferences = {}
+            user.preferences["last_project_id"] = str(project.id)
+
+            # Maintain a chronological array of projects w/ id and title
+            projects_list = user.preferences.get("projects", [])
+            projects_list.append({"id": str(project.id), "title": project.name})
+            user.preferences["projects"] = projects_list
+            await save_model(db, user)
+
             logger.info(f"Created project {project.id} with KB {kb.id}")
             return await create_standard_response(
                 serialize_project(project),
@@ -453,10 +465,57 @@ async def delete_project(
                 },
             )
 
+            # FULL CLEANUP before deleting the project
+
+            # -- Delete all conversations and messages for this project
+            from sqlalchemy import delete as sqlalchemy_delete
+            convo_del = await db.execute(
+                sqlalchemy_delete(Conversation).where(Conversation.project_id == project_id)
+            )
+            logger.info(f"Deleted {convo_del.rowcount if hasattr(convo_del, 'rowcount') else '?'} conversations for project {project_id}")
+
+            # -- Delete all artifacts for this project
+            artifact_del = await db.execute(
+                sqlalchemy_delete(Artifact).where(Artifact.project_id == project_id)
+            )
+            logger.info(f"Deleted {artifact_del.rowcount if hasattr(artifact_del, 'rowcount') else '?'} artifacts for project {project_id}")
+
+            # -- Delete the knowledge base (if any)
+            if getattr(project, 'knowledge_base_id', None):
+                kb_row = await db.get(KnowledgeBase, project.knowledge_base_id)
+                if kb_row:
+                    await db.delete(kb_row)
+                    logger.info(f"Deleted knowledge base {project.knowledge_base_id} for project {project_id}")
+
+            # -- Delete all ProjectFile rows (already handled file removal above)
+            file_del = await db.execute(
+                sqlalchemy_delete(ProjectFile).where(ProjectFile.project_id == project_id)
+            )
+            logger.info(f"Deleted {file_del.rowcount if hasattr(file_del, 'rowcount') else '?'} file records for project {project_id}")
+
             # Delete project
             with sentry_span(op="db.delete", description="Delete project record"):
                 await db.delete(project)
                 await db.commit()
+
+            # Cleanup user.preferences for this project
+            user = current_user
+            prefs = user.preferences or {}
+
+            # Remove from projects list
+            old_projects = prefs.get("projects", [])
+            updated_projects = [p for p in old_projects if p.get("id") != str(project_id)]
+            prefs["projects"] = updated_projects
+
+            # If this was last_project_id, update to previous or None
+            if prefs.get("last_project_id") == str(project_id):
+                if updated_projects:
+                    prefs["last_project_id"] = updated_projects[-1]["id"]
+                else:
+                    prefs["last_project_id"] = None
+
+            user.preferences = prefs
+            await save_model(db, user)
 
             # Record metrics
             metrics.incr(

@@ -154,6 +154,7 @@ from config import settings
 from db import init_db, get_async_session_context
 from utils.auth_utils import clean_expired_tokens
 from utils.db_utils import schedule_token_cleanup
+from db.schema_manager import SchemaManager
 
 # Import your routers
 from auth import router as auth_router, create_default_user
@@ -164,6 +165,7 @@ from routes.projects.artifacts import router as project_artifacts_router
 from routes.user_preferences import router as user_preferences_router
 from routes.unified_conversations import router as conversations_router
 from routes.sentry_test import router as sentry_test_router
+from routes.user_preferences import router as user_preferences_router
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
@@ -196,6 +198,9 @@ async def on_startup():
     """Initialize services for debugging, with minimal checks."""
     try:
         await init_db()
+        # Run schema migration/validation at startup
+        schema_manager = SchemaManager()
+        await schema_manager.initialize_database()
         await create_default_user()  # Insecure default user creation
         await schedule_token_cleanup(interval_minutes=30)
         logger.info(f"{APP_NAME} v{APP_VERSION} started in debug mode.")
@@ -266,7 +271,7 @@ app.include_router(
     tags=["artifacts"],
 )
 app.include_router(
-    user_preferences_router, prefix="/api/preferences", tags=["preferences"]
+    user_preferences_router, tags=["preferences"]
 )
 app.include_router(conversations_router, prefix="/api/projects", tags=["conversations"])
 

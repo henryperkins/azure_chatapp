@@ -245,6 +245,8 @@ function toggleElement(selectorOrElement, show) {
     }
 }
 
+import { fetchCurrentUser } from './auth.js';
+
 // ---------------------------------------------------------------------
 // Create & register modules
 // ---------------------------------------------------------------------
@@ -301,15 +303,22 @@ const app = {
         return { ...appState };
     },
     getProjectId() {
+        // USER STATE = GROUND TRUTH
+        if (window.currentUser && window.currentUser.preferences && window.currentUser.preferences.last_project_id) {
+            return window.currentUser.preferences.last_project_id;
+        }
+        // Allow a one-shot deep-link from the URL if the project is in user's allowed projects, otherwise ignore
         try {
             const urlParams = new URLSearchParams(window.location.search);
             const urlProjectId = urlParams.get('project');
-            if (urlProjectId && globalUtils.isValidProjectId(urlProjectId)) {
+            if (
+                urlProjectId &&
+                globalUtils.isValidProjectId(urlProjectId) &&
+                window.currentUser &&
+                Array.isArray(window.currentUser.preferences?.projects) &&
+                window.currentUser.preferences.projects.some(p => p.id === urlProjectId)
+            ) {
                 return urlProjectId;
-            }
-            const pm = DependencySystem.modules.get('projectManager');
-            if (pm?.currentProject?.id && globalUtils.isValidProjectId(pm.currentProject.id)) {
-                return pm.currentProject.id;
             }
         } catch {
             // ignored
@@ -482,10 +491,18 @@ if (regChatManager === createChatManager || typeof regChatManager.loadConversati
     DependencySystem.register('chatManager', chatManager);
 }
 
+let currentUser = null;
+
 // ---------------------------------------------------------------------
 // Bootstrap & application initialization
 // ---------------------------------------------------------------------
-function bootstrap() {
+async function bootstrap() {
+    // Fetch currentUser as soon as possible before anything else
+    currentUser = await fetchCurrentUser();
+    if (currentUser) {
+        window.currentUser = currentUser;
+        DependencySystem.register('currentUser', currentUser);
+    }
     // Use eventHandlers to track DOMContentLoaded if needed
     if (document.readyState === 'loading') {
         eventHandlers.trackListener(
@@ -508,6 +525,9 @@ bootstrap();
 function onReady() {
     if (APP_CONFIG.DEBUG) {
         console.log(`[App] DOM ready. Starting init...`);
+        if (window.currentUser) {
+            console.log("[App] Current user loaded from auth.js:", window.currentUser);
+        }
     }
     init().catch(err => {
         console.error("[App] Unhandled error during async init:", err);

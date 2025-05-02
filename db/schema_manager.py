@@ -19,6 +19,59 @@ from db.db import Base, sync_engine, async_engine
 
 logger = logging.getLogger(__name__)
 
+# --- Alembic Automated Migration Integration ---
+def automated_alembic_migrate(message: str = "Automated migration", revision_dir: str = "alembic"):
+    """
+    Invokes Alembic to autogenerate a new migration (if needed) and upgrade the database to head.
+    """
+    import os
+    import sys
+    import logging
+    from alembic.config import Config
+    from alembic import command
+
+    logger = logging.getLogger(__name__)
+    logger.info("Starting Alembic auto-migration workflow...")
+
+    # Path adjustments:
+    alembic_ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
+    alembic_ini_path = os.path.abspath(alembic_ini_path)
+    migration_dir_path = os.path.join(os.path.dirname(__file__), "..", revision_dir)
+    migration_dir_path = os.path.abspath(migration_dir_path)
+
+    # Create Alembic config object programmatically
+    alembic_cfg = Config(alembic_ini_path)
+    alembic_cfg.set_main_option("script_location", migration_dir_path)
+
+    # 1. Autogenerate revision (will be skipped if no changes detected)
+    from alembic.script import ScriptDirectory
+    script = ScriptDirectory.from_config(alembic_cfg)
+    prev_head = script.get_current_head()
+
+    logger.info("Checking for model/db schema drift to issue new Alembic revision...")
+    try:
+        command.revision(alembic_cfg, message=message, autogenerate=True)
+    except Exception as e:
+        logger.error(f"Alembic revision failed: {e}")
+        raise
+
+    # Check if new revision was created
+    script = ScriptDirectory.from_config(alembic_cfg)
+    new_head = script.get_current_head()
+    if prev_head != new_head:
+        logger.info(f"New Alembic migration created: {new_head}. Upgrading database...")
+    else:
+        logger.info(f"No changes detected. Database already up to date.")
+
+    # 2. Always upgrade to head (idempotent)
+    try:
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migration applied: database is at head.")
+    except Exception as e:
+        logger.error(f"Alembic upgrade failed: {e}")
+        raise
+# --- End Alembic Migration Integration ---
+
 
 class SchemaManager:
     def __init__(self):
@@ -119,6 +172,8 @@ class SchemaManager:
 
             # Check constraints
             for constraint in table.constraints:
+                if not constraint.name:
+                    continue  # skip unnamed constraints
                 if constraint.name not in db_schema["constraints"].get(table_name, []):
                     mismatch_details.append(
                         f"Missing constraint: {table_name}.{constraint.name}"
@@ -131,32 +186,36 @@ class SchemaManager:
         logger.info("Starting schema alignment...")
 
         async with async_engine.begin() as conn:
-            # Create missing tables
+            # Create missing tables and align schema with ORM
             await conn.run_sync(Base.metadata.create_all)
 
-            # Get existing tables using async pattern
-            existing_tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
-
-            # Add missing columns/indexes using proper async methods
-            # ... (rest of schema alignment logic using async connections)
-
-
-            inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
+            # Add missing columns, indexes, and foreign key constraints as needed
             for table in Base.metadata.tables.values():
-                if not inspector.has_table(table.name):
+                table_exists = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).has_table(table.name)
+                )
+                if not table_exists:
                     continue
-                db_columns = {c["name"] for c in inspector.get_columns(table.name)}
+
+                db_columns = await conn.run_sync(
+                    lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table.name)}
+                )
                 for column in table.columns:
                     if column.name not in db_columns:
                         logger.info(f"Adding column: {table.name}.{column.name}")
-                        self._add_column(conn, table.name, column)
+                        await self._add_column(conn, table.name, column)
 
             # 3. Create missing indexes
             for table in Base.metadata.tables.values():
-                if not inspector.has_table(table.name):
+                table_exists = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).has_table(table.name)
+                )
+                if not table_exists:
                     continue
 
-                db_indexes = {idx["name"] for idx in inspector.get_indexes(table.name)}
+                db_indexes = await conn.run_sync(
+                    lambda sync_conn: {idx["name"] for idx in inspect(sync_conn).get_indexes(table.name)}
+                )
                 for index in table.indexes:
                     if index.name not in db_indexes:
                         logger.info(f"Creating index: {table.name}.{index.name}")
@@ -167,17 +226,22 @@ class SchemaManager:
 
             # 4. Fix foreign key constraints
             for table in Base.metadata.tables.values():
-                if not inspector.has_table(table.name):
+                table_exists = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).has_table(table.name)
+                )
+                if not table_exists:
                     continue
 
-                db_fks = inspector.get_foreign_keys(table.name)
+                db_fks = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).get_foreign_keys(table.name)
+                )
                 for column in table.columns:
                     for fk in column.foreign_keys:
                         if not self._fk_exists(db_fks, column.name, fk):
                             logger.info(
                                 f"Adding FK: {table.name}.{column.name} -> {fk.column.table.name}.{fk.column.name}"
                             )
-                            self._add_foreign_key(conn, table.name, column.name, fk)
+                            await self._add_foreign_key(conn, table.name, column.name, fk)
 
         logger.info("Schema alignment completed")
 
@@ -197,7 +261,12 @@ class SchemaManager:
 
     async def _get_db_schema(self) -> dict:
         """Retrieve current database schema information."""
-        schema_info = {"tables": set(), "columns": {}, "indexes": {}, "constraints": {}}
+        schema_info: dict = {
+            "tables": set(),  # Set[str]
+            "columns": {},    # Dict[str, Dict[str, dict]]
+            "indexes": {},    # Dict[str, Set[str]]
+            "constraints": {},# Dict[str, Set[str]]
+        }
 
         async with async_engine.connect() as conn:
             # Get tables
