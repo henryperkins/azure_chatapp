@@ -260,11 +260,10 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
   function addMessageListener(target = window, trackListener = null) {
     if (_messageListenerAttached) return;
-    if (trackListener) {
-      trackListener(target, 'message', handleNotificationMessages, { description: 'NotificationHandler: message' });
-    } else {
-      target.addEventListener('message', handleNotificationMessages);
+    if (!trackListener) {
+      throw new Error("[NotificationHandler] addMessageListener requires 'trackListener' to be provided (no direct addEventListener allowed)");
     }
+    trackListener(target, 'message', handleNotificationMessages, { description: 'NotificationHandler: message' });
     _messageListenerAttached = true;
   }
 

@@ -110,20 +110,18 @@ export function createKnowledgeBaseComponent(options = {}) {
     name in options ? options[name] : DS.modules.get(name);
   // DOMPurify global sanitizer for innerHTML
   const DOMPurify = getDep("DOMPurify");
+  if (!DOMPurify || typeof DOMPurify.sanitize !== 'function') {
+    throw new Error("KnowledgeBaseComponent requires 'DOMPurify' dependency for HTML sanitization.");
+  }
 
   /**
-   * Safely set element innerHTML, using DOMPurify if available or stripping tags as fallback.
+   * Safely set element innerHTML, using DOMPurify.
    * @param {HTMLElement} el
    * @param {string} html
    */
   function setSanitizedHTML(el, html) {
     if (!el) return;
-    if (DOMPurify && typeof DOMPurify.sanitize === 'function') {
-      el.innerHTML = DOMPurify.sanitize(html);
-    } else {
-      // Fallback: strip basic tags as minimal defense.
-      el.innerHTML = String(html).replace(/<[^>]+>/g, '');
-    }
+    el.innerHTML = DOMPurify.sanitize(html);
   }
 
   // Required dependencies

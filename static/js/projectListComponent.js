@@ -449,7 +449,7 @@ export class ProjectListComponent {
 
     /** Confirmation via notificationHandler */
     async _confirmDelete(project) {
-        const ok = await notificationHandler.confirm(
+        const ok = await this.notification.confirm(
             `Delete "${project.name}"? This cannot be undone.`
         );
         if (ok) this._executeDelete(project.id);
@@ -479,16 +479,18 @@ export class ProjectListComponent {
     _showLoadingState() {
         if (!this.element) return;
         this._clearElement(this.element);
+
+        // Use a responsive grid container for loading state
+        this.element.classList.add("grid", "project-list");
         for (let i = 0; i < 6; i++) {
             const skeleton = document.createElement("div");
-            skeleton.className =
-                "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
+            skeleton.className = "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
             const raw = `
-          <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
-          <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
-          <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
-          <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
-        `;
+              <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
+              <div class="h-4 bg-base-300 rounded w-full mb-2"></div>
+              <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
+              <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
+            `;
             this._setElementHTML(skeleton, raw);
             this.element.appendChild(skeleton);
         }
@@ -497,17 +499,20 @@ export class ProjectListComponent {
     /** Empty state UI */
     _showEmptyState() {
         if (!this.element) return;
-        const raw = `
-        <div class="col-span-3 text-center py-10 text-base-content/60">
+        this._clearElement(this.element);
+        this.element.classList.add("grid", "project-list");
+        const emptyDiv = document.createElement("div");
+        emptyDiv.className = "project-list-empty";
+        emptyDiv.innerHTML = `
           <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
           <p class="mt-4 text-lg text-base-content">No projects found</p>
           <p class="mt-1">Create a new project to get started</p>
           <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
-        </div>
-      `;
-        this._setElementHTML(this.element, raw);
+        `;
+        this.element.appendChild(emptyDiv);
+
         const createBtn = document.getElementById("emptyStateCreateBtn");
         if (createBtn) {
             this.eventHandlers.trackListener(
@@ -522,13 +527,16 @@ export class ProjectListComponent {
     /** Login required UI */
     _showLoginRequired() {
         if (!this.element) return;
-        const raw = `
-        <div class="col-span-3 text-center py-10">
+        this._clearElement(this.element);
+        this.element.classList.add("grid", "project-list");
+        const loginDiv = document.createElement("div");
+        loginDiv.className = "project-list-fallback";
+        loginDiv.innerHTML = `
           <p class="mt-4 text-lg">Please log in to view your projects</p>
           <button id="loginButton" class="btn btn-primary mt-4">Login</button>
-        </div>
-      `;
-        this._setElementHTML(this.element, raw);
+        `;
+        this.element.appendChild(loginDiv);
+
         const loginBtn = document.getElementById("loginButton");
         if (loginBtn) {
             this.eventHandlers.trackListener(loginBtn, "click", (e) => {
@@ -540,18 +548,25 @@ export class ProjectListComponent {
 
     /** Error UI */
     _showErrorState(message) {
-        if (!this.element) return;
+        console.error("[ProjectListComponent] Error state shown with message:", message);
+        if (!this.element) {
+            console.error("[ProjectListComponent] Cannot show error state, this.element is null/undefined");
+            return;
+        }
+        this._clearElement(this.element);
+        this.element.classList.add("grid", "project-list");
         const msg = message || "An unknown error occurred.";
-        const raw = `
-        <div class="col-span-3 text-center py-10">
+        const errorDiv = document.createElement("div");
+        errorDiv.className = "project-list-error";
+        errorDiv.innerHTML = `
           <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p class="mt-4 text-lg text-error">${msg}</p>
           <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
-        </div>
-      `;
-        this._setElementHTML(this.element, raw);
+          <div class="mt-4 text-sm text-base-content/70">If the issue persists, check console logs for more details.</div>
+        `;
+        this.element.appendChild(errorDiv);
         const retryBtn = document.getElementById("retryButton");
         if (retryBtn) {
             this.eventHandlers.trackListener(

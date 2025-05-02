@@ -251,6 +251,19 @@ function toggleElement(selectorOrElement, show) {
 DependencySystem.register('apiRequest', apiRequest);
 
 const notificationHandler = createNotificationHandler({ DependencySystem });
+/**
+ * Compatibility shim: Add .log/.warn/.error/.confirm to the notification handler for legacy consumers.
+ */
+function createNotificationShim(h) {
+    return {
+        ...h,
+        log: (...args) => h.show?.(args[0], "info", args[1] || {}),
+        warn: (...args) => h.show?.(args[0], "warning", args[1] || {}),
+        error: (...args) => h.show?.(args[0], "error", args[1] || {}),
+        confirm: (...args) => h.show?.(args[0], "info", { ...args[1], action: "Confirm" }),
+    };
+}
+const notificationHandlerWithLog = createNotificationShim(notificationHandler);
 DependencySystem.register('notificationHandler', notificationHandler);
 DependencySystem.register('modalMapping', MODAL_MAPPINGS);
 
@@ -260,15 +273,17 @@ DependencySystem.register('modalMapping', MODAL_MAPPINGS);
  * Each handler only affects notifications in its own container.
  */
 function createBannerHandlerWithLog(containerSelector) {
-    const container = typeof containerSelector === "string" ?
-        document.querySelector(containerSelector) :
-        containerSelector;
+    const container = typeof containerSelector === "string"
+        ? document.querySelector(containerSelector)
+        : containerSelector;
     const h = createNotificationHandler({ container });
+
+    // Map to expected log/warn/error/confirm for compatibility
     return {
-        log: (...args) => h.info?.(...args),
-        warn: (...args) => h.warn?.(...args),
-        error: (...args) => h.error?.(...args),
-        confirm: (...args) => h.confirm?.(...args)
+        log: (...args) => h.show?.(args[0], "info", args[1] || {}),
+        warn: (...args) => h.show?.(args[0], "warning", args[1] || {}),
+        error: (...args) => h.show?.(args[0], "error", args[1] || {}),
+        confirm: (...args) => h.show?.(args[0], "info", { ...args[1], action: "Confirm" })
     };
 }
 
@@ -394,15 +409,11 @@ const storageService = {
 DependencySystem.register('storage', storageService);
 
 /**
- * sanitizer: abstraction for DOM sanitizer, defaults to DOMPurify via DI.
+ * sanitizer: abstraction for DOM sanitizer, now directly imported via ESM for DI (no globals).
  */
-const sanitizer =
-    typeof window.DOMPurify === 'object' && typeof window.DOMPurify.sanitize === 'function'
-        ? window.DOMPurify
-        : {
-              sanitize: (html) => html // fallback: no-op sanitizer (DANGEROUS, but always returns input)
-          };
-DependencySystem.register('sanitizer', sanitizer);
+import DOMPurify from './vendor/dompurify.es.js';
+DependencySystem.register('sanitizer', DOMPurify);
+DependencySystem.register('DOMPurify', DOMPurify);
 
 // ---------------------------------------------------------------------
 // Protect chatManager from accidental overwrites
@@ -456,7 +467,7 @@ const chatManager = createChatManager({
             return false;
         }
     },
-    sanitizer: DependencySystem.modules.get('sanitizer')
+    DOMPurify: DependencySystem.modules.get('sanitizer')
 });
 if (!chatManager || typeof chatManager.initialize !== 'function') {
     throw new Error('[App] createChatManager() did not return a valid ChatManager instance.');
@@ -633,14 +644,37 @@ async function initializeCoreSystems() {
         throw new Error('[App] chatManager registration: not a valid instance with "initialize".');
     }
 
-    const projectManager = createProjectManager({ DependencySystem, chatManager: chatMgrInstance });
+    const projectManager = createProjectManager({
+        DependencySystem,
+        chatManager: chatMgrInstance,
+        app,
+        notificationHandler: notificationHandlerWithLog,
+        storage: DependencySystem.modules.get('storage'),
+        listenerTracker: {
+            add: (target, event, handler, description) =>
+                eventHandlers.trackListener(target, event, handler, {
+                    description: description || `[ProjectManager] ${event} on ${target?.id || target}`
+                }),
+            remove: (target, event, handler) => {
+                if (eventHandlers.cleanupListeners) {
+                    eventHandlers.cleanupListeners(target, event, handler);
+                }
+            }
+        }
+    });
     DependencySystem.register('projectManager', projectManager);
-    if (
-        typeof DependencySystem.modules.get('projectManager') === 'function' ||
-        typeof projectManager.initialize !== 'function'
-    ) {
-        throw new Error('[App] projectManager registration: not a valid instance with "initialize".');
+    // Enhanced validation for projectManager
+    if (typeof DependencySystem.modules.get('projectManager') === 'function') {
+        console.error('[App] projectManager registration error: got a function instead of an instance');
+        throw new Error('[App] projectManager registration: not a valid instance (got function)');
     }
+
+    if (!projectManager || typeof projectManager.initialize !== 'function') {
+        console.error('[App] projectManager invalid:', projectManager);
+        throw new Error('[App] projectManager registration: not a valid instance with "initialize" method');
+    }
+
+    console.log('[App] projectManager validation passed');
 
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
@@ -828,6 +862,7 @@ async function initializeUIComponents() {
     // Chat Extensions
     const chatExtensions = createChatExtensions({
         DependencySystem,
+        eventHandlers,
         notificationHandler: notificationHandler.show.bind(notificationHandler)
     });
     DependencySystem.register('chatExtensions', chatExtensions);
@@ -930,7 +965,8 @@ async function initializeUIComponents() {
         auth: DependencySystem.modules.get('auth'),
         projectManager,
         showNotification,
-        uiUtils: globalUtils
+        uiUtils: globalUtils,
+        sanitizer: DependencySystem.modules.get('sanitizer')
     });
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponent);
 
@@ -960,8 +996,19 @@ async function initializeUIComponents() {
         await projectDetailsComp.initialize();
     }
 
-    if (appState.isAuthenticated && projectManager?.loadProjects) {
-        projectManager.loadProjects('all');
+    if (appState.isAuthenticated) {
+        if (projectManager?.loadProjects) {
+            console.log('[App] Calling projectManager.loadProjects from initializeUIComponents');
+            projectManager.loadProjects('all').catch(err => {
+                console.error('[App] Failed to load projects during initialization:', err);
+                showNotification('Failed to load projects. Please try refreshing.', 'error');
+            });
+        } else {
+            console.error('[App] projectManager or loadProjects method not available:', projectManager);
+            showNotification('Project manager initialization issue. Please try refreshing.', 'error');
+        }
+    } else {
+        console.warn('[App] Not authenticated, skipping initial project load');
     }
 
     // Optionally initialize accessibility extras
@@ -1032,7 +1079,18 @@ function registerAppListeners() {
 function setupChatInitializationTrigger() {
     const requiredDeps = ['auth', 'chatManager', 'projectManager'];
 
-    const debouncedInitChat = globalUtils.debounce(async (forceProjectId = null) => {
+    const debouncedInitChat = globalUtils.debounce(async (arg = null) => {
+        // Defensive: accept either a projectId or a CustomEvent from listeners
+        let forceProjectId = arg;
+        if (
+            arg &&
+            typeof arg === 'object' &&
+            arg.detail &&
+            arg.detail.project &&
+            arg.detail.project.id
+        ) {
+            forceProjectId = arg.detail.project.id;
+        }
         try {
             const [authMod, chatMgr, pm] = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
             if (!authMod || !chatMgr) {
