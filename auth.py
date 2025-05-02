@@ -35,6 +35,33 @@ ACCESS_TOKEN_EXPIRE_MIN = 24 * 60  # 1 day in minutes
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 router = APIRouter()
+
+@router.get("/api/user/me")
+async def get_current_user_profile(
+    request: Request,
+    session: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get the current user's profile and preferences for frontend bootstrapping.
+    """
+    try:
+        user_obj, _tok = await get_current_user_and_token(request)
+        prefs = user_obj.preferences or {}
+        profile = {
+            "id": user_obj.id,
+            "username": user_obj.username,
+            "role": user_obj.role,
+            "is_active": user_obj.is_active,
+            "preferences": prefs,
+            "created_at": user_obj.created_at,
+            "updated_at": user_obj.updated_at,
+        }
+        return {"user": profile}
+    except Exception as ex:
+        import traceback
+        tb_str = traceback.format_exc()
+        logger.error(f"Error in /api/user/me: {ex}\n{tb_str}")
+        raise HTTPException(status_code=401, detail="Not authenticated")
 __all__ = ["router", "create_default_user"]
 
 
@@ -49,9 +76,9 @@ class CookieSettings:
         # Local dev environment defaults
         if hostname in ["localhost", "127.0.0.1"] or self.env.lower() == "development":
             return {
-                "secure": False,
-                "domain": None,
-                "samesite": "lax",
+                "secure": False,  # False for HTTP in dev
+                "domain": "localhost",
+                "samesite": "none",  # None for cross-port requests
                 "httponly": True,
                 "path": "/",
             }

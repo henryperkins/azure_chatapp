@@ -20,6 +20,22 @@
  * - createAuthModule: factory for main API for authentication actions and state
  */
 
+export async function fetchCurrentUser() {
+  try {
+    const resp = await fetch("/api/user/me", {
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json"
+      }
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.user || null;
+  } catch {
+    return null;
+  }
+}
+
 export function createAuthModule({
   apiRequest,
   showNotification,
