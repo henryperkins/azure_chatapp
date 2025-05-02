@@ -68,7 +68,7 @@ async def create_artifact(
     content_type: str,
     content: str,
     conversation_id: Optional[UUID] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[dict[str, Any]] = None,
     user_id: Optional[int] = None,
 ) -> Artifact:
     """
@@ -204,7 +204,7 @@ async def list_artifacts(
     skip: int = 0,
     limit: int = 100,
     user_id: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """
     List artifacts with filtering, search, and pagination.
 
@@ -294,7 +294,7 @@ async def update_artifact(
     db: AsyncSession,
     artifact_id: UUID,
     project_id: UUID,
-    update_data: Dict[str, Any],
+    update_data: dict[str, Any],
     user_id: Optional[int] = None,
 ) -> Artifact:
     """
@@ -349,7 +349,7 @@ async def update_artifact(
 
 async def delete_artifact(
     db: AsyncSession, artifact_id: UUID, project_id: UUID, user_id: Optional[int] = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Delete an artifact.
 
@@ -382,7 +382,7 @@ async def export_artifact(
     project_id: UUID,
     export_format: str = "text",
     user_id: Optional[int] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Export an artifact in various formats.
 
@@ -511,7 +511,7 @@ async def export_artifact(
 
 async def get_artifact_stats(
     project_id: UUID, db: AsyncSession, user_id: Optional[int] = None
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get statistics about artifacts in a project.
 

@@ -36,14 +36,8 @@ export class ProjectDetailsComponent {
     knowledgeBaseComponent = null,
     modelConfig = null
   } = {}) {
-    // --- DEBUG LOG ---
-    if (typeof window !== "undefined" && window.APP_CONFIG?.DEBUG) {
-      console.log(`[ProjectDetailsComponent] CONSTRUCTOR called`, { stack: (new Error()).stack });
-    } else {
-      // fallback basic log
-      console.log(`[ProjectDetailsComponent] CONSTRUCTOR called`);
-    }
     /* ------------------------------------------------------  dependency gate */
+    // Note: Debug logging removed to adhere to no-console rule. Use notificationHandler if needed.
     if (
       !app || !projectManager || !eventHandlers ||
       !modalManager || !FileUploadComponentClass ||
@@ -109,13 +103,7 @@ export class ProjectDetailsComponent {
   /* ========== INITIALISATION ================================================= */
 
   async initialize() {
-    // --- DEBUG LOG ---
-    if (typeof window !== "undefined" && window.APP_CONFIG?.DEBUG) {
-      console.log(`[ProjectDetailsComponent] INITIALIZE called`, { stack: (new Error()).stack });
-    } else {
-      // fallback basic log
-      console.log(`[ProjectDetailsComponent] INITIALIZE called`);
-    }
+    // Note: Debug logging removed to adhere to no-console rule. Use notificationHandler if needed.
     if (this.state.initialized) {
       this.notification.log("[ProjectDetailsComponent] Already initialized.");
       return true;
@@ -794,18 +782,28 @@ export class ProjectDetailsComponent {
 
   /* ========== CONVERSATION NAV ============================================ */
 
-  _openConversation(cv) {
+  async _openConversation(cv) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !cv?.id) {
       this.notification.error("[ProjectDetailsComponent] openConversation invalid ids", { pid, cv });
       this.app.showNotification("Invalid conversation.", "error");
       return;
     }
-    /* Add chatId param via router */
-    const url = new URL(this.router.getURL());
-    url.searchParams.set("chatId", cv.id);
-    this.router.navigate(url.toString());
-    this.notification.log(`[ProjectDetailsComponent] conversation ${cv.id} opened`);
+
+    try {
+      // Fetch conversation details from backend to ensure validity
+      const conversation = await this.projectManager.getConversation(cv.id);
+
+      // Add chatId param via router
+      const url = new URL(this.router.getURL());
+      url.searchParams.set("chatId", cv.id);
+      this.router.navigate(url.toString());
+
+      this.notification.log(`[ProjectDetailsComponent] conversation ${cv.id} opened`, conversation);
+    } catch (error) {
+      this.notification.error("[ProjectDetailsComponent] Failed to fetch conversation:", error);
+      this.app.showNotification("Failed to load conversation details.", "error");
+    }
   }
 }
 

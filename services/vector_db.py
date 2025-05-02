@@ -15,7 +15,7 @@ import logging
 import json
 import os
 import uuid
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Any, Optional, Callable
 from uuid import UUID
 
 import numpy as np
@@ -102,8 +102,8 @@ class VectorDB:
         self._initialize_embedding_model()
 
         # In-memory storage
-        self.vectors: Dict[str, List[float]] = {}  # doc_id -> vector
-        self.metadata: Dict[str, Dict[str, Any]] = {}  # doc_id -> metadata
+        self.vectors: dict[str, List[float]] = {}  # doc_id -> vector
+        self.metadata: dict[str, dict[str, Any]] = {}  # doc_id -> metadata
         self.id_map: List[str] = []  # Maps FAISS internal indices to document IDs
 
     def _initialize_faiss(self) -> None:
@@ -141,7 +141,7 @@ class VectorDB:
             except Exception as e:
                 logger.warning(f"Model warmup failed: {str(e)}")
 
-    async def test_connection(self) -> Dict[str, Any]:
+    async def test_connection(self) -> dict[str, Any]:
         """Test the vector database connection and basic functionality."""
         try:
             model_ready = (
@@ -269,7 +269,7 @@ class VectorDB:
     async def add_documents(
         self,
         chunks: List[str],
-        metadatas: Optional[List[Dict[str, Any]]] = None,
+        metadatas: Optional[List[dict[str, Any]]] = None,
         ids: Optional[List[str]] = None,
         batch_size: int = 100,
     ) -> List[str]:
@@ -295,7 +295,7 @@ class VectorDB:
 
         return successful_ids
 
-    def _validate_metadatas(self, metadatas: List[Dict[str, Any]]) -> None:
+    def _validate_metadatas(self, metadatas: List[dict[str, Any]]) -> None:
         """Validate that all metadatas contain required fields."""
         required_fields = ["project_id", "knowledge_base_id", "file_id"]
         for i, metadata in enumerate(metadatas):
@@ -311,7 +311,7 @@ class VectorDB:
                 )
 
     async def _process_document_batch(
-        self, chunks: List[str], metadatas: List[Dict[str, Any]], ids: List[str]
+        self, chunks: List[str], metadatas: List[dict[str, Any]], ids: List[str]
     ) -> List[str]:
         """Process a single batch of documents."""
         embeddings = await self.generate_embeddings(chunks)
@@ -363,9 +363,9 @@ class VectorDB:
         self,
         query: str,
         top_k: int = 5,
-        filter_metadata: Optional[Dict[str, Any]] = None,
+        filter_metadata: Optional[dict[str, Any]] = None,
         query_expansion: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """Search for documents similar to the query text."""
         if not query:
             raise VectorDBError("Query cannot be empty")
@@ -385,8 +385,8 @@ class VectorDB:
         self,
         query_vector: List[float],
         top_k: int,
-        filter_metadata: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        filter_metadata: Optional[dict[str, Any]],
+    ) -> List[dict[str, Any]]:
         """FAISS-based similarity search implementation."""
         results = []
         query_np = np.array([query_vector], dtype=np.float32)
@@ -415,8 +415,8 @@ class VectorDB:
         self,
         query_vector: List[float],
         top_k: int,
-        filter_metadata: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        filter_metadata: Optional[dict[str, Any]],
+    ) -> List[dict[str, Any]]:
         """scikit-learn based cosine similarity search."""
         ids = list(self.vectors.keys())
         vectors = [self.vectors[d_id] for d_id in ids]
@@ -444,8 +444,8 @@ class VectorDB:
         self,
         query_vector: List[float],
         top_k: int,
-        filter_metadata: Optional[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        filter_metadata: Optional[dict[str, Any]],
+    ) -> List[dict[str, Any]]:
         """Manual cosine similarity as a fallback."""
         results = []
         for doc_id, vector in self.vectors.items():
@@ -473,7 +473,7 @@ class VectorDB:
             logger.error(f"Error calculating similarity: {str(e)}")
             return 0.0
 
-    def _format_result(self, doc_id: str, score: float) -> Dict[str, Any]:
+    def _format_result(self, doc_id: str, score: float) -> dict[str, Any]:
         """Format search result for consistent output."""
         return {
             "id": doc_id,
@@ -483,7 +483,7 @@ class VectorDB:
         }
 
     def _matches_filter(
-        self, metadata: Dict[str, Any], filter_criteria: Dict[str, Any]
+        self, metadata: dict[str, Any], filter_criteria: dict[str, Any]
     ) -> bool:
         """Check if document metadata matches the given filter criteria."""
         for key, value in filter_criteria.items():
@@ -549,7 +549,7 @@ class VectorDB:
             self.index = None
             self.id_map = []
 
-    async def delete_by_filter(self, filter_metadata: Dict[str, Any]) -> int:
+    async def delete_by_filter(self, filter_metadata: dict[str, Any]) -> int:
         """Delete documents matching a given filter."""
         if not filter_metadata:
             return 0
@@ -561,7 +561,7 @@ class VectorDB:
         ]
         return await self.delete_by_ids(ids_to_delete)
 
-    async def get_document(self, doc_id: str) -> Optional[Dict[str, Any]]:
+    async def get_document(self, doc_id: str) -> Optional[dict[str, Any]]:
         """Get a document by its ID."""
         if doc_id not in self.metadata:
             return None
@@ -573,7 +573,7 @@ class VectorDB:
             "vector": self.vectors.get(doc_id),
         }
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Get basic statistics about the vector database.
 
         Returns:
@@ -591,7 +591,7 @@ class VectorDB:
 
     async def get_knowledge_base_status(
         self, project_id: UUID, db: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get comprehensive status of the knowledge base for a project.
 
         This method provides detailed metrics and health information about
@@ -602,7 +602,7 @@ class VectorDB:
             db: Database session for querying related records
 
         Returns:
-            Dict containing status information about:
+            dict containing status information about:
             - Vector DB health (connection, model, index)
             - Storage metrics (size, location)
             - Content metrics (document count, file types)
@@ -690,7 +690,7 @@ async def process_file_for_search(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     knowledge_base_id: Optional[UUID] = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Process a file for similarity search."""
     from services.text_extraction import get_text_extractor
 
@@ -763,7 +763,7 @@ async def process_file_for_search(
 
 async def search_context_for_query(
     query: str, vector_db: VectorDB, project_id: Optional[str] = None, top_k: int = 5
-) -> List[Dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """Search for relevant context for a query within a project."""
     filter_metadata = {"project_id": project_id} if project_id else None
     return await vector_db.search(
@@ -801,7 +801,7 @@ async def process_files_for_project(
     db: Optional[Any] = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Batch process project files with progress tracking.
 
     Processes files associated with a project for search indexing.
@@ -832,11 +832,11 @@ async def process_files_for_project(
     config = await get_storage_config()
     storage = get_file_storage(config)
 
-    results: Dict[str, Any] = {
+    results: dict[str, Any] = {
         "processed": 0,  # int
         "failed": 0,     # int
         "errors": [],    # List[str]
-        "details": []    # List[Dict[str, Any]]
+        "details": []    # List[dict[str, Any]]
     }
 
     # Get file records to process
@@ -893,8 +893,8 @@ async def process_files_for_project(
 
 
 async def search_project_context(
-    project_id: UUID, query: str, top_k: int = 5, filters: Optional[Dict] = None
-) -> List[Dict[str, Any]]:
+    project_id: UUID, query: str, top_k: int = 5, filters: Optional[dict] = None
+) -> List[dict[str, Any]]:
     """Project-scoped search with automatic vector DB setup.
 
     Performs search within a specific project context with automatic vector DB

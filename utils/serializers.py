@@ -6,7 +6,7 @@ Ensures consistent response formats across endpoints.
 """
 
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Sequence, Union
+from typing import Any, Optional, List, Sequence, Union
 
 from models.project import Project
 from models.conversation import Conversation
@@ -44,7 +44,7 @@ def serialize_uuid(id_value: Any) -> Optional[str]:
     return None
 
 
-def serialize_project(project: Project) -> Dict[str, Any]:
+def serialize_project(project: Project) -> dict[str, Any]:
     """
     Serialize a Project model to a dictionary.
 
@@ -74,7 +74,7 @@ def serialize_project(project: Project) -> Dict[str, Any]:
     }
 
 
-def serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
+def serialize_conversation(conversation: Conversation) -> dict[str, Any]:
     """
     Serialize a Conversation model or dict to a dictionary.
 
@@ -104,7 +104,7 @@ def serialize_conversation(conversation: Conversation) -> Dict[str, Any]:
     }
 
 
-def serialize_message(message: Message) -> Dict[str, Any]:
+def serialize_message(message: Message) -> dict[str, Any]:
     """
     Serialize a Message model to a dictionary.
 
@@ -127,7 +127,7 @@ def serialize_message(message: Message) -> Dict[str, Any]:
 
 def serialize_artifact(
     artifact: Artifact, include_content: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Serialize an Artifact model to a dictionary.
 
@@ -164,7 +164,7 @@ def serialize_artifact(
 
 def serialize_project_file(
     file: ProjectFile, include_content: bool = False, include_file_path: bool = False
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Serialize a ProjectFile model to a dictionary.
 
@@ -198,7 +198,7 @@ def serialize_project_file(
 
 def serialize_list(
     items: Sequence[Any], serializer_func, **kwargs
-) -> List[Dict[str, Any]]:
+) -> List[dict[str, Any]]:
     """
     Serialize a list of items using the provided serializer function.
 
@@ -213,7 +213,7 @@ def serialize_list(
     return [serializer_func(item, **kwargs) for item in items]
 
 
-def serialize_knowledge_base(kb: "KnowledgeBase") -> Dict[str, Any]:
+def serialize_knowledge_base(kb: "KnowledgeBase") -> dict[str, Any]:
     """
     Serialize a KnowledgeBase model to a dictionary.
 
@@ -234,7 +234,7 @@ def serialize_knowledge_base(kb: "KnowledgeBase") -> Dict[str, Any]:
     }
 
 
-def serialize_vector_result(result: Dict[str, Any]) -> Dict[str, Any]:
+def serialize_vector_result(result: dict[str, Any]) -> dict[str, Any]:
     """
     Standardize vector search results format.
 

@@ -14,7 +14,7 @@ and response_utils.py.
 
 import logging
 import tiktoken
-from typing import List, Dict, Optional, Any, Union, AsyncGenerator, cast
+from typing import List, Optional, Any, Union, AsyncGenerator, cast
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
@@ -32,7 +32,7 @@ SUMMARIZATION_CHUNK_SIZE = 1800  # Adjust as needed
 
 
 async def do_summarization(
-    messages: List[Dict[str, str]], model_name: str = "o1"
+    messages: List[dict[str, str]], model_name: str = "o1"
 ) -> str:
     """
     Summarizes a list of conversation messages. This function calls openai_chat
@@ -54,8 +54,8 @@ async def do_summarization(
 
     try:
         # Collect all response chunks from the async generator
-        complete_response: Dict[str, Any] = {}
-        result: Union[Dict[str, Any], AsyncGenerator[Union[Dict[str, Any], bytes], None]] = await openai_chat(
+        complete_response: dict[str, Any] = {}
+        result: Union[dict[str, Any], AsyncGenerator[Union[dict[str, Any], bytes], None]] = await openai_chat(
             messages=summarization_input,
             model_name=model_name,
             max_completion_tokens=300,
@@ -70,14 +70,14 @@ async def do_summarization(
             async for chunk in result:
                 if isinstance(chunk, (dict, bytes, bytearray, memoryview)):
                     if isinstance(chunk, dict):
-                        complete_response.update(cast(Dict[str, Any], chunk))
+                        complete_response.update(cast(dict[str, Any], chunk))
                     else:
                         try:
                             if isinstance(chunk, memoryview):
                                 chunk = chunk.tobytes()
                             chunk_str = chunk.decode("utf-8")
                             chunk_dict = json.loads(chunk_str)
-                            if isinstance(chunk_dict, Dict):
+                            if isinstance(chunk_dict, dict):
                                 complete_response.update(chunk_dict)
                         except (UnicodeDecodeError, json.JSONDecodeError) as e:
                             logger.error(f"Error decoding chunk: {e}")
@@ -106,11 +106,11 @@ class ContextTokenTracker:
 
 
 async def manage_context(
-    messages: List[Dict[str, str]],
+    messages: List[dict[str, str]],
     user_message: Optional[str] = None,
-    search_results: Optional[Dict[str, Any]] = None,
+    search_results: Optional[dict[str, Any]] = None,
     max_tokens: Optional[int] = None,
-) -> List[Dict[str, str]]:
+) -> List[dict[str, str]]:
     """
     Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
     This modifies the conversation in-place by replacing older messages with a single summary if needed.
@@ -191,7 +191,7 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
 
 
 def estimate_token_count(
-    messages: List[Dict[str, str]], model: str = "claude-3-sonnet-20240229"
+    messages: List[dict[str, str]], model: str = "claude-3-sonnet-20240229"
 ) -> int:
     """
     Count tokens using available methods with proper fallback handling.

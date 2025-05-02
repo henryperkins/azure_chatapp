@@ -15,7 +15,7 @@ import logging
 import tempfile
 from pathlib import Path
 from io import IOBase
-from typing import Any, Dict, Optional, Union, cast, BinaryIO
+from typing import Any, Optional, Union, cast, BinaryIO
 from uuid import UUID
 
 # Local imports
@@ -165,7 +165,7 @@ class FileStorage:
         file_content: FileContent,
         filename: str,
         content_type: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
         project_id: Optional[UUID] = None,
     ) -> str:
         """
@@ -213,7 +213,7 @@ class FileStorage:
         content: bytes,
         filename: str,
         content_type: Optional[str],
-        metadata: Optional[Dict[str, Any]],
+        metadata: Optional[dict[str, Any]],
     ) -> str:
         from azure.storage.blob import ContentSettings as AzureContentSettings
 
@@ -239,11 +239,11 @@ class FileStorage:
         content: bytes,
         filename: str,
         content_type: Optional[str],
-        metadata: Optional[Dict[str, Any]],
+        metadata: Optional[dict[str, Any]],
     ) -> str:
         import asyncio
 
-        extra_args: Dict[str, Any] = {}
+        extra_args: dict[str, Any] = {}
         if content_type:
             extra_args["ContentType"] = content_type
         if metadata:
@@ -370,7 +370,7 @@ class FileStorage:
 # ----------------------------------------------------
 # Configuration & Helpers
 # ----------------------------------------------------
-async def get_storage_config() -> Dict[str, Any]:
+async def get_storage_config() -> dict[str, Any]:
     """
     Return standard config from your 'settings' object or environment.
     Adjust attribute names as needed for your environment.
@@ -389,7 +389,7 @@ async def get_storage_config() -> Dict[str, Any]:
     }
 
 
-def get_file_storage(config: Dict[str, Any]) -> FileStorage:
+def get_file_storage(config: dict[str, Any]) -> FileStorage:
     """
     Create a FileStorage instance based on config dictionary.
     """

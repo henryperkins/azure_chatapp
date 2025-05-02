@@ -7,7 +7,7 @@ Handles schema validation, automatic fixes, and initialization.
 
 import logging
 import time
-from typing import Optional, List, Set, Dict, Tuple, AsyncGenerator
+from typing import Optional, List, Set, Tuple, AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import inspect, text, MetaData
@@ -133,13 +133,13 @@ class SchemaManager:
         async with async_engine.begin() as conn:
             # Create missing tables
             await conn.run_sync(Base.metadata.create_all)
-        
+
             # Get existing tables using async pattern
             existing_tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
-        
+
             # Add missing columns/indexes using proper async methods
             # ... (rest of schema alignment logic using async connections)
-            
+
 
             inspector = await conn.run_sync(lambda sync_conn: inspect(sync_conn))
             for table in Base.metadata.tables.values():
@@ -150,7 +150,7 @@ class SchemaManager:
                     if column.name not in db_columns:
                         logger.info(f"Adding column: {table.name}.{column.name}")
                         self._add_column(conn, table.name, column)
-            
+
             # 3. Create missing indexes
             for table in Base.metadata.tables.values():
                 if not inspector.has_table(table.name):
@@ -195,7 +195,7 @@ class SchemaManager:
             )
             return {row[0] for row in result}
 
-    async def _get_db_schema(self) -> Dict:
+    async def _get_db_schema(self) -> dict:
         """Retrieve current database schema information."""
         schema_info = {"tables": set(), "columns": {}, "indexes": {}, "constraints": {}}
 
