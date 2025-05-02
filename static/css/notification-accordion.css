@@ -1,0 +1,28 @@
+/* notification-accordion.css */
+
+.accordion-banner {
+  @apply alert shadow-md my-2 flex flex-col w-full max-w-lg;
+  border-radius: 0.33rem;
+  transition: box-shadow 0.2s;
+}
+
+.accordion-banner .accordion-summary {
+  @apply flex items-center justify-between w-full cursor-pointer font-medium;
+}
+
+.accordion-banner .accordion-toggle-btn {
+  @apply btn btn-xs btn-ghost ml-2;
+}
+
+.accordion-banner .accordion-message-list {
+  @apply mt-2 pl-4 list-disc text-sm text-base-content/80;
+  display: none;
+}
+
+.accordion-banner.expanded .accordion-message-list {
+  display: block;
+}
+
+.accordion-banner .accordion-message-list li {
+  @apply mb-1;
+}
