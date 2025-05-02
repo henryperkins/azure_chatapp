@@ -210,14 +210,13 @@ textarea:focus-visible,
 
 /* Enhanced Modals */
 .modal-box {
-  @apply max-h-[90vh] overflow-y-auto w-full px-2;
-  @apply max-w-full; /* Prevent modal overflow on mobile */
+  @apply max-h-[90vh] overflow-y-auto px-2;
   @apply overflow-x-auto; /* Prevent horizontal overflow on small screens */
 }
 
 @media (max-width: 640px) {
   .modal-box {
-    @apply max-w-xs px-2 w-full;
+    @apply max-w-xs px-2;
     @apply max-w-full;
     @apply overflow-x-auto;
   }
@@ -468,6 +467,10 @@ textarea:focus-visible,
 /* Enhanced Notification Styling */
 #notificationContainer .alert {
   opacity: 1;
+  max-width: 90vw !important;
+  min-width: 220px !important;
+  margin: 0.5rem 1.5rem !important;
+  box-sizing: border-box;
 }
 
 /* HIGH CONTRAST NOTIFICATION VARIANTS */
@@ -475,7 +478,7 @@ textarea:focus-visible,
 .notification-error,
 .notification-warning,
 .notification-info {
-  background: #fff !important;
+  /* background: #fff !important; */ /* Let DaisyUI's background color show for full color coding */
   color: #1a1a1a !important;
   @apply shadow-md max-w-sm duration-300 text-sm font-normal px-3 py-2 flex items-center border-l-[4px];
   border-radius: 0.33rem;
@@ -694,7 +697,6 @@ textarea:focus-visible,
 .card,
 .stats,
 .modal,
-.modal-box,
 .project-card,
 .file-preview-item,
 .kb-result-card {

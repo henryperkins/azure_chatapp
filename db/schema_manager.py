@@ -32,6 +32,7 @@ def automated_alembic_migrate(message: str = "Automated migration", revision_dir
 
     logger = logging.getLogger(__name__)
     logger.info("Starting Alembic auto-migration workflow...")
+    print("==> (Alembic) Starting Alembic auto-migration workflow...")
 
     # Path adjustments:
     alembic_ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
@@ -49,10 +50,13 @@ def automated_alembic_migrate(message: str = "Automated migration", revision_dir
     prev_head = script.get_current_head()
 
     logger.info("Checking for model/db schema drift to issue new Alembic revision...")
+    print("==> (Alembic) Checking for model/db schema drift to issue new Alembic revision...")
     try:
         command.revision(alembic_cfg, message=message, autogenerate=True)
+        print("==> (Alembic) Alembic revision command executed.")
     except Exception as e:
         logger.error(f"Alembic revision failed: {e}")
+        print(f"==> (Alembic) Alembic revision failed: {e}")
         raise
 
     # Check if new revision was created
@@ -60,15 +64,19 @@ def automated_alembic_migrate(message: str = "Automated migration", revision_dir
     new_head = script.get_current_head()
     if prev_head != new_head:
         logger.info(f"New Alembic migration created: {new_head}. Upgrading database...")
+        print(f"==> (Alembic) New migration created: {new_head}. Upgrading database to head...")
     else:
         logger.info(f"No changes detected. Database already up to date.")
+        print("==> (Alembic) No changes detected. Database already up to date (no new migration).")
 
     # 2. Always upgrade to head (idempotent)
     try:
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migration applied: database is at head.")
+        print("==> (Alembic) Alembic upgrade applied: database is at head.")
     except Exception as e:
         logger.error(f"Alembic upgrade failed: {e}")
+        print(f"==> (Alembic) Alembic upgrade failed: {e}")
         raise
 # --- End Alembic Migration Integration ---
 
@@ -100,30 +108,44 @@ class SchemaManager:
         """
         try:
             logger.info("Starting database initialization...")
+            print("==> Starting database initialization...")
 
             # Step 1: Create missing tables
             existing_tables = await self.get_existing_tables()
+            print(f"==> Existing tables: {sorted(existing_tables)}")
             tables_to_create = [
                 t for t in Base.metadata.tables.keys() if t not in existing_tables
             ]
 
             if tables_to_create:
-                logger.info(f"Creating {len(tables_to_create)} missing tables")
+                msg = f"Creating {len(tables_to_create)} missing tables: {tables_to_create}"
+                logger.info(msg)
+                print("==> " + msg)
                 await self._create_missing_tables(tables_to_create)
+            else:
+                print("==> No tables need creation.")
 
             # Step 2: Schema alignment
             logger.info("Running schema alignment...")
+            print("==> Running schema alignment...")
             await self.fix_schema()
 
             # Step 3: Final validation
             logger.info("Validating schema...")
+            print("==> Validating schema...")
             issues = await self.validate_schema()
             if issues:
-                logger.warning(f"Schema validation completed with {len(issues)} issues")
+                msg = f"Schema validation completed with {len(issues)} issues."
+                logger.warning(msg)
+                print("==> " + msg)
                 for issue in issues[:5]:  # Log first 5 issues
                     logger.warning(f"  - {issue}")
+                    print(f"==> (ISSUE) {issue}")
+                if len(issues) > 5:
+                    print(f"==> ...and {len(issues)-5} more issues.")
             else:
                 logger.info("Schema validation successful - no issues found")
+                print("==> Schema validation successful - no issues found.")
 
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")

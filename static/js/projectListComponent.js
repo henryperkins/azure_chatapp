@@ -255,6 +255,12 @@ export class ProjectListComponent {
 
     /** Render list of projects */
     renderProjects(data) {
+        // Handle unauthenticated: projectManager emits { error: true, reason: 'auth_required' }
+        if (data && data.error && data.reason === 'auth_required') {
+            this._showLoginRequired();
+            return;
+        }
+
         const projects = this._extractProjects(data);
         this.state.projects = projects || [];
 
