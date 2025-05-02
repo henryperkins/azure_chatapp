@@ -1,3 +1,5 @@
+import { showGroupedNotificationByTypeAndTime } from './handler-helper.js';
+
 /**
  * notification-handler.js
  * DependencySystem/DI-compliant, modular notification handler for robust UX toasts.
@@ -35,6 +37,15 @@ export function createNotificationHandler({ DependencySystem } = {}) {
   // Show a notification
   function show(message, type = 'info', options = {}) {
     const container = ensureNotificationContainer();
+
+    // Group by type and time window if options.groupByTypeAndTime is true
+    if (options.groupByTypeAndTime) {
+      return showGroupedNotificationByTypeAndTime({
+        message,
+        type,
+        container
+      });
+    }
 
     // Generate a unique ID each time
     const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
