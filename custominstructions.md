@@ -50,17 +50,61 @@ function setupSidebarEvents({ eventHandlers, domAPI }) {
 }
 ```
 
-### 4. Notifications via DI, Never Console/Alert
+### 4. Notifications via DI—With Grouping & Context Options, Never Console/Alert
 
 ```javascript
+// Always inject notificationHandler by DI—not globals.
+// To properly group notifications by feature or context, pass the group/context/module/source options.
+
 export function createNotificationUtil({ notificationHandler }) {
   if (!notificationHandler) throw new Error('notificationHandler required');
   return {
-    info: msg => notificationHandler.show(msg, 'info'),
-    error: msg => notificationHandler.show(msg, 'error'),
+    // Basic usage (info notification)
+    info: (msg, opts = {}) => notificationHandler.show(msg, 'info', opts),
+
+    // Example: Project errors grouped by context
+    projectError: (msg, opts = {}) =>
+      notificationHandler.show(msg, 'error', { group: true, context: 'projectManager', ...opts }),
+
+    // Example: API errors grouped by source
+    apiError: (msg, opts = {}) =>
+      notificationHandler.show(msg, 'error', { group: true, source: 'apiRequest', ...opts }),
+
+    // Example: Global (cross-module) errors
+    globalError: (msg, opts = {}) =>
+      notificationHandler.show(msg, 'error', { group: true, ...opts }),
+
+    // Simple error usage (no grouping)
+    error: (msg, opts = {}) => notificationHandler.show(msg, 'error', opts),
   };
 }
 ```
+
+**Notification Grouping Options:**
+- `group: true` — Enables grouping/batching in a notification accordion.
+- `context` — Arbitrary string for logical grouping ("auth", "projectManager", etc). Prefer this for feature/module grouping.
+- `module` — Subsystem or feature name ("chatManager", "sidebar").
+- `source` — Fine-grained action or operation ("formSubmit", "apiRequest").
+- Group keys resolve in this order: `context` → `module` → `source` → `"general"`.
+
+**Best practices**
+- For module/feature-specific grouping, always provide `group: true` and a `context`:
+  ```js
+  notificationHandler.show('Could not load file', 'error', { group: true, context: 'file-upload' });
+  ```
+- For operation-level grouping:
+  ```js
+  notificationHandler.show('Save failed', 'error', { group: true, source: 'saveButton' });
+  ```
+- For global (cross-module) grouping, supply only `group: true` (context/module/source omitted).
+
+| Option    | Purpose                        | Example Value           |
+|-----------|-------------------------------|------------------------|
+| group     | Enable notification grouping   | true                   |
+| context   | Module/feature scope           | 'projectManager'       |
+| module    | Subsystem                     | 'chatManager'          |
+| source    | Fine-grained action           | 'apiRequest'           |
+
 
 ### 5. Error Handling, Context-Rich Logging
 
