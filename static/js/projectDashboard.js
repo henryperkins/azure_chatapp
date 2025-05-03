@@ -156,6 +156,8 @@ class ProjectDashboard {
   async showProjectDetails(projectObjOrId) {
     let project = null;
     let projectId = null;
+    let currentLoadId = Symbol('loadId');
+    this._lastLoadId = currentLoadId;
 
     // Determine if argument is an object (project) or string (id)
     if (
@@ -192,12 +194,6 @@ class ProjectDashboard {
       return false;
     }
 
-    // Delay setting view until project data is confirmed ready
-    // this._setView({ showList: false, showDetails: true }); // Moved down
-
-    // if (this.components.projectList) this.components.projectList.hide(); // Moved down
-    // if (this.components.projectDetails) this.components.projectDetails.show(); // Moved down
-
     // Update URL param
     this.browserService.setSearchParam('project', projectId);
 
@@ -214,6 +210,10 @@ class ProjectDashboard {
       if (this.components.projectDetails && this.components.projectDetails.renderProject) {
         try {
           // Step 1: Make sure the DOM element is actually visible
+          if (this._lastLoadId !== currentLoadId) {
+            this.logger.info('[ProjectDashboard] Aborting showProjectDetails (direct path) due to newer load');
+            return false;
+          }
           console.log('[ProjectDashboard] Setting initial view visibility first');
           this._setView({ showList: false, showDetails: true });
 
@@ -255,11 +255,16 @@ class ProjectDashboard {
     if (this.app?.state?.isAuthenticated && this.projectManager?.loadProjectDetails) {
       try {
         project = await this.projectManager.loadProjectDetails(projectId);
+        if (this._lastLoadId !== currentLoadId) {
+          this.logger.info('[ProjectDashboard] Aborting showProjectDetails (API path) due to newer load');
+          return false;
+        }
         if (!project) {
           this.logger.warn('[ProjectDashboard] Project not found after details load');
           this.app?.showNotification('Project not found', 'error');
           // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
           this.showProjectList();
+          return false;
         }
         if (project && this.components.projectDetails && this.components.projectDetails.renderProject) {
           // Always set as current project to trigger downstream events
@@ -302,14 +307,20 @@ class ProjectDashboard {
           }
         }
       } catch (error) {
+        if (this._lastLoadId !== currentLoadId) {
+          this.logger.info('[ProjectDashboard] Aborting showProjectDetails error handler due to newer load');
+          return false;
+        }
         this.logger.error('[ProjectDashboard] Failed to load project details:', error);
         this.app?.showNotification('Failed to load project details', 'error');
         // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
         this.showProjectList();
+        return false;
       }
     } else {
       // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
       this.showProjectList();
+      return false;
     }
 
     return true;
