@@ -282,19 +282,88 @@ DependencySystem.register('apiRequest', apiRequest);
 
 const eventHandlers = createEventHandlers({ DependencySystem });
 DependencySystem.register('eventHandlers', eventHandlers);
-const notificationHandler = createNotificationHandler({ eventHandlers, DependencySystem });
-/**
- * Compatibility shim: Add .log/.warn/.error/.confirm to the notification handler for legacy consumers.
+/*
+ * Enhanced notification handler initialization with error boundary and legacy shims.
  */
+const notificationHandler = createNotificationHandler({
+  eventHandlers,
+  DependencySystem
+});
+
+// Add a global loading handler to hide notifications on page changes
+document.addEventListener('locationchange', function() {
+  // Only clear notifications if they're not important
+  const container = document.getElementById('notificationArea');
+  if (container) {
+    const notificationsToKeep = Array.from(container.children).filter(
+      el => el.classList.contains('priority') || el.classList.contains('sticky')
+    );
+
+    // Clear non-important notifications
+    notificationHandler.clear();
+
+    // Re-add important ones
+    notificationsToKeep.forEach(el => container.appendChild(el));
+  }
+});
+
+// Add notification error boundary
+const originalShow = notificationHandler.show;
+notificationHandler.show = function(message, type, options) {
+  try {
+    return originalShow.call(this, message, type, options);
+  } catch (err) {
+    console.error('Failed to show notification:', err);
+    // Create a simple fallback notification without using any complex functions
+    try {
+      const container = document.getElementById('notificationArea') || document.body;
+      const div = document.createElement('div');
+      div.textContent = message || 'Notification error';
+      div.className = 'alert alert-' + (type || 'error');
+      div.style.margin = '10px';
+      div.style.padding = '10px';
+      container.appendChild(div);
+      setTimeout(() => div.remove(), 5000);
+    } catch (e) {
+      // Last resort
+      console.error('Critical notification error:', message, e);
+    }
+    return null;
+  }
+};
+
+// Enhanced notification shim with error trapping
 function createNotificationShim(h) {
-    return {
-        ...h,
-        log: (...args) => h.show?.(args[0], "info", { ...(args[1] || {}), context: "App" }),
-        warn: (...args) => h.show?.(args[0], "warning", { ...(args[1] || {}), context: "App" }),
-        error: (...args) => h.show?.(args[0], "error", { ...(args[1] || {}), context: "App" }),
-        confirm: (...args) => h.show?.(args[0], "info", { ...args[1], action: "Confirm", context: "App" }),
-        debug: (...args) => h.debug?.(...args) ?? h.show?.(args.join(' '), "info", { timeout: 2000, context: "App" })
-    };
+  const safeFn = (fn, fallbackType) => (...args) => {
+    try {
+      return fn.apply(h, args);
+    } catch (err) {
+      console.error(`Error in notification ${fallbackType}:`, err);
+      try {
+        // Simple DOM-based fallback
+        const msg = args[0] || `[${fallbackType}] Notification failed`;
+        const div = document.createElement('div');
+        div.textContent = msg;
+        div.className = `alert alert-${fallbackType}`;
+        div.style.margin = '10px';
+        div.style.padding = '10px';
+        document.body.appendChild(div);
+        setTimeout(() => div.remove(), 5000);
+      } catch (e) {
+        // Last resort: console
+        console.error(`[${fallbackType}] ${args[0]}`, e);
+      }
+    }
+  };
+
+  return {
+    ...h,
+    log: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
+    warn: safeFn(h.show || ((...args) => h(args[0], 'warning')), 'warning'),
+    error: safeFn(h.show || ((...args) => h(args[0], 'error')), 'error'),
+    confirm: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
+    debug: safeFn(h.debug || ((...args) => console.debug(...args)), 'debug')
+  };
 }
 const notificationHandlerWithLog = createNotificationShim(notificationHandler);
 DependencySystem.register('notificationHandler', notificationHandler);
