@@ -1,36 +1,41 @@
 /**
- * Handler-helper.js
- * Accordion/grouped notification implementation (factory/DI style).
- * Accepts { eventHandlers, getIconForType, notificationHandler }.
- *
- * Harmonizes tracked event handling, styling, accessibility, and DOM safety.
+ * Handler-helper.js - Improved grouping notifications implementation
  */
 
-/**
- * Factory for grouped notification helpers.
- * @param {Object} deps
- * @param {Object} deps.eventHandlers - Required; must have trackListener, cleanupListeners.
- * @param {Function} deps.getIconForType - Optional; returns HTML string or Element.
- * @param {Object} deps.notificationHandler - Optional; for unified lifecycle.
- */
 function createGroupedNotificationHelper({ eventHandlers, getIconForType, notificationHandler } = {}) {
   if (!eventHandlers || typeof eventHandlers.trackListener !== "function") {
     throw new Error("[groupedNotificationHelper] eventHandlers with trackListener is required.");
   }
 
-  // Explicit storage keyed by groupKey
+  // Store notifications with proper cleanup handlers
   const groupedNotifications = new Map();
-  const GROUP_WINDOW_MS = 5000;
+  const GROUP_WINDOW_MS = 10000; // Increased from 5s to 10s for better UX
 
+  // Improved context + type based grouping
   function getTypeTimeContextGroupKey(type, context) {
     const bucket = Math.floor(Date.now() / GROUP_WINDOW_MS);
     const ctx = (context || 'general').replace(/\s+/g, '_');
     return `${type}-${ctx}-${bucket}`;
   }
 
+  // HTML template for group banner
+  const groupTemplate = document.createElement('template');
+  groupTemplate.innerHTML = `
+    <div class="accordion-banner" role="alert">
+      <div class="accordion-summary" tabindex="0">
+        <span class="notification-context-badge"></span>
+        <span class="accordion-summary-text"></span>
+        <button type="button" class="accordion-toggle-btn">
+          Show Details
+        </button>
+        <button type="button" class="accordion-dismiss-btn" title="Dismiss" aria-label="Dismiss notification group">×</button>
+      </div>
+      <ul class="accordion-message-list" role="region"></ul>
+    </div>
+  `;
+
   /**
-   * Show a grouped notification, returns group notificationId (not groupKey!).
-   * Accepts .context field (string).
+   * Show a grouped notification
    */
   function showGroupedNotificationByTypeAndTime({ message, type = "info", context, container }) {
     const groupKey = getTypeTimeContextGroupKey(type, context);
@@ -52,7 +57,8 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
       groupKey,
       expanded: false,
       element: null,
-      teardown: null, // for lifecycle
+      teardown: null,
+      registeredEvents: [],
     };
     groupedNotifications.set(groupKey, group);
     renderGroupBanner(group, container);
@@ -60,175 +66,235 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
   }
 
   /**
-   * Programmatically dismiss a notification group by groupId or groupKey.
+   * Dismiss a notification group
    */
   function hideGroupedNotification(idOrKey) {
-    // Accept either groupKey or notificationId for convenience.
+    // Accept either groupKey or notificationId for convenience
     let group = null;
+
     // Try groupKey
-    if (groupedNotifications.has(idOrKey)) group = groupedNotifications.get(idOrKey);
-    else group = Array.from(groupedNotifications.values()).find(
-      g => g.notificationId === idOrKey
-    );
-    if (!group) return;
-    if (group.element && group.element.parentNode) {
-      group.element.parentNode.removeChild(group.element);
+    if (groupedNotifications.has(idOrKey)) {
+      group = groupedNotifications.get(idOrKey);
+    } else {
+      // Try by notificationId
+      group = Array.from(groupedNotifications.values()).find(
+        g => g.notificationId === idOrKey
+      );
     }
-    if (typeof group.teardown === "function") group.teardown();
+
+    if (!group) return false;
+
+    // Clean up DOM element with animation
+    if (group.element && group.element.parentNode) {
+      group.element.classList.add('animate-fadeOut');
+      group.element.style.animationDuration = '300ms';
+
+      setTimeout(() => {
+        if (group.element && group.element.parentNode) {
+          group.element.parentNode.removeChild(group.element);
+        }
+      }, 300);
+    }
+
+    // Clean up event listeners
+    if (Array.isArray(group.registeredEvents)) {
+      group.registeredEvents.forEach(description => {
+        eventHandlers.cleanupListeners(null, null, description);
+      });
+    }
+
+    if (typeof group.teardown === "function") {
+      group.teardown();
+    }
+
     groupedNotifications.delete(group.groupKey);
+    return true;
   }
 
   /**
-   * Remove all grouped notifications.
+   * Clear all grouped notifications
    */
   function clearAllGroupedNotifications() {
     for (let group of groupedNotifications.values()) {
       if (group.element && group.element.parentNode) {
         group.element.parentNode.removeChild(group.element);
       }
-      if (typeof group.teardown === "function") group.teardown();
+
+      // Clean up event listeners
+      if (Array.isArray(group.registeredEvents)) {
+        group.registeredEvents.forEach(description => {
+          eventHandlers.cleanupListeners(null, null, description);
+        });
+      }
+
+      if (typeof group.teardown === "function") {
+        group.teardown();
+      }
     }
     groupedNotifications.clear();
   }
 
   /**
-   * Render one group banner (standalone DOM).
+   * Render a group banner using cloneNode for better performance
    */
   function renderGroupBanner(group, container) {
-    // --- Accessibility IDs ---
+    // Generate IDs for accessibility connections
     const summaryId = `group-summary-${group.notificationId}`;
     const detailsId = `group-details-${group.notificationId}`;
 
-    // Banner root
-    const banner = document.createElement("div");
-    banner.className = `accordion-banner alert alert-${group.type} notification-item notification-${group.type}`;
-    banner.id = group.notificationId;
-    banner.setAttribute("role", "alert");
+    // Clone the template
+    const bannerClone = groupTemplate.content.cloneNode(true);
+    const banner = bannerClone.querySelector('.accordion-banner');
 
-    // Icon (optional)
-    let iconHtml = "";
+    // Add ID and classes
+    banner.id = group.notificationId;
+    banner.classList.add(`alert-${group.type}`, `notification-${group.type}`, `notification-context-${group.context}`);
+
+    // Find elements to customize
+    const summary = banner.querySelector('.accordion-summary');
+    const toggleBtn = banner.querySelector('.accordion-toggle-btn');
+    const dismissBtn = banner.querySelector('.accordion-dismiss-btn');
+    const messageList = banner.querySelector('.accordion-message-list');
+    const contextBadge = banner.querySelector('.notification-context-badge');
+    const summaryText = banner.querySelector('.accordion-summary-text');
+
+    // Set ARIA attributes for accessibility
+    summary.id = summaryId;
+    messageList.id = detailsId;
+    messageList.setAttribute('aria-labelledby', summaryId);
+    toggleBtn.setAttribute('aria-expanded', 'false');
+    toggleBtn.setAttribute('aria-controls', detailsId);
+
+    // Add icon if available
     if (getIconForType) {
       const icon = getIconForType(group.type);
-      if (typeof icon === "string") iconHtml = icon;
-      else if (icon instanceof HTMLElement) iconHtml = icon.outerHTML;
+      if (typeof icon === "string") {
+        const iconEl = document.createElement('span');
+        iconEl.className = 'accordion-icon mr-2';
+        iconEl.innerHTML = icon;
+        summary.insertBefore(iconEl, summary.firstChild);
+      }
     }
 
-    // --- Compose inner structure ---
-    banner.innerHTML = `
-      <div class="accordion-summary" id="${summaryId}">
-        ${iconHtml}
-        <span class="notification-context-badge">${escapeHtml(group.context)}</span>
-        <span class="accordion-summary-text">${group.messages.length} ${capitalize(group.type)}${group.messages.length > 1 ? "s" : ""} occurred</span>
-        <button type="button" class="accordion-toggle-btn"
-          aria-expanded="false" aria-controls="${detailsId}" id="toggle-${group.notificationId}">
-          Show Details
-        </button>
-        <button type="button" class="accordion-dismiss-btn" title="Dismiss" aria-label="Dismiss notification group">&times;</button>
-      </div>
-      <ul class="accordion-message-list" id="${detailsId}" role="region" aria-labelledby="${summaryId}" style="display: none"></ul>
-    `;
+    // Set content
+    contextBadge.textContent = escapeHtml(group.context);
+    summaryText.textContent = `${group.messages.length} ${capitalize(group.type)}${group.messages.length > 1 ? "s" : ""} occurred`;
 
-    // Dom nodes
-    const toggleBtn = banner.querySelector(".accordion-toggle-btn");
-    const dismissBtn = banner.querySelector(".accordion-dismiss-btn");
-    const messageList = banner.querySelector(".accordion-message-list");
-    const summaryDiv = banner.querySelector(".accordion-summary");
-
-    // --- Tracked Event Handlers ---
-    // Toggle details
-    eventHandlers.trackListener(toggleBtn, "click", (e) => {
+    // Toggle button event
+    const toggleDescription = `Group toggle ${group.notificationId}`;
+    eventHandlers.trackListener(toggleBtn, 'click', (e) => {
       e.stopPropagation();
       group.expanded = !group.expanded;
-      banner.classList.toggle("expanded", group.expanded);
-      toggleBtn.textContent = group.expanded ? "Hide Details" : "Show Details";
-      toggleBtn.setAttribute("aria-expanded", group.expanded.toString());
-      messageList.style.display = group.expanded ? "" : "none";
-      if (group.expanded) {
-        // Move focus to message list for a11y if desired, otherwise keep summary.
-        setTimeout(() => messageList.focus && messageList.focus(), 50);
-      }
-    }, { description: "Accordion toggle group details" });
+      banner.classList.toggle('expanded', group.expanded);
+      toggleBtn.textContent = group.expanded ? 'Hide Details' : 'Show Details';
+      toggleBtn.setAttribute('aria-expanded', group.expanded.toString());
 
-    // Dismiss button (explicit; never on banner itself)
-    eventHandlers.trackListener(dismissBtn, "click", (e) => {
+      // Use CSS transition instead of display:none
+      if (group.expanded) {
+        messageList.style.maxHeight = '170px';
+      } else {
+        messageList.style.maxHeight = '0';
+      }
+
+      if (group.expanded) {
+        setTimeout(() => messageList.focus && messageList.focus(), 100);
+      }
+    }, { description: toggleDescription });
+    group.registeredEvents.push(toggleDescription);
+
+    // Dismiss button event
+    const dismissDescription = `Group dismiss ${group.notificationId}`;
+    eventHandlers.trackListener(dismissBtn, 'click', (e) => {
       e.stopPropagation();
       hideGroupedNotification(group.groupKey);
-    }, { description: "Accordion dismiss group" });
+    }, { description: dismissDescription });
+    group.registeredEvents.push(dismissDescription);
 
-    // Keyboard shortcut: dismiss on Escape within banner
-    eventHandlers.trackListener(banner, "keydown", (e) => {
-      if (e.key === "Escape") hideGroupedNotification(group.groupKey);
-    }, { description: "Accordion dismiss via Escape" });
+    // Keyboard shortcut for dismiss
+    const keydownDescription = `Group keydown ${group.notificationId}`;
+    eventHandlers.trackListener(banner, 'keydown', (e) => {
+      if (e.key === 'Escape') hideGroupedNotification(group.groupKey);
+    }, { description: keydownDescription });
+    group.registeredEvents.push(keydownDescription);
 
-    // Focus management: focus summary when mounted
+    // Focus management
     setTimeout(() => {
-      summaryDiv && summaryDiv.focus && summaryDiv.focus();
-    }, 50);
+      summary && summary.focus && summary.focus();
+    }, 100);
 
-    // Fill messages (safe)
-    updateGroupBanner(group, container, true, messageList);
+    // Fill message list
+    for (const msg of group.messages) {
+      const li = document.createElement('li');
+      li.textContent = msg;
+      messageList.appendChild(li);
+    }
 
-    // Attach
+    // Initialize with collapsed state
+    messageList.style.maxHeight = '0';
+    messageList.style.overflow = 'hidden';
+    messageList.style.transition = 'max-height 0.3s ease-in-out';
+
+    // Register teardown function
     group.element = banner;
     group.teardown = () => {
-      // Detach any further resources if needed
-      // eventHandlers.cleanupListeners is presumed called by owner on teardown
+      group.registeredEvents.forEach(description => {
+        eventHandlers.cleanupListeners(null, null, description);
+      });
     };
+
+    // Add to container
     container.appendChild(banner);
   }
 
   /**
-   * Update summary + message list for a given group.
-   * Safe DOM, textContent only.
+   * Update an existing group banner with new messages
    */
-  function updateGroupBanner(group, container, initial = false, listOverride = null) {
+  function updateGroupBanner(group, container, initial = false) {
     if (!group.element) return;
-    const summaryText = group.element.querySelector(".accordion-summary-text");
-    const messageList = listOverride
-      ? listOverride
-      : group.element.querySelector(".accordion-message-list");
+
+    const summaryText = group.element.querySelector('.accordion-summary-text');
+    const messageList = group.element.querySelector('.accordion-message-list');
+
     if (summaryText) {
-      summaryText.textContent =
-        `${group.messages.length} ${capitalize(group.type)}${group.messages.length > 1 ? "s" : ""} occurred`;
+      summaryText.textContent = `${group.messages.length} ${capitalize(group.type)}${group.messages.length > 1 ? 's' : ''} occurred`;
     }
+
     if (messageList) {
-      messageList.innerHTML = "";
-      group.messages.forEach(msg => {
-        const li = document.createElement("li");
-        li.textContent = msg;
-        messageList.appendChild(li);
-      });
+      // Only add the new message instead of rebuilding the entire list
+      const lastMessage = group.messages[group.messages.length - 1];
+      const li = document.createElement('li');
+      li.textContent = lastMessage;
+      messageList.appendChild(li);
     }
+
+    // Flash effect for update
     if (!initial && !group.expanded) {
-      // Flash or highlight on update
-      group.element.classList.add("ring", "ring-primary");
-      setTimeout(() => group.element.classList.remove("ring", "ring-primary"), 300);
+      group.element.classList.add('group-updated');
+      setTimeout(() => group.element.classList.remove('group-updated'), 400);
     }
   }
 
-  // --- Helpers ---
+  // Helper functions
   function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
   }
 
-  // Escape HTML for safe context label rendering
   function escapeHtml(unsafe) {
     if (typeof unsafe !== "string") return '';
     return unsafe
       .replace(/&/g, "&")
       .replace(/</g, "<")
       .replace(/>/g, ">")
-      .replace(/"/g, '\\"')       // Replace " with \"
+      .replace(/"/g, '\\"') // Replace " with \"
       .replace(/'/g, "&#039;");
   }
 
-  // --- API ---
   return {
     showGroupedNotificationByTypeAndTime,
     hideGroupedNotification,
     clearAllGroupedNotifications,
     updateGroupBanner,
-    groupedNotifications, // exposed if necessary for advanced usage
+    groupedNotifications,
   };
 }
 
