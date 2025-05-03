@@ -75,10 +75,11 @@ class CookieSettings:
         scheme = request.url.scheme
         # Local dev environment defaults
         if hostname in ["localhost", "127.0.0.1"] or self.env.lower() == "development":
+            # PATCH: 'samesite' must be 'lax' for localhost+HTTP and 'secure' must be False (browser compatibility)
             return {
                 "secure": False,  # False for HTTP in dev
-                "domain": "localhost",
-                "samesite": "none",  # None for cross-port requests
+                "domain": None,   # Let browser default; avoids edge-case domain bugs in localhost
+                "samesite": "lax",  # LAX is correct for non-secure localhost
                 "httponly": True,
                 "path": "/",
             }
@@ -87,6 +88,7 @@ class CookieSettings:
         if self.cookie_domain and self.cookie_domain.lower() not in ["localhost", "127.0.0.1"]:
             domain_value = self.cookie_domain
 
+        # If production & HTTPS, may use None+Secure for cross-site if needed. LAX remains safest default.
         return {
             "secure": (scheme == "https"),
             "domain": domain_value,

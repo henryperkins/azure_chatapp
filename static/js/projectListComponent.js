@@ -53,10 +53,10 @@ export class ProjectListComponent {
 
         // --- DEBUG LOG ---
         if (this.appConfig && this.appConfig.DEBUG) {
-            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`, { stack: (new Error()).stack });
+            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`, { stack: (new Error()).stack, context: "ProjectListComponent" });
         } else {
             // fallback basic log
-            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`);
+            this.notification.log(`[ProjectListComponent] CONSTRUCTOR called`, { context: "ProjectListComponent" });
         }
         if (
             !this.projectManager ||
@@ -114,14 +114,14 @@ export class ProjectListComponent {
     initialize() {
         // --- DEBUG LOG ---
         if (this.appConfig && this.appConfig.DEBUG) {
-            this.notification.log(`[ProjectListComponent] INITIALIZE called`, { stack: (new Error()).stack });
+            this.notification.log(`[ProjectListComponent] INITIALIZE called`, { stack: (new Error()).stack, context: "ProjectListComponent" });
         } else {
             // fallback basic log
-            this.notification.log(`[ProjectListComponent] INITIALIZE called`);
+            this.notification.log(`[ProjectListComponent] INITIALIZE called`, { context: "ProjectListComponent" });
         }
         if (this.state.initialized) {
             if (this.app?.config?.debug) {
-                this.notification.log("[ProjectListComponent] Already initialized.");
+                this.notification.log("[ProjectListComponent] Already initialized.", { context: "ProjectListComponent" });
             }
             return;
         }
@@ -321,7 +321,7 @@ export class ProjectListComponent {
     /** Show the list container */
     show() {
         if (!this.gridElement) {
-            this.notification.warn("[ProjectListComponent.show] grid element not found.");
+            this.notification.warn("[ProjectListComponent.show] grid element not found.", { context: "ProjectListComponent" });
             return;
         }
         this.gridElement.classList.remove("hidden");
@@ -484,7 +484,8 @@ export class ProjectListComponent {
     _openNewProjectModal() {
         if (!this.modalManager?.show) {
             this.notification.error(
-                "[ProjectListComponent] modalManager.show is unavailable"
+                "[ProjectListComponent.renderProjects] Grid element not found.",
+                { context: "ProjectListComponent" }
             );
             return;
         }

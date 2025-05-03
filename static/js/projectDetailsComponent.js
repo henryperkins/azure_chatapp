@@ -59,9 +59,9 @@ export class ProjectDetailsComponent {
     this.router = router;
     this._rawNotificationHandler = notificationHandler; // save the root adapter
     this.notification = {
-      log: (...args) => notificationHandler.log?.(`[ProjectDetailsComponent] ${args[0]}`),
-      warn: (...args) => notificationHandler.warn?.(`[ProjectDetailsComponent] ${args[0]}`),
-      error: (...args) => notificationHandler.error?.(`[ProjectDetailsComponent] ${args[0]}`),
+      log: (...args) => notificationHandler.log?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
+      warn: (...args) => notificationHandler.warn?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
+      error: (...args) => notificationHandler.error?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
       confirm: (...args) => notificationHandler.confirm?.(...args)
     };
     this.sanitizer = sanitizer;
@@ -70,7 +70,7 @@ export class ProjectDetailsComponent {
 
     /* ------------------------------------------------------  callbacks      */
     this.onBack = onBack || (() => {
-      this.notification.warn("[ProjectDetailsComponent] onBack callback not provided.");
+      this.notification.warn("[ProjectDetailsComponent] onBack callback not provided.", { context: "ProjectDetailsComponent" });
     });
 
     /* ------------------------------------------------------  state + cache  */
@@ -105,7 +105,7 @@ export class ProjectDetailsComponent {
   async initialize() {
     // Note: Debug logging removed to adhere to no-console rule. Use notificationHandler if needed.
     if (this.state.initialized) {
-      this.notification.log("[ProjectDetailsComponent] Already initialized.");
+      this.notification.log("[ProjectDetailsComponent] Already initialized.", { context: "ProjectDetailsComponent" });
       return true;
     }
 
@@ -124,7 +124,7 @@ export class ProjectDetailsComponent {
 
       return true;
     } catch (err) {
-      this.notification.error("[ProjectDetailsComponent] Init failed:", err);
+      this.notification.error("[ProjectDetailsComponent] Init failed:", err, { context: "ProjectDetailsComponent" });
       this.app.showNotification("Project Details failed to initialise.", "error");
       return false;
     }
@@ -148,7 +148,7 @@ export class ProjectDetailsComponent {
 
     this.elements.container = document.getElementById("projectDetailsView");
     if (!this.elements.container) {
-      this.notification.error("[ProjectDetailsComponent] #projectDetailsView not found");
+      this.notification.error("[ProjectDetailsComponent] #projectDetailsView not found", { context: "ProjectDetailsComponent" });
       return false;
     }
 
@@ -315,7 +315,7 @@ export class ProjectDetailsComponent {
         els.uploadProgress && els.progressBar && els.uploadStatus;
 
       if (!ready) {
-        this.notification.warn("[ProjectDetailsComponent] FileUploadComponent DOM nodes missing.");
+        this.notification.warn("[ProjectDetailsComponent] FileUploadComponent DOM nodes missing.", { context: "ProjectDetailsComponent" });
         return;
       }
 
@@ -344,7 +344,7 @@ export class ProjectDetailsComponent {
       });
 
       this.fileUploadComponent.initialize?.();
-      this.notification.log("[ProjectDetailsComponent] FileUploadComponent ready.");
+      this.notification.log("[ProjectDetailsComponent] FileUploadComponent ready.", { context: "ProjectDetailsComponent" });
     }
   }
 
@@ -352,36 +352,36 @@ export class ProjectDetailsComponent {
 
   show() {
     if (!this.state.initialized || !this.elements.container) {
-      this.notification.error("[ProjectDetailsComponent] show() before init.");
+      this.notification.error("[ProjectDetailsComponent] show() before init.", { context: "ProjectDetailsComponent" });
       return;
     }
     this.elements.container.classList.remove("hidden");
     this.elements.container.setAttribute("aria-hidden", "false");
-    this.notification.log("[ProjectDetailsComponent] Shown.");
+      this.notification.log("[ProjectDetailsComponent] Shown.", { context: "ProjectDetailsComponent" });
   }
 
   hide() {
     if (this.elements.container) {
       this.elements.container.classList.add("hidden");
       this.elements.container.setAttribute("aria-hidden", "true");
-      this.notification.log("[ProjectDetailsComponent] Hidden.");
+      this.notification.log("[ProjectDetailsComponent] Hidden.", { context: "ProjectDetailsComponent" });
     }
   }
 
   /** render top header + reset tab */
   renderProject(project) {
     if (!this.state.initialized) {
-      this.notification.error("[ProjectDetailsComponent] renderProject before init.");
+      this.notification.error("[ProjectDetailsComponent] renderProject before init.", { context: "ProjectDetailsComponent" });
       return;
     }
     if (!project || !this.app.validateUUID(project.id)) {
-      this.notification.error("[ProjectDetailsComponent] Invalid project payload.");
+      this.notification.error("[ProjectDetailsComponent] Invalid project payload.", { context: "ProjectDetailsComponent" });
       this.app.showNotification("Failed to load project details.", "error");
       this.onBack();
       return;
     }
 
-    this.notification.log(`[ProjectDetailsComponent] Render project ${project.id}`);
+      this.notification.log(`[ProjectDetailsComponent] Render project ${project.id}`, { context: "ProjectDetailsComponent" });
     this.state.currentProject = project;
 
     // Set/refresh which project id is ready for the event.
@@ -403,13 +403,13 @@ export class ProjectDetailsComponent {
   /** tab switcher */
   switchTab(tabName) {
     if (!this.state.initialized) {
-      this.notification.warn("[ProjectDetailsComponent] switchTab before init.");
+      this.notification.warn("[ProjectDetailsComponent] switchTab before init.", { context: "ProjectDetailsComponent" });
       return;
     }
 
     const TABS = ["details", "files", "knowledge", "conversations", "artifacts"];
     if (!TABS.includes(tabName)) {
-      this.notification.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`);
+      this.notification.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`, { context: "ProjectDetailsComponent" });
       return;
     }
 
@@ -418,12 +418,12 @@ export class ProjectDetailsComponent {
     const needsProject = ["files", "knowledge", "conversations", "artifacts", "chat"].includes(tabName);
 
     if (needsProject && !this.app.validateUUID(pid)) {
-      this.notification.error(`[ProjectDetailsComponent] tab "${tabName}" needs valid project.`);
+      this.notification.error(`[ProjectDetailsComponent] tab "${tabName}" needs valid project.`, { context: "ProjectDetailsComponent" });
       this.app.showNotification("Load a project first.", "warning");
       return;
     }
 
-    this.notification.log(`[ProjectDetailsComponent] tab => ${tabName}`);
+      this.notification.log(`[ProjectDetailsComponent] tab => ${tabName}`, { context: "ProjectDetailsComponent" });
     this.state.activeTab = tabName;
 
     /* aria & visual */
@@ -453,10 +453,10 @@ export class ProjectDetailsComponent {
           inputSelector: "#projectChatInput",
           sendButtonSelector: "#projectChatSendBtn"
         }).catch((err) => {
-          this.notification.error("[ProjectDetailsComponent] Failed to initialize chatManager for conversations tab:", err);
+          this.notification.error("[ProjectDetailsComponent] Failed to initialize chatManager for conversations tab:", err, { context: "ProjectDetailsComponent" });
         });
       } else {
-        this.notification.error("[ProjectDetailsComponent] chatManager DI missing or invalid during conversations tab init.");
+        this.notification.error("[ProjectDetailsComponent] chatManager DI missing or invalid during conversations tab init.", { context: "ProjectDetailsComponent" });
       }
     }
   }
@@ -483,7 +483,7 @@ export class ProjectDetailsComponent {
         }
       });
       document.dispatchEvent(event);
-      this.notification.log(`[ProjectDetailsComponent] Dispatched projectDetailsReady for ${this.state.currentProject.id}`);
+      this.notification.log(`[ProjectDetailsComponent] Dispatched projectDetailsReady for ${this.state.currentProject.id}`, { context: "ProjectDetailsComponent" });
     }
   }
 
@@ -492,7 +492,7 @@ export class ProjectDetailsComponent {
   renderFiles(files = []) {
     const c = this.elements.filesList;
     if (!c) {
-      this.notification.warn("[ProjectDetailsComponent] filesList node missing.");
+      this.notification.warn("[ProjectDetailsComponent] filesList node missing.", { context: "ProjectDetailsComponent" });
       document.dispatchEvent(new CustomEvent("projectFilesRendered", { detail: { projectId: this.state.currentProject?.id } }));
       return;
     }
@@ -515,7 +515,7 @@ export class ProjectDetailsComponent {
   renderConversations(convs = []) {
     const c = this.elements.conversationsList;
     if (!c) {
-      this.notification.warn("[ProjectDetailsComponent] conversationsList missing.");
+      this.notification.warn("[ProjectDetailsComponent] conversationsList missing.", { context: "ProjectDetailsComponent" });
       document.dispatchEvent(new CustomEvent("projectConversationsRendered", { detail: { projectId: this.state.currentProject?.id } }));
       return;
     }
@@ -537,7 +537,7 @@ export class ProjectDetailsComponent {
   renderArtifacts(arts = []) {
     const c = this.elements.artifactsList;
     if (!c) {
-      this.notification.warn("[ProjectDetailsComponent] artifactsList missing.");
+      this.notification.warn("[ProjectDetailsComponent] artifactsList missing.", { context: "ProjectDetailsComponent" });
       document.dispatchEvent(new CustomEvent("projectArtifactsRendered", { detail: { projectId: this.state.currentProject?.id } }));
       return;
     }
@@ -555,7 +555,7 @@ export class ProjectDetailsComponent {
     const convoCount = this.elements.container.querySelector('[data-stat="conversationCount"]');
     if (fileCount && s.fileCount !== undefined) fileCount.textContent = s.fileCount;
     if (convoCount && s.conversationCount !== undefined) convoCount.textContent = s.conversationCount;
-    this.notification.log("[ProjectDetailsComponent] stats updated", s);
+    this.notification.log("[ProjectDetailsComponent] stats updated", s, { context: "ProjectDetailsComponent" });
   }
 
   /* ========== NEW CONVERSATION ============================================ */
@@ -572,7 +572,7 @@ export class ProjectDetailsComponent {
     }
 
     try {
-      this.notification.log(`[ProjectDetailsComponent] create conversation @${pid}`);
+      this.notification.log(`[ProjectDetailsComponent] create conversation @${pid}`, { context: "ProjectDetailsComponent" });
       const conv = await this.projectManager.createConversation(pid);
       if (conv?.id) {
         this.app.showNotification(`Conversation “${conv.title || "Untitled"}” created.`, "success");
@@ -584,7 +584,7 @@ export class ProjectDetailsComponent {
         throw new Error("Invalid response from createConversation");
       }
     } catch (err) {
-      this.notification.error("[ProjectDetailsComponent] createConversation failed:", err);
+      this.notification.error("[ProjectDetailsComponent] createConversation failed:", err, { context: "ProjectDetailsComponent" });
       this.app.showNotification(`Failed: ${err.message}`, "error");
     }
   }
@@ -592,7 +592,7 @@ export class ProjectDetailsComponent {
   /* ========== CLEANUP ====================================================== */
 
   destroy() {
-    this.notification.log("[ProjectDetailsComponent] destroy()");
+    this.notification.log("[ProjectDetailsComponent] destroy()", { context: "ProjectDetailsComponent" });
     this.eventHandlers.cleanupListeners(this.elements.container);
     this.eventHandlers.cleanupListeners(document);
     this.state.initialized = false;
@@ -651,7 +651,7 @@ export class ProjectDetailsComponent {
     try {
       await asyncFn();
     } catch (err) {
-      this.notification.error(`[ProjectDetailsComponent] load ${section} failed:`, err);
+      this.notification.error(`[ProjectDetailsComponent] load ${section} failed:`, err, { context: "ProjectDetailsComponent" });
       this.app.showNotification(`Failed to load ${section}.`, "error");
     } finally {
       this.state.isLoading[section] = false;
@@ -750,7 +750,7 @@ export class ProjectDetailsComponent {
             this.app.showNotification(`Download failed: ${e.message}`, "error");
           });
       else
-        this.notification.error("[ProjectDetailsComponent] downloadArtifact not available.");
+        this.notification.error("[ProjectDetailsComponent] downloadArtifact not available.", { context: "ProjectDetailsComponent" });
     }, { description: `DownloadArtifact_${art.id}` });
     return div;
   }
@@ -760,7 +760,7 @@ export class ProjectDetailsComponent {
   _confirmDeleteFile(fileId, fileName) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
-      this.notification.error("[ProjectDetailsComponent] deleteFile invalid ids", { pid, fileId });
+      this.notification.error("[ProjectDetailsComponent] deleteFile invalid ids", { pid, fileId, context: "ProjectDetailsComponent" });
       return;
     }
     this.modalManager.confirmAction({
@@ -774,7 +774,7 @@ export class ProjectDetailsComponent {
           this.app.showNotification("File deleted.", "success");
           this.projectManager.loadProjectFiles(pid);
         } catch (e) {
-          this.notification.error("[ProjectDetailsComponent] deleteFile failed:", e);
+          this.notification.error("[ProjectDetailsComponent] deleteFile failed:", e, { context: "ProjectDetailsComponent" });
           this.app.showNotification(`Delete failed: ${e.message}`, "error");
         }
       }
@@ -784,16 +784,16 @@ export class ProjectDetailsComponent {
   _downloadFile(fileId, fileName) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
-      this.notification.error("[ProjectDetailsComponent] downloadFile invalid ids", { pid, fileId });
+      this.notification.error("[ProjectDetailsComponent] downloadFile invalid ids", { pid, fileId, context: "ProjectDetailsComponent" });
       return;
     }
     if (!this.projectManager.downloadFile) {
-      this.notification.error("[ProjectDetailsComponent] downloadFile not implemented.");
+      this.notification.error("[ProjectDetailsComponent] downloadFile not implemented.", { context: "ProjectDetailsComponent" });
       return;
     }
     this.projectManager.downloadFile(pid, fileId)
       .catch(e => {
-        this.notification.error("[ProjectDetailsComponent] downloadFile failed:", e);
+        this.notification.error("[ProjectDetailsComponent] downloadFile failed:", e, { context: "ProjectDetailsComponent" });
         this.app.showNotification(`Download failed: ${e.message}`, "error");
       });
   }
@@ -803,7 +803,7 @@ export class ProjectDetailsComponent {
   async _openConversation(cv) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !cv?.id) {
-      this.notification.error("[ProjectDetailsComponent] openConversation invalid ids", { pid, cv });
+      this.notification.error("[ProjectDetailsComponent] openConversation invalid ids", { pid, cv, context: "ProjectDetailsComponent" });
       this.app.showNotification("Invalid conversation.", "error");
       return;
     }
@@ -817,9 +817,9 @@ export class ProjectDetailsComponent {
       url.searchParams.set("chatId", cv.id);
       this.router.navigate(url.toString());
 
-      this.notification.log(`[ProjectDetailsComponent] conversation ${cv.id} opened`, conversation);
+      this.notification.log(`[ProjectDetailsComponent] conversation ${cv.id} opened`, conversation, { context: "ProjectDetailsComponent" });
     } catch (error) {
-      this.notification.error("[ProjectDetailsComponent] Failed to fetch conversation:", error);
+      this.notification.error("[ProjectDetailsComponent] Failed to fetch conversation:", error, { context: "ProjectDetailsComponent" });
       this.app.showNotification("Failed to load conversation details.", "error");
     }
   }
