@@ -180,7 +180,9 @@ class ProjectDashboard {
       return false;
     }
 
-    this.state.currentView = 'details';
+    // Set view state only after successful load
+    // Show loading indicator or overlay here if desired
+    this.state.currentView = null;
 
     try {
       if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
@@ -194,9 +196,7 @@ class ProjectDashboard {
       return false;
     }
 
-    // Update URL param
-    this.browserService.setSearchParam('project', projectId);
-
+    // Only update URL after successful load
     // Persist selection - REMOVED
     // this.browserService.setItem('selectedProjectId', projectId);
 
@@ -246,6 +246,9 @@ class ProjectDashboard {
           this._setView({ showList: false, showDetails: true });
         }
       }
+      // Update URL param only after successful render
+      this.browserService.setSearchParam('project', projectId);
+      this.state.currentView = 'details';
       // Optionally, emit projectLoaded event for consistency
       document.dispatchEvent(new CustomEvent('projectLoaded', { detail: project }));
       return true;
@@ -274,6 +277,10 @@ class ProjectDashboard {
 
           try {
             // Step 1: Make sure the DOM element is actually visible
+            if (this._lastLoadId !== currentLoadId) {
+              this.logger.info('[ProjectDashboard] Aborting showProjectDetails (API path) due to newer load after render check');
+              return false;
+            }
             console.log('[ProjectDashboard] Setting initial view visibility first (API path)');
             this._setView({ showList: false, showDetails: true });
 
@@ -317,6 +324,10 @@ class ProjectDashboard {
         this.showProjectList();
         return false;
       }
+      // Update URL param only after successful render
+      this.browserService.setSearchParam('project', projectId);
+      this.state.currentView = 'details';
+      return true;
     } else {
       // this.browserService.removeItem('selectedProjectId'); // Remove localStorage persistence
       this.showProjectList();
@@ -329,6 +340,10 @@ class ProjectDashboard {
   // =================== PRIVATE METHODS ===================
 
   _setView({ showList, showDetails }) {
+    if (this.state._aborted) {
+      this.logger.info('[ProjectDashboard] _setView aborted due to navigation change');
+      return;
+    }
     console.log('[ProjectDashboard] _setView called with:', { showList, showDetails });
 
     const listView = document.getElementById('projectListView');
@@ -411,6 +426,7 @@ class ProjectDashboard {
   }
 
   _showLoginRequiredMessage() {
+    this.state._aborted = true;
     const loginMessage = document.getElementById('loginRequiredMessage');
     if (loginMessage) loginMessage.classList.remove('hidden');
     const sidebar = document.getElementById('mainSidebar');
@@ -522,6 +538,7 @@ class ProjectDashboard {
   }
 
   _loadProjects() {
+    this.state._aborted = false;
     console.log('[ProjectDashboard] Loading projects...');  // Enhanced console log for debugging
     this.logger.info('[ProjectDashboard] Loading projects...');
 
@@ -553,6 +570,10 @@ class ProjectDashboard {
       console.log('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
       this.projectManager.loadProjects('all')
         .then(projects => {
+          if (this.state._aborted) {
+            this.logger.info('[ProjectDashboard] _loadProjects aborted, ignoring loaded projects');
+            return;
+          }
           console.log('[ProjectDashboard] Projects loaded successfully:', projects);
         })
         .catch((error) => {
