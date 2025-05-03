@@ -252,7 +252,9 @@ import { fetchCurrentUser } from './auth.js';
 // ---------------------------------------------------------------------
 DependencySystem.register('apiRequest', apiRequest);
 
-const notificationHandler = createNotificationHandler({ DependencySystem });
+const eventHandlers = createEventHandlers({ DependencySystem });
+DependencySystem.register('eventHandlers', eventHandlers);
+const notificationHandler = createNotificationHandler({ eventHandlers, DependencySystem });
 /**
  * Compatibility shim: Add .log/.warn/.error/.confirm to the notification handler for legacy consumers.
  */
@@ -278,7 +280,7 @@ function createBannerHandlerWithLog(containerSelector) {
     const container = typeof containerSelector === "string"
         ? document.querySelector(containerSelector)
         : containerSelector;
-    const h = createNotificationHandler({ container });
+    const h = createNotificationHandler({ container, eventHandlers, DependencySystem });
 
     // Map to expected log/warn/error/confirm for compatibility
     return {
@@ -288,9 +290,6 @@ function createBannerHandlerWithLog(containerSelector) {
         confirm: (...args) => h.show?.(args[0], "info", { ...args[1], action: "Confirm" })
     };
 }
-
-const eventHandlers = createEventHandlers({ DependencySystem });
-DependencySystem.register('eventHandlers', eventHandlers);
 
 /**
  * The main "app" object, with references to core config/state and key methods.
@@ -699,15 +698,101 @@ async function initializeCoreSystems() {
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
 
-    const modalsReady = new Promise(resolve =>
-        document.addEventListener('modalsLoaded', resolve, { once: true })
-    );
-    if (APP_CONFIG.DEBUG) {
-        console.log('[App] Waiting for modal HTML to load...');
+    const modalsReady = new Promise((resolve, reject) => {
+        // Add a timeout to prevent infinite waiting
+        const timeout = setTimeout(() => {
+            console.error('[App] TIMEOUT: Modal HTML failed to load in 15 seconds');
+            // Resolve anyway to prevent app from blocking completely
+            resolve();
+        }, 15000);
+
+        document.addEventListener('modalsLoaded', () => {
+            clearTimeout(timeout);
+            resolve();
+        }, { once: true });
+    });
+
+    // Always log, even in non-debug mode
+    console.log('[App] Waiting for modal HTML to load...');
+
+    // Try to actively load the modals HTML and inject it
+    try {
+        let modalsContainer = document.getElementById('modalsContainer');
+        if (!modalsContainer) {
+            console.error('[App] #modalsContainer element not found in DOM');
+            // Create the container if it doesn't exist
+            const newContainer = document.createElement('div');
+            newContainer.id = 'modalsContainer';
+            document.body.appendChild(newContainer);
+            console.log('[App] Created missing #modalsContainer');
+            // Update our reference to the newly created container
+            modalsContainer = document.getElementById('modalsContainer');
+        }
+
+        console.log('[App] Attempting to load and inject modals HTML...');
+
+        // Actively load and inject the modal HTML
+        try {
+            const resp = await fetch('/static/html/modals.html', { cache: 'no-store' });
+            console.log(`[App] Modals fetch status: ${resp.status}`);
+            if (!resp.ok) {
+                throw new Error(`HTTP error! status: ${resp.status}`);
+            }
+
+            const html = await resp.text();
+            console.log('[App] Modals HTML loaded, length:', html.length);
+
+            if (html && html.length > 0) {
+                modalsContainer.innerHTML = html;
+                console.log('[App] Modals HTML injected into DOM');
+                // Manually dispatch the modalsLoaded event
+                document.dispatchEvent(new CustomEvent('modalsLoaded'));
+            } else {
+                throw new Error('Empty modals HTML response');
+            }
+        } catch (err) {
+            console.error('[App] Modals HTML fetch/injection failed:', err);
+            // Dispatch event anyway to prevent blocking
+            document.dispatchEvent(new CustomEvent('modalsLoaded'));
+        }
+    } catch (error) {
+        console.error('[App] Error during modal HTML loading:', error);
+        // Dispatch event anyway to prevent blocking
+        document.dispatchEvent(new CustomEvent('modalsLoaded'));
     }
+
+    // Wait for modals to be ready with a shorter timeout
+    const modalsTimeout = setTimeout(() => {
+        console.error('[App] TIMEOUT: Modal HTML failed to load in 10 seconds');
+        document.dispatchEvent(new CustomEvent('modalsLoaded'));
+    }, 10000);
+
+    document.addEventListener('modalsLoaded', () => {
+        clearTimeout(modalsTimeout);
+    }, { once: true });
+
     await modalsReady;
-    if (APP_CONFIG.DEBUG) {
-        console.log('[App] Modal HTML loaded.');
+    console.log('[App] Modal HTML load promise resolved. Proceeding with initialization.');
+
+    // Ensure all mapped modals actually exist in DOM before init (avoid race condition)
+    async function verifyModalsExist(modalMappings, maxTries = 10) {
+        for (let attempt = 0; attempt < maxTries; attempt++) {
+            let allFound = true;
+            for (const modalId of Object.values(modalMappings)) {
+                if (!document.getElementById(modalId)) {
+                    allFound = false;
+                    break;
+                }
+            }
+            if (allFound) return true;
+            await new Promise(r => setTimeout(r, 150));
+        }
+        return false;
+    }
+
+    const modalsOk = await verifyModalsExist(MODAL_MAPPINGS);
+    if (!modalsOk) {
+        console.error('[App] One or more modal dialogs failed to appear in DOM after modal HTML injection.');
     }
 
     if (typeof modalManager.init === 'function') {
@@ -1105,55 +1190,69 @@ function registerAppListeners() {
 function setupChatInitializationTrigger() {
     const requiredDeps = ['auth', 'chatManager', 'projectManager'];
 
-    const debouncedInitChat = globalUtils.debounce(async (arg = null) => {
-        // Defensive: accept either a projectId or a CustomEvent from listeners
-        let forceProjectId = arg;
-        if (
-            arg &&
-            typeof arg === 'object' &&
-            arg.detail &&
-            arg.detail.project &&
-            arg.detail.project.id
-        ) {
-            forceProjectId = arg.detail.project.id;
-        }
-        try {
-            const [authMod, chatMgr, pm] = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
-            if (!authMod || !chatMgr) {
-                if (APP_CONFIG.DEBUG) {
-                    console.warn('[App] Chat init: Required dependency missing.', [authMod, chatMgr, pm]);
-                }
-                return;
-            }
-            if (typeof authMod.isAuthenticated !== "function") {
-                if (APP_CONFIG.DEBUG) {
-                    console.warn('[App] Chat init: auth.isAuthenticated is not a function.', authMod);
-                }
-                return;
+    // Use a non-async function for the debounced callback to avoid unhandled promise rejections
+    const debouncedInitChat = globalUtils.debounce((arg = null) => {
+        // Return false from the event handler to indicate we're handling it
+        // Create and properly handle the Promise internally rather than returning it
+        const asyncProcess = (async () => {
+            // Defensive: accept either a projectId or a CustomEvent from listeners
+            let forceProjectId = arg;
+            if (
+                arg &&
+                typeof arg === 'object' &&
+                arg.detail &&
+                arg.detail.project &&
+                arg.detail.project.id
+            ) {
+                forceProjectId = arg.detail.project.id;
             }
 
-            const projectId = app.getProjectId();
-            const finalProjectId = forceProjectId ?? projectId ?? pm?.currentProject?.id ?? null;
+            try {
+                const [authMod, chatMgr, pm] = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
+                if (!authMod || !chatMgr) {
+                    if (APP_CONFIG.DEBUG) {
+                        console.warn('[App] Chat init: Required dependency missing.', [authMod, chatMgr, pm]);
+                    }
+                    return;
+                }
+                if (typeof authMod.isAuthenticated !== "function") {
+                    if (APP_CONFIG.DEBUG) {
+                        console.warn('[App] Chat init: auth.isAuthenticated is not a function.', authMod);
+                    }
+                    return;
+                }
 
-            if (authMod.isAuthenticated() && typeof chatMgr.initialize === "function") {
-                if (APP_CONFIG.DEBUG) {
-                    console.log(`[App] Debounced chat init triggered. Project: ${finalProjectId}`);
+                const projectId = app.getProjectId();
+                const finalProjectId = forceProjectId ?? projectId ?? pm?.currentProject?.id ?? null;
+
+                if (authMod.isAuthenticated() && typeof chatMgr.initialize === "function") {
+                    if (APP_CONFIG.DEBUG) {
+                        console.log(`[App] Debounced chat init triggered. Project: ${finalProjectId}`);
+                    }
+                    await chatMgr.initialize({ projectId: finalProjectId });
+                } else {
+                    if (APP_CONFIG.DEBUG) {
+                        console.log(
+                            `[App] Skipping debounced chat init. Auth: ${authMod.isAuthenticated?.() ?? 'N/A'}, ` +
+                            `Project: ${finalProjectId}`
+                        );
+                    }
+                    chatMgr?.clear?.();
                 }
-                await chatMgr.initialize({ projectId: finalProjectId });
-            } else {
-                if (APP_CONFIG.DEBUG) {
-                    console.log(
-                        `[App] Skipping debounced chat init. Auth: ${authMod.isAuthenticated?.() ?? 'N/A'}, ` +
-                        `Project: ${finalProjectId}`
-                    );
-                }
-                chatMgr?.clear?.();
+            } catch (err) {
+                console.error('[App] Error during debounced chat initialization:', err);
             }
-        } catch (err) {
-            console.error('[App] Error during debounced chat initialization:', err);
-        }
+        })();
+
+        // Ensure unhandled promise rejections are caught
+        asyncProcess.catch(err => {
+            console.error('[App] Unhandled error in chat initialization:', err);
+        });
+
+        return false; // Indicate synchronous processing
     }, 350);
 
+    // Ensure the waitFor promise is properly handled and doesn't cause unhandled rejections
     waitFor(requiredDeps, () => {
         attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
         if (!document._chatInitProjListenerAttached) {
@@ -1162,6 +1261,7 @@ function setupChatInitializationTrigger() {
                 'currentProjectChanged',
                 () => {
                     debouncedInitChat();
+                    return false; // Indicate synchronous handling
                 },
                 { description: 'Current project changed -> reinit chat' }
             );
@@ -1175,13 +1275,15 @@ function setupChatInitializationTrigger() {
             'currentProjectReady',
             e => {
                 debouncedInitChat(e.detail?.project?.id);
+                return false; // Indicate synchronous handling
             },
             { description: 'Project ready -> reinit chat' }
         );
         debouncedInitChat();
-    }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2).catch(
-        err => console.error('[App] Failed setup for chat init triggers:', err)
-    );
+    }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)
+    .catch(err => {
+        console.error('[App] Failed setup for chat init triggers:', err);
+    });
 }
 
 // ---------------------------------------------------------------------
@@ -1312,10 +1414,11 @@ function getAuthBus() {
     return auth?.AuthBus;
 }
 
-async function handleAuthStateChange(event) {
+function handleAuthStateChange(event) {
+    // Use non-async function to avoid returning a Promise without proper handling
     const { authenticated, username } = event?.detail || {};
     const newAuthState = !!authenticated;
-    if (newAuthState === appState.isAuthenticated) return;
+    if (newAuthState === appState.isAuthenticated) return false; // No change needed
 
     const previousAuthState = appState.isAuthenticated;
     appState.isAuthenticated = newAuthState;
@@ -1323,6 +1426,7 @@ async function handleAuthStateChange(event) {
         console.log(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}, User: ${username || 'N/A'}`);
     }
 
+    // Update UI synchronously
     requestAnimationFrame(() => {
         toggleElement(APP_CONFIG.SELECTORS.AUTH_BUTTON, !appState.isAuthenticated);
         toggleElement(APP_CONFIG.SELECTORS.USER_MENU, appState.isAuthenticated);
@@ -1339,51 +1443,74 @@ async function handleAuthStateChange(event) {
         }, 0);
     });
 
-    let projectManager, projectDashboard, sidebar, chatManager, storage;
-    try {
-        [projectManager, projectDashboard, sidebar, chatManager, storage] = await Promise.all([
-            waitFor('projectManager'),
-            waitFor('projectDashboard'),
-            waitFor('sidebar'),
-            waitFor('chatManager'),
-            waitFor('storage') // Wait for storage service
-        ]);
-    } catch (e) {
-        console.error('[App] Failed to get modules during auth state change:', e);
-        showNotification('Failed to update UI after auth change.', 'error');
-        return;
-    }
-
-    if (appState.isAuthenticated && !previousAuthState) {
-        if (APP_CONFIG.DEBUG) {
-            console.log('[App] User logged in. Refreshing data/UI.');
+    // Handle the async operations in a separate function that doesn't return a Promise
+    (async function updateAuthStateUI() {
+        let projectManager, projectDashboard, sidebar, chatManager, storage;
+        try {
+            [projectManager, projectDashboard, sidebar, chatManager, storage] = await Promise.all([
+                waitFor('projectManager'),
+                waitFor('projectDashboard'),
+                waitFor('sidebar'),
+                waitFor('chatManager'),
+                waitFor('storage') // Wait for storage service
+            ]);
+        } catch (e) {
+            console.error('[App] Failed to get modules during auth state change:', e);
+            showNotification('Failed to update UI after auth change.', 'error');
+            return;
         }
-        toggleElement('LOGIN_REQUIRED_MESSAGE', false);
-        projectDashboard.showProjectList?.();
-        if (projectManager.loadProjects) {
+
+        if (appState.isAuthenticated && !previousAuthState) {
+            if (APP_CONFIG.DEBUG) {
+                console.log('[App] User logged in. Refreshing data/UI.');
+            }
+            toggleElement('LOGIN_REQUIRED_MESSAGE', false);
+
             try {
-                const projects = await projectManager.loadProjects('all');
-                if (APP_CONFIG.DEBUG) {
-                    console.log(`[App] Projects loaded after login: ${projects.length}`);
+                projectDashboard.showProjectList?.();
+
+                if (projectManager.loadProjects) {
+                    try {
+                        const projects = await projectManager.loadProjects('all');
+                        if (APP_CONFIG.DEBUG) {
+                            console.log(`[App] Projects loaded after login: ${projects.length}`);
+                        }
+                        sidebar.renderProjects?.(projects);
+                    } catch (err) {
+                        console.error('[App] Failed to load projects after login:', err);
+                        showNotification('Failed to load projects.', 'error');
+                    }
                 }
-                sidebar.renderProjects?.(projects);
             } catch (err) {
-                console.error('[App] Failed to load projects after login:', err);
-                showNotification('Failed to load projects.', 'error');
+                console.error('[App] Error refreshing UI after login:', err);
+            }
+        } else if (!appState.isAuthenticated && previousAuthState) {
+            if (APP_CONFIG.DEBUG) {
+                console.log('[App] User logged out. Clearing data/UI.');
+            }
+
+            try {
+                toggleElement('LOGIN_REQUIRED_MESSAGE', true);
+                projectManager.currentProject = null;
+                storage.removeItem('selectedProjectId');
+                projectDashboard.showLoginRequiredMessage?.();
+                sidebar.clear?.();
+                chatManager.clear?.();
+
+                try {
+                    handleNavigationChange();
+                } catch (navError) {
+                    console.error('[App] Navigation error after logout:', navError);
+                }
+            } catch (err) {
+                console.error('[App] Error updating UI after logout:', err);
             }
         }
-    } else if (!appState.isAuthenticated && previousAuthState) {
-        if (APP_CONFIG.DEBUG) {
-            console.log('[App] User logged out. Clearing data/UI.');
-        }
-        toggleElement('LOGIN_REQUIRED_MESSAGE', true);
-        projectManager.currentProject = null;
-        storage.removeItem('selectedProjectId');
-        projectDashboard.showLoginRequiredMessage?.();
-        sidebar.clear?.();
-        chatManager.clear?.();
-        handleNavigationChange();
-    }
+    })().catch(err => {
+        console.error('[App] Unhandled error in auth state change handler:', err);
+    });
+
+    return false; // Indicate synchronous handling to prevent message channel errors
 }
 
 // ---------------------------------------------------------------------

@@ -212,12 +212,39 @@ class ProjectDashboard {
       }
 
       if (this.components.projectDetails && this.components.projectDetails.renderProject) {
-        // Set view AFTER project is ready to be rendered
-        this._setView({ showList: false, showDetails: true });
-        if (this.components.projectList) this.components.projectList.hide();
-        if (this.components.projectDetails) this.components.projectDetails.show(); // Ensure component is shown
+        try {
+          // Step 1: Make sure the DOM element is actually visible
+          console.log('[ProjectDashboard] Setting initial view visibility first');
+          this._setView({ showList: false, showDetails: true });
 
-        this.components.projectDetails.renderProject(project);
+          // Step 2: Tell the component to show itself
+          console.log('[ProjectDashboard] Showing project details component (direct path)');
+          if (this.components.projectDetails) this.components.projectDetails.show();
+
+          // Step 3: Hide the list component
+          console.log('[ProjectDashboard] Hiding project list component');
+          if (this.components.projectList) this.components.projectList.hide();
+
+          // Step 4: Render the data
+          console.log('[ProjectDashboard] Rendering project data (direct path)');
+          this.components.projectDetails.renderProject(project);
+
+          // Final verification that the details are visible
+          console.log('[ProjectDashboard] Performing final visibility check');
+          const detailsView = document.getElementById('projectDetailsView');
+          if (detailsView) {
+            if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
+              console.warn('[ProjectDashboard] Details view still hidden after all operations, forcing visibility');
+              detailsView.classList.remove('hidden', 'opacity-0');
+              detailsView.style.display = '';
+              detailsView.setAttribute('aria-hidden', 'false');
+            }
+          }
+        } catch (error) {
+          console.error('[ProjectDashboard] Error during view transition:', error);
+          // Try one more time with the basic approach
+          this._setView({ showList: false, showDetails: true });
+        }
       }
       // Optionally, emit projectLoaded event for consistency
       document.dispatchEvent(new CustomEvent('projectLoaded', { detail: project }));
@@ -239,12 +266,40 @@ class ProjectDashboard {
           if (this.projectManager && typeof this.projectManager.setCurrentProject === 'function') {
             this.projectManager.setCurrentProject(project);
           }
-          // Set view AFTER project is loaded and ready to be rendered (always do this if project is valid)
-          this._setView({ showList: false, showDetails: true });
-          if (this.components.projectList) this.components.projectList.hide();
-          if (this.components.projectDetails) this.components.projectDetails.show(); // Ensure component is shown
 
-          this.components.projectDetails.renderProject(project);
+          try {
+            // Step 1: Make sure the DOM element is actually visible
+            console.log('[ProjectDashboard] Setting initial view visibility first (API path)');
+            this._setView({ showList: false, showDetails: true });
+
+            // Step 2: Tell the component to show itself
+            console.log('[ProjectDashboard] Showing project details component (API path)');
+            if (this.components.projectDetails) this.components.projectDetails.show();
+
+            // Step 3: Hide the list component
+            console.log('[ProjectDashboard] Hiding project list component (API path)');
+            if (this.components.projectList) this.components.projectList.hide();
+
+            // Step 4: Render the data
+            console.log('[ProjectDashboard] Rendering project data (API path)');
+            this.components.projectDetails.renderProject(project);
+
+            // Final verification that the details are visible
+            console.log('[ProjectDashboard] Performing final visibility check (API path)');
+            const detailsView = document.getElementById('projectDetailsView');
+            if (detailsView) {
+              if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
+                console.warn('[ProjectDashboard] Details view still hidden after all operations, forcing visibility (API path)');
+                detailsView.classList.remove('hidden', 'opacity-0');
+                detailsView.style.display = '';
+                detailsView.setAttribute('aria-hidden', 'false');
+              }
+            }
+          } catch (error) {
+            console.error('[ProjectDashboard] Error during view transition (API path):', error);
+            // Try one more time with the basic approach
+            this._setView({ showList: false, showDetails: true });
+          }
         }
       } catch (error) {
         this.logger.error('[ProjectDashboard] Failed to load project details:', error);
@@ -263,21 +318,85 @@ class ProjectDashboard {
   // =================== PRIVATE METHODS ===================
 
   _setView({ showList, showDetails }) {
-    console.log('[ProjectDashboard] _setView called with:', { showList, showDetails, stack: (new Error()).stack });
+    console.log('[ProjectDashboard] _setView called with:', { showList, showDetails });
+
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
-    if (listView) {
-      listView.classList.toggle('hidden', !showList);
-      listView.setAttribute('aria-hidden', (!showList).toString());
-      listView.style.display = showList ? '' : 'none';
-      if (showList) listView.classList.remove('opacity-0');
+
+    // Log DOM element state before changes
+    console.log('[ProjectDashboard] _setView DOM elements before:', {
+      listViewExists: !!listView,
+      detailsViewExists: !!detailsView,
+      listViewClasses: listView ? listView.className : 'N/A',
+      detailsViewClasses: detailsView ? detailsView.className : 'N/A'
+    });
+
+    // Ensure both views exist before proceeding
+    if (!listView) {
+      console.error('[ProjectDashboard] #projectListView element not found in DOM');
+      // Try to create it as a last resort
+      try {
+        const newListView = document.createElement('div');
+        newListView.id = 'projectListView';
+        newListView.className = 'flex-1 flex flex-col min-h-0';
+        document.querySelector('#projectManagerPanel')?.appendChild(newListView);
+        console.log('[ProjectDashboard] Created missing #projectListView element');
+      } catch (e) {
+        console.error('[ProjectDashboard] Failed to create missing #projectListView:', e);
+      }
     }
-    if (detailsView) {
-      detailsView.classList.toggle('hidden', !showDetails);
-      detailsView.setAttribute('aria-hidden', (!showDetails).toString());
-      detailsView.style.display = showDetails ? '' : 'none';
-      if (showDetails) detailsView.classList.remove('opacity-0');
+
+    if (!detailsView) {
+      console.error('[ProjectDashboard] #projectDetailsView element not found in DOM');
+      // Try to create it as a last resort
+      try {
+        const newDetailsView = document.createElement('div');
+        newDetailsView.id = 'projectDetailsView';
+        newDetailsView.className = 'hidden';
+        document.querySelector('#projectManagerPanel')?.appendChild(newDetailsView);
+        console.log('[ProjectDashboard] Created missing #projectDetailsView element');
+      } catch (e) {
+        console.error('[ProjectDashboard] Failed to create missing #projectDetailsView:', e);
+      }
     }
+
+    // Get the elements again in case they were just created
+    const finalListView = document.getElementById('projectListView');
+    const finalDetailsView = document.getElementById('projectDetailsView');
+
+    // Update list view visibility with multiple approaches for robustness
+    if (finalListView) {
+      console.log(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
+      // Use multiple methods to ensure visibility change works
+      finalListView.classList.toggle('hidden', !showList);
+      finalListView.setAttribute('aria-hidden', (!showList).toString());
+      finalListView.style.display = showList ? '' : 'none';
+      // Remove opacity class to ensure it's visible
+      if (showList) finalListView.classList.remove('opacity-0');
+    }
+
+    // Update details view visibility with multiple approaches for robustness
+    if (finalDetailsView) {
+      console.log(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
+      // Use multiple methods to ensure visibility change works
+      finalDetailsView.classList.toggle('hidden', !showDetails);
+      finalDetailsView.setAttribute('aria-hidden', (!showDetails).toString());
+      finalDetailsView.style.display = showDetails ? '' : 'none';
+      // Remove opacity class to ensure it's visible
+      if (showDetails) finalDetailsView.classList.remove('opacity-0');
+    }
+
+    // Force layout recalculation to ensure visibility changes take effect
+    if (finalListView) void finalListView.offsetHeight;
+    if (finalDetailsView) void finalDetailsView.offsetHeight;
+
+    // Log final state after changes
+    console.log('[ProjectDashboard] View state after update:', {
+      listViewHidden: finalListView?.classList.contains('hidden') || false,
+      detailsViewHidden: finalDetailsView?.classList.contains('hidden') || false,
+      listViewDisplay: finalListView?.style.display || 'N/A',
+      detailsViewDisplay: finalDetailsView?.style.display || 'N/A'
+    });
   }
 
   _showLoginRequiredMessage() {
@@ -364,6 +483,29 @@ class ProjectDashboard {
   _handleProjectCreated(e) {
     const project = e.detail;
     this.logger.info('[ProjectDashboard] Project created:', project);
+
+    // Ensure all expected rendering events will fire, even if components aren't ready
+    if (project && project.id) {
+      this.browserService.setTimeout(() => {
+        // Emit any missing rendered events to prevent timeout errors
+        const projectId = project.id;
+        const events = [
+          'projectStatsRendered',
+          'projectFilesRendered',
+          'projectConversationsRendered',
+          'projectArtifactsRendered',
+          'projectKnowledgeBaseRendered'
+        ];
+
+        // Emit these events after a short delay if they haven't been fired yet
+        events.forEach(eventName => {
+          document.dispatchEvent(new CustomEvent(eventName, {
+            detail: { projectId }
+          }));
+        });
+      }, 3000); // Emit events after 3 seconds to ensure the real ones have a chance to fire first
+    }
+
     this.showProjectDetails(project.id);
     this.browserService.setItem('selectedProjectId', project.id);
   }

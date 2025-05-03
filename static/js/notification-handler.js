@@ -1,4 +1,5 @@
-import { showGroupedNotificationByTypeAndTime } from './handler-helper.js';
+
+import createGroupedNotificationHelper from './handler-helper.js';
 
 /**
  * notification-handler.js
@@ -7,14 +8,18 @@ import { showGroupedNotificationByTypeAndTime } from './handler-helper.js';
  *
  * Usage (in app.js or orchestrator):
  *   import { createNotificationHandler } from './notification-handler.js';
- *   const notificationHandler = createNotificationHandler({ DependencySystem });
+ *   const notificationHandler = createNotificationHandler({ eventHandlers, DependencySystem });
  *   DependencySystem.register('notificationHandler', notificationHandler);
  *   notificationHandler.addMessageListener(); // Optional: if cross-window message support is desired
  *
  * Exposes API: { show, hide, clear, cleanup, addMessageListener, removeMessageListener }
  */
 
-export function createNotificationHandler({ DependencySystem } = {}) {
+export function createNotificationHandler({ eventHandlers, DependencySystem } = {}) {
+  if (!eventHandlers || typeof eventHandlers.trackListener !== 'function') {
+    throw new Error('[NotificationHandler] eventHandlers with trackListener is required.');
+  }
+
   // Keep track of active notifications and their timeouts
   // Map of notificationId -> { element, timeoutId }
   const activeNotifications = new Map();
@@ -34,6 +39,61 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     return container;
   }
 
+  // Provide consistent icon logic for both solo and grouped notifications
+  function getIconForType(type) {
+    switch (type) {
+      case 'success':
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" ' +
+          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
+          'd="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>'
+        );
+      case 'warning':
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" ' +
+          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
+          'd="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 ' +
+          '1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 ' +
+          '1.333.192 3 1.732 3z" /></svg>'
+        );
+      case 'error':
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" ' +
+          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
+          'd="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 ' +
+          '0 9 9 0 0118 0z" /></svg>'
+        );
+      case 'info':
+      default:
+        return (
+          '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" ' +
+          'class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" ' +
+          'stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 ' +
+          '12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
+        );
+    }
+  }
+
+  function getHeadingForType(type) {
+    switch (type) {
+      case 'success': return 'Success';
+      case 'warning': return 'Warning';
+      case 'error': return 'Error';
+      case 'info':
+      default: return 'Info';
+    }
+  }
+
+  // --- GROUPED NOTIFICATION SETUP ---
+  const groupedHelper = createGroupedNotificationHelper({
+    eventHandlers,
+    getIconForType,
+    notificationHandler: null // self-reference only if needed by advanced features
+  });
+
   // Utility: Async log notification to backend (fire-and-forget)
   async function logNotificationToServer(message, type, user) {
     try {
@@ -41,11 +101,11 @@ export function createNotificationHandler({ DependencySystem } = {}) {
         message,
         type,
         timestamp: Date.now() / 1000,
-        user: user || (window.currentUser?.username ?? "unknown")
+        user: user || (window.currentUser?.username ?? 'unknown')
       };
-      await fetch("/api/log_notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await fetch('/api/log_notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(logPayload)
       });
     } catch (_) {
@@ -53,7 +113,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     }
   }
 
-  // Show a notification
+  // Show a notification (solo or grouped)
   function show(message, type = 'info', options = {}) {
     const container = ensureNotificationContainer();
 
@@ -62,7 +122,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
     // Group by type and time window if options.groupByTypeAndTime is true
     if (options.groupByTypeAndTime) {
-      return showGroupedNotificationByTypeAndTime({
+      return groupedHelper.showGroupedNotificationByTypeAndTime({
         message,
         type,
         container
@@ -119,10 +179,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     });
 
     // Default click-to-dismiss behavior; remove if you want to rely on explicit buttons only
-    // Use DI event handler if provided, else fallback to raw addEventListener
-    (options.trackListener || notification.addEventListener.bind(notification))(
-      'click', () => { hide(notificationId); }
-    );
+    eventHandlers.trackListener(notification, "click", () => { hide(notificationId); }, { description: "dismiss notification by click" });
 
     // Focus the notification for screen readers
     setTimeout(() => {
@@ -132,60 +189,56 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     return notificationId;
   }
 
+  // Hide a notification—works for both standard and grouped
   function hide(notificationId) {
-    try {
-      // Notification can be a string ID or the HTMLElement itself
-      // Always try to look up by ID in our Map
-      const data = typeof notificationId === 'string'
-        ? activeNotifications.get(notificationId)
-        : null;
+    // Try active notifications first
+    const data = typeof notificationId === 'string'
+      ? activeNotifications.get(notificationId)
+      : null;
 
-      // If we didn't find a match in the Map, try using getElementById (fallback)
-      // This might be a leftover call or partial usage
-      const notificationElement = data?.element ||
-        (typeof notificationId === 'string' ? document.getElementById(notificationId) : notificationId);
-
+    // Hide standard notification logic
+    if (data) {
+      const notificationElement = data.element;
       if (!notificationElement) {
         activeNotifications.delete(String(notificationId));
         return false;
       }
-
-      // Clear any pending timeout if it exists
-      if (data?.timeoutId) {
-        clearTimeout(data.timeoutId);
-      }
-
-      // Fade out
+      if (data.timeoutId) clearTimeout(data.timeoutId);
       notificationElement.style.transition = 'opacity 0.3s ease-out';
       notificationElement.style.opacity = '0';
-
-      // Remove from DOM after animation
       setTimeout(() => {
         try {
-          if (notificationElement.parentNode) {
-            notificationElement.parentNode.removeChild(notificationElement);
-          }
+          if (notificationElement.parentNode) notificationElement.parentNode.removeChild(notificationElement);
           activeNotifications.delete(String(notificationId));
         } catch (err) {
           console.error('[NotificationHandler] hide/timeout removeChild error:', err);
         }
       }, 300);
-
       return true;
-    } catch (err) {
-      console.error('[NotificationHandler] hide function error:', err);
-      return false;
     }
+
+    // Try grouped notification logic
+    let success = false;
+    // Allow passing groupKey or group notificationId
+    if (typeof notificationId === 'string') {
+      groupedHelper.hideGroupedNotification(notificationId);
+      success = true;
+    }
+    return success;
   }
 
+  // Clear all notifications of both types
   function clear() {
+    // Standard
     const container = document.getElementById('notificationContainer');
     if (container) {
       Array.from(container.children).forEach((notification) => {
-        hide(notification);
+        hide(notification.id);
       });
       activeNotifications.clear();
     }
+    // Grouped
+    groupedHelper.clearAllGroupedNotifications();
   }
 
   function cleanup() {
@@ -200,53 +253,6 @@ export function createNotificationHandler({ DependencySystem } = {}) {
       case 'error': return 'alert-error';
       case 'info':
       default: return 'alert-info';
-    }
-  }
-
-  function getIconForType(type) {
-    switch (type) {
-      case 'success':
-        return (
-          '<svg xmlns="http://www.w3.org/2000/svg" ' +
-          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
-          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
-          'd="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>'
-        );
-      case 'warning':
-        return (
-          '<svg xmlns="http://www.w3.org/2000/svg" ' +
-          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
-          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
-          'd="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 ' +
-          '1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 ' +
-          '1.333.192 3 1.732 3z" /></svg>'
-        );
-      case 'error':
-        return (
-          '<svg xmlns="http://www.w3.org/2000/svg" ' +
-          'class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24">' +
-          '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" ' +
-          'd="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 ' +
-          '0 9 9 0 0118 0z" /></svg>'
-        );
-      case 'info':
-      default:
-        return (
-          '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" ' +
-          'class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" ' +
-          'stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 ' +
-          '12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>'
-        );
-    }
-  }
-
-  function getHeadingForType(type) {
-    switch (type) {
-      case 'success': return 'Success';
-      case 'warning': return 'Warning';
-      case 'error': return 'Error';
-      case 'info':
-      default: return 'Info';
     }
   }
 
@@ -308,10 +314,12 @@ export function createNotificationHandler({ DependencySystem } = {}) {
 
   function addMessageListener(target = window, trackListener = null) {
     if (_messageListenerAttached) return;
-    if (!trackListener) {
+    if (!trackListener && !eventHandlers.trackListener) {
       throw new Error("[NotificationHandler] addMessageListener requires 'trackListener' to be provided (no direct addEventListener allowed)");
     }
-    trackListener(target, 'message', handleNotificationMessages, { description: 'NotificationHandler: message' });
+    // Use DI if available
+    const tracker = trackListener || eventHandlers.trackListener;
+    tracker(target, 'message', handleNotificationMessages, { description: 'NotificationHandler: message' });
     _messageListenerAttached = true;
   }
 
@@ -322,7 +330,7 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     }
   }
 
-  // DependencySystem registration is now always handled in orchestrator (app.js).
+  // DependencySystem registration is always handled in orchestrator/app.js.
   // No top-level registration or usage here.
 
   return {
@@ -331,6 +339,9 @@ export function createNotificationHandler({ DependencySystem } = {}) {
     clear,
     cleanup,
     addMessageListener,
-    removeMessageListener
+    removeMessageListener,
+    getIconForType, // Expose if needed elsewhere
+    groupedNotifications: groupedHelper.groupedNotifications, // Expose for diagnostics/testing
+    groupedHelper // Expose the full grouped API if needed
   };
 }
