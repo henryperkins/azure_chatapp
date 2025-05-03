@@ -1,0 +1,213 @@
+# Notification System: Architecture, Usage, and Best Practices
+
+This guide documents the notification banner system for the Azure Chat Application, including its features, usage patterns, configuration options, and integration points for all modules.
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Banner Display Types](#banner-display-types)
+   - [Single Notifications](#single-notifications)
+   - [Grouped Notifications](#grouped-notifications)
+3. [Styling, Animation, and Theming](#styling-animation-and-theming)
+4. [Notification API Usage](#notification-api-usage)
+   - [Basic Example](#basic-example)
+   - [Types](#types)
+   - [Grouping Options](#grouping-options)
+   - [Customizing Context, Module, Source](#customizing-context-module-source)
+5. [Grouping Rules and Contexts](#grouping-rules-and-contexts)
+6. [Accessibility and Responsiveness](#accessibility-and-responsiveness)
+7. [Best Practices](#best-practices)
+8. [Reference: Customization and CSS](#reference-customization-and-css)
+
+---
+
+## Overview
+
+The notification system provides robust, accessible, and theme-aware banners for user feedback, error handling, and operational status across desktop and mobile.
+
+**Features include:**
+- Consistent display for all modules (info, warning, error, success)
+- Animation (fade-in/out, grouped pulse)
+- Advanced grouping (batch related messages together)
+- Per-module scoping and cross-module grouping
+- Full theme (light/dark) and responsive support
+- Accessibility (keyboard navigation, ARIA, focus)
+- Integrated one-click copy-to-clipboard for all notifications (with inline feedback and accessibility support)
+- Easy customization and extensibility
+
+---
+
+## Banner Display Types
+
+### Single Notifications
+
+- Rendered as `.alert.notification-item`
+- Icon, message, dismiss (`×`) button, and new **copy button** (clipboard icon; click to copy message, icon changes to checkmark on success)
+- Uses classes like `.notification-error`, `.notification-success`
+- Animates with `.animate-fadeIn` and `.animate-fadeOut`
+
+### Grouped Notifications (Accordion)
+
+- Rendered as `.accordion-banner` using an accordion UI
+- Summary view: context badge + type + count
+- **Copy button** in summary row allows copying all messages in group to clipboard; the icon provides inline checkmark feedback on success
+- Expand/collapse to show all messages in group (`Show Details`/`Hide Details`)
+- Dismisses group as a whole (`×`)
+- Groups by {type, context/module/source, time bucket}
+
+---
+
+## Styling, Animation, and Theming
+
+- **Theme/color:** Uses DaisyUI/Tailwind theme colors (`--color-error`, `--color-success`, etc) in both enhanced-components and notification-accordion CSS.
+- **Accent border:** Strong left border color by type for immediate recognition.
+- **Animations:** Fade-in/out for both singles and groups; pulse on grouped update.
+- **Responsiveness:** Max width/shrink for mobile, enforced button/tap target sizes.
+- **Integration Points:** All styling centralized via `enhanced-components.css`, `notification-accordion.css`, and theme variable overrides.
+
+---
+
+## Notification API Usage
+
+### Basic Example
+
+```js
+// Show an info notification
+notificationHandler.show('User saved successfully', 'success', { timeout: 4000 });
+
+// Show an error, grouped for this module
+notificationHandler.show(
+  'Failed to upload file',
+  'error',
+  { group: true, context: 'file-upload' }
+);
+```
+
+### Types
+
+Types supported: `info`, `success`, `warning`, `error`
+Rendering and left-accent color are determined by type.
+
+### Grouping Options
+
+- Set `group: true` in the `options` parameter to enable grouping/batching.
+- Grouping is based on:
+  `{ type, context/module/source, 5s time bucket }`
+- If no `context/module/source` is given, grouping is cross-module by type (`general` context).
+
+### Customizing Context, Module, Source
+
+You can scope grouping and display by providing one of these options:
+
+- `context`: Arbitrary string (e.g. `"auth"`, `"projectManager"`, `"file-upload"`)
+- `module`: Name of the subsystem or feature (e.g. `"chatManager"`, `"sidebar"`)
+- `source`: More granular context (e.g. `"apiRequest"`, `"loginSubmit"`)
+
+The notification handler determines grouping context as:
+```js
+const context = options.context || options.module || options.source || 'general';
+```
+Specify these to control grouping boundaries.
+
+---
+
+## Grouping Rules and Contexts
+
+- **All modules, shared type:**
+  - If no context/module/source is set (or all are the same), notifications of the same type from all modules are grouped together in a single accordion.
+- **Module/feature-specific grouping:**
+  - By setting a unique `context`, `module`, or `source`, grouping is *per module/feature* and type.
+- **Summary:**
+  - Grouping context is fully controlled by your option string; use the same string to group together, unique ones to keep groups distinct.
+
+**Examples:**
+```js
+// All errors from all modules grouped together (default)
+notificationHandler.show('Error in X', 'error', { group: true });
+
+// Only errors in auth grouped
+notificationHandler.show('Login failed', 'error', { group: true, context: 'auth' });
+
+// Per-feature grouping for Project Manager
+notificationHandler.show('Missing project file', 'error', { group: true, module: 'projectManager' });
+```
+
+---
+
+## Accessibility and Responsiveness
+
+- **ARIA roles:** All banners use proper roles (alert, region, labelledby).
+- **Keyboard support:** Tab/focus states on all buttons, including copy, summary, close, and message lists.
+- **Focus management:** Outlines and focus-visible for all interactive elements; supports keyboard navigation.
+- **Copy button accessibility:** Copy buttons are keyboard and screenreader accessible (aria-label, focusable, feedback with icon swap).
+- **Minimum tap targets:** All dismiss/toggle/copy/action buttons are at least 44x44px.
+- **Mobile:** Responsive width and stacking, font sizes scale on smaller screens.
+
+---
+
+## Best Practices
+
+- Use a descriptive, stable string for `context` or `module` when grouping notifications in your feature/module.
+- For cross-cutting/globally relevant grouping, leave context/module/source unset or set the same value in multiple locations.
+- Always provide a type (`"info"`, `"error"`, etc.) for semantic coloring and icon.
+- Prefer `timeout: 0` for persistent/system alerts, otherwise use a short timeout to avoid notification clutter.
+- Clean up notifications via `.clear()` if relevant (e.g. on navigation).
+- For accessibility, ensure summaries and messages are concise and descriptive.
+
+---
+
+## Reference: Customization and CSS
+
+- Styles are managed via DaisyUI + custom CSS in `enhanced-components.css`, `notification-accordion.css`.
+- Copy button styling uses class `.notification-copy-btn` for singles and `.accordion-copy-btn` for grouped banners.
+- All color variables are themeable and support both light and dark modes.
+- Animations are managed via Tailwind utility classes and custom keyframes.
+- You may further customize banner layout, iconography (including supplied SVGs for copy/check), or transitions through these partials.
+
+---
+
+## Example: Creating a Grouped Notification from a Module
+
+```js
+// In projectManager.js
+export function notifyProjectLoadError(notificationHandler, projectId) {
+  notificationHandler.show(
+    `Could not load project with ID: ${projectId}`,
+    'error',
+    { group: true, context: 'projectManager' }
+  );
+}
+```
+
+---
+
+## Additional Information
+
+- Standard notification handler: `DependencySystem.modules.get('notificationHandler')`
+- Grouped notification helper: Used internally, but available as `notificationHandler.groupedHelper`
+- Supports server-side batching/logging for notifications
+
+---
+
+## See Also
+
+- static/js/notification-handler.js – implementation, options, grouped helper
+- static/js/handler-helper.js – grouping logic
+- static/css/notification-accordion.css, static/css/enhanced-components.css – styles
+- static/js/app.js – how notification handler is registered and injected
+
+---
+
+*For contributions or style overrides, see the CSS partials and review the notification API signature to ensure notification UX remains consistent site-wide.*
+
+---
+
+## Changelog
+
+**2025-05-03:**
+- Added copy-to-clipboard feature to all notification banners:
+  - All single and grouped notifications now have a copy button.
+  - Copy feedback is provided via inline icon state only (checkmark), not a popup.
+  - Accessibility and style updated accordingly.

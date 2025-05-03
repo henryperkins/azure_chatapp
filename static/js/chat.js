@@ -186,14 +186,57 @@ export function createChatManager({
   const _EH = eventHandlers || createDefaultEventHandlers();
 
   // Notification handler: prefer injected, then app.showNotification, else throw
-  const notify = notificationHandler ||
-    ((msg, type = "info", ...args) => {
-      if (typeof app.showNotification === "function") {
-        app.showNotification(msg, type, ...args);
-      } else {
-        throw new Error(`[ChatManager] Notification: ${msg}`);
-      }
-    });
+  // Unified notification: always inject grouping/context for chatManager
+  const notify = notificationHandler
+    ? ((msg, type = "info", ...args) => {
+        // Find or merge options into last arg (handler interface)
+        let opts = {};
+        if (
+          args.length &&
+          typeof args[args.length - 1] === "object" &&
+          args[args.length - 1] !== null &&
+          !Array.isArray(args[args.length - 1])
+        ) {
+          opts = { ...args.pop(), group: true, context: "chatManager" };
+        } else {
+          opts = { group: true, context: "chatManager" };
+        }
+        // Try handler.show for showNotification-like API
+        if (typeof notificationHandler.show === "function") {
+          return notificationHandler.show(msg, type, opts);
+        }
+        // Try handler[type] for log/warn/error
+        if (typeof notificationHandler[type] === "function") {
+          return notificationHandler[type](msg, ...(args.length > 0 ? args : [opts]));
+        }
+        // Fallback: call as a function in case handler itself is callable
+        if (typeof notificationHandler === "function") {
+          return notificationHandler(msg, type, opts);
+        }
+      })
+    : ((msg, type = "info", ...args) => {
+        // Ensure 4th arg to showNotification is always options with group/context
+        let duration = undefined;
+        let options = {};
+        if (args.length && typeof args[0] === "number") {
+          duration = args.shift();
+        }
+        if (
+          args.length &&
+          typeof args[args.length - 1] === "object" &&
+          args[args.length - 1] !== null &&
+          !Array.isArray(args[args.length - 1])
+        ) {
+          options = { ...args.pop(), group: true, context: "chatManager" };
+        } else {
+          options = { group: true, context: "chatManager" };
+        }
+        if (typeof app.showNotification === "function") {
+          app.showNotification(msg, type, duration, options);
+        } else {
+          throw new Error(`[ChatManager] Notification: ${msg}`);
+        }
+      });
 
   /**
    * The main ChatManager class, constructed with all DI references enclosed.
