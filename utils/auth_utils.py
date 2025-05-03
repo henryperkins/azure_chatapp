@@ -32,9 +32,12 @@ import secrets
 # -----------------------------------------------------------------------------
 # JWT Configuration
 # -----------------------------------------------------------------------------
-JWT_SECRET: str = getattr(settings, "JWT_SECRET", None) or secrets.token_hex(32)
-if not getattr(settings, "JWT_SECRET", None):
-    logger.warning("JWT_SECRET was not set! Using a random secret key for this session (local development ONLY).")
+JWT_SECRET: str = getattr(settings, "JWT_SECRET", None)
+if not JWT_SECRET:
+    if getattr(settings, "ENV", "development").lower() == "production":
+        raise RuntimeError("JWT_SECRET must be set in production environment")
+    logger.critical("JWT_SECRET was not set! Using an insecure random secret for development only")
+    JWT_SECRET = secrets.token_hex(32)
 
 JWT_ALGORITHM = "HS256"
 
@@ -79,94 +82,39 @@ async def verify_token(
     db_session: Optional[AsyncSession] = None,
 ) -> dict[str, Any]:
     """
-    Verifies and decodes a JWT token.
-
-    SECURITY NOTE:
-      - Never auto-refresh or extend token expiration in this function (only allow in `/refresh` endpoint).
-      - REQUIRE a real DB session (dependency-injected). This function will not open its own DB session.
-      - Token lifetime policies must be enforced strictly by expiration date in the JWT itself.
-      - This function is used by `/verify` and must never modify or return renewed tokens.
-
-    - Checks if token is blacklisted.
-    - Enforces a token type if `expected_type` is given.
-    - Raises HTTPException(401) if invalid, expired, or revoked.
+    Enhanced token verification with strict error handling and logging.
+    Raises HTTPException(401) on any validation or blacklist failure.
     """
     if db_session is None:
-        logger.error("verify_token called without required db_session argument")
-        raise RuntimeError(
-            "Database session must be supplied to verify_token - dependency-inject this, do not rely on lazy session!"
-        )
-
-    decoded = None
-    token_id = None
-    start_time = datetime.utcnow()
+        raise RuntimeError("Database session required for verify_token")
 
     try:
-        if settings.DEBUG:
-            logger.debug(
-                f"Verifying token (expected_type={expected_type}): {token[:20]}..."
-            )
-
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         token_id = decoded.get("jti")
         token_type = decoded.get("type", "unknown")
-        username = decoded.get("sub", "unknown")
-        expires_at = (
-            datetime.utcfromtimestamp(decoded["exp"]) if decoded.get("exp") else None
-        )
-
-        if settings.DEBUG:
-            logger.debug(
-                f"Token details - jti: {token_id}, type: {token_type}, "
-                f"user: {username}, expires: {expires_at}"
-            )
-
-        # If a specific token type is expected, confirm it
-        if expected_type and token_type != expected_type:
-            logger.warning(
-                f"Token type mismatch. Expected '{expected_type}', got '{token_type}'"
-            )
-            raise HTTPException(status_code=401, detail="Invalid token type")
 
         if not token_id:
-            logger.warning("Token missing required 'jti' claim")
             raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-        # Check if token is blacklisted - must use provided DB session
-        query = select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
-        result = await db_session.execute(query)
-        blacklisted = result.scalar_one_or_none()
+        if expected_type and token_type != expected_type:
+            raise HTTPException(status_code=401, detail=f"Invalid token type: expected {expected_type}")
 
-        if blacklisted:
-            logger.warning(f"Token ID '{token_id}' is revoked (blacklisted)")
-            raise HTTPException(status_code=401, detail="Token is revoked")
+        # Check blacklist
+        blacklisted = await db_session.execute(
+            select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
+        )
+        if blacklisted.scalar_one_or_none():
+            raise HTTPException(status_code=401, detail="Token has been revoked")
 
-        if settings.DEBUG:
-            duration = (datetime.utcnow() - start_time).total_seconds() * 1000
-            logger.debug(
-                f"Token verification successful for jti={token_id}, "
-                f"user={username} (took {duration:.2f}ms)"
-            )
         return decoded
 
-    except ExpiredSignatureError as exc:
-        logger.warning("Token expired: jti=%s", token_id)
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired - please refresh your session",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
     except InvalidTokenError as e:
-        logger.warning("Invalid token jti=%s, error=%s", token_id, str(e))
-        raise HTTPException(status_code=401, detail="Invalid token") from e
-    except PyJWTError as e:
-        logger.error("JWT error for jti=%s: %s", token_id, str(e))
-        raise HTTPException(status_code=401, detail="Token error") from e
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
     except Exception as e:
-        logger.exception(
-            "Unexpected error during token verification for jti=%s", token_id
-        )
-        raise HTTPException(status_code=500, detail="Token verification failed") from e
+        logger.error(f"Unexpected error during token verification: {str(e)}")
+        raise HTTPException(status_code=500, detail="Token verification failed")
 
 
 # -----------------------------------------------------------------------------

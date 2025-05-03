@@ -136,9 +136,13 @@ export class ProjectListComponent {
         // New: Use only the real project grid for cards, not the root
         this.gridElement = this.element.querySelector('.grid');
         if (!this.gridElement) {
-            throw new Error(
-                `[ProjectListComponent] '.grid' container not found inside #${this.elementId}`
+            this.notification.error(
+                `[ProjectListComponent.INIT] '.grid' container not found inside #${this.elementId}. Element HTML: ${this.element.innerHTML}`,
+                { context: "ProjectListComponent" }
             );
+            throw new Error(`'.grid' container not found`);
+        } else {
+            this.notification.log(`[ProjectListComponent] gridElement found and initialized.`, { context: "ProjectListComponent" });
         }
 
         this._bindEventListeners();
@@ -325,13 +329,10 @@ export class ProjectListComponent {
             return;
         }
         this.gridElement.classList.remove("hidden");
-        this.gridElement.style.display = "";
         this.element.classList.remove("hidden");
-        this.element.style.display = "";
         const listView = document.getElementById("projectListView");
         if (listView) {
             listView.classList.remove("hidden", "opacity-0");
-            listView.style.display = "";
         }
     }
 

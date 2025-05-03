@@ -36,7 +36,7 @@ from models.project_file import ProjectFile
 from models.artifact import Artifact
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
-from services.project_service import validate_project_access
+from services.project_service import check_project_permission, ProjectAccessLevel
 import config
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -290,7 +290,7 @@ async def get_project(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get project details with monitoring"""
+    """Get project details with centralized permission validation"""
     current_user, _token = current_user_tuple
     with sentry_span(
         op="project", name="Get Project", description=f"Get project {project_id}"
@@ -299,8 +299,17 @@ async def get_project(
             span.set_tag("project.id", str(project_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Validate access
-            project = await validate_project_access(project_id, current_user, db)
+            # Centralized permission check
+            await check_project_permission(
+                project_id,
+                current_user,
+                db,
+                ProjectAccessLevel.READ
+            )
+            # Fetch project after permission check
+            project = await db.get(Project, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
 
             # Set context in Sentry
             with configure_scope() as scope:
@@ -349,8 +358,16 @@ async def update_project(
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("user.id", str(current_user.id))
 
-            # Validate access
-            project = await validate_project_access(project_id, current_user, db)
+            # Centralized permission check
+            await check_project_permission(
+                project_id,
+                current_user,
+                db,
+                ProjectAccessLevel.EDIT
+            )
+            project = await db.get(Project, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
 
             # Track changes
             changes = {}
@@ -432,8 +449,16 @@ async def delete_project(
             transaction.set_tag("project.id", str(project_id))
             transaction.set_tag("user.id", str(current_user.id))
 
-            # Validate access
-            project = await validate_project_access(project_id, current_user, db)
+            # Centralized permission check
+            await check_project_permission(
+                project_id,
+                current_user,
+                db,
+                ProjectAccessLevel.MANAGE
+            )
+            project = await db.get(Project, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
 
             # Initialize storage
             storage = get_file_storage(
@@ -577,8 +602,16 @@ async def toggle_archive_project(
             span.set_tag("project.id", str(project_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Validate access
-            project = await validate_project_access(project_id, current_user, db)
+            # Centralized permission check
+            await check_project_permission(
+                project_id,
+                current_user,
+                db,
+                ProjectAccessLevel.MANAGE
+            )
+            project = await db.get(Project, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
 
             # Track state change
             old_state = project.archived
@@ -633,8 +666,16 @@ async def toggle_pin_project(
             span.set_tag("project.id", str(project_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Validate access
-            project = await validate_project_access(project_id, current_user, db)
+            # Centralized permission check
+            await check_project_permission(
+                project_id,
+                current_user,
+                db,
+                ProjectAccessLevel.MANAGE
+            )
+            project = await db.get(Project, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
 
             if project.archived and not project.pinned:
                 raise HTTPException(
@@ -698,8 +739,16 @@ async def get_project_stats(
             span.set_tag("project.id", str(project_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Validate access
-            project = await validate_project_access(project_id, current_user, db)
+            # Centralized permission check
+            await check_project_permission(
+                project_id,
+                current_user,
+                db,
+                ProjectAccessLevel.READ
+            )
+            project = await db.get(Project, project_id)
+            if not project:
+                raise HTTPException(status_code=404, detail="Project not found")
 
             metrics.incr("project.stats.requested")
             start_time = time.time()

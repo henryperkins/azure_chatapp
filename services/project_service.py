@@ -16,12 +16,13 @@ from sqlalchemy.future import select
 from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import joinedload
 
-from models.project import Project
-from models.user import User
 from models.knowledge_base import KnowledgeBase
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from utils.serializers import serialize_list
+from enum import Enum
+from models.user import User, UserRole
+from models.project import Project, ProjectUserAssociation
 
 # =======================================================
 #  Knowledge Base Validation
@@ -52,6 +53,86 @@ async def validate_knowledge_base_access(
 # =======================================================
 #  Project Access
 # =======================================================
+
+class ProjectAccessLevel(Enum):
+    NONE = 0
+    READ = 10
+    COMMENT = 20
+    EDIT = 30
+    MANAGE = 40
+    OWNER = 50
+
+
+async def check_project_permission(
+    project_id,
+    user: User,
+    db,
+    required_level: ProjectAccessLevel = ProjectAccessLevel.READ,
+    raise_exception: bool = True,
+) -> bool:
+    """
+    Unified project permission check.
+
+    Handles:
+    - Direct ownership (user_id matches)
+    - Project association (e.g., member, contributor, manager)
+    - Admin override
+    - Archived project restrictions
+
+    Returns: bool (or raises HTTPException)
+    """
+    # Admins: admin can do anything up to MANAGE (not OWNER actions by default, unless adjusted)
+    if (
+        user.role == UserRole.ADMIN.value
+        and required_level.value <= ProjectAccessLevel.MANAGE.value
+    ):
+        project = await db.get(Project, project_id)
+        if not project:
+            if raise_exception:
+                raise HTTPException(status_code=404, detail="Project not found")
+            return False
+        if project.archived and required_level != ProjectAccessLevel.MANAGE:
+            if raise_exception:
+                raise HTTPException(status_code=400, detail="Project is archived")
+            return False
+        return True
+
+    # Direct Ownership
+    if required_level == ProjectAccessLevel.OWNER:
+        result = await db.execute(
+            select(Project).where(Project.id == project_id, Project.user_id == user.id)
+        )
+        if result.scalar_one_or_none():
+            return True
+
+    # Project Association (roles via association table)
+    assoc_query = select(ProjectUserAssociation).where(
+        ProjectUserAssociation.project_id == project_id,
+        ProjectUserAssociation.user_id == user.id,
+    )
+    result = await db.execute(assoc_query)
+    association = result.scalar_one_or_none()
+    if association:
+        # Map association's role to access level
+        role = getattr(association, "role", None)
+        assoc_level = ProjectAccessLevel.READ
+        if role == "contributor":
+            assoc_level = ProjectAccessLevel.COMMENT
+        elif role == "member":
+            assoc_level = ProjectAccessLevel.EDIT
+        elif role == "manager":
+            assoc_level = ProjectAccessLevel.MANAGE
+        if assoc_level.value >= required_level.value:
+            project = await db.get(Project, project_id)
+            if project and not getattr(project, "archived", False):
+                return True
+
+    # Fallback: Not permitted
+    if raise_exception:
+        raise HTTPException(
+            status_code=403, detail="Project access denied or insufficient role"
+        )
+    return False
 
 
 async def check_knowledge_base_status(

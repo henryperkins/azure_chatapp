@@ -95,27 +95,26 @@ export function createAuthModule({
   /* =========================
      CSRF Token Management
      ========================= */
-  async function fetchCsrfToken() {
+  // Simplified and secure CSRF token fetch per security remediation
+  function fetchCSRFToken() {
     try {
-      if (apiRequest) {
-        const data = await apiRequest(`/api/auth/csrf?ts=${Date.now()}`, { method: "GET", headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
-        if (!data?.token) throw new Error('CSRF token missing in response');
-        return data.token;
-      }
-      const response = await fetch(`/api/auth/csrf?ts=${Date.now()}`, {
+      return fetch(`/api/auth/csrf?ts=${Date.now()}`, {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
         headers: {
-          Accept: 'application/json',
+          'Accept': 'application/json',
           'Cache-Control': 'no-cache',
         },
+      })
+      .then(response => {
+        if (!response.ok) throw new Error(`CSRF fetch failed: ${response.status}`);
+        return response.json();
+      })
+      .then(data => {
+        if (!data.token) throw new Error('CSRF token missing in response');
+        return data.token;
       });
-
-      if (!response.ok) throw new Error(`CSRF fetch failed with status ${response.status}`);
-      const data = await response.json();
-      if (!data.token) throw new Error('CSRF token missing in response');
-      return data.token;
     } catch (error) {
       showNotification?.('[Auth] CSRF token fetch failed: ' + (error?.message || error), 'error');
       return null;
@@ -128,7 +127,7 @@ export function createAuthModule({
 
     csrfTokenPromise = (async () => {
       try {
-        const token = await fetchCsrfToken();
+        const token = await fetchCSRFToken();
         if (token) csrfToken = token;
         return token;
       } finally {
