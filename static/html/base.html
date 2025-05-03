@@ -73,7 +73,7 @@
   <!-- SCRIPT LOADING ORDER -->
 
   <!-- Tier 0: Sentry Init -->
-  <script src="/static/js/sentry-init.js"></script>
+  <script type="module" src="/static/js/sentry-init.js"></script>
 
   <!-- Tier 0.5: Dependency System -->
   <script>
@@ -856,7 +856,7 @@
       (function loadModalsHtml() {
         // Always log this to help with debugging
         console.log('[ModalLoader] DOM content loaded, will attempt to load modals.html');
-        
+
         const modalsContainer = document.getElementById('modalsContainer');
         if (!modalsContainer) {
           console.error('[ModalLoader] #modalsContainer not found in DOM.');
@@ -874,20 +874,20 @@
             return;
           }
         }
-        
+
         // Add timeout to prevent infinite waiting
         const fetchTimeout = setTimeout(() => {
           console.error('[ModalLoader] TIMEOUT: Fetch for modals.html took too long (8 seconds)');
           // Dispatch the event anyway to unblock app initialization
-          document.dispatchEvent(new CustomEvent('modalsLoaded', { 
-            detail: { success: false, error: 'Timeout' } 
+          document.dispatchEvent(new CustomEvent('modalsLoaded', {
+            detail: { success: false, error: 'Timeout' }
           }));
         }, 8000);
-        
+
         console.log('[ModalLoader] Starting fetch for /static/html/modals.html...');
-        
+
         // Use a more robust fetch with explicit cache control
-        fetch('/static/html/modals.html', { 
+        fetch('/static/html/modals.html', {
           cache: 'no-store',  // Don't use cache at all
           headers: { 'Cache-Control': 'no-cache' }
         })
@@ -900,20 +900,20 @@
           })
           .then(html => {
             clearTimeout(fetchTimeout);
-            
+
             if (!html || html.trim() === '') {
               console.error('[ModalLoader] Empty response received for modals.html');
               throw new Error('Empty response');
             }
-            
+
             console.log('[ModalLoader] Fetch successful, received html length:', html.length);
             console.log('[ModalLoader] Injecting HTML into DOM...');
-            
+
             modalsContainer.innerHTML = html;
             modalsContainer.classList.remove('hidden');
-            
+
             console.log('[ModalLoader] HTML injected, dispatching modalsLoaded event...');
-            document.dispatchEvent(new CustomEvent('modalsLoaded', { 
+            document.dispatchEvent(new CustomEvent('modalsLoaded', {
               detail: { success: true }
             }));
             console.log('[ModalLoader] modalsLoaded event dispatched. Modal system ready.');
@@ -923,7 +923,7 @@
             // Log the specific error during fetch or processing
             console.error('[ModalLoader] Error loading or processing modals.html:', err);
             // Always dispatch event to unblock app initialization
-            document.dispatchEvent(new CustomEvent('modalsLoaded', { 
+            document.dispatchEvent(new CustomEvent('modalsLoaded', {
               detail: { success: false, error: err.message }
             }));
           });

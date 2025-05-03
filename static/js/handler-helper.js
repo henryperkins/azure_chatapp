@@ -22,16 +22,18 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
   const groupedNotifications = new Map();
   const GROUP_WINDOW_MS = 5000;
 
-  function getTypeTimeGroupKey(type) {
+  function getTypeTimeContextGroupKey(type, context) {
     const bucket = Math.floor(Date.now() / GROUP_WINDOW_MS);
-    return `${type}-${bucket}`;
+    const ctx = (context || 'general').replace(/\s+/g, '_');
+    return `${type}-${ctx}-${bucket}`;
   }
 
   /**
    * Show a grouped notification, returns group notificationId (not groupKey!).
+   * Accepts .context field (string).
    */
-  function showGroupedNotificationByTypeAndTime({ message, type = "info", container }) {
-    const groupKey = getTypeTimeGroupKey(type);
+  function showGroupedNotificationByTypeAndTime({ message, type = "info", context, container }) {
+    const groupKey = getTypeTimeContextGroupKey(type, context);
 
     let group = groupedNotifications.get(groupKey);
     if (group) {
@@ -44,9 +46,10 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
     const notificationId = `group-${groupKey}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     group = {
       type,
+      context: context || 'general',
       messages: [message],
       notificationId,
-      groupKey, // store for clean deletion
+      groupKey,
       expanded: false,
       element: null,
       teardown: null, // for lifecycle
@@ -114,6 +117,7 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
     banner.innerHTML = `
       <div class="accordion-summary" id="${summaryId}">
         ${iconHtml}
+        <span class="notification-context-badge">${escapeHtml(group.context)}</span>
         <span class="accordion-summary-text">${group.messages.length} ${capitalize(group.type)}${group.messages.length > 1 ? "s" : ""} occurred</span>
         <button type="button" class="accordion-toggle-btn"
           aria-expanded="false" aria-controls="${detailsId}" id="toggle-${group.notificationId}">
@@ -205,6 +209,17 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
   // --- Helpers ---
   function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
+  }
+
+  // Escape HTML for safe context label rendering
+  function escapeHtml(unsafe) {
+    if (typeof unsafe !== "string") return '';
+    return unsafe
+      .replace(/&/g, "&")
+      .replace(/</g, "<")
+      .replace(/>/g, ">")
+      .replace(/"/g, '\\"')       // Replace " with \"
+      .replace(/'/g, "&#039;");
   }
 
   // --- API ---

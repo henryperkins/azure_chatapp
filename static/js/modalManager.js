@@ -96,7 +96,7 @@ class ModalManager {
       return;
     }
     if (this.showNotification) {
-      this.showNotification(message, level);
+      this.showNotification(message, level, undefined, { context: "ModalManager" });
     }
     // else do nothing (no direct console usage allowed)
   }
@@ -261,9 +261,9 @@ class ModalManager {
     Object.entries(modalMapping).forEach(([key, modalId]) => {
       const elements = document.querySelectorAll(`#${modalId}`);
       if (elements.length === 0) {
-        this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`);
+        this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`, false);
       } else if (elements.length > 1) {
-        this._notify('error', `ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`);
+        this._notify('error', `ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`, false);
       }
     });
   }
@@ -285,13 +285,13 @@ class ModalManager {
 
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`);
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false);
       return false;
     }
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`);
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false);
       return false;
     }
 
@@ -316,13 +316,13 @@ class ModalManager {
     const modalName = 'confirm';
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      this._notify('error', '[ModalManager] Confirm modal ID not mapped.');
+      this._notify('error', '[ModalManager] Confirm modal ID not mapped.', false);
       return;
     }
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      this._notify('error', '[ModalManager] Confirm modal element not found.');
+      this._notify('error', '[ModalManager] Confirm modal element not found.', false);
       return;
     }
 

@@ -267,3 +267,27 @@ export async function waitForDepsAndDom({
     await new Promise(resolve => setTimeout(resolve, pollInterval));
   }
 }
+
+/**
+ * Context-rich error-handling async fetch utility.
+ * Usage: await fetchData({ apiClient, errorReporter }, id)
+ *
+ * @param {Object} deps - DI bundle.
+ * @param {Object} deps.apiClient - API client with a .get(url) method.
+ * @param {Object} deps.errorReporter - Error tracker with .capture(err, ctx).
+ * @param {any} id - Resource identifier for API endpoint.
+ * @returns {Promise<any>} - Resolves with data or rethrows error after reporting.
+ */
+export async function fetchData({ apiClient, errorReporter }, id) {
+  try {
+    const data = await apiClient.get(`/item/${id}`);
+    return data;
+  } catch (err) {
+    errorReporter?.capture?.(err, {
+      module: 'projectManager',
+      method: 'fetchData',
+      itemId: id,
+    });
+    throw err;
+  }
+}

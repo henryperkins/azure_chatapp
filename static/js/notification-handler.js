@@ -28,13 +28,17 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
 
   // Create notification container if it doesn't exist
   function ensureNotificationContainer() {
-    let container = document.getElementById('notificationContainer');
+    let container = document.getElementById('notificationArea');
     if (!container) {
-      container = document.createElement('div');
-      container.id = 'notificationContainer';
-      container.className = 'toast toast-top toast-end z-[100]';
-      document.body.appendChild(container);
-      console.debug('Notification container created');
+      // fallback: create and append notificationContainer if notificationArea is missing (legacy)
+      container = document.getElementById('notificationContainer');
+      if (!container) {
+        container = document.createElement('div');
+        container.id = 'notificationContainer';
+        container.className = 'toast toast-top toast-end z-[100]';
+        document.body.appendChild(container);
+        console.debug('Notification container created');
+      }
     }
     return container;
   }
@@ -120,73 +124,18 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     // Fire-and-forget backend log
     logNotificationToServer(message, type, options.user);
 
-    // Group by type and time window if options.groupByTypeAndTime is true
-    if (options.groupByTypeAndTime) {
-      return groupedHelper.showGroupedNotificationByTypeAndTime({
-        message,
-        type,
-        container
-      });
-    }
+    // Pass context (if supplied), fallback to type if not present, else 'general'
+    const context = options.context
+      || (typeof options.module === 'string' && options.module)
+      || (typeof options.source === 'string' && options.source)
+      || 'general';
 
-    // Generate a unique ID each time
-    const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
-
-    // Build the notification DOM element
-    const notification = document.createElement('div');
-    const notificationClass = `alert ${getAlertClass(type)} shadow-md my-2 notification-item notification-${type} max-w-lg w-full`;
-    notification.id = notificationId;
-    notification.className = notificationClass;
-    notification.setAttribute('role', 'alert');
-    notification.setAttribute('aria-live', 'assertive');
-    notification.setAttribute('tabindex', '0');
-
-    const iconSvg = getIconForType(type);
-    const statusHeading = `<span class="notification-heading font-bold mr-2">${getHeadingForType(type)}</span>`;
-    notification.innerHTML = `${iconSvg}${statusHeading}<span>${message}</span>`;
-
-    // If there's an action button
-    if (options.action && typeof options.onAction === 'function') {
-      const actionButton = document.createElement('button');
-      actionButton.className = 'btn btn-sm btn-ghost';
-      actionButton.textContent = options.action;
-      actionButton.onclick = (e) => {
-        e.stopPropagation(); // Prevent click from also dismissing the notification
-        options.onAction();
-        hide(notificationId);
-      };
-
-      notification.innerHTML = `<div class="flex-1 flex items-center">${iconSvg}${statusHeading}<span>${message}</span></div>`;
-      notification.appendChild(actionButton);
-      notification.classList.add('flex', 'justify-between', 'items-center');
-    }
-
-    container.appendChild(notification);
-
-    // Add extra visible class to help style "pop"
-    notification.classList.add(`notification-${type}`);
-
-    // Store this notification in the Map along with its timeout ID (if any)
-    const timeoutDuration = options.timeout === 0 ? null : (options.timeout || 5000);
-    let timeoutId = null;
-    if (timeoutDuration) {
-      timeoutId = setTimeout(() => hide(notificationId), timeoutDuration);
-    }
-
-    activeNotifications.set(notificationId, {
-      element: notification,
-      timeoutId
+    return groupedHelper.showGroupedNotificationByTypeAndTime({
+      message,
+      type,
+      context,
+      container
     });
-
-    // Default click-to-dismiss behavior; remove if you want to rely on explicit buttons only
-    eventHandlers.trackListener(notification, "click", () => { hide(notificationId); }, { description: "dismiss notification by click" });
-
-    // Focus the notification for screen readers
-    setTimeout(() => {
-      notification.focus();
-    }, 100);
-
-    return notificationId;
   }
 
   // Hide a notification—works for both standard and grouped
@@ -333,6 +282,20 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
   // DependencySystem registration is always handled in orchestrator/app.js.
   // No top-level registration or usage here.
 
+  /**
+   * Debug/trace method for app-wide diagnostic messages.
+   * Only outputs if window.APP_CONFIG?.DEBUG is true.
+   */
+  function debug(...args) {
+    if (window.APP_CONFIG && window.APP_CONFIG.DEBUG) {
+      // Prefer console.debug, but messages traceable via notification infra as well if needed
+      // You may choose to toast or store debug logs in DOM—here we just do console.debug;
+      // or, to surface trace info in the UI, uncomment below:
+      // show(args.join(' '), 'info', { timeout: 2000 });
+      console.debug('[DEBUG]', ...args);
+    }
+  }
+
   return {
     show,
     hide,
@@ -342,6 +305,7 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     removeMessageListener,
     getIconForType, // Expose if needed elsewhere
     groupedNotifications: groupedHelper.groupedNotifications, // Expose for diagnostics/testing
-    groupedHelper // Expose the full grouped API if needed
+    groupedHelper, // Expose the full grouped API if needed
+    debug
   };
 }
