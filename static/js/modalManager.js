@@ -96,7 +96,12 @@ class ModalManager {
       return;
     }
     if (this.showNotification) {
-      this.showNotification(message, level, undefined, { context: "ModalManager" });
+      this.showNotification(
+        message,
+        level,
+        undefined,
+        { group: true, context: "ModalManager" }
+      );
     }
     // else do nothing (no direct console usage allowed)
   }

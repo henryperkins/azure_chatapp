@@ -107,6 +107,8 @@ class ProjectDashboard {
       await this._initializeComponents();
       this._processUrlParameters();
       this._setupEventListeners();
+      // ---------- NEW: keep URL and UI in sync ----------
+      window.addEventListener('popstate', this._handlePopState.bind(this));
       this.state.initialized = true;
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
       this.logger.info('[ProjectDashboard] Initialization complete.', { context: 'ProjectDashboard' });
@@ -159,9 +161,7 @@ class ProjectDashboard {
     this.browserService.setTimeout(() => {
       const listView = document.getElementById('projectListView');
       if (listView) {
-        listView.style.display = 'none';
-        void listView.offsetHeight;
-        listView.style.display = '';
+        // reflow hack removed, rely on Tailwind classes for visibility
       }
     }, 50);
   }
@@ -427,7 +427,6 @@ class ProjectDashboard {
       );
       finalListView.classList.toggle('hidden', !showList);
       finalListView.setAttribute('aria-hidden', (!showList).toString());
-      finalListView.style.display = showList ? '' : 'none';
       if (showList) finalListView.classList.remove('opacity-0');
     }
 
@@ -438,13 +437,8 @@ class ProjectDashboard {
       );
       finalDetailsView.classList.toggle('hidden', !showDetails);
       finalDetailsView.setAttribute('aria-hidden', (!showDetails).toString());
-      finalDetailsView.style.display = showDetails ? '' : 'none';
       if (showDetails) finalDetailsView.classList.remove('opacity-0');
     }
-
-    // Force reflow
-    if (finalListView) void finalListView.offsetHeight;
-    if (finalDetailsView) void finalDetailsView.offsetHeight;
 
     // Log final state
     this.logger.info('[ProjectDashboard] View state after update:', {
@@ -624,10 +618,14 @@ class ProjectDashboard {
   }
 
   _handleViewProject(projectId) {
+    // Push url then show – enables Back button
+    history.pushState({}, '', this.browserService.buildUrl ? this.browserService.buildUrl({ project: projectId }) : `?project=${projectId}`);
     this.showProjectDetails(projectId);
   }
 
   _handleBackToList() {
+    // Push url for list-view (no project param) then show list
+    history.pushState({}, '', this.browserService.buildUrl ? this.browserService.buildUrl({ project: '' }) : window.location.pathname);
     this.showProjectList();
   }
 

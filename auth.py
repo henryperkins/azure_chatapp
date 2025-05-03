@@ -71,27 +71,30 @@ class CookieSettings:
         self.cookie_domain = cookie_domain
 
     def get_attributes(self, request: Request) -> dict[str, Any]:
+        env = self.env.lower()
         hostname = request.url.hostname
         scheme = request.url.scheme
-        # Local dev environment defaults
-        if hostname in ["localhost", "127.0.0.1"] or self.env.lower() == "development":
-            # PATCH: 'samesite' must be 'lax' for localhost+HTTP and 'secure' must be False (browser compatibility)
+        is_localhost = hostname in ["localhost", "127.0.0.1"]
+        is_production = env == "production"
+
+        # Production must have strict security
+        if is_production and not scheme == "https":
+            logger.warning(f"Production environment detected but not using HTTPS: {hostname}")
+
+        # Force production settings for safety
+        if is_production:
             return {
-                "secure": False,  # False for HTTP in dev
-                "domain": None,   # Let browser default; avoids edge-case domain bugs in localhost
-                "samesite": "lax",  # LAX is correct for non-secure localhost
+                "secure": True,
+                "domain": self.cookie_domain if self.cookie_domain else None,
+                "samesite": "lax",
                 "httponly": True,
                 "path": "/",
             }
-        # Production environment
-        domain_value = None
-        if self.cookie_domain and self.cookie_domain.lower() not in ["localhost", "127.0.0.1"]:
-            domain_value = self.cookie_domain
 
-        # If production & HTTPS, may use None+Secure for cross-site if needed. LAX remains safest default.
+        # Default for local development
         return {
-            "secure": (scheme == "https"),
-            "domain": domain_value,
+            "secure": not is_localhost,  # False for localhost HTTP, True for e.g. LAN IP dev over HTTPS
+            "domain": None,
             "samesite": "lax",
             "httponly": True,
             "path": "/",
@@ -342,15 +345,19 @@ async def login_user(
     try:
         rate_limit_login(request, creds.username)
         name_lower = creds.username.strip().lower()
+        masked_for_log = f"{name_lower[:3]}***"
+
+        # Always log the login attempt minimally for audit (never store plaintext creds!)
+        logger.info(f"Login attempt for user: {masked_for_log}")
 
         async with session.begin():
             result = await session.execute(select(User).where(User.username == name_lower).with_for_update())
             db_user = result.scalars().first()
             if not db_user:
-                logger.warning("Login unknown => %s", name_lower)
+                logger.warning("Login failed: unknown user => %s", masked_for_log)
                 raise HTTPException(status_code=401, detail="Invalid credentials.")
             if not db_user.is_active:
-                logger.warning("Login disabled => %s", name_lower)
+                logger.warning("Login failed: account disabled => %s", masked_for_log)
                 raise HTTPException(status_code=403, detail="Account disabled.")
 
             start_time = datetime.now(timezone.utc)
@@ -361,13 +368,13 @@ async def login_user(
                     db_user.password_hash.encode("utf-8")
                 )
                 delta = (datetime.now(timezone.utc) - start_time).total_seconds()
-                logger.debug("Password check %.3fs => user=%s", delta, name_lower)
+                logger.debug("Password check %.3fs => user=%s", delta, masked_for_log)
             except ValueError:
-                logger.error("Corrupted password hash => user=%s", name_lower)
+                logger.error("Corrupted password hash => user=%s", masked_for_log)
                 raise HTTPException(status_code=400, detail="Corrupted password hash.")
 
             if not valid_pw:
-                logger.warning("Wrong password => user=%s", name_lower)
+                logger.warning("Wrong password => user=%s", masked_for_log)
                 await asyncio.sleep(0.2)
                 raise HTTPException(status_code=401, detail="Invalid credentials.")
 
@@ -387,6 +394,7 @@ async def login_user(
         set_secure_cookie(response, "access_token", access_token, int(access_expires.total_seconds()), request)
         set_secure_cookie(response, "refresh_token", refresh_token, int(refresh_expires.total_seconds()), request)
 
+        logger.info("Login succeeded for user: %s", masked_for_log)
         return LoginResponse(
             access_token=access_token,
             refresh_token=refresh_token,
@@ -500,15 +508,20 @@ async def get_server_time() -> dict[str, float]:
 @router.get("/csrf", response_model=dict[str, str])
 async def get_csrf_token(request: Request, response: Response):
     csrf_token = str(uuid.uuid4())
+
+    # Use the same expiration as the access token for synchronized protection
+    csrf_expiry = int(timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN).total_seconds())
+
     response.set_cookie(
         "csrf_token",
         csrf_token,
-        max_age=600,
-        httponly=False,
+        max_age=csrf_expiry,
+        httponly=False,  # Must be accessible to JavaScript
         samesite="lax",
+        secure=request.url.scheme == "https",
         path="/"
     )
-    if AUTH_DEBUG:
+    if settings.ENV.lower() != "production" and settings.DEBUG:
         logger.debug("CSRF dev token => %s", csrf_token)
     return {"token": csrf_token}
 
@@ -528,11 +541,17 @@ async def set_cookies_endpoint(
 ):
     from utils.auth_utils import validate_csrf_token
     validate_csrf_token(request)
-    if settings.ENV.lower() != "local":
-        raise HTTPException(status_code=403, detail="Insecure cookie endpoint disabled in non-local env.")
 
-    host_txt = request.client.host if (request.client and request.client.host) else "unknown"
-    logger.warning("Manual insecure cookie set => from %s", host_txt)
+    # Secure this endpoint even further: Only allowed in local env AND from localhost
+    env = settings.ENV.lower()
+    client_host = request.client.host if (request.client and request.client.host) else "unknown"
+
+    if env != "local":
+        raise HTTPException(status_code=403, detail="This endpoint is disabled in production")
+    if client_host not in ["localhost", "127.0.0.1"]:
+        raise HTTPException(status_code=403, detail="Only available from localhost")
+
+    logger.warning(f"Manual cookie set from {client_host} - THIS IS INSECURE")
 
     access_expires = int(timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN).total_seconds())
     refresh_expires = int(timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS).total_seconds())
