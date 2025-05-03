@@ -854,31 +854,78 @@
     // --- Modal HTML Loader ---
     document.addEventListener('DOMContentLoaded', function () {
       (function loadModalsHtml() {
+        // Always log this to help with debugging
+        console.log('[ModalLoader] DOM content loaded, will attempt to load modals.html');
+        
         const modalsContainer = document.getElementById('modalsContainer');
         if (!modalsContainer) {
           console.error('[ModalLoader] #modalsContainer not found in DOM.');
-          return;
+          // Try to recover by creating the container
+          try {
+            const newContainer = document.createElement('div');
+            newContainer.id = 'modalsContainer';
+            newContainer.setAttribute('aria-live', 'polite');
+            newContainer.setAttribute('role', 'complementary');
+            document.body.appendChild(newContainer);
+            console.log('[ModalLoader] Created missing #modalsContainer as recovery attempt');
+            modalsContainer = newContainer;
+          } catch (e) {
+            console.error('[ModalLoader] Failed to create missing container:', e);
+            return;
+          }
         }
-        console.log('[ModalLoader] Starting fetch for /static/html/modals.html...'); // <-- Add log
-        fetch('/static/html/modals.html')
+        
+        // Add timeout to prevent infinite waiting
+        const fetchTimeout = setTimeout(() => {
+          console.error('[ModalLoader] TIMEOUT: Fetch for modals.html took too long (8 seconds)');
+          // Dispatch the event anyway to unblock app initialization
+          document.dispatchEvent(new CustomEvent('modalsLoaded', { 
+            detail: { success: false, error: 'Timeout' } 
+          }));
+        }, 8000);
+        
+        console.log('[ModalLoader] Starting fetch for /static/html/modals.html...');
+        
+        // Use a more robust fetch with explicit cache control
+        fetch('/static/html/modals.html', { 
+          cache: 'no-store',  // Don't use cache at all
+          headers: { 'Cache-Control': 'no-cache' }
+        })
           .then(resp => {
-            console.log(`[ModalLoader] Fetch response status: ${resp.status}`); // <-- Add log
+            console.log(`[ModalLoader] Fetch response status: ${resp.status}`);
             if (!resp.ok) {
               throw new Error(`HTTP error! status: ${resp.status}`);
             }
             return resp.text();
           })
           .then(html => {
-            console.log('[ModalLoader] Fetch successful, injecting HTML...'); // <-- Add log
+            clearTimeout(fetchTimeout);
+            
+            if (!html || html.trim() === '') {
+              console.error('[ModalLoader] Empty response received for modals.html');
+              throw new Error('Empty response');
+            }
+            
+            console.log('[ModalLoader] Fetch successful, received html length:', html.length);
+            console.log('[ModalLoader] Injecting HTML into DOM...');
+            
             modalsContainer.innerHTML = html;
             modalsContainer.classList.remove('hidden');
-            console.log('[ModalLoader] HTML injected, dispatching modalsLoaded event...'); // <-- Add log
-            document.dispatchEvent(new CustomEvent('modalsLoaded'));
-            console.log('[ModalLoader] modalsLoaded event dispatched.'); // <-- Add log
+            
+            console.log('[ModalLoader] HTML injected, dispatching modalsLoaded event...');
+            document.dispatchEvent(new CustomEvent('modalsLoaded', { 
+              detail: { success: true }
+            }));
+            console.log('[ModalLoader] modalsLoaded event dispatched. Modal system ready.');
           })
           .catch(err => {
+            clearTimeout(fetchTimeout);
             // Log the specific error during fetch or processing
-            console.error('[ModalLoader] Error loading or processing modals.html:', err); // <-- Enhanced log
+            console.error('[ModalLoader] Error loading or processing modals.html:', err);
+            // Always dispatch event to unblock app initialization
+            document.dispatchEvent(new CustomEvent('modalsLoaded', { 
+              detail: { success: false, error: err.message }
+            }));
           });
       })();
     });

@@ -90,7 +90,7 @@ export class ProjectListComponent {
             }).catch(() => {});
             // Now navigate SPA without ?project= in the URL, e.g., to /project-details or "main view"
             if (this.router && typeof this.router.navigate === "function") {
-                this.router.navigate("/project-details-view");
+                this.router.navigate(`/project-details-view?project=${projectId}`);
             }
         };
 
@@ -370,6 +370,12 @@ export class ProjectListComponent {
 
     /** Handle click on project cards */
     _handleCardClick(e) {
+        // Check if the click is on a create project button and ignore it
+        const isCreateButton = e.target.closest('#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn');
+        if (isCreateButton) {
+            return; // Ignore clicks on create buttons
+        }
+
         const projectCard = e.target.closest(".project-card");
         if (!projectCard) {
             this.notification.warn('[Debug] No .project-card ancestor on click event.');
