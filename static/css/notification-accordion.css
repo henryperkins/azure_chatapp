@@ -1,4 +1,4 @@
-/* notification-accordion.css */
+/* notification-accordion.css - Improved with theme variables and transitions */
 
 /* Banner container */
 .accordion-banner {
@@ -6,64 +6,116 @@
   border-radius: 0.33rem;
   transition: box-shadow 0.2s, border-color 0.2s;
   position: relative;
+  animation: fadeIn 0.3s ease-out;
 }
 
-/* Context label for source grouping */
-.accordion-banner .notification-context-label {
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-fadeOut {
+  animation: fadeOut 0.3s ease-out;
+}
+
+/* Context badge with theme colors */
+.notification-context-badge {
   @apply inline-flex items-center rounded bg-base-200 px-2 py-0.5 text-xs font-semibold ml-2 mr-2 text-base-content/70 border border-base-300;
   letter-spacing: 0.01em;
 }
 
-/* Context-driven colors (add JS class for context) */
-.accordion-banner.notification-context-ProjectListComponent      { border-left: 4px solid #4f46e5; /* Indigo */ }
-.accordion-banner.notification-context-ProjectDetailsComponent   { border-left: 4px solid #0ea5e9; /* Sky */ }
-.accordion-banner.notification-context-ModalManager              { border-left: 4px solid #facc15; /* Amber */ }
-.accordion-banner.notification-context-App                      { border-left: 4px solid #34d399; /* Emerald */ }
+/* Context-based colors using theme variables */
+.accordion-banner.notification-context-ProjectListComponent {
+  border-left: 4px solid var(--color-primary);
+}
+.accordion-banner.notification-context-ProjectDetailsComponent {
+  border-left: 4px solid var(--color-secondary);
+}
+.accordion-banner.notification-context-ModalManager {
+  border-left: 4px solid var(--color-accent);
+}
+.accordion-banner.notification-context-App {
+  border-left: 4px solid var(--color-success);
+}
 
-/* Priority/sticky: bold, red border, background */
+/* Priority/sticky styling */
 .accordion-banner.sticky,
 .accordion-banner.priority {
-  border-left: 6px solid #ef4444 !important; /* Red */
-  background: linear-gradient(90deg, #fecaca60 0 70%, transparent 100%);
+  border-left: 6px solid var(--color-error);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-error) 10%, transparent) 0 70%, transparent 100%);
   z-index: 120;
 }
 
-/* Built-in DaisyUI alert variants still apply */
-.accordion-banner.alert-error      { border-left-color: #dc2626 !important; }
-.accordion-banner.alert-warning    { border-left-color: #f59e42 !important; }
-.accordion-banner.alert-info       { border-left-color: #2563eb !important; }
-
-.accordion-banner .accordion-summary {
-  @apply flex items-center justify-between w-full cursor-pointer font-medium;
-  outline: none;
-  padding-right: 0.75em;
+/* Using theme variables for alert types */
+.accordion-banner.alert-error {
+  border-left-color: var(--color-error);
 }
+.accordion-banner.alert-warning {
+  border-left-color: var(--color-warning);
+}
+.accordion-banner.alert-info {
+  border-left-color: var(--color-info);
+}
+.accordion-banner.alert-success {
+  border-left-color: var(--color-success);
+}
+
+/* Summary styling */
+.accordion-banner .accordion-summary {
+  @apply flex items-center justify-between w-full cursor-pointer font-medium p-2;
+  outline: none;
+}
+
 .accordion-banner .accordion-summary:focus-visible {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
 
+/* Animation for group updated notification */
+.accordion-banner.group-updated {
+  animation: pulse 0.4s ease-in-out;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 var(--color-primary-focus, rgba(99, 102, 241, 0.4)); }
+  70% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+}
+
+/* Button styling */
 .accordion-banner .accordion-toggle-btn {
   @apply btn btn-xs btn-ghost ml-2;
 }
 
 .accordion-banner .accordion-dismiss-btn {
-  @apply btn btn-xs btn-ghost text-error ml-1;
+  @apply btn btn-xs btn-ghost text-base-content/70 hover:text-error ml-1;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
 }
 
+/* Message list with smooth transitions */
 .accordion-banner .accordion-message-list {
   @apply mt-2 pl-4 list-disc text-sm text-base-content/80;
-  display: none;
-  max-height: 170px;
-  overflow-y: auto;
-  padding-right: 0.5em;
-  border-left: 2px solid #e5e7eb;
+  border-left: 2px solid var(--color-base-300, #e5e7eb);
   margin-left: 0.1em;
-  background: rgba(250, 250, 250, 0.75);
+  background: rgba(var(--color-base-100-rgb, 250, 250, 250), 0.75);
+  overflow: hidden;
+  transition: max-height 0.3s ease-in-out;
+  max-height: 0;
 }
 
 .accordion-banner.expanded .accordion-message-list {
-  display: block;
+  max-height: 170px;
+  overflow-y: auto;
 }
 
 .accordion-banner .accordion-message-list li {
@@ -72,7 +124,30 @@
   word-break: break-all;
 }
 
-/* Visual 'clear all' button (slot—JS must provide) */
+/* Style for the icon */
+.accordion-banner .accordion-icon {
+  @apply flex-shrink-0;
+}
+
+/* Visual 'clear all' button */
 .notification-clear-all {
   @apply btn btn-xs btn-outline absolute top-1 right-3 z-20;
+}
+
+/* Dark mode adjustments */
+[data-theme="dracula-enhanced"] .accordion-banner .accordion-message-list {
+  background: rgba(var(--color-base-200-rgb, 30, 30, 46), 0.75);
+  border-left-color: var(--color-base-300, #44475a);
+}
+
+/* Focus states for keyboard navigation */
+.accordion-banner .accordion-toggle-btn:focus-visible,
+.accordion-banner .accordion-dismiss-btn:focus-visible {
+  @apply outline-offset-2 outline-2 outline-primary;
+}
+
+/* Make message list properly focusable */
+.accordion-banner .accordion-message-list:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
