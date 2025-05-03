@@ -81,31 +81,46 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       }
     }
 
-    const wrappedHandler = async function (event) {
+    const wrappedHandler = function (event) {
+      const startTime = performance.now();
       try {
-        const startTime = performance.now();
         const result = handler.call(this, event);
+
+        // Handle asynchronous responses (Promise returns)
         if (result && typeof result.then === 'function') {
-          await result;
+          // Don't return the promise directly, wrap in a proper error handler
+          // to prevent "message channel closed" errors
+          result.catch(error => {
+            console.error(`Async error in ${type} event handler:`, error);
+            if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
+              console.warn(`preventDefault() called on a passive ${type} listener`);
+            }
+          }).finally(() => {
+            const duration = performance.now() - startTime;
+            const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
+            if (duration > threshold) {
+              console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+            }
+          });
+
+          // Return false to indicate the event is being handled synchronously
+          // even though we're processing the promise asynchronously
+          return false;
         }
+
+        // Handle synchronous responses
         const duration = performance.now() - startTime;
-        const threshold =
-          type === 'submit' ? 800
-            : type === 'click' ? 500
-            : 100;
+        const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
         if (duration > threshold) {
           console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
         }
+
+        return result;
       } catch (error) {
         console.error(`Error in ${type} event handler:`, error);
-        if (
-          error.name === 'TypeError' &&
-          error.message.includes('passive') &&
-          finalOptions.passive
-        ) {
+        if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
           console.warn(`preventDefault() called on a passive ${type} listener`);
         }
-        throw error;
       }
     };
 

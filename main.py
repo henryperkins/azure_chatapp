@@ -225,7 +225,29 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 if not os.path.isdir(STATIC_DIR):
     logger.critical(f"Static directory not found: {STATIC_DIR}. Aborting startup.")
     raise RuntimeError(f"Static directory not found: {STATIC_DIR}")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+# Enhanced static file serving with more debugging
+try:
+    # Check if modals.html exists
+    modals_path = os.path.join(STATIC_DIR, "html", "modals.html")
+    if os.path.isfile(modals_path):
+        logger.info(f"Found modals.html at: {modals_path}")
+    else:
+        logger.critical(f"CRITICAL: modals.html not found at: {modals_path}")
+        # Try to locate modals.html anywhere in the project
+        import glob
+        modals_files = glob.glob("**/modals.html", recursive=True)
+        if modals_files:
+            logger.info(f"Found modals.html in alternative locations: {modals_files}")
+        else:
+            logger.info("Could not find modals.html anywhere in the project")
+    
+    # Mount static directory
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    logger.info(f"Static files mounted from {STATIC_DIR}")
+except Exception as e:
+    logger.critical(f"Failed to mount static files: {str(e)}", exc_info=True)
+    raise RuntimeError(f"Failed to mount static files: {str(e)}")
 
 
 @app.get("/", include_in_schema=False)
@@ -242,6 +264,23 @@ async def serve_login(request: Request) -> Response:
     Insecurely serve the login page.
     """
     return FileResponse("static/html/login.html")
+
+
+@app.get("/modals", include_in_schema=False)
+async def serve_modals(request: Request) -> Response:
+    """
+    Special direct route to serve modals.html for debugging.
+    """
+    modals_path = "static/html/modals.html"
+    if os.path.isfile(modals_path):
+        logger.info(f"Serving modals.html via direct route from: {modals_path}")
+        return FileResponse(modals_path)
+    else:
+        logger.error(f"modals.html not found at {modals_path} in direct route")
+        return JSONResponse(
+            status_code=404,
+            content={"detail": f"modals.html not found at {modals_path}"}
+        )
 
 
 @app.get("/health")
