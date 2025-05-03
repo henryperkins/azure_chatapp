@@ -365,17 +365,17 @@ class ProjectManager {
    * @returns {Promise<Project[]>} The loaded projects.
    */
   async loadProjects(filter = 'all') {
-    console.log(`[ProjectManager] loadProjects called with filter: ${filter}`);
+    this.notificationHandler.log(`[ProjectManager] loadProjects called with filter: ${filter}`);
 
     if (this.projectLoadingInProgress) {
-      console.log("[ProjectManager] loadProjects: already in progress");
+      this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
       this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
       return [];
     }
 
     // Check authentication status and log more details
     if (!this.app?.state?.isAuthenticated) {
-      console.error("[ProjectManager] Not authenticated, cannot load projects");
+      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects");
       this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects");
       this._emitEvent("projectsLoaded", {
         error: true,
@@ -386,11 +386,11 @@ class ProjectManager {
     }
 
     if (!this.requireAuthenticatedOrEmit("projectsLoaded", { reason: 'auth_required' })) {
-      console.error("[ProjectManager] Authentication check failed in requireAuthenticatedOrEmit");
+      this.notificationHandler.error("[ProjectManager] Authentication check failed in requireAuthenticatedOrEmit");
       return [];
     }
 
-    console.log("[ProjectManager] Starting to load projects...");
+    this.notificationHandler.log("[ProjectManager] Starting to load projects...");
     this.projectLoadingInProgress = true;
     this._emitEvent("projectsLoading", { filter });
 
@@ -398,19 +398,19 @@ class ProjectManager {
       const params = new URLSearchParams({ filter, skip: '0', limit: '100' });
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
 
-      console.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
+      this.notificationHandler.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
 
       if (!this.app?.apiRequest) {
         throw new Error("apiRequest function not available in app dependency");
       }
 
       const response = await this.app.apiRequest(endpoint);
-      console.log('[ProjectManager] Raw projects response:', response);
+      this.notificationHandler.log('[ProjectManager] Raw projects response:', response);
       this.notificationHandler.log('[ProjectManager] Raw projects response:', response);
 
       // Use a standard parse approach - use extractResourceList since _parseProjectsArray doesn't exist
       const projects = extractResourceList(response, { listKeys: ["projects"] }) || [];
-      console.log(`[ProjectManager] Parsed ${projects ? projects.length : 0} projects`);
+      this.notificationHandler.log(`[ProjectManager] Parsed ${projects ? projects.length : 0} projects`);
 
       // Optionally auto-select the first if none selected
       // if (!this.currentProject && projects.length > 0) {
@@ -426,10 +426,10 @@ class ProjectManager {
       this._emitEvent("projectsLoaded", { projects, filter });
       return projects;
     } catch (error) {
-      console.error("[ProjectManager] Error loading projects:", error);
+      this.notificationHandler.error("[ProjectManager] Error loading projects:", error);
       return this.handleError("projectsLoaded", error, []);
     } finally {
-      console.log("[ProjectManager] Finished loadProjects operation, resetting loading flag");
+      this.notificationHandler.log("[ProjectManager] Finished loadProjects operation, resetting loading flag");
       this.projectLoadingInProgress = false;
     }
   }
@@ -787,11 +787,11 @@ class ProjectManager {
    */
   setCurrentProject(project) {
     if (!project || !project.id) {
-      console.error('[ProjectManager] Cannot set invalid project as current', project);
+      this.notificationHandler.error('[ProjectManager] Cannot set invalid project as current', project);
       return;
     }
 
-    console.log(`[ProjectManager] Setting current project: ${project.id}`);
+    this.notificationHandler.log(`[ProjectManager] Setting current project: ${project.id}`);
     const previousProject = this.currentProject;
     this.currentProject = project;
 
@@ -986,6 +986,7 @@ class ProjectManager {
 function createProjectManager(deps = {}) {
   // Add additional validation to ensure DependencySystem is provided
   if (!deps.DependencySystem) {
+    // Using notificationHandler here is not possible, so fallback to console.error for fatal static context
     console.error('[ProjectManager] DependencySystem is missing in createProjectManager', deps);
     throw new Error('DependencySystem is required for ProjectManager');
   }
@@ -994,6 +995,7 @@ function createProjectManager(deps = {}) {
   if (!deps.app) {
     const app = deps.DependencySystem.modules.get('app');
     if (!app) {
+      // Using notificationHandler here is not possible, so fallback to console.error for fatal static context
       console.error('[ProjectManager] app module not found in DependencySystem');
       throw new Error('app module not found in DependencySystem or direct dependency');
     }
@@ -1004,14 +1006,21 @@ function createProjectManager(deps = {}) {
   if (!deps.chatManager) {
     const chatManager = deps.DependencySystem.modules.get('chatManager');
     if (!chatManager || typeof chatManager.loadConversation !== 'function') {
+      // Using notificationHandler here is not possible, so fallback to console.error for fatal static context
       console.error('[ProjectManager] chatManager not found or invalid in DependencySystem');
       throw new Error('chatManager is required for ProjectManager');
     }
     deps.chatManager = chatManager;
   }
 
-  console.log('[ProjectManager] Creating new ProjectManager instance with deps:',
+  // Only log using notificationHandler if available, otherwise fallback to console in static factory context
+  if (deps.notificationHandler && typeof deps.notificationHandler.log === 'function') {
+    deps.notificationHandler.log('[ProjectManager] Creating new ProjectManager instance with deps:',
               Object.keys(deps).join(', '));
+  } else {
+    console.log('[ProjectManager] Creating new ProjectManager instance with deps:',
+                Object.keys(deps).join(', '));
+  }
 
   return new ProjectManager(deps);
 }

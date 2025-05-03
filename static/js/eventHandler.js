@@ -35,7 +35,7 @@
 import { waitForDepsAndDom } from './utils/globalUtils.js';
 import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
 
-export function createEventHandlers({ app, auth, projectManager, sidebar, modalManager, DependencySystem } = {}) {
+export function createEventHandlers({ app, auth, projectManager, sidebar, modalManager, DependencySystem, navigate, storage } = {}) {
   // Helper for optional DI from DependencySystem if not provided at construction time
   DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
   function resolveDep(name) {
@@ -47,6 +47,28 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
   auth = auth || resolveDep('auth');
   projectManager = projectManager || resolveDep('projectManager');
   modalManager = modalManager || resolveDep('modalManager');
+
+  // Storage utility: DI or fallback to window.localStorage
+  const storageBackend = storage ||
+    (typeof window !== "undefined" && window.localStorage) ||
+    (typeof globalThis !== "undefined" && globalThis.localStorage) ||
+    null;
+
+  // Navigation utility for redirecting (modular, avoid window global)
+  function redirect(url) {
+    if (typeof navigate === "function") {
+      navigate(url);
+    } else if (app && typeof app.navigate === "function") {
+      app.navigate(url);
+    } else {
+      // Fallback (legacy, not ideal for testability, but avoids window global assignment)
+      if (typeof window !== "undefined" && window.location) {
+        window.location.href = url;
+      } else if (typeof document !== "undefined" && document.location) {
+        document.location.href = url;
+      }
+    }
+  }
 
   // --- Tracked Listeners ---
   const trackedListeners = new Set();
@@ -91,15 +113,27 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
           // Don't return the promise directly, wrap in a proper error handler
           // to prevent "message channel closed" errors
           result.catch(error => {
-            console.error(`Async error in ${type} event handler:`, error);
+            if (app && typeof app.showNotification === "function") {
+              app.showNotification(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
+            } else if (typeof console !== "undefined") {
+              console.error(`Async error in ${type} event handler:`, error);
+            }
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-              console.warn(`preventDefault() called on a passive ${type} listener`);
+              if (app && typeof app.showNotification === "function") {
+                app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
+              } else if (typeof console !== "undefined") {
+                console.warn(`preventDefault() called on a passive ${type} listener`);
+              }
             }
           }).finally(() => {
             const duration = performance.now() - startTime;
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
-              console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+              if (app && typeof app.showNotification === "function") {
+                app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
+              } else if (typeof console !== "undefined") {
+                console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+              }
             }
           });
 
@@ -112,14 +146,26 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         const duration = performance.now() - startTime;
         const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
         if (duration > threshold) {
-          console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+          if (app && typeof app.showNotification === "function") {
+            app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
+          } else if (typeof console !== "undefined") {
+            console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+          }
         }
 
         return result;
       } catch (error) {
-        console.error(`Error in ${type} event handler:`, error);
+        if (app && typeof app.showNotification === "function") {
+          app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
+        } else if (typeof console !== "undefined") {
+          console.error(`Error in ${type} event handler:`, error);
+        }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-          console.warn(`preventDefault() called on a passive ${type} listener`);
+          if (app && typeof app.showNotification === "function") {
+            app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
+          } else if (typeof console !== "undefined") {
+            console.warn(`preventDefault() called on a passive ${type} listener`);
+          }
         }
       }
     };
@@ -181,7 +227,11 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         );
         trackedListeners.delete(listener);
       } catch (error) {
-        console.warn(`Error removing ${listener.type} listener:`, error);
+        if (app && typeof app.showNotification === "function") {
+          app.showNotification(`Error removing ${listener.type} listener: ${error && error.message ? error.message : error}`, "warning");
+        } else if (typeof console !== "undefined") {
+          console.warn(`Error removing ${listener.type} listener:`, error);
+        }
       }
     });
   }
@@ -196,7 +246,11 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         try {
           handler.call(target, event, target);
         } catch (error) {
-          console.error(`Error in delegated ${eventType} handler for ${selector}:`, error);
+          if (app && typeof app.showNotification === "function") {
+            app.showNotification(`Error in delegated ${eventType} handler for ${selector}: ${error && error.message ? error.message : error}`, "error");
+          } else if (typeof console !== "undefined") {
+            console.error(`Error in delegated ${eventType} handler for ${selector}:`, error);
+          }
         }
       }
     };
@@ -230,12 +284,19 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       if (expand && typeof onExpand === 'function') {
         onExpand();
       }
-      if (toggleId) {
-        localStorage.setItem(`${toggleId}_expanded`, expand ? 'true' : 'false');
+      if (toggleId && storageBackend && typeof storageBackend.setItem === "function") {
+        try {
+          storageBackend.setItem(`${toggleId}_expanded`, expand ? 'true' : 'false');
+        } catch (e) {}
       }
     };
 
-    const savedState = localStorage.getItem(`${toggleId}_expanded`);
+    let savedState = null;
+    if (toggleId && storageBackend && typeof storageBackend.getItem === "function") {
+      try {
+        savedState = storageBackend.getItem(`${toggleId}_expanded`);
+      } catch (e) {}
+    }
     const initialExpand = savedState === 'true';
     togglePanel(initialExpand);
 
@@ -334,14 +395,16 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
           form.reset();
         }
       } catch (error) {
-        console.error('Form submission error:', error);
+        if (app && typeof app.showNotification === "function") {
+          app.showNotification(
+            error.message ? `Form submission error: ${error.message}` : "Form submission failed",
+            "error"
+          );
+        } else if (typeof console !== "undefined") {
+          console.error('Form submission error:', error);
+        }
         if (options.onError) {
           options.onError(error);
-        } else if (app?.showNotification) {
-          app.showNotification(
-            error.message || 'Form submission failed',
-            'error'
-          );
         }
       } finally {
         if (showLoadingState) {
@@ -374,11 +437,17 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
           if (projectManager?.createConversation) {
             const projectId = app?.getProjectId();
             const conversation = await projectManager.createConversation(projectId);
-            window.location.href = `/?chatId=${conversation.id}`;
+            redirect(`/?chatId=${conversation.id}`);
           }
         } catch (error) {
-          console.error('Failed to create conversation:', error);
-          app?.showNotification('Failed to create conversation', 'error');
+          if (app && typeof app.showNotification === "function") {
+            app.showNotification(
+              error.message ? `Failed to create conversation: ${error.message}` : 'Failed to create conversation',
+              "error"
+            );
+          } else if (typeof console !== "undefined") {
+            console.error('Failed to create conversation:', error);
+          }
         }
       });
     }
@@ -398,7 +467,14 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     if (logoutBtn && auth) {
       trackListener(logoutBtn, 'click', (e) => {
         auth.logout(e).catch(err => {
-          console.error('Logout failed:', err);
+          if (app && typeof app.showNotification === "function") {
+            app.showNotification(
+              err && err.message ? `Logout failed: ${err.message}` : "Logout failed",
+              "error"
+            );
+          } else if (typeof console !== "undefined") {
+            console.error('Logout failed:', err);
+          }
         });
       }, { passive: false });
     }
@@ -425,7 +501,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
           authDropdown.classList.add('hidden');
         }
         if (response && response.access_token) {
-          setTimeout(() => { window.location.href = '/'; }, 100);
+          // Reason for delay: ensure notification or UI state updates before leaving page
+          setTimeout(() => { redirect('/'); }, 100);
         } else {
         }
       }, { resetOnSuccess: false });
@@ -459,7 +536,11 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         const isExpanded = !mainSidebar.classList.contains('-translate-x-full');
         navToggleBtn.setAttribute('aria-expanded', isExpanded.toString());
         mainSidebar.setAttribute('aria-hidden', (!isExpanded).toString());
-        console.log('[EventHandler] Sidebar toggled:', isExpanded ? 'open' : 'closed');
+        if (app && typeof app.showNotification === "function") {
+          app.showNotification(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, "info");
+        } else if (typeof console !== "undefined") {
+          console.log('[EventHandler] Sidebar toggled:', isExpanded ? 'open' : 'closed');
+        }
       });
     }
     if (closeSidebarBtn && mainSidebar) {
@@ -557,60 +638,79 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       // Modal open happens via showModal/show etc., so check global signal to open on register if present
       const loginModal = document.getElementById("loginModal");
       if (loginModal) {
+        // Internal flag, avoid window global
+        let showRegisterTabFlag = false;
         const ensureTab = () => {
-          if (window && window.showRegisterTab) {
+          if (showRegisterTabFlag) {
             showTab("register");
-            window.showRegisterTab = false;
+            showRegisterTabFlag = false;
           } else {
             showTab("login");
           }
         };
-        // Listen for both show and transition to visible
-        loginModal.addEventListener("show", ensureTab);
+        // Use trackListener instead of direct addEventListener
+        trackListener(loginModal, "show", ensureTab, { description: "Login modal show event" });
         new MutationObserver(() => {
           if (loginModal.open || loginModal.style.display === "flex" || loginModal.style.display === "block") {
             ensureTab();
           }
         }).observe(loginModal, {attributes: true, attributeFilter: ["open", "style", "class"]});
-      }
-      window.openLoginRegisterModal = function(tab) {
-        const loginModal = document.getElementById("loginModal");
-        if (loginModal) {
+
+        // Instead of exposing on window, expose on event handler instance (see below)
+        loginModal._openLoginRegisterModal = function(tab) {
           if (tab === "register") {
-            window.showRegisterTab = true;
+            showRegisterTabFlag = true;
           }
-          if (window.modalManager && window.modalManager.show) {
-            window.modalManager.show("login");
-          } else {
+          if (modalManager && modalManager.show) {
+            modalManager.show("login");
+          } else if (typeof loginModal.showModal === "function") {
             loginModal.showModal();
           }
-        }
-      };
-      window.showRegisterModal = () => window.openLoginRegisterModal("register");
+        };
+      }
+      // Remove window property assignments. We'll expose public openLoginRegisterModal, showRegisterModal as exports later.
     }
   }
-  document.addEventListener('modalsLoaded', setupModalTabs);
+  // Use trackListener for document-level lifecycle events
+  trackListener(document, 'modalsLoaded', setupModalTabs, { description: "Modals loaded event" });
   // Also ensure modal tabs init after DOMContentLoaded for static/app shell builds:
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
-    setTimeout(setupModalTabs, 0);
+    // UX: Give DOM pipeline a tick for modal DOM availability in static/app shell
+    setTimeout(setupModalTabs, 0); // eslint-disable-line no-inline-comments
   } else {
-    document.addEventListener('DOMContentLoaded', setupModalTabs, { once: true });
+    trackListener(document, 'DOMContentLoaded', setupModalTabs, { once: true, description: "DOMContentLoaded for modal tabs" });
   }
   // ---- end modal tab hookup ----
 
   let initialized = false;
   async function init() {
     if (initialized) return;
-    await waitForDepsAndDom({
-      deps: ['app', 'auth', 'projectManager', 'modalManager'],
-      domSelectors: ['body', '#mainSidebar', '#navToggleBtn']
-    });
-    setupCommonElements();
-    setupNavigationElements();
-    setupContentElements();
-    setupModalTabs(); // catch case where modalsLoaded happens before this point
-    initialized = true;
-    console.log('[EventHandler] All handlers initialized');
+    try {
+      await waitForDepsAndDom({
+        deps: ['app', 'auth', 'projectManager', 'modalManager'],
+        domSelectors: ['body', '#mainSidebar', '#navToggleBtn']
+      });
+      setupCommonElements();
+      setupNavigationElements();
+      setupContentElements();
+      setupModalTabs(); // catch case where modalsLoaded happens before this point
+      initialized = true;
+      if (app && typeof app.showNotification === "function") {
+        app.showNotification("[EventHandler] All handlers initialized", "info");
+      } else if (typeof console !== "undefined") {
+        console.log('[EventHandler] All handlers initialized');
+      }
+    } catch (err) {
+      if (app && typeof app.showNotification === "function") {
+        app.showNotification(
+          err && err.message ? `Failed to initialize event handlers: ${err.message}` : "Failed to initialize event handlers",
+          "error"
+        );
+      } else if (typeof console !== "undefined") {
+        console.error("Failed to initialize event handlers:", err);
+      }
+      throw err; // rethrow for orchestrator fail-fast in tests
+    }
   }
 
   // No self-assignment! Only export for orchestrator/consumer to register.
