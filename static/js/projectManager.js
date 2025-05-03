@@ -247,17 +247,15 @@ class ProjectManager {
       }
     };
 
-    this.notificationHandler = notificationHandler || {
-      log: (...args) => { },
-      warn: (...args) => { },
-      error: (...args) => { },
-      notify: (msg, type) => { }
-    };
+    if (!notificationHandler) {
+      throw new Error("ProjectManager: notificationHandler dependency is required (DI only, no fallback allowed)");
+    }
+    this.notificationHandler = notificationHandler;
 
     // Dependency-injected storage abstraction for setItem/getItem
     this.storage = storage || {
-      setItem: (key, value) => { },
-      getItem: (key) => null
+      setItem: (_key, _value) => { },
+      getItem: (_key) => null
     };
 
     // Dependency-injected or default tracked listener management
@@ -291,7 +289,7 @@ class ProjectManager {
      * For exponential backoff, uses a timer for pure-wait (no functional logic delayed).
      * If not provided, falls back to setTimeout (safe for delay, not for logic/timing hacks).
      */
-    this.timer = timer || (typeof setTimeout === 'function' ? setTimeout : (cb, delay) => cb());
+    this.timer = timer || (typeof setTimeout === 'function' ? setTimeout : (cb, _delay) => cb());
 
     /** @type {Project|null} */
     this.currentProject = null;
@@ -301,7 +299,7 @@ class ProjectManager {
   }
 
   async initialize() {
-    this.notificationHandler.log('[ProjectManager] Initializing...', { context: "ProjectManager" });
+    this.notificationHandler.show('[ProjectManager] Initializing...', 'info', { group: true, context: "projectManager" });
   }
 
   // ---------------------------------------------------------------------------
@@ -331,7 +329,7 @@ class ProjectManager {
    */
   requireAuthenticatedOrEmit(eventName, detail = {}) {
     if (!this.app?.state?.isAuthenticated) {
-      this.notificationHandler.warn(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`, { context: "ProjectManager" });
+      this.notificationHandler.show(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`, 'warning', { group: true, context: "projectManager" });
       this._emitEvent(eventName, {
         error: { message: 'Authentication required' },
         ...detail
@@ -346,7 +344,7 @@ class ProjectManager {
    * returns fallbackValue for the method's final return.
    */
   handleError(eventName, error, fallbackValue, extraDetail = {}) {
-    this.notificationHandler.error(`[ProjectManager] ${eventName} error:`, error, { context: "ProjectManager" });
+    this.notificationHandler.error(`[ProjectManager] ${eventName} error:`, error, { group: true, context: "projectManager" });
     this._emitEvent(eventName, {
       error: { message: error.message, status: error.status },
       ...extraDetail
@@ -365,18 +363,18 @@ class ProjectManager {
    * @returns {Promise<Project[]>} The loaded projects.
    */
   async loadProjects(filter = 'all') {
-    this.notificationHandler.log(`[ProjectManager] loadProjects called with filter: ${filter}`, { context: "ProjectManager" });
+    this.notificationHandler.show(`[ProjectManager] loadProjects called with filter: ${filter}`, 'info', { group: true, context: "projectManager" });
 
     if (this.projectLoadingInProgress) {
-      this.notificationHandler.log("[ProjectManager] loadProjects: already in progress", { context: "ProjectManager" });
-      this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
+      this.notificationHandler.show("[ProjectManager] loadProjects: already in progress", 'info', { group: true, context: "projectManager" });
+      this.notificationHandler.show("[ProjectManager] loadProjects: already in progress", 'info', { group: true, context: "projectManager" });
       return [];
     }
 
     // Check authentication status and log more details
     if (!this.app?.state?.isAuthenticated) {
-      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects");
-      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects");
+      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects", { group: true, context: "projectManager" });
+      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects", { group: true, context: "projectManager" });
       this._emitEvent("projectsLoaded", {
         error: true,
         message: 'Authentication required to load projects',
@@ -386,11 +384,11 @@ class ProjectManager {
     }
 
     if (!this.requireAuthenticatedOrEmit("projectsLoaded", { reason: 'auth_required' })) {
-      this.notificationHandler.error("[ProjectManager] Authentication check failed in requireAuthenticatedOrEmit");
+      this.notificationHandler.error("[ProjectManager] Authentication check failed in requireAuthenticatedOrEmit", { group: true, context: "projectManager" });
       return [];
     }
 
-    this.notificationHandler.log("[ProjectManager] Starting to load projects...");
+    this.notificationHandler.show("[ProjectManager] Starting to load projects...", 'info', { group: true, context: "projectManager" });
     this.projectLoadingInProgress = true;
     this._emitEvent("projectsLoading", { filter });
 
@@ -398,19 +396,19 @@ class ProjectManager {
       const params = new URLSearchParams({ filter, skip: '0', limit: '100' });
       const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
 
-      this.notificationHandler.log(`[ProjectManager] Requesting projects from: ${endpoint}`);
+      this.notificationHandler.show(`[ProjectManager] Requesting projects from: ${endpoint}`, 'info', { group: true, context: "projectManager" });
 
       if (!this.app?.apiRequest) {
         throw new Error("apiRequest function not available in app dependency");
       }
 
       const response = await this.app.apiRequest(endpoint);
-      this.notificationHandler.log('[ProjectManager] Raw projects response:', response);
-      this.notificationHandler.log('[ProjectManager] Raw projects response:', response);
+      this.notificationHandler.show('[ProjectManager] Raw projects response: ' + JSON.stringify(response), 'info', { group: true, context: "projectManager" });
+      this.notificationHandler.show('[ProjectManager] Raw projects response: ' + JSON.stringify(response), 'info', { group: true, context: "projectManager" });
 
       // Use a standard parse approach - use extractResourceList since _parseProjectsArray doesn't exist
       const projects = extractResourceList(response, { listKeys: ["projects"] }) || [];
-      this.notificationHandler.log(`[ProjectManager] Parsed ${projects ? projects.length : 0} projects`);
+      this.notificationHandler.show(`[ProjectManager] Parsed ${projects ? projects.length : 0} projects`, 'info', { group: true, context: "projectManager" });
 
       // Optionally auto-select the first if none selected
       // if (!this.currentProject && projects.length > 0) {
@@ -426,10 +424,10 @@ class ProjectManager {
       this._emitEvent("projectsLoaded", { projects, filter });
       return projects;
     } catch (error) {
-      this.notificationHandler.error("[ProjectManager] Error loading projects:", error);
+      this.notificationHandler.error("[ProjectManager] Error loading projects:", error, { group: true, context: "projectManager" });
       return this.handleError("projectsLoaded", error, []);
     } finally {
-      this.notificationHandler.log("[ProjectManager] Finished loadProjects operation, resetting loading flag");
+      this.notificationHandler.show("[ProjectManager] Finished loadProjects operation, resetting loading flag", 'info', { group: true, context: "projectManager" });
       this.projectLoadingInProgress = false;
     }
   }
@@ -461,10 +459,11 @@ class ProjectManager {
       const projectData = normalizeProjectResponse(response);
       // If the IDs mismatch, we still accept the server-provided ID
       if (String(projectData.id).toLowerCase() !== String(projectId).toLowerCase()) {
-        this.notificationHandler.warn("[ProjectManager] ID mismatch – taking server value:", {
-          requestedId: projectId,
-          parsedId: projectData.id
-        });
+        this.notificationHandler.show(
+          `[ProjectManager] ID mismatch – taking server value: requestedId=${projectId}, parsedId=${projectData.id}`,
+          'warning',
+          { group: true, context: "projectManager" }
+        );
       }
       this.currentProject = projectData;
       this._emitEvent("projectLoaded", { ...this.currentProject });
@@ -494,7 +493,7 @@ class ProjectManager {
         .map(result => result.reason);
 
       if (criticalErrors.length > 0) {
-        this.notificationHandler.error("[ProjectManager] Critical component load errors:", criticalErrors);
+        this.notificationHandler.error("[ProjectManager] Critical component load errors:", criticalErrors, { group: true, context: "projectManager" });
         this._emitEvent("projectDetailsLoadError", {
           projectId: projectData.id,
           errors: criticalErrors
@@ -523,7 +522,11 @@ class ProjectManager {
           success: true
         });
       } catch (renderError) {
-        this.notificationHandler.warn("[ProjectManager] Not all components rendered:", renderError);
+        this.notificationHandler.show(
+          "[ProjectManager] Not all components rendered: " + (renderError?.message || renderError),
+          'warning',
+          { group: true, context: "projectManager" }
+        );
         // Still signal readiness but with warning flag
         this._emitEvent("projectDetailsFullyLoaded", {
           projectId: projectData.id,
@@ -560,21 +563,29 @@ class ProjectManager {
 
   async loadProjectKnowledgeBase(projectId) {
     try {
-      this.notificationHandler.log(`[ProjectManager] Loading knowledge base for project ${projectId}...`);
+      this.notificationHandler.show(`[ProjectManager] Loading knowledge base for project ${projectId}...`, 'info', { group: true, context: "projectManager" });
       const endpoint = `/api/projects/${projectId}/knowledge-bases/`;
       const response = await this.app.apiRequest(endpoint);
       const kb = response?.data || response;
       if (!kb) {
-        this.notificationHandler.warn("[ProjectManager] No knowledge base found for project:", projectId);
+        this.notificationHandler.show(
+          `[ProjectManager] No knowledge base found for project: ${projectId}`,
+          'warning',
+          { group: true, context: "projectManager" }
+        );
         // Even if no KB found, emit the loaded event with null data
         this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
       } else {
-        this.notificationHandler.log(`[ProjectManager] Knowledge base loaded for project ${projectId}:`, kb.id);
+        this.notificationHandler.show(
+          `[ProjectManager] Knowledge base loaded for project ${projectId}: ${kb.id}`,
+          'info',
+          { group: true, context: "projectManager" }
+        );
         this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: kb });
       }
       return kb;
     } catch (error) {
-      this.notificationHandler.error(`[ProjectManager] Error loading knowledge base for project ${projectId}:`, error);
+      this.notificationHandler.error(`[ProjectManager] Error loading knowledge base for project ${projectId}:`, error, { group: true, context: "projectManager" });
       this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
       return this.handleError("projectKnowledgeBaseError", error, null, { projectId });
     }
@@ -662,7 +673,7 @@ class ProjectManager {
       }
       return resultData;
     } catch (error) {
-      this.notificationHandler.error("[ProjectManager] createOrUpdateProject error:", error);
+      this.notificationHandler.error("[ProjectManager] createOrUpdateProject error:", error, { group: true, context: "projectManager" });
       throw error;
     }
   }
@@ -688,7 +699,7 @@ class ProjectManager {
       this._emitEvent("projectDeleted", { projectId });
       return response;
     } catch (error) {
-      this.notificationHandler.error("[ProjectManager] deleteProject error:", error);
+      this.notificationHandler.error("[ProjectManager] deleteProject error:", error, { group: true, context: "projectManager" });
       throw error;
     }
   }
@@ -710,7 +721,7 @@ class ProjectManager {
       });
       return response;
     } catch (error) {
-      this.notificationHandler.error("[ProjectManager] Error toggling archive:", error);
+      this.notificationHandler.error("[ProjectManager] Error toggling archive:", error, { group: true, context: "projectManager" });
       throw error;
     }
   }
@@ -724,7 +735,7 @@ class ProjectManager {
       this.storage.setItem("selectedProjectId", projectId);
       return await this.chatManager.createNewConversation(projectId, options);
     } catch (error) {
-      this.notificationHandler.error("[ProjectManager] createConversation error:", error);
+      this.notificationHandler.error("[ProjectManager] createConversation error:", error, { group: true, context: "projectManager" });
       throw error;
     }
   }
@@ -740,7 +751,7 @@ class ProjectManager {
     }
     const projectId = this.currentProject?.id;
     if (!isValidProjectId(projectId)) {
-        this.notificationHandler.error("[ProjectManager] Cannot get conversation without a valid current project ID.");
+        this.notificationHandler.error("[ProjectManager] Cannot get conversation without a valid current project ID.", { group: true, context: "projectManager" });
         throw new Error("No valid project context");
     }
 
@@ -751,12 +762,16 @@ class ProjectManager {
         if (!conversation || !conversation.id) {
             throw new Error("Invalid conversation data received");
         }
-        this.notificationHandler.log(`[ProjectManager] Conversation ${conversationId} fetched.`);
+        this.notificationHandler.show(
+          `[ProjectManager] Conversation ${conversationId} fetched.`,
+          'info',
+          { group: true, context: "projectManager" }
+        );
         // Optionally emit an event if needed, though likely not necessary just for getting details
         // this._emitEvent("conversationDetailsLoaded", { projectId, conversation });
         return conversation;
     } catch (error) {
-        this.notificationHandler.error(`[ProjectManager] Failed to get conversation ${conversationId}:`, error);
+        this.notificationHandler.error(`[ProjectManager] Failed to get conversation ${conversationId}:`, error, { group: true, context: "projectManager" });
         // Re-throw the error so the caller knows it failed
         throw error;
     }
@@ -768,7 +783,7 @@ class ProjectManager {
       await this.chatManager.deleteConversation(conversationId);
       return true;
     } catch (error) {
-      this.notificationHandler.error("[ProjectManager] deleteProjectConversation error:", error);
+      this.notificationHandler.error("[ProjectManager] deleteProjectConversation error:", error, { group: true, context: "projectManager" });
       throw error;
     }
   }
@@ -787,11 +802,11 @@ class ProjectManager {
    */
   setCurrentProject(project) {
     if (!project || !project.id) {
-      this.notificationHandler.error('[ProjectManager] Cannot set invalid project as current', project);
+      this.notificationHandler.error('[ProjectManager] Cannot set invalid project as current', project, { group: true, context: "projectManager" });
       return;
     }
 
-    this.notificationHandler.log(`[ProjectManager] Setting current project: ${project.id}`);
+    this.notificationHandler.show(`[ProjectManager] Setting current project: ${project.id}`, 'info', { group: true, context: "projectManager" });
     const previousProject = this.currentProject;
     this.currentProject = project;
 
@@ -880,7 +895,7 @@ class ProjectManager {
       if (!project || !project.id) {
         throw new Error('Invalid project response');
       }
-      this.notificationHandler.log('[ProjectManager] Project created:', project.id);
+      this.notificationHandler.show('[ProjectManager] Project created: ' + project.id, 'info', { group: true, context: "projectManager" });
 
       // Optionally ensure conversation + knowledge base
       const ensureConversation = async () => {
@@ -916,8 +931,11 @@ class ProjectManager {
 
       return project;
     } catch (error) {
-      this.notificationHandler.error('[ProjectManager] Error creating project:', error);
-      this.app?.showNotification?.('Failed to create project', 'error');
+      this.notificationHandler.show(
+        '[ProjectManager] Error creating project: ' + (error?.message || error),
+        'error',
+        { group: true, context: 'projectManager' }
+      );
       throw error;
     }
   }
@@ -944,11 +962,14 @@ class ProjectManager {
       if (!conversation || !conversation.id) {
         throw new Error('Failed to create default conversation');
       }
-      this.notificationHandler.log('[ProjectManager] Default conversation created:', conversation.id);
+      this.notificationHandler.show('[ProjectManager] Default conversation created: ' + conversation.id, 'info', { group: true, context: "projectManager" });
       return conversation;
     } catch (error) {
-      this.notificationHandler.error('[ProjectManager] Failed to create default conversation:', error);
-      this.app?.showNotification?.('Default conversation creation failed', 'error');
+      this.notificationHandler.show(
+        '[ProjectManager] Failed to create default conversation: ' + (error?.message || error),
+        'error',
+        { group: true, context: 'projectManager' }
+      );
       return null;
     }
   }
@@ -969,11 +990,14 @@ class ProjectManager {
       const kb = response.data || response;
       if (!kb?.id) throw new Error('Failed to initialize knowledge base');
 
-      this.notificationHandler.log('[ProjectManager] Knowledge base initialized:', kb.id);
+      this.notificationHandler.show('[ProjectManager] Knowledge base initialized: ' + kb.id, 'info', { group: true, context: "projectManager" });
       return kb;
     } catch (error) {
-      this.notificationHandler.error('[ProjectManager] Failed to initialize knowledge base:', error);
-      this.app?.showNotification?.('Knowledge base initialization failed', 'error');
+      this.notificationHandler.show(
+        '[ProjectManager] Failed to initialize knowledge base: ' + (error?.message || error),
+        'error',
+        { group: true, context: 'projectManager' }
+      );
       return null;
     }
   }
@@ -1014,9 +1038,12 @@ function createProjectManager(deps = {}) {
   }
 
   // Only log using notificationHandler if available, otherwise fallback to console in static factory context
-  if (deps.notificationHandler && typeof deps.notificationHandler.log === 'function') {
-    deps.notificationHandler.log('[ProjectManager] Creating new ProjectManager instance with deps:',
-              Object.keys(deps).join(', '));
+  if (deps.notificationHandler && typeof deps.notificationHandler.show === 'function') {
+    deps.notificationHandler.show(
+      '[ProjectManager] Creating new ProjectManager instance with deps: ' + Object.keys(deps).join(', '),
+      'info',
+      { context: 'projectManager' }
+    );
   } else {
     console.log('[ProjectManager] Creating new ProjectManager instance with deps:',
                 Object.keys(deps).join(', '));

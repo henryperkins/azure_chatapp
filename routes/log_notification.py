@@ -1,8 +1,5 @@
 """
-log_notification.py
--------------------
-Route for recording frontend notifications to a server-side text file.
-Improved with batching, log rotation, and better error handling.
+log_notification.py - Enhanced with proper file locking and retries
 """
 
 from fastapi import APIRouter, Request, status, BackgroundTasks
@@ -12,10 +9,11 @@ import os
 import logging
 from typing import List, Optional
 import time
+import fcntl  # For file locking
 
 router = APIRouter()
 
-# Configure a proper logger
+# Configure logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("notification_system")
 
@@ -27,15 +25,15 @@ MAX_LOGS = 5  # Number of rotated logs to keep
 class NotificationLogItem(BaseModel):
     message: str = Field(..., max_length=4096)
     type: str = Field(default="info", max_length=50)
-    timestamp: Optional[float] = None  # Unix timestamp (optional)
+    timestamp: Optional[float] = None
     user: str = Field(default="unknown", max_length=256)
 
     @validator('type')
     def validate_type(cls, v):
         valid_types = ['info', 'warning', 'error', 'success']
-        if v.lower() not in valid_types:
-            return 'info'  # Default to info if not valid
-        return v.lower()
+        if isinstance(v, str) and v.lower() in valid_types:
+            return v.lower()
+        return 'info'
 
 class NotificationLogBatch(BaseModel):
     notifications: List[NotificationLogItem]
@@ -64,29 +62,41 @@ def check_rotate_logs():
     except Exception as e:
         logger.error(f"Error rotating logs: {str(e)}")
 
-def write_log_entries(entries):
-    """Write multiple log entries to the file."""
-    try:
-        check_rotate_logs()
+def write_log_entries(entries, retries=2):
+    """Write multiple log entries to the file with file locking and retries."""
+    for attempt in range(retries + 1):
+        try:
+            check_rotate_logs()
 
-        # Format log entries
-        log_lines = []
-        for entry in entries:
-            dt_str = (
-                datetime.utcfromtimestamp(entry.timestamp).isoformat() + "Z"
-                if entry.timestamp
-                else datetime.utcnow().isoformat() + "Z"
-            )
-            user = entry.user if entry.user else "unknown"
-            clean_type = entry.type or "info"
-            log_lines.append(f"{dt_str} [{clean_type.upper()}] user={user} {entry.message.strip()}")
+            # Format log entries
+            log_lines = []
+            for entry in entries:
+                dt_str = (
+                    datetime.utcfromtimestamp(entry.timestamp).isoformat() + "Z"
+                    if entry.timestamp
+                    else datetime.utcnow().isoformat() + "Z"
+                )
+                user = entry.user if entry.user else "unknown"
+                clean_type = entry.type or "info"
+                log_lines.append(f"{dt_str} [{clean_type.upper()}] user={user} {entry.message.strip()}")
 
-        # Write all entries in one operation
-        with open(NOTIFICATION_LOG, "a", encoding="utf-8") as f:
-            f.write("\n".join(log_lines) + "\n")
+            # Use file locking to handle concurrent writes
+            with open(NOTIFICATION_LOG, "a", encoding="utf-8") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                try:
+                    f.write("\n".join(log_lines) + "\n")
+                    f.flush()  # Ensure it's written to disk
+                finally:
+                    fcntl.flock(f, fcntl.LOCK_UN)
 
-    except Exception as e:
-        logger.error(f"Failed to write notification logs: {str(e)}")
+            return True
+        except Exception as e:
+            if attempt < retries:
+                # Exponential backoff
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+            logger.error(f"Failed to write notification logs (attempt {attempt+1}): {str(e)}")
+            return False
 
 @router.post("/api/log_notification", status_code=status.HTTP_201_CREATED)
 async def log_notification(entry: NotificationLogItem, background_tasks: BackgroundTasks):
