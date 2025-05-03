@@ -77,14 +77,14 @@ class ProjectDashboard {
 
   async initialize() {
     if (this.state.initialized) {
-      this.logger.info('[ProjectDashboard] Already initialized.');
+      this.logger.info('[ProjectDashboard] Already initialized.', { context: "ProjectDashboard" });
       return true;
     }
-    this.logger.info('[ProjectDashboard] Initializing...');
+    this.logger.info('[ProjectDashboard] Initializing...', { context: "ProjectDashboard" });
 
     try {
       if (!this.app?.state?.isAuthenticated) {
-        this.logger.info('[ProjectDashboard] Not authenticated, waiting for login...');
+        this.logger.info('[ProjectDashboard] Not authenticated, waiting for login...', { context: "ProjectDashboard" });
         this._showLoginRequiredMessage();
         return false;
       }
@@ -95,7 +95,7 @@ class ProjectDashboard {
       this._setupEventListeners();
       this.state.initialized = true;
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
-      this.logger.info('[ProjectDashboard] Initialization complete.');
+      this.logger.info('[ProjectDashboard] Initialization complete.', { context: "ProjectDashboard" });
       return true;
     } catch (error) {
       this.logger.error('[ProjectDashboard] Initialization failed:', error);

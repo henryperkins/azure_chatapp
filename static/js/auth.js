@@ -20,8 +20,16 @@
  * - createAuthModule: factory for main API for authentication actions and state
  */
 
-export async function fetchCurrentUser() {
+/**
+ * DI-friendly helper for current user fetch;
+ * Tries injected apiRequest (if present), else falls back to fetch.
+ */
+export async function fetchCurrentUser({ apiRequest, showNotification } = {}) {
   try {
+    if (apiRequest) {
+      const data = await apiRequest("/api/user/me", { method: "GET" });
+      return data?.user || null;
+    }
     const resp = await fetch("/api/user/me", {
       credentials: "include",
       headers: {
@@ -31,7 +39,8 @@ export async function fetchCurrentUser() {
     if (!resp.ok) return null;
     const data = await resp.json();
     return data.user || null;
-  } catch {
+  } catch (err) {
+    showNotification?.("[Auth] fetchCurrentUser failed: " + (err?.message || err), "error");
     return null;
   }
 }
@@ -40,11 +49,22 @@ export function createAuthModule({
   apiRequest,
   showNotification,
   eventHandlers,
+  domAPI,
+  sanitizer,
   modalManager // if needed, pass explicitly for modal close UX
 } = {}) {
   // No fallback to window.DependencySystem or window.*
   if (!apiRequest) {
     throw new Error('Auth module requires apiRequest as a dependency');
+  }
+  if (!eventHandlers?.trackListener) {
+    throw new Error('Auth module requires eventHandlers.trackListener as a dependency');
+  }
+  if (!domAPI || typeof domAPI.getElementById !== 'function') {
+    throw new Error('Auth module requires domAPI with getElementById for safe DOM access');
+  }
+  if (!sanitizer || typeof sanitizer.sanitize !== 'function') {
+    throw new Error('Auth module requires sanitizer for setting innerHTML safely');
   }
 
   /* =========================
@@ -77,6 +97,11 @@ export function createAuthModule({
      ========================= */
   async function fetchCsrfToken() {
     try {
+      if (apiRequest) {
+        const data = await apiRequest(`/api/auth/csrf?ts=${Date.now()}`, { method: "GET", headers: { Accept: "application/json", "Cache-Control": "no-cache" } });
+        if (!data?.token) throw new Error('CSRF token missing in response');
+        return data.token;
+      }
       const response = await fetch(`/api/auth/csrf?ts=${Date.now()}`, {
         method: 'GET',
         credentials: 'include',
@@ -92,7 +117,7 @@ export function createAuthModule({
       if (!data.token) throw new Error('CSRF token missing in response');
       return data.token;
     } catch (error) {
-      console.error('[Auth] CSRF token fetch failed:', error);
+      showNotification?.('[Auth] CSRF token fetch failed: ' + (error?.message || error), 'error');
       return null;
     }
   }
@@ -115,7 +140,7 @@ export function createAuthModule({
 
   function getCSRFToken() {
     if (!csrfToken && !csrfTokenPromise) {
-      getCSRFTokenAsync().catch(console.error);
+      getCSRFTokenAsync().catch(e => showNotification?.("[Auth] getCSRFToken error: " + (e?.message || e), "warn"));
     }
     return csrfToken;
   }
@@ -151,7 +176,7 @@ export function createAuthModule({
       if (token) {
         options.headers['X-CSRF-Token'] = token;
       } else {
-        console.warn(`[Auth] CSRF token missing for request: ${endpoint}`);
+        showNotification?.(`[Auth] CSRF token missing for request: ${endpoint}`, 'warn');
       }
     }
 
@@ -175,7 +200,7 @@ export function createAuthModule({
       if (response.status === 204) return null;
       return await response.json();
     } catch (error) {
-      console.error(`[Auth] Request failed ${method} ${endpoint}:`, error);
+      showNotification?.(`[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`, 'error');
       if (!error.status) {
         error.status = 0;
         error.data = { detail: error.message || 'Network error/CORS issue' };
@@ -198,7 +223,7 @@ export function createAuthModule({
         const response = await authRequest('/api/auth/refresh', 'POST');
         return { success: true, response };
       } catch (error) {
-        console.error('[Auth] Refresh token failed:', error);
+        showNotification?.('[Auth] Refresh token failed: ' + (error?.message || error), 'error');
         if (error.status === 401) {
           await clearTokenState({ source: 'refresh_401_error', isError: true });
         }
@@ -223,7 +248,7 @@ export function createAuthModule({
     authState.username = username;
 
     if (changed) {
-      console.log(`[Auth] State changed (${source}): Auth=${authenticated}, User=${username ?? 'None'}`);
+      showNotification?.(`[Auth] State changed (${source}): Auth=${authenticated}, User=${username ?? 'None'}`, 'info');
       AuthBus.dispatchEvent(
         new CustomEvent('authStateChanged', {
           detail: {
@@ -238,7 +263,7 @@ export function createAuthModule({
   }
 
   async function clearTokenState(options = { source: 'unknown', isError: false }) {
-    console.log(`[Auth] Clearing auth state. Source: ${options.source}`);
+    showNotification?.(`[Auth] Clearing auth state. Source: ${options.source}`, 'info');
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
     // HttpOnly cookies are cleared by backend on logout
   }
@@ -265,7 +290,7 @@ export function createAuthModule({
       return false;
 
     } catch (error) {
-      console.warn('[Auth] verifyAuthState error:', error);
+      showNotification?.('[Auth] verifyAuthState error: ' + (error?.message || error), 'warn');
 
       if (error.status === 500) {
         await clearTokenState({ source: 'verify_500' });
@@ -293,7 +318,7 @@ export function createAuthModule({
      Public Auth Actions
      ========================= */
   async function loginUser(username, password) {
-    console.log('[Auth] Attempting login for user:', username);
+    showNotification?.(`[Auth] Attempting login for user: ${username}`, 'info');
     try {
       await getCSRFTokenAsync();
 
@@ -321,15 +346,15 @@ export function createAuthModule({
   }
 
   async function logout() {
-    console.log('[Auth] Initiating logout...');
+    showNotification?.('[Auth] Initiating logout...', 'info');
     await clearTokenState({ source: 'logout_manual' });
 
     try {
       await getCSRFTokenAsync();
       await authRequest('/api/auth/logout', 'POST');
-      console.log('[Auth] Backend logout successful.');
+      showNotification?.('[Auth] Backend logout successful.', 'info');
     } catch (err) {
-      console.warn('[Auth] Backend logout call failed:', err);
+      showNotification?.('[Auth] Backend logout call failed: ' + (err?.message || err), 'warn');
     } finally {
       // Cosmetic: Allow UI to paint, then redirect user after logout
       // Do not redirect; just update UI and let SPA handle login modal if user clicks login
@@ -355,7 +380,7 @@ export function createAuthModule({
 
       const verified = await verifyAuthState(true);
       if (!verified) {
-        console.warn('[Auth] Registration succeeded but verification failed.');
+        showNotification?.('[Auth] Registration succeeded but verification failed.', 'warn');
       }
 
       return response;
@@ -370,17 +395,17 @@ export function createAuthModule({
      ========================= */
   async function init() {
     if (authState.isReady) {
-      console.warn('[Auth] init called multiple times.');
+      showNotification?.('[Auth] init called multiple times.', 'warn');
       return true;
     }
-    console.log('[Auth] Initializing auth module...');
+    showNotification?.('[Auth] Initializing auth module...', 'info');
 
     // Set up login & register modal form handlers (if present)
     const setupAuthForms = () => {
       // ----- Login
       const loginForms = [
-        document.getElementById('loginForm'),
-        document.getElementById('loginModalForm')
+        domAPI.getElementById('loginForm'),
+        domAPI.getElementById('loginModalForm')
       ];
       loginForms.forEach(loginForm => {
         if (loginForm && !loginForm._listenerAttached) {
@@ -393,7 +418,7 @@ export function createAuthModule({
 
             // Hide any previous error message
             if (loginForm.id === 'loginModalForm') {
-              const errorEl = document.getElementById('loginModalError');
+              const errorEl = domAPI.getElementById('loginModalError');
               if (errorEl) {
                 errorEl.textContent = '';
                 errorEl.classList.add('hidden');
@@ -404,7 +429,7 @@ export function createAuthModule({
             const submitBtn = loginForm.querySelector('button[type="submit"]');
             if (submitBtn) {
               submitBtn.disabled = true;
-              submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Logging in...`;
+              submitBtn.innerHTML = sanitizer.sanitize(`<span class="loading loading-spinner loading-xs"></span> Logging in...`);
             }
 
             const formData = new FormData(loginForm);
@@ -414,7 +439,7 @@ export function createAuthModule({
             // Basic validation
             if (!username || !password) {
               if (loginForm.id === 'loginModalForm') {
-                const errorEl = document.getElementById('loginModalError');
+                const errorEl = domAPI.getElementById('loginModalError');
                 if (errorEl) {
                   errorEl.textContent = 'Username and password are required.';
                   errorEl.classList.remove('hidden');
@@ -448,7 +473,7 @@ export function createAuthModule({
               }
               // Display error
               if (loginForm.id === 'loginModalForm') {
-                const errorEl = document.getElementById('loginModalError');
+                const errorEl = domAPI.getElementById('loginModalError');
                 if (errorEl) {
                   errorEl.textContent = msg;
                   errorEl.classList.remove('hidden');
@@ -464,27 +489,23 @@ export function createAuthModule({
             }
           };
 
-          if (eventHandlers?.trackListener) {
-            eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false });
-          } else {
-            loginForm.addEventListener('submit', handler, { passive: false });
-          }
+          eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false });
         }
       });
 
       // ----- Register Modal
-      const registerModalForm = document.getElementById('registerModalForm');
+      const registerModalForm = domAPI.getElementById('registerModalForm');
       if (registerModalForm && !registerModalForm._listenerAttached) {
         registerModalForm._listenerAttached = true;
         const handler = async (e) => {
           e.preventDefault();
-          const errorEl = document.getElementById('registerModalError');
-          const submitBtn = document.getElementById('registerModalSubmitBtn');
+          const errorEl = domAPI.getElementById('registerModalError');
+          const submitBtn = domAPI.getElementById('registerModalSubmitBtn');
           if (errorEl) errorEl.classList.add('hidden');
 
           if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Registering...`;
+            submitBtn.innerHTML = sanitizer.sanitize(`<span class="loading loading-spinner loading-xs"></span> Registering...`);
           }
 
           const formData = new FormData(registerModalForm);
@@ -541,16 +562,16 @@ export function createAuthModule({
             }
           }
         };
-        if (eventHandlers?.trackListener) {
-          eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false });
-        } else {
-          registerModalForm.addEventListener('submit', handler, { passive: false });
-        }
+        eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false });
       }
     };
 
     setupAuthForms();
-    document.addEventListener('modalsLoaded', setupAuthForms);
+    if (eventHandlers?.trackListener) {
+      eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms);
+    } else {
+      document.addEventListener('modalsLoaded', setupAuthForms);
+    }
 
     try {
       await getCSRFTokenAsync();
@@ -560,7 +581,7 @@ export function createAuthModule({
 
     } catch (err) {
       // Enhanced error logging and propagation
-      console.error('[Auth] Initial verification failed in init:', err && err.stack ? err.stack : err);
+      showNotification?.('[Auth] Initial verification failed in init: ' + ((err && err.stack) ? err.stack : err), 'error');
       await clearTokenState({ source: 'init_fail', isError: true });
       authState.isReady = true;
       broadcastAuth(false, null, 'init_error');
@@ -569,7 +590,7 @@ export function createAuthModule({
     } finally {
       setInterval(() => {
         if (!document.hidden && authState.isAuthenticated) {
-          verifyAuthState(false).catch(console.warn);
+          verifyAuthState(false).catch(e => showNotification?.('[Auth] verifyAuthState periodic error: ' + (e?.message || e), 'warn'));
         }
       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
 

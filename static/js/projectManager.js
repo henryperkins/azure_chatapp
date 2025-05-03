@@ -301,7 +301,7 @@ class ProjectManager {
   }
 
   async initialize() {
-    this.notificationHandler.log('[ProjectManager] Initializing...');
+    this.notificationHandler.log('[ProjectManager] Initializing...', { context: "ProjectManager" });
   }
 
   // ---------------------------------------------------------------------------
@@ -331,7 +331,7 @@ class ProjectManager {
    */
   requireAuthenticatedOrEmit(eventName, detail = {}) {
     if (!this.app?.state?.isAuthenticated) {
-      this.notificationHandler.warn(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`);
+      this.notificationHandler.warn(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`, { context: "ProjectManager" });
       this._emitEvent(eventName, {
         error: { message: 'Authentication required' },
         ...detail
@@ -346,7 +346,7 @@ class ProjectManager {
    * returns fallbackValue for the method's final return.
    */
   handleError(eventName, error, fallbackValue, extraDetail = {}) {
-    this.notificationHandler.error(`[ProjectManager] ${eventName} error:`, error);
+    this.notificationHandler.error(`[ProjectManager] ${eventName} error:`, error, { context: "ProjectManager" });
     this._emitEvent(eventName, {
       error: { message: error.message, status: error.status },
       ...extraDetail
@@ -365,10 +365,10 @@ class ProjectManager {
    * @returns {Promise<Project[]>} The loaded projects.
    */
   async loadProjects(filter = 'all') {
-    this.notificationHandler.log(`[ProjectManager] loadProjects called with filter: ${filter}`);
+    this.notificationHandler.log(`[ProjectManager] loadProjects called with filter: ${filter}`, { context: "ProjectManager" });
 
     if (this.projectLoadingInProgress) {
-      this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
+      this.notificationHandler.log("[ProjectManager] loadProjects: already in progress", { context: "ProjectManager" });
       this.notificationHandler.log("[ProjectManager] loadProjects: already in progress");
       return [];
     }

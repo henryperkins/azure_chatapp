@@ -1,370 +1,370 @@
-(function () {
-  /**
-   * Determines if Sentry should be disabled based on:
-   *  - localStorage flag (disable_monitoring)
-   *  - localhost or 127.0.0.1 environment
-   * @returns {boolean}
-   */
+/**
+ * Sentry Initialization Manager (Factory Pattern, Dependency Injection)
+ * Refactored for strict DI, modularity, teardown, and centralized config.
+ *
+ * @param {Object} deps
+ * @param {object} deps.config - Centralized config: {dsn, environment, release, sampleRates, integrations, ...}
+ * @param {object} deps.env - Per-request environment values; e.g., user flags, app state.
+ * @param {object} deps.dependencySystem - For advanced lookups if needed; can be omitted if not used.
+ * @param {object} deps.domAPI - {createElement, addEventListener, removeEventListener, ...}
+ * @param {object} deps.storage - {getItem, setItem} (localStorage-like).
+ * @param {object} deps.notification - {log, warn, error}, for logging/notification.
+ * @param {object} deps.navigator - Navigator API (for UA, onLine, etc.).
+ * @param {object} deps.sanitizer - Sanitize injected HTML if needed.
+ * @param {object} deps.sentryNamespace - Sentry object namespace (e.g., window.Sentry).
+ * @param {object} deps.window - Reference to global window-like object.
+ * @param {object} deps.document - Reference to global document-like object.
+ *
+ * @returns {object} { initialize, cleanup }
+ */
+
+export function createSentryManager(deps) {
+  // Dependency validation
+  const required = [
+    "config",
+    "env",
+    "domAPI",
+    "storage",
+    "notification",
+    "navigator",
+    "window",
+    "document",
+    "sentryNamespace",
+  ];
+  for (const k of required) {
+    if (!deps[k]) throw new Error(`SentryManager: missing dependency ${k}`);
+  }
+  const {
+    config,
+    env,
+    domAPI,
+    storage,
+    notification,
+    navigator,
+    window,
+    document,
+    sentryNamespace,
+  } = deps;
+
+  let initialized = false;
+  let cleanupCbs = [];
+  let navigationObserver = null;
+
+  // Determine if Sentry should be disabled based on config/env/user prefs
   function shouldDisableSentry() {
     try {
-      // Check if we're in development mode
-      const isDevelopment =
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1';
+      // Configurable environment detection (dev detection)
+      const hostname = window.location.hostname;
+      const isDev = config.isDev
+        ? config.isDev(hostname, env)
+        : hostname === "localhost" || hostname === "127.0.0.1";
 
-      // Check if user has explicitly disabled monitoring
-      const userDisabled = localStorage.getItem('disable_monitoring') === 'true';
+      const userDisabled =
+        storage.getItem("disable_monitoring") === "true" ||
+        (typeof env.disableMonitoring !== "undefined"
+          ? !!env.disableMonitoring
+          : false);
 
-      // In development, only enable if explicitly requested (enable_monitoring='true')
-      if (isDevelopment) {
-        return !(localStorage.getItem('enable_monitoring') === 'true');
+      if (isDev) {
+        return !(storage.getItem("enable_monitoring") === "true");
       }
-
-      // In production, respect user preference
       return userDisabled;
-    } catch (e) {
-      // If localStorage is inaccessible (private/incognito mode, etc.), default to enabled
+    } catch {
+      notification.warn("Sentry: localStorage check failed; will default to enabled");
       return false;
     }
   }
 
-  /**
-   * Return the DSN to use. Replace with your own logic:
-   *  - Inline DSN
-   *  - Environment variables
-   */
+  // Sentry DSN getter (configurable)
   function getDsn() {
+    return config.dsn || env.SENTRY_DSN || "YOUR_SENTRY_DSN_HERE";
+  }
+
+  // Environment getter
+  function getEnvironment() {
     return (
-      // Replace with actual DSN or remove fallback if you never want a default
-      (window.ENV?.SENTRY_DSN ||
-        window.SENTRY_DSN ||
-        'YOUR_SENTRY_DSN_HERE')
+      config.environment ||
+      env.ENVIRONMENT ||
+      (() => {
+        const hn = window.location.hostname.toLowerCase();
+        if (hn.includes("localhost") || hn.includes("127.0.0.1")) return "development";
+        if (hn.includes("staging") || hn.includes("test")) return "staging";
+        if (hn.includes("dev") || hn.includes("qa")) return "development";
+        return "production";
+      })()
     );
   }
 
-  /**
-   * Detect environment. Customize as needed.
-   */
-  function detectEnvironment() {
-    const hostname = window.location.hostname.toLowerCase();
-    const env = window.ENV?.ENVIRONMENT || window.SENTRY_ENVIRONMENT;
-
-    if (env) return env.toLowerCase();
-
-    if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-      return 'development';
-    } else if (hostname.includes('staging') || hostname.includes('test')) {
-      return 'staging';
-    } else if (hostname.includes('dev') || hostname.includes('qa')) {
-      return 'development';
-    }
-    return 'production';
-  }
-
-  /**
-   * Provide a release version if available (e.g., from CI).
-   */
+  // Release getter
   function getReleaseVersion() {
-    return window.APP_VERSION || 'azure-chatapp@1.0.0';
+    return config.release || env.APP_VERSION || "azure-chatapp@1.0.0";
   }
 
-  /**
-   * The main initialization function, called first. If Sentry is disabled, we do nothing.
-   */
-  function initializeSentry() {
-    if (window._sentryAlreadyInitialized) {
-      console.log('[Sentry] Already initialized, skipping');
-      return;
-    }
-
-    if (shouldDisableSentry()) {
-      console.log('[Sentry] Disabled based on environment or user preference');
-      return;
-    }
-
-    const dsn = getDsn();
-    if (!dsn) {
-      console.warn('[Sentry] No DSN configured - skipping initialization');
-      return;
-    }
-
-    // If Sentry is already loaded (e.g. via <script> in head), skip to setup
-    if (window.Sentry) {
-      console.log('[Sentry] SDK already available, setting up...');
-      setupSentry();
-      return;
-    }
-
-    // Otherwise, load the Sentry SDK dynamically
-    const script = document.createElement('script');
-    script.src = 'https://browser.sentry-cdn.com/7.50.0/bundle.min.js';
-    script.crossOrigin = 'anonymous';
-    script.integrity = 'sha384-ABC123...'; // optional integrity hash (update with valid hash)
-    script.referrerPolicy = 'strict-origin-when-cross-origin';
-
-    script.onload = function () {
-      if (window.Sentry) {
-        console.log('[Sentry] SDK loaded successfully');
-        setupSentry();
-      } else {
-        console.error('[Sentry] SDK failed to load properly');
-      }
-    };
-    script.onerror = function () {
-      console.error('[Sentry] Failed to load SDK from CDN');
-    };
-
-    document.head.appendChild(script);
-  }
-
-  /**
-   * Once Sentry is available, configure it and attach global handlers.
-   */
+  // Sentry init logic with injected config and namespace
   function setupSentry() {
-    if (window._sentryAlreadyInitialized) {
-      console.log('[Sentry] Already initialized, skipping duplicate setup');
+    if (initialized) {
+      notification.log("[Sentry] Already initialized, skipping duplicate setup");
       return;
     }
-
-    if (!window.Sentry || typeof Sentry.init !== 'function') {
-      return; // Sentry script blocked or failed
+    const Sentry = sentryNamespace.Sentry;
+    if (!Sentry || typeof Sentry.init !== "function") {
+      notification.error("[Sentry] Sentry namespace missing or invalid.");
+      return;
     }
-
-    const environment = detectEnvironment();
+    const environment = getEnvironment();
     const releaseVersion = getReleaseVersion();
-
-    // Defer final Sentry.init if your app has phases, or init immediately
-    const initWhenReady = () => {
-      // Optional check if your app has a state object with phases:
-      // e.g., only init Sentry after certain phases. If not needed, skip this.
-      if (!window.app?.state || window.app?.state?.currentPhase === 'initialized') {
-        Sentry.init({
-          dsn: getDsn(),
-          environment: environment,
-          release: releaseVersion,
-          tracesSampleRate: parseFloat(
-            window.SENTRY_TRACES_SAMPLE_RATE ||
-            (environment === 'development' ? '1.0' : '0.1')
-          ),
-          replaysSessionSampleRate: parseFloat(
-            window.SENTRY_REPLAY_SESSION_SAMPLE_RATE || '0.0'
-          ),
-          replaysOnErrorSampleRate: parseFloat(
-            window.SENTRY_REPLAY_ON_ERROR_SAMPLE_RATE || '1.0'
-          ),
-          integrations: [
-            // New BrowserTracing integration for automatic performance tracing
-            // Note: This is hypothetical; actual usage may vary by Sentry version
-            Sentry.browserTracingIntegration && Sentry.browserTracingIntegration({
-              // tracePropagationTargets: [...], // optional
-            }),
-            // Legacy BrowserTracing if you need it
-            Sentry.BrowserTracing && Sentry.BrowserTracing({
-              // advanced tracing config
-            }),
-            // Session Replay
+    Sentry.init({
+      dsn: getDsn(),
+      environment,
+      release: releaseVersion,
+      tracesSampleRate: config.sampleRates?.traces ?? (environment === "development" ? 1.0 : 0.1),
+      replaysSessionSampleRate: config.sampleRates?.replaysSession ?? 0.0,
+      replaysOnErrorSampleRate: config.sampleRates?.replaysOnError ?? 1.0,
+      integrations: config.integrations
+        ? config.integrations(Sentry)
+        : [
+            Sentry.browserTracingIntegration &&
+              Sentry.browserTracingIntegration(),
+            Sentry.BrowserTracing && Sentry.BrowserTracing(),
             Sentry.replayIntegration && Sentry.replayIntegration({
               maskAllText: true,
               blockAllMedia: true,
             }),
-            // Capture console logs as breadcrumbs/events
-            Sentry.captureConsoleIntegration && Sentry.captureConsoleIntegration({
-              // levels: ['log', 'info', 'warn', 'error', 'debug', 'assert']
-            }),
-            // Show code context around errors
-            Sentry.contextLinesIntegration && Sentry.contextLinesIntegration({
-              // frameContextLines: 7,
-            }),
+            Sentry.captureConsoleIntegration &&
+              Sentry.captureConsoleIntegration(),
+            Sentry.contextLinesIntegration &&
+              Sentry.contextLinesIntegration(),
           ].filter(Boolean),
-          beforeSend(event, hint) {
-            // If user disables in real time or we discover dev environment
-            if (shouldDisableSentry()) {
-              return null; // discard the event
-            }
-
-            // Example: scrub sensitive params
-            if (event.request?.url) {
-              try {
-                const url = new URL(event.request.url);
-                ['token', 'key', 'secret', 'password', 'passwd', 'auth'].forEach(param => {
-                  if (url.searchParams.has(param)) {
-                    url.searchParams.set(param, '[redacted]');
-                  }
-                });
-                event.request.url = url.toString();
-              } catch (err) {
-                console.error('[Sentry] Error redacting URL parameters:', err);
+      beforeSend(event) {
+        if (shouldDisableSentry()) return null;
+        // Scrub sensitive URL params
+        if (event.request?.url) {
+          try {
+            const url = new window.URL(event.request.url);
+            ["token", "key", "secret", "password", "passwd", "auth"].forEach((param) => {
+              if (url.searchParams.has(param)) {
+                url.searchParams.set(param, "[redacted]");
               }
-            }
-            return event;
+            });
+            event.request.url = url.toString();
+          } catch (err) {
+            notification.error("Sentry: URL param redaction failed", err);
           }
-        });
+        }
+        return event;
+      },
+    });
+    notification.log("[Sentry] Initialized successfully");
 
-        console.log('[Sentry] Initialized successfully');
-        // Basic context/tags
-        Sentry.setTag('browser', navigator.userAgent);
-        Sentry.setTag('screen_resolution', `${window.screen.width}x${window.screen.height}`);
-        Sentry.setTag('app_version', releaseVersion);
+    Sentry.setTag("browser", navigator.userAgent);
+    Sentry.setTag(
+      "screen_resolution",
+      `${window.screen.width}x${window.screen.height}`
+    );
+    Sentry.setTag("app_version", releaseVersion);
 
-        // Set a broad environment context
-        Sentry.setContext('environment', {
-          browser: { name: navigator.userAgent, online: navigator.onLine },
-          screen: { width: window.screen.width, height: window.screen.height },
-          document: { referrer: document.referrer, url: window.location.href },
-        });
-
-        // Listen for auth changes to identify user
-        document.addEventListener('authStateChanged', function (evt) {
-          if (evt.detail?.authenticated && evt.detail?.username) {
-            Sentry.setUser({ id: evt.detail.username, username: evt.detail.username });
-          } else {
-            Sentry.setUser(null);
-          }
-        });
-
-        // Attach all global error handlers
-        attachGlobalSentryHandlers();
-        // Enhance fetch with distributed tracing
-        enhanceFetchForSentry();
-
-        // Mark as initialized
-        window._sentryAlreadyInitialized = true;
-      }
-    };
-
-    // If your app has a dedicated state machine, you might wait for a certain phase
-    if (window.app?.state) {
-      initWhenReady();
-    } else {
-      // Or, just do it after DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initWhenReady);
-      } else {
-        initWhenReady();
-      }
-    }
-  }
-
-  /**
-   * All Sentry-dependent, global error and event hooks should be attached AFTER Sentry is initialized.
-   */
-  function attachGlobalSentryHandlers() {
-    // Unhandled rejections
-    window.addEventListener('unhandledrejection', (event) => {
-      if (!(window.Sentry && typeof Sentry.captureException === 'function')) return;
-      const error = event.reason || new Error('Unhandled Promise Rejection');
-      Sentry.captureException(error, {
-        extra: {
-          type: 'unhandledrejection',
-          promise: event.promise?.toString(),
-          stack: error?.stack
-        },
-      });
+    Sentry.setContext("environment", {
+      browser: { name: navigator.userAgent, online: navigator.onLine },
+      screen: { width: window.screen.width, height: window.screen.height },
+      document: { referrer: document.referrer, url: window.location.href },
     });
 
-    // Window errors
-    window.addEventListener('error', (event) => {
-      if (!(window.Sentry && typeof Sentry.captureException === 'function')) return;
-      // Example skip logic for certain known logs:
-      if (!event.message.includes('auth') && !event.filename?.includes('auth.js')) {
+    // Wire up authStateChanged for user tracking, allowing teardown
+    const authListener = (evt) => {
+      if (evt.detail?.authenticated && evt.detail?.username) {
+        Sentry.setUser({
+          id: evt.detail.username,
+          username: evt.detail.username,
+        });
+      } else {
+        Sentry.setUser(null);
+      }
+    };
+    domAPI.addEventListener(document, "authStateChanged", authListener);
+    cleanupCbs.push(() =>
+      domAPI.removeEventListener(document, "authStateChanged", authListener)
+    );
+
+    // Attach all global error handlers and keep cleanup refs
+    attachGlobalSentryHandlers(Sentry);
+
+    // Enhance fetch for tracing, if desired
+    if (typeof config.enhanceFetch === "function") {
+      cleanupCbs.push(config.enhanceFetch(deps, Sentry));
+    }
+
+    initialized = true;
+  }
+
+  // Global event/error handling with teardown
+  function attachGlobalSentryHandlers(Sentry) {
+    // Unhandled Promise Rejection
+    const unhandledRejectionListener = (event) => {
+      if (!(Sentry && typeof Sentry.captureException === "function")) return;
+      const error = event.reason || new Error("Unhandled Promise Rejection");
+      Sentry.captureException(error, {
+        extra: {
+          type: "unhandledrejection",
+          promise: event.promise?.toString(),
+          stack: error?.stack,
+        },
+      });
+    };
+    domAPI.addEventListener(window, "unhandledrejection", unhandledRejectionListener);
+    cleanupCbs.push(() =>
+      domAPI.removeEventListener(window, "unhandledrejection", unhandledRejectionListener)
+    );
+
+    // Window error
+    const windowErrorListener = (event) => {
+      if (!(Sentry && typeof Sentry.captureException === "function")) return;
+      if (
+        !event.message?.includes("auth") &&
+        !event.filename?.includes("auth.js")
+      ) {
         Sentry.captureException(event.error || new Error(event.message), {
           extra: {
-            type: 'window.onerror',
+            type: "window.onerror",
             filename: event.filename,
             lineno: event.lineno,
             colno: event.colno,
-          }
+          },
         });
       }
-    });
-
-    // If desired, override console.error for capturing console-based errors:
-    /*
-    const originalConsoleError = console.error;
-    console.error = function (...args) {
-      const err = args[0] instanceof Error ? args[0] : new Error(args.join(' '));
-      if (window.Sentry && typeof Sentry.captureException === 'function') {
-        Sentry.captureException(err, { extra: { type: 'console.error', args: args.slice(1) } });
-      }
-      originalConsoleError.apply(console, args);
     };
-    */
+    domAPI.addEventListener(window, "error", windowErrorListener);
+    cleanupCbs.push(() =>
+      domAPI.removeEventListener(window, "error", windowErrorListener)
+    );
 
-    // Log user clicks as breadcrumbs
-    document.addEventListener('click', (event) => {
-      if (!window.Sentry || typeof Sentry.addBreadcrumb !== 'function') return;
+    // UI click breadcrumb
+    const clickListener = (event) => {
+      if (!Sentry || typeof Sentry.addBreadcrumb !== "function") return;
       if (!event.target || event.target === document) return;
       Sentry.addBreadcrumb({
-        category: 'ui.click',
-        message: `Clicked on <${event.target.tagName.toLowerCase()}>`,
-        level: 'info',
+        category: "ui.click",
+        message: `Clicked on <${event.target.tagName?.toLowerCase()}>`,
+        level: "info",
         data: {
           id: event.target.id || null,
           class: event.target.className || null,
           text: event.target.textContent?.trim().slice(0, 80) || null,
         },
       });
-    });
+    };
+    domAPI.addEventListener(document, "click", clickListener);
+    cleanupCbs.push(() =>
+      domAPI.removeEventListener(document, "click", clickListener)
+    );
 
-    // Track navigation changes via MutationObserver or popstate
-    initNavigationTracking();
+    // Navigation breadcrumbs (MutationObserver and popstate)
+    initNavigationTracking(Sentry);
+
+    // Insert additional error/event handlers as desired...
   }
 
-  /**
-   * Simple MutationObserver approach to watch for SPA navigation changes
-   */
-  function initNavigationTracking() {
-    if (!document.body || !window.Sentry) return;
+  // Navigation tracking setup/teardown
+  function initNavigationTracking(Sentry) {
+    // MutationObserver
     let lastHref = window.location.href;
 
-    const navigationObserver = new MutationObserver(() => {
-      if (window.location.href !== lastHref && window.Sentry) {
+    navigationObserver = new window.MutationObserver(() => {
+      if (window.location.href !== lastHref && Sentry) {
         Sentry.addBreadcrumb({
-          category: 'navigation',
+          category: "navigation",
           message: `Navigated to: ${window.location.href}`,
-          level: 'info',
+          level: "info",
         });
         lastHref = window.location.href;
       }
     });
-
     try {
       navigationObserver.observe(document.body, { childList: true, subtree: true });
     } catch (error) {
-      console.error('[Sentry] Navigation tracking failed:', error);
+      notification.error("Sentry navigation tracking failed", error);
     }
+    cleanupCbs.push(() => navigationObserver.disconnect());
 
-    // Also, you might register popstate:
-    window.addEventListener('popstate', () => {
-      if (window.location.href !== lastHref && window.Sentry) {
+    // popstate
+    const popstateListener = () => {
+      if (window.location.href !== lastHref && Sentry) {
         Sentry.addBreadcrumb({
-          category: 'navigation',
+          category: "navigation",
           message: `Navigated by popstate to: ${window.location.href}`,
-          level: 'info',
+          level: "info",
         });
         lastHref = window.location.href;
       }
+    };
+    domAPI.addEventListener(window, "popstate", popstateListener);
+    cleanupCbs.push(() =>
+      domAPI.removeEventListener(window, "popstate", popstateListener)
+    );
+  }
+
+  // SDK loader logic (optional, or can depend on app - kept dependency injectable)
+  function loadSentrySdk(then) {
+    if (sentryNamespace.Sentry) {
+      then();
+      return;
+    }
+    const script = domAPI.createElement("script");
+    script.src =
+      config.sdkUrl ||
+      "https://browser.sentry-cdn.com/7.50.0/bundle.min.js";
+    script.crossOrigin = "anonymous";
+    if (config.sdkIntegrity) {
+      script.integrity = config.sdkIntegrity;
+    }
+    script.referrerPolicy = "strict-origin-when-cross-origin";
+    script.onload = () => {
+      if (sentryNamespace.Sentry) {
+        notification.log("[Sentry] SDK loaded successfully");
+        then();
+      } else {
+        notification.error("[Sentry] SDK failed to load properly");
+      }
+    };
+    script.onerror = () => {
+      notification.error("[Sentry] Failed to load SDK from CDN");
+    };
+    domAPI.appendChild(document.head, script);
+    cleanupCbs.push(() => {
+      if (script.parentNode) script.parentNode.removeChild(script);
     });
   }
 
-  /**
-   * Enhance fetch to propagate Sentry tracing headers, correlate backend errors, etc.
-   */
-  function enhanceFetchForSentry() {
-    if (!window.fetch || !window.Sentry) return;
-    // Basic example of patching fetch (implementation can vary):
-    // const originalFetch = window.fetch;
-    // window.fetch = function (...args) {
-    //   // Insert Sentry trace headers or do other manipulations
-    //   return originalFetch.apply(this, args);
-    // };
+  // Initialize function (call to set up Sentry if not disabled)
+  function initialize() {
+    if (initialized) {
+      notification.log("[Sentry] Already initialized, skipping");
+      return;
+    }
+    if (shouldDisableSentry()) {
+      notification.log("[Sentry] Disabled via environment or user preference");
+      return;
+    }
+    // If SDK present, setup, else load then setup
+    if (sentryNamespace.Sentry) {
+      setupSentry();
+    } else {
+      loadSentrySdk(setupSentry);
+    }
   }
 
-  // If a loader script calls sentryOnLoad, link to our init
-  if (typeof window.sentryOnLoad === 'function') {
-    // Let the loader script call it explicitly
-  } else {
-    // Otherwise initialize Sentry immediately
-    initializeSentry();
+  function cleanup() {
+    for (const cb of cleanupCbs) {
+      try {
+        cb();
+      } catch (e) {
+        notification.warn("Sentry cleanup failed", e);
+      }
+    }
+    cleanupCbs = [];
+    initialized = false;
+    navigationObserver = null;
   }
-})();
+
+  // Return modular API
+  return { initialize, cleanup };
+}

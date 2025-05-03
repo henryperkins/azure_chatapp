@@ -1,22 +1,65 @@
 /* notification-accordion.css */
 
+/* Banner container */
 .accordion-banner {
   @apply alert shadow-md my-2 flex flex-col w-full max-w-lg;
   border-radius: 0.33rem;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s, border-color 0.2s;
+  position: relative;
 }
+
+/* Context label for source grouping */
+.accordion-banner .notification-context-label {
+  @apply inline-flex items-center rounded bg-base-200 px-2 py-0.5 text-xs font-semibold ml-2 mr-2 text-base-content/70 border border-base-300;
+  letter-spacing: 0.01em;
+}
+
+/* Context-driven colors (add JS class for context) */
+.accordion-banner.notification-context-ProjectListComponent      { border-left: 4px solid #4f46e5; /* Indigo */ }
+.accordion-banner.notification-context-ProjectDetailsComponent   { border-left: 4px solid #0ea5e9; /* Sky */ }
+.accordion-banner.notification-context-ModalManager              { border-left: 4px solid #facc15; /* Amber */ }
+.accordion-banner.notification-context-App                      { border-left: 4px solid #34d399; /* Emerald */ }
+
+/* Priority/sticky: bold, red border, background */
+.accordion-banner.sticky,
+.accordion-banner.priority {
+  border-left: 6px solid #ef4444 !important; /* Red */
+  background: linear-gradient(90deg, #fecaca60 0 70%, transparent 100%);
+  z-index: 120;
+}
+
+/* Built-in DaisyUI alert variants still apply */
+.accordion-banner.alert-error      { border-left-color: #dc2626 !important; }
+.accordion-banner.alert-warning    { border-left-color: #f59e42 !important; }
+.accordion-banner.alert-info       { border-left-color: #2563eb !important; }
 
 .accordion-banner .accordion-summary {
   @apply flex items-center justify-between w-full cursor-pointer font-medium;
+  outline: none;
+  padding-right: 0.75em;
+}
+.accordion-banner .accordion-summary:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .accordion-banner .accordion-toggle-btn {
   @apply btn btn-xs btn-ghost ml-2;
 }
 
+.accordion-banner .accordion-dismiss-btn {
+  @apply btn btn-xs btn-ghost text-error ml-1;
+}
+
 .accordion-banner .accordion-message-list {
   @apply mt-2 pl-4 list-disc text-sm text-base-content/80;
   display: none;
+  max-height: 170px;
+  overflow-y: auto;
+  padding-right: 0.5em;
+  border-left: 2px solid #e5e7eb;
+  margin-left: 0.1em;
+  background: rgba(250, 250, 250, 0.75);
 }
 
 .accordion-banner.expanded .accordion-message-list {
@@ -25,4 +68,11 @@
 
 .accordion-banner .accordion-message-list li {
   @apply mb-1;
+  padding-left: 0.5em;
+  word-break: break-all;
+}
+
+/* Visual 'clear all' button (slot—JS must provide) */
+.notification-clear-all {
+  @apply btn btn-xs btn-outline absolute top-1 right-3 z-20;
 }
