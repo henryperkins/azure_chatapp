@@ -1,4 +1,4 @@
-// notification-handler.js - Simplified API and improved DOM handling
+// notification-handler.js - Improved but backward compatible
 
 import createGroupedNotificationHelper from './handler-helper.js';
 
@@ -20,25 +20,29 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
   let notificationCounter = 0;
   let _messageListenerAttached = false;
 
-  // Use a template for consistent notification creation
+  // Templates - defined as DOM element to maintain compatibility
   const notificationTemplate = document.createElement('template');
   notificationTemplate.innerHTML = `
     <div class="alert notification-item animate-fadeIn" role="alert">
       <div class="flex items-center">
         <span class="notification-icon"></span>
         <span class="notification-message ml-2"></span>
+        <button type="button" class="notification-copy-btn ml-1" aria-label="Copy notification" title="Copy notification message">
+          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true" class="inline-block align-text-bottom" viewBox="0 0 20 20" fill="currentColor"><path d="M8 2a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7.83a2 2 0 0 0-.59-1.42l-2.83-2.83A2 2 0 0 0 14.17 3H14V2a2 2 0 0 0-2-2H8zm2 1v1H8V3h2zm3.59 2 2.41 2.41V13a1 1 0 0 1-1 1h-1V7a2 2 0 0 0-2-2h-6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6a2 2 0 0 0 2 2v8h-6a1 1 0 0 1-1-1V7.83a1 1 0 0 1 .29-.71z"/></svg>
+        </button>
+        <button type="button" class="btn btn-xs btn-ghost notification-close ml-auto" aria-label="Dismiss">×</button>
       </div>
-      <button type="button" class="btn btn-xs btn-ghost notification-close ml-auto" aria-label="Dismiss">×</button>
     </div>
   `;
 
   function ensureNotificationContainer() {
     let container = document.getElementById('notificationArea');
     if (!container) {
-      // Single fallback approach
       container = document.createElement('div');
       container.id = 'notificationArea';
       container.className = 'fixed top-16 right-4 z-50 w-72 gap-2 flex flex-col';
+      container.setAttribute('role', 'status');
+      container.setAttribute('aria-live', 'polite');
       document.body.appendChild(container);
     }
     return container;
@@ -55,16 +59,16 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     return icons[type] || icons.info;
   }
 
-  // Batched server logging - send logs every 2 seconds or when batch reaches 10
+  // Batched server logging - improved with retry mechanism
   const logBatch = [];
   let logSendTimeout = null;
 
   function scheduleBatchLog() {
     if (logSendTimeout) return;
-    logSendTimeout = setTimeout(sendLogBatch, 2000);
+    logSendTimeout = setTimeout(() => sendLogBatch(0), 2000);
   }
 
-  async function sendLogBatch() {
+  async function sendLogBatch(retryCount = 0) {
     logSendTimeout = null;
     if (logBatch.length === 0) return;
 
@@ -72,14 +76,26 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     logBatch.length = 0;
 
     try {
-      await fetch('/api/log_notification_batch', {
+      const response = await fetch('/api/log_notification_batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ notifications: batchToSend })
       });
+
+      if (!response.ok && retryCount < 2) {
+        // Put items back in batch and retry with backoff
+        console.warn(`[NotificationHandler] Server returned ${response.status}, retrying...`);
+        logBatch.push(...batchToSend);
+        setTimeout(() => sendLogBatch(retryCount + 1), 1000 * (retryCount + 1));
+      }
     } catch (err) {
-      // Silent failure, but at least we know what happened
       console.warn('[NotificationHandler] Failed to send log batch:', err);
+
+      // Retry on network errors with exponential backoff
+      if (retryCount < 2) {
+        logBatch.push(...batchToSend);
+        setTimeout(() => sendLogBatch(retryCount + 1), 1000 * (retryCount + 1));
+      }
     }
   }
 
@@ -97,80 +113,122 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     logBatch.push(logItem);
     if (logBatch.length >= 10) {
       clearTimeout(logSendTimeout);
-      sendLogBatch();
+      sendLogBatch(0);
     } else {
       scheduleBatchLog();
     }
   }
 
-  // Grouped notification helper setup
-  const groupedHelper = createGroupedNotificationHelper({
-    eventHandlers,
-    getIconForType,
-    notificationHandler: null
-  });
-
-  // Primary notification method
+  // Improved primary notification method with better error handling
   function show(message, type = 'info', options = {}) {
-    const container = ensureNotificationContainer();
-    logNotification(message, type, options.user);
+    try {
+      const container = ensureNotificationContainer();
+      logNotification(message, type, options.user);
 
-    // Use context for grouping if provided
-    const context = options.context || options.module || options.source || 'general';
+      // Use context for grouping if provided
+      const context = options.context || options.module || options.source || 'general';
 
-    // Determine if we should group this notification
-    const shouldGroup = !!options.group;
+      // Determine if we should group this notification
+      const shouldGroup = !!options.group;
 
-    if (shouldGroup) {
-      return groupedHelper.showGroupedNotificationByTypeAndTime({
-        message,
-        type,
-        context,
-        container
+      if (shouldGroup) {
+        return groupedHelper.showGroupedNotificationByTypeAndTime({
+          message,
+          type,
+          context,
+          container
+        });
+      }
+
+      // Create a new notification from the template
+      const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
+      const notificationClone = notificationTemplate.content.cloneNode(true);
+      const notification = notificationClone.querySelector('.alert');
+
+      // Set properties
+      notification.id = notificationId;
+      // Only use safe type for class (fallback to 'info' if invalid)
+      let safeType = typeof type === "string" ? type.trim().toLowerCase() : "info";
+      if (!/^(info|error|warning|success)$/i.test(safeType)) safeType = "info";
+      notification.classList.add(`notification-${safeType}`);
+      notification.querySelector('.notification-icon').innerHTML = getIconForType(safeType);
+      notification.querySelector('.notification-message').textContent = message;
+
+      // Ensure animation is consistent
+      notification.style.animationDuration = '300ms';
+
+      // Set up auto-dismiss timeout if enabled
+      const timeout = options.timeout ?? 5000;
+      let timeoutId = null;
+      if (timeout > 0) {
+        timeoutId = setTimeout(() => hide(notificationId), timeout);
+      }
+
+      // Track the notification
+      activeNotifications.set(notificationId, {
+        element: notification,
+        timeoutId
       });
+
+      // Add close button handler with proper tracking
+      const closeBtn = notification.querySelector('.notification-close');
+      if (closeBtn) {
+        eventHandlers.trackListener(
+          closeBtn,
+          'click',
+          () => hide(notificationId),
+          { description: `Notification close btn ${notificationId}` }
+        );
+      }
+
+      // Add copy button handler
+      const copyBtn = notification.querySelector('.notification-copy-btn');
+      if (copyBtn) {
+        const originalIcon = copyBtn.innerHTML;
+        const checkIcon =
+          '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true" class="inline-block align-text-bottom text-success" viewBox="0 0 20 20" fill="currentColor"><path d="M16.704 5.29a1 1 0 0 1 .007 1.414l-7 7a1 1 0 0 1-1.414 0l-3-3a1 1 0 1 1 1.414-1.414L9 11.586l6.293-6.293a1 1 0 0 1 1.414-.003z"/></svg>';
+        eventHandlers.trackListener(
+          copyBtn,
+          'click',
+          () => {
+            const messageText = notification.querySelector('.notification-message')?.textContent || '';
+            navigator.clipboard.writeText(messageText).then(() => {
+              copyBtn.innerHTML = checkIcon;
+              copyBtn.classList.add('text-success');
+              setTimeout(() => {
+                copyBtn.innerHTML = originalIcon;
+                copyBtn.classList.remove('text-success');
+              }, 1200);
+            }).catch(() => {
+              notificationHandler.show('Copy failed', 'error', { timeout: 2000, context: 'notificationHelper' });
+            });
+          },
+          { description: `Notification copy btn ${notificationId}` }
+        );
+      }
+
+      // Add to container
+      container.appendChild(notification);
+      return notificationId;
+    } catch (err) {
+      // Single error boundary
+      console.error('Failed to show notification:', err);
+
+      // Create a simple fallback notification
+      try {
+        const container = document.getElementById('notificationArea') || document.body;
+        const div = document.createElement('div');
+        div.className = `alert alert-${type || 'info'} mb-2`;
+        div.textContent = message || 'Notification error';
+        div.style.margin = '10px';
+        container.appendChild(div);
+        setTimeout(() => div.remove(), 5000);
+      } catch (e) {
+        // Last resort
+        console.error('Critical notification error:', message, e);
+      }
+      return null;
     }
-
-    // Create a new notification from the template
-    const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
-    const notificationClone = notificationTemplate.content.cloneNode(true);
-    const notification = notificationClone.querySelector('.alert');
-
-    // Set properties
-    notification.id = notificationId;
-    // Only use safe type for class (fallback to 'info' if invalid)
-    let safeType = typeof type === "string" ? type.trim().toLowerCase() : "info";
-    if (!/^(info|error|warning|success)$/i.test(safeType)) safeType = "info";
-    notification.classList.add(`notification-${safeType}`);
-    notification.querySelector('.notification-icon').innerHTML = getIconForType(safeType);
-    notification.querySelector('.notification-message').textContent = message;
-
-    // Set up auto-dismiss timeout if enabled
-    const timeout = options.timeout ?? 5000;
-    let timeoutId = null;
-    if (timeout > 0) {
-      timeoutId = setTimeout(() => hide(notificationId), timeout);
-    }
-
-    // Track the notification
-    activeNotifications.set(notificationId, {
-      element: notification,
-      timeoutId
-    });
-
-    // Add close button handler
-    const closeBtn = notification.querySelector('.notification-close');
-    if (closeBtn) {
-      eventHandlers.trackListener(
-        closeBtn,
-        'click',
-        () => hide(notificationId),
-        { description: 'Notification close button' }
-      );
-    }
-
-    // Add to container
-    container.appendChild(notification);
-    return notificationId;
   }
 
   function hide(notificationId) {
@@ -183,6 +241,7 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
       if (timeoutId) clearTimeout(timeoutId);
 
       // Use CSS animation for fade out
+      element.classList.remove('animate-fadeIn');
       element.classList.add('animate-fadeOut');
       element.style.animationDuration = '300ms';
 
@@ -211,15 +270,6 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
 
     // Clear grouped notifications
     groupedHelper.clearAllGroupedNotifications();
-  }
-
-  function cleanup() {
-    clear();
-    removeMessageListener();
-    // Send any pending logs
-    if (logBatch.length > 0) {
-      sendLogBatch();
-    }
   }
 
   // Message event handler for cross-frame communication
@@ -288,12 +338,26 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     }
   }
 
-  // Create a backwards compatible API that maps to the `show` method
-  return {
+  // Set up the grouped notification helper
+  const groupedHelper = createGroupedNotificationHelper({
+    eventHandlers,
+    getIconForType,
+    notificationHandler: null // Self-reference will be added below
+  });
+
+  // Create the complete notification handler with all required methods
+  const notificationHandler = {
     show,
     hide,
     clear,
-    cleanup,
+    cleanup() {
+      clear();
+      removeMessageListener();
+      // Send any pending logs
+      if (logBatch.length > 0) {
+        sendLogBatch(0);
+      }
+    },
     addMessageListener,
     removeMessageListener,
     getIconForType,
@@ -306,4 +370,11 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     error: (msg, opts) => show(msg, 'error', opts),
     debug: (msg, opts) => show(msg, 'info', { ...(opts || {}), timeout: 2000 })
   };
+
+  // Set self-reference in groupedHelper if needed
+  if (groupedHelper._setNotificationHandler && typeof groupedHelper._setNotificationHandler === 'function') {
+    groupedHelper._setNotificationHandler(notificationHandler);
+  }
+
+  return notificationHandler;
 }
