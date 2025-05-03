@@ -80,14 +80,19 @@ export class ProjectListComponent {
             if (this.app && typeof this.app.setCurrentProjectId === "function") {
                 this.app.setCurrentProjectId(projectId);
             } else {
-                window.currentProjectId = projectId; // fallback; ideally DI/app method
+                this.notification.warn("[ProjectListComponent] Cannot set current project; app.setCurrentProjectId not available.");
             }
             // (Optional) Persist to user preferences via API for cross-session behavior
-            fetch('/api/user/preferences', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ last_project_id: projectId })
-            }).catch(() => {});
+            if (this.apiClient && typeof this.apiClient.patch === "function") {
+                this.apiClient.patch('/api/user/preferences', { last_project_id: projectId }).catch(() => {});
+            } else if (typeof fetch === "function") {
+                this.notification.warn("[ProjectListComponent] Using direct fetch as apiClient is not available. Please inject apiClient.");
+                fetch('/api/user/preferences', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ last_project_id: projectId })
+                }).catch(() => {});
+            }
             // Now navigate SPA without ?project= in the URL, e.g., to /project-details or "main view"
             if (this.router && typeof this.router.navigate === "function") {
                 this.router.navigate(`/project-details-view?project=${projectId}`);
@@ -149,7 +154,10 @@ export class ProjectListComponent {
 
     /** Private helper: sanitize and set HTML */
     _setElementHTML(element, rawHtml) {
-        element.innerHTML = DOMPurify.sanitize(rawHtml);
+        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
+            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
+        }
+        element.innerHTML = this.sanitizer.sanitize(rawHtml);
     }
 
     /** Private helper: clear element content */
@@ -554,14 +562,17 @@ export class ProjectListComponent {
         this.gridElement.classList.add("grid", "project-list");
         const emptyDiv = document.createElement("div");
         emptyDiv.className = "project-list-empty";
-        emptyDiv.innerHTML = `
+        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
+            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
+        }
+        emptyDiv.innerHTML = this.sanitizer.sanitize(`
           <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
           <p class="mt-4 text-lg text-base-content">No projects found</p>
           <p class="mt-1">Create a new project to get started</p>
           <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
-        `;
+        `);
         this.gridElement.appendChild(emptyDiv);
 
         const createBtn = document.getElementById("emptyStateCreateBtn");
@@ -582,10 +593,13 @@ export class ProjectListComponent {
         this.element.classList.add("grid", "project-list");
         const loginDiv = document.createElement("div");
         loginDiv.className = "project-list-fallback";
-        loginDiv.innerHTML = `
+        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
+            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
+        }
+        loginDiv.innerHTML = this.sanitizer.sanitize(`
           <p class="mt-4 text-lg">Please log in to view your projects</p>
           <button id="loginButton" class="btn btn-primary mt-4">Login</button>
-        `;
+        `);
         this.element.appendChild(loginDiv);
 
         const loginBtn = document.getElementById("loginButton");
@@ -599,9 +613,9 @@ export class ProjectListComponent {
 
     /** Error UI */
     _showErrorState(message) {
-        console.error("[ProjectListComponent] Error state shown with message:", message);
+        this.notification.error("[ProjectListComponent] Error state shown with message:", message);
         if (!this.element) {
-            console.error("[ProjectListComponent] Cannot show error state, this.element is null/undefined");
+            this.notification.error("[ProjectListComponent] Cannot show error state, this.element is null/undefined");
             return;
         }
         this._clearElement(this.element);
@@ -609,14 +623,17 @@ export class ProjectListComponent {
         const msg = message || "An unknown error occurred.";
         const errorDiv = document.createElement("div");
         errorDiv.className = "project-list-error";
-        errorDiv.innerHTML = `
+        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
+            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
+        }
+        errorDiv.innerHTML = this.sanitizer.sanitize(`
           <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <p class="mt-4 text-lg text-error">${msg}</p>
           <button id="retryButton" class="btn btn-outline btn-error mt-4">Retry</button>
           <div class="mt-4 text-sm text-base-content/70">If the issue persists, check console logs for more details.</div>
-        `;
+        `);
         this.element.appendChild(errorDiv);
         const retryBtn = document.getElementById("retryButton");
         if (retryBtn) {

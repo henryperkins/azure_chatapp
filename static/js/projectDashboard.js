@@ -214,34 +214,34 @@ class ProjectDashboard {
             this.logger.info('[ProjectDashboard] Aborting showProjectDetails (direct path) due to newer load');
             return false;
           }
-          console.log('[ProjectDashboard] Setting initial view visibility first');
+          this.logger.info('[ProjectDashboard] Setting initial view visibility first');
           this._setView({ showList: false, showDetails: true });
 
           // Step 2: Tell the component to show itself
-          console.log('[ProjectDashboard] Showing project details component (direct path)');
+          this.logger.info('[ProjectDashboard] Showing project details component (direct path)');
           if (this.components.projectDetails) this.components.projectDetails.show();
 
           // Step 3: Hide the list component
-          console.log('[ProjectDashboard] Hiding project list component');
+          this.logger.info('[ProjectDashboard] Hiding project list component');
           if (this.components.projectList) this.components.projectList.hide();
 
           // Step 4: Render the data
-          console.log('[ProjectDashboard] Rendering project data (direct path)');
+          this.logger.info('[ProjectDashboard] Rendering project data (direct path)');
           this.components.projectDetails.renderProject(project);
 
           // Final verification that the details are visible
-          console.log('[ProjectDashboard] Performing final visibility check');
+          this.logger.info('[ProjectDashboard] Performing final visibility check');
           const detailsView = document.getElementById('projectDetailsView');
           if (detailsView) {
             if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
-              console.warn('[ProjectDashboard] Details view still hidden after all operations, forcing visibility');
+              this.logger.warn('[ProjectDashboard] Details view still hidden after all operations, forcing visibility');
               detailsView.classList.remove('hidden', 'opacity-0');
               detailsView.style.display = '';
               detailsView.setAttribute('aria-hidden', 'false');
             }
           }
         } catch (error) {
-          console.error('[ProjectDashboard] Error during view transition:', error);
+          this.logger.error('[ProjectDashboard] Error during view transition:', error);
           // Try one more time with the basic approach
           this._setView({ showList: false, showDetails: true });
         }
@@ -344,13 +344,13 @@ class ProjectDashboard {
       this.logger.info('[ProjectDashboard] _setView aborted due to navigation change');
       return;
     }
-    console.log('[ProjectDashboard] _setView called with:', { showList, showDetails });
+    this.logger.info('[ProjectDashboard] _setView called with:', { showList, showDetails });
 
     const listView = document.getElementById('projectListView');
     const detailsView = document.getElementById('projectDetailsView');
 
     // Log DOM element state before changes
-    console.log('[ProjectDashboard] _setView DOM elements before:', {
+    this.logger.info('[ProjectDashboard] _setView DOM elements before:', {
       listViewExists: !!listView,
       detailsViewExists: !!detailsView,
       listViewClasses: listView ? listView.className : 'N/A',
@@ -359,30 +359,30 @@ class ProjectDashboard {
 
     // Ensure both views exist before proceeding
     if (!listView) {
-      console.error('[ProjectDashboard] #projectListView element not found in DOM');
+      this.logger.error('[ProjectDashboard] #projectListView element not found in DOM');
       // Try to create it as a last resort
       try {
         const newListView = document.createElement('div');
         newListView.id = 'projectListView';
         newListView.className = 'flex-1 flex flex-col min-h-0';
         document.querySelector('#projectManagerPanel')?.appendChild(newListView);
-        console.log('[ProjectDashboard] Created missing #projectListView element');
+        this.logger.info('[ProjectDashboard] Created missing #projectListView element');
       } catch (e) {
-        console.error('[ProjectDashboard] Failed to create missing #projectListView:', e);
+        this.logger.error('[ProjectDashboard] Failed to create missing #projectListView:', e);
       }
     }
 
     if (!detailsView) {
-      console.error('[ProjectDashboard] #projectDetailsView element not found in DOM');
+      this.logger.error('[ProjectDashboard] #projectDetailsView element not found in DOM');
       // Try to create it as a last resort
       try {
         const newDetailsView = document.createElement('div');
         newDetailsView.id = 'projectDetailsView';
         newDetailsView.className = 'hidden';
         document.querySelector('#projectManagerPanel')?.appendChild(newDetailsView);
-        console.log('[ProjectDashboard] Created missing #projectDetailsView element');
+        this.logger.info('[ProjectDashboard] Created missing #projectDetailsView element');
       } catch (e) {
-        console.error('[ProjectDashboard] Failed to create missing #projectDetailsView:', e);
+        this.logger.error('[ProjectDashboard] Failed to create missing #projectDetailsView:', e);
       }
     }
 
@@ -392,7 +392,7 @@ class ProjectDashboard {
 
     // Update list view visibility with multiple approaches for robustness
     if (finalListView) {
-      console.log(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
+      this.logger.info(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
       // Use multiple methods to ensure visibility change works
       finalListView.classList.toggle('hidden', !showList);
       finalListView.setAttribute('aria-hidden', (!showList).toString());
@@ -403,7 +403,7 @@ class ProjectDashboard {
 
     // Update details view visibility with multiple approaches for robustness
     if (finalDetailsView) {
-      console.log(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
+      this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
       // Use multiple methods to ensure visibility change works
       finalDetailsView.classList.toggle('hidden', !showDetails);
       finalDetailsView.setAttribute('aria-hidden', (!showDetails).toString());
@@ -417,7 +417,7 @@ class ProjectDashboard {
     if (finalDetailsView) void finalDetailsView.offsetHeight;
 
     // Log final state after changes
-    console.log('[ProjectDashboard] View state after update:', {
+    this.logger.info('[ProjectDashboard] View state after update:', {
       listViewHidden: finalListView?.classList.contains('hidden') || false,
       detailsViewHidden: finalDetailsView?.classList.contains('hidden') || false,
       listViewDisplay: finalListView?.style.display || 'N/A',
@@ -539,45 +539,39 @@ class ProjectDashboard {
 
   _loadProjects() {
     this.state._aborted = false;
-    console.log('[ProjectDashboard] Loading projects...');  // Enhanced console log for debugging
-    this.logger.info('[ProjectDashboard] Loading projects...');
+    this.logger.info('[ProjectDashboard] Loading projects...');  // Enhanced logging for debugging
 
     if (!this.app) {
-      console.error('[ProjectDashboard] app is null or undefined');
       this.logger.error('[ProjectDashboard] app is null or undefined');
       return;
     }
 
     if (!this.app?.state?.isAuthenticated) {
-      console.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', this.app?.state);
-      this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects');
+      this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', this.app?.state);
       return;
     }
 
     if (!this.projectManager) {
-      console.error('[ProjectDashboard] projectManager is null or undefined');
       this.logger.error('[ProjectDashboard] projectManager is null or undefined');
       return;
     }
 
     if (!this.projectManager?.loadProjects) {
-      console.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available', this.projectManager);
       this.logger.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
       return;
     }
 
     this.browserService.setTimeout(() => {
-      console.log('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
+      this.logger.info('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
       this.projectManager.loadProjects('all')
         .then(projects => {
           if (this.state._aborted) {
             this.logger.info('[ProjectDashboard] _loadProjects aborted, ignoring loaded projects');
             return;
           }
-          console.log('[ProjectDashboard] Projects loaded successfully:', projects);
+          this.logger.info('[ProjectDashboard] Projects loaded successfully:', projects);
         })
         .catch((error) => {
-          console.error('[ProjectDashboard] Error loading projects:', error);
           this.logger.error('[ProjectDashboard] Error loading projects:', error);
         });
     }, 100);
