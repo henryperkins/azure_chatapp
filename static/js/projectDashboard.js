@@ -543,6 +543,7 @@ class ProjectDashboard {
       add(win, 'popstate', this._handlePopState.bind(this));
     }
     add(document, 'authStateChanged', this._handleAuthStateChange.bind(this));
+    add(document, 'projectDeleted', this._handleProjectDeleted.bind(this)); // Add listener for project deletion
   }
 
   _handleProjectCreated(e) {
@@ -740,6 +741,22 @@ class ProjectDashboard {
       { group: true, context: 'projectDashboard' }
     );
     this.showProjectList();
+  }
+
+  _handleProjectDeleted(event) {
+    const { projectId } = event.detail || {};
+    this.logger.info(`[ProjectDashboard] Project deleted event received for ID: ${projectId}`);
+    // If the deleted project was the one being viewed, go back to list
+    if (this.state.currentProject && this.state.currentProject.id === projectId) {
+      this.logger.info('[ProjectDashboard] Currently viewed project was deleted, returning to list view.');
+      this.showProjectList(); // This already calls _loadProjects
+    } else {
+      // Otherwise, just reload the list in the background if it's already visible
+      if (this.state.currentView === 'list') {
+        this.logger.info('[ProjectDashboard] Project deleted while list is visible, reloading list.');
+        this._loadProjects();
+      }
+    }
   }
 }
 
