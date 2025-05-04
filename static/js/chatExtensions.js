@@ -75,6 +75,18 @@ export function createChatExtensions({
   function init() {
     try {
       setupChatTitleEditing();
+
+      // Ensure the edit button is only visible when chat UI is visible
+      const chatUI = domAPI?.getElementById?.("projectChatUI");
+      const editTitleBtn = domAPI?.getElementById?.("chatTitleEditBtn");
+      if (editTitleBtn) {
+        if (chatUI && !chatUI.classList.contains("hidden")) {
+          editTitleBtn.classList.remove("hidden");
+        } else {
+          editTitleBtn.classList.add("hidden");
+        }
+      }
+
       showNotification('[ChatExtensions] Initialized', 'debug');
     } catch (error) {
       showNotification("[ChatExtensions] Initialization failed: " + (error && error.message ? error.message : error), "error");
