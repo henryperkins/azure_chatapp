@@ -15,7 +15,7 @@
    If you want DaisyUI built-in themes, for example: */
 @plugin "daisyui";
 
-/* Custom "fadeZoomIn" animation is now defined in tailwind.config.js for use as "animate-fadeZoomIn". */
+/* Custom "fadeZoomIn" animation is now defined in tailwind.config.mjs for use as "animate-fadeZoomIn". */
 /* Remove manual CSS keyframes and use utility class in markup per Tailwind best practices. */
 
 /* 4) Import partial CSS files: enhanced-components, file-upload, legacy-dracula-theme. */
