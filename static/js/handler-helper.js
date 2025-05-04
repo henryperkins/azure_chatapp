@@ -95,7 +95,13 @@ export function createGroupedNotificationHelper({
     const listBox = banner.querySelector('.accordion-message-list');
 
     radio.name = `notif-group-${group.type}-${group.context}`;
-    radio.checked = true;
+    const collapseTitle = banner.querySelector('.collapse-title');
+    eventHandlers.trackListener(collapseTitle, 'click', () => {
+      radio.checked = !radio.checked;
+      banner.classList.toggle('collapse-open', radio.checked);
+    }, {
+      description: 'Accordion Title Toggle'
+    });
 
     ctxBadge.textContent = group.context;
     iconBox.innerHTML = getIconForType(group.type);
@@ -109,8 +115,19 @@ export function createGroupedNotificationHelper({
       eventHandlers.trackListener(radio, 'change', () => banner.classList.toggle('collapse-open', radio.checked), { description: 'Grp radio' }),
       eventHandlers.trackListener(copyBtn, 'click', () => {
         if (!_clipboard) return;
-        _clipboard.writeText(group.messages.join('\n')).catch(console.error);
-      }, { description: 'Grp copy' }),
+        const originalIcon = copyBtn.innerHTML;
+        const checkIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true" class="inline-block align-text-bottom"><path d="M16.704 5.29a1 1 0 0 1 .007 1.414l-7 7a1 1 0 0 1-1.414 0l-3-3a1 1 0 1 1 1.414-1.414L9 11.586l6.293-6.293a1 1 0 0 1 1.414-.003z"/></svg>';
+        _clipboard.writeText(group.messages.join('\n'))
+          .then(() => {
+            copyBtn.innerHTML = checkIcon;
+            copyBtn.classList.add('text-success');
+            setTimeout(() => {
+              copyBtn.innerHTML = originalIcon;
+              copyBtn.classList.remove('text-success');
+            }, 1200);
+          })
+          .catch(err => console.error('[GroupedCopy] Clipboard failed:', err));
+      }, { description: 'Grouped Notification Copy' }),
       eventHandlers.trackListener(dismiss, 'click', () => hideGroupedNotification(group.notificationId), { description: 'Grp dismiss' }),
     ];
 
