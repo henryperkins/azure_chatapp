@@ -1,11 +1,31 @@
 /**
- * app.js - Application Core (Refactored)
+ * app.js - Application Core (Refactored, with Unified Notification System)
+ *
+ * ## Notification System Integration Notes
+ *
+ * - The notification handler, created via createNotificationHandler, is registered as 'notificationHandler'
+ *   in the DependencySystem. The wafer-thin notify util is registered as 'notify'. All feature and core
+ *   modules should receive 'notify' via dependency injection and **must not import notification-handler.js directly**.
+ * - When adding or updating modules (projectManager, chatManager, sidebar, etc.), always accept 'notify'
+ *   as a dependency and use notify.success/info/warn/error for all user-facing notifications.
+ * - Never call notificationHandler.show directly except inside app.js or notification-system integration wrappers.
+ * - For usage and grouping patterns, see notification-system.md.
  *
  * Changes in this refactored version:
  * 1. Centralized event binding using eventHandlers (trackListener).
  * 2. Console logging wrapped with if (APP_CONFIG.DEBUG) checks.
  * 3. Added destroyApp() for cleanup in SPA contexts.
  * 4. Preserved core logic, but reorganized some sections for clarity.
+ *
+ * Example: Injecting notify in a feature module
+ *
+ *   export function createSomeFeature({ notify, ...deps }) {
+ *     if (!notify) throw new Error('notify is required');
+ *     function doSomething() {
+ *        notify.success('Action completed!', { context: 'someFeature' });
+ *     }
+ *     // ...
+ *   }
  */
 
 import * as globalUtils from './utils/globalUtils.js';
@@ -27,6 +47,7 @@ import * as accessibilityUtils from './accessibility-utils.js';
 import { createNotificationHandler } from './notification-handler.js';
 import { createEventHandlers } from './eventHandler.js';
 import { createAuthModule } from './auth.js';
+import { createNotify } from './utils/notify.js';
 
 /**
  * browserAPI: Abstraction for all browser globals to enable DI.
@@ -640,6 +661,10 @@ async function init() {
         groupWindowMs : 7000                // example – 7-second buckets for API chatter
     });
 
+    // Register notificationHandler and notify util in DI
+    DependencySystem.register('notificationHandler', notificationHandler);
+    DependencySystem.register('notify', createNotify({ notificationHandler }));
+
     // Optional: expose for legacy code (must be at top level for ESM; assign here for global/legacy, not export)
     window.showNotification = notificationHandler.show;
 
@@ -882,25 +907,26 @@ async function initializeCoreSystems() {
         throw new Error('[App] chatManager registration: not a valid instance with "initialize".');
     }
 
-    const projectManager = createProjectManager({
-        DependencySystem,
-        chatManager: chatMgrInstance,
-        app,
-        notificationHandler: notificationHandlerWithLog,
-        storage: DependencySystem.modules.get('storage'),
-        listenerTracker: {
-            add: (target, event, handler, description) =>
-                eventHandlers.trackListener(target, event, handler, {
-                    description: description || `[ProjectManager] ${event} on ${target?.id || target}`
-                }),
-            remove: (target, event, handler) => {
-                if (eventHandlers.cleanupListeners) {
-                    eventHandlers.cleanupListeners(target, event, handler);
-                }
+const notify = DependencySystem.modules.get('notify');
+const projectManager = createProjectManager({
+    DependencySystem,
+    chatManager: chatMgrInstance,
+    app,
+    notify,
+    storage: DependencySystem.modules.get('storage'),
+    listenerTracker: {
+        add: (target, event, handler, description) =>
+            eventHandlers.trackListener(target, event, handler, {
+                description: description || `[ProjectManager] ${event} on ${target?.id || target}`
+            }),
+        remove: (target, event, handler) => {
+            if (eventHandlers.cleanupListeners) {
+                eventHandlers.cleanupListeners(target, event, handler);
             }
         }
-    });
-    DependencySystem.register('projectManager', projectManager);
+    }
+});
+DependencySystem.register('projectManager', projectManager);
 
     // Enhanced validation for projectManager
     if (typeof DependencySystem.modules.get('projectManager') === 'function') {
@@ -1237,13 +1263,7 @@ async function initializeUIComponents() {
     DependencySystem.register('projectDashboardUtils', projectDashboardUtils);
 
     // Project List Component
-    const projectListNotificationHandlerRaw = createBannerHandlerWithLog('#projectListView');
-    const projectListNotificationHandler = {
-        log: (...args) => projectListNotificationHandlerRaw.log?.(...args),
-        warn: (...args) => projectListNotificationHandlerRaw.warn?.(...args),
-        error: (...args) => projectListNotificationHandlerRaw.error?.(...args),
-        confirm: (...args) => projectListNotificationHandlerRaw.confirm?.(...args)
-    };
+    const notifyForUi = DependencySystem.modules.get('notify');
     const projectListComponent = new ProjectListComponent({
         projectManager,
         eventHandlers,
@@ -1256,7 +1276,7 @@ async function initializeUIComponents() {
             },
             getURL: () => window.location.href
         },
-        notificationHandler: projectListNotificationHandler,
+        notify: notifyForUi,
         storage: DependencySystem.modules.get('storage'),
         sanitizer: DependencySystem.modules.get('sanitizer')
     });
@@ -1270,7 +1290,6 @@ async function initializeUIComponents() {
     DependencySystem.register('projectDashboard', projectDashboard);
 
     // Project Details Component
-    const projectDetailsNotificationHandler = createBannerHandlerWithLog('#projectDetailsView');
     const projectDetailsComponent = createProjectDetailsComponent({
         onBack: async () => {
             try {
@@ -1293,7 +1312,7 @@ async function initializeUIComponents() {
             },
             getURL: () => window.location.href
         },
-        notificationHandler: projectDetailsNotificationHandler,
+        notify: notifyForUi,
         sanitizer: DependencySystem.modules.get('sanitizer')
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponent);
