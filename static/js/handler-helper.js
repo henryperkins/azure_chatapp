@@ -104,6 +104,24 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
       const dismissBtn = banner.querySelector('.accordion-dismiss-btn');
       const messageList = banner.querySelector('.accordion-message-list');
 
+      // --- ARIA Improvement: Add aria-describedby and visually hidden group summary for SRs ---
+      const ariaDescId = `group-desc-${group.notificationId}`;
+      const ariaDesc = document.createElement('span');
+      ariaDesc.id = ariaDescId;
+      ariaDesc.className = 'sr-only';
+      ariaDesc.textContent = `${group.messages.length} ${group.type} notifications in group "${group.context}". Use copy or clear actions.`;
+      banner.setAttribute('aria-describedby', ariaDescId);
+      banner.appendChild(ariaDesc);
+
+      // Announce expansion/collapse for screen readers
+      radio.addEventListener('change', () => {
+        if (radio.checked) {
+          ariaDesc.textContent = `Expanded grouped notifications for ${group.context}, showing ${group.messages.length}.`;
+        } else {
+          ariaDesc.textContent = `Collapsed grouped notifications for ${group.context}.`;
+        }
+      });
+
       // ARIA for accessibility
       banner.setAttribute('aria-live', 'polite');
 
