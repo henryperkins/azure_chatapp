@@ -272,8 +272,13 @@ function showNotification(message, type = 'info', duration = 5000, options = {})
     }
     // Prefer notificationHandler (DI) for unified, robust notifications
     if (typeof notificationHandler?.show === "function") {
-        // Merge timeout/duration with options, giving precedence to explicit timeout in options if provided
-        const opts = { ...options, ...(options.timeout === undefined ? { timeout: duration } : {}) };
+        // Merge timeout/duration with options, giving precedence to explicit timeout in options
+        const opts = {
+            ...options,
+            ...(options.timeout === undefined ? { timeout: duration } : {}),
+            // Always add pointer-events: auto to ensure clickable notifications
+            style: { pointerEvents: 'auto', ...(options.style || {}) }
+        };
         return notificationHandler.show(message, type, opts);
     }
     // Fallback to legacy util, if somehow DI notification is missing
@@ -307,88 +312,9 @@ DependencySystem.register('eventHandlers', eventHandlers);
 /*
  * Enhanced notification handler initialization with error boundary and legacy shims.
  */
-const notificationHandler = createNotificationHandler({
-  eventHandlers,
-  DependencySystem
-});
-
-// Add a global loading handler to hide notifications on page changes
-document.addEventListener('locationchange', function() {
-  // Only clear notifications if they're not important
-  const container = document.getElementById('notificationArea');
-  if (container) {
-    const notificationsToKeep = Array.from(container.children).filter(
-      el => el.classList.contains('priority') || el.classList.contains('sticky')
-    );
-
-    // Clear non-important notifications
-    notificationHandler.clear();
-
-    // Re-add important ones
-    notificationsToKeep.forEach(el => container.appendChild(el));
-  }
-});
-
-// Add notification error boundary
-const originalShow = notificationHandler.show;
-notificationHandler.show = function(message, type, options) {
-  try {
-    return originalShow.call(this, message, type, options);
-  } catch (err) {
-    console.error('Failed to show notification:', err);
-    // Create a simple fallback notification without using any complex functions
-    try {
-      const container = document.getElementById('notificationArea') || document.body;
-      const div = document.createElement('div');
-      div.textContent = message || 'Notification error';
-      div.className = 'alert alert-' + (type || 'error');
-      div.style.margin = '10px';
-      div.style.padding = '10px';
-      container.appendChild(div);
-      setTimeout(() => div.remove(), 5000);
-    } catch (e) {
-      // Last resort
-      console.error('Critical notification error:', message, e);
-    }
-    return null;
-  }
-};
-
-// Enhanced notification shim with error trapping
-function createNotificationShim(h) {
-  const safeFn = (fn, fallbackType) => (...args) => {
-    try {
-      return fn.apply(h, args);
-    } catch (err) {
-      console.error(`Error in notification ${fallbackType}:`, err);
-      try {
-        // Simple DOM-based fallback
-        const msg = args[0] || `[${fallbackType}] Notification failed`;
-        const div = document.createElement('div');
-        div.textContent = msg;
-        div.className = `alert alert-${fallbackType}`;
-        div.style.margin = '10px';
-        div.style.padding = '10px';
-        document.body.appendChild(div);
-        setTimeout(() => div.remove(), 5000);
-      } catch (e) {
-        // Last resort: console
-        console.error(`[${fallbackType}] ${args[0]}`, e);
-      }
-    }
-  };
-
-  return {
-    ...h,
-    log: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
-    warn: safeFn(h.show || ((...args) => h(args[0], 'warning')), 'warning'),
-    error: safeFn(h.show || ((...args) => h(args[0], 'error')), 'error'),
-    confirm: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
-    debug: safeFn(h.debug || ((...args) => console.debug(...args)), 'debug')
-  };
-}
-const notificationHandlerWithLog = createNotificationShim(notificationHandler);
-DependencySystem.register('notificationHandler', notificationHandler);
+// Note: Initialization moved into init() for better DI timing/order (see below).
+let notificationHandler = null;
+let notificationHandlerWithLog = null;
 DependencySystem.register('modalMapping', MODAL_MAPPINGS);
 
 /**
@@ -421,11 +347,16 @@ DependencySystem.register('errorReporter', errorReporter);
  * mapped for compatibility with legacy component APIs.
  * Each handler only affects notifications in its own container.
  */
+const domAPI = {
+    getElementById: (id) => document.getElementById(id),
+    createElement: (tag) => document.createElement(tag)
+};
+
 function createBannerHandlerWithLog(containerSelector) {
     const container = typeof containerSelector === "string"
         ? document.querySelector(containerSelector)
         : containerSelector;
-    const h = createNotificationHandler({ container, eventHandlers, DependencySystem });
+    const h = createNotificationHandler({ container, eventHandlers, DependencySystem, domAPI });
 
     // Map to expected log/warn/error/confirm for compatibility
     return {
@@ -553,7 +484,7 @@ const storageService = {
     get length() {
         try {
             return browserAPIForStorage.getLocalStorage().length;
-        } catch (e) {
+        } catch {
             if (APP_CONFIG.DEBUG) {
                 notificationHandlerWithLog.warn('[storageService] length getter failed', { });
             }
@@ -666,14 +597,18 @@ bootstrap();
  * Called when DOM is ready. Proceeds with init.
  */
 function onReady() {
-    if (APP_CONFIG.DEBUG) {
+    if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
         notificationHandlerWithLog.debug(`[App] DOM ready. Starting init...`);
         if (window.currentUser) {
             notificationHandlerWithLog.debug("[App] Current user loaded from auth.js:", window.currentUser);
         }
     }
     init().catch(err => {
-        notificationHandlerWithLog.error("[App] Unhandled error during async init:", err);
+        if (notificationHandlerWithLog) {
+            notificationHandlerWithLog.error("[App] Unhandled error during async init:", err);
+        } else {
+            console.error("[App] Unhandled error during async init:", err);
+        }
     });
 }
 
@@ -681,13 +616,131 @@ function onReady() {
  * Main initialization sequence
  * @returns {Promise<boolean>} success or failure
  */
+/**
+ * Removes any duplicate notificationArea elements from the DOM, preserving only the first instance.
+ */
+function cleanupDuplicateNotificationAreas() {
+    const areas = document.querySelectorAll('#notificationArea');
+    if (areas.length > 1) {
+        console.warn(`[App] Found ${areas.length} notification areas, removing duplicates.`);
+        // Keep the first one, remove others
+        for (let i = 1; i < areas.length; i++) {
+            areas[i].parentNode.removeChild(areas[i]);
+        }
+    }
+}
+
 async function init() {
+    // Remove duplicate notificationArea containers if any exist before continuing
+    cleanupDuplicateNotificationAreas();
+
     if (appState.initialized || appState.initializing) {
         if (APP_CONFIG.DEBUG) {
             console.info('[App] Initialization attempt skipped (already done or in progress).');
         }
         return appState.initialized;
     }
+    // --- EARLY: Notification handler container and DI-first setup ---
+    // Ensure Notification Container Creation Order
+    let notificationContainer = document.getElementById('notificationArea');
+    if (!notificationContainer) {
+        notificationContainer = document.createElement('div');
+        notificationContainer.id = 'notificationArea';
+        notificationContainer.className = 'notification-area fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto pointer-events-none';
+        notificationContainer.setAttribute('role', 'status');
+        notificationContainer.setAttribute('aria-live', 'polite');
+        document.body.appendChild(notificationContainer);
+    }
+    // Create and register before core system initialization
+    notificationHandler = createNotificationHandler({
+        eventHandlers,
+        DependencySystem,
+        container: notificationContainer,
+        domAPI: {
+            getElementById: (id) => document.getElementById(id),
+            createElement: (tag) => document.createElement(tag),
+        }
+    });
+
+    // Add a global loading handler to hide notifications on page changes
+    document.addEventListener('locationchange', function() {
+        // Only clear notifications if they're not important
+        const container = document.getElementById('notificationArea');
+        if (container) {
+            const notificationsToKeep = Array.from(container.children).filter(
+                el => el.classList.contains('priority') || el.classList.contains('sticky')
+            );
+
+            // Clear non-important notifications
+            notificationHandler.clear();
+
+            // Re-add important ones
+            notificationsToKeep.forEach(el => container.appendChild(el));
+        }
+    });
+
+    // Add notification error boundary
+    const originalShow = notificationHandler.show;
+    notificationHandler.show = function(message, type, options) {
+        try {
+            return originalShow.call(this, message, type, options);
+        } catch (err) {
+            console.error('Failed to show notification:', err);
+            // Create a simple fallback notification without using any complex functions
+            try {
+                const container = document.getElementById('notificationArea') || document.body;
+                const div = document.createElement('div');
+                div.textContent = message || 'Notification error';
+                div.className = 'alert alert-' + (type || 'error');
+                div.style.margin = '10px';
+                div.style.padding = '10px';
+                container.appendChild(div);
+                setTimeout(() => div.remove(), 5000);
+            } catch (e) {
+                // Last resort
+                console.error('Critical notification error:', message, e);
+            }
+            return null;
+        }
+    };
+
+    // Enhanced notification shim with error trapping
+    function createNotificationShim(h) {
+        const safeFn = (fn, fallbackType) => (...args) => {
+            try {
+                return fn.apply(h, args);
+            } catch (err) {
+                console.error(`Error in notification ${fallbackType}:`, err);
+                try {
+                    // Simple DOM-based fallback
+                    const msg = args[0] || `[${fallbackType}] Notification failed`;
+                    const div = document.createElement('div');
+                    div.textContent = msg;
+                    div.className = `alert alert-${fallbackType}`;
+                    div.style.margin = '10px';
+                    div.style.padding = '10px';
+                    document.body.appendChild(div);
+                    setTimeout(() => div.remove(), 5000);
+                } catch (e) {
+                    // Last resort: console
+                    console.error(`[${fallbackType}] ${args[0]}`, e);
+                }
+            }
+        };
+
+        return {
+            ...h,
+            log: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
+            warn: safeFn(h.show || ((...args) => h(args[0], 'warning')), 'warning'),
+            error: safeFn(h.show || ((...args) => h(args[0], 'error')), 'error'),
+            confirm: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
+            debug: safeFn(h.debug || ((...args) => console.debug(...args)), 'debug')
+        };
+    }
+    notificationHandlerWithLog = createNotificationShim(notificationHandler);
+
+    DependencySystem.register('notificationHandler', notificationHandler);
+
     if (APP_CONFIG.DEBUG) {
         notificationHandlerWithLog.debug('[App] Initializing application...');
     }
@@ -699,13 +752,15 @@ async function init() {
 
     try {
         appState.currentPhase = 'init_core_systems';
+
+        // NotificationHandler is now available in the DependencySystem for all downstream deps
         await initializeCoreSystems();
 
         appState.currentPhase = 'waiting_core_deps';
         if (APP_CONFIG.DEBUG) {
             notificationHandlerWithLog.debug('[App] Waiting for essential dependencies...');
         }
-        await waitFor(['auth', 'eventHandlers', 'notificationHandler'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+        await waitFor(['auth', 'eventHandlers', 'notificationHandler', 'modalManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
 
         appState.currentPhase = 'init_auth';
         await initializeAuthSystem();
@@ -794,10 +849,37 @@ export function destroyApp() {
 /**
  * Core Systems Initialization
  */
+/**
+ * Guarantee the notification container exists in the DOM.
+ * May be safely called multiple times.
+ */
+function ensureNotificationContainer() {
+    let notificationContainer = document.getElementById('notificationArea');
+    if (!notificationContainer) {
+        notificationContainer = document.createElement('div');
+        notificationContainer.id = 'notificationArea';
+        notificationContainer.className = 'notification-area fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto pointer-events-none';
+        notificationContainer.setAttribute('role', 'status');
+        notificationContainer.setAttribute('aria-live', 'polite');
+        document.body.appendChild(notificationContainer);
+    }
+    return notificationContainer;
+}
+
 async function initializeCoreSystems() {
     if (APP_CONFIG.DEBUG) {
         notificationHandlerWithLog.debug('[App] Initializing core systems...');
     }
+
+    // Ensure DOM is ready before creating notification container
+    if (document.readyState !== 'complete' && document.readyState !== 'interactive') {
+        await new Promise(resolve => {
+            document.addEventListener('DOMContentLoaded', resolve, { once: true });
+        });
+    }
+
+    ensureNotificationContainer();
+
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
 

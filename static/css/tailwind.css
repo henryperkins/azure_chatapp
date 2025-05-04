@@ -26,11 +26,11 @@
   animation: fadeZoomIn 0.3s ease-out forwards;
 }
 
-/* 5. Project CSS partials (must come AFTER global/utility definitions, no extra @import "tailwindcss"!) */
+/* Move notification-accordion.css higher in import order */
+@import "./notification-accordion.css";
 @import "./enhanced-components.css";
 @import "./file-upload-enhanced.css";
 @import "./legacy-dracula-theme.css";
-@import "./notification-accordion.css";
 
 /* =============================================================================
    End of Aggregate Stylesheet
