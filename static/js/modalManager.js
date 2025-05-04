@@ -100,7 +100,7 @@ class ModalManager {
         message,
         level,
         undefined,
-        { group: true, context: "ModalManager" }
+        { group: true, context: "modalManager" }
       );
     }
     // else do nothing (no direct console usage allowed)
@@ -506,7 +506,12 @@ class ProjectModal {
    */
   _notify(type, message) {
     if (this.showNotification) {
-      this.showNotification(message, type);
+      this.showNotification(
+        message,
+        type,
+        undefined,
+        { group: true, context: "projectModal" }
+      );
     }
     // else do nothing (no direct alert/console)
   }

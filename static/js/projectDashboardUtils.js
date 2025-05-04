@@ -2,6 +2,11 @@
  * projectDashboardUtils.js
  * Centralized utility functions for the project dashboard.
  *
+ * Strict DI, notification, and error handling patterns:
+ * - All notifications are routed via the injected `notify` util.
+ * - Every notification is grouped and context-tagged: `{ group: true, context: 'projectDashboard' }`.
+ * - If a DI dependency is missing, an error notification is sent before throwing.
+ * - No fallback or global notification handlers.
  * DI/DependencySystem-compliant: all dependencies are injected or resolved via DependencySystem.
  * No window.* references or global side effects.
  * Usage:
@@ -17,9 +22,16 @@ function getDependency(dep, name, DependencySystem) {
  * Notification util: strict DI – inject notify, use appropriate context/group.
  * @param {Function} notify - Notification util (required, from DI)
  */
-function createShowNotification(notify) {
-  if (!notify) throw new Error('[projectDashboardUtils] notify util required for notification');
-  // Always provide grouping/context for all usage in project dashboard utils
+function createShowNotification(notify, DependencySystem) {
+  if (!notify) {
+    if (DependencySystem?.modules?.get?.('notify')) {
+      DependencySystem.modules.get('notify').error(
+        '[projectDashboardUtils] notify util required for notification',
+        { group: true, context: 'projectDashboard' }
+      );
+    }
+    throw new Error('[projectDashboardUtils] notify util required for notification');
+  }
   return (msg, type = 'info') => {
     if (type === 'error') {
       notify.error(msg, { group: true, context: "projectDashboard" });
@@ -33,9 +45,15 @@ function createShowNotification(notify) {
   };
 }
 
-function createTrackListener(eventHandlers) {
+function createTrackListener(eventHandlers, DependencySystem) {
   if (eventHandlers?.trackListener) {
     return eventHandlers.trackListener.bind(eventHandlers);
+  }
+  if (DependencySystem?.modules?.get?.('notify')) {
+    DependencySystem.modules.get('notify').error(
+      '[projectDashboardUtils] eventHandlers.trackListener is required',
+      { group: true, context: 'projectDashboard' }
+    );
   }
   throw new Error('trackListener is required for event handling');
 }
@@ -136,7 +154,8 @@ function setupEventListeners({
   modalManager,
   showNotification,
   trackListener,
-  DependencySystem
+  DependencySystem,
+  notify // inject notify directly for errors
 }) {
   // Edit project
   const editBtn = typeof document !== 'undefined' ? document.getElementById('editProjectBtn') : null;
@@ -147,7 +166,7 @@ function setupEventListeners({
       if (currentProject && pm?.openModal) {
         pm.openModal(currentProject);
       } else {
-        DependencySystem.modules.get('notify')?.error('[projectDashboardUtils] projectModal.openModal not available', { context: 'projectDashboardUtils', group: true });
+        notify?.error?.('[projectDashboardUtils] projectModal.openModal not available', { group: true, context: 'projectDashboard' });
       }
     });
   }
@@ -165,7 +184,7 @@ function setupEventListeners({
             'success'
           );
         } catch (error) {
-          DependencySystem.modules.get('notify')?.error('Failed to toggle pin: ' + (error?.message || error), { context: 'projectDashboardUtils', group: true });
+          notify?.error?.('Failed to toggle pin: ' + (error?.message || error), { group: true, context: 'projectDashboard' });
         }
       }
     });
@@ -192,7 +211,7 @@ function setupEventListeners({
                 'success'
               );
             } catch (error) {
-              DependencySystem.modules.get('notify')?.error('Failed to toggle archive: ' + (error?.message || error), { context: 'projectDashboardUtils', group: true });
+              notify?.error?.('Failed to toggle archive: ' + (error?.message || error), { group: true, context: 'projectDashboard' });
             }
           },
         });
@@ -220,8 +239,8 @@ export function createProjectDashboardUtils({
   formatBytes = getDependency(formatBytes, 'formatBytes', DependencySystem);
   sanitizeHTML = getDependency(sanitizeHTML, 'sanitizeHTML', DependencySystem);
 
-  const showNotification = createShowNotification(notify);
-  const trackListener = createTrackListener(eventHandlers);
+  const showNotification = createShowNotification(notify, DependencySystem);
+  const trackListener = createTrackListener(eventHandlers, DependencySystem);
 
   const ProjectDashboard = {};
 
@@ -240,14 +259,15 @@ export function createProjectDashboardUtils({
       modalManager,
       showNotification,
       trackListener,
-      DependencySystem
+      DependencySystem,
+      notify
     });
   };
 
   ProjectDashboard.init = function () {
     if (initialized) return this;
     initialized = true;
-    DependencySystem.modules.get('notify')?.info('[ProjectDashboard] Initializing...', { context: 'projectDashboardUtils' });
+    notify.info('[ProjectDashboard] Initializing...', { group: true, context: 'projectDashboard' });
     ProjectDashboard.setupEventListeners();
     if (typeof document !== 'undefined') {
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));

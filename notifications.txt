@@ -38,3 +38,217 @@
 2025-05-04T18:00:34.430000Z [INFO] user=hperkins (group=True, context=ProjectListComponent) No projects found for this filter.
 2025-05-04T18:00:34.431000Z [SUCCESS] user=hperkins (group=True, context=ProjectListComponent) Projects loaded successfully.
 2025-05-04T18:00:34.442000Z [INFO] user=hperkins (group=True, context=ProjectListComponent) No projects found for this filter.
+2025-05-04T18:35:56.729000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:35:57.333000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:35:57.336000Z [INFO] user=unknown (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:35:57.336000Z [INFO] user=unknown (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:35:57.339000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:35:57.341000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:35:57.340000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:35:57.341000Z [SUCCESS] user=unknown (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:35:57.345000Z [WARNING] user=unknown (group=True, context=projectManager) [ProjectManager] Auth required
+2025-05-04T18:35:57.346000Z [INFO] user=unknown (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:35:57.348000Z [INFO] user=unknown (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:35:57.347000Z [SUCCESS] user=unknown (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:35:57.347000Z [INFO] user=unknown (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:35:57.348000Z [INFO] user=unknown (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:35:59.811000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:36:00.237000Z [INFO] user=unknown (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:36:00.237000Z [INFO] user=unknown (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:36:00.236000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:36:00.239000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:36:00.239000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:36:00.238000Z [INFO] user=unknown (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:36:00.239000Z [SUCCESS] user=unknown (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:36:00.241000Z [WARNING] user=unknown (group=True, context=projectManager) [ProjectManager] Auth required
+2025-05-04T18:36:00.242000Z [INFO] user=unknown (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:36:00.243000Z [SUCCESS] user=unknown (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:36:00.243000Z [INFO] user=unknown (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:36:00.244000Z [INFO] user=unknown (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:36:00.244000Z [INFO] user=unknown (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:36:07.248000Z [INFO] user=unknown [ProjectManager] loadProjects already running
+2025-05-04T18:36:07.410000Z [SUCCESS] user=unknown (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:36:07.411000Z [INFO] user=unknown (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:36:07.441000Z [INFO] user=unknown (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:42:40.468000Z [WARNING] user=unknown (group=True, context=projectListComponent) [Debug] No .project-card ancestor on click event.
+2025-05-04T18:46:47.353000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:46:47.897000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:46:47.902000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:46:47.903000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:46:47.901000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:46:47.904000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:46:47.905000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:46:47.904000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:46:47.909000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:46:47.910000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:46:47.909000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:46:47.911000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:46:47.912000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:46:47.912000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:46:47.913000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:46:48.009000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:46:48.125000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:46:48.128000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:46:48.127000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:46:48.137000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:49:10.725000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:49:11.271000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:49:11.274000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:49:11.278000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:49:11.278000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:49:11.277000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:49:11.275000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:49:11.279000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:49:11.284000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:49:11.284000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:49:11.285000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:49:11.286000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:49:11.287000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:49:11.287000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:49:11.288000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:49:11.386000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:49:11.501000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:49:11.504000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:49:11.504000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:49:11.530000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:50:24.631000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:50:25.061000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:50:25.064000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:50:25.065000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:50:25.068000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:50:25.067000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:50:25.066000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:50:25.067000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:50:25.072000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:50:25.073000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:50:25.073000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:50:25.074000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:50:25.075000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:50:25.078000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:50:25.078000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:50:25.179000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:50:25.290000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:50:25.293000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:50:25.292000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:50:25.318000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:51:24.851000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:51:25.404000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:51:25.401000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:51:25.404000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:51:25.407000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:51:25.406000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:51:25.407000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:51:25.412000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:51:25.408000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:51:25.414000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:51:25.413000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:51:25.415000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:51:25.416000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:51:25.416000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:51:25.417000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:51:25.515000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:51:25.632000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:51:25.629000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:51:25.631000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:51:25.660000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:52:04.814000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:52:05.394000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:52:05.397000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:52:05.398000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:52:05.400000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:52:05.400000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:52:05.401000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:52:05.402000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:52:05.405000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:52:05.406000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:52:05.406000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:52:05.407000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:52:05.408000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:52:05.408000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:52:05.409000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:52:05.506000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:52:05.572000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:52:05.574000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:52:05.574000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:52:05.601000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:53:03.908000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:53:04.411000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:53:04.415000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:53:04.413000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:53:04.416000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:53:04.414000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:53:04.417000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:53:04.422000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:53:04.423000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:53:04.417000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:53:04.423000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:53:04.424000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:53:04.425000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:53:04.425000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:53:04.426000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:53:04.527000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:53:04.598000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:53:04.600000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:53:04.601000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:53:04.628000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:53:05.635000Z [WARNING] user=hperkins (group=True, context=projectListComponent) [Debug] No .project-card ancestor on click event.
+2025-05-04T18:54:48.717000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:54:49.261000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:54:49.258000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:54:49.261000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:54:49.263000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:54:49.265000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:54:49.264000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:54:49.266000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:54:49.270000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:54:49.271000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:54:49.270000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:54:49.272000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:54:49.273000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:54:49.273000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:54:49.274000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:54:49.372000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:54:49.479000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:54:49.477000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:54:49.480000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:54:49.501000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:55:59.059000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:55:59.543000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:55:59.544000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:55:59.540000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:55:59.546000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:55:59.547000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:55:59.553000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:55:59.547000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:55:59.548000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:55:59.553000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:55:59.553000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:55:59.554000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:55:59.556000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:55:59.557000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:55:59.557000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:55:59.654000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:55:59.776000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:55:59.774000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:55:59.777000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:55:59.806000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:56:43.827000Z [INFO] user=unknown (group=True, context=projectManager) [ProjectManager] Initialized
+2025-05-04T18:56:44.371000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] CONSTRUCTOR called
+2025-05-04T18:56:44.374000Z [INFO] user=hperkins (group=True, context=sidebar) [sidebar] initialized successfully
+2025-05-04T18:56:44.376000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] gridElement found and initialized.
+2025-05-04T18:56:44.374000Z [INFO] user=hperkins (group=True, context=chatExtensions) [ChatExtensions] Initialized
+2025-05-04T18:56:44.376000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:56:44.382000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Already initialized.
+2025-05-04T18:56:44.378000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Project list loaded.
+2025-05-04T18:56:44.381000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] INITIALIZE called
+2025-05-04T18:56:44.377000Z [INFO] user=hperkins (group=True, context=projectListComponent) [ProjectListComponent] Initialized successfully.
+2025-05-04T18:56:44.382000Z [INFO] user=hperkins (group=True, context=projectListComponent) Project list is already initialized.
+2025-05-04T18:56:44.383000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Found required elements.
+2025-05-04T18:56:44.384000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] FileUploadComponent ready.
+2025-05-04T18:56:44.385000Z [INFO] user=hperkins (group=True, context=projectDetailsComponent) [ProjectDetailsComponent] [ProjectDetailsComponent] Initialised.
+2025-05-04T18:56:44.385000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:56:44.486000Z [INFO] user=hperkins [ProjectManager] loadProjects already running
+2025-05-04T18:56:44.599000Z [SUCCESS] user=hperkins (group=True, context=projectListComponent) Projects loaded successfully.
+2025-05-04T18:56:44.598000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
+2025-05-04T18:56:44.597000Z [SUCCESS] user=hperkins (group=True, context=projectManager) [ProjectManager] 0 projects
+2025-05-04T18:56:44.621000Z [INFO] user=hperkins (group=True, context=projectListComponent) No projects found for this filter.
