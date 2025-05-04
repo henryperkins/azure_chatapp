@@ -599,57 +599,6 @@
     // --- end registration form hookup ---
 
 
-     // Project form submit (ensure it uses the manager to close)
-    const projectForm = document.getElementById('projectModalForm');
-    console.log("[modals.html] projectModalForm detected:", !!projectForm, "window.projectManager:", !!window.projectManager, "window.modalManager:", !!window.modalManager, "window.showNotification:", !!window.showNotification);
-    if (projectForm) {
-        projectForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const submitBtn = projectForm.querySelector('button[type="submit"]');
-            setButtonLoading(submitBtn, true);
-
-            // Gather data
-            const formData = new FormData(projectForm);
-            const data = {};
-            for (let [key, value] of formData.entries()) {
-                if (key === 'projectId' && !value) continue;
-                // Match backend snake_case or camelCase as appropriate
-                if (key === 'maxTokens' || key === 'max_tokens') {
-                  data.max_tokens = parseInt(value, 10);
-                } else {
-                  data[key] = value;
-                }
-            }
-            // Fallback for required field
-            if (!data.name) {
-                notify('error', 'Project name is required');
-                setButtonLoading(submitBtn, false);
-                return;
-            }
-
-            try {
-                let result;
-                if (window.projectManager?.createProject) {
-                    result = await window.projectManager.createProject(data);
-                } else if (window.projectManager?.saveProject) {
-                    result = await window.projectManager.saveProject(undefined, data);
-                } else {
-                    throw new Error('No project manager available');
-                }
-                notify('success', 'Project created');
-                window.modalManager?.hide('project');
-                // Reload projects
-                if (window.projectManager?.loadProjects) {
-                    window.projectManager.loadProjects('all');
-                }
-            } catch (err) {
-                notify('error', 'Failed to create project: ' + (err?.message || err));
-                console.error('Project creation error', err);
-            } finally {
-                setButtonLoading(submitBtn, false);
-            }
-        });
-    }
 
   });
 </script>
