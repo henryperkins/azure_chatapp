@@ -467,8 +467,7 @@ textarea:focus-visible,
 /* Enhanced Notification Styling */
 #notificationContainer .alert,
 #notificationArea .notification-item,
-#notificationArea .accordion-banner {
-  opacity: 1;
+/* (REMOVED: Obsolete .accordion-banner styling - now handled by DaisyUI .collapse) */
   box-sizing: border-box;
   /* Space and color improvements for usability and accessibility */
   margin: 0.3rem auto 0.3rem auto !important;

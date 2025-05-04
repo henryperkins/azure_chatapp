@@ -18,22 +18,24 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
     return `${type}-${ctx}-${bucket}`;
   }
 
-  // HTML template for group banner
+  // DaisyUI-compliant group accordion template
   const groupTemplate = document.createElement('template');
   groupTemplate.innerHTML = `
-    <div class="accordion-banner animate-fadeIn" role="alert">
-      <div class="accordion-summary" tabindex="0">
+    <div class="collapse collapse-arrow bg-base-100 border border-base-300 animate-fadeIn" role="alert">
+      <!-- Radio input drives expansion. The name is set dynamically to allow multiple groups, only one expanded per context/type group. -->
+      <input type="radio" name="" class="group-radio" />
+      <div class="collapse-title flex items-center gap-2 font-semibold">
         <span class="notification-context-badge"></span>
+        <span class="accordion-icon"></span>
         <span class="accordion-summary-text"></span>
-        <button type="button" class="accordion-toggle-btn">
-          Show Details
-        </button>
-        <button type="button" class="accordion-copy-btn" aria-label="Copy notifications" title="Copy notification messages to clipboard">
+        <button type="button" class="accordion-copy-btn btn btn-xs btn-ghost ml-1" aria-label="Copy notifications" title="Copy notification messages to clipboard">
           <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true" class="inline-block align-text-bottom" viewBox="0 0 20 20" fill="currentColor"><path d="M8 2a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7.83a2 2 0 0 0-.59-1.42l-2.83-2.83A2 2 0 0 0 14.17 3H14V2a2 2 0 0 0-2-2H8zm2 1v1H8V3h2zm3.59 2 2.41 2.41V13a1 1 0 0 1-1 1h-1V7a2 2 0 0 0-2-2h-6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6a2 2 0 0 0 2 2v8h-6a1 1 0 0 1-1-1V7.83a1 1 0 0 1 .29-.71z"/></svg>
         </button>
-        <button type="button" class="accordion-dismiss-btn" title="Dismiss" aria-label="Dismiss notification group">×</button>
+        <button type="button" class="accordion-dismiss-btn btn btn-xs btn-ghost ml-1" title="Dismiss" aria-label="Dismiss notification group">×</button>
       </div>
-      <ul class="accordion-message-list" role="region"></ul>
+      <div class="collapse-content pt-2">
+        <ul class="accordion-message-list list-disc pl-4 text-sm"></ul>
+      </div>
     </div>
   `;
 
@@ -73,71 +75,49 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
    */
   function renderGroupBanner(group, container) {
     try {
+      // DaisyUI radio accordion pattern: name = notification-group-{type}-{context}, only one open per group
+      const groupName = `notification-group-${group.type}-${group.context}`;
+      const isChecked = true; // New groups start expanded
+      const checkedAttr = isChecked ? 'checked' : '';
+
       // Clone the template
       const bannerClone = groupTemplate.content.cloneNode(true);
-      const banner = bannerClone.querySelector('.accordion-banner');
+      const banner = bannerClone.querySelector('.collapse');
 
-      // Generate IDs for accessibility
-      const summaryId = `group-summary-${group.notificationId}`;
-      const detailsId = `group-details-${group.notificationId}`;
+      // Set up/Name radio input and mark as checked for the first render
+      const radio = banner.querySelector('.group-radio');
+      radio.setAttribute('name', groupName);
+      radio.checked = true;
+      // Store key on element for later toggling if needed
+      radio.dataset.groupKey = group.groupKey;
 
-      // Add ID and classes
+      // Add notification-specific state classes
       banner.id = group.notificationId;
       banner.classList.add(`alert-${group.type}`, `notification-${group.type}`, `notification-context-${group.context}`);
       banner.style.animationDuration = '300ms';
 
       // Find elements
-      const summary = banner.querySelector('.accordion-summary');
-      const toggleBtn = banner.querySelector('.accordion-toggle-btn');
+      const contextBadge = banner.querySelector('.notification-context-badge');
+      const iconContainer = banner.querySelector('.accordion-icon');
+      const summaryText = banner.querySelector('.accordion-summary-text');
       const copyBtn = banner.querySelector('.accordion-copy-btn');
       const dismissBtn = banner.querySelector('.accordion-dismiss-btn');
       const messageList = banner.querySelector('.accordion-message-list');
-      const contextBadge = banner.querySelector('.notification-context-badge');
-      const summaryText = banner.querySelector('.accordion-summary-text');
 
-      // Set ARIA attributes
-      summary.id = summaryId;
-      messageList.id = detailsId;
-      messageList.setAttribute('aria-labelledby', summaryId);
-      toggleBtn.setAttribute('aria-expanded', 'false');
-      toggleBtn.setAttribute('aria-controls', detailsId);
+      // ARIA for accessibility
+      banner.setAttribute('aria-live', 'polite');
 
       // Add icon
       if (getIconForType) {
         const icon = getIconForType(group.type);
         if (typeof icon === "string") {
-          const iconEl = document.createElement('span');
-          iconEl.className = 'accordion-icon mr-2';
-          iconEl.innerHTML = icon;
-          summary.insertBefore(iconEl, summary.firstChild);
+          iconContainer.innerHTML = icon;
         }
       }
 
       // Set content
       contextBadge.textContent = escapeHtml(group.context);
-      summaryText.textContent = `${group.messages.length} ${capitalize(group.type)}${group.messages.length > 1 ? "s" : ""} notification${group.messages.length > 1 ? "s" : ""}`;
-
-      // Toggle button event with proper tracking
-      const toggleDesc = `Group toggle ${group.notificationId}`;
-      eventHandlers.trackListener(toggleBtn, 'click', (e) => {
-        e.stopPropagation();
-        group.expanded = !group.expanded;
-        banner.classList.toggle('expanded', group.expanded);
-        toggleBtn.textContent = group.expanded ? 'Hide Details' : 'Show Details';
-        toggleBtn.setAttribute('aria-expanded', group.expanded.toString());
-
-        // Apply transition via CSS for consistency
-        // No longer needed: only .expanded on parent
-
-        // Improve focus management
-        if (group.expanded) {
-          // Use requestAnimationFrame for more reliable focus
-          requestAnimationFrame(() => {
-            messageList.focus();
-          });
-        }
-      }, { description: toggleDesc });
-      group.registeredEvents.push(toggleDesc);
+      summaryText.textContent = `${group.messages.length} ${capitalize(group.type)} notification${group.messages.length > 1 ? 's' : ''}`;
 
       // Copy button event
       if (copyBtn) {
@@ -166,6 +146,41 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
         group.registeredEvents.push(copyDesc);
       }
 
+      // Add a "Copy All" button if there are multiple messages
+      if (group.messages.length > 1 && summaryText && summaryText.parentNode) {
+        const copyAllBtn = document.createElement('button');
+        copyAllBtn.className = 'btn btn-xs btn-ghost ml-1';
+        copyAllBtn.setAttribute('aria-label', 'Copy all messages');
+        copyAllBtn.setAttribute('title', 'Copy all messages to clipboard');
+        copyAllBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" class="inline-block" viewBox="0 0 20 20" fill="currentColor">
+          <path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z" />
+          <path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />
+        </svg>`;
+        const copyAllDesc = `Group copy-all ${group.notificationId}`;
+        eventHandlers.trackListener(copyAllBtn, 'click', (e) => {
+          e.stopPropagation();
+          const allText = group.messages.join('\n');
+          navigator.clipboard.writeText(allText).then(() => {
+            const originalText = copyAllBtn.innerHTML;
+            copyAllBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" class="inline-block text-success" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg> Copied!`;
+            copyAllBtn.classList.add('text-success');
+            setTimeout(() => {
+              copyAllBtn.innerHTML = originalText;
+              copyAllBtn.classList.remove('text-success');
+            }, 1500);
+          }).catch(() => {
+            if (notificationHandler && typeof notificationHandler.show === 'function') {
+              notificationHandler.show('Copy failed', 'error', { timeout: 2000, context: 'notificationHelper' });
+            }
+          });
+        }, { description: copyAllDesc });
+        group.registeredEvents.push(copyAllDesc);
+        // Insert after summaryText in the collapse-title
+        summaryText.parentNode.insertBefore(copyAllBtn, summaryText.nextSibling);
+      }
+
       // Dismiss button event
       const dismissDesc = `Group dismiss ${group.notificationId}`;
       eventHandlers.trackListener(dismissBtn, 'click', (e) => {
@@ -174,42 +189,34 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
       }, { description: dismissDesc });
       group.registeredEvents.push(dismissDesc);
 
-      // Escape key for accessibility
+      // Keyboard: Escape to dismiss the whole group
       const keyDesc = `Group keydown ${group.notificationId}`;
       eventHandlers.trackListener(banner, 'keydown', (e) => {
         if (e.key === 'Escape') {
           hideGroupedNotification(group.groupKey);
-        } else if (e.key === 'Enter' && e.target === summary) {
-          // Toggle on Enter when summary is focused
-          e.preventDefault();
-          group.expanded = !group.expanded;
-          banner.classList.toggle('expanded', group.expanded);
-          toggleBtn.textContent = group.expanded ? 'Hide Details' : 'Show Details';
-          toggleBtn.setAttribute('aria-expanded', group.expanded.toString());
         }
       }, { description: keyDesc });
       group.registeredEvents.push(keyDesc);
 
-      // Fill message list
+      // Fill message list in collapse-content
       for (const msg of group.messages) {
         const li = document.createElement('li');
         li.textContent = msg;
         messageList.appendChild(li);
       }
 
-      // Initialize with collapsed state
-      messageList.style.overflow = 'hidden';
-
       // Save for later updates
       group.element = banner;
 
-      // Add to container
-      container.appendChild(banner);
+      // Add to container (.toast) at the top
+      container.insertBefore(banner, container.firstChild);
 
-      // Focus the summary for accessibility after a slight delay
+      // Focus the collapse-title for accessibility after slight delay
       setTimeout(() => {
-        summary.focus();
+        const summary = banner.querySelector('.collapse-title');
+        if(summary) summary.focus();
       }, 50);
+
     } catch (err) {
       console.error('[groupedNotificationHelper] Error rendering group banner:', err);
 
@@ -250,7 +257,7 @@ function createGroupedNotificationHelper({ eventHandlers, getIconForType, notifi
         messageList.appendChild(li);
       }
 
-      // Flash effect for update
+      // DaisyUI doesn't animate group, but for compatibility flash effect is preserved if desired
       group.element.classList.add('group-updated');
       setTimeout(() => {
         if (group.element) {
