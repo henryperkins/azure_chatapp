@@ -47,7 +47,16 @@ export class ProjectListComponent {
         this.modalManager = modalManager;
         this.app = app;
         this.router = router;
-        this.notification = notificationHandler;
+
+        // Wrap notificationHandler (DI) to always apply context and grouping for this component
+        this.notification = {
+            log: (msg, opts = {}) => notificationHandler.log?.(msg, { context: "ProjectListComponent", ...opts }),
+            warn: (msg, opts = {}) => notificationHandler.warn?.(msg, { group: true, context: "ProjectListComponent", ...opts }),
+            error: (msg, opts = {}) => notificationHandler.error?.(msg, { group: true, context: "ProjectListComponent", ...opts }),
+            confirm: (...args) => notificationHandler.confirm?.(...args),
+            show: (msg, type, opts = {}) => notificationHandler.show?.(msg, type, { group: true, context: "ProjectListComponent", ...opts })
+        };
+
         this.storage = storage;
         this.sanitizer = sanitizer;
 
@@ -525,14 +534,14 @@ export class ProjectListComponent {
         }
         try {
             await this.projectManager.deleteProject(projectId);
-            this.app?.showNotification?.("Project deleted", "success");
+            this.notification.show("Project deleted", "success");
             this._loadProjects();
         } catch (err) {
             this.notification.error(
                 "[ProjectListComponent] Failed to delete project:",
                 err
             );
-            this.app?.showNotification?.("Failed to delete project", "error");
+            this.notification.error("Failed to delete project");
         }
     }
 

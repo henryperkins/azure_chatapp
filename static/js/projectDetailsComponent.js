@@ -125,7 +125,7 @@ export class ProjectDetailsComponent {
       return true;
     } catch (err) {
       this.notification.error("[ProjectDetailsComponent] Init failed:", err, { context: "ProjectDetailsComponent" });
-      this.app.showNotification("Project Details failed to initialise.", "error");
+      this.notification.error("Project Details failed to initialise.");
       return false;
     }
   }
