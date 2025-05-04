@@ -1208,7 +1208,7 @@ async function initializeUIComponents() {
     const chatExtensions = createChatExtensions({
         DependencySystem,
         eventHandlers,
-        notificationHandler: notificationHandler.show.bind(notificationHandler)
+        notificationHandler: notificationHandler
     });
     DependencySystem.register('chatExtensions', chatExtensions);
 
