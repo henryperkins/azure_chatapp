@@ -19,7 +19,7 @@
  *
  * ## DI requirements (all REQUIRED!):
  *   - opts.eventHandlers: { trackListener, cleanupListeners }
- *   - opts.notificationHandler: notification sink (object: .show/.warn/.error or function (msg, type))
+ *   - opts.notify: notification util (object: .info/.warn/.error from DI, required)
  *   - opts.DependencySystem: Strongly recommended for registration, but not used for global lookup.
  *
  * If any checklist item is not met, the module must be revised before deployment or merge.
@@ -30,7 +30,7 @@ let lastFocusedElement = null;
 
 let eventHandlers;
 let DependencySystem;
-let notificationHandler;
+let notify;
 
 /**
  * Stores references to key event bindings so we can untrack them during teardown.
@@ -44,19 +44,19 @@ const registeredHandlers = [];
  * Should be called once during app bootstrap.
  * @param {Object} opts - DI dependencies.
  * @param {Object} opts.eventHandlers - { trackListener, cleanupListeners } (required)
- * @param {Function|Object} opts.notificationHandler - notificationHandler or showNotification (required)
+ * @param {Function|Object} opts.notify - notify util (required, from DI)
  * @param {Object} [opts.DependencySystem] - DependencySystem reference (optional, for DS.register)
  */
 export function initAccessibilityEnhancements(opts = {}) {
   eventHandlers = opts.eventHandlers;
-  notificationHandler = opts.notificationHandler;
+  notify = opts.notify;
   DependencySystem = opts.DependencySystem;
 
   if (!eventHandlers || typeof eventHandlers.trackListener !== 'function') {
     throw new Error('eventHandlers with trackListener required for accessibility-utils');
   }
-  if (!notificationHandler) {
-    throw new Error('notificationHandler (or showNotification function) required for accessibility-utils');
+  if (!notify) {
+    throw new Error('notify util required for accessibility-utils');
   }
 
   bindGlobalShortcuts();
@@ -90,13 +90,7 @@ export function destroyAccessibilityEnhancements() {
         h.description
       );
     } catch (err) {
-      if (typeof notificationHandler.warn === 'function') {
-        notificationHandler.warn(`[Accessibility] Failed removing listener: ${h.description || ''}`, err);
-      } else if (typeof notificationHandler.show === 'function') {
-        notificationHandler.show(`[Accessibility] Failed removing listener: ${h.description || ''}`, 'warn');
-      } else if (typeof notificationHandler === 'function') {
-        notificationHandler(`[Accessibility] Failed removing listener: ${h.description || ''}`, 'warn');
-      }
+      notify.warn(`[Accessibility] Failed removing listener: ${h.description || ''} (${err && err.message ? err.message : err})`, { group: true, context: "accessibility" });
     }
   });
   registeredHandlers.length = 0;
@@ -118,13 +112,7 @@ function bindGlobalShortcuts() {
       try {
         sidebar = await DependencySystem?.waitFor?.('sidebar', null, 3000);
       } catch (err) {
-        if (typeof notificationHandler.error === 'function') {
-          notificationHandler.error('Sidebar waitFor failed:', err);
-        } else if (typeof notificationHandler.show === 'function') {
-          notificationHandler.show(`Sidebar waitFor failed: ${err && err.message ? err.message : err}`, 'error');
-        } else if (typeof notificationHandler === 'function') {
-          notificationHandler(`Sidebar waitFor failed: ${err && err.message ? err.message : err}`, 'error');
-        }
+        notify.error(`Sidebar waitFor failed: ${err && err.message ? err.message : err}`, { group: true, context: "accessibility" });
         // Gracefully continue without sidebar.
       }
 
@@ -177,13 +165,7 @@ function bindGlobalShortcuts() {
         return;
       }
     } catch (error) {
-      if (typeof notificationHandler.error === 'function') {
-        notificationHandler.error('[Accessibility] Uncaught error in global keyboard shortcut handler', error);
-      } else if (typeof notificationHandler.show === 'function') {
-        notificationHandler.show('[Accessibility] Keyboard shortcut error: ' + (error && error.message ? error.message : error), 'error');
-      } else if (typeof notificationHandler === 'function') {
-        notificationHandler('[Accessibility] Keyboard shortcut error: ' + (error && error.message ? error.message : error), 'error');
-      }
+      notify.error('[Accessibility] Keyboard shortcut error: ' + (error && error.message ? error.message : error), { group: true, context: "accessibility" });
     }
   };
 

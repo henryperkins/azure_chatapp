@@ -329,17 +329,37 @@ export function createAuthModule({
       if (response && response.username) {
         const verified = await verifyAuthState(true);
         if (verified) {
+          showNotification?.(
+            "Login successful.",
+            "success",
+            { group: true, context: "auth" }
+          );
           return response;
         } else {
           await clearTokenState({ source: 'login_verify_fail' });
+          showNotification?.(
+            "Login succeeded but could not verify session.",
+            "error",
+            { group: true, context: "auth" }
+          );
           throw new Error('Login succeeded but session could not be verified immediately.');
         }
       } else {
         await clearTokenState({ source: 'login_bad_response' });
+        showNotification?.(
+          "Login succeeded but received invalid response from server.",
+          "error",
+          { group: true, context: "auth" }
+        );
         throw new Error('Login succeeded but received invalid response data.');
       }
     } catch (error) {
       await clearTokenState({ source: 'login_error' });
+      showNotification?.(
+        "Login failed: " + (error.message || "Unknown login error."),
+        "error",
+        { group: true, context: "auth" }
+      );
       throw error;
     }
   }
@@ -351,9 +371,17 @@ export function createAuthModule({
     try {
       await getCSRFTokenAsync();
       await authRequest('/api/auth/logout', 'POST');
-      showNotification?.('[Auth] Backend logout successful.', 'info');
+      showNotification?.(
+        'Logout successful.',
+        'success',
+        { group: true, context: 'auth' }
+      );
     } catch (err) {
-      showNotification?.('[Auth] Backend logout call failed: ' + (err?.message || err), 'warn');
+      showNotification?.(
+        '[Auth] Backend logout call failed: ' + (err?.message || err),
+        'warn',
+        { group: true, context: 'auth' }
+      );
     } finally {
       // Cosmetic: Allow UI to paint, then redirect user after logout
       // Do not redirect; just update UI and let SPA handle login modal if user clicks login
@@ -367,6 +395,11 @@ export function createAuthModule({
 
   async function registerUser(userData) {
     if (!userData?.username || !userData?.password) {
+      showNotification?.(
+        'Username and password required.',
+        'error',
+        { group: true, context: 'auth' }
+      );
       throw new Error('Username and password required.');
     }
 
@@ -379,12 +412,26 @@ export function createAuthModule({
 
       const verified = await verifyAuthState(true);
       if (!verified) {
-        showNotification?.('[Auth] Registration succeeded but verification failed.', 'warn');
+        showNotification?.(
+          '[Auth] Registration succeeded but verification failed.',
+          'warn',
+          { group: true, context: 'auth' }
+        );
+      } else {
+        showNotification?.(
+          'Registration successful.',
+          'success',
+          { group: true, context: 'auth' }
+        );
       }
-
       return response;
     } catch (error) {
       await clearTokenState({ source: 'register_error', isError: true });
+      showNotification?.(
+        "Registration failed: " + (error.message || "Unknown error."),
+        "error",
+        { group: true, context: "auth" }
+      );
       throw error;
     }
   }
@@ -394,10 +441,18 @@ export function createAuthModule({
      ========================= */
   async function init() {
     if (authState.isReady) {
-      showNotification?.('[Auth] init called multiple times.', 'warn');
+      showNotification?.(
+        '[Auth] init called multiple times.',
+        'warn',
+        { group: true, context: 'auth' }
+      );
       return true;
     }
-    showNotification?.('[Auth] Initializing auth module...', 'info');
+    showNotification?.(
+      '[Auth] Initializing auth module...',
+      'info',
+      { group: true, context: 'auth' }
+    );
 
     // Set up login & register modal form handlers (if present)
     const setupAuthForms = () => {
@@ -580,7 +635,11 @@ export function createAuthModule({
 
     } catch (err) {
       // Enhanced error logging and propagation
-      showNotification?.('[Auth] Initial verification failed in init: ' + ((err && err.stack) ? err.stack : err), 'error');
+      showNotification?.(
+        '[Auth] Initial verification failed in init: ' + ((err && err.stack) ? err.stack : err),
+        'error',
+        { group: true, context: 'auth' }
+      );
       await clearTokenState({ source: 'init_fail', isError: true });
       authState.isReady = true;
       broadcastAuth(false, null, 'init_error');

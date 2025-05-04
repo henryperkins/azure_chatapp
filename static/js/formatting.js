@@ -1,4 +1,4 @@
-/**
+  /**
  * formatting.js - Core text formatting utilities
  * Provides HTML escaping and basic code block formatting
  */
@@ -34,3 +34,5 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+export { formatText };

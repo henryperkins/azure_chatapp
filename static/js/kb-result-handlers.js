@@ -21,17 +21,16 @@
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-export default function createKbResultHandlers({ eventHandlers, notificationHandler, DOMPurify, domAPI } = {}) {
+export default function createKbResultHandlers({ eventHandlers, notify, DOMPurify, domAPI } = {}) {
   if (!eventHandlers) {
     throw new Error('[kb-result-handlers] eventHandlers dependency required');
   }
-  if (!notificationHandler) {
-    throw new Error('[kb-result-handlers] notificationHandler dependency required');
+  if (!notify) {
+    throw new Error('[kb-result-handlers] notify dependency required');
   }
   if (!DOMPurify) {
     throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
   }
-  const doc = (domAPI && domAPI.document) || (typeof document !== 'undefined' ? document : null);
   const wnd = (domAPI && domAPI.window) || (typeof window !== 'undefined' ? window : null);
 
 
@@ -76,13 +75,7 @@ export default function createKbResultHandlers({ eventHandlers, notificationHand
         showCopyFeedback(true);
       })
       .catch(err => {
-        if (typeof notificationHandler.error === 'function') {
-          notificationHandler.error('[KB Clipboard] Failed to copy text:', err);
-        } else if (typeof notificationHandler.show === 'function') {
-          notificationHandler.show('[KB Clipboard] Failed to copy text: ' + (err && err.message ? err.message : err), 'error');
-        } else if (typeof notificationHandler === 'function') {
-          notificationHandler('[KB Clipboard] Failed to copy text: ' + (err && err.message ? err.message : err), 'error');
-        }
+        notify.error('[KB Clipboard] Failed to copy text: ' + (err && err.message ? err.message : err), { group: true, context: "knowledgeBase" });
         showCopyFeedback(false);
       });
   }

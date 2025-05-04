@@ -1,6 +1,13 @@
 /**
  * projectDashboard.js
  *
+ * ALL user/system notification, error, warning, or info banners must be
+ * routed via the DI notification handler (`notificationHandler.show`). Never
+ * use direct `console` or `alert` for user/system feedback. For dev/debug logs,
+ * use only `this.logger.*` (DI-injected), never user alerts.
+ *
+ * For architectural conventions, see notification-system.md and custominstructions.md.
+ *
  * Coordinates project dashboard components and state, interacting exclusively
  * via DependencySystem for all dependencies. No global/ .* access for shared modules.
  */
@@ -89,6 +96,11 @@ class ProjectDashboard {
   async initialize() {
     if (this.state.initialized) {
       this.logger.info('[ProjectDashboard] Already initialized.', { context: 'ProjectDashboard' });
+      this.notificationHandler.show(
+        'Project dashboard is already initialized.',
+        'info',
+        { group: true, context: 'projectDashboard' }
+      );
       return true;
     }
     this.logger.info('[ProjectDashboard] Initializing...', { context: 'ProjectDashboard' });
@@ -151,8 +163,18 @@ class ProjectDashboard {
     if (this.components.projectList) {
       this.components.projectList.show();
       this.logger.info('[ProjectDashboard] ProjectList component shown');
+      this.notificationHandler.show(
+        'Switched to project list view.',
+        'info',
+        { group: true, context: 'projectDashboard' }
+      );
     } else {
       this.logger.warn('[ProjectDashboard] ProjectList component not available');
+      this.notificationHandler.show(
+        'The project list is currently unavailable.',
+        'warning',
+        { group: true, context: 'projectDashboard' }
+      );
     }
 
     this._loadProjects();

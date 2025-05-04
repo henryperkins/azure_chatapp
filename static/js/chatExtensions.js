@@ -17,7 +17,7 @@ export function createChatExtensions({
   chatManager,
   auth,
   app,
-  notificationHandler,
+  notify,
   domAPI
 } = {}) {
   // Dependency resolution fallback if not provided
@@ -43,9 +43,9 @@ export function createChatExtensions({
       DependencySystem?.modules?.get?.('app') ||
       undefined);
 
-  notificationHandler = notificationHandler ||
-    (DependencySystem?.get?.('notificationHandler') ||
-      DependencySystem?.modules?.get?.('notificationHandler') ||
+  notify = notify ||
+    (DependencySystem?.get?.('notify') ||
+      DependencySystem?.modules?.get?.('notify') ||
       undefined);
 
   domAPI = domAPI ||
@@ -65,12 +65,21 @@ export function createChatExtensions({
   }
   const trackListener = eventHandlers.trackListener.bind(eventHandlers);
 
-  // Helper - consistent showNotification fallback
-  const showNotification = notificationHandler
-    ? (msg, type = 'info') => notificationHandler(msg, type)
-    : (app && typeof app.showNotification === "function")
-      ? (msg, type = 'info') => app.showNotification(msg, type)
-      : (msg, type = 'info') => { };
+  // Helper - consistent showNotification: uses DI notified util, strict grouping.
+  if (!notify) throw new Error('[chatExtensions] notify util required for notification');
+  const showNotification = (msg, type = 'info') => {
+    if (type === 'error') {
+      notify.error(msg, { group: true, context: "chatExtensions" });
+    } else if (type === 'success') {
+      notify.success(msg, { group: true, context: "chatExtensions" });
+    } else if (type === 'warning' || type === 'warn') {
+      notify.warn(msg, { group: true, context: "chatExtensions" });
+    } else if (type === 'debug') {
+      notify.info(msg, { group: true, context: "chatExtensions" }); // Optionally: customize if you want true debug level
+    } else {
+      notify.info(msg, { group: true, context: "chatExtensions" });
+    }
+  };
 
   function init() {
     try {

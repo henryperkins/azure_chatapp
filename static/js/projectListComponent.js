@@ -133,6 +133,7 @@ export class ProjectListComponent {
             if (this.app?.config?.debug) {
                 this.notification.log("[ProjectListComponent] Already initialized.", { context: "ProjectListComponent" });
             }
+            this.notification.show("Project list is already initialized.", "info");
             return;
         }
 
@@ -150,6 +151,7 @@ export class ProjectListComponent {
                 `[ProjectListComponent.INIT] '.grid' container not found inside #${this.elementId}. Element HTML: ${this.element.innerHTML}`,
                 { context: "ProjectListComponent" }
             );
+            this.notification.show("Critical error: Unable to find project grid container.", "error");
             throw new Error(`'.grid' container not found`);
         } else {
             this.notification.log(`[ProjectListComponent] gridElement found and initialized.`, { context: "ProjectListComponent" });
@@ -162,7 +164,7 @@ export class ProjectListComponent {
         if (this.app?.config?.debug) {
             this.notification.log("[ProjectListComponent] Initialized successfully.");
         }
-
+        this.notification.show("Project list loaded.", "success", { group: true });
         this._loadProjects();
     }
 
@@ -224,12 +226,12 @@ export class ProjectListComponent {
         this._bindFilterEvents();
     }
 
-    /** Bind filter tab clicks */
+    /** Bind filter tab clicks & ARIA tab keyboard navigation */
     _bindFilterEvents() {
         const container = document.getElementById("projectFilterTabs");
         if (!container) return;
 
-        const tabs = container.querySelectorAll(".tab[data-filter]");
+        const tabs = Array.from(container.querySelectorAll(".tab[data-filter]"));
         tabs.forEach((tab) => {
             const filterValue = tab.dataset.filter;
             if (!filterValue) return;
@@ -237,6 +239,41 @@ export class ProjectListComponent {
             this.eventHandlers.trackListener(tab, "click", clickHandler, {
                 description: `ProjectList: Filter tab click (${filterValue})`
             });
+            // Accessibility: handle keydown on individual tab for activation (Enter, Space)
+            this.eventHandlers.trackListener(tab, "keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    this._setFilter(filterValue);
+                    tab.focus();
+                }
+            }, {
+                description: `ProjectList: Tab keydown (Enter/Space) activation (${filterValue})`
+            });
+        });
+
+        // Accessibility: Arrow/End/Home navigation for ARIA tabs
+        this.eventHandlers.trackListener(container, "keydown", (event) => {
+            const currentTab = document.activeElement;
+            // Only process if current focus is on a tab inside this tablist
+            if (!tabs.includes(currentTab)) return;
+            let idx = tabs.indexOf(currentTab);
+            if (event.key === "ArrowRight" || event.key === "Right") {
+                event.preventDefault();
+                const nextIdx = (idx + 1) % tabs.length;
+                tabs[nextIdx].focus();
+            } else if (event.key === "ArrowLeft" || event.key === "Left") {
+                event.preventDefault();
+                const prevIdx = (idx - 1 + tabs.length) % tabs.length;
+                tabs[prevIdx].focus();
+            } else if (event.key === "Home") {
+                event.preventDefault();
+                tabs[0].focus();
+            } else if (event.key === "End") {
+                event.preventDefault();
+                tabs[tabs.length - 1].focus();
+            }
+        }, {
+            description: "ProjectList: ARIA tablist keyboard navigation"
         });
     }
 
@@ -245,19 +282,28 @@ export class ProjectListComponent {
         this.state.filter = filter;
         this._updateActiveTab();
         this._updateUrl(filter);
+        this.notification.show(`Filter applied: ${filter}`, "info", { group: true });
         this._loadProjects();
     }
 
-    /** Visually highlight active tab */
+    /** Visually highlight active tab & update tabindex/aria-labelledby for a11y */
     _updateActiveTab() {
         const tabs = document.querySelectorAll(
             "#projectFilterTabs .tab[data-filter]"
         );
+        let activeTabId = null;
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
             tab.classList.toggle("tab-active", isActive);
             tab.setAttribute("aria-selected", isActive ? "true" : "false");
+            tab.setAttribute("tabindex", isActive ? "0" : "-1");
+            if (isActive) activeTabId = tab.id;
         });
+        // Update aria-labelledby for the project card grid/tabpanel
+        const projectCardsPanel = document.getElementById("projectCardsPanel");
+        if (projectCardsPanel && activeTabId) {
+            projectCardsPanel.setAttribute("aria-labelledby", activeTabId);
+        }
     }
 
     /** Update URL via router abstraction */
@@ -294,6 +340,7 @@ export class ProjectListComponent {
         }
         if (!projects?.length) {
             this._showEmptyState();
+            this.notification.show("No projects found for this filter.", "info", { group: true });
             return;
         }
 
@@ -361,6 +408,7 @@ export class ProjectListComponent {
             listView.classList.add("hidden", "opacity-0");
             listView.style.display = "none";
         }
+        this.notification.show("Project list is now hidden.", "info", { group: true });
     }
 
     /** Load projects via manager */
@@ -376,12 +424,14 @@ export class ProjectListComponent {
         this._showLoadingState();
         try {
             await this.projectManager.loadProjects(this.state.filter);
+            this.notification.show("Projects loaded successfully.", "success", { group: true });
         } catch (error) {
             this.notification.error(
                 "[ProjectListComponent] Error loading projects:",
                 error
             );
             this._showErrorState("Failed to load projects");
+            this.notification.show("Failed to load projects.", "error", { group: true });
         } finally {
             this.state.loading = false;
         }
@@ -531,11 +581,12 @@ export class ProjectListComponent {
             this.notification.error(
                 "[ProjectListComponent] projectManager.deleteProject is not available."
             );
+            this.notification.show("Critical: Delete not available.", "error", { group: true });
             return;
         }
         try {
             await this.projectManager.deleteProject(projectId);
-            this.notification.show("Project deleted", "success");
+            this.notification.show("Project deleted", "success", { group: true });
             this._loadProjects();
         } catch (err) {
             this.notification.error(
@@ -543,6 +594,7 @@ export class ProjectListComponent {
                 err
             );
             this.notification.error("Failed to delete project");
+            this.notification.show("Failed to delete project.", "error", { group: true });
         }
     }
 

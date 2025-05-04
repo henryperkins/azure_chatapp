@@ -182,14 +182,11 @@ class ProjectManager {
       }
 
       // Parallel fetch additional resources (non-fatal on failure)
-      const [stats, files, convos, artifacts, kb] = await Promise.allSettled([
+      const [stats, files, convos, artifacts] = await Promise.allSettled([
         this.loadProjectStats(id),
         this.loadProjectFiles(id),
         this.loadProjectConversations(id),
         this.loadProjectArtifacts(id),
-        this.currentProject.knowledge_base
-          ? Promise.resolve(this.currentProject.knowledge_base)
-          : this.loadProjectKnowledgeBase(id),
       ]);
 
       // Track if any critical (first 4) components failed
@@ -405,15 +402,6 @@ class ProjectManager {
   /* Additional Project Creation Helpers (Ensured Conversation, KB, etc)     */
   /* ---------------------------------------------------------------------- */
 
-  /**
-   * Optional initialize method for DI compatibility.
-   * Called by app.js after registration.
-   */
-  async initialize() {
-    // No-op for now; can be extended for future async setup.
-    return true;
-  }
-
   async createProject(projectData) {
     try {
       const response = await this.app.apiRequest(this._CONFIG.PROJECTS, {
@@ -429,16 +417,11 @@ class ProjectManager {
         if (hasConvo) return project.conversations?.[0];
         return await this.createDefaultConversation(project.id);
       };
-      const ensureKnowledgeBase = async () => {
-        if (project.knowledge_base?.id) return project.knowledge_base;
-        return await this.initializeKnowledgeBase(project.id);
-      };
-      const [conversation, kb] = await Promise.all([ensureConversation(), ensureKnowledgeBase()]);
+      const conversation = await ensureConversation();
       if (conversation) {
         project.conversations = [conversation];
         project.conversation_count = 1;
       }
-      if (kb) project.knowledge_base = kb;
       this._emit('projectCreated', project);
       this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
@@ -471,34 +454,26 @@ class ProjectManager {
       return null;
     }
   }
-  async initializeKnowledgeBase(projectId) {
-    try {
-      const response = await this.app.apiRequest(
-        `/api/projects/${projectId}/knowledge-bases/`,
-        {
-          method: 'POST',
-          body: {
-            name: 'Default Knowledge Base',
-            description: 'Auto-created knowledge base.',
-            embedding_model: 'text-embedding-3-small'
-          }
-        }
-      );
-      const kb = response.data || response;
-      if (!kb?.id) throw new Error('Failed to initialize knowledge base');
-      this.notify.success('[ProjectManager] Knowledge base initialized: ' + kb.id);
-      return kb;
-    } catch (err) {
-      this.notify.error('[ProjectManager] Failed to initialize knowledge base: ' + (err?.message || err));
-      return null;
-    }
-  }
 
   /* ---------------------------------------------------------------------- */
   /* General retry utility                                                  */
   /* ---------------------------------------------------------------------- */
   async retryWithBackoff(fn, maxRetries = 3) {
     return retryWithBackoff(fn, maxRetries, this.timer);
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Required DI lifecycle method: initialize                               */
+  /* ---------------------------------------------------------------------- */
+  /**
+   * Initializes the ProjectManager (DI contract).
+   * Ensures compatibility with orchestrator/module loader.
+   * Returns a resolved promise immediately.
+   * @returns {Promise<boolean>}
+   */
+  async initialize() {
+    // If you need to preload projects or state at startup, do it here in future.
+    return true;
   }
 }
 
