@@ -1,6 +1,14 @@
-# Notification System: Architecture, Usage, and Best Practices
+Below is a **single, comprehensive reference document** that merges the complete [Notification System: Architecture, Usage, and Best Practices](#) guide with the **Integration & Migration: Dependency Injection Playbook**. This unified doc illustrates:
 
-This guide documents the notification banner system for the Azure Chat Application, including its features, usage patterns, configuration options, and integration points for all modules.
+1. How the notification system works (types, grouping, styling, etc.).
+2. How to integrate and migrate modules using strictly injected dependencies.
+3. Best practices for consistent usage in your codebase.
+
+By following this single guide, teams can ensure both **notification** and **dependency injection** patterns remain unified and maintainable across the entire application.
+
+---
+
+# Azure Chat App Notification System & DI Playbook
 
 ---
 
@@ -21,319 +29,307 @@ This guide documents the notification banner system for the Azure Chat Applicati
 7. [Best Practices](#best-practices)
 8. [Reference: Customization and CSS](#reference-customization-and-css)
 9. [Notification Logging & Backend Integration](#notification-logging--backend-integration)
+10. [Integration & Migration: DI Playbook](#integration--migration-di-playbook)
 
 ---
 
-## Overview
+## 1. Overview
 
-The notification system provides robust, accessible, and theme-aware banners for user feedback, error handling, and operational status across desktop and mobile.
+The notification system provides robust, accessible, and theme-aware banners for user feedback, error handling, and operational status across desktop and mobile in the Azure Chat Application.
 
 **Features include:**
 - Consistent display for all modules (info, warning, error, success)
 - Animation (fade-in/out, grouped pulse)
 - Advanced grouping (batch related messages together)
 - Per-module scoping and cross-module grouping
-- Full theme (light/dark) and responsive support
+- Theme (light/dark) and responsive support
 - Accessibility (keyboard navigation, ARIA, focus)
-- Integrated one-click copy-to-clipboard for all notifications (with inline feedback and accessibility support)
+- Integrated one-click **copy-to-clipboard** for all notifications
 - Easy customization and extensibility
+
+All notifications remain strictly client-side. As of 2025-05-04, there is **no automated backend logging** of notification banners.
 
 ---
 
-## Banner Display Types
+## 2. Banner Display Types
 
 ### Single Notifications
 
-- Rendered as `.alert.notification-item`
-- Icon, message, dismiss (`×`) button, and new **copy button** (clipboard icon; click to copy message, icon changes to checkmark on success)
-- Uses classes like `.notification-error`, `.notification-success`
-- Animates with `.animate-fadeIn` and `.animate-fadeOut`
+- Rendered as `.alert.notification-item`.
+- Each Banner:
+  - Icon (e.g. info, error),
+  - Main message text,
+  - Dismiss button (`×`),
+  - **Copy button** (clipboard icon) to copy the message text; icon changes to a checkmark upon success.
+- Colors are controlled by classes like `.notification-error`, `.notification-success`.
+- Animations: `.animate-fadeIn` and `.animate-fadeOut`.
 
-### Grouped Notifications (Accordion)
+### Grouped Notifications
 
-- Rendered as `.accordion-banner` using an accordion UI
-- Summary view: context badge + type + count
-- **Copy button** in summary row allows copying all messages in group to clipboard; the icon provides inline checkmark feedback on success
-- Expand/collapse to show all messages in group (`Show Details`/`Hide Details`)
-- Dismisses group as a whole (`×`)
-- Groups by {type, context/module/source, time bucket}
-
----
-
-## Styling, Animation, and Theming
-
-- **Theme/color:** Uses DaisyUI/Tailwind theme colors (`--color-error`, `--color-success`, etc) in `enhanced-components.css`.
-- **Accent border:** Strong left border color by type for immediate recognition.
-- **Animations:** Fade-in/out for both singles and groups; pulse on grouped update.
-- **Responsiveness:** Max width/shrink for mobile, enforced button/tap target sizes.
-- **Integration Points:** All notification styling is centralized via `enhanced-components.css` and theme variable overrides.
-- **CSS status:** As of 2025-05-04, the classes and rules in `notification-accordion.css` are not used by any current notification JS and may be removed with no effect on notification banners.
+- Rendered with an **accordion-like** UI, typically as `.accordion-banner`.
+- A “summary row” indicates:
+  - The context or feature name,
+  - The message “type” (info, error, etc.),
+  - A count of how many messages are batched together.
+- The summary row itself has:
+  - A copy button to copy **all** messages in the group, with inline success icon swap,
+  - Expand/collapse controls (e.g. “Show Details” / “Hide Details”),
+  - A dismiss button that closes the entire group.
+- Grouping is based on type + context/module/source + time bucket (e.g. 5-7 seconds).
+- Animations: same fade plus a quick “pulse” if additional messages arrive while the group is expanded.
 
 ---
 
-## Notification API Usage
+## 3. Styling, Animation, and Theming
+
+- **Theme Colors:** We use DaisyUI/Tailwind theme tokens (e.g. `--color-error`, `--color-success`) in `enhanced-components.css`.
+- **Accent Border:** A distinct left border or top border by notification type.
+- **Responsiveness:** Banners scale for mobile. Dismiss/copy/toggle buttons are at least 44px.
+- **Animations:** Tailwind-based fade-in/fade-out plus pulses for group expansions.
+- **Legacy note:** `notification-accordion.css` can be removed without affecting modern banners.
+
+---
+
+## 4. Notification API Usage
+
+Below is the standard interface (you may see it as `notificationHandler.show(...)` or via an injected `notify` wrapper):
 
 ### Basic Example
 
 ```js
-// Show an info notification
-notificationHandler.show('User saved successfully', 'success', { timeout: 4000 });
+// Show an info notification (non-grouped)
+notify.info('User saved successfully', { timeout: 4000 });
 
-// Show an error, grouped for this module
-notificationHandler.show(
-  'Failed to upload file',
-  'error',
-  { group: true, context: 'file-upload' }
-);
+// Show an error, grouped for the "file-upload" context
+notify.error('Failed to upload file', {
+  group: true,
+  context: 'file-upload'
+});
 ```
 
 ### Types
 
-Types supported: `info`, `success`, `warning`, `error`
-Rendering and left-accent color are determined by type.
+Supported string types:
+- `"info"`
+- `"success"`
+- `"warning"`
+- `"error"`
+
+The UI uses color-coded icons and backgrounds for each.
 
 ### Grouping Options
 
-- Set `group: true` in the `options` parameter to enable grouping/batching.
-- Grouping is based on:
-  `{ type, context/module/source, 5s time bucket }`
-- If no `context/module/source` is given, grouping is cross-module by type (`general` context).
-
-### Customizing Context, Module, Source
-
-You can scope grouping and display by providing one of these options:
-
-- `context`: Arbitrary string (e.g. `"auth"`, `"projectManager"`, `"file-upload"`)
-- `module`: Name of the subsystem or feature (e.g. `"chatManager"`, `"sidebar"`)
-- `source`: More granular context (e.g. `"apiRequest"`, `"loginSubmit"`)
-
-The notification handler determines grouping context as:
+Set `group: true` in the options to batch messages together. Batching merges:
 ```js
-const context = options.context || options.module || options.source || 'general';
-```
-Specify these to control grouping boundaries.
-
----
-
-## Grouping Rules and Contexts
-
-- **All modules, shared type:**
-  - If no context/module/source is set (or all are the same), notifications of the same type from all modules are grouped together in a single accordion.
-- **Module/feature-specific grouping:**
-  - By setting a unique `context`, `module`, or `source`, grouping is *per module/feature* and type.
-- **Summary:**
-  - Grouping context is fully controlled by your option string; use the same string to group together, unique ones to keep groups distinct.
-
-**Examples:**
-```js
-// All errors from all modules grouped together (default)
-notificationHandler.show('Error in X', 'error', { group: true });
-
-// Only errors in auth grouped
-notificationHandler.show('Login failed', 'error', { group: true, context: 'auth' });
-
-// Per-feature grouping for Project Manager
-notificationHandler.show('Missing project file', 'error', { group: true, module: 'projectManager' });
-```
-
----
-
-## Accessibility and Responsiveness
-
-- **ARIA roles:** All banners use proper roles (alert, region, labelledby).
-- **Keyboard support:** Tab/focus states on all buttons, including copy, summary, close, and message lists.
-- **Focus management:** Outlines and focus-visible for all interactive elements; supports keyboard navigation.
-- **Copy button accessibility:** Copy buttons are keyboard and screenreader accessible (aria-label, focusable, feedback with icon swap).
-- **Minimum tap targets:** All dismiss/toggle/copy/action buttons are at least 44x44px.
-- **Mobile:** Responsive width and stacking, font sizes scale on smaller screens.
-
----
-
-## Best Practices
-
-- Use a descriptive, stable string for `context` or `module` when grouping notifications in your feature/module.
-- For cross-cutting/globally relevant grouping, leave context/module/source unset or set the same value in multiple locations.
-- Always provide a type (`"info"`, `"error"`, etc.) for semantic coloring and icon.
-- Prefer `timeout: 0` for persistent/system alerts, otherwise use a short timeout to avoid notification clutter.
-- Clean up notifications via `.clear()` if relevant (e.g. on navigation).
-- For accessibility, ensure summaries and messages are concise and descriptive.
-
----
-
-## Reference: Customization and CSS
-
-- Styles are managed via DaisyUI + custom CSS in `enhanced-components.css`.
-- Copy button styling uses class `.notification-copy-btn` for singles and `.accordion-copy-btn` for grouped banners (legacy only).
-- All color variables are themeable and support both light and dark modes.
-- Animations are managed via Tailwind utility classes and custom keyframes.
-- Banner and accordion CSS from `notification-accordion.css` are not active as of 2025-05-04—remove this file without impact unless your app requires backward compatibility.
-
----
-
-## Example: Creating a Grouped Notification from a Module
-
-```js
-// In projectManager.js
-export function notifyProjectLoadError(notificationHandler, projectId) {
-  notificationHandler.show(
-    `Could not load project with ID: ${projectId}`,
-    'error',
-    { group: true, context: 'projectManager' }
-  );
+{
+  type:     [info|warning|...],
+  context:  (or module/source),
+  timeBucket: e.g. 5s or 7s
 }
 ```
 
+If **none** of `context`, `module`, or `source` is provided, notifications of the same type are grouped under a default “general” label.
+
+### Customizing Context, Module, Source
+
+When you pass `context`, `module`, or `source` in the `options`, you control how those notifications are grouped. The library uses:
+
+```js
+const groupKey = options.context || options.module || options.source || 'general';
+```
+
+**Examples:**
+
+```js
+// All errors from all modules are grouped together (default)
+notify.error('Error in X', { group: true });
+
+// Only errors in "auth" grouped
+notify.error('Login failed', { group: true, context: 'auth' });
+
+// Per-feature grouping
+notify.error('Missing project file', { group: true, module: 'projectManager' });
+```
+
 ---
 
-## Additional Information
+## 5. Grouping Rules and Contexts
 
-- **Injected notification util for all code:** `DependencySystem.modules.get('notify')`
-  - This is the *only* supported way to send notifications in modules, features, and components outside of `static/js/app.js`.
-  - Usage (example):
-    ```js
-    // In your feature or component
-    export function createFeature({ notify }) {
-      notify.success('Operation complete!', { context: 'feature' });
-      notify.error('Something went wrong', { context: 'feature' });
-    }
-    ```
-- **Do NOT use `notificationHandlerWithLog`**:
-  - This internal-only object appears in `app.js` and must never be injected or referenced in other modules.
-- **Direct handler access (low-level):** `DependencySystem.modules.get('notificationHandler')`
-  - For advanced use (e.g. non-standard grouping, low-level hide, etc.), rarely needed.
-- **Grouped notification helper:** Used internally by the handler as `notificationHandler.groupedHelper`
+- **All modules, same type**: If you do not set a context, all e.g. `"error"` notifications from different modules get batched in one group labeled “Error (general)”.
+- **Module/feature grouping**: Setting `context: 'someFeature'` ensures separate grouping from other features.
 
 ---
 
-## Notification Logging & Backend Integration
+## 6. Accessibility and Responsiveness
 
-> **Important Update (2025-05-04):**
+- **ARIA roles**: Banners have `[role="alert"]` with proper labeling.
+- **Keyboard**: All actions (dismiss, copy, expand) are keyed to tab-stops, with focus indicators.
+- **Focus**: Minimal shift, but focus remains on the last triggered element unless the app chooses to move it.
+- **Copy button accessibility**: Each notification line or group has a copy button with an `aria-label="Copy message"`. On success, icon toggles visually.
+
+---
+
+## 7. Best Practices
+
+- Always specify a type (`"error"`, `"info"`, etc.) so the user sees appropriate color and icon.
+- For ephemeral messages, set `timeout` to a few seconds. For important system alerts, use `timeout: 0`.
+- Use meaningful `context` or `module` to isolate or unify related notifications (e.g. `'auth'` for all login-related warnings).
+- Use a single or minimal set of `context` strings for easy grouping, rather than dozens of unique ones.
+- Avoid spamming repeated messages (e.g. gracefully handle errors in a single place).
+
+---
+
+## 8. Reference: Customization and CSS
+
+- **Primary styles**: `enhanced-components.css` (Tailwind + DaisyUI).
+- **Copy button classes**:
+  - `.notification-copy-btn` for single banners,
+  - `.accordion-copy-btn` for group summary row.
+- **Animation**: Utility classes (like `animate-fadeIn`).
+- **Deprecated**: `notification-accordion.css` is no longer used for the current system.
+
+---
+
+## 9. Notification Logging & Backend Integration
+
+> **As of 2025-05-04**, the current notification system is purely on the frontend. It does **not** automatically post to any backend endpoints or log files.
 >
-> The *current* notification system implementation is purely frontend and does **not** send log events to the backend API or to `notifications.txt`. No POST to `/api/log_notification` or `/api/log_notification_batch` is performed by any notification JS module. All notification events remain inside the user's browser/app session and backend log files will not reflect frontend banner activity.
->
-> The backend notification logging endpoints and FastAPI logic remain present for future integration or external/batch use, but as of this date **no frontend code automatically logs notifications** to the backend.
+> The existing FastAPI `log_notification` endpoints remain for possible future usage or batch logging but are not employed by the current code.
 
 ---
 
-## See Also
+## 10. Integration & Migration: DI Playbook
 
-- static/js/notification-handler.js – implementation, options, grouped helper
-- static/js/handler-helper.js – grouping logic
-- static/css/enhanced-components.css – all active notification/app styles
-- static/js/app.js – how notification handler is registered and injected
-- routes/log_notification.py – backend logging (API endpoints, concurrency/rotation logic)
+This playbook ensures new and existing modules integrate notifications **and** all other dependencies (like `apiClient`, `eventHandlers`, etc.) through **strict dependency injection**. It also shows how to unify them with the notification system described above.
 
----
+### 10.1 One-time Setup (Already in `app.js`)
 
-*For contributions or style overrides, see the CSS partials and review the notification API signature to ensure notification UX remains consistent site-wide.*
+Below is an example typical of your `app.js` or main entry file:
 
----
-
-## Changelog
-
-**2025-05-04:**
-- Clarified that backend notification logging and notifications.txt are unused by frontend notification banners.
-- Marked notification-accordion.css as obsolete.
-- Updated CSS guidance and integration notes accordingly.
-
-**2025-05-03:**
-- Added copy-to-clipboard feature to all notification banners:
-  - All single and grouped notifications now have a copy button.
-  - Copy feedback is provided via inline icon state only (checkmark), not a popup.
-  - Accessibility and style updated accordingly.
-
----
-
-# Integration & Migration: Dependency Injection Playbook
-
-Below is a **drop-in playbook** you can hand to *any* team-mate and apply to *every* JavaScript/TypeScript file in the repo—whether it already exists or will be written next week.
-It enforces the same dependency-injection style, grouping semantics, and error-handling rules the new **notification-handler** expects, yet stays thin enough that you can copy-paste most of it verbatim.
-
----
-
-## 1 One-time setup you already have
-
-```javascript
-// app.js  (early boot, already present)
+```js
+// app.js (early boot)
 import { createNotificationHandler } from './notification-handler.js';
 
 const notificationHandler = createNotificationHandler({
   eventHandlers,
   DependencySystem,
   domAPI,
-  groupWindowMs : 7000,            //  <-- tune per product
+  groupWindowMs: 7000, // how long to batch messages
 });
 DependencySystem.register('notificationHandler', notificationHandler);
 
-/* Optional but helpful façade for legacy code */
+/* Optional facade for older code */
 export const showNotification = notificationHandler.show;
 ```
-*Nothing else in this guide will touch `app.js`.*
 
----
+You might also have a specialized `notify` wrapper:
 
-## 2 Create a wafer-thin util wrapper (recommended)
-
-```javascript
+```js
 // static/js/utils/notify.js
 export function createNotify({ notificationHandler }) {
   if (!notificationHandler?.show) throw new Error('notificationHandler missing');
 
-  /* Centralised defaults ↓ */
   const DURATION = { info:4000, success:4000, warning:6000, error:0 };
 
   function send(msg, type='info', opts={}) {
+    // The library’s .show() might accept (msg, type, timeout, options).
     return notificationHandler.show(msg, type, DURATION[type], opts);
   }
 
-  /* Sugar helpers  –  encourage grouping */
   return {
-    info   : (msg, o={}) => send(msg,'info',   o),
-    success: (msg, o={}) => send(msg,'success',o),
-    warn   : (msg, o={}) => send(msg,'warning',o),
-    error  : (msg, o={}) => send(msg,'error',  o),
+    info   : (msg, o={}) => send(msg, 'info',    o),
+    success: (msg, o={}) => send(msg, 'success', o),
+    warn   : (msg, o={}) => send(msg, 'warning', o),
+    error  : (msg, o={}) => send(msg, 'error',   o),
 
-    /* Common, opinionated buckets */
-    apiError : (msg, o={}) => send(msg,'error',
-                     { group:true, context:'apiRequest', ...o }),
-    authWarn : (msg, o={}) => send(msg,'warning',
-                     { group:true, context:'auth', ...o }),
+    // Some opinionated group-labeled helpers
+    apiError: (msg, o={}) =>
+      send(msg, 'error', { group:true, context:'apiRequest', ...o }),
+    authWarn: (msg, o={}) =>
+      send(msg, 'warning', { group:true, context:'auth', ...o })
   };
 }
-```
 
-Register once, right after the handler:
-
-```javascript
+// After you've created it:
 DependencySystem.register(
   'notify',
   createNotify({ notificationHandler })
 );
 ```
 
+Now any module that needs to show a notification can do so by injecting `notify`.
+
 ---
 
-## 3 Integrating any **new module**
+### 10.2 A Canonical “Factory” Module Example
 
-Below is the canonical skeleton—use it for every factory you write.
+Below is a minimal template for any new or refactored feature module, ensuring no global references (like `window.*` or `console.*`) and using the final `notify` from DI.
 
-```javascript
+```js
 /**
- * createAwesomeFeature.js – DI-strict module
+ * createAwesomeFeature.js – DI-strict example
  */
 export function createAwesomeFeature({
   apiClient,
   eventHandlers,
-  notify,                  // <-- inject wrapper, *never* import directly
-  DependencySystem,
+  notify,          // inject from DI, do NOT import globally
+  DependencySystem
 }) {
-  if (!notify) throw new Error('notify util required');
+  if (!notify) throw new Error('notify utility required');
 
-  /* Example public method */
   async function doSomethingCool(fileId) {
-    notify.info('[Awesome] Uploading…', {
-      group:true, context:'awesome', module:'upload',
-    });
+    // Show a grouped info notification under "awesome"
+    notify.info('[Awesome] Starting process...', { group:true, context:'awesome' });
 
     try {
       const res = await apiClient.post(`/files/${fileId}/process`);
+      notify.success('File processed successfully!', { group:true, context:'awesome' });
+      return res;
+    } catch (err) {
+      notify.error('File processing failed!', { group:true, context:'awesome' });
+      // Rethrow or handle as needed
+      throw err;
+    }
+  }
+
+  // Return any public methods
+  return { doSomethingCool };
+}
+```
+
+**Key takeaways for strict DI:**
+- **Never** import or reference `window.*`, `document.*`, or a globally-scoped `console.*` to show user feedback.
+- Instead, rely on **injected** `notify`, `domAPI`, `eventHandlers`, etc.
+- Thoroughly check for existence of required dependencies.
+
+---
+
+### 10.3 Example: Migrating an Existing Module
+
+When refactoring an older file that used to do `console.log` or `alert` calls:
+
+1. **Remove** all direct `alert` or `console` calls.
+2. **Add** `notify` as a constructor/`createX` param.
+3. **Replace** references to `console` with the appropriate `notify.info`, `notify.warn`, `notify.error`, etc.
+4. **Add** grouping contexts if relevant (e.g. `context: 'myModuleName'`).
+
+---
+
+### 10.4 Ensuring Cleanup & Mockability
+
+- For modules that attach `eventHandlers.trackListener`, remember to expose a `destroy()` or `cleanup()` method to remove them if your SPA or tests re-instantiate modules.
+- This pattern is particularly important for code using `setInterval` or references to a real DOM in tests.
+- Mocks of `notify` can be used in unit tests to assert that certain warnings or errors are shown.
+
+---
+
+## Conclusion
+
+By adhering to this combined **Notification System** architecture (sections 1-9) and the **Strict Dependency Injection Playbook** (section 10), your application:
+
+- Presents consistent, accessible banners for errors and status messages.
+- Ensures no leaky global references or ad-hoc user notifications.
+- Can easily group messages by module or context and avoid spamming repeated alerts.
+- Maintains testability by injecting all external dependencies, including the notification subsystem.
+
+Continue to check the references in your code for any direct `console.*` or `window.*` usage and convert them to injected dependencies plus the `notify` utility. This will keep the user experience unified, themed, and fully maintainable.
