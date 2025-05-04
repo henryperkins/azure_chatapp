@@ -239,9 +239,9 @@ export function createNotificationHandler({
     // Using minimal string template to create a container
     return `
       <div class="alert notification-item animate-fadeIn" role="alert" aria-live="polite" style="animation-duration:300ms;">
-        <div class="flex items-center">
+        <div class="flex items-center gap-2">
           <span class="notification-icon" aria-hidden="true"></span>
-          <span class="notification-message ml-2"></span>
+          <span class="notification-message ml-2 flex-1"></span>
           <button type="button" class="notification-copy-btn btn btn-xs btn-ghost ml-1"
                   aria-label="Copy notification" title="Copy notification message" tabindex="0">
             <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true"
