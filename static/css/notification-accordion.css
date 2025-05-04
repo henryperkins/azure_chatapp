@@ -259,7 +259,20 @@
   letter-spacing: 0.015em;
 }
 
-/* Clear All button, pins to cluster top right */
+/* [CUSTOM NEW] 1. Hide radio input for group accordion (a11y visible) */
+.group-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* [CUSTOM NEW] 2. Expand notification list when DaisyUI's collapse-open is present */
+.accordion-banner.collapse-open .accordion-message-list {
+  max-height: 44vh;
+  overflow-y: auto;
+}
+
+/* 5.1 Clear All button, pins to cluster top right */
 .notification-clear-all {
   position: absolute;
   top: 0.39em;
@@ -277,6 +290,7 @@
   pointer-events: auto;
   transition: border 0.13s, color 0.13s;
 }
+
 .notification-clear-all:focus-visible {
   outline: 2px solid #246bdb;
   outline-offset: 2px;
@@ -306,4 +320,63 @@
 .accordion-dismiss-btn:focus-visible {
   outline: 2px solid var(--color-primary, #2563eb);
   outline-offset: 2px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Notification system • Theme-safe polish                        *
+ * ------------------------------------------------------------- */
+
+/* A. De-opacity sibling banners instead of dimming them out */
+#notificationArea .accordion-banner[aria-expanded="true"] ~ .accordion-banner {
+  /* 60 % keeps text readable in both themes */
+  opacity: .6;
+}
+
+/* B. Keep Clear-All fixed to the container’s padding-box */
+#notificationArea {
+  position: relative;            /* establish containing block */
+}
+#notificationArea > .notification-clear-all {
+  position: sticky;
+  top: .25rem;
+  right: .5rem;
+  z-index: 1250;                 /* above banners & scrollbar */
+}
+
+/* C. Icon & text perfect centring */
+.accordion-banner .collapse-title {
+  display: flex;
+  gap: .5rem;
+  align-items: center;           /* NEW – fixes vertical drift */
+}
+.accordion-banner .collapse-title .accordion-icon svg {
+  flex-shrink: 0;
+}
+
+/* D. Always show a scrollbar when overflowed (both themes) */
+#notificationArea {
+  overflow-y: auto;
+  max-height: 92vh;              /* safety on very small viewports */
+}
+
+/* E. Rounded corners stay when list expands */
+.accordion-banner.collapse-open {
+  border-bottom-left-radius: theme(borderRadius.lg);
+  border-bottom-right-radius: theme(borderRadius.lg);
+}
+
+/* Theming variables (optional but recommended) */
+:root{
+  --notif-group-bg: theme(colors.info);
+  --notif-dim-opacity: .6;
+}
+html[data-theme="dark"]{
+  --notif-group-bg: theme(colors.sky.700 / 1); /* darker aqua */
+}
+
+.accordion-banner.grouped{
+  background-color: var(--notif-group-bg);
+}
+#notificationArea .accordion-banner[aria-expanded="true"] ~ .accordion-banner{
+  opacity: var(--notif-dim-opacity);
 }

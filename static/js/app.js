@@ -619,53 +619,34 @@ function onReady() {
 /**
  * Removes any duplicate notificationArea elements from the DOM, preserving only the first instance.
  */
-function cleanupDuplicateNotificationAreas() {
-    const areas = document.querySelectorAll('#notificationArea');
-    if (areas.length > 1) {
-        console.warn(`[App] Found ${areas.length} notification areas, removing duplicates.`);
-        // Keep the first one, remove others
-        for (let i = 1; i < areas.length; i++) {
-            areas[i].parentNode.removeChild(areas[i]);
-        }
-    }
-}
+// cleanupDuplicateNotificationAreas (and any manual container setup) is now obsolete – removed per requirements.
 
 async function init() {
-    // Remove duplicate notificationArea containers if any exist before continuing
-    cleanupDuplicateNotificationAreas();
-
     if (appState.initialized || appState.initializing) {
         if (APP_CONFIG.DEBUG) {
             console.info('[App] Initialization attempt skipped (already done or in progress).');
         }
         return appState.initialized;
     }
-    // --- EARLY: Notification handler container and DI-first setup ---
-    // Ensure Notification Container Creation Order
-    let notificationContainer = document.getElementById('notificationArea');
-    if (!notificationContainer) {
-        notificationContainer = document.createElement('div');
-        notificationContainer.id = 'notificationArea';
-        notificationContainer.className = 'notification-area fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto pointer-events-none';
-        notificationContainer.setAttribute('role', 'status');
-        notificationContainer.setAttribute('aria-live', 'polite');
-        document.body.appendChild(notificationContainer);
-    }
-    // Create and register before core system initialization
+    // --- EARLY: Notification handler ----------------------------------
     notificationHandler = createNotificationHandler({
         eventHandlers,
         DependencySystem,
-        container: notificationContainer,
         domAPI: {
-            getElementById: (id) => document.getElementById(id),
-            createElement: (tag) => document.createElement(tag),
-        }
+            getElementById : id  => document.getElementById(id),
+            createElement  : tag => document.createElement(tag),
+            createTemplate : html=> { const t=document.createElement('template'); t.innerHTML=html.trim(); return t; }
+        },
+        groupWindowMs : 7000                // example – 7-second buckets for API chatter
     });
+
+    // Optional: expose for legacy code (must be at top level for ESM; assign here for global/legacy, not export)
+    window.showNotification = notificationHandler.show;
 
     // Add a global loading handler to hide notifications on page changes
     document.addEventListener('locationchange', function() {
         // Only clear notifications if they're not important
-        const container = document.getElementById('notificationArea');
+        const container = notificationHandler.getContainer?.() || document.getElementById('notificationArea');
         if (container) {
             const notificationsToKeep = Array.from(container.children).filter(
                 el => el.classList.contains('priority') || el.classList.contains('sticky')
@@ -688,7 +669,7 @@ async function init() {
             console.error('Failed to show notification:', err);
             // Create a simple fallback notification without using any complex functions
             try {
-                const container = document.getElementById('notificationArea') || document.body;
+                const container = notificationHandler.getContainer?.() || document.getElementById('notificationArea') || document.body;
                 const div = document.createElement('div');
                 div.textContent = message || 'Notification error';
                 div.className = 'alert alert-' + (type || 'error');
@@ -696,9 +677,9 @@ async function init() {
                 div.style.padding = '10px';
                 container.appendChild(div);
                 setTimeout(() => div.remove(), 5000);
-            } catch (e) {
+            } catch {
                 // Last resort
-                console.error('Critical notification error:', message, e);
+                console.error('Critical notification error:', message);
             }
             return null;
         }
