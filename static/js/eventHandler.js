@@ -1,14 +1,17 @@
 /**
- * eventHandler.js - DependencySystem/DI Refactored Edition
+ * eventHandler.js — DI-strict, orchestrated UI event utility collection.
  *
- * Modular, orchestrator-registered UI event utility collection.
- * NO global window.* access internally; no window.* assignment/self-registration.
+ * All UI/system/user notifications **must** use DI notification system, never direct console:
+ *   1. Prefer `app.showNotification` (if available)
+ *   2. Else prefer DI `notify` util (if available)
+ *   3. Only then fallback to console.* (dev only, with strict comment)
+ *
+ * For project architecture: see notification-system.md, custominstructions.md.
  *
  * ## Dependencies (from DependencySystem or DI-injected)
  * - app: Core app module (API, notifications)
  * - auth: Auth module
  * - projectManager: Project management
- * - sidebar: Sidebar UI handler
  * - modalManager: Modal UI/logic handler
  * - DependencySystem: DI registry (optional if DI provided)
  *
@@ -28,14 +31,13 @@
  *   @param {Object} deps.app - App dependency (required for showNotification)
  *   @param {Object} deps.auth - Auth module (for logout, etc)
  *   @param {Object} deps.projectManager - Project management
- *   @param {Object} deps.sidebar - Sidebar handler
  *   @param {Object} deps.modalManager - Modal handler
  *   @param {Object} deps.DependencySystem - Preferred for DI dependency registry
  */
 import { waitForDepsAndDom } from './utils/globalUtils.js';
 import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
 
-export function createEventHandlers({ app, auth, projectManager, sidebar, modalManager, DependencySystem, navigate, storage } = {}) {
+export function createEventHandlers({ app, auth, projectManager, modalManager, DependencySystem, navigate, storage } = {}) {
   // Helper for optional DI from DependencySystem if not provided at construction time
   DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
   function resolveDep(name) {
@@ -116,13 +118,15 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
             if (app && typeof app.showNotification === "function") {
               app.showNotification(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
             } else if (typeof console !== "undefined") {
-              console.error(`Async error in ${type} event handler:`, error);
+              // Last-resort fallback for dev debugging only
+              console.error(`[EventHandler] (fallback) Async error in ${type} event handler:`, error);
             }
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
               if (app && typeof app.showNotification === "function") {
                 app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
               } else if (typeof console !== "undefined") {
-                console.warn(`preventDefault() called on a passive ${type} listener`);
+                // Last-resort fallback for dev debugging only
+                console.warn(`[EventHandler] (fallback) preventDefault() called on a passive ${type} listener`);
               }
             }
           }).finally(() => {
@@ -130,9 +134,10 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
               if (app && typeof app.showNotification === "function") {
-                app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning", 4000, { group: true, context: 'eventHandler' });
+                app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
               } else if (typeof console !== "undefined") {
-                console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+                // Last-resort fallback for dev debugging only
+                console.warn(`[EventHandler] (fallback) Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
               }
             }
           });
@@ -148,23 +153,26 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         if (duration > threshold) {
           if (app && typeof app.showNotification === "function") {
             app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
-          } else if (typeof console !== "undefined") {
-            console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+            } else if (typeof console !== "undefined") {
+              // Last-resort fallback for dev debugging only
+              console.warn(`[EventHandler] (fallback) Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
           }
         }
 
         return result;
       } catch (error) {
         if (app && typeof app.showNotification === "function") {
-          app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error", 0, { group: true, context: 'eventHandler' });
+          app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
         } else if (typeof console !== "undefined") {
-          console.error(`Error in ${type} event handler:`, error);
+          // Last-resort fallback for dev debugging only
+          console.error(`[EventHandler] (fallback) Error in ${type} event handler:`, error);
         }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
           if (app && typeof app.showNotification === "function") {
-            app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning", 5000, { group: true, context: 'eventHandler' });
+            app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
           } else if (typeof console !== "undefined") {
-            console.warn(`preventDefault() called on a passive ${type} listener`);
+            // Last-resort fallback for dev debugging only
+            console.warn(`[EventHandler] (fallback) preventDefault() called on a passive ${type} listener`);
           }
         }
       }
@@ -230,7 +238,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         if (app && typeof app.showNotification === "function") {
           app.showNotification(`Error removing ${listener.type} listener: ${error && error.message ? error.message : error}`, "warning");
         } else if (typeof console !== "undefined") {
-          console.warn(`Error removing ${listener.type} listener:`, error);
+          // Last-resort fallback for dev debugging only
+          console.warn(`[EventHandler] (fallback) Error removing ${listener.type} listener:`, error);
         }
       }
     });
@@ -249,7 +258,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
           if (app && typeof app.showNotification === "function") {
             app.showNotification(`Error in delegated ${eventType} handler for ${selector}: ${error && error.message ? error.message : error}`, "error");
           } else if (typeof console !== "undefined") {
-            console.error(`Error in delegated ${eventType} handler for ${selector}:`, error);
+            // Last-resort fallback for dev debugging only
+            console.error(`[EventHandler] (fallback) Error in delegated ${eventType} handler for ${selector}:`, error);
           }
         }
       }
@@ -287,7 +297,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       if (toggleId && storageBackend && typeof storageBackend.setItem === "function") {
         try {
           storageBackend.setItem(`${toggleId}_expanded`, expand ? 'true' : 'false');
-        } catch (e) {}
+        } catch { /* ignore */ }
       }
     };
 
@@ -295,7 +305,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
     if (toggleId && storageBackend && typeof storageBackend.getItem === "function") {
       try {
         savedState = storageBackend.getItem(`${toggleId}_expanded`);
-      } catch (e) {}
+      } catch { /* ignore */ }
     }
     const initialExpand = savedState === 'true';
     togglePanel(initialExpand);
@@ -398,12 +408,11 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         if (app && typeof app.showNotification === "function") {
           app.showNotification(
             error.message ? `Form submission error: ${error.message}` : "Form submission failed",
-            "error",
-            0,
-            { group: true, context: 'eventHandler' }
+            "error"
           );
         } else if (typeof console !== "undefined") {
-          console.error('Form submission error:', error);
+          // Last-resort fallback for dev debugging only
+          console.error('[EventHandler] (fallback) Form submission error:', error);
         }
         if (options.onError) {
           options.onError(error);
@@ -422,9 +431,6 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       }
     }, { passive: false });
   }
-
-
-
 
   function setupNavigation() {
     const newConversationBtn = document.getElementById('newConversationBtn');
@@ -448,7 +454,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
               "error"
             );
           } else if (typeof console !== "undefined") {
-            console.error('Failed to create conversation:', error);
+            // Last-resort fallback for dev debugging only
+            console.error('[EventHandler] (fallback) Failed to create conversation:', error);
           }
         }
       });
@@ -474,15 +481,52 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
               err && err.message ? `Logout failed: ${err.message}` : "Logout failed",
               "error"
             );
-          } else if (typeof console !== "undefined") {
-            console.error('Logout failed:', err);
+        } else if (typeof console !== "undefined") {
+          // Last-resort fallback for dev debugging only
+          console.error('[EventHandler] (fallback) Logout failed:', err);
           }
         });
       }, { passive: false });
     }
     // Registration form handling...
+    if (document.getElementById('registerForm')) {
+      setupForm('registerForm', async (formData) => {
+        const username = formData.get('username');
+        const password = formData.get('password');
+        if (!username || !password) {
+          throw new Error('Username and password are required');
+        }
+        // Validate password requirements
+        const validation = validatePassword(password);
+        if (!validation.valid) throw new Error(validation.message);
+        // Wait for auth module before proceeding
+        if (!auth || typeof auth.register !== 'function') {
+          throw new Error('Authentication module not loaded. Cannot register.');
+        }
+        const response = await auth.register({ username, password });
+        app?.showNotification('Registration successful', 'success');
+        // Close auth dropdown
+        const authDropdown = document.getElementById('authDropdown');
+        if (authDropdown) {
+          authDropdown.classList.add('hidden');
+        }
+        if (response && response.access_token) {
+          // Reason for delay: ensure notification or UI state updates before leaving page
+          setTimeout(() => { redirect('/'); }, 100);
+        }
+      }, { resetOnSuccess: false });
+    }
   }
 
+  function validatePassword(password) {
+    if (password && password.length >= 3) {
+      return { valid: true };
+    }
+    return {
+      valid: false,
+      message: 'Password must be at least 3 characters long.'
+    };
+  }
 
   function setupNavigationElements() {
     const navToggleBtn = document.getElementById('navToggleBtn');
@@ -502,9 +546,12 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         navToggleBtn.setAttribute('aria-expanded', isExpanded.toString());
         mainSidebar.setAttribute('aria-hidden', (!isExpanded).toString());
         if (app && typeof app.showNotification === "function") {
-          app.showNotification(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, "info", 4000, { group: true, context: 'eventHandler' });
+          app.showNotification(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, "info");
+        } else if (DependencySystem?.modules?.get?.('notify')?.info) {
+          DependencySystem.modules.get('notify').info(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, { context: 'eventHandler' });
         } else if (typeof console !== "undefined") {
-          console.log('[EventHandler] Sidebar toggled:', isExpanded ? 'open' : 'closed');
+          // DEV-ONLY fallback: not user-facing
+          console.log('[EventHandler] (fallback) Sidebar toggled:', isExpanded ? 'open' : 'closed');
         }
       });
     }
@@ -641,7 +688,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
   // Also ensure modal tabs init after DOMContentLoaded for static/app shell builds:
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     // UX: Give DOM pipeline a tick for modal DOM availability in static/app shell
-    setTimeout(setupModalTabs, 0); // eslint-disable-line no-inline-comments
+    setTimeout(setupModalTabs, 0);
   } else {
     trackListener(document, 'DOMContentLoaded', setupModalTabs, { once: true, description: "DOMContentLoaded for modal tabs" });
   }
@@ -663,7 +710,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       if (app && typeof app.showNotification === "function") {
         app.showNotification("[EventHandler] All handlers initialized", "info");
       } else if (typeof console !== "undefined") {
-        console.log('[EventHandler] All handlers initialized');
+        // Last-resort fallback for dev debugging only
+        console.log('[EventHandler] (fallback) All handlers initialized');
       }
     } catch (err) {
       if (app && typeof app.showNotification === "function") {
@@ -672,7 +720,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
           "error"
         );
       } else if (typeof console !== "undefined") {
-        console.error("Failed to initialize event handlers:", err);
+        // Last-resort fallback for dev debugging only
+        console.error("[EventHandler] (fallback) Failed to initialize event handlers:", err);
       }
       throw err; // rethrow for orchestrator fail-fast in tests
     }

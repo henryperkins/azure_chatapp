@@ -17,14 +17,41 @@
   <!-- Filters and Search row -->
   <div class="flex flex-wrap items-center gap-2 mb-2">
     <!-- Filter tabs (DaisyUI theme-aligned tabs) -->
-    <div id="projectFilterTabs" class="tabs tabs-boxed bg-base-200 rounded-lg h-10">
-      <button type="button" class="tab text-sm min-w-[90px] font-medium focus:outline-none focus-visible:ring-2" data-filter="all" aria-current="page">
+    <div id="projectFilterTabs" class="tabs tabs-boxed bg-base-200 rounded-lg h-10" role="tablist" aria-label="Project filters">
+      <button
+        type="button"
+        id="filterTabAll"
+        class="tab text-sm min-w-[90px] font-medium focus:outline-none focus-visible:ring-2"
+        data-filter="all"
+        role="tab"
+        aria-selected="true"
+        aria-controls="projectCardsPanel"
+        tabindex="0"
+      >
         All
       </button>
-      <button type="button" class="tab text-sm min-w-[90px] font-medium text-base-content/70" data-filter="pinned">
+      <button
+        type="button"
+        id="filterTabPinned"
+        class="tab text-sm min-w-[90px] font-medium text-base-content/70"
+        data-filter="pinned"
+        role="tab"
+        aria-selected="false"
+        aria-controls="projectCardsPanel"
+        tabindex="-1"
+      >
         Pinned
       </button>
-      <button type="button" class="tab text-sm min-w-[90px] font-medium text-base-content/70" data-filter="archived">
+      <button
+        type="button"
+        id="filterTabArchived"
+        class="tab text-sm min-w-[90px] font-medium text-base-content/70"
+        data-filter="archived"
+        role="tab"
+        aria-selected="false"
+        aria-controls="projectCardsPanel"
+        tabindex="-1"
+      >
         Archived
       </button>
     </div>
@@ -42,12 +69,23 @@
   </div>
 
   <!-- Project card grid -->
-  <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 py-2">
+  <div
+    id="projectCardsPanel"
+    class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 py-2"
+    role="tabpanel"
+    aria-labelledby="filterTabAll"
+    tabindex="0"
+  >
     <!-- Project cards injected here -->
   </div>
 
-  <!-- No projects message -->
-  <div id="noProjectsMessage" class="hidden text-center py-8 text-base-content/60 text-sm font-medium">
+  <!-- No projects message (announced to assistive tech using aria-live) -->
+  <div id="noProjectsMessage"
+    class="hidden text-center py-8 text-base-content/60 text-sm font-medium"
+    aria-live="polite"
+    role="status"
+    tabindex="0"
+  >
     No projects found. Create your first project using the "New Project" button.
   </div>
 </div>

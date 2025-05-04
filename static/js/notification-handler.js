@@ -534,9 +534,6 @@ export function createNotificationHandler({
   // Wrap grouped methods to inject the Clear All button logic
   const originalShowGrouped = groupedHelper.showGroupedNotificationByTypeAndTime;
   groupedHelper.showGroupedNotificationByTypeAndTime = function (opts) {
-    // We do need to call and return id, but eslint warns 'id' is never used (outside this function).
-    // This usage is intentional: downstream callers expect an id.
-    // eslint-disable-next-line no-unused-vars
     const id = originalShowGrouped.call(groupedHelper, opts);
     ensureClearAllBtn();
     return id;

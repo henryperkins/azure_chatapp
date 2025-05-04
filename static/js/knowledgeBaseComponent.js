@@ -515,7 +515,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           // Don't await this call - it's not critical to load health info before continuing
           // This allows the rendering to complete faster
           this._loadKnowledgeBaseHealth(kbData.id)
-            .catch(err => this._notify("warning", "Failed to load KB health"));
+            .catch(() => this._notify("warning", "Failed to load KB health"));
         }
 
         this._updateStatusAlerts(kbData);
@@ -1115,7 +1115,7 @@ export function createKnowledgeBaseComponent(options = {}) {
           false,
         );
         return resp?.data || null;
-      } catch (err) {
+      } catch {
         this._notify('error', "Could not verify knowledge base health");
         this._showStatusAlert(
           "Could not verify knowledge base health",

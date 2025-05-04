@@ -5,7 +5,6 @@
  * This script handles dark mode toggle functionality and keeps
  * everything in sync with DaisyUI/Tailwind's required theme names.
  */
-console.log("[theme-toggle.js] Script is running...");
 
 document.addEventListener('DOMContentLoaded', () => {
   // Theme names used in DaisyUI config

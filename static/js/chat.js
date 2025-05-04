@@ -211,7 +211,7 @@ export function createChatManager({
         }
         // Fallback: call as a function in case handler itself is callable
         if (typeof notificationHandler === "function") {
-          return notificationHandler(msg, type, opts);
+          return notificationHandler.show(msg, type, opts);
         }
       })
     : ((msg, type = "info", ...args) => {

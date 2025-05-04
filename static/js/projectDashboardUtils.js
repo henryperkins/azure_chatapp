@@ -13,14 +13,23 @@ function getDependency(dep, name, DependencySystem) {
   return dep || DependencySystem?.modules?.get?.(name) || DependencySystem?.get?.(name);
 }
 
-function createShowNotification(notificationHandler, app) {
+/**
+ * Notification util: strict DI – inject notify, use appropriate context/group.
+ * @param {Function} notify - Notification util (required, from DI)
+ */
+function createShowNotification(notify) {
+  if (!notify) throw new Error('[projectDashboardUtils] notify util required for notification');
+  // Always provide grouping/context for all usage in project dashboard utils
   return (msg, type = 'info') => {
-    if (notificationHandler?.show) {
-      notificationHandler.show(msg, type);
-    } else if (app?.showNotification) {
-      app.showNotification(msg, type);
+    if (type === 'error') {
+      notify.error(msg, { group: true, context: "projectDashboard" });
+    } else if (type === 'success') {
+      notify.success(msg, { group: true, context: "projectDashboard" });
+    } else if (type === 'warning' || type === 'warn') {
+      notify.warn(msg, { group: true, context: "projectDashboard" });
+    } else {
+      notify.info(msg, { group: true, context: "projectDashboard" });
     }
-    // else: no-op (no console.log)
   };
 }
 
@@ -197,8 +206,7 @@ export function createProjectDashboardUtils({
   eventHandlers,
   projectManager,
   modalManager,
-  notificationHandler,
-  app,
+  notify,
   formatDate,
   formatBytes,
   sanitizeHTML
@@ -207,13 +215,12 @@ export function createProjectDashboardUtils({
   eventHandlers = getDependency(eventHandlers, 'eventHandlers', DependencySystem);
   projectManager = getDependency(projectManager, 'projectManager', DependencySystem);
   modalManager = getDependency(modalManager, 'modalManager', DependencySystem);
-  notificationHandler = getDependency(notificationHandler, 'notificationHandler', DependencySystem);
-  app = getDependency(app, 'app', DependencySystem);
+  notify = getDependency(notify, 'notify', DependencySystem);
   formatDate = getDependency(formatDate, 'formatDate', DependencySystem);
   formatBytes = getDependency(formatBytes, 'formatBytes', DependencySystem);
   sanitizeHTML = getDependency(sanitizeHTML, 'sanitizeHTML', DependencySystem);
 
-  const showNotification = createShowNotification(notificationHandler, app);
+  const showNotification = createShowNotification(notify);
   const trackListener = createTrackListener(eventHandlers);
 
   const ProjectDashboard = {};
@@ -240,7 +247,7 @@ export function createProjectDashboardUtils({
   ProjectDashboard.init = function () {
     if (initialized) return this;
     initialized = true;
-    if (app?.config?.debug) showNotification('[ProjectDashboard] Initializing...', 'info');
+    showNotification('[ProjectDashboard] Initializing...', 'info');
     ProjectDashboard.setupEventListeners();
     if (typeof document !== 'undefined') {
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));

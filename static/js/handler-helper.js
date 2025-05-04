@@ -29,7 +29,6 @@ export function createGroupedNotificationHelper({
   getIconForType,
   domAPI,
   globalScope = typeof window !== 'undefined' ? window : {},
-  notificationHandler = null,
   groupWindowMs = 5000,
   classMap = {},
 } = {}) {
@@ -38,7 +37,6 @@ export function createGroupedNotificationHelper({
   }
 
   /* ---------- 1. Utilities ---------- */
-  const _setTimeout = globalScope.setTimeout || setTimeout;
   const _clipboard = globalScope.navigator?.clipboard;
   const classes = {
     banner: 'accordion-banner collapse collapse-arrow bg-base-100 border border-base-300',
@@ -79,29 +77,18 @@ export function createGroupedNotificationHelper({
   function renderGroupBanner(group, container) {
     const clone = groupTemplate.content.cloneNode(true);
     const banner = clone.querySelector(`.${classes.banner.split(' ')[0]}`);
+    const radio = clone.querySelector('.group-radio');
+    const ctxBadge = clone.querySelector('.notification-context-badge');
+    const iconBox = clone.querySelector('.accordion-icon');
+    const summary = clone.querySelector(`.${classes.summaryText}`);
+    const copyBtn = clone.querySelector('.accordion-copy-btn');
+    const dismiss = clone.querySelector('.accordion-dismiss-btn');
+    const listBox = clone.querySelector('.accordion-message-list');
 
     banner.id = group.notificationId;
     banner.classList.add(`alert-${group.type}`, `notification-${group.type}`);
-
-    container.appendChild(banner); // Append first to DOM
-
-    // Now select elements from live DOM
-    const radio = banner.querySelector('.group-radio');
-    const ctxBadge = banner.querySelector('.notification-context-badge');
-    const iconBox = banner.querySelector('.accordion-icon');
-    const summary = banner.querySelector(`.${classes.summaryText}`);
-    const copyBtn = banner.querySelector('.accordion-copy-btn');
-    const dismiss = banner.querySelector('.accordion-dismiss-btn');
-    const listBox = banner.querySelector('.accordion-message-list');
-
     radio.name = `notif-group-${group.type}-${group.context}`;
-    const collapseTitle = banner.querySelector('.collapse-title');
-    eventHandlers.trackListener(collapseTitle, 'click', () => {
-      radio.checked = !radio.checked;
-      banner.classList.toggle('collapse-open', radio.checked);
-    }, {
-      description: 'Accordion Title Toggle'
-    });
+    radio.checked = true;
 
     ctxBadge.textContent = group.context;
     iconBox.innerHTML = getIconForType(group.type);
@@ -115,22 +102,15 @@ export function createGroupedNotificationHelper({
       eventHandlers.trackListener(radio, 'change', () => banner.classList.toggle('collapse-open', radio.checked), { description: 'Grp radio' }),
       eventHandlers.trackListener(copyBtn, 'click', () => {
         if (!_clipboard) return;
-        const originalIcon = copyBtn.innerHTML;
-        const checkIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true" class="inline-block align-text-bottom"><path d="M16.704 5.29a1 1 0 0 1 .007 1.414l-7 7a1 1 0 0 1-1.414 0l-3-3a1 1 0 1 1 1.414-1.414L9 11.586l6.293-6.293a1 1 0 0 1 1.414-.003z"/></svg>';
-        _clipboard.writeText(group.messages.join('\n'))
-          .then(() => {
-            copyBtn.innerHTML = checkIcon;
-            copyBtn.classList.add('text-success');
-            setTimeout(() => {
-              copyBtn.innerHTML = originalIcon;
-              copyBtn.classList.remove('text-success');
-            }, 1200);
-          })
-          .catch(err => console.error('[GroupedCopy] Clipboard failed:', err));
-      }, { description: 'Grouped Notification Copy' }),
+        // Last-resort dev fallback: show error in console if copy fails
+        _clipboard.writeText(group.messages.join('\n')).catch(e =>
+          console.error('[GroupedHelper] (fallback) Clipboard write failure:', e)
+        );
+      }, { description: 'Grp copy' }),
       eventHandlers.trackListener(dismiss, 'click', () => hideGroupedNotification(group.notificationId), { description: 'Grp dismiss' }),
     ];
 
+    container.appendChild(banner);
     group.element = banner;
   }
 
@@ -154,7 +134,7 @@ export function createGroupedNotificationHelper({
 
     // new bucket
     const notificationId = `group-${key}-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
-    group = { type, context, messages: [message], notificationId, registeredEvents: [], element: null };
+    group = { type, context, messages: [message], notificationId, registerEvents: [], element: null };
     groupedNotifications.set(key, group);
     renderGroupBanner(group, container);
     return notificationId;
@@ -186,7 +166,7 @@ export function createGroupedNotificationHelper({
     groupedNotifications,
     getGroupKey,
     destroy,
-    _setNotificationHandler: h => (notificationHandler = h),
+    _setNotificationHandler: () => {},
   };
 }
 

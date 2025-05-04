@@ -692,7 +692,7 @@ class ProjectModal {
 
       this.closeModal();
       this._notify('success', projectId ? 'Project updated' : 'Project created');
-    } catch (error) {
+    } catch {
       this._notify('error', 'Failed to save project');
     } finally {
       const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
