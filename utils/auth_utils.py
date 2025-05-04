@@ -16,7 +16,7 @@ if not getattr(settings, 'DEBUG', False):
     raise RuntimeError("INSECURE module loaded in non-debug/prod environment! Use only in local dev/testing.")
 
 import jwt
-from jwt import PyJWTError, ExpiredSignatureError, InvalidTokenError
+from jwt import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, status
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ import secrets
 # -----------------------------------------------------------------------------
 # JWT Configuration
 # -----------------------------------------------------------------------------
-JWT_SECRET: str = getattr(settings, "JWT_SECRET", None)
+JWT_SECRET: Optional[str] = getattr(settings, "JWT_SECRET", None)
 if not JWT_SECRET:
     if getattr(settings, "ENV", "development").lower() == "production":
         raise RuntimeError("JWT_SECRET must be set in production environment")
@@ -50,6 +50,8 @@ def create_access_token(data: dict) -> str:
     Encodes a JWT token from the given payload `data`.
     Assumes 'data' already contains all necessary claims, including 'exp'.
     """
+    if JWT_SECRET is None:
+        raise RuntimeError("JWT_SECRET is not set. Cannot encode token.")
     try:
         token = jwt.encode(
             data,
@@ -88,6 +90,8 @@ async def verify_token(
     if db_session is None:
         raise RuntimeError("Database session required for verify_token")
 
+    if JWT_SECRET is None:
+        raise RuntimeError("JWT_SECRET is not set. Cannot decode token.")
     try:
         decoded = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         token_id = decoded.get("jti")
