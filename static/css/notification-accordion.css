@@ -367,11 +367,12 @@
 
 /* Theming variables (optional but recommended) */
 :root{
-  --notif-group-bg: theme(colors.info);
+  /* Notification group banner background: info color (light mode), readable aqua for dark mode */
+  --notif-group-bg: #83eaff;      /* rgb(131, 234, 255) DaisyUI info default */
   --notif-dim-opacity: .6;
 }
 html[data-theme="dark"]{
-  --notif-group-bg: theme(colors.sky.700 / 1); /* darker aqua */
+  --notif-group-bg: #226b81;      /* deep aqua for dark, visually accessible */
 }
 
 .accordion-banner.grouped{
