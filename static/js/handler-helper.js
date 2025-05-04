@@ -79,16 +79,21 @@ export function createGroupedNotificationHelper({
   function renderGroupBanner(group, container) {
     const clone = groupTemplate.content.cloneNode(true);
     const banner = clone.querySelector(`.${classes.banner.split(' ')[0]}`);
-    const radio = clone.querySelector('.group-radio');
-    const ctxBadge = clone.querySelector('.notification-context-badge');
-    const iconBox = clone.querySelector('.accordion-icon');
-    const summary = clone.querySelector(`.${classes.summaryText}`);
-    const copyBtn = clone.querySelector('.accordion-copy-btn');
-    const dismiss = clone.querySelector('.accordion-dismiss-btn');
-    const listBox = clone.querySelector('.accordion-message-list');
 
     banner.id = group.notificationId;
     banner.classList.add(`alert-${group.type}`, `notification-${group.type}`);
+
+    container.appendChild(banner); // Append first to DOM
+
+    // Now select elements from live DOM
+    const radio = banner.querySelector('.group-radio');
+    const ctxBadge = banner.querySelector('.notification-context-badge');
+    const iconBox = banner.querySelector('.accordion-icon');
+    const summary = banner.querySelector(`.${classes.summaryText}`);
+    const copyBtn = banner.querySelector('.accordion-copy-btn');
+    const dismiss = banner.querySelector('.accordion-dismiss-btn');
+    const listBox = banner.querySelector('.accordion-message-list');
+
     radio.name = `notif-group-${group.type}-${group.context}`;
     radio.checked = true;
 
@@ -109,7 +114,6 @@ export function createGroupedNotificationHelper({
       eventHandlers.trackListener(dismiss, 'click', () => hideGroupedNotification(group.notificationId), { description: 'Grp dismiss' }),
     ];
 
-    container.appendChild(banner);
     group.element = banner;
   }
 
