@@ -49,6 +49,8 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
   auth = auth || resolveDep('auth');
   projectManager = projectManager || resolveDep('projectManager');
   modalManager = modalManager || resolveDep('modalManager');
+  // Try to DI a notify util
+  let notify = resolveDep('notify');
 
   // Storage utility: DI or fallback to window.localStorage
   const storageBackend = storage ||
@@ -115,14 +117,18 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
           // Don't return the promise directly, wrap in a proper error handler
           // to prevent "message channel closed" errors
           result.catch(error => {
-            if (app && typeof app.showNotification === "function") {
+            if (notify) {
+              notify.error(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
+            } else if (app && typeof app.showNotification === "function") {
               app.showNotification(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
             } else if (typeof console !== "undefined") {
               // Last-resort fallback for dev debugging only
               console.error(`[EventHandler] (fallback) Async error in ${type} event handler:`, error);
             }
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-              if (app && typeof app.showNotification === "function") {
+              if (notify) {
+                notify.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
+              } else if (app && typeof app.showNotification === "function") {
                 app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
               } else if (typeof console !== "undefined") {
                 // Last-resort fallback for dev debugging only
@@ -133,7 +139,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
             const duration = performance.now() - startTime;
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
-              if (app && typeof app.showNotification === "function") {
+              if (notify) {
+                notify.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
+              } else if (app && typeof app.showNotification === "function") {
                 app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
               } else if (typeof console !== "undefined") {
                 // Last-resort fallback for dev debugging only
@@ -151,24 +159,30 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         const duration = performance.now() - startTime;
         const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
         if (duration > threshold) {
-          if (app && typeof app.showNotification === "function") {
+          if (notify) {
+            notify.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
+          } else if (app && typeof app.showNotification === "function") {
             app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
-            } else if (typeof console !== "undefined") {
-              // Last-resort fallback for dev debugging only
-              console.warn(`[EventHandler] (fallback) Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
+          } else if (typeof console !== "undefined") {
+            // Last-resort fallback for dev debugging only
+            console.warn(`[EventHandler] (fallback) Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
           }
         }
 
         return result;
       } catch (error) {
-        if (app && typeof app.showNotification === "function") {
+        if (notify) {
+          notify.error(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
+        } else if (app && typeof app.showNotification === "function") {
           app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
         } else if (typeof console !== "undefined") {
           // Last-resort fallback for dev debugging only
           console.error(`[EventHandler] (fallback) Error in ${type} event handler:`, error);
         }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-          if (app && typeof app.showNotification === "function") {
+          if (notify) {
+            notify.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
+          } else if (app && typeof app.showNotification === "function") {
             app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
           } else if (typeof console !== "undefined") {
             // Last-resort fallback for dev debugging only
@@ -235,7 +249,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         );
         trackedListeners.delete(listener);
       } catch (error) {
-        if (app && typeof app.showNotification === "function") {
+        if (notify) {
+          notify.warn(`Error removing ${listener.type} listener: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
+        } else if (app && typeof app.showNotification === "function") {
           app.showNotification(`Error removing ${listener.type} listener: ${error && error.message ? error.message : error}`, "warning");
         } else if (typeof console !== "undefined") {
           // Last-resort fallback for dev debugging only

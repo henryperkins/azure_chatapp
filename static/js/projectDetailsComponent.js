@@ -1,36 +1,13 @@
 /**
- * projectDetailsComponent.js                     — DI-strict, no window.*, no console.*
+ * projectDetailsComponent.js — DI-strict (no window.*, no direct console.* or alert)
  *
- * ALL user/system notification, error, warning, or info banners must be routed
- * via the DI notification utility (`notify` injected at construction). Never use
- * direct `console` or `alert` for any user/system feedback. For dev/debug logs, use
- * only DI logging utilities (never for user alerts).
- *
- * For architectural conventions, see notification-system.md and custominstructions.md.
- *
- * Component for displaying project details, files, conversations, artifacts and
- * knowledge-base data. -- EVERY dependency is passed in, nothing global.
- *
- * Required constructor deps  ( = must supply )
- * ----------------------------------------------------------
- *   app                    : core app module (utils, validators, showNotification)
- *   projectManager         : backend operations + event emitters
- *   eventHandlers          : centralised listener registry   (trackListener / delegate / cleanupListeners)
- *   modalManager           : confirmations / modals
- *   FileUploadComponentClass : class/factory for upload UI
- *   router                 : { getURL():string, navigate(url:string):void }
- *   notify                 : DI notification util: success/warn/error/info/confirm
- *   sanitizer              : { sanitize(html):string }      ( for ALL innerHTML )
- *
- * Optional constructor deps
- * ----------------------------------------------------------
- *   knowledgeBaseComponent : KB UI module
- *   modelConfig            : chat-model quick-config panel
- *   onBack                 : callback for back button
+ * This version:
+ *  - Injects a `chatManager` instead of referencing window.DependencySystem.
+ *  - Injects a `domAPI` instead of using document.* directly.
  */
 
 export class ProjectDetailsComponent {
-    constructor({
+  constructor({
     onBack,
     app,
     projectManager,
@@ -41,86 +18,119 @@ export class ProjectDetailsComponent {
     notify,
     sanitizer,
     knowledgeBaseComponent = null,
-    modelConfig = null
+    modelConfig = null,
+
+    // NEW Dependencies for strict DI:
+    chatManager = null,
+    domAPI = null,
   } = {}) {
-    /* ------------------------------------------------------  dependency gate */
+    /* --- 1) Validate Dependencies --- */
     if (
-      !app || !projectManager || !eventHandlers ||
-      !modalManager || !FileUploadComponentClass ||
-      !router || !notify || !sanitizer
+      !app ||
+      !projectManager ||
+      !eventHandlers ||
+      !modalManager ||
+      !FileUploadComponentClass ||
+      !router ||
+      !notify ||
+      !sanitizer
     ) {
       throw new Error(
-        "[ProjectDetailsComponent] Missing required dependencies " +
+        "[ProjectDetailsComponent] Missing required constructor deps: " +
         "(app, projectManager, eventHandlers, modalManager, FileUploadComponentClass, " +
         "router, notify, sanitizer)."
       );
     }
+    // Ensure domAPI has minimal expected API
+    if (!domAPI || typeof domAPI.getElementById !== "function" || typeof domAPI.dispatchEvent !== "function") {
+      throw new Error(
+        "[ProjectDetailsComponent] Requires domAPI with getElementById(...) & dispatchEvent(...)."
+      );
+    }
 
-    /* ------------------------------------------------------  store deps      */
+    /* --- 2) Store Dependencies --- */
+    this.onBack = onBack || (() => {
+      notify.warn("[ProjectDetailsComponent] onBack callback not provided.", {
+        context: "ProjectDetailsComponent",
+      });
+    });
     this.app = app;
     this.projectManager = projectManager;
     this.eventHandlers = eventHandlers;
     this.modalManager = modalManager;
     this.FileUploadComponentClass = FileUploadComponentClass;
     this.router = router;
-    this._rawNotify = notify; // save the root adapter
-    this.notification = {
-      log: (...args) => notify.info?.(
-        `[ProjectDetailsComponent] ${args[0]}`,
-        { group: true, context: "ProjectDetailsComponent" }
-      ),
-      warn: (...args) => notify.warn?.(
-        `[ProjectDetailsComponent] ${args[0]}`,
-        { group: true, context: "ProjectDetailsComponent" }
-      ),
-      error: (...args) => notify.error?.(
-        `[ProjectDetailsComponent] ${args[0]}`,
-        { group: true, context: "ProjectDetailsComponent" }
-      ),
-      confirm: (...args) => notify.confirm?.(...args)
-    };
+    this._rawNotify = notify;
     this.sanitizer = sanitizer;
     this.knowledgeBaseComponent = knowledgeBaseComponent;
     this.modelConfig = modelConfig;
+    this.domAPI = domAPI;          // <---- Replaces direct document usage
+    this.chatManager = chatManager; // <---- Replaces window.DependencySystem for chat
 
-    /* ------------------------------------------------------  callbacks      */
-    this.onBack = onBack || (() => {
-      this.notification.warn("[ProjectDetailsComponent] onBack callback not provided.", { context: "ProjectDetailsComponent" });
-    });
+    /* DI-based notification facade */
+    this.notification = {
+      log: (...args) =>
+        notify.info?.(`[ProjectDetailsComponent] ${args[0]}`, {
+          group: true,
+          context: "projectDetailsComponent",
+        }),
+      warn: (...args) =>
+        notify.warn?.(`[ProjectDetailsComponent] ${args[0]}`, {
+          group: true,
+          context: "projectDetailsComponent",
+        }),
+      error: (...args) =>
+        notify.error?.(`[ProjectDetailsComponent] ${args[0]}`, {
+          group: true,
+          context: "projectDetailsComponent",
+        }),
+      confirm: (...args) => notify.confirm?.(...args),
+    };
 
-    /* ------------------------------------------------------  state + cache  */
+    /* --- 3) Internal State & Elements Map --- */
+    this.onBack = onBack;
     this.state = {
       currentProject: null,
       activeTab: "details",
       isLoading: Object.create(null),
-      initialized: false
+      initialized: false,
     };
-
     this.fileConstants = {
       allowedExtensions: [
         ".txt", ".md", ".csv", ".json", ".pdf", ".doc", ".docx", ".py", ".js",
-        ".html", ".css", ".jpg", ".jpeg", ".png", ".gif", ".zip"
+        ".html", ".css", ".jpg", ".jpeg", ".png", ".gif", ".zip",
       ],
-      maxSizeMB: 30
+      maxSizeMB: 30,
     };
-
     this.elements = {
-      container: null, title: null, description: null, backBtn: null,
-      tabContainer: null, filesList: null, conversationsList: null,
-      artifactsList: null, tabContents: {}, loadingIndicators: {},
-      fileInput: null, uploadBtn: null, dragZone: null,
-      uploadProgress: null, progressBar: null, uploadStatus: null
+      container: null,
+      title: null,
+      description: null,
+      backBtn: null,
+      tabContainer: null,
+      filesList: null,
+      conversationsList: null,
+      artifactsList: null,
+      tabContents: {},
+      loadingIndicators: {},
+      fileInput: null,
+      uploadBtn: null,
+      dragZone: null,
+      uploadProgress: null,
+      progressBar: null,
+      uploadStatus: null,
     };
-
     this.fileUploadComponent = null;
   }
 
-  /* ========== INITIALISATION ================================================= */
+  /* ===================== INITIALIZATION ===================== */
 
   async initialize() {
-    // Note: Debug logging removed to adhere to no-console rule. Use notificationHandler if needed.
     if (this.state.initialized) {
-      this.notification.log("[ProjectDetailsComponent] Already initialized.", { context: "ProjectDetailsComponent" });
+      this.notification.log(
+        "[ProjectDetailsComponent] Already initialized.",
+        { context: "ProjectDetailsComponent" }
+      );
       this.app.showNotification(
         "Project Details view already initialized.",
         "info",
@@ -140,61 +150,66 @@ export class ProjectDetailsComponent {
         );
         throw new Error("Required DOM nodes missing in #projectDetailsView.");
       }
-      this.notification.log("[ProjectDetailsComponent] Found required elements.", { context: "ProjectDetailsComponent" });
+      this.notification.log(
+        "[ProjectDetailsComponent] Found required elements.",
+        { context: "ProjectDetailsComponent" }
+      );
       this._bindCoreEvents();
       this._initSubComponents();
+
       this.state.initialized = true;
-      this.notification.log("[ProjectDetailsComponent] Initialised.");
-      this.app.showNotification(
-        "Project Details module initialized.",
-        "success",
-        3000,
-        { group: true, context: "projectDetailsComponent" }
-      );
-      // Internal ready flag (do NOT emit ready yet: only set UI half of readiness)
+      this.notification.log("[ProjectDetailsComponent] Initialized.");
+      this.app.showNotification("Project Details module initialized.", "success", 3000, {
+        group: true,
+        context: "projectDetailsComponent",
+      });
+      // Mark UI as ready
       this._uiReadyFlag = true;
       this._maybeEmitReady();
-
       return true;
     } catch (err) {
-      this.notification.error("[ProjectDetailsComponent] Init failed:", err, { context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] Init failed:", err, {
+        context: "ProjectDetailsComponent",
+      });
       this.notification.error("Project Details failed to initialise.");
-      this.app.showNotification(
-        "Project Details failed to initialize.",
-        "error",
-        0,
-        { group: true, context: "projectDetailsComponent" }
-      );
+      this.app.showNotification("Project Details failed to initialize.", "error", 0, {
+        group: true,
+        context: "projectDetailsComponent",
+      });
       return false;
     }
   }
 
-  /* ========== DOM HELPER UTILS ============================================== */
+  /* ===================== DOM HELPERS ===================== */
 
-  /** always sanitise anything shoved into innerHTML */
   _html(el, raw) {
     el.innerHTML = this.sanitizer.sanitize(raw);
   }
-
   _clear(el) {
     el.innerHTML = "";
   }
 
-  /* ========== DOM QUERY ===================================================== */
+  /* ===================== DOM QUERY (via domAPI) ===================== */
 
   _findElements() {
-    const $ = (sel) => this.elements.container.querySelector(sel);
-
-    this.elements.container = document.getElementById("projectDetailsView");
+    // Instead of document.getElementById(...), we use this.domAPI:
+    this.elements.container = this.domAPI.getElementById("projectDetailsView");
     if (!this.elements.container) {
-      this.notification.error("[ProjectDetailsComponent] #projectDetailsView not found", { context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] #projectDetailsView not found", {
+        context: "ProjectDetailsComponent",
+      });
       return false;
     }
+
+    // Helper to query inside container:
+    const $ = (sel) => this.elements.container.querySelector(sel);
 
     this.elements.title = $("#projectTitle");
     this.elements.description = $("#projectDescription");
     this.elements.backBtn = $("#backToProjectsBtn");
-    this.elements.tabContainer = this.elements.container.querySelector('.tabs[role="tablist"]');
+    this.elements.tabContainer = this.elements.container.querySelector(
+      '.tabs[role="tablist"]'
+    );
 
     this.elements.filesList = $("#projectFilesList");
     this.elements.conversationsList = $("#projectConversationsList");
@@ -206,14 +221,14 @@ export class ProjectDetailsComponent {
       knowledge: $("#knowledgeTab"),
       conversations: $("#conversationsTab"),
       artifacts: $("#artifactsTab"),
-      chat: $("#chatTab")
+      chat: $("#chatTab"),
     };
 
     this.elements.loadingIndicators = {
       files: $("#filesLoadingIndicator"),
       conversations: $("#conversationsLoadingIndicator"),
       artifacts: $("#artifactsLoadingIndicator"),
-      stats: $("#statsLoadingIndicator")
+      stats: $("#statsLoadingIndicator"),
     };
 
     this.elements.fileInput = $("#fileInput");
@@ -223,10 +238,14 @@ export class ProjectDetailsComponent {
     this.elements.progressBar = $("#fileProgressBar");
     this.elements.uploadStatus = $("#uploadStatus");
 
-    return !!(this.elements.title && this.elements.backBtn && this.elements.tabContainer);
+    return !!(
+      this.elements.title &&
+      this.elements.backBtn &&
+      this.elements.tabContainer
+    );
   }
 
-  /* ========== EVENT BINDINGS =============================================== */
+  /* ===================== EVENT BINDINGS ===================== */
 
   _bindCoreEvents() {
     /* back-button */
@@ -255,8 +274,10 @@ export class ProjectDetailsComponent {
       );
     }
 
-    /* "New chat" button (starts disabled until load-complete) */
-    const newChatBtn = this.elements.container.querySelector("#projectNewConversationBtn");
+    /* "New chat" button */
+    const newChatBtn = this.elements.container.querySelector(
+      "#projectNewConversationBtn"
+    );
     if (newChatBtn) {
       newChatBtn.disabled = true;
       newChatBtn.classList.add("btn-disabled");
@@ -268,102 +289,106 @@ export class ProjectDetailsComponent {
       );
     }
 
-    /* ------------- project-manager → UI events -------------- */
-    const on = (evt, cb, desc) =>
-      this.eventHandlers.trackListener(document, evt, cb, { description: desc });
+    /* ---- projectManager → UI events (formerly on document) ---- */
+    const onGlobalEvent = (evt, cb, desc) =>
+      this.eventHandlers.trackListener(this.domAPI, evt, cb, { description: desc });
 
-    on(
-      "projectConversationsLoaded",
-      (e) => {
-        this.renderConversations(e.detail?.conversations || []);
-        document.dispatchEvent(
-          new CustomEvent("projectConversationsRendered", { detail: { projectId: e.detail?.projectId } })
-        );
-      },
-      "PD_ConversationsLoaded"
-    );
+    onGlobalEvent("projectConversationsLoaded", (e) => {
+      this.renderConversations(e.detail?.conversations || []);
+      // dispatch a new event via domAPI
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectConversationsRendered", {
+          detail: { projectId: e.detail?.projectId },
+        })
+      );
+    }, "PD_ConversationsLoaded");
 
-    on(
-      "projectFilesLoaded",
-      (e) => {
-        this.renderFiles(e.detail?.files || []);
-        document.dispatchEvent(
-          new CustomEvent("projectFilesRendered", { detail: { projectId: e.detail?.projectId } })
-        );
-      },
-      "PD_FilesLoaded"
-    );
+    onGlobalEvent("projectFilesLoaded", (e) => {
+      this.renderFiles(e.detail?.files || []);
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectFilesRendered", {
+          detail: { projectId: e.detail?.projectId },
+        })
+      );
+    }, "PD_FilesLoaded");
 
-    on(
-      "projectArtifactsLoaded",
-      (e) => {
-        this.renderArtifacts(e.detail?.artifacts || []);
-        document.dispatchEvent(
-          new CustomEvent("projectArtifactsRendered", { detail: { projectId: e.detail?.projectId } })
-        );
-      },
-      "PD_ArtifactsLoaded"
-    );
+    onGlobalEvent("projectArtifactsLoaded", (e) => {
+      this.renderArtifacts(e.detail?.artifacts || []);
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectArtifactsRendered", {
+          detail: { projectId: e.detail?.projectId },
+        })
+      );
+    }, "PD_ArtifactsLoaded");
 
-    on(
-      "projectStatsLoaded",
-      (e) => {
-        this.renderStats(e.detail);
-        document.dispatchEvent(
-          new CustomEvent("projectStatsRendered", { detail: { projectId: e.detail?.projectId } })
-        );
-      },
-      "PD_StatsLoaded"
-    );
+    onGlobalEvent("projectStatsLoaded", (e) => {
+      this.renderStats(e.detail);
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectStatsRendered", {
+          detail: { projectId: e.detail?.projectId },
+        })
+      );
+    }, "PD_StatsLoaded");
 
-    on(
-      "projectKnowledgeBaseLoaded",
-      (e) => {
-        this.knowledgeBaseComponent?.renderKnowledgeBaseInfo?.(
-          e.detail?.knowledgeBase,
-          e.detail?.projectId
-        );
-        document.dispatchEvent(
-          new CustomEvent("projectKnowledgeBaseRendered", { detail: { projectId: e.detail?.projectId } })
-        );
-      },
-      "PD_KnowledgeLoaded"
-    );
+    onGlobalEvent("projectKnowledgeBaseLoaded", (e) => {
+      this.knowledgeBaseComponent?.renderKnowledgeBaseInfo?.(
+        e.detail?.knowledgeBase,
+        e.detail?.projectId
+      );
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectKnowledgeBaseRendered", {
+          detail: { projectId: e.detail?.projectId },
+        })
+      );
+    }, "PD_KnowledgeLoaded");
 
-    on(
-      "projectDetailsFullyLoaded",
-      (e) => {
-        this.notification.log(`[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded.`);
-        const newChat = this.elements.container.querySelector("#projectNewConversationBtn");
-        if (newChat) {
-          newChat.disabled = false;
-          newChat.classList.remove("btn-disabled");
-        }
-      },
-      "PD_FullyLoaded"
-    );
+    onGlobalEvent("projectDetailsFullyLoaded", (e) => {
+      this.notification.log(
+        `[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded.`,
+        { context: "ProjectDetailsComponent" }
+      );
+      const newChat = this.elements.container.querySelector(
+        "#projectNewConversationBtn"
+      );
+      if (newChat) {
+        newChat.disabled = false;
+        newChat.classList.remove("btn-disabled");
+      }
+    }, "PD_FullyLoaded");
   }
 
-  /* ========== SUB-COMPONENTS ============================================== */
+  /* ===================== SUB-COMPONENT INIT ===================== */
 
   _initSubComponents() {
     if (!this.fileUploadComponent && this.FileUploadComponentClass) {
       const els = this.elements;
       const ready =
-        els.fileInput && els.uploadBtn && els.dragZone &&
-        els.uploadProgress && els.progressBar && els.uploadStatus;
+        els.fileInput &&
+        els.uploadBtn &&
+        els.dragZone &&
+        els.uploadProgress &&
+        els.progressBar &&
+        els.uploadStatus;
 
       if (!ready) {
-        this.notification.warn("[ProjectDetailsComponent] FileUploadComponent DOM nodes missing.", { context: "ProjectDetailsComponent" });
+        this.notification.warn(
+          "[ProjectDetailsComponent] FileUploadComponent DOM nodes missing.",
+          { context: "ProjectDetailsComponent" }
+        );
         return;
       }
 
+      /* A specialized notify object for file uploads */
       const fileUploadNotify = {
-        log: (...args) => this._rawNotify.info?.(`[FileUploadComponent] ${args[0]}`),
-        warn: (...args) => this._rawNotify.warn?.(`[FileUploadComponent] ${args[0]}`),
-        error: (...args) => this._rawNotify.error?.(`[FileUploadComponent] ${args[0]}`),
+        log: (...args) =>
+          this._rawNotify.info?.(`[FileUploadComponent] ${args[0]}`),
+        warn: (...args) =>
+          this._rawNotify.warn?.(`[FileUploadComponent] ${args[0]}`),
+        error: (...args) =>
+          this._rawNotify.error?.(`[FileUploadComponent] ${args[0]}`),
         confirm: (...args) => this._rawNotify.confirm?.(...args),
-        success: (...args) => this._rawNotify.success?.(`[FileUploadComponent] ${args[0]}`)
+        success: (...args) =>
+          this._rawNotify.success?.(`[FileUploadComponent] ${args[0]}`),
       };
       this.fileUploadComponent = new this.FileUploadComponentClass({
         fileInput: els.fileInput,
@@ -379,91 +404,112 @@ export class ProjectDetailsComponent {
         onUploadComplete: () => {
           const id = this.state.currentProject?.id;
           if (id) this.projectManager.loadProjectFiles(id);
-        }
+        },
       });
 
       this.fileUploadComponent.initialize?.();
-      this.notification.log("[ProjectDetailsComponent] FileUploadComponent ready.", { context: "ProjectDetailsComponent" });
+      this.notification.log("[ProjectDetailsComponent] FileUploadComponent ready.", {
+        context: "ProjectDetailsComponent",
+      });
     }
   }
 
-  /* ========== PUBLIC API =================================================== */
+  /* ===================== PUBLIC API METHODS ===================== */
 
   show() {
     if (!this.state.initialized || !this.elements.container) {
-      this.notification.error("[ProjectDetailsComponent] show() before init.", { context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] show() before init.", {
+        context: "ProjectDetailsComponent",
+      });
       return;
     }
     this.elements.container.classList.remove("hidden");
     this.elements.container.setAttribute("aria-hidden", "false");
-      this.notification.log("[ProjectDetailsComponent] Shown.", { context: "ProjectDetailsComponent" });
+    this.notification.log("[ProjectDetailsComponent] Shown.", {
+      context: "ProjectDetailsComponent",
+    });
   }
 
   hide() {
     if (this.elements.container) {
       this.elements.container.classList.add("hidden");
       this.elements.container.setAttribute("aria-hidden", "true");
-      this.notification.log("[ProjectDetailsComponent] Hidden.", { context: "ProjectDetailsComponent" });
+      this.notification.log("[ProjectDetailsComponent] Hidden.", {
+        context: "ProjectDetailsComponent",
+      });
     }
   }
 
-  /** render top header + reset tab */
   renderProject(project) {
     if (!this.state.initialized) {
-      this.notification.error("[ProjectDetailsComponent] renderProject before init.", { context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] renderProject before init.", {
+        context: "ProjectDetailsComponent",
+      });
       return;
     }
     if (!project || !this.app.validateUUID(project.id)) {
-      this.notification.error("[ProjectDetailsComponent] Invalid project payload.", { context: "ProjectDetailsComponent" });
-      this.notify.error("Failed to load project details: Invalid or missing project ID.", { context: "projectDetailsComponent", group: true });
+      this.notification.error("[ProjectDetailsComponent] Invalid project payload.", {
+        context: "ProjectDetailsComponent",
+      });
+      this._rawNotify.error("Failed to load project details: invalid or missing project ID.", {
+        context: "projectDetailsComponent",
+        group: true
+      });
       this.onBack();
       return;
     }
 
-      this.notification.log(`[ProjectDetailsComponent] Render project ${project.id}`, { context: "ProjectDetailsComponent" });
+    this.notification.log(`[ProjectDetailsComponent] Render project ${project.id}`, {
+      context: "ProjectDetailsComponent",
+    });
     this.state.currentProject = project;
 
-    // Set/refresh which project id is ready for the event.
+    // Mark data as ready
     this._dataReadyProjectId = project.id;
     this._dataReadyFlag = true;
     this._maybeEmitReady();
 
-    /* update upload component */
+    // Set/refresh project ID in upload component
     this.fileUploadComponent?.setProjectId?.(project.id);
-
     /* header */
-    this.elements.title.textContent = project.title || project.name || "Untitled project";
+    this.elements.title.textContent =
+      project.title || project.name || "Untitled project";
     this.elements.description.textContent = project.description || "";
 
     this.switchTab("details");
     this.show();
   }
 
-  /** tab switcher */
   switchTab(tabName) {
     if (!this.state.initialized) {
-      this.notification.warn("[ProjectDetailsComponent] switchTab before init.", { context: "ProjectDetailsComponent" });
+      this.notification.warn("[ProjectDetailsComponent] switchTab before init.", {
+        context: "ProjectDetailsComponent",
+      });
       return;
     }
 
     const TABS = ["details", "files", "knowledge", "conversations", "artifacts"];
     if (!TABS.includes(tabName)) {
-      this.notification.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`, { context: "ProjectDetailsComponent" });
-      this.app.showNotification(
-        `Attempted to switch to invalid tab: ${tabName}`,
-        "warning",
-        5000,
-        { group: true, context: "projectDetailsComponent" }
+      this.notification.warn(
+        `[ProjectDetailsComponent] invalid tab "${tabName}".`,
+        { context: "ProjectDetailsComponent" }
       );
+      this.app.showNotification(`Attempted to switch to invalid tab: ${tabName}`, "warning", 5000, {
+        group: true,
+        context: "projectDetailsComponent",
+      });
       return;
     }
 
-    /* project check for data tabs */
     const pid = this.state.currentProject?.id;
-    const needsProject = ["files", "knowledge", "conversations", "artifacts", "chat"].includes(tabName);
-
+    const needsProject = ["files", "knowledge", "conversations", "artifacts", "chat"].includes(
+      tabName
+    );
     if (needsProject && !this.app.validateUUID(pid)) {
-      this.notification.error(`[ProjectDetailsComponent] tab "${tabName}" needs valid project.`, { context: "ProjectDetailsComponent" });
+      this.notification.error(
+        `[ProjectDetailsComponent] tab "${tabName}" needs valid project.`,
+        { context: "ProjectDetailsComponent" }
+      );
       this.app.showNotification(
         "Please select a valid project before accessing this tab.",
         "warning",
@@ -473,19 +519,19 @@ export class ProjectDetailsComponent {
       return;
     }
 
-      this.notification.log(`[ProjectDetailsComponent] tab => ${tabName}`, { context: "ProjectDetailsComponent" });
+    this.notification.log(`[ProjectDetailsComponent] tab => ${tabName}`, {
+      context: "ProjectDetailsComponent",
+    });
     this.state.activeTab = tabName;
-    this.app.showNotification(
-      `Switched to "${tabName}" tab.`,
-      "info",
-      2500,
-      { group: true, context: "projectDetailsComponent" }
-    );
+    this.app.showNotification(`Switched to "${tabName}" tab.`, "info", 2500, {
+      group: true,
+      context: "projectDetailsComponent",
+    });
 
-    /* aria & visual */
+    /* aria & visual changes */
     this.elements.tabContainer
       ?.querySelectorAll(".project-tab-btn")
-      .forEach(btn => {
+      .forEach((btn) => {
         const active = btn.dataset.tab === tabName;
         btn.classList.toggle("tab-active", active);
         btn.setAttribute("aria-selected", active ? "true" : "false");
@@ -498,29 +544,37 @@ export class ProjectDetailsComponent {
     /* lazy load */
     this._loadTabContent(tabName);
 
-    // ----- ChatManager initialization for conversations tab -----
+    // Instead of window.DependencySystem?.modules?.get('chatManager'), we rely on injected this.chatManager:
     if (tabName === "conversations") {
-      const chatManager = window.DependencySystem?.modules?.get('chatManager');
-      if (chatManager && typeof chatManager.initialize === "function") {
-        chatManager.initialize({
-          projectId: this.state.currentProject?.id,
-          containerSelector: "#projectChatUI",
-          messageContainerSelector: "#projectChatMessages",
-          inputSelector: "#projectChatInput",
-          sendButtonSelector: "#projectChatSendBtn"
-        }).catch((err) => {
-          this.notification.error("[ProjectDetailsComponent] Failed to initialize chatManager for conversations tab:", err, { context: "ProjectDetailsComponent" });
-          this.app.showNotification(
-            "Unable to initialize chat manager for Conversations tab.",
-            "error",
-            0,
-            { group: true, context: "projectDetailsComponent" }
-          );
-        });
+      if (this.chatManager && typeof this.chatManager.initialize === "function") {
+        this.chatManager
+          .initialize({
+            projectId: this.state.currentProject.id,
+            containerSelector: "#projectChatUI",
+            messageContainerSelector: "#projectChatMessages",
+            inputSelector: "#projectChatInput",
+            sendButtonSelector: "#projectChatSendBtn",
+          })
+          .catch((err) => {
+            this.notification.error(
+              "[ProjectDetailsComponent] Failed to initialize chatManager for conversations tab:",
+              err,
+              { context: "ProjectDetailsComponent" }
+            );
+            this.app.showNotification(
+              "Unable to initialize chat manager for Conversations tab.",
+              "error",
+              0,
+              { group: true, context: "projectDetailsComponent" }
+            );
+          });
       } else {
-        this.notification.error("[ProjectDetailsComponent] chatManager DI missing or invalid during conversations tab init.", { context: "ProjectDetailsComponent" });
+        this.notification.error(
+          "[ProjectDetailsComponent] chatManager DI missing or invalid for conversations tab init.",
+          { context: "ProjectDetailsComponent" }
+        );
         this.app.showNotification(
-          "Chat functionality is currently unavailable due to missing dependencies.",
+          "Chat functionality unavailable due to missing dependencies.",
           "error",
           0,
           { group: true, context: "projectDetailsComponent" }
@@ -529,10 +583,7 @@ export class ProjectDetailsComponent {
     }
   }
 
-  /**
-   * Internal: Fires "projectDetailsReady" when BOTH UI and data are ready.
-   * Ensures only fires once per project being shown.
-   */
+  /* Fires "projectDetailsReady" once UI + Data are both loaded. */
   _maybeEmitReady() {
     if (
       this.state.initialized &&
@@ -541,27 +592,39 @@ export class ProjectDetailsComponent {
       this.state.currentProject &&
       this.state.currentProject.id
     ) {
-      // Prevent duplicate for same project
       if (this._lastReadyEmittedId === this.state.currentProject.id) return;
       this._lastReadyEmittedId = this.state.currentProject.id;
+
       const event = new CustomEvent("projectDetailsReady", {
         detail: {
           project: this.state.currentProject,
-          container: this.elements.container
-        }
+          container: this.elements.container,
+        },
       });
-      document.dispatchEvent(event);
-      this.notification.log(`[ProjectDetailsComponent] Dispatched projectDetailsReady for ${this.state.currentProject.id}`, { context: "ProjectDetailsComponent" });
+      // Use domAPI for dispatching
+      this.domAPI.dispatchEvent(event);
+
+      this.notification.log(
+        `[ProjectDetailsComponent] Dispatched projectDetailsReady for ${this.state.currentProject.id}`,
+        { context: "ProjectDetailsComponent" }
+      );
     }
   }
 
-  /* ========== RENDERERS ==================================================== */
+  /* ===================== RENDERERS ===================== */
 
   renderFiles(files = []) {
     const c = this.elements.filesList;
     if (!c) {
-      this.notification.warn("[ProjectDetailsComponent] filesList node missing.", { context: "ProjectDetailsComponent" });
-      document.dispatchEvent(new CustomEvent("projectFilesRendered", { detail: { projectId: this.state.currentProject?.id } }));
+      this.notification.warn("[ProjectDetailsComponent] filesList node missing.", {
+        context: "ProjectDetailsComponent",
+      });
+      // dispatch an event anyway so external code won’t hang:
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectFilesRendered", {
+          detail: { projectId: this.state.currentProject?.id },
+        })
+      );
       return;
     }
 
@@ -569,64 +632,75 @@ export class ProjectDetailsComponent {
       this._html(
         c,
         `<div class="text-center py-8 text-base-content/60">
-           <p>No files uploaded yet.</p>
-           <p class="text-sm mt-1">Drag & drop or click Upload.</p>
-         </div>`
+          <p>No files uploaded yet.</p>
+          <p class="text-sm mt-1">Drag & drop or click Upload.</p>
+        </div>`
       );
       return;
     }
-
     this._clear(c);
-    files.forEach(f => c.appendChild(this._fileItem(f)));
+    files.forEach((f) => c.appendChild(this._fileItem(f)));
   }
 
   renderConversations(convs = []) {
     const c = this.elements.conversationsList;
     if (!c) {
-      this.notification.warn("[ProjectDetailsComponent] conversationsList missing.", { context: "ProjectDetailsComponent" });
-      document.dispatchEvent(new CustomEvent("projectConversationsRendered", { detail: { projectId: this.state.currentProject?.id } }));
+      this.notification.warn("[ProjectDetailsComponent] conversationsList missing.", {
+        context: "ProjectDetailsComponent",
+      });
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectConversationsRendered", {
+          detail: { projectId: this.state.currentProject?.id },
+        })
+      );
       return;
     }
-
     if (!convs.length) {
       this._html(
         c,
         `<div class="text-center py-8">
-           <p>No conversations yet. Click “New Chat”.</p>
-         </div>`
+          <p>No conversations yet. Click “New Chat”.</p>
+        </div>`
       );
       return;
     }
-
     this._clear(c);
-    convs.forEach(cv => c.appendChild(this._conversationItem(cv)));
+    convs.forEach((cv) => c.appendChild(this._conversationItem(cv)));
   }
 
   renderArtifacts(arts = []) {
     const c = this.elements.artifactsList;
     if (!c) {
-      this.notification.warn("[ProjectDetailsComponent] artifactsList missing.", { context: "ProjectDetailsComponent" });
-      document.dispatchEvent(new CustomEvent("projectArtifactsRendered", { detail: { projectId: this.state.currentProject?.id } }));
+      this.notification.warn("[ProjectDetailsComponent] artifactsList missing.", {
+        context: "ProjectDetailsComponent",
+      });
+      this.domAPI.dispatchEvent(
+        new CustomEvent("projectArtifactsRendered", {
+          detail: { projectId: this.state.currentProject?.id },
+        })
+      );
       return;
     }
-
     if (!arts.length) {
       this._html(c, `<div class="py-8 text-center">No artifacts yet.</div>`);
       return;
     }
     this._clear(c);
-    arts.forEach(a => c.appendChild(this._artifactItem(a)));
+    arts.forEach((a) => c.appendChild(this._artifactItem(a)));
   }
 
   renderStats(s = {}) {
     const fileCount = this.elements.container.querySelector('[data-stat="fileCount"]');
     const convoCount = this.elements.container.querySelector('[data-stat="conversationCount"]');
     if (fileCount && s.fileCount !== undefined) fileCount.textContent = s.fileCount;
-    if (convoCount && s.conversationCount !== undefined) convoCount.textContent = s.conversationCount;
-    this.notification.log("[ProjectDetailsComponent] stats updated", s, { context: "ProjectDetailsComponent" });
+    if (convoCount && s.conversationCount !== undefined)
+      convoCount.textContent = s.conversationCount;
+    this.notification.log("[ProjectDetailsComponent] stats updated", s, {
+      context: "ProjectDetailsComponent",
+    });
   }
 
-  /* ========== NEW CONVERSATION ============================================ */
+  /* ===================== CREATE NEW CONVERSATION ===================== */
 
   async createNewConversation() {
     const pid = this.state.currentProject?.id;
@@ -640,38 +714,50 @@ export class ProjectDetailsComponent {
     }
 
     try {
-      this.notification.log(`[ProjectDetailsComponent] create conversation @${pid}`, { context: "ProjectDetailsComponent" });
+      this.notification.log(
+        `[ProjectDetailsComponent] create conversation @${pid}`,
+        { context: "ProjectDetailsComponent" }
+      );
       const conv = await this.projectManager.createConversation(pid);
       if (conv?.id) {
-        this.app.showNotification(`Conversation “${conv.title || "Untitled"}” created.`, "success");
-        // Navigate to the new conversation instead of just refreshing the list
+        this.app.showNotification(
+          `Conversation “${conv.title || "Untitled"}” created.`,
+          "success"
+        );
+        // Open it immediately
         this._openConversation(conv);
-        // Optionally reload the list in the background if needed, but prioritize navigation
-        // this.projectManager.loadProjectConversations(pid);
       } else {
         throw new Error("Invalid response from createConversation");
       }
     } catch (err) {
-      this.notification.error("[ProjectDetailsComponent] createConversation failed:", err, { context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] createConversation failed:", err, {
+        context: "ProjectDetailsComponent",
+      });
       this.app.showNotification(`Failed: ${err.message}`, "error");
-      this.notify.error("Unable to create new conversation. " + (err.message || ""), { context: "projectDetailsComponent", group: true });
+      this._rawNotify.error("Unable to create new conversation. " + (err.message || ""), {
+        context: "projectDetailsComponent",
+        group: true,
+      });
     }
   }
 
-  /* ========== CLEANUP ====================================================== */
+  /* ===================== CLEANUP ===================== */
 
   destroy() {
-    this.notification.log("[ProjectDetailsComponent] destroy()", { context: "ProjectDetailsComponent" });
+    this.notification.log("[ProjectDetailsComponent] destroy()", {
+      context: "ProjectDetailsComponent",
+    });
+    // Remove all tracked listeners from container
     this.eventHandlers.cleanupListeners(this.elements.container);
-    this.eventHandlers.cleanupListeners(document);
+    // Remove all tracked listeners from "global doc" (now domAPI)
+    this.eventHandlers.cleanupListeners(this.domAPI);
     this.state.initialized = false;
   }
 
-  /* ========== TAB CONTENT LOADER ========================================== */
+  /* ===================== TAB CONTENT LOAD ===================== */
 
   _loadTabContent(tab) {
     const pid = this.state.currentProject?.id;
-
     const load = (section, fn) => this._withLoading(section, () => fn(pid));
 
     switch (tab) {
@@ -690,15 +776,17 @@ export class ProjectDetailsComponent {
       case "knowledge":
         if (this.knowledgeBaseComponent) {
           const kb = this.state.currentProject?.knowledge_base;
-          Promise.resolve().then(() => this.knowledgeBaseComponent.initialize(true, kb, pid))
-            .catch(e => this.notification.error("[ProjectDetailsComponent] KB init failed:", e));
+          Promise.resolve()
+            .then(() => this.knowledgeBaseComponent.initialize(true, kb, pid))
+            .catch((e) =>
+              this.notification.error("[ProjectDetailsComponent] KB init failed:", e)
+            );
         }
         break;
     }
 
-    /* lazy render modelConfig on conversations tab */
     if (tab === "conversations" && this.modelConfig?.renderQuickConfig) {
-      const panel = document.getElementById("modelConfigPanel");
+      const panel = this.elements.container.querySelector("#modelConfigPanel");
       if (panel) {
         Promise.resolve().then(() => {
           try {
@@ -706,13 +794,14 @@ export class ProjectDetailsComponent {
           } catch (e) {
             this.notification.error("[ProjectDetailsComponent] modelConfig render failed:", e);
           }
-          document.dispatchEvent(new CustomEvent("modelConfigRendered", { detail: { projectId: pid } }));
+          this.domAPI.dispatchEvent(
+            new CustomEvent("modelConfigRendered", { detail: { projectId: pid } })
+          );
         });
       }
     }
   }
 
-  /* show / hide indicator while loading */
   async _withLoading(section, asyncFn) {
     if (this.state.isLoading[section]) return;
     this.state.isLoading[section] = true;
@@ -720,8 +809,13 @@ export class ProjectDetailsComponent {
     try {
       await asyncFn();
     } catch (err) {
-      this.notification.error(`[ProjectDetailsComponent] load ${section} failed:`, err, { context: "ProjectDetailsComponent" });
-      this.notify.error(`Failed to load ${section}.`, { context: "projectDetailsComponent", group: true });
+      this.notification.error(`[ProjectDetailsComponent] load ${section} failed:`, err, {
+        context: "ProjectDetailsComponent",
+      });
+      this._rawNotify.error(`Failed to load ${section}.`, {
+        context: "projectDetailsComponent",
+        group: true,
+      });
     } finally {
       this.state.isLoading[section] = false;
       this._toggleIndicator(section, false);
@@ -732,18 +826,22 @@ export class ProjectDetailsComponent {
     this.elements.loadingIndicators[sec]?.classList.toggle("hidden", !show);
   }
 
-  /* ========== ITEM BUILDERS =============================================== */
+  /* ===================== ITEM BUILDERS ===================== */
 
   _fileItem(file) {
     const div = document.createElement("div");
-    div.className = "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-xs hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
+    div.className =
+      "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-xs " +
+      "hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.fileId = file.id;
 
-    const fmtB = this.app.formatBytes || (b => `${b} B`);
-    const fmtD = this.app.formatDate || (d => new Date(d).toLocaleDateString());
+    const fmtB = this.app.formatBytes || ((b) => `${b} B`);
+    const fmtD = this.app.formatDate || ((d) => new Date(d).toLocaleDateString());
     const icon = this.app.getFileTypeIcon?.(file.file_type) || "📄";
 
-    this._html(div, `
+    this._html(
+      div,
+      `
       <div class="flex items-center gap-3 min-w-0 flex-1">
         <span class="text-xl text-primary">${icon}</span>
         <div class="flex flex-col min-w-0 flex-1">
@@ -754,82 +852,119 @@ export class ProjectDetailsComponent {
         </div>
       </div>
       <div class="flex gap-2">
-        <button class="btn btn-ghost btn-xs btn-square text-info hover:bg-info/10" aria-label="Download" data-action="download">
+        <button class="btn btn-ghost btn-xs btn-square text-info hover:bg-info/10" data-action="download" aria-label="Download">
           ⬇
         </button>
-        <button class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10" aria-label="Delete" data-action="delete">
+        <button class="btn btn-ghost btn-xs btn-square text-error hover:bg-error/10" data-action="delete" aria-label="Delete">
           ✕
         </button>
-      </div>`);
+      </div>`
+    );
 
-    /* buttons */
     const [downloadBtn, deleteBtn] = div.querySelectorAll("button");
-    this.eventHandlers.trackListener(downloadBtn, "click", () => this._downloadFile(file.id, file.filename),
-      { description: `DownloadFile_${file.id}` });
-    this.eventHandlers.trackListener(deleteBtn, "click", () => this._confirmDeleteFile(file.id, file.filename),
-      { description: `DeleteFile_${file.id}` });
+    this.eventHandlers.trackListener(
+      downloadBtn,
+      "click",
+      () => this._downloadFile(file.id, file.filename),
+      { description: `DownloadFile_${file.id}` }
+    );
+    this.eventHandlers.trackListener(
+      deleteBtn,
+      "click",
+      () => this._confirmDeleteFile(file.id, file.filename),
+      { description: `DeleteFile_${file.id}` }
+    );
     return div;
   }
 
   _conversationItem(cv) {
     const div = document.createElement("div");
-    div.className = "p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors max-w-full w-full overflow-x-auto";
+    div.className =
+      "p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.conversationId = cv.id;
+    const fmt = this.app.formatDate || ((d) => new Date(d).toLocaleDateString());
 
-    const fmt = this.app.formatDate || (d => new Date(d).toLocaleDateString());
-
-    this._html(div, `
+    this._html(
+      div,
+      `
       <h4 class="font-medium truncate mb-1">${cv.title || "Untitled conversation"}</h4>
       <p class="text-sm text-base-content/70 truncate">${cv.last_message || "No messages yet"}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
         <span>${fmt(cv.updated_at)}</span>
         <span class="badge badge-ghost badge-sm">${cv.message_count || 0} msgs</span>
       </div>
-    `);
+      `
+    );
 
-    this.eventHandlers.trackListener(div, "click", () => this._openConversation(cv),
-      { description: `OpenConversation_${cv.id}` });
+    this.eventHandlers.trackListener(
+      div,
+      "click",
+      () => this._openConversation(cv),
+      { description: `OpenConversation_${cv.id}` }
+    );
     return div;
   }
 
   _artifactItem(art) {
     const div = document.createElement("div");
-    div.className = "p-3 border-b border-base-300 hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
+    div.className =
+      "p-3 border-b border-base-300 hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.artifactId = art.id;
+    const fmt = this.app.formatDate || ((d) => new Date(d).toLocaleDateString());
 
-    const fmt = this.app.formatDate || (d => new Date(d).toLocaleDateString());
-
-    this._html(div, `
+    this._html(
+      div,
+      `
       <div class="flex justify-between items-center">
         <h4 class="font-medium truncate">${art.name || "Untitled artifact"}</h4>
         <span class="text-xs text-base-content/60">${fmt(art.created_at)}</span>
       </div>
-      <p class="text-sm text-base-content/70 truncate mt-1">${art.description || art.type || "No description"}</p>
+      <p class="text-sm text-base-content/70 truncate mt-1">${art.description ||
+      art.type ||
+      "No description"}</p>
       <div class="mt-2">
         <button class="btn btn-xs btn-outline" data-action="download">Download</button>
       </div>
-    `);
+      `
+    );
 
     const btn = div.querySelector("[data-action=download]");
-    this.eventHandlers.trackListener(btn, "click", () => {
-      if (this.projectManager.downloadArtifact)
-        this.projectManager.downloadArtifact(this.state.currentProject.id, art.id)
-          .catch(e => {
-            this.notification.error("[ProjectDetailsComponent] artifact download failed:", e);
-            this.notify.error(`Download failed: ${e.message}`, { context: "projectDetailsComponent", group: true });
-          });
-      else
-        this.notification.error("[ProjectDetailsComponent] downloadArtifact not available.", { context: "ProjectDetailsComponent" });
-    }, { description: `DownloadArtifact_${art.id}` });
+    this.eventHandlers.trackListener(
+      btn,
+      "click",
+      () => {
+        if (this.projectManager.downloadArtifact) {
+          this.projectManager
+            .downloadArtifact(this.state.currentProject.id, art.id)
+            .catch((e) => {
+              this.notification.error("[ProjectDetailsComponent] artifact download failed:", e);
+              this._rawNotify.error(`Download failed: ${e.message}`, {
+                context: "projectDetailsComponent",
+                group: true,
+              });
+            });
+        } else {
+          this.notification.error(
+            "[ProjectDetailsComponent] downloadArtifact not available.",
+            { context: "ProjectDetailsComponent" }
+          );
+        }
+      },
+      { description: `DownloadArtifact_${art.id}` }
+    );
     return div;
   }
 
-  /* ========== FILE ACTIONS ================================================ */
+  /* ===================== FILE ACTIONS ===================== */
 
   _confirmDeleteFile(fileId, fileName) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
-      this.notification.error("[ProjectDetailsComponent] deleteFile invalid ids", { pid, fileId, context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] deleteFile invalid ids", {
+        pid,
+        fileId,
+        context: "ProjectDetailsComponent",
+      });
       return;
     }
     this.modalManager.confirmAction({
@@ -843,56 +978,90 @@ export class ProjectDetailsComponent {
           this.app.showNotification("File deleted.", "success");
           this.projectManager.loadProjectFiles(pid);
         } catch (e) {
-          this.notification.error("[ProjectDetailsComponent] deleteFile failed:", e, { context: "ProjectDetailsComponent" });
-          this.notify.error(`Delete failed: ${e.message}`, { context: "projectDetailsComponent", group: true });
+          this.notification.error("[ProjectDetailsComponent] deleteFile failed:", e, {
+            context: "ProjectDetailsComponent",
+          });
+          this._rawNotify.error(`Delete failed: ${e.message}`, {
+            context: "projectDetailsComponent",
+            group: true,
+          });
         }
-      }
+      },
     });
   }
 
   _downloadFile(fileId, fileName) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
-      this.notification.error("[ProjectDetailsComponent] downloadFile invalid ids", { pid, fileId, context: "ProjectDetailsComponent" });
+      this.notification.error("[ProjectDetailsComponent] downloadFile invalid ids", {
+        pid,
+        fileId,
+        context: "ProjectDetailsComponent",
+      });
       return;
     }
     if (!this.projectManager.downloadFile) {
-      this.notification.error("[ProjectDetailsComponent] downloadFile not implemented.", { context: "ProjectDetailsComponent" });
+      this.notification.error(
+        "[ProjectDetailsComponent] downloadFile not implemented.",
+        { context: "ProjectDetailsComponent" }
+      );
       return;
     }
-    this.projectManager.downloadFile(pid, fileId)
-      .catch(e => {
-        this.notification.error("[ProjectDetailsComponent] downloadFile failed:", e, { context: "ProjectDetailsComponent" });
+    this.projectManager
+      .downloadFile(pid, fileId)
+      .catch((e) => {
+        this.notification.error("[ProjectDetailsComponent] downloadFile failed:", e, {
+          context: "ProjectDetailsComponent",
+        });
         this.app.showNotification(`Download failed: ${e.message}`, "error");
       });
   }
 
-  /* ========== CONVERSATION NAV ============================================ */
+  /* ===================== CONVERSATION NAV ===================== */
 
   async _openConversation(cv) {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !cv?.id) {
-      this.notification.error("[ProjectDetailsComponent] openConversation invalid ids", { pid, cv, context: "ProjectDetailsComponent" });
-      this.notify.error("Invalid conversation.", { context: "projectDetailsComponent", group: true });
+      this.notification.error("[ProjectDetailsComponent] openConversation invalid ids", {
+        pid,
+        cv,
+        context: "ProjectDetailsComponent",
+      });
+      this._rawNotify.error("Invalid conversation.", {
+        context: "projectDetailsComponent",
+        group: true,
+      });
       return;
     }
-
     try {
-      // Fetch conversation details from backend to ensure validity
+      // Validate on backend
       const conversation = await this.projectManager.getConversation(cv.id);
-
-      // Add chatId param via router
+      // Add chatId param
       const url = new URL(this.router.getURL());
       url.searchParams.set("chatId", cv.id);
       this.router.navigate(url.toString());
 
-      this.notification.log(`[ProjectDetailsComponent] conversation ${cv.id} opened`, conversation, { context: "ProjectDetailsComponent" });
+      this.notification.log(
+        `[ProjectDetailsComponent] conversation ${cv.id} opened`,
+        conversation,
+        { context: "ProjectDetailsComponent" }
+      );
     } catch (error) {
-      this.notification.error("[ProjectDetailsComponent] Failed to fetch conversation:", error, { context: "ProjectDetailsComponent" });
-      this.notify.error("Failed to load conversation details.", { context: "projectDetailsComponent", group: true });
+      this.notification.error("[ProjectDetailsComponent] Failed to fetch conversation:", error, {
+        context: "ProjectDetailsComponent",
+      });
+      this._rawNotify.error("Failed to load conversation details.", {
+        context: "projectDetailsComponent",
+        group: true,
+      });
     }
   }
 }
 
-/* factory helper ⇒ keeps import ergonomics identical to previous version */
-export const createProjectDetailsComponent = (opts) => new ProjectDetailsComponent(opts);
+/**
+ * Factory helper, ensuring usage aligns with your "factory export" pattern.
+ * @param {Object} opts - All DI dependencies, plus { chatManager, domAPI } in this revised version.
+ * @returns {ProjectDetailsComponent}
+ */
+export const createProjectDetailsComponent = (opts) =>
+  new ProjectDetailsComponent(opts);

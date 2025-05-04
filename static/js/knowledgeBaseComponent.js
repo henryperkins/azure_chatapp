@@ -193,7 +193,12 @@ export function createKnowledgeBaseComponent(options = {}) {
       // Use only showNotification; remove direct alert/console
       this._notify = function(type, message) {
         if (this.showNotification) {
-          this.showNotification(message, type);
+          this.showNotification(
+            message,
+            type,
+            undefined,
+            { group: true, context: "knowledgeBaseComponent" }
+          );
         }
       };
 
