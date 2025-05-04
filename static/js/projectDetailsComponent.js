@@ -415,7 +415,7 @@ export class ProjectDetailsComponent {
     }
     if (!project || !this.app.validateUUID(project.id)) {
       this.notification.error("[ProjectDetailsComponent] Invalid project payload.", { context: "ProjectDetailsComponent" });
-      this.app.showNotification("Failed to load project details: Invalid or missing project ID.", "error");
+      this.notify.error("Failed to load project details: Invalid or missing project ID.", { context: "projectDetailsComponent", group: true });
       this.onBack();
       return;
     }
@@ -654,12 +654,7 @@ export class ProjectDetailsComponent {
     } catch (err) {
       this.notification.error("[ProjectDetailsComponent] createConversation failed:", err, { context: "ProjectDetailsComponent" });
       this.app.showNotification(`Failed: ${err.message}`, "error");
-      this.app.showNotification(
-        "Unable to create new conversation. " + (err.message || ""),
-        "error",
-        0,
-        { group: true, context: "projectDetailsComponent" }
-      );
+      this.notify.error("Unable to create new conversation. " + (err.message || ""), { context: "projectDetailsComponent", group: true });
     }
   }
 
@@ -726,7 +721,7 @@ export class ProjectDetailsComponent {
       await asyncFn();
     } catch (err) {
       this.notification.error(`[ProjectDetailsComponent] load ${section} failed:`, err, { context: "ProjectDetailsComponent" });
-      this.app.showNotification(`Failed to load ${section}.`, "error");
+      this.notify.error(`Failed to load ${section}.`, { context: "projectDetailsComponent", group: true });
     } finally {
       this.state.isLoading[section] = false;
       this._toggleIndicator(section, false);
@@ -821,7 +816,7 @@ export class ProjectDetailsComponent {
         this.projectManager.downloadArtifact(this.state.currentProject.id, art.id)
           .catch(e => {
             this.notification.error("[ProjectDetailsComponent] artifact download failed:", e);
-            this.app.showNotification(`Download failed: ${e.message}`, "error");
+            this.notify.error(`Download failed: ${e.message}`, { context: "projectDetailsComponent", group: true });
           });
       else
         this.notification.error("[ProjectDetailsComponent] downloadArtifact not available.", { context: "ProjectDetailsComponent" });
@@ -849,7 +844,7 @@ export class ProjectDetailsComponent {
           this.projectManager.loadProjectFiles(pid);
         } catch (e) {
           this.notification.error("[ProjectDetailsComponent] deleteFile failed:", e, { context: "ProjectDetailsComponent" });
-          this.app.showNotification(`Delete failed: ${e.message}`, "error");
+          this.notify.error(`Delete failed: ${e.message}`, { context: "projectDetailsComponent", group: true });
         }
       }
     });
@@ -878,7 +873,7 @@ export class ProjectDetailsComponent {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid) || !cv?.id) {
       this.notification.error("[ProjectDetailsComponent] openConversation invalid ids", { pid, cv, context: "ProjectDetailsComponent" });
-      this.app.showNotification("Invalid conversation.", "error");
+      this.notify.error("Invalid conversation.", { context: "projectDetailsComponent", group: true });
       return;
     }
 
@@ -894,7 +889,7 @@ export class ProjectDetailsComponent {
       this.notification.log(`[ProjectDetailsComponent] conversation ${cv.id} opened`, conversation, { context: "ProjectDetailsComponent" });
     } catch (error) {
       this.notification.error("[ProjectDetailsComponent] Failed to fetch conversation:", error, { context: "ProjectDetailsComponent" });
-      this.app.showNotification("Failed to load conversation details.", "error");
+      this.notify.error("Failed to load conversation details.", { context: "projectDetailsComponent", group: true });
     }
   }
 }

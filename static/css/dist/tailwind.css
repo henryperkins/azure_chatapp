@@ -3738,9 +3738,6 @@
   .top-3 {
     top: calc(var(--spacing) * 3);
   }
-  .top-6 {
-    top: calc(var(--spacing) * 6);
-  }
   .right-0 {
     right: calc(var(--spacing) * 0);
   }
@@ -3749,9 +3746,6 @@
   }
   .right-3 {
     right: calc(var(--spacing) * 3);
-  }
-  .right-6 {
-    right: calc(var(--spacing) * 6);
   }
   .dock-sm {
     height: calc(0.25rem * 14);
@@ -4139,9 +4133,6 @@
   }
   .z-\[102\] {
     z-index: 102;
-  }
-  .z-\[1200\] {
-    z-index: 1200;
   }
   .tab-content {
     order: var(--tabcontent-order);
@@ -5654,9 +5645,6 @@
   .max-h-\[90vh\] {
     max-height: 90vh;
   }
-  .max-h-\[96vh\] {
-    max-height: 96vh;
-  }
   .min-h-0 {
     min-height: calc(var(--spacing) * 0);
   }
@@ -6083,9 +6071,6 @@
   .items-center {
     align-items: center;
   }
-  .items-end {
-    align-items: flex-end;
-  }
   .items-start {
     align-items: flex-start;
   }
@@ -6112,13 +6097,6 @@
   }
   .gap-6 {
     gap: calc(var(--spacing) * 6);
-  }
-  .space-y-1 {
-    :where(& > :not(:last-child)) {
-      --tw-space-y-reverse: 0;
-      margin-block-start: calc(calc(var(--spacing) * 1) * var(--tw-space-y-reverse));
-      margin-block-end: calc(calc(var(--spacing) * 1) * calc(1 - var(--tw-space-y-reverse)));
-    }
   }
   .space-y-3 {
     :where(& > :not(:last-child)) {
@@ -6938,9 +6916,6 @@
   }
   .align-middle {
     vertical-align: middle;
-  }
-  .align-text-bottom {
-    vertical-align: text-bottom;
   }
   .font-sans {
     font-family: var(--font-sans);
@@ -8687,10 +8662,10 @@
   }
 }
 .notification-area, #notificationArea {
-  position: fixed;
-  top: 1.2rem;
-  right: 1.1rem;
-  z-index: 1200;
+  position: fixed !important;
+  top: 90px !important;
+  right: 64px !important;
+  z-index: 6000 !important;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -8719,14 +8694,14 @@ body.with-sidebar-open .notification-area, body.with-sidebar-open #notificationA
 }
 @media (max-width: 640px) {
   .notification-area, #notificationArea {
-    top: 0.6rem;
-    right: 0.15rem;
-    left: 0.15rem;
+    top: 64px !important;
+    right: 4px !important;
+    left: 4px !important;
     min-width: 0;
-    width: 100%;
+    width: 100vw;
     max-width: 100vw;
     align-items: stretch;
-    max-height: 85vh;
+    max-height: 75vh;
     padding-left: 0.5rem;
     padding-right: 0.5rem;
   }
@@ -9029,35 +9004,44 @@ html[data-theme="dark"] {
   opacity: var(--notif-dim-opacity);
 }
 html[data-theme="dark"] {
-  .notification-item .notification-message, .alert.notification-item .notification-message {
-    color: var(--fallback-b1, #e5e7eb) !important;
+  .notification-item .notification-message, .alert.notification-item .notification-message, .accordion-banner .collapse-title, .accordion-banner .accordion-summary-text, .accordion-banner .notification-context-badge, .accordion-banner .accordion-message-list li, .accordion-banner .accordion-message-list {
+    color: #fafbfd !important;
+    text-shadow: 0 1px 2px #04051544;
   }
-  .accordion-banner .collapse-title, .accordion-banner .accordion-summary-text, .accordion-banner .notification-context-badge {
-    color: var(--fallback-bc, #e5e7eb) !important;
+  .notification-item, .alert.notification-item, .accordion-banner {
+    background-color: #181a20 !important;
   }
   .notification-context-badge {
-    background-color: var(--fallback-b3, #374151) !important;
-    border-color: var(--fallback-bc, #9ca3af) !important;
+    background-color: #23243a !important;
+    border-color: #4ec9fa !important;
+    color: #fafbfd !important;
+    font-weight: 600;
   }
   .accordion-banner .accordion-message-list li {
-    color: var(--fallback-bc, #e5e7eb) !important;
+    color: #f6f6fb !important;
     background-color: transparent !important;
   }
   .accordion-banner .accordion-message-list li:nth-child(even) {
-    background-color: var(--fallback-b2, #2a2e37) !important;
+    background-color: #23243a !important;
   }
   .notification-copy-btn, .notification-close, .accordion-copy-btn, .accordion-dismiss-btn, .accordion-banner .btn-xs {
-    color: var(--fallback-bc, #d1d5db) !important;
+    color: #fafbfd !important;
+    opacity: 0.94;
   }
   .accordion-dismiss-btn {
-    color: var(--fallback-er, #f87171) !important;
+    color: #ff7a7a !important;
   }
-  .accordion-banner.notification-info, .accordion-banner.notification-success, .accordion-banner.notification-error, .accordion-banner.notification-warning {
-    background-color: var(--fallback-b1, #1e2329) !important;
+  .notification-item.info, .accordion-banner.notification-info {
+    border-left-color: #4ec9fa !important;
   }
-  .notification-item.info, .notification-item.success, .notification-item.error, .notification-item.warning {
-    background-color: var(--fallback-b1, #1e2329) !important;
-    color: var(--fallback-bc, #e5e7eb) !important;
+  .notification-item.success, .accordion-banner.notification-success {
+    border-left-color: #90efb7 !important;
+  }
+  .notification-item.error, .accordion-banner.notification-error {
+    border-left-color: #fa7ea6 !important;
+  }
+  .notification-item.warning, .accordion-banner.notification-warning {
+    border-left-color: #ffcb6b !important;
   }
 }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .tab:focus-visible, .btn:focus-visible, .menu-item:focus-visible, [role="button"]:focus-visible {

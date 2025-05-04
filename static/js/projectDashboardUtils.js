@@ -147,7 +147,7 @@ function setupEventListeners({
       if (currentProject && pm?.openModal) {
         pm.openModal(currentProject);
       } else {
-        showNotification('[projectDashboardUtils] projectModal.openModal not available', 'error');
+        DependencySystem.modules.get('notify')?.error('[projectDashboardUtils] projectModal.openModal not available', { context: 'projectDashboardUtils', group: true });
       }
     });
   }
@@ -165,7 +165,7 @@ function setupEventListeners({
             'success'
           );
         } catch (error) {
-          showNotification('Failed to toggle pin: ' + (error?.message || error), 'error');
+          DependencySystem.modules.get('notify')?.error('Failed to toggle pin: ' + (error?.message || error), { context: 'projectDashboardUtils', group: true });
         }
       }
     });
@@ -192,7 +192,7 @@ function setupEventListeners({
                 'success'
               );
             } catch (error) {
-              showNotification('Failed to toggle archive: ' + (error?.message || error), 'error');
+              DependencySystem.modules.get('notify')?.error('Failed to toggle archive: ' + (error?.message || error), { context: 'projectDashboardUtils', group: true });
             }
           },
         });
@@ -247,7 +247,7 @@ export function createProjectDashboardUtils({
   ProjectDashboard.init = function () {
     if (initialized) return this;
     initialized = true;
-    showNotification('[ProjectDashboard] Initializing...', 'info');
+    DependencySystem.modules.get('notify')?.info('[ProjectDashboard] Initializing...', { context: 'projectDashboardUtils' });
     ProjectDashboard.setupEventListeners();
     if (typeof document !== 'undefined') {
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
