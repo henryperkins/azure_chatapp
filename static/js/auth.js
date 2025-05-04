@@ -637,6 +637,25 @@ export function createAuthModule({
         group: true,
         context: 'auth'
       });
+
+      // Added event listener for the login button to open the login modal
+      const loginBtn = domAPI.getElementById('authButton');
+      if (loginBtn && !loginBtn._listenerAttached) {
+        loginBtn._listenerAttached = true;
+        const handler = (e) => {
+          e.preventDefault();
+          // Try window.modalManager first, then DI system
+          const mm = window.modalManager || (window.DependencySystem && window.DependencySystem.modules.get('modalManager'));
+          if (mm?.show) {
+            mm.show('login');
+          } else {
+            notify.error('No modalManager available to show login.', { group: true, context: 'auth' });
+          }
+        };
+        registeredListeners.push(
+          eventHandlers.trackListener(loginBtn, 'click', handler, { description: 'Auth Button open login modal' })
+        );
+      }
       return true;
     }
     notify.info('[Auth] Initializing auth module...', {
@@ -759,17 +778,29 @@ export function createAuthModule({
   };
 
   return publicAuth;
-}
-
-export default createAuthModule;
-
+  }
+/**
+ * Provide a minimal direct fetch-based version of fetchCurrentUser,
+ * so callers can still import { fetchCurrentUser } without referencing
+ * the main module DI.
+ */
 export async function fetchCurrentUser() {
   try {
-    const resp = await apiRequest('/api/auth/verify', { method: 'GET' });
-    if (!resp || !resp.user) return null;
-    return resp.user;
+    const resp = await fetch('/api/auth/verify', {
+      method: 'GET',
+      credentials: 'include',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data || !data.user) return null;
+    return data.user;
   } catch (err) {
     console.error('[auth] fetchCurrentUser error:', err);
     return null;
   }
 }
+
+export default createAuthModule;
