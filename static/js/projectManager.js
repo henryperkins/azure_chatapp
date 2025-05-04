@@ -1,979 +1,467 @@
 /**
- * projectManager.js - DependencySystem Refactored Edition
+ * projectManager.js – DI-strict, Notification-aware, Advanced Edition
  *
- * Refactored with local utility functions to eliminate repeated code:
- *  - Common auth checks (requireAuthenticatedOrEmit).
- *  - Error handling (handleError).
- *  - Array parsing (parseServerArrayOrSingle).
- *  - Exponential retry logic (retryWithBackoff).
- *  - Etc.
- *
- * Relies on an "app" module providing apiRequest, a "chatManager", and an optional "modelConfig."
- * Uses DOM events for "projectCreated," "projectsLoaded," etc.
+ * Combines:
+ *  - Modern DI/notification patterns from Untitled 4
+ *  - Full feature set from projectManager (file upload, KB, archive, etc)
  */
 
-/**
- * @typedef {Object} Project
- * @property {string} id       - Unique project ID (UUID).
- * @property {string} name     - Human-readable project name.
- * @property {boolean} [archived]  - Whether the project is archived.
- * @property {boolean} [pinned]    - Whether the project is pinned.
- * @property {*} [otherProps]      - Additional arbitrary properties.
- */
+/* -------------------------------------------------------------------------- */
+/* Local utility helpers – pure and safe to unit-test                         */
+/* -------------------------------------------------------------------------- */
 
-/**
- * @typedef {Object} ProjectStats
- * @property {string} projectId     - The project ID to which these stats belong.
- * @property {number} [fileCount]   - Number of files in the project.
- * @property {number} [conversationCount] - Number of conversations in the project.
- * @property {*} [otherStats]       - Additional arbitrary statistics.
- */
-
-/**
- * @typedef {Object} FileUploadResult
- * @property {Array<{file: File}>} validatedFiles
- * @property {Array<{file: File, reason: string}>} invalidFiles
- */
-
-/* ------------------------------------------------------------------------
- * Local Utility Functions
- * ----------------------------------------------------------------------- */
-
-/**
- * Checks if the provided string is a valid project ID (UUID).
- * @param {string} id - Potential project ID.
- * @returns {boolean} True if it matches a typical 32- or 36-character UUID.
- */
 function isValidProjectId(id) {
-  return (
-    typeof id === 'string' &&
-    /^[0-9a-f-]{32,36}$/i.test(id) &&
-    id.toLowerCase() !== 'null'
-  );
+  return typeof id === 'string' && /^[0-9a-f-]{32,36}$/i.test(id ?? '');
 }
 
-/**
- * Normalizes a project API response to a guaranteed `.id`, throwing
- * if no valid ID is found.
- * @param {*} response
- * @returns {Object} A normalized project object (with `id`).
- * @throws {Error} If no valid ID can be extracted.
- */
-function normalizeProjectResponse(response) {
-  let projectData = null;
-
-  // Attempt to find project data in array or object shapes
-  if (Array.isArray(response)) projectData = response[0];
-  if (!projectData || !projectData.id) projectData = response?.data?.id ? response.data : null;
-  if (!projectData || !projectData.id) projectData = response?.id ? response : null;
-
-  // Normalize ID among known properties
-  projectData &&= {
-    ...projectData,
-    id: String(
-      projectData.id ??
-      projectData.uuid ??
-      projectData.project_id ??
-      projectData.projectId ??
-      ''
-    ).trim()
-  };
-
-  if (!projectData || !projectData.id || !isValidProjectId(projectData.id)) {
-    throw new Error('Invalid or missing project ID after project load');
+function normalizeProjectResponse(res) {
+  let data = Array.isArray(res) ? res[0]
+    : res?.data?.id ? res.data
+      : res?.id ? res
+        : null;
+  if (data) {
+    data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
   }
-  return projectData;
+  if (!isValidProjectId(data?.id)) throw new Error('Invalid project ID in server response');
+  return data;
 }
 
-/**
- * Inspects a server response to find an array of items in known keys
- * or transforms a single object into an array if needed.
- * @param {*} response
- * @param {Object} [options={}]
- * @param {string[]} [options.listKeys=["projects","conversations","artifacts","files"]]
- * @returns {?Array<*>} An array of items if found or null if none recognized.
- */
-function extractResourceList(response, options = {}) {
-  const {
-    listKeys = ["projects", "conversations", "artifacts", "files"],
-    dataKey = "data",
-    singularKey = null
-  } = options;
-
-  // Try arrays in known places
-  for (const key of listKeys) {
-    if (Array.isArray(response?.[key])) return response[key];
-    if (Array.isArray(response?.[dataKey]?.[key])) return response[dataKey][key];
-    if (Array.isArray(response?.data)) return response.data;
-    // If found single object with an ID, wrap in array
-    if (response?.[key] && response[key].id) return [response[key]];
-    if (response?.[dataKey]?.[key] && response[dataKey][key].id) {
-      return [response[dataKey][key]];
-    }
+/** Finds a list in response (keys) or wraps singletons */
+function extractResourceList(res, keys = ['projects', 'conversations', 'files', 'artifacts']) {
+  for (const k of keys) {
+    if (Array.isArray(res?.[k])) return res[k];
+    if (Array.isArray(res?.data?.[k])) return res.data[k];
+    if (res?.[k]?.id) return [res[k]];
+    if (res?.data?.[k]?.id) return [res.data[k]];
   }
-
-  // Fallback checks
-  if (Array.isArray(response?.[dataKey])) return response[dataKey];
-  if (Array.isArray(response)) return response;
-  if (response?.[dataKey]?.id) return [response[dataKey]];
-  if (response?.id) return [response];
-
-  // If singularKey is provided, handle that
-  if (singularKey && response?.[singularKey]) return [response[singularKey]];
-  if (singularKey && response?.[dataKey]?.[singularKey]) {
-    return [response[dataKey][singularKey]];
-  }
-  return null;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res)) return res;
+  if (res?.id) return [res];
+  return [];
 }
 
-/**
- * Delay utility for backoff waits (pure timer, no logic).
- * Always uses injected timer for testability and checklist compliance.
- * @param {Function} timer - Timer function (callback, ms)
- * @param {number} ms - Milliseconds to wait
- * @returns {Promise<void>}
- */
-function waitForBackoff(timer, ms) {
-  return new Promise(resolve => timer(resolve, ms));
-}
-
-/**
- * Determines whether a retry should be attempted.
- * @param {number} attempt - Current attempt count
- * @param {number} maxRetries - Maximum attempts
- * @returns {boolean}
- */
-function shouldRetry(attempt, maxRetries) {
-  return attempt < maxRetries;
-}
-
-/**
- * Core retry execution for backoff.
- * @param {Function} fn - The async function to call.
- * @param {number} maxRetries
- * @param {Function} timer
- * @returns {Promise<*>}
- */
-async function runWithBackoff(fn, maxRetries, timer) {
-  let attempt = 0;
-  while (shouldRetry(attempt, maxRetries)) {
-    try {
-      return await fn();
-    } catch (err) {
-      attempt++;
-      if (!shouldRetry(attempt, maxRetries)) throw err;
-      await waitForBackoff(timer, 1000 * attempt);
-    }
-  }
-  // Defensive: shouldn't reach here, error should have been thrown in catch.
-  throw new Error('Exhausted retries without successful result');
-}
-
-/**
- * Exponential backoff utility for retries.
- * Does not default to setTimeout—timer must be injected for checklist compliance.
- * Pure delay is supported, never uses timing for logic or control flow.
- * @param {Function} fn - The async function to call.
- * @param {number} maxRetries - Maximum retries
- * @param {Function} timer - Timer function for delays (cb, ms). Required.
- * @returns {Promise<*>}
- */
 async function retryWithBackoff(fn, maxRetries, timer) {
-  if (typeof timer !== 'function') {
-    throw new Error('timer (cb, ms) is required for retryWithBackoff');
+  let attempt = 0;
+  while (true) {
+    try { return await fn(); }
+    catch (err) {
+      if (++attempt > maxRetries) throw err;
+      await new Promise(r => timer(r, 1000 * attempt));
+    }
   }
-  return runWithBackoff(fn, maxRetries, timer);
 }
 
-/* ------------------------------------------------------------------------
- * The ProjectManager Class
- * ----------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------- */
+/* The ProjectManager class                                                   */
+/* -------------------------------------------------------------------------- */
 
 class ProjectManager {
-  /**
-   * @param {Object} deps
-   * @param {Object} [deps.app] - The main application instance
-   * @param {Object} [deps.chatManager] - The chat/conversation manager instance
-   * @param {Object} [deps.modelConfig] - Optional model config manager
-   * @param {Object} [deps.DependencySystem] - Dependency injection system
-   */
   constructor({
     app,
     chatManager,
-    modelConfig,
     DependencySystem,
-    notificationHandler,
-    storage,
-    listenerTracker,
-    timer
+    modelConfig = null,
+    notify = null,
+    notificationHandler = null,
+    listenerTracker = null,
+    timer = typeof setTimeout === 'function' ? setTimeout : (cb) => cb(),
+    storage = { setItem: () => { }, getItem: () => null },
   } = {}) {
-    if (!DependencySystem) {
-      throw new Error("DependencySystem is required for ProjectManager");
-    }
-    this.DependencySystem = DependencySystem;
-    this.app = app || this.DependencySystem.modules.get("app");
+    if (!DependencySystem) throw new Error('DependencySystem required');
+    this.app = app ?? DependencySystem.modules.get('app');
+    this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
+    this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
+    this.notify = notify ?? DependencySystem.modules.get?.('notify');
+    this.timer = timer;
+    this.storage = storage;
 
-    // Defensive resolution of chatManager
-    let resolvedChatManager = chatManager || this.DependencySystem.modules.get("chatManager");
-    if (
-      typeof resolvedChatManager !== 'object' ||
-      typeof resolvedChatManager.loadConversation !== 'function'
-    ) {
-      // Attempt fallback
-      resolvedChatManager = this.DependencySystem.modules.get("chatManager");
-      if (
-        typeof resolvedChatManager !== 'object' ||
-        typeof resolvedChatManager.loadConversation !== 'function'
-      ) {
-        throw new Error("projectManager: 'chatManager' missing or invalid");
-      }
-    }
-    this.chatManager = resolvedChatManager;
-    this.modelConfig = modelConfig || this.DependencySystem.modules.get("modelConfig");
-
-    if (!this.app) {
-      throw new Error("ProjectManager constructor: 'app' dependency missing.");
-    }
-
-    this.CONFIG = {
-      DEBUG: false, // Set debug mode via dependency injection
-      ENDPOINTS: {
-        PROJECTS: '/api/projects/',
-        PROJECT_DETAIL: '/api/projects/{projectId}/',
-        PROJECT_CONVERSATIONS: '/api/projects/{projectId}/conversations/',
-        PROJECT_FILES: '/api/projects/{projectId}/files/',
-        PROJECT_STATS: '/api/projects/{projectId}/stats/',
-        PROJECT_ARTIFACTS: '/api/projects/{projectId}/artifacts/'
-      }
-    };
-
-    if (!notificationHandler) {
-      throw new Error("ProjectManager: notificationHandler dependency is required (DI only, no fallback allowed)");
-    }
-    this.notificationHandler = notificationHandler;
-
-    // Dependency-injected storage abstraction for setItem/getItem
-    this.storage = storage || {
-      setItem: (_key, _value) => { },
-      getItem: (_key) => null
-    };
-
-    // Dependency-injected or default tracked listener management
-    // Listener management must use tracked injected API
-    if (listenerTracker) {
-      this.listenerTracker = listenerTracker;
-    } else if (DependencySystem?.modules?.get?.("eventHandlers")) {
-      // Fallback to use eventHandlers.trackListener as tracker for all DOM events
-      const eventHandlers = DependencySystem.modules.get("eventHandlers");
-      this.listenerTracker = {
-        add: (target, event, handler, description) => {
-          if (!eventHandlers.trackListener) throw new Error("eventHandlers.trackListener not available");
-          // trackListener returns the _wrapped handler_, which it tracks for removal
-          return eventHandlers.trackListener(target, event, handler, {
-            description: description || `[ProjectManager] ${event} on ${target?.id || target}`
-          });
-        },
-        remove: (target, event, handler) => {
-          // Assume eventHandlers exposes cleanupListeners for correct DI-registered remove
-          if (eventHandlers.cleanupListeners) {
-            eventHandlers.cleanupListeners(target, event, handler);
-          }
-        }
+    // Fallback: wrap raw handler if notify util isn't injected yet
+    if (!this.notify && notificationHandler?.show) {
+      const h = notificationHandler;
+      this.notify = {
+        info: (m, o = {}) => h.show(m, 'info', 4000, { ...o, group: true, context: 'projectManager' }),
+        success: (m, o = {}) => h.show(m, 'success', 4000, { ...o, group: true, context: 'projectManager' }),
+        warn: (m, o = {}) => h.show(m, 'warning', 6000, { ...o, group: true, context: 'projectManager' }),
+        error: (m, o = {}) => h.show(m, 'error', 0, { ...o, group: true, context: 'projectManager' }),
       };
-    } else {
-      throw new Error("ProjectManager requires a tracked event listener system (listenerTracker or eventHandlers DI)");
     }
+    if (!this.notify) throw new Error('notify util or notificationHandler missing');
 
-    /**
-     * Dependency-injected timer for backoff delays.
-     * For exponential backoff, uses a timer for pure-wait (no functional logic delayed).
-     * If not provided, falls back to setTimeout (safe for delay, not for logic/timing hacks).
-     */
-    this.timer = timer || (typeof setTimeout === 'function' ? setTimeout : (cb, _delay) => cb());
+    // Listener tracking
+    if (!listenerTracker) {
+      const ev = DependencySystem.modules.get('eventHandlers');
+      if (!ev?.trackListener) throw new Error('eventHandlers.trackListener missing');
+      listenerTracker = {
+        add: (t, e, h, dsc) => ev.trackListener(t, e, h, { description: dsc }),
+        remove: (t, e, h) => ev.cleanupListeners?.(t, e, h),
+      };
+    }
+    this.listenerTracker = listenerTracker;
 
-    /** @type {Project|null} */
+    /** @type {?Object} */
     this.currentProject = null;
-
-    /** @type {boolean} */
-    this.projectLoadingInProgress = false;
-  }
-
-  async initialize() {
-    this.notificationHandler.show('[ProjectManager] Initializing...', 'info', { group: true, context: "projectManager" });
-  }
-
-  // ---------------------------------------------------------------------------
-  // Helper for Emitting DOM Events
-  // ---------------------------------------------------------------------------
-  _emitEvent(eventName, detail) {
-    const evt = new CustomEvent(eventName, {
-      detail,
-      bubbles: false,
-      composed: false
+    this._loadingProjects = false;
+    this._CONFIG = Object.freeze({
+      PROJECTS: '/api/projects/',
+      DETAIL: '/api/projects/{id}/',
+      FILES: '/api/projects/{id}/files/',
+      CONVOS: '/api/projects/{id}/conversations/',
+      STATS: '/api/projects/{id}/stats/',
+      ARTIFACTS: '/api/projects/{id}/artifacts/',
+      KB: '/api/projects/{id}/knowledge-bases/',
+      ARCHIVE: '/api/projects/{id}/archive',
     });
-    // Track then remove a self-cleanup listener using listenerTracker
-    const cleanup = this.listenerTracker.add(document, eventName, (event) => {
-      if (event && event.type === eventName) {
-        cleanup && cleanup();
-      }
-    });
-    document.dispatchEvent(evt);
+
+    this.notify.info('[ProjectManager] Initialized');
   }
 
-  // ---------------------------------------------------------------------------
-  // Reusable Auth Check
-  // ---------------------------------------------------------------------------
-  /**
-   * If the user is not authenticated, emits an error event and returns false.
-   * Otherwise returns true for continuing the method logic.
-   */
-  requireAuthenticatedOrEmit(eventName, detail = {}) {
-    if (!this.app?.state?.isAuthenticated) {
-      this.notificationHandler.show(`[ProjectManager] Not authenticated, cannot proceed with ${eventName}`, 'warning', { group: true, context: "projectManager" });
-      this._emitEvent(eventName, {
-        error: { message: 'Authentication required' },
-        ...detail
-      });
-      return false;
-    }
-    return true;
+  /* ---------------------------------------------------------------------- */
+  /* Helpers                                                                */
+  /* ---------------------------------------------------------------------- */
+
+  _emit(event, detail) {
+    document.dispatchEvent(new CustomEvent(event, { detail }));
+  }
+  _authOk(failEvent, extraDetail = {}) {
+    if (this.app?.state?.isAuthenticated) return true;
+    this.notify.warn('[ProjectManager] Auth required');
+    this._emit(failEvent, { error: 'auth_required', ...extraDetail });
+    return false;
+  }
+  _handleErr(eventName, err, fallback) {
+    this.notify.error(`[ProjectManager] ${eventName}: ${err.message}`);
+    this._emit(eventName, { error: err.message });
+    return fallback;
   }
 
-  /**
-   * Utility for handling errors: logs to console, emits an error event,
-   * returns fallbackValue for the method's final return.
-   */
-  handleError(eventName, error, fallbackValue, extraDetail = {}) {
-    this.notificationHandler.error(`[ProjectManager] ${eventName} error:`, error, { group: true, context: "projectManager" });
-    this._emitEvent(eventName, {
-      error: { message: error.message, status: error.status },
-      ...extraDetail
-    });
-    return fallbackValue;
-  }
+  /* ---------------------------------------------------------------------- */
+  /* Core API: Project List/Details                                         */
+  /* ---------------------------------------------------------------------- */
 
-  // --------------------------------------------------------------------------
-  // Core Project Lifecycle
-  // --------------------------------------------------------------------------
-
-  /**
-   * Loads a list of projects from the server.
-   * @async
-   * @param {string} [filter='all'] - Filter type for the API.
-   * @returns {Promise<Project[]>} The loaded projects.
-   */
   async loadProjects(filter = 'all') {
-    this.notificationHandler.show(`[ProjectManager] loadProjects called with filter: ${filter}`, 'info', { group: true, context: "projectManager" });
-
-    if (this.projectLoadingInProgress) {
-      this.notificationHandler.show("[ProjectManager] loadProjects: already in progress", 'info', { group: true, context: "projectManager" });
-      this.notificationHandler.show("[ProjectManager] loadProjects: already in progress", 'info', { group: true, context: "projectManager" });
+    if (this._loadingProjects) {
+      this.notify.info('[ProjectManager] loadProjects already running');
       return [];
     }
-
-    // Check authentication status and log more details
-    if (!this.app?.state?.isAuthenticated) {
-      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects", { group: true, context: "projectManager" });
-      this.notificationHandler.error("[ProjectManager] Not authenticated, cannot load projects", { group: true, context: "projectManager" });
-      this._emitEvent("projectsLoaded", {
-        error: true,
-        message: 'Authentication required to load projects',
-        reason: 'auth_required'
-      });
-      return [];
-    }
-
-    if (!this.requireAuthenticatedOrEmit("projectsLoaded", { reason: 'auth_required' })) {
-      this.notificationHandler.error("[ProjectManager] Authentication check failed in requireAuthenticatedOrEmit", { group: true, context: "projectManager" });
-      return [];
-    }
-
-    this.notificationHandler.show("[ProjectManager] Starting to load projects...", 'info', { group: true, context: "projectManager" });
-    this.projectLoadingInProgress = true;
-    this._emitEvent("projectsLoading", { filter });
+    if (!this._authOk('projectsLoaded', { filter })) return [];
+    this._loadingProjects = true;
+    this._emit('projectsLoading', { filter });
 
     try {
-      const params = new URLSearchParams({ filter, skip: '0', limit: '100' });
-      const endpoint = `${this.CONFIG.ENDPOINTS.PROJECTS}?${params.toString()}`;
+      const url = new URL(this._CONFIG.PROJECTS, location.origin);
+      url.searchParams.set('filter', filter);
 
-      this.notificationHandler.show(`[ProjectManager] Requesting projects from: ${endpoint}`, 'info', { group: true, context: "projectManager" });
-
-      if (!this.app?.apiRequest) {
-        throw new Error("apiRequest function not available in app dependency");
-      }
-
-      const response = await this.app.apiRequest(endpoint);
-      this.notificationHandler.show('[ProjectManager] Raw projects response: ' + JSON.stringify(response), 'info', { group: true, context: "projectManager" });
-      this.notificationHandler.show('[ProjectManager] Raw projects response: ' + JSON.stringify(response), 'info', { group: true, context: "projectManager" });
-
-      // Use a standard parse approach - use extractResourceList since _parseProjectsArray doesn't exist
-      const projects = extractResourceList(response, { listKeys: ["projects"] }) || [];
-      this.notificationHandler.show(`[ProjectManager] Parsed ${projects ? projects.length : 0} projects`, 'info', { group: true, context: "projectManager" });
-
-      // Optionally auto-select the first if none selected
-      // if (!this.currentProject && projects.length > 0) {
-      //   console.log(`[ProjectManager] Auto-selecting first project: ${projects[0].id}`);
-      //   this.setCurrentProject?.(projects[0]);
-      //   document.dispatchEvent(
-      //     new CustomEvent('currentProjectReady', {
-      //       detail: { project: this.currentProject }
-      //     })
-      //   );
-      // }
-
-      this._emitEvent("projectsLoaded", { projects, filter });
-      return projects;
-    } catch (error) {
-      this.notificationHandler.error("[ProjectManager] Error loading projects:", error, { group: true, context: "projectManager" });
-      return this.handleError("projectsLoaded", error, []);
+      const res = await this.app.apiRequest(String(url));
+      const list = extractResourceList(res, ['projects']);
+      this.notify.success(`[ProjectManager] ${list.length} projects`);
+      this._emit('projectsLoaded', { projects: list, filter });
+      return list;
+    } catch (err) {
+      return this._handleErr('projectsLoaded', err, []);
     } finally {
-      this.notificationHandler.show("[ProjectManager] Finished loadProjects operation, resetting loading flag", 'info', { group: true, context: "projectManager" });
-      this.projectLoadingInProgress = false;
+      this._loadingProjects = false;
     }
   }
 
-  /**
-   * Loads details for a specific project, plus stats, files, conversations, etc.
-   * @async
-   * @param {string} projectId
-   * @returns {Promise<Project|null>}
-   */
-  async loadProjectDetails(projectId) {
+  async loadProjectDetails(id) {
+    if (!isValidProjectId(id)) throw new Error('Invalid projectId');
+    if (!this._authOk('projectDetailsError', { id })) return null;
+
+    const detailUrl = this._CONFIG.DETAIL.replace('{id}', id);
     this.currentProject = null;
-    this.projectLoadingInProgress = true;
-    this._emitEvent("projectDetailsLoading", { projectId });
 
     try {
-      const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
-      const response = await this.app.apiRequest(endpoint);
-      if (!response) {
-        this.projectLoadingInProgress = false;
-        return this.handleError(
-          "projectDetailsError",
-          new Error("No response returned"),
-          null,
-          { projectId }
-        );
-      }
+      const detailRes = await this.app.apiRequest(detailUrl);
+      this.currentProject = normalizeProjectResponse(detailRes);
+      this._emit('projectLoaded', this.currentProject);
 
-      const projectData = normalizeProjectResponse(response);
-      // If the IDs mismatch, we still accept the server-provided ID
-      if (String(projectData.id).toLowerCase() !== String(projectId).toLowerCase()) {
-        this.notificationHandler.show(
-          `[ProjectManager] ID mismatch – taking server value: requestedId=${projectId}, parsedId=${projectData.id}`,
-          'warning',
-          { group: true, context: "projectManager" }
-        );
-      }
-      this.currentProject = projectData;
-      this._emitEvent("projectLoaded", { ...this.currentProject });
-
+      // Don't continue if archived
       if (this.currentProject.archived) {
-        this._emitEvent("projectArchivedNotice", { id: this.currentProject.id });
-        this.projectLoadingInProgress = false;
+        this._emit('projectArchivedNotice', { id: this.currentProject.id });
         return { ...this.currentProject };
       }
 
-      // Create promises for both data loading and UI rendering
-      const loadPromises = [
-        this.loadProjectStats(projectData.id),
-        this.loadProjectFiles(projectData.id),
-        this.loadProjectConversations(projectData.id),
-        this.loadProjectArtifacts(projectData.id),
-        // Add knowledgebase loading if not already loaded with the project
-        projectData.knowledge_base ? Promise.resolve(projectData.knowledge_base) : this.loadProjectKnowledgeBase(projectData.id)
-      ];
-
-      // First, wait for all data to be loaded
-      const loadResults = await Promise.allSettled(loadPromises);
-
-      // Track if any critical components failed to load
-      const criticalErrors = loadResults
-        .filter((result, index) => result.status === 'rejected' && index < 4) // Stats, files, conversations, artifacts
-        .map(result => result.reason);
-
-      if (criticalErrors.length > 0) {
-        this.notificationHandler.error("[ProjectManager] Critical component load errors:", criticalErrors, { group: true, context: "projectManager" });
-        this._emitEvent("projectDetailsLoadError", {
-          projectId: projectData.id,
-          errors: criticalErrors
-        });
-      }
-
-      // Create a promise that resolves when all rendering events have occurred
-      const renderingComplete = Promise.all([
-        this._createRenderPromise("projectStatsRendered", projectData.id),
-        this._createRenderPromise("projectFilesRendered", projectData.id),
-        this._createRenderPromise("projectConversationsRendered", projectData.id),
-        this._createRenderPromise("projectArtifactsRendered", projectData.id),
-        this._createRenderPromise("projectKnowledgeBaseRendered", projectData.id)
+      // Parallel fetch additional resources (non-fatal on failure)
+      const [stats, files, convos, artifacts, kb] = await Promise.allSettled([
+        this.loadProjectStats(id),
+        this.loadProjectFiles(id),
+        this.loadProjectConversations(id),
+        this.loadProjectArtifacts(id),
+        this.currentProject.knowledge_base
+          ? Promise.resolve(this.currentProject.knowledge_base)
+          : this.loadProjectKnowledgeBase(id),
       ]);
 
-      // Wait for rendering to complete with a timeout
-      try {
-        await Promise.race([
-          renderingComplete,
-          new Promise((_, reject) => this.timer(() =>
-            reject(new Error("Rendering timeout")), 5000))
-        ]);
-        // All components have been rendered
-        this._emitEvent("projectDetailsFullyLoaded", {
-          projectId: projectData.id,
-          success: true
-        });
-      } catch (renderError) {
-        this.notificationHandler.show(
-          "[ProjectManager] Not all components rendered: " + (renderError?.message || renderError),
-          'warning',
-          { group: true, context: "projectManager" }
-        );
-        // Still signal readiness but with warning flag
-        this._emitEvent("projectDetailsFullyLoaded", {
-          projectId: projectData.id,
-          success: false,
-          error: renderError
-        });
-      } finally {
-        // CRITICAL: Always reset loading flag, even if rendering fails or times out
-        this.projectLoadingInProgress = false;
+      // Track if any critical (first 4) components failed
+      const criticalErrors = [stats, files, convos, artifacts]
+        .filter(r => r.status === 'rejected')
+        .map(r => r.reason);
+      if (criticalErrors.length > 0) {
+        this.notify.error(`[ProjectManager] Some components failed: ${criticalErrors.map(e => e.message).join(', ')}`);
+        this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
+      this.notify.success(`[ProjectManager] Project ${id} ready`);
       return { ...this.currentProject };
-    } catch (error) {
-      this.projectLoadingInProgress = false;
-      this.handleError("projectDetailsError", error, null, { projectId });
-      if (error.status === 404) {
-        this._emitEvent("projectNotFound", { projectId });
-      }
+    } catch (err) {
+      this._handleErr('projectDetailsError', err, null);
+      if (err.status === 404) this._emit('projectNotFound', { id });
       return null;
     }
   }
 
-  // Helper method to create a promise that resolves when a specific rendering event occurs
-  _createRenderPromise(eventName, projectId) {
-    return new Promise((resolve) => {
-      const handleEvent = (event) => {
-        if (event.detail?.projectId === projectId) {
-          this.listenerTracker.remove(document, eventName, handleEvent);
-          resolve();
-        }
-      };
-      this.listenerTracker.add(document, eventName, handleEvent);
-    });
-  }
+  /* ---------------------------------------------------------------------- */
+  /* Project Subresources                                                   */
+  /* ---------------------------------------------------------------------- */
 
-  async loadProjectKnowledgeBase(projectId) {
+  async loadProjectStats(id) {
     try {
-      this.notificationHandler.show(`[ProjectManager] Loading knowledge base for project ${projectId}...`, 'info', { group: true, context: "projectManager" });
-      const endpoint = `/api/projects/${projectId}/knowledge-bases/`;
-      const response = await this.app.apiRequest(endpoint);
-      const kb = response?.data || response;
+      const res = await this.app.apiRequest(this._CONFIG.STATS.replace('{id}', id));
+      const stats = res?.data ?? {};
+      this._emit('projectStatsLoaded', { id, ...stats });
+      return stats;
+    } catch (err) {
+      return this._handleErr('projectStatsError', err, {});
+    }
+  }
+  async loadProjectFiles(id) {
+    try {
+      const res = await this.app.apiRequest(this._CONFIG.FILES.replace('{id}', id));
+      const files = extractResourceList(res, ['files', 'file']) ?? [];
+      this._emit('projectFilesLoaded', { id, files });
+      return files;
+    } catch (err) {
+      return this._handleErr('projectFilesError', err, []);
+    }
+  }
+  async loadProjectConversations(id) {
+    try {
+      const res = await this.app.apiRequest(this._CONFIG.CONVOS.replace('{id}', id));
+      const conversations = extractResourceList(res, ['conversations']) ?? [];
+      this._emit('projectConversationsLoaded', { id, conversations });
+      return conversations;
+    } catch (err) {
+      return this._handleErr('projectConversationsError', err, []);
+    }
+  }
+  async loadProjectArtifacts(id) {
+    try {
+      const res = await this.app.apiRequest(this._CONFIG.ARTIFACTS.replace('{id}', id));
+      const artifacts = extractResourceList(res, ['artifacts']) ?? [];
+      this._emit('projectArtifactsLoaded', { id, artifacts });
+      return artifacts;
+    } catch (err) {
+      return this._handleErr('projectArtifactsError', err, []);
+    }
+  }
+  async loadProjectKnowledgeBase(id) {
+    try {
+      this.notify.info(`[ProjectManager] Loading knowledge base for project ${id}...`);
+      const res = await this.app.apiRequest(this._CONFIG.KB.replace('{id}', id));
+      const kb = res?.data || res;
       if (!kb) {
-        this.notificationHandler.show(
-          `[ProjectManager] No knowledge base found for project: ${projectId}`,
-          'warning',
-          { group: true, context: "projectManager" }
-        );
-        // Even if no KB found, emit the loaded event with null data
-        this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
+        this.notify.warn(`[ProjectManager] No knowledge base for: ${id}`);
+        this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
       } else {
-        this.notificationHandler.show(
-          `[ProjectManager] Knowledge base loaded for project ${projectId}: ${kb.id}`,
-          'info',
-          { group: true, context: "projectManager" }
-        );
-        this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: kb });
+        this.notify.success(`[ProjectManager] Knowledge base loaded for ${id}: ${kb.id}`);
+        this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: kb });
       }
       return kb;
-    } catch (error) {
-      this.notificationHandler.error(`[ProjectManager] Error loading knowledge base for project ${projectId}:`, error, { group: true, context: "projectManager" });
-      this._emitEvent("projectKnowledgeBaseLoaded", { projectId, knowledgeBase: null });
-      return this.handleError("projectKnowledgeBaseError", error, null, { projectId });
+    } catch (err) {
+      this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
+      return this._handleErr('projectKnowledgeBaseError', err, null);
     }
   }
 
-  async loadProjectStats(projectId) {
-    try {
-      const endpoint = this.CONFIG.ENDPOINTS.PROJECT_STATS.replace('{projectId}', projectId);
-      const response = await this.app.apiRequest(endpoint);
-      const stats = response?.data || {};
-      this._emitEvent("projectStatsLoaded", { projectId, ...stats });
-      return stats;
-    } catch (error) {
-      return this.handleError("projectStatsError", error, {}, { projectId });
-    }
-  }
+  /* ---------------------------------------------------------------------- */
+  /* Project Creation/Update/Delete/Archive                                 */
+  /* ---------------------------------------------------------------------- */
 
-  async loadProjectFiles(projectId) {
-    try {
-      const endpoint = this.CONFIG.ENDPOINTS.PROJECT_FILES.replace('{projectId}', projectId);
-      const response = await this.app.apiRequest(endpoint);
-
-      const files = extractResourceList(response, { listKeys: ["files", "file"] }) || [];
-      this._emitEvent("projectFilesLoaded", { projectId, files });
-      return files;
-    } catch (error) {
-      return this.handleError("projectFilesError", error, [], { projectId });
-    }
-  }
-
-  async loadProjectConversations(projectId) {
-    try {
-      const endpoint = this.CONFIG.ENDPOINTS.PROJECT_CONVERSATIONS.replace('{projectId}', projectId);
-      const response = await this.app.apiRequest(endpoint);
-      const conversations = extractResourceList(response, { listKeys: ["conversations"] }) || [];
-      this._emitEvent("projectConversationsLoaded", { projectId, conversations });
-      return conversations;
-    } catch (error) {
-      return this.handleError("projectConversationsError", error, [], { projectId });
-    }
-  }
-
-  async loadProjectArtifacts(projectId) {
-    try {
-      const endpoint = this.CONFIG.ENDPOINTS.PROJECT_ARTIFACTS.replace('{projectId}', projectId);
-      const response = await this.app.apiRequest(endpoint);
-      const artifacts = extractResourceList(response, { listKeys: ["artifacts"] }) || [];
-      this._emitEvent("projectArtifactsLoaded", { projectId, artifacts });
-      return artifacts;
-    } catch (error) {
-      return this.handleError("projectArtifactsError", error, [], { projectId });
-    }
-  }
-
-  /**
-   * Create or update a project (POST or PATCH).
-   * @async
-   * @param {string|null} projectId
-   * @param {Object} projectData
-   * @returns {Promise<Project>}
-   * @throws {Error}
-   */
-  async createOrUpdateProject(projectId, projectData) {
-    if (!this.requireAuthenticatedOrEmit('projectUpdateError', { projectId })) {
-      throw new Error("Auth required");
-    }
-    const isUpdate = !!projectId;
-    const method = isUpdate ? "PATCH" : "POST";
-    const endpoint = isUpdate
-      ? this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)
-      : this.CONFIG.ENDPOINTS.PROJECTS;
+  async saveProject(id, payload) {
+    if (!this._authOk('projectSaveError', { id })) throw new Error('auth');
+    const isUpdate = Boolean(id);
+    const url = isUpdate ? this._CONFIG.DETAIL.replace('{id}', id) : this._CONFIG.PROJECTS;
+    const method = isUpdate ? 'PATCH' : 'POST';
 
     try {
-      const response = await this.app.apiRequest(endpoint, { method, body: projectData });
-      const resultData = response?.data || response;
-      if (!resultData || !resultData.id) {
-        throw new Error("Invalid response after project save");
-      }
-
-      if (isUpdate && this.currentProject?.id === projectId) {
-        this.currentProject = { ...this.currentProject, ...resultData };
-        this._emitEvent("projectUpdated", { ...this.currentProject });
-      } else if (!isUpdate) {
-        this._emitEvent("projectCreated", resultData);
-      }
-      return resultData;
-    } catch (error) {
-      this.notificationHandler.error("[ProjectManager] createOrUpdateProject error:", error, { group: true, context: "projectManager" });
-      throw error;
+      const res = await this.app.apiRequest(url, { method, body: payload });
+      const proj = res?.data ?? res;
+      this._emit(isUpdate ? 'projectUpdated' : 'projectCreated', proj);
+      this.notify.success(`[ProjectManager] Project ${isUpdate ? 'updated' : 'created'}: ${proj.id}`);
+      return proj;
+    } catch (err) {
+      this._handleErr('projectSaveError', err, null);
+      throw err;
     }
   }
-
-  /**
-   * Deletes a project from the server. Emits "projectDeleted" on success.
-   * @async
-   * @param {string} projectId
-   * @returns {Promise<any>}
-   * @throws {Error}
-   */
-  async deleteProject(projectId) {
-    if (!this.requireAuthenticatedOrEmit("projectDeleteError", { projectId })) {
-      throw new Error("Authentication required");
-    }
+  async deleteProject(id) {
+    if (!this._authOk('projectDeleteError', { id })) throw new Error('auth');
     try {
-      const endpoint = this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId);
-      const response = await this.app.apiRequest(endpoint, { method: "DELETE" });
-
-      if (this.currentProject?.id === projectId) {
-        this.currentProject = null;
-      }
-      this._emitEvent("projectDeleted", { projectId });
-      return response;
-    } catch (error) {
-      this.notificationHandler.error("[ProjectManager] deleteProject error:", error, { group: true, context: "projectManager" });
-      throw error;
+      await this.app.apiRequest(this._CONFIG.DETAIL.replace('{id}', id), { method: 'DELETE' });
+      if (this.currentProject?.id === id) this.currentProject = null;
+      this._emit('projectDeleted', { id });
+      this.notify.success(`[ProjectManager] Project ${id} deleted`);
+    } catch (err) {
+      this._handleErr('projectDeleteError', err);
+      throw err;
     }
   }
-
-  /**
-   * Toggle archived state of a project. Emits "projectArchiveToggled".
-   * @async
-   */
-  async toggleArchiveProject(projectId) {
-    if (!this.requireAuthenticatedOrEmit("projectArchiveToggled", { projectId })) {
-      throw new Error("Auth required");
-    }
+  async toggleArchiveProject(id) {
+    if (!this._authOk('projectArchiveToggled', { id })) throw new Error('auth');
     try {
-      const endpoint = `${this.CONFIG.ENDPOINTS.PROJECT_DETAIL.replace('{projectId}', projectId)}/archive`;
-      const response = await this.app.apiRequest(endpoint, { method: "PATCH" });
-      this._emitEvent("projectArchiveToggled", {
-        projectId,
-        archived: response?.archived ?? !this.currentProject?.archived
-      });
-      return response;
-    } catch (error) {
-      this.notificationHandler.error("[ProjectManager] Error toggling archive:", error, { group: true, context: "projectManager" });
-      throw error;
+      const res = await this.app.apiRequest(this._CONFIG.ARCHIVE.replace('{id}', id), { method: "PATCH" });
+      this._emit('projectArchiveToggled', { id, archived: res?.archived ?? !this.currentProject?.archived });
+      return res;
+    } catch (err) {
+      this._handleErr('projectArchiveToggled', err);
+      throw err;
     }
   }
 
-  // --------------------------------------------------------------------------
-  // Chat/Conversation Delegations
-  // --------------------------------------------------------------------------
+  /* ---------------------------------------------------------------------- */
+  /* Chat/Conversation Delegations                                          */
+  /* ---------------------------------------------------------------------- */
 
-  async createConversation(projectId, options = {}) {
+  async createConversation(projectId, opts = {}) {
     try {
-      this.storage.setItem("selectedProjectId", projectId);
-      return await this.chatManager.createNewConversation(projectId, options);
-    } catch (error) {
-      this.notificationHandler.error("[ProjectManager] createConversation error:", error, { group: true, context: "projectManager" });
-      throw error;
+      this.storage.setItem?.('selectedProjectId', projectId);
+      return await this.chatManager.createNewConversation(projectId, opts);
+    } catch (err) {
+      this._handleErr('conversationCreateError', err);
+      throw err;
     }
   }
-
-  /**
-   * Fetches details for a single conversation.
-   * @param {string} conversationId
-   * @returns {Promise<Object|null>} Conversation details or null on error.
-   */
   async getConversation(conversationId) {
-    if (!this.requireAuthenticatedOrEmit("conversationLoadError", { conversationId })) {
-        throw new Error("Authentication required");
-    }
+    if (!this._authOk('conversationLoadError', { conversationId })) throw new Error('auth');
     const projectId = this.currentProject?.id;
     if (!isValidProjectId(projectId)) {
-        this.notificationHandler.error("[ProjectManager] Cannot get conversation without a valid current project ID.", { group: true, context: "projectManager" });
-        throw new Error("No valid project context");
+      this.notify.error('[ProjectManager] No valid current project ID');
+      throw new Error('No valid project context');
     }
-
     try {
-        const endpoint = `/api/projects/${projectId}/conversations/${conversationId}/`;
-        const response = await this.app.apiRequest(endpoint);
-        const conversation = response?.data || response;
-        if (!conversation || !conversation.id) {
-            throw new Error("Invalid conversation data received");
-        }
-        this.notificationHandler.show(
-          `[ProjectManager] Conversation ${conversationId} fetched.`,
-          'info',
-          { group: true, context: "projectManager" }
-        );
-        // Optionally emit an event if needed, though likely not necessary just for getting details
-        // this._emitEvent("conversationDetailsLoaded", { projectId, conversation });
-        return conversation;
-    } catch (error) {
-        this.notificationHandler.error(`[ProjectManager] Failed to get conversation ${conversationId}:`, error, { group: true, context: "projectManager" });
-        // Re-throw the error so the caller knows it failed
-        throw error;
+      const endpoint = `/api/projects/${projectId}/conversations/${conversationId}/`;
+      const res = await this.app.apiRequest(endpoint);
+      const convo = res?.data || res;
+      if (!convo || !convo.id) throw new Error('Invalid conversation data received');
+      this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`);
+      return convo;
+    } catch (err) {
+      this._handleErr(`conversationLoadError`, err, null);
+      throw err;
     }
   }
-
   async deleteProjectConversation(projectId, conversationId) {
     try {
-      this.storage.setItem("selectedProjectId", projectId);
+      this.storage.setItem?.('selectedProjectId', projectId);
       await this.chatManager.deleteConversation(conversationId);
       return true;
-    } catch (error) {
-      this.notificationHandler.error("[ProjectManager] deleteProjectConversation error:", error, { group: true, context: "projectManager" });
-      throw error;
+    } catch (err) {
+      this._handleErr('deleteProjectConversationError', err);
+      throw err;
     }
   }
 
-  // --------------------------------------------------------------------------
-  // File Handling
-  // --------------------------------------------------------------------------
+  /* ---------------------------------------------------------------------- */
+  /* File Handling                                                          */
+  /* ---------------------------------------------------------------------- */
 
   getCurrentProject() {
     return this.currentProject ? JSON.parse(JSON.stringify(this.currentProject)) : null;
   }
-
-  /**
-   * Sets the current active project and triggers relevant events
-   * @param {Project} project - The project to set as current
-   */
   setCurrentProject(project) {
     if (!project || !project.id) {
-      this.notificationHandler.error('[ProjectManager] Cannot set invalid project as current', project, { group: true, context: "projectManager" });
+      this.notify.error('[ProjectManager] Cannot set invalid project as current');
       return;
     }
-
-    this.notificationHandler.show(`[ProjectManager] Setting current project: ${project.id}`, 'info', { group: true, context: "projectManager" });
-    const previousProject = this.currentProject;
+    const previous = this.currentProject;
     this.currentProject = project;
-
-    // Save current project ID to storage if available
-    if (this.storage?.setItem) {
-      this.storage.setItem('selectedProjectId', project.id);
-    }
-
-    // Emit event for project change
-    document.dispatchEvent(
-      new CustomEvent('currentProjectChanged', {
-        detail: {
-          project,
-          previousProject
-        }
-      })
-    );
-
+    this.storage?.setItem?.('selectedProjectId', project.id);
+    this._emit('currentProjectChanged', { project, previousProject: previous });
     return project;
   }
-
   async prepareFileUploads(projectId, fileList) {
     const validatedFiles = [];
     const invalidFiles = [];
-
     for (const file of fileList) {
       if (file.size > 30_000_000) {
         invalidFiles.push({ file, reason: 'Max size exceeded (30MB)' });
-      } else {
-        validatedFiles.push({ file });
-      }
+      } else validatedFiles.push({ file });
     }
     return { validatedFiles, invalidFiles };
   }
-
-  /**
-   * Uploads a file with retry and backoff, using the injected timer.
-   * @param {string} projectId
-   * @param {Object} fileObj
-   * @param {number} maxRetries
-   * @returns {Promise<boolean>}
-   */
   async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
-    return this.retryWithBackoff(async () => {
+    return retryWithBackoff(async () => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('projectId', projectId);
-
       await this.app.apiRequest(`/api/projects/${projectId}/files/`, {
         method: 'POST',
         body: formData
       });
       return true;
-    }, maxRetries);
+    }, maxRetries, this.timer);
   }
 
-  /**
-   * Retry a function with backoff using injected timer.
-   * @param {Function} fn
-   * @param {number} maxRetries
-   * @returns {Promise<*>}
-   */
-  /**
-   * Retry a function with exponential backoff, using injected timer.
-   * Pure wait for backoff periods, not logic delays.
-   */
-  async retryWithBackoff(fn, maxRetries = 3) {
-    return retryWithBackoff(fn, maxRetries, this.timer);
-  }
+  /* ---------------------------------------------------------------------- */
+  /* Additional Project Creation Helpers (Ensured Conversation, KB, etc)     */
+  /* ---------------------------------------------------------------------- */
 
-  // --------------------------------------------------------------------------
-  // Additional Project Creation Helpers
-  // --------------------------------------------------------------------------
-
-  /**
-   * Creates a brand-new project, optionally ensuring a default conversation
-   * and knowledge base, then returns the final project object.
-   */
   async createProject(projectData) {
     try {
-      const response = await this.app.apiRequest('/api/projects', {
+      const response = await this.app.apiRequest(this._CONFIG.PROJECTS, {
         method: 'POST',
         body: projectData
       });
       const project = response.data || response;
-      if (!project || !project.id) {
-        throw new Error('Invalid project response');
-      }
-      this.notificationHandler.show('[ProjectManager] Project created: ' + project.id, 'info', { group: true, context: "projectManager" });
-
-      // Optionally ensure conversation + knowledge base
+      if (!project || !project.id) throw new Error('Invalid project response');
+      this.notify.success('[ProjectManager] Project created: ' + project.id);
       const ensureConversation = async () => {
-        const hasConvo =
-          (Array.isArray(project.conversations) && project.conversations.length > 0) ||
-          Number(project.conversation_count) > 0;
+        const hasConvo = (Array.isArray(project.conversations) && project.conversations.length > 0)
+          || Number(project.conversation_count) > 0;
         if (hasConvo) return project.conversations?.[0];
         return await this.createDefaultConversation(project.id);
       };
-
       const ensureKnowledgeBase = async () => {
         if (project.knowledge_base?.id) return project.knowledge_base;
         return await this.initializeKnowledgeBase(project.id);
       };
-
-      const [conversation, kb] = await Promise.all([
-        ensureConversation(),
-        ensureKnowledgeBase()
-      ]);
-
+      const [conversation, kb] = await Promise.all([ensureConversation(), ensureKnowledgeBase()]);
       if (conversation) {
         project.conversations = [conversation];
         project.conversation_count = 1;
       }
       if (kb) project.knowledge_base = kb;
-
-      this._emitEvent('projectCreated', project);
-      document.dispatchEvent(
-        new CustomEvent('projectConversationsLoaded', {
-          detail: { projectId: project.id, conversations: project.conversations }
-        })
-      );
-
+      this._emit('projectCreated', project);
+      this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
-    } catch (error) {
-      this.notificationHandler.show(
-        '[ProjectManager] Error creating project: ' + (error?.message || error),
-        'error',
-        { group: true, context: 'projectManager' }
-      );
-      throw error;
+    } catch (err) {
+      this.notify.error('[ProjectManager] Error creating project: ' + (err?.message || err));
+      throw err;
     }
   }
-
   async createDefaultConversation(projectId) {
     try {
       const response = await this.app.apiRequest(
-        `/api/projects/${projectId}/conversations/`,
-        {
-          method: 'POST',
-          body: {
-            title: 'Default Conversation',
-            model_id:
-              (this.modelConfig?.getConfig?.()?.modelName) || 'claude-3-sonnet-20240229'
-          }
+        `/api/projects/${projectId}/conversations/`, {
+        method: 'POST',
+        body: {
+          title: 'Default Conversation',
+          model_id: this.modelConfig?.getConfig?.()?.modelName || 'claude-3-sonnet-20240229'
         }
+      }
       );
       const conversation =
         response?.data?.conversation ||
         response?.data ||
         response?.conversation ||
         response;
-
-      if (!conversation || !conversation.id) {
-        throw new Error('Failed to create default conversation');
-      }
-      this.notificationHandler.show('[ProjectManager] Default conversation created: ' + conversation.id, 'info', { group: true, context: "projectManager" });
+      if (!conversation || !conversation.id) throw new Error('Failed to create default conversation');
+      this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id);
       return conversation;
-    } catch (error) {
-      this.notificationHandler.show(
-        '[ProjectManager] Failed to create default conversation: ' + (error?.message || error),
-        'error',
-        { group: true, context: 'projectManager' }
-      );
+    } catch (err) {
+      this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err));
       return null;
     }
   }
-
   async initializeKnowledgeBase(projectId) {
     try {
       const response = await this.app.apiRequest(
@@ -983,76 +471,36 @@ class ProjectManager {
           body: {
             name: 'Default Knowledge Base',
             description: 'Auto-created knowledge base.',
-            embedding_model: 'text-embedding-3-small' // example default
+            embedding_model: 'text-embedding-3-small'
           }
         }
       );
       const kb = response.data || response;
       if (!kb?.id) throw new Error('Failed to initialize knowledge base');
-
-      this.notificationHandler.show('[ProjectManager] Knowledge base initialized: ' + kb.id, 'info', { group: true, context: "projectManager" });
+      this.notify.success('[ProjectManager] Knowledge base initialized: ' + kb.id);
       return kb;
-    } catch (error) {
-      this.notificationHandler.show(
-        '[ProjectManager] Failed to initialize knowledge base: ' + (error?.message || error),
-        'error',
-        { group: true, context: 'projectManager' }
-      );
+    } catch (err) {
+      this.notify.error('[ProjectManager] Failed to initialize knowledge base: ' + (err?.message || err));
       return null;
     }
   }
+
+  /* ---------------------------------------------------------------------- */
+  /* General retry utility                                                  */
+  /* ---------------------------------------------------------------------- */
+  async retryWithBackoff(fn, maxRetries = 3) {
+    return retryWithBackoff(fn, maxRetries, this.timer);
+  }
 }
 
-/**
- * Factory function for dependency-injected ProjectManager instance.
- * This is checklist-compliant: always returns a new instance, not a singleton; never runs logic on import.
- */
-function createProjectManager(deps = {}) {
-  // Add additional validation to ensure DependencySystem is provided
-  if (!deps.DependencySystem) {
-    // Using notificationHandler here is not possible, so fallback to console.error for fatal static context
-    console.error('[ProjectManager] DependencySystem is missing in createProjectManager', deps);
-    throw new Error('DependencySystem is required for ProjectManager');
-  }
+/* -------------------------------------------------------------------------- */
+/* Factory export – always returns a NEW instance                              */
+/* -------------------------------------------------------------------------- */
 
-  // Validate app from DependencySystem if not directly provided
-  if (!deps.app) {
-    const app = deps.DependencySystem.modules.get('app');
-    if (!app) {
-      // Using notificationHandler here is not possible, so fallback to console.error for fatal static context
-      console.error('[ProjectManager] app module not found in DependencySystem');
-      throw new Error('app module not found in DependencySystem or direct dependency');
-    }
-    deps.app = app;
-  }
-
-  // Validate chatManager
-  if (!deps.chatManager) {
-    const chatManager = deps.DependencySystem.modules.get('chatManager');
-    if (!chatManager || typeof chatManager.loadConversation !== 'function') {
-      // Using notificationHandler here is not possible, so fallback to console.error for fatal static context
-      console.error('[ProjectManager] chatManager not found or invalid in DependencySystem');
-      throw new Error('chatManager is required for ProjectManager');
-    }
-    deps.chatManager = chatManager;
-  }
-
-  // Only log using notificationHandler if available, otherwise fallback to console in static factory context
-  if (deps.notificationHandler && typeof deps.notificationHandler.show === 'function') {
-    deps.notificationHandler.show(
-      '[ProjectManager] Creating new ProjectManager instance with deps: ' + Object.keys(deps).join(', '),
-      'info',
-      { context: 'projectManager' }
-    );
-  } else {
-    console.log('[ProjectManager] Creating new ProjectManager instance with deps:',
-                Object.keys(deps).join(', '));
-  }
-
+export function createProjectManager(deps = {}) {
+  if (!deps.DependencySystem) throw new Error('DependencySystem missing');
   return new ProjectManager(deps);
 }
 
-export { isValidProjectId, createProjectManager };
-
-// Checklist compliance: the default export is the factory function, never a singleton or pre-instantiated instance.
+export { isValidProjectId, extractResourceList, normalizeProjectResponse, retryWithBackoff };
 export default createProjectManager;

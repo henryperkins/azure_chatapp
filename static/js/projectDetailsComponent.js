@@ -12,7 +12,7 @@
  *   modalManager           : confirmations / modals
  *   FileUploadComponentClass : class/factory for upload UI
  *   router                 : { getURL():string, navigate(url:string):void }
- *   notificationHandler    : { log,warn,error,confirm }     ( replaces console & alert/confirm )
+ *   notify                 : DI notification util: success/warn/error/info/confirm
  *   sanitizer              : { sanitize(html):string }      ( for ALL innerHTML )
  *
  * Optional constructor deps
@@ -23,7 +23,7 @@
  */
 
 export class ProjectDetailsComponent {
-  constructor({
+    constructor({
     onBack,
     app,
     projectManager,
@@ -31,22 +31,21 @@ export class ProjectDetailsComponent {
     modalManager,
     FileUploadComponentClass,
     router,
-    notificationHandler,
+    notify,
     sanitizer,
     knowledgeBaseComponent = null,
     modelConfig = null
   } = {}) {
     /* ------------------------------------------------------  dependency gate */
-    // Note: Debug logging removed to adhere to no-console rule. Use notificationHandler if needed.
     if (
       !app || !projectManager || !eventHandlers ||
       !modalManager || !FileUploadComponentClass ||
-      !router || !notificationHandler || !sanitizer
+      !router || !notify || !sanitizer
     ) {
       throw new Error(
         "[ProjectDetailsComponent] Missing required dependencies " +
         "(app, projectManager, eventHandlers, modalManager, FileUploadComponentClass, " +
-        "router, notificationHandler, sanitizer)."
+        "router, notify, sanitizer)."
       );
     }
 
@@ -57,12 +56,12 @@ export class ProjectDetailsComponent {
     this.modalManager = modalManager;
     this.FileUploadComponentClass = FileUploadComponentClass;
     this.router = router;
-    this._rawNotificationHandler = notificationHandler; // save the root adapter
+    this._rawNotify = notify; // save the root adapter
     this.notification = {
-      log: (...args) => notificationHandler.log?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
-      warn: (...args) => notificationHandler.warn?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
-      error: (...args) => notificationHandler.error?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
-      confirm: (...args) => notificationHandler.confirm?.(...args)
+      log: (...args) => notify.info?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
+      warn: (...args) => notify.warn?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
+      error: (...args) => notify.error?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
+      confirm: (...args) => notify.confirm?.(...args)
     };
     this.sanitizer = sanitizer;
     this.knowledgeBaseComponent = knowledgeBaseComponent;
@@ -319,13 +318,13 @@ export class ProjectDetailsComponent {
         return;
       }
 
-      const fileUploadNotificationHandler = {
-        log: (...args) => this._rawNotificationHandler.log?.(`[FileUploadComponent] ${args[0]}`),
-        warn: (...args) => this._rawNotificationHandler.warn?.(`[FileUploadComponent] ${args[0]}`),
-        error: (...args) => this._rawNotificationHandler.error?.(`[FileUploadComponent] ${args[0]}`),
-        confirm: (...args) => this._rawNotificationHandler.confirm?.(...args)
+      const fileUploadNotify = {
+        log: (...args) => this._rawNotify.info?.(`[FileUploadComponent] ${args[0]}`),
+        warn: (...args) => this._rawNotify.warn?.(`[FileUploadComponent] ${args[0]}`),
+        error: (...args) => this._rawNotify.error?.(`[FileUploadComponent] ${args[0]}`),
+        confirm: (...args) => this._rawNotify.confirm?.(...args),
+        success: (...args) => this._rawNotify.success?.(`[FileUploadComponent] ${args[0]}`)
       };
-
       this.fileUploadComponent = new this.FileUploadComponentClass({
         fileInput: els.fileInput,
         uploadBtn: els.uploadBtn,
@@ -336,7 +335,7 @@ export class ProjectDetailsComponent {
         projectManager: this.projectManager,
         app: this.app,
         eventHandlers: this.eventHandlers,
-        notificationHandler: fileUploadNotificationHandler,
+        notify: fileUploadNotify,
         onUploadComplete: () => {
           const id = this.state.currentProject?.id;
           if (id) this.projectManager.loadProjectFiles(id);
