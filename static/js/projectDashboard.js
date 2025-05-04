@@ -127,16 +127,18 @@ class ProjectDashboard {
       return true;
     } catch (error) {
       this.logger.error('[ProjectDashboard] Initialization failed:', error);
-      this.notificationHandler.show(
-        'Dashboard initialization failed',
-        'error',
-        { group: true, context: 'projectDashboard' }
-      );
-      this.state.initialized = false;
-      document.dispatchEvent(
-        new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
-      );
-      return false;
+        if (this.notificationHandler?.show) {
+          this.notificationHandler.show(
+            'Dashboard initialization failed',
+            'error',
+            { group: true, context: 'projectDashboard' }
+          );
+        }
+        this.state.initialized = false;
+        document.dispatchEvent(
+          new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
+        );
+        return false;
     }
   }
 

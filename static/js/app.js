@@ -48,9 +48,12 @@ const browserAPI = {
     }
 };
 let DependencySystem = browserAPI.getDependencySystem();
-const notify = () => DependencySystem.modules.get && DependencySystem.modules.get('notify');
+// Always get DI-injected notify util from DependencySystem; use for all user-facing notifications/errors
+const notify = DependencySystem.modules.get && DependencySystem.modules.get('notify');
 if (!DependencySystem) {
-    notify()?.error("CRITICAL: DependencySystem not found. Application cannot start.", { group: true, context: "app" });
+    if (typeof notify?.error === "function") {
+        notify.error("CRITICAL: DependencySystem not found. Application cannot start.", { group: true, context: "app" });
+    }
     browserAPI.getDocument().body.innerHTML = `
     <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
       <strong>Application Critical Error:</strong> Core dependency system failed to load.
@@ -259,23 +262,24 @@ async function apiRequest(url, opts = {}, skipCache = false) {
  * @returns {void}
  */
 function showNotification(message, type = 'info', duration = 5000, options = {}) {
-    if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog?.debug?.(`[App] showNotification: ${message} (type: ${type}, duration: ${duration})`);
-    }
-    // Prefer notificationHandler (DI) for unified, robust notifications
-    if (typeof notificationHandler?.show === "function") {
-        // Merge timeout/duration with options, giving precedence to explicit timeout in options
-        const opts = {
-            ...options,
-            ...(options.timeout === undefined ? { timeout: duration } : {}),
-            // Always add pointer-events: auto to ensure clickable notifications
-            style: { pointerEvents: 'auto', ...(options.style || {}) }
-        };
-        return notificationHandler.show(message, type, opts);
-    }
-    // Fallback to legacy util, if somehow DI notification is missing
-    if (globalUtils?.showNotification) {
-        return globalUtils.showNotification(message, type, duration);
+    // Updated: use DI notify utility for all notifications
+    if (!notify) return;
+    // Prefer grouping/context for all messages
+    const optsWithTimeout = { ...options };
+    if (optsWithTimeout.timeout === undefined) optsWithTimeout.timeout = duration;
+    if (typeof optsWithTimeout.group === 'undefined') optsWithTimeout.group = true;
+    if (typeof optsWithTimeout.context === 'undefined') optsWithTimeout.context = "app";
+    switch (type) {
+        case "info":
+            notify.info(message, optsWithTimeout); break;
+        case "success":
+            notify.success(message, optsWithTimeout); break;
+        case "warning":
+            notify.warn(message, optsWithTimeout); break;
+        case "error":
+            notify.error(message, optsWithTimeout); break;
+        default:
+            notify.info(message, optsWithTimeout); break;
     }
 }
 
@@ -313,21 +317,16 @@ DependencySystem.register('modalMapping', MODAL_MAPPINGS);
  * Basic errorReporter for DI: captures errors with context.
  */
 function createErrorReporter({ notificationHandler }) {
+    // Wraps error feedback to use DI-based notify for user/system errors
     return {
         capture: (err, context = {}) => {
-            if (APP_CONFIG.DEBUG) {
-                // Log full structured error in debug only
-                notificationHandler?.error?.(
-                    `[ErrorReporter] ${context.module || 'unknown'}:${context.method || 'unknown'}: ${err.message || err}`,
-                    { context }
-                );
-                notificationHandlerWithLog.error('[ErrorReporter]', {
-                    error: err,
-                    context
-                });
+            // Show error to user in DEV, group by module if available
+            if (APP_CONFIG.DEBUG && notify) {
+                const moduleLabel = context.module || "app";
+                const msg = `[${moduleLabel}] ${(context.method || 'error')}: ${err.message || err}`;
+                notify.error(msg, { group: true, context: moduleLabel });
             }
-            // In all cases, log error details for further handling/tracing
-            // Optionally send to backend or add extra error handling here
+            // Extended logging/trace could be added here
         }
     };
 }
@@ -925,6 +924,69 @@ async function initializeCoreSystems() {
                 if (typeof modalsLoadedRemover?.remove === 'function') {
                     modalsLoadedRemover.remove();
                 }
+
+                // ---- Attach project modal submit handler robustly ----
+                // Wait until modals are injected
+                setTimeout(() => {
+                  const projectForm = document.getElementById('projectModalForm');
+                  if (!projectForm) return;
+                  // Remove any previous handler
+                  projectForm.onsubmit = null;
+                  projectForm.addEventListener('submit', async (e) => {
+                      e.preventDefault();
+                      const submitBtn = projectForm.querySelector('button[type="submit"]');
+                      if (submitBtn) {
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
+                      }
+                      const formData = new FormData(projectForm);
+                      const data = {};
+                      for (let [key, value] of formData.entries()) {
+                          if (key === 'projectId' && !value) continue;
+                          if (key === 'maxTokens' || key === 'max_tokens') {
+                              data.max_tokens = parseInt(value, 10);
+                          } else {
+                              data[key] = value;
+                          }
+                      }
+                      if (!data.name) {
+                          showNotification('Project name is required', 'error', 5000, { group: true, context: 'projectModal' });
+                          if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Save Project';
+                          }
+                          return;
+                      }
+                      try {
+                          const pm = window.projectManager || (window.DependencySystem?.modules?.get?.('projectManager'));
+                          if (pm?.createProject) {
+                              await pm.createProject(data);
+                          } else if (pm?.saveProject) {
+                              await pm.saveProject(undefined, data);
+                          } else {
+                              throw new Error('ProjectManager unavailable in DI');
+                          }
+                          showNotification('Project created', 'success', 5000, { group: true, context: 'projectModal' });
+                          const mm = window.modalManager || (window.DependencySystem?.modules?.get?.('modalManager'));
+                          if (mm?.hide) {
+                              mm.hide('project');
+                          }
+                          if (pm?.loadProjects) {
+                              pm.loadProjects('all');
+                          }
+                      } catch (err) {
+                          showNotification('Failed to create project: ' + (err?.message || err), 'error', 5000, { group: true, context: 'projectModal' });
+                          // Optionally rethrow
+                      } finally {
+                          if (submitBtn) {
+                            submitBtn.disabled = false;
+                            submitBtn.textContent = 'Save Project';
+                          }
+                      }
+                  });
+                }, 0);
+                // ---- End submit handler attach ----
+
             }
         );
 
