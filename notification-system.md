@@ -20,6 +20,7 @@ This guide documents the notification banner system for the Azure Chat Applicati
 6. [Accessibility and Responsiveness](#accessibility-and-responsiveness)
 7. [Best Practices](#best-practices)
 8. [Reference: Customization and CSS](#reference-customization-and-css)
+9. [Notification Logging & Backend Integration](#notification-logging--backend-integration)
 
 ---
 
@@ -191,12 +192,71 @@ export function notifyProjectLoadError(notificationHandler, projectId) {
 
 ---
 
+## Notification Logging & Backend Integration
+
+Server-side logging ensures that all user-facing notifications (info, warning, error, and success) are optionally recorded persistently for audit, support, or debugging.
+
+### API Endpoints
+
+- **Batch log (recommended, used by notification-handler.js):**
+  - **POST** `/api/log_notification_batch`
+  - Body:
+    ```json
+    {
+      "notifications": [
+        {
+          "message": "string",
+          "type": "info|warning|error|success",
+          "timestamp": 1714759832.10,
+          "user": "alice"
+        }
+      ]
+    }
+    ```
+  - Responds with `{ "status": "ok", "count": <number> }`
+
+- **Single log:**
+  - **POST** `/api/log_notification`
+  - Body:
+    ```json
+    {
+      "message": "string",
+      "type": "info|warning|error|success",
+      "timestamp": 1714759832.10,
+      "user": "alice"
+    }
+    ```
+
+> **Note:** The notification system behaves robustly if the logger endpoint is missing or errors—user feedback is never blocked.
+
+### Logging Implementation Details
+
+- Logs are appended to `notifications.txt` at the project root.
+- If the log exceeds 10 MB, logs are rotated (`notifications.txt`, `notifications.txt.1`, up to 5 files).
+- Every log entry is formatted:
+  ```
+  2025-05-04T10:48:22.123456Z [INFO] user=alice Message content here
+  ```
+- Log writes are file-locked (`fcntl.LOCK_EX`) for concurrency and retried; logging runs as a FastAPI background task for non-blocking API response.
+- Only the last 5 log files are retained. After rotation, the new file starts with a comment header line indicating rotation.
+
+### Troubleshooting Backend Logging
+
+- **Banners show but no entries appear in notifications.txt:**
+  - Check that your FastAPI backend is running and has write permission in the project root.
+  - Log rotation may have just happened; check `.1`, `.2` etc. for older logs.
+  - Confirm the `/api/log_notification_batch` endpoint is not returning errors.
+  - Review backend logs for exceptions (permission errors, OS/file errors).
+
+---
+
 ## See Also
 
 - static/js/notification-handler.js – implementation, options, grouped helper
 - static/js/handler-helper.js – grouping logic
 - static/css/notification-accordion.css, static/css/enhanced-components.css – styles
 - static/js/app.js – how notification handler is registered and injected
+- routes/log_notification.py – backend logging (API endpoints, concurrency/rotation logic)
 
 ---
 
@@ -206,8 +266,249 @@ export function notifyProjectLoadError(notificationHandler, projectId) {
 
 ## Changelog
 
+**2025-05-04:**
+- Added documentation for backend logging endpoints, file locations, and troubleshooting.
+- Clarified API contracts for `/api/log_notification_batch` and batch model shape.
+- Outlined log file concurrency/rotation guarantees and backend log retention policy.
+
 **2025-05-03:**
 - Added copy-to-clipboard feature to all notification banners:
   - All single and grouped notifications now have a copy button.
   - Copy feedback is provided via inline icon state only (checkmark), not a popup.
   - Accessibility and style updated accordingly.
+
+---
+
+# Integration & Migration: Dependency Injection Playbook
+
+Below is a **drop-in playbook** you can hand to *any* team-mate and apply to *every* JavaScript/TypeScript file in the repo—whether it already exists or will be written next week.
+It enforces the same dependency-injection style, grouping semantics, and error-handling rules the new **notification-handler** expects, yet stays thin enough that you can copy-paste most of it verbatim.
+
+---
+
+## 1 One-time setup you already have
+
+```javascript
+// app.js  (early boot, already present)
+import { createNotificationHandler } from './notification-handler.js';
+
+const notificationHandler = createNotificationHandler({
+  eventHandlers,
+  DependencySystem,
+  domAPI,
+  groupWindowMs : 7000,            //  <-- tune per product
+});
+DependencySystem.register('notificationHandler', notificationHandler);
+
+/* Optional but helpful façade for legacy code */
+export const showNotification = notificationHandler.show;
+```
+
+*Nothing else in this guide will touch `app.js`.*
+
+---
+
+## 2 Create a wafer-thin util wrapper (recommended)
+
+```javascript
+// static/js/utils/notify.js
+export function createNotify({ notificationHandler }) {
+  if (!notificationHandler?.show) throw new Error('notificationHandler missing');
+
+  /* Centralised defaults ↓ */
+  const DURATION = { info:4000, success:4000, warning:6000, error:0 };
+
+  function send(msg, type='info', opts={}) {
+    return notificationHandler.show(msg, type, DURATION[type], opts);
+  }
+
+  /* Sugar helpers  –  encourage grouping */
+  return {
+    info   : (msg, o={}) => send(msg,'info',   o),
+    success: (msg, o={}) => send(msg,'success',o),
+    warn   : (msg, o={}) => send(msg,'warning',o),
+    error  : (msg, o={}) => send(msg,'error',  o),
+
+    /* Common, opinionated buckets */
+    apiError : (msg, o={}) => send(msg,'error',
+                     { group:true, context:'apiRequest', ...o }),
+    authWarn : (msg, o={}) => send(msg,'warning',
+                     { group:true, context:'auth', ...o }),
+  };
+}
+```
+
+Register once, right after the handler:
+
+```javascript
+DependencySystem.register(
+  'notify',
+  createNotify({ notificationHandler })
+);
+```
+
+---
+
+## 3 Integrating any **new module**
+
+Below is the canonical skeleton—use it for every factory you write.
+
+```javascript
+/**
+ * createAwesomeFeature.js – DI-strict module
+ */
+export function createAwesomeFeature({
+  apiClient,
+  eventHandlers,
+  notify,                  // <-- inject wrapper, *never* import directly
+  DependencySystem,
+}) {
+  if (!notify) throw new Error('notify util required');
+
+  /* Example public method */
+  async function doSomethingCool(fileId) {
+    notify.info('[Awesome] Uploading…', {
+      group:true, context:'awesome', module:'upload',
+    });
+
+    try {
+      const res = await apiClient.post(`/files/${fileId}/process`);
+      notify.success('File processed ✅', { context:'awesome' });
+      return res.data;
+    } catch (err) {
+      notify.apiError(`Processing failed (${err.message})`, { module:'upload' });
+      throw err;                                 // keep promise semantics
+    }
+  }
+
+  return { doSomethingCool };
+}
+```
+
+### Checklist for every method you expose
+
+| ✅                                                                                                    | Rule |
+| ---------------------------------------------------------------------------------------------------- | ---- |
+| Announce **start & success/fail** for any long-running or user-visible job.                          |      |
+| For bursts (API retries, auth errors): `{ group:true, context:'apiRequest' }`.                       |      |
+| Stick to the four severities: `info`, `success`, `warning`, `error`.                                 |      |
+| Use **0 ms** duration (sticky) for `error`, finite durations for everything else.                    |      |
+| Never call `notificationHandler.show` directly unless you need low-level features (e.g. `hide(id)`). |      |
+
+---
+
+## 4 Migrating an **existing** file
+
+1. **Remove** `import { showNotification } from 'app'`
+   → inject `notify` instead.
+2. Replace
+
+   ```js
+   showNotification('Saved!', 'success');
+   ```
+
+   with
+
+   ```js
+   notify.success('Saved!', { context:'profile' });
+   ```
+3. Search-and-replace any old `notificationUtil` mentions.
+4. Add the new param to the factory signature & unit tests:
+
+   ```diff
+   - export function createSidebar({ api, eventHandlers }) {
+   + export function createSidebar({ api, eventHandlers, notify }) {
+   ```
+
+Unit test stubbing stays trivial:
+
+```javascript
+const dummyNotify = { info: jest.fn(), success: jest.fn(), error: jest.fn() };
+const sidebar = createSidebar({ api:mockApi, eventHandlers:{}, notify:dummyNotify });
+```
+
+---
+
+## 5 React / UI component interop (if you render JSX)
+
+```javascript
+export default function SaveButton({ deps }) {
+  const { apiClient, notify } = deps;
+
+  const handleClick = async () => {
+    notify.info('Saving…', { context:'saveButton' });
+    try {
+      await apiClient.post('/save');
+      notify.success('Saved!', { context:'saveButton' });
+    } catch (e) {
+      notify.error(`Save failed: ${e.message}`, { context:'saveButton' });
+    }
+  };
+
+  return <Button onClick={handleClick}>Save</Button>;
+}
+```
+
+Still DI-safe: parent passes `deps` that includes `notify`.
+
+---
+
+## 6 Choosing **grouping keys** at a glance
+
+| Situation                                 | Recommended key combo                                      |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| Repeated REST 500s from the same endpoint | `group:true, context:'apiRequest', source:'/users/update'` |
+| Burst of auth refresh failures            | `group:true, context:'auth'`                               |
+| File-upload errors inside chat project    | `group:true, context:'fileUpload', module:'chat'`          |
+| One-off UX hint (“Draft saved”)           | *omit* `group:true`; let it vanish in 4 s                  |
+
+> **Remember:** the notification system collapses any messages with identical `(type, context)` arriving in the same `groupWindowMs` bucket (7 s in your app).
+
+---
+
+## 7 Troubleshooting cheatsheet
+
+| Symptom                     | Likely cause                                                            | Fix                                                                             |
+| --------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| *“notify is undefined”*     | Module forgot to accept it in DI list                                   | Add `notify` param when instantiating in orchestrator.                          |
+| Banners never appear        | The top-level handler wasn’t registered or `eventHandlers` is mis-wired | Check `app.js` boot log for `DependencySystem.register('notificationHandler')`. |
+| All banners stack ungrouped | `group:true` missing or wrong key (`context` typo)                      | Confirm your opts object.                                                       |
+| Clear-All button disappears | Handler’s `clear()` ran; that’s expected                                | New notifications re-insert the button automatically.                           |
+| Log files not updated       | Backend API not reachable, permission denied, or log rotation occurred  | See backend logging troubleshooting above.                                      |
+
+---
+
+## 8 CI guard (optional but valuable)
+
+Add a lint rule or lightweight ESLint plugin that flags any import of
+`notification-handler.js` **outside** `app.js` or the util wrapper.
+That guarantees every other file stays DI-pure.
+
+```js
+// .eslintrc.js (sketch)
+module.exports = {
+  rules: {
+    'no-direct-notification-handler': context => ({
+      ImportDeclaration(node) {
+        if (
+          node.source.value.endsWith('notification-handler.js') &&
+          !context.getFilename().endsWith('app.js')
+        ) {
+          context.report(node, 'Import notify via DI, not directly');
+        }
+      },
+    }),
+  },
+};
+```
+
+---
+
+### TL;DR
+
+1. **Inject `notify`** into every feature factory/component.
+2. Use `notify.info / success / warn / error` with **grouping keys** where noise can spike.
+3. Keep severities & durations consistent.
+4. Never import the handler itself outside `app.js`.
+
+Follow those four rules and any present—or future—module will plug into the unified notification stack without surprises.

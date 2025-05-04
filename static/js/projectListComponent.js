@@ -12,7 +12,7 @@
  *     modalManager,
  *     app,
  *     router,
- *     notificationHandler,
+ *     notify,
  *     storage,
  *     sanitizer
  *   });
@@ -27,7 +27,7 @@ export class ProjectListComponent {
      * @param {Object} deps.modalManager         - ModalManager instance (optional)
      * @param {Object} deps.app                  - App instance (optional)
      * @param {Object} deps.router               - Router abstraction (required)
-     * @param {Object} deps.notificationHandler  - Notification/logging abstraction (required)
+     * @param {Object} deps.notify               - DI notification interface (required: success, error, warn, info, etc)
      * @param {Object} deps.storage              - Storage abstraction (required)
      * @param {Object} deps.sanitizer            - HTML sanitizer abstraction (required)
      */
@@ -37,7 +37,7 @@ export class ProjectListComponent {
         modalManager,
         app,
         router,
-        notificationHandler,
+        notify,
         storage,
         sanitizer
     } = {}) {
@@ -48,13 +48,14 @@ export class ProjectListComponent {
         this.app = app;
         this.router = router;
 
-        // Wrap notificationHandler (DI) to always apply context and grouping for this component
+        // New wafer-thin DI notify interface
+        this.notify = notify;
         this.notification = {
-            log: (msg, opts = {}) => notificationHandler.log?.(msg, { context: "ProjectListComponent", ...opts }),
-            warn: (msg, opts = {}) => notificationHandler.warn?.(msg, { group: true, context: "ProjectListComponent", ...opts }),
-            error: (msg, opts = {}) => notificationHandler.error?.(msg, { group: true, context: "ProjectListComponent", ...opts }),
-            confirm: (...args) => notificationHandler.confirm?.(...args),
-            show: (msg, type, opts = {}) => notificationHandler.show?.(msg, type, { group: true, context: "ProjectListComponent", ...opts })
+            log: (msg, opts = {}) => notify.info?.(msg, { context: "ProjectListComponent", ...opts }),
+            warn: (msg, opts = {}) => notify.warn?.(msg, { group: true, context: "ProjectListComponent", ...opts }),
+            error: (msg, opts = {}) => notify.error?.(msg, { group: true, context: "ProjectListComponent", ...opts }),
+            confirm: (...args) => notify.confirm?.(...args),
+            show: (msg, type, opts = {}) => notify[type]?.(msg, { group: true, context: "ProjectListComponent", ...opts }) || notify.info?.(msg, { group: true, context: "ProjectListComponent", ...opts })
         };
 
         this.storage = storage;
