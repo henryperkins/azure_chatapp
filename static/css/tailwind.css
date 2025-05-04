@@ -13,9 +13,7 @@
 
 /* 2) DaisyUI plugin config (optional).
    If you want DaisyUI built-in themes, for example: */
-@plugin "daisyui" {
-  themes: azure-light --default, dracula-enhanced --prefersdark;
-}
+@plugin "daisyui";
 
 /* Custom "fadeZoomIn" animation is now defined in tailwind.config.js for use as "animate-fadeZoomIn". */
 /* Remove manual CSS keyframes and use utility class in markup per Tailwind best practices. */
@@ -38,7 +36,4 @@
     opacity: 1;
     transform: scale(1);
   }
-}
-@utility animate-fadeZoomIn {
-  animation: fadeZoomIn 0.3s ease-out forwards;
 }
