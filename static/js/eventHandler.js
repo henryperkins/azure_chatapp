@@ -130,7 +130,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
               if (app && typeof app.showNotification === "function") {
-                app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
+                app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning", 4000, { group: true, context: 'eventHandler' });
               } else if (typeof console !== "undefined") {
                 console.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
               }
@@ -156,13 +156,13 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         return result;
       } catch (error) {
         if (app && typeof app.showNotification === "function") {
-          app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
+          app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error", 0, { group: true, context: 'eventHandler' });
         } else if (typeof console !== "undefined") {
           console.error(`Error in ${type} event handler:`, error);
         }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
           if (app && typeof app.showNotification === "function") {
-            app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
+            app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning", 5000, { group: true, context: 'eventHandler' });
           } else if (typeof console !== "undefined") {
             console.warn(`preventDefault() called on a passive ${type} listener`);
           }
@@ -398,7 +398,9 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         if (app && typeof app.showNotification === "function") {
           app.showNotification(
             error.message ? `Form submission error: ${error.message}` : "Form submission failed",
-            "error"
+            "error",
+            0,
+            { group: true, context: 'eventHandler' }
           );
         } else if (typeof console !== "undefined") {
           console.error('Form submission error:', error);
@@ -500,7 +502,7 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
         navToggleBtn.setAttribute('aria-expanded', isExpanded.toString());
         mainSidebar.setAttribute('aria-hidden', (!isExpanded).toString());
         if (app && typeof app.showNotification === "function") {
-          app.showNotification(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, "info");
+          app.showNotification(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, "info", 4000, { group: true, context: 'eventHandler' });
         } else if (typeof console !== "undefined") {
           console.log('[EventHandler] Sidebar toggled:', isExpanded ? 'open' : 'closed');
         }
