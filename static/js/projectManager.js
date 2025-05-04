@@ -129,7 +129,7 @@ class ProjectManager {
     return false;
   }
   _handleErr(eventName, err, fallback) {
-    this.notify.error(`[ProjectManager] ${eventName}: ${err.message}`);
+    this.notify.error(`[ProjectManager] ${eventName}: ${err.message}`, { context: "projectManager", group: true });
     this._emit(eventName, { error: err.message });
     return fallback;
   }
@@ -194,7 +194,7 @@ class ProjectManager {
         .filter(r => r.status === 'rejected')
         .map(r => r.reason);
       if (criticalErrors.length > 0) {
-        this.notify.error(`[ProjectManager] Some components failed: ${criticalErrors.map(e => e.message).join(', ')}`);
+        this.notify.error(`[ProjectManager] Some components failed: ${criticalErrors.map(e => e.message).join(', ')}`, { context: "projectManager", group: true });
         this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
       this.notify.success(`[ProjectManager] Project ${id} ready`);
@@ -331,7 +331,7 @@ class ProjectManager {
     if (!this._authOk('conversationLoadError', { conversationId })) throw new Error('auth');
     const projectId = this.currentProject?.id;
     if (!isValidProjectId(projectId)) {
-      this.notify.error('[ProjectManager] No valid current project ID');
+      this.notify.error('[ProjectManager] No valid current project ID', { context: "projectManager", group: true });
       throw new Error('No valid project context');
     }
     try {
@@ -366,7 +366,7 @@ class ProjectManager {
   }
   setCurrentProject(project) {
     if (!project || !project.id) {
-      this.notify.error('[ProjectManager] Cannot set invalid project as current');
+      this.notify.error('[ProjectManager] Cannot set invalid project as current', { context: "projectManager", group: true });
       return;
     }
     const previous = this.currentProject;
@@ -426,7 +426,7 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
     } catch (err) {
-      this.notify.error('[ProjectManager] Error creating project: ' + (err?.message || err));
+      this.notify.error('[ProjectManager] Error creating project: ' + (err?.message || err), { context: "projectManager", group: true });
       throw err;
     }
   }
@@ -450,7 +450,7 @@ class ProjectManager {
       this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id);
       return conversation;
     } catch (err) {
-      this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err));
+      this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { context: "projectManager", group: true });
       return null;
     }
   }

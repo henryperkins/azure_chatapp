@@ -27,6 +27,10 @@ class NotificationLogItem(BaseModel):
     type: str = Field(default="info", max_length=50)
     timestamp: Optional[float] = None
     user: str = Field(default="unknown", max_length=256)
+    group: Optional[bool] = None  # Notification grouping
+    context: Optional[str] = None  # Logical module or feature context
+    module: Optional[str] = None  # Subsystem/module name
+    source: Optional[str] = None  # Fine-grained action/source
 
     @validator('type')
     def validate_type(cls, v):
@@ -78,7 +82,22 @@ def write_log_entries(entries, retries=2):
                 )
                 user = entry.user if entry.user else "unknown"
                 clean_type = entry.type or "info"
-                log_lines.append(f"{dt_str} [{clean_type.upper()}] user={user} {entry.message.strip()}")
+                # Compose log context
+                log_ctx = []
+                if hasattr(entry, "group") and entry.group is not None:
+                    log_ctx.append(f"group={entry.group}")
+                if hasattr(entry, "context") and entry.context:
+                    log_ctx.append(f"context={entry.context}")
+                if hasattr(entry, "module") and entry.module:
+                    log_ctx.append(f"module={entry.module}")
+                if hasattr(entry, "source") and entry.source:
+                    log_ctx.append(f"source={entry.source}")
+
+                ctx_str = f" ({', '.join(log_ctx)})" if log_ctx else ""
+
+                log_lines.append(
+                    f"{dt_str} [{clean_type.upper()}] user={user}{ctx_str} {entry.message.strip()}"
+                )
 
             # Use file locking to handle concurrent writes
             with open(NOTIFICATION_LOG, "a", encoding="utf-8") as f:

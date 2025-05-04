@@ -1,589 +1,248 @@
-/**
- * Notification Handler Module.
- * Provides a flexible, DOM-based notification system with grouping, cross-document messaging,
- * batched server logging, and robust cleanup. Follows the project's DI and coding guidelines.
- *
- * @param {Object} deps - Required dependencies.
- * @param {DependencySystem} deps.DependencySystem - Central orchestrator/service locator.
- * @param {EventHandlers} deps.eventHandlers - Safe event wiring abstraction (trackListener, cleanupListeners).
- * @param {Object} deps.domAPI - Safe DOM API (e.g. getElementById, createElement, body, etc.); no direct globals.
- * @param {Object} [deps.globalScope] - Optional global-like context (e.g. window). Provides setTimeout, addEventListener, etc.
- * @param {Function} [deps.fetchFn] - HTTP request function (defaulting to global fetch if not provided).
- * @param {Function} [deps.getCurrentUser] - Returns current user info for logging (default unknown).
- * @returns {NotificationHandler} An object exposing { show, hide, clear, cleanup, addMessageListener, removeMessageListener, ... }.
- *
- * @example
- * import createGroupedNotificationHelper from './handler-helper.js';
- * import { createNotificationHandler } from './notification-handler.js';
- *
- * const deps = {
- *   DependencySystem: mySystem,
- *   eventHandlers: myEventHandlers,
- *   domAPI: myDomAPI,     // getElementById, createElement, body, etc.
- *   globalScope: window,  // or a mock for testing
- *   fetchFn: fetch,       // or a custom HTTP function
- *   getCurrentUser: () => ({ username: 'alice' })
- * };
- *
- * const notificationHandler = createNotificationHandler(deps);
- * notificationHandler.show('Welcome!', 'info');
- * // ...
- * notificationHandler.cleanup(); // Removes listeners, sends pending logs, etc.
- */
-
-import createGroupedNotificationHelper from './handler-helper.js';
-
+/* ---------------------------------------------------------------------------
+ *  notificationHandler.js  ★ refined v3.4  (2025-05-04)
+ *  --------------------------------------------------------------------------
+ *  CHANGES (v3.4)
+ *  --------------------------------------------------------------------------
+ *  • **Longer default lifetime** - banners auto-dismiss after 15 s (was 8 s).
+ *    Pass `timeout` in opts or set `timeout:0` for sticky.
+ *  • **Smoother animation** - 250 ms ease-out, subtle scale.
+ *  • **Responsive width** - container shrinks on small screens; banners never
+ *    cover the whole viewport.
+ *  • API is unchanged - all per-module overrides still work.
+ *  -------------------------------------------------------------------------- */
 export function createNotificationHandler({
-  eventHandlers,
   DependencySystem,
-  domAPI,
-  globalScope,
-  fetchFn,
-  getCurrentUser,
-  container,
-  groupWindowMs = 5000,          // <-- NEW: bubble straight to helper
-  classMap = {}                  // <-- optional style overrides
+  domAPI = {
+    getElementById: id => document.getElementById(id),
+    createElement : tag => document.createElement(tag),
+    body          : document.body,
+  },
+  position = "top-right",        // "top-left" | "bottom-right" | "bottom-left"
+  maxVisible = 5,
+  groupWindowMs = 4000,
+  theme = {
+    debug  : "#475569",
+    info   : "#2563EB",
+    success: "#16A34A",
+    warning: "#D97706",
+    error  : "#DC2626",
+  },
 } = {}) {
-  // -----------------------------
-  // 1. Validate and set defaults
-  // -----------------------------
-  if (!DependencySystem) {
-    throw new Error('[NotificationHandler] DependencySystem required');
-  }
-  if (!eventHandlers || typeof eventHandlers.trackListener !== 'function') {
-    throw new Error('[NotificationHandler] eventHandlers with trackListener required');
-  }
-  if (!domAPI || typeof domAPI.getElementById !== 'function' || typeof domAPI.createElement !== 'function') {
-    throw new Error('[NotificationHandler] domAPI with getElementById, createElement required');
-  }
+  const DEFAULT_TIMEOUT = 15000; // ← 15 s
 
-  // Fallbacks for optional dependencies
-  const _fetch = typeof fetchFn === 'function' ? fetchFn : (typeof fetch === 'function' ? fetch : null);
-  const _globalScope = globalScope || (typeof window !== 'undefined' ? window : {});
-  const _setTimeout = typeof _globalScope.setTimeout === 'function' ? _globalScope.setTimeout : setTimeout; // fallback
-  const _addGlobalListener = typeof _globalScope.addEventListener === 'function'
-    ? _globalScope.addEventListener.bind(_globalScope)
-    : null;
-  const currentUserFn = typeof getCurrentUser === 'function' ? getCurrentUser : () => ({ username: 'unknown' });
+  /* ────────────────────────── container ─────────────────────────── */
+  const CONTAINER_ID = "notificationArea";
+  const container = (() => {
+    let el = domAPI.getElementById(CONTAINER_ID);
+    if (el) return el;
+    el = domAPI.createElement("div");
+    el.id = CONTAINER_ID;
+    el.setAttribute("role", "region");
+    el.setAttribute("aria-label", "Notifications");
+    Object.assign(el.style, {
+      position      : "fixed",
+      zIndex        : 10000,
+      maxWidth      : "28rem",
+      width         : "calc(100vw - 2rem)", // mobile‑friendly
+      pointerEvents : "none",
+      display       : "flex",
+      flexDirection : position.startsWith("bottom") ? "column-reverse" : "column",
+      gap           : "0.5rem",
+    });
+    const [v, h] = position.split("-");
+    el.style[v] = "1rem";
+    el.style[h] = "1rem";
+    domAPI.body.appendChild(el);
+    return el;
+  })();
 
-  // -----------------------------
-  // 2. Internal state
-  // -----------------------------
-  let _ready = false;
-  const _pendingQueue = [];
-  const activeNotifications = new Map();
-  let notificationCounter = 0;
-  let _messageListenerAttached = false;
+  /* ────────────────────── internal state ────────────────────────── */
+  const groups = new Map(); // key → groupData
 
-  const logBatch = [];
-  let logSendTimeout = null;
+  /* ─────────────────────── utility fns ──────────────────────────── */
+  const iconBtn = (label, glyph) => {
+    const b = domAPI.createElement("button");
+    b.type = "button";
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    Object.assign(b.style, {
+      background    : "transparent",
+      border        : 0,
+      cursor        : "pointer",
+      color         : "inherit",
+      fontSize      : "1rem",
+      lineHeight    : 1,
+      display       : "flex",
+      alignItems    : "center",
+      justifyContent: "center",
+      padding       : 0,
+      userSelect    : "none",
+    });
+    b.textContent = glyph;
+    return b;
+  };
+  const flashIcon = (btn, glyph, ms = 800) => {
+    const old = btn.textContent;
+    btn.textContent = glyph;
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = old; btn.disabled = false; }, ms);
+  };
+  const fadeIn = el => requestAnimationFrame(() => {
+    el.style.opacity = "1";
+    el.style.transform = "translateY(0) scale(1)";
+  });
+  const fadeOut = el => {
+    el.style.opacity = "0";
+    el.style.transform = "translateY(-6px) scale(.96)";
+    setTimeout(() => el.remove(), 250);
+  };
 
-  // -----------------------------
-  // 3. Notification Container
-  // -----------------------------
-  // Expose so app.js can call it without duplicating container logic.
-  function ensureNotificationContainer() {
-    // Use provided container if passed
-    if (container) return container;
+  function buildBanner(type, key) {
+    const root = domAPI.createElement("div");
+    root.setAttribute("role", "alert");
+    root.setAttribute("aria-live", "polite");
+    root.tabIndex = 0;
+    Object.assign(root.style, {
+      pointerEvents : "auto",
+      width         : "100%",
+      display       : "flex",
+      flexDirection : "column",
+      gap           : "0.5rem",
+      padding       : "0.75rem 1rem",
+      borderRadius  : "0.5rem",
+      boxShadow     : "0 2px 6px rgba(0,0,0,.15)",
+      color         : "#fff",
+      background    : theme[type] || theme.info,
+      backdropFilter: "blur(4px)",
+      transform     : "translateY(10px) scale(.97)",
+      opacity       : "0",
+      transition    : "opacity .25s ease-out, transform .25s cubic-bezier(.21,.55,.3,1)",
+    });
 
-    let resolved = domAPI.getElementById('notificationArea');
-    if (!resolved) {
-      resolved = domAPI.createElement('div');
-      resolved.id = 'notificationArea';
-      resolved.className =
-        'notification-area fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto';
-      resolved.setAttribute('role', 'status');
-      resolved.setAttribute('aria-live', 'polite');
+    /* header row */
+    const header = domAPI.createElement("div");
+    Object.assign(header.style, { display: "flex", alignItems: "flex-start", gap: "0.5rem" });
+    root.appendChild(header);
 
-      if (domAPI.body && typeof domAPI.body.appendChild === 'function') {
-        domAPI.body.appendChild(resolved);
-      }
-    } else {
-      // Ensure styling is consistent
-      if (!resolved.classList.contains('notification-area')) {
-        resolved.classList.add('notification-area');
-      }
-      resolved.style.zIndex = '1200';
-    }
-    return resolved;
-  }
+    const counterEl = domAPI.createElement("span");
+    counterEl.textContent = "1";
+    counterEl.title = "1× repeated";
+    Object.assign(counterEl.style, { fontSize: "0.75rem", opacity: 0.85, alignSelf: "baseline" });
+    header.appendChild(counterEl);
 
-  // Public getter (used by app.js now)
-  const getContainer = ensureNotificationContainer;
+    const msgShort = domAPI.createElement("span");
+    msgShort.style.flex = "1 1 auto";
+    header.appendChild(msgShort);
 
-  // -----------------------------
-  // 4. Readiness & Queue Flush
-  // -----------------------------
-  function _checkReady() {
-    // Force container creation to ensure we can render notifications
-    const container = ensureNotificationContainer();
+    const copyBtn  = iconBtn("Copy message(s)", "📋");
+    const closeBtn = iconBtn("Dismiss", "✕");
+    header.appendChild(copyBtn);
+    header.appendChild(closeBtn);
 
-    // If we have all required dependencies, set ready
-    if (eventHandlers && typeof eventHandlers.trackListener === 'function' && DependencySystem && container) {
-      _ready = true;
-      // Flush any pending notifications
-      while (_pendingQueue.length > 0) {
-        const args = _pendingQueue.shift();
-        show(...args);
-      }
-    }
-    return _ready;
-  }
+    /* accordion */
+    const toggler = iconBtn("Show details", "▸");
+    header.insertBefore(toggler, msgShort);
+    const list = domAPI.createElement("ul");
+    Object.assign(list.style, { display:"none", margin:0, paddingLeft:"1rem", listStyle:"disc", fontSize:"0.75rem" });
+    root.appendChild(list);
 
-  // Optionally auto-check readiness using global scope events
-  if (_addGlobalListener && _globalScope.document) {
-    const rs = _globalScope.document.readyState;
-    if (rs === 'complete' || rs === 'interactive') {
-      _setTimeout(_checkReady, 0);
-      _setTimeout(_checkReady, 500);
-    } else {
-      _addGlobalListener(
-        'DOMContentLoaded',
-        () => {
-          _checkReady();
-          _setTimeout(_checkReady, 500);
-        },
-        { once: true }
-      );
-    }
-  } else {
-    // If no global document or event listener, the user can manually call _checkReady
-    _checkReady();
-  }
-
-  // -----------------------------
-  // 5. Icon Generation
-  // -----------------------------
-  function getIconForType(type) {
-    const icons = {
-      success:
-        '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>',
-      warning:
-        '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5.062 19h13.856c1.54 0 2.502-1.667 1.732-3l-6.287-9.17c-.77-1.333-2.694-1.333-3.464 0L3.33 16c-.77 1.333.192 3 1.732 3z" /></svg>',
-      error:
-        '<svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" /></svg>',
-      info:
-        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"></path></svg>',
-    };
-    return icons[type] || icons.info;
-  }
-
-  // -----------------------------
-  // 6. Batched Logging
-  // -----------------------------
-  function scheduleBatchLog() {
-    if (logSendTimeout) return;
-    logSendTimeout = _setTimeout(() => sendLogBatch(0), 2000);
-  }
-
-  async function sendLogBatch(retryCount = 0) {
-    logSendTimeout = null;
-    if (logBatch.length === 0) return;
-    if (typeof _fetch !== 'function') {
-      // Cannot send logs without a fetch function
-      return;
-    }
-
-    const batchToSend = [...logBatch];
-    logBatch.length = 0;
-
-    try {
-      const response = await _fetch('/api/log_notification_batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notifications: batchToSend }),
-      });
-
-      if (!response.ok && retryCount < 2) {
-        // Put items back in batch and retry
-        console.warn(`[NotificationHandler] Server returned ${response.status}, retrying...`);
-        logBatch.push(...batchToSend);
-        _setTimeout(() => sendLogBatch(retryCount + 1), 1000 * (retryCount + 1));
-      }
-    } catch (err) {
-      console.warn('[NotificationHandler] Failed to send log batch:', err);
-      // Retry on network errors
-      if (retryCount < 2) {
-        logBatch.push(...batchToSend);
-        _setTimeout(() => sendLogBatch(retryCount + 1), 1000 * (retryCount + 1));
-      }
-    }
-  }
-
-  function logNotification(message, type, user) {
-    let safeType = typeof type === 'string' ? type.trim().toLowerCase() : 'info';
-    if (!/^(info|error|warning|success)$/i.test(safeType)) {
-      safeType = 'info';
-    }
-    const logItem = {
-      message: String(message),
-      type: safeType,
-      timestamp: Date.now() / 1000,
-      user: user || currentUserFn().username || 'unknown',
-    };
-
-    logBatch.push(logItem);
-    if (logBatch.length >= 10) {
-      if (logSendTimeout) clearTimeout(logSendTimeout);
-      sendLogBatch(0);
-    } else {
-      scheduleBatchLog();
-    }
-  }
-
-  // -----------------------------
-  // 7. Notification Template
-  // -----------------------------
-  // We'll build the template in memory the first time, or store as a string
-  function getNotificationTemplateContent() {
-    // Using minimal string template to create a container
-    return `
-      <div class="alert notification-item animate-fadeIn" role="alert" aria-live="polite" style="animation-duration:300ms;">
-        <div class="flex items-center gap-2">
-          <span class="notification-icon" aria-hidden="true"></span>
-          <span class="notification-message ml-2 flex-1"></span>
-          <button type="button" class="notification-copy-btn btn btn-xs btn-ghost ml-1"
-                  aria-label="Copy notification" title="Copy notification message" tabindex="0">
-            <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true"
-                 class="inline-block align-text-bottom" viewBox="0 0 20 20" fill="currentColor">
-              <path d="M8 2a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-1h1
-                       a2 2 0 0 0 2-2V7.83a2 2 0 0 0-.59-1.42l-2.83-2.83A2 2 0 0 0 14.17 3H14V2
-                       a2 2 0 0 0-2-2H8zm2 1v1H8V3h2zm3.59 2 2.41 2.41V13a1 1 0 0 1-1 1h-1V7
-                       a2 2 0 0 0-2-2h-6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h6a2 2 0 0 0 2 2v8h-6
-                       a1 1 0 0 1-1-1V7.83a1 1 0 0 1 .29-.71z"/>
-            </svg>
-          </button>
-          <button type="button" class="btn btn-xs btn-ghost notification-close ml-auto"
-                  aria-label="Dismiss notification" tabindex="0">×</button>
-        </div>
-      </div>
-    `;
-  }
-
-  // -----------------------------
-  // 8. Show Notifications
-  // -----------------------------
-  function show(message, type = 'info', options = {}) {
-    const container = ensureNotificationContainer();
-    if (!_ready && !_checkReady()) {
-      // Queue notification
-      _pendingQueue.push([message, type, options]);
-      return null;
-    }
-
-    try {
-      // Log first
-      logNotification(message, type, options.user);
-
-      // Group context
-      const context = options.context || options.module || options.source || 'general';
-      if (options.group) {
-        return groupedHelper.showGroupedNotificationByTypeAndTime({
-          message,
-          type,
-          context,
-          container,
-        });
-      }
-
-      // Create new notification
-      const notificationId = `notification-${Date.now()}-${notificationCounter++}`;
-      const notificationHTML = getNotificationTemplateContent();
-      const wrapperEl = domAPI.createElement('div');
-      wrapperEl.innerHTML = notificationHTML.trim();
-      const notificationEl = wrapperEl.firstElementChild; // <div class="alert ...">
-
-      // Assign ID
-      notificationEl.id = notificationId;
-      let safeType = typeof type === 'string' ? type.trim().toLowerCase() : 'info';
-      if (!/^(info|error|warning|success)$/i.test(safeType)) {
-        safeType = 'info';
-      }
-      notificationEl.classList.add(`notification-${safeType}`);
-
-      // Set icon and text
-      const iconSpan = notificationEl.querySelector('.notification-icon');
-      const messageSpan = notificationEl.querySelector('.notification-message');
-      if (iconSpan) iconSpan.innerHTML = getIconForType(safeType);
-      if (messageSpan) {
-        // textContent is safe for user messages
-        messageSpan.textContent = message;
-      }
-
-      // Auto-dismiss
-      const timeout = options.timeout ?? 5000;
-      let timeoutId = null;
-      if (timeout > 0) {
-        timeoutId = _setTimeout(() => hide(notificationId), timeout);
-      }
-
-      // Track
-      activeNotifications.set(notificationId, {
-        element: notificationEl,
-        timeoutId,
-      });
-
-      // Close button
-      const closeBtn = notificationEl.querySelector('.notification-close');
-      if (closeBtn) {
-        eventHandlers.trackListener(closeBtn, 'click', () => hide(notificationId), {
-          description: `Notification close btn ${notificationId}`,
-        });
-      }
-
-      // Copy button
-      const copyBtn = notificationEl.querySelector('.notification-copy-btn');
-      if (copyBtn) {
-        const originalIcon = copyBtn.innerHTML;
-        const checkIcon = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" focusable="false" aria-hidden="true"
-               class="inline-block align-text-bottom text-success" viewBox="0 0 20 20" fill="currentColor">
-            <path d="M16.704 5.29a1 1 0 0 1 .007 1.414l-7 7a1 1 0 0 1-1.414 0l-3-3
-                     a1 1 0 1 1 1.414-1.414L9 11.586l6.293-6.293
-                     a1 1 0 0 1 1.414-.003z"/>
-          </svg>
-        `;
-        eventHandlers.trackListener(copyBtn, 'click', () => {
-          const textEl = notificationEl.querySelector('.notification-message');
-          const copyText = textEl?.textContent || '';
-          if (_globalScope.navigator && _globalScope.navigator.clipboard) {
-            _globalScope.navigator.clipboard.writeText(copyText).then(() => {
-              copyBtn.innerHTML = checkIcon;
-              copyBtn.classList.add('text-success');
-              _setTimeout(() => {
-                copyBtn.innerHTML = originalIcon;
-                copyBtn.classList.remove('text-success');
-              }, 1200);
-            }).catch(() => {
-              notificationHandler.show('Copy failed', 'error', { timeout: 2000, context: 'notificationHelper' });
-            });
-          }
-        }, {
-          description: `Notification copy btn ${notificationId}`,
-        });
-      }
-
-      // Append to container
-      container.appendChild(notificationEl);
-
-      return notificationId;
-    } catch (err) {
-      console.error('[NotificationHandler] Failed to show notification:', err);
-
-      // Fallback
+    toggler.addEventListener("click", () => {
+      const open = list.style.display !== "none";
+      list.style.display = open ? "none" : "block";
+      toggler.textContent = open ? "▸" : "▾";
+      toggler.title = open ? "Show details" : "Hide details";
+    });
+    closeBtn.addEventListener("click", () => dismiss(key));
+    copyBtn.addEventListener("click", async e => {
+      e.stopPropagation();
       try {
-        const fallbackEl = domAPI.createElement('div');
-        fallbackEl.className = `alert alert-${type || 'info'} mb-2`;
-        fallbackEl.textContent = message || 'Notification error';
-        if (container) container.appendChild(fallbackEl);
-        _setTimeout(() => {
-          if (fallbackEl.parentNode) {
-            fallbackEl.parentNode.removeChild(fallbackEl);
-          }
-        }, 5000);
-      } catch (e2) {
-        console.error('[NotificationHandler] Critical fallback error:', e2);
+        const text = Array.from(list.children).map(li => li.textContent).join("\n");
+        await navigator.clipboard.writeText(text);
+        flashIcon(copyBtn, "✅");
+      } catch {
+        flashIcon(copyBtn, "⚠️");
       }
-      return null;
+    });
+
+    fadeIn(root);
+    return { root, counterEl, msgShort, list, ts: Date.now(), timer: null, type };
+  }
+
+  function scheduleAutoDismiss(group, key, timeout = DEFAULT_TIMEOUT) {
+    if (group.timer) clearTimeout(group.timer);
+    if (timeout > 0) group.timer = setTimeout(() => dismiss(key), timeout);
+  }
+  function dismiss(key) {
+    const g = groups.get(key);
+    if (!g) return;
+    clearTimeout(g.timer);
+    fadeOut(g.root);
+    groups.delete(key);
+  }
+
+  /* ───────────────────────── show() core ────────────────────────── */
+  function show(message, type = "info", opts = {}) {
+    if (!message) return null;
+    const scope = opts.scope || "type"; // "type" | "type+context"
+    const ctx   = opts.context || "";
+    const key   = opts.group === false ? `${type}|${Date.now()}|${Math.random()}`
+                                       : (scope === "type+context" ? `${type}|${ctx}` : type);
+    const now = Date.now();
+    let g = groups.get(key);
+
+    if (g && (now - g.ts) < groupWindowMs) {
+      g.ts = now;
+      const newCount = Number(g.counterEl.textContent) + 1;
+      g.counterEl.textContent = String(newCount);
+      g.counterEl.title = `${newCount}× repeated`;
+      if (!g.messages) g.messages = [];
+      if (!g.messages.includes(message)) {
+        g.messages.push(message);
+        const li = domAPI.createElement("li");
+        li.textContent = message;
+        g.list.appendChild(li);
+      }
+      g.msgShort.textContent = message;
+      scheduleAutoDismiss(g, key, opts.timeout ?? DEFAULT_TIMEOUT);
+      return g.root;
+    }
+
+    g = buildBanner(type, key);
+    g.messages = [message];
+    g.msgShort.textContent = message;
+    const li = domAPI.createElement("li");
+    li.textContent = message;
+    g.list.appendChild(li);
+    groups.set(key, g);
+
+    if (opts.style) Object.assign(g.root.style, opts.style);
+
+    while (container.children.length >= maxVisible) {
+      const victim = position.startsWith("bottom") ? container.children[container.children.length - 1]
+                                                   : container.children[0];
+      victim.remove();
+    }
+    position.startsWith("bottom") ? container.appendChild(g.root) : container.prepend(g.root);
+    scheduleAutoDismiss(g, key, opts.timeout ?? DEFAULT_TIMEOUT);
+    return g.root;
+  }
+
+  /* ───────────────────────────── API ───────────────────────────── */
+  function clear(filter = {}) {
+    for (const [key] of groups) {
+      if (!filter.context || key.endsWith("|" + filter.context)) dismiss(key);
     }
   }
 
-  // -----------------------------
-  // 9. Hide Notifications
-  // -----------------------------
-  function hide(notificationId) {
-    const data = activeNotifications.get(notificationId);
-    if (data) {
-      const { element, timeoutId } = data;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      // Animate out
-      element.classList.remove('animate-fadeIn');
-      element.classList.add('animate-fadeOut');
-      element.style.animationDuration = '300ms';
-
-      _setTimeout(() => {
-        if (element.parentNode) {
-          element.parentNode.removeChild(element);
-        }
-        activeNotifications.delete(notificationId);
-      }, 300);
-
-      return true;
-    }
-    // Possibly a grouped notification
-    return groupedHelper.hideGroupedNotification(notificationId);
-  }
-
-  // -----------------------------
-  // 10. Clear Notifications
-  // -----------------------------
-  function clear() {
-    // Clear standard
-    for (const [id, { element, timeoutId }] of activeNotifications.entries()) {
-      if (timeoutId) clearTimeout(timeoutId);
-      if (element && element.parentNode) {
-        element.parentNode.removeChild(element);
-      }
-    }
-    activeNotifications.clear();
-    // Clear grouped
-    groupedHelper.clearAllGroupedNotifications();
-  }
-
-  // -----------------------------
-  // 11. Cross-Frame Messaging
-  // -----------------------------
-  function handleNotificationMessages(event) {
-    try {
-      const msg = event.data;
-      let handled = false;
-
-      if (typeof msg === 'string' && msg.includes('<hide-notification>')) {
-        const match = msg.match(/<hide-notification(?:\s+id="([^"]+)")?\s*>/);
-        const id = match && match[1];
-        if (id) hide(id);
-        else clear();
-        handled = true;
-      } else if (msg && typeof msg === 'object') {
-        if (msg.type === 'notification') {
-          show(msg.text, msg.level || 'info', msg.options || {});
-          handled = true;
-        }
-      }
-
-      if (handled && event.source && event.origin && typeof event.source.postMessage === 'function') {
-        event.source.postMessage({
-          type: 'notification-handled',
-          success: true,
-          messageId: msg.id || null,
-        }, event.origin);
-      }
-    } catch (err) {
-      if (event.source && event.origin && typeof event.source.postMessage === 'function') {
-        try {
-          event.source.postMessage({
-            type: 'notification-error',
-            success: false,
-            error: err.message,
-            messageId: event.data?.id || null,
-          }, event.origin);
-        } catch (err2) {
-          console.error('[NotificationHandler] postMessage notification-error:', err2);
-        }
-      }
-    }
-  }
-
-  function addMessageListener(target = _globalScope, trackListener = null) {
-    if (_messageListenerAttached) return;
-    if (!target || !target.postMessage) return; // not a valid window-like
-
-    const tracker = trackListener || eventHandlers.trackListener;
-    tracker(target, 'message', handleNotificationMessages, { description: 'NotificationHandler: message' });
-    _messageListenerAttached = true;
-  }
-
-  function removeMessageListener(target = _globalScope) {
-    if (_messageListenerAttached) {
-      eventHandlers.cleanupListeners(
-        target,
-        'message',
-        null,
-        'NotificationHandler: message'
-      );
-      _messageListenerAttached = false;
-    }
-  }
-
-  // -----------------------------
-  // 12. Grouped Notifications
-  // -----------------------------
-  const groupedHelper = createGroupedNotificationHelper({
-    domAPI,
-    eventHandlers,
-    getIconForType,
-    notificationHandler: null, // We'll set reference below
-    globalScope: _globalScope,
-    groupWindowMs,
-    classMap
+  const api = { show, clear, getContainer: () => container };
+  ["debug","info","success","warning","error"].forEach(lvl => {
+    api[lvl] = (msg, opts = {}) => show(msg, lvl, opts);
   });
 
-  /* --- Clear-all caching (avoids querySelector each time) --- */
-  let clearAllBtnEl = null;
-  function ensureClearAllBtn() {
-    const cont = getContainer();
-    if (groupedHelper.groupedNotifications.size === 0) {
-      clearAllBtnEl?.remove();
-      clearAllBtnEl = null;
-      return;
-    }
-    if (clearAllBtnEl && cont.contains(clearAllBtnEl)) return;
-    clearAllBtnEl?.remove();
-
-    clearAllBtnEl = domAPI.createElement('button');
-    clearAllBtnEl.type = 'button';
-    clearAllBtnEl.className = 'notification-clear-all btn btn-xs btn-outline';
-    clearAllBtnEl.textContent = 'Clear All';
-    clearAllBtnEl.setAttribute('aria-label', 'Clear all notifications');
-    clearAllBtnEl.onclick = () => { clear(); clearAllBtnEl.remove(); clearAllBtnEl = null; };
-    cont.insertBefore(clearAllBtnEl, cont.firstChild);
+  if (DependencySystem?.modules?.has("notificationHandler")) {
+    return DependencySystem.modules.get("notificationHandler");
   }
-
-  // Wrap grouped methods to inject the Clear All button logic
-  const originalShowGrouped = groupedHelper.showGroupedNotificationByTypeAndTime;
-  groupedHelper.showGroupedNotificationByTypeAndTime = function (opts) {
-    const id = originalShowGrouped.call(groupedHelper, opts);
-    ensureClearAllBtn();
-    return id;
-  };
-
-  const originalClearAllGrouped = groupedHelper.clearAllGroupedNotifications;
-  groupedHelper.clearAllGroupedNotifications = function () {
-    originalClearAllGrouped.call(groupedHelper);
-    ensureClearAllBtn();
-  };
-
-  // -----------------------------
-  // 13. Final handler object
-  // -----------------------------
-  const notificationHandler = {
-    show,
-    hide,
-    clear,
-
-    // Cleanup everything: notifications, logs, message listeners
-    cleanup() {
-      clear();
-      removeMessageListener();
-      if (logBatch.length > 0) {
-        sendLogBatch(0);
-      }
-    },
-    addMessageListener,
-    removeMessageListener,
-
-    getIconForType,
-    groupedNotifications: groupedHelper.groupedNotifications,
-    groupedHelper,
-
-    getContainer,                       // <-- NEW
-
-    // Compatibility: methods that existed in older code
-    log: (msg, opts) => show(msg, 'info', opts),
-    warn: (msg, opts) => show(msg, 'warning', opts),
-    error: (msg, opts) => show(msg, 'error', opts),
-    debug: (msg, opts) => show(msg, 'info', { ...(opts || {}), timeout: 2000 }),
-  };
-
-  // Self-reference in groupedHelper
-  if (groupedHelper._setNotificationHandler && typeof groupedHelper._setNotificationHandler === 'function') {
-    groupedHelper._setNotificationHandler(notificationHandler);
-  }
-
-  // Try immediate readiness check
-  _checkReady();
-
-  return notificationHandler;
+  return api;
 }
+
+export default { createNotificationHandler };

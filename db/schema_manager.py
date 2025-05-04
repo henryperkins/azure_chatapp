@@ -22,16 +22,17 @@ logger = logging.getLogger(__name__)
 # --- Alembic Automated Migration Integration ---
 def automated_alembic_migrate(message: str = "Automated migration", revision_dir: str = "alembic"):
     """
-    Invokes Alembic to autogenerate a new migration (if needed) and upgrade the database to head.
+    Autogenerate and apply Alembic migrations automatically
+    — but if the migration is a no-op ("pass"), do not write or apply it. Prevents reload loops.
     """
     import os
-    import sys
     import logging
     from alembic.config import Config
     from alembic import command
+    import glob
 
     logger = logging.getLogger(__name__)
-    logger.info("Starting Alembic auto-migration workflow...")
+    logger.info("Starting Alembic auto-migration workflow with no-op pruning")
     print("==> (Alembic) Starting Alembic auto-migration workflow...")
 
     # Path adjustments:
@@ -44,7 +45,6 @@ def automated_alembic_migrate(message: str = "Automated migration", revision_dir
     alembic_cfg = Config(alembic_ini_path)
     alembic_cfg.set_main_option("script_location", migration_dir_path)
 
-    # 1. Autogenerate revision (will be skipped if no changes detected)
     from alembic.script import ScriptDirectory
     script = ScriptDirectory.from_config(alembic_cfg)
     prev_head = script.get_current_head()
@@ -63,13 +63,38 @@ def automated_alembic_migrate(message: str = "Automated migration", revision_dir
     script = ScriptDirectory.from_config(alembic_cfg)
     new_head = script.get_current_head()
     if prev_head != new_head:
+        # Find the new migration file
+        migration_files = sorted(glob.glob(os.path.join(migration_dir_path, "versions", "*.py")), key=os.path.getmtime, reverse=True)
+        latest_file = migration_files[0] if migration_files else None
+
+        if latest_file:
+            with open(latest_file, "r", encoding="utf-8") as f:
+                contents = f.read()
+            # Detect no-op: Both upgrade() and downgrade() are 'pass'
+            is_noop = (
+                "def upgrade():" in contents and "def downgrade():" in contents
+                and (
+                    "def upgrade():\n    pass" in contents or "def upgrade():\n\tpass" in contents
+                ) and (
+                    "def downgrade():\n    pass" in contents or "def downgrade():\n\tpass" in contents
+                )
+            )
+            if is_noop:
+                logger.info(f"Removing Alembic no-op (empty) migration file: {latest_file}")
+                print(f"==> (Alembic) Removing no-op migration {latest_file}")
+                os.remove(latest_file)
+                # Reset head so db & script state matches
+                script = ScriptDirectory.from_config(alembic_cfg)
+                command.upgrade(alembic_cfg, prev_head or "base")
+                return
+
         logger.info(f"New Alembic migration created: {new_head}. Upgrading database...")
         print(f"==> (Alembic) New migration created: {new_head}. Upgrading database to head...")
+
     else:
-        logger.info(f"No changes detected. Database already up to date.")
+        logger.info("No changes detected. Database already up to date.")
         print("==> (Alembic) No changes detected. Database already up to date (no new migration).")
 
-    # 2. Always upgrade to head (idempotent)
     try:
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migration applied: database is at head.")
@@ -102,11 +127,19 @@ class SchemaManager:
     async def initialize_database(self) -> None:
         """
         Full database initialization process:
-        1. Creates missing tables
-        2. Aligns schema with ORM definitions
-        3. Validates final schema
+        1. Optionally generates and runs Alembic migrations
+        2. Creates missing tables
+        3. Aligns schema with ORM definitions
+        4. Validates final schema
         """
+        import os
         try:
+            # ---- Alembic auto-migration/upgrade (conditionally run) ----
+            AUTO_MIGRATE = os.getenv("ENABLE_AUTO_MIGRATION", "false").lower() == "true"
+            if AUTO_MIGRATE:
+                automated_alembic_migrate()
+            else:
+                logger.info("Alembic auto-migration is disabled (ENABLE_AUTO_MIGRATION is false or unset)")
             logger.info("Starting database initialization...")
             print("==> Starting database initialization...")
 

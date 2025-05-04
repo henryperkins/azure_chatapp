@@ -156,6 +156,9 @@ from utils.auth_utils import clean_expired_tokens
 from utils.db_utils import schedule_token_cleanup
 from db.schema_manager import SchemaManager
 
+# ----- Ensure ALL models are registered for migrations/table creation -----
+import models
+
 # Import your routers
 from auth import router as auth_router, create_default_user
 from routes.knowledge_base_routes import router as knowledge_base_router
@@ -241,7 +244,7 @@ try:
             logger.info(f"Found modals.html in alternative locations: {modals_files}")
         else:
             logger.info("Could not find modals.html anywhere in the project")
-    
+
     # Mount static directory
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     logger.info(f"Static files mounted from {STATIC_DIR}")

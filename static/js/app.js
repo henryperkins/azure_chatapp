@@ -48,8 +48,9 @@ const browserAPI = {
     }
 };
 let DependencySystem = browserAPI.getDependencySystem();
+const notify = () => DependencySystem.modules.get && DependencySystem.modules.get('notify');
 if (!DependencySystem) {
-    showNotification("CRITICAL: DependencySystem not found. Application cannot start.", "error", 5000, { group: true, context: "app" });
+    notify()?.error("CRITICAL: DependencySystem not found. Application cannot start.", { group: true, context: "app" });
     browserAPI.getDocument().body.innerHTML = `
     <div style="padding: 2em; text-align: center; color: red; font-family: sans-serif;">
       <strong>Application Critical Error:</strong> Core dependency system failed to load.

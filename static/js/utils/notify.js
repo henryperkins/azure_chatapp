@@ -30,8 +30,55 @@ export function createNotify({ notificationHandler }) {
   /* Centralised defaults ↓ */
   const DURATION = { info:4000, success:4000, warning:6000, error:0 };
 
+  async function logNotificationToBackend({
+    message, type, timestamp, user,
+    group, context, module, source
+  }) {
+    try {
+      await fetch('/api/log_notification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          type,
+          timestamp,
+          user,
+          ...(group !== undefined ? { group } : {}),
+          ...(context ? { context } : {}),
+          ...(module ? { module } : {}),
+          ...(source ? { source } : {})
+        })
+      });
+    } catch {/* intentionally swallow errors; never break notification UI */}
+  }
+
   function send(msg, type='info', opts={}) {
-    return notificationHandler.show(msg, type, DURATION[type], opts);
+    const res = notificationHandler.show(msg, type, DURATION[type], opts);
+    // Fire-and-forget backend logging
+    const allowedTypes = ['info','success','warning','error'];
+    const _type = allowedTypes.includes(type) ? type : 'info';
+    let user = 'unknown';
+    try {
+      user = (window.DependencySystem?.modules?.get('currentUser')?.username)
+        || (window.currentUser?.username)
+        || (window.currentUser?.name)
+        || 'unknown';
+    } catch {/* fallback to unknown */}
+    // Get epoch seconds
+    const timestamp = Date.now() / 1000;
+    // Extract context fields
+    const { group, context, module, source } = opts || {};
+    logNotificationToBackend({
+      message: msg,
+      type: _type,
+      timestamp,
+      user,
+      group,
+      context,
+      module,
+      source
+    });
+    return res;
   }
 
   /* Sugar helpers  –  encourage grouping */
