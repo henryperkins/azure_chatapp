@@ -840,7 +840,7 @@ async function initializeCoreSystems() {
         });
     }
 
-    ensureNotificationContainer();
+    notificationHandler.getContainer();
 
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
