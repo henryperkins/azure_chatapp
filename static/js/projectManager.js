@@ -22,15 +22,6 @@ function normalizeProjectResponse(res) {
   if (data) {
     data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
   }
-
-  /**
-   * Optional initialize method for DI compatibility.
-   * Called by app.js after registration.
-   */
-  async initialize() {
-    // No-op for now; can be extended for future async setup.
-    return true;
-  }
   if (!isValidProjectId(data?.id)) throw new Error('Invalid project ID in server response');
   return data;
 }
@@ -413,6 +404,15 @@ class ProjectManager {
   /* ---------------------------------------------------------------------- */
   /* Additional Project Creation Helpers (Ensured Conversation, KB, etc)     */
   /* ---------------------------------------------------------------------- */
+
+  /**
+   * Optional initialize method for DI compatibility.
+   * Called by app.js after registration.
+   */
+  async initialize() {
+    // No-op for now; can be extended for future async setup.
+    return true;
+  }
 
   async createProject(projectData) {
     try {
