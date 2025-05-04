@@ -1,39 +1,24 @@
-/* =============================================================================
-   tailwind.css (Aggregator)
-   =============================================================================
-   Purpose:
-     1) Import Tailwind CSS v4.
-     2) (Optionally) configure DaisyUI plugin inline.
-     3) Define a custom fade+zoom animation utility (fade-zoom-in).
-     4) Import partial CSS files.
-*/
+/* tailwind.css */
 
-/* 1) Import Tailwind's core */
-@import "tailwindcss";
+/* 1) Core layers (base, components, utilities) */
+@import "tailwindcss";          /* Tailwind v4 unified import :contentReference[oaicite:8]{index=8} */
 
-/* 2) DaisyUI plugin config (optional).
-   If you want DaisyUI built-in themes, for example: */
+/* 2) DaisyUI plugin */
 @plugin "daisyui";
 
-/* Custom "fadeZoomIn" animation is now defined in tailwind.config.mjs for use as "animate-fadeZoomIn". */
-/* Remove manual CSS keyframes and use utility class in markup per Tailwind best practices. */
+/* 3) Custom theme & component overrides */
+@import "./legacy-dracula-theme.css";    /* Semicolon ensures valid CSS :contentReference[oaicite:10]{index=10} */
+@import "./enhanced-components.css";     /* No @import of Tailwind here :contentReference[oaicite:11]{index=11} */
+@import "./file-upload-enhanced.css";    /* Added missing semicolon :contentReference[oaicite:12]{index=12} */
 
-/* 4) Import partial CSS files: enhanced-components, file-upload, legacy-dracula-theme. */
-@import "./enhanced-components.css";
-@import "./file-upload-enhanced.css";
-
-/* Done! "npm run build:css" will compile into a single dist/tailwind.css file. */
-
-/* Custom animation: fadeZoomIn, configured for Tailwind v4+.
-   Use as class="animate-fadeZoomIn" per https://tailwindcss.com/docs/animation#customizing-utilities
-*/
+/* 4) Example custom animation/utilities */
 @keyframes fadeZoomIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
+  0% { opacity: 0; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@layer utilities {
+  .animate-fadeZoomIn {
+    animation: fadeZoomIn 0.3s ease-in-out forwards;
   }
 }
