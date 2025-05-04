@@ -7,42 +7,7 @@ import { isValidProjectId as rawIsValidProjectId } from '../projectManager.js';
  */
 export const isValidProjectId = rawIsValidProjectId;
 
-/**
- * Checks if the current user is authenticated based on window.app.state data.
- * (Not used in app.js, but kept here for other modules if needed.)
- */
-export function isAuthenticated() {
-  return window.app?.state?.isAuthenticated === true;
-}
 
-/**
- * Displays a notification message (via window.DependencySystem if available)
- * or logs in console as a fallback.
- */
-export function showNotification(message, type = 'info', duration = 5000) {
-  try {
-    const ds = window.DependencySystem || null;
-    const notificationHandler = ds?.modules?.get('notificationHandler');
-    if (notificationHandler?.show) {
-      notificationHandler.show(message, type, { timeout: duration });
-    } else {
-      const logMethod = type === 'error'
-        ? console.error
-        : type === 'warn'
-          ? console.warn
-          : console.log;
-      logMethod(`[Notification Fallback] (${type}): ${message}`);
-    }
-  } catch (e) {
-    console.error("[globalUtils] Error showing notification:", e);
-    const logMethod = type === 'error'
-      ? console.error
-      : type === 'warn'
-        ? console.warn
-        : console.log;
-    logMethod(`[Notification Critical Fallback] (${type}): ${message}`);
-  }
-}
 
 /**
  * Debounce: delay function calls until after `wait` ms have elapsed

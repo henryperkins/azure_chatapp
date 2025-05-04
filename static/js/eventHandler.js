@@ -479,45 +479,8 @@ export function createEventHandlers({ app, auth, projectManager, sidebar, modalM
       }, { passive: false });
     }
     // Registration form handling...
-    if (document.getElementById('registerForm')) {
-      setupForm('registerForm', async (formData) => {
-        const username = formData.get('username');
-        const password = formData.get('password');
-        if (!username || !password) {
-          throw new Error('Username and password are required');
-        }
-        // Validate password requirements
-        const validation = validatePassword(password);
-        if (!validation.valid) throw new Error(validation.message);
-        // Wait for auth module before proceeding
-        if (!auth || typeof auth.register !== 'function') {
-          throw new Error('Authentication module not loaded. Cannot register.');
-        }
-        const response = await auth.register({ username, password });
-        app?.showNotification('Registration successful', 'success');
-        // Close auth dropdown
-        const authDropdown = document.getElementById('authDropdown');
-        if (authDropdown) {
-          authDropdown.classList.add('hidden');
-        }
-        if (response && response.access_token) {
-          // Reason for delay: ensure notification or UI state updates before leaving page
-          setTimeout(() => { redirect('/'); }, 100);
-        } else {
-        }
-      }, { resetOnSuccess: false });
-    }
   }
 
-  function validatePassword(password) {
-    if (password && password.length >= 3) {
-      return { valid: true };
-    }
-    return {
-      valid: false,
-      message: 'Password must be at least 3 characters long.'
-    };
-  }
 
   function setupNavigationElements() {
     const navToggleBtn = document.getElementById('navToggleBtn');

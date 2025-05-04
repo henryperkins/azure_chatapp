@@ -825,52 +825,10 @@ async function init() {
     }
 }
 
-/**
- * Cleanly tear down the app, removing event listeners and resetting state.
- * Useful if the SPA fully re-initializes or navigates away, etc.
- */
-export function destroyApp() {
-    if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] destroyApp() called. Cleaning up listeners and states...');
-    }
-    // Remove all tracked event listeners
-    eventHandlers.cleanupListeners();
-
-    // Destroy accessibility enhancements if needed
-    accessibilityUtils.destroyAccessibilityEnhancements?.();
-
-    // Clear chat manager if desired
-    const chatMgr = DependencySystem.modules.get('chatManager');
-    chatMgr?.clear?.();
-
-    // Reset app state flags
-    appState.initialized = false;
-    appState.initializing = false;
-    appState.currentPhase = 'destroyed';
-    if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] Application teardown complete.');
-    }
-}
 
 /**
  * Core Systems Initialization
  */
-/**
- * Guarantee the notification container exists in the DOM.
- * May be safely called multiple times.
- */
-function ensureNotificationContainer() {
-    let notificationContainer = document.getElementById('notificationArea');
-    if (!notificationContainer) {
-        notificationContainer = document.createElement('div');
-        notificationContainer.id = 'notificationArea';
-        notificationContainer.className = 'notification-area fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto pointer-events-none';
-        notificationContainer.setAttribute('role', 'status');
-        notificationContainer.setAttribute('aria-live', 'polite');
-        document.body.appendChild(notificationContainer);
-    }
-    return notificationContainer;
-}
 
 async function initializeCoreSystems() {
     if (APP_CONFIG.DEBUG) {
