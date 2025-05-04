@@ -6936,6 +6936,9 @@
   .align-middle {
     vertical-align: middle;
   }
+  .align-text-bottom {
+    vertical-align: text-bottom;
+  }
   .font-sans {
     font-family: var(--font-sans);
   }
