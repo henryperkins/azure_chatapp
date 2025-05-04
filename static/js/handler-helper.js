@@ -137,7 +137,7 @@ export function createGroupedNotificationHelper({
 
     // new bucket
     const notificationId = `group-${key}-${Date.now()}-${Math.floor(Math.random() * 1e4)}`;
-    group = { type, context, messages: [message], notificationId, registerEvents: [], element: null };
+    group = { type, context, messages: [message], notificationId, registeredEvents: [], element: null };
     groupedNotifications.set(key, group);
     renderGroupBanner(group, container);
     return notificationId;
