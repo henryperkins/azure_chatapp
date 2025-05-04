@@ -686,26 +686,30 @@ async function init() {
     });
 
     // Add notification error boundary
+
+    function showSimpleNotification(msg, type = 'error', container = null) {
+        try {
+            const targetContainer = container || document.getElementById('notificationArea') || document.body;
+            const div = document.createElement('div');
+            div.textContent = msg || 'Notification error';
+            div.className = 'alert alert-' + (type || 'error');
+            div.style.margin = '10px';
+            div.style.padding = '10px';
+            targetContainer.appendChild(div);
+            setTimeout(() => div.remove(), 5000);
+        } catch {
+            // Last resort
+            console.error('Critical notification error:', msg);
+        }
+    }
+
     const originalShow = notificationHandler.show;
     notificationHandler.show = function(message, type, options) {
         try {
             return originalShow.call(this, message, type, options);
         } catch (err) {
             console.error('Failed to show notification:', err);
-            // Create a simple fallback notification without using any complex functions
-            try {
-                const container = notificationHandler.getContainer?.() || document.getElementById('notificationArea') || document.body;
-                const div = document.createElement('div');
-                div.textContent = message || 'Notification error';
-                div.className = 'alert alert-' + (type || 'error');
-                div.style.margin = '10px';
-                div.style.padding = '10px';
-                container.appendChild(div);
-                setTimeout(() => div.remove(), 5000);
-            } catch {
-                // Last resort
-                console.error('Critical notification error:', message);
-            }
+            showSimpleNotification(message, type, notificationHandler.getContainer?.());
             return null;
         }
     };
@@ -720,13 +724,7 @@ async function init() {
                 try {
                     // Simple DOM-based fallback
                     const msg = args[0] || `[${fallbackType}] Notification failed`;
-                    const div = document.createElement('div');
-                    div.textContent = msg;
-                    div.className = `alert alert-${fallbackType}`;
-                    div.style.margin = '10px';
-                    div.style.padding = '10px';
-                    document.body.appendChild(div);
-                    setTimeout(() => div.remove(), 5000);
+                    showSimpleNotification(msg, fallbackType, document.body);
                 } catch (e) {
                     // Last resort: console
                     console.error(`[${fallbackType}] ${args[0]}`, e);
@@ -865,43 +863,94 @@ async function initializeCoreSystems() {
         throw new Error('[App] chatManager registration: not a valid instance with "initialize".');
     }
 
-const notify = DependencySystem.modules.get('notify');
-const projectManager = createProjectManager({
-    DependencySystem,
-    chatManager: chatMgrInstance,
-    app,
-    notify,
-    storage: DependencySystem.modules.get('storage'),
-    listenerTracker: {
-        add: (target, event, handler, description) =>
-            eventHandlers.trackListener(target, event, handler, {
-                description: description || `[ProjectManager] ${event} on ${target?.id || target}`
-            }),
-        remove: (target, event, handler) => {
-            if (eventHandlers.cleanupListeners) {
-                eventHandlers.cleanupListeners(target, event, handler);
+    const notify = DependencySystem.modules.get('notify');
+    const projectManager = createProjectManager({
+        DependencySystem,
+        chatManager: chatMgrInstance,
+        app,
+        notify,
+        storage: DependencySystem.modules.get('storage'),
+        listenerTracker: {
+            add: (target, event, handler, description) =>
+                eventHandlers.trackListener(target, event, handler, {
+                    description: description || `[ProjectManager] ${event} on ${target?.id || target}`
+                }),
+            remove: (target, event, handler) => {
+                if (eventHandlers.cleanupListeners) {
+                    eventHandlers.cleanupListeners(target, event, handler);
+                }
             }
         }
-    }
-});
-DependencySystem.register('projectManager', projectManager);
+    });
+    DependencySystem.register('projectManager', projectManager);
 
-    // Enhanced validation for projectManager
-    if (typeof DependencySystem.modules.get('projectManager') === 'function') {
-        showNotification('[App] projectManager registration error: got a function instead of an instance', 'error', 5000, { group: true, context: "projectManager" });
-        throw new Error('[App] projectManager registration: not a valid instance (got function)');
-    }
-    if (!projectManager || typeof projectManager.initialize !== 'function') {
-        showNotification('[App] Project manager invalid: see developer console for details.', 'error', 5000, { group: true, context: "projectManager" });
-        if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.error('[App] projectManager invalid:', projectManager);
+    function validateModule(name, instance, requiredMethod) {
+        if (typeof instance === 'function') {
+            showNotification(`[App] ${name} registration error: got a function instead of an instance`, 'error', 5000, { group: true, context: name });
+            throw new Error(`[App] ${name} registration: not a valid instance (got function)`);
         }
-        throw new Error('[App] projectManager registration: not a valid instance with "initialize" method');
+        if (!instance || typeof instance[requiredMethod] !== 'function') {
+            showNotification(`[App] ${name} invalid: see developer console for details.`, 'error', 5000, { group: true, context: name });
+            if (APP_CONFIG.DEBUG) {
+                notificationHandlerWithLog.error(`[App] ${name} invalid:`, instance);
+            }
+            throw new Error(`[App] ${name} registration: not a valid instance with "${requiredMethod}" method`);
+        }
     }
-    notificationHandlerWithLog.debug('[App] projectManager validation passed');
+
+    validateModule('projectManager', projectManager, 'initialize');
 
     const projectModal = createProjectModal();
     DependencySystem.register('projectModal', projectModal);
+
+    async function injectAndVerifyHtml(url, containerId, requiredElementIds, maxTries = 10) {
+        const doc = browserAPI.getDocument();
+        let container = doc.getElementById(containerId);
+        if (!container) {
+            notificationHandlerWithLog.error(`[App] #${containerId} element not found in DOM`);
+            container = doc.createElement('div');
+            container.id = containerId;
+            doc.body.appendChild(container);
+            notificationHandlerWithLog.debug(`[App] Created missing #${containerId}`);
+        }
+
+        notificationHandlerWithLog.debug(`[App] Attempting to load and inject HTML from ${url}...`);
+
+        try {
+            const resp = await fetch(url, { cache: 'no-store' });
+            notificationHandlerWithLog.debug(`[App] Fetch status for ${url}: ${resp.status}`);
+            if (!resp.ok) {
+                throw new Error(`HTTP error! status: ${resp.status}`);
+            }
+
+            const html = await resp.text();
+            notificationHandlerWithLog.debug(`[App] HTML loaded from ${url}, length: ${html.length}`);
+
+            if (html && html.length > 0) {
+                container.innerHTML = html;
+                notificationHandlerWithLog.debug(`[App] HTML injected into #${containerId}`);
+                doc.dispatchEvent(new CustomEvent('modalsLoaded'));
+            } else {
+                throw new Error('Empty HTML response');
+            }
+        } catch (err) {
+            showNotification(`[App] HTML fetch/injection failed for ${url}: ${err?.message || err}`, 'error', 5000, { group: true, context: "app" });
+            doc.dispatchEvent(new CustomEvent('modalsLoaded'));
+        }
+
+        for (let attempt = 0; attempt < maxTries; attempt++) {
+            let allFound = true;
+            for (const id of requiredElementIds) {
+                if (!doc.getElementById(id)) {
+                    allFound = false;
+                    break;
+                }
+            }
+            if (allFound) return true;
+            await new Promise(r => setTimeout(r, 150));
+        }
+        return false;
+    }
 
     // Wait for the modals to load
     const modalsReady = new Promise((resolve) => {
@@ -926,49 +975,8 @@ DependencySystem.register('projectManager', projectManager);
             }
         );
 
-        // Async IIFE for modal container and HTML injection
-        ; (async function modalsAsyncLoader() {
-            try {
-                const doc = browserAPI.getDocument();
-                let modalsContainer = doc.getElementById('modalsContainer');
-                if (!modalsContainer) {
-                    notificationHandlerWithLog.error('[App] #modalsContainer element not found in DOM');
-                    // Create the container if it doesn't exist
-                    const newContainer = doc.createElement('div');
-                    newContainer.id = 'modalsContainer';
-                    doc.body.appendChild(newContainer);
-                    notificationHandlerWithLog.debug('[App] Created missing #modalsContainer');
-                    modalsContainer = doc.getElementById('modalsContainer');
-                }
-
-                notificationHandlerWithLog.debug('[App] Attempting to load and inject modals HTML...');
-
-                // Fetch and inject the modal HTML
-                try {
-                    const resp = await fetch('/static/html/modals.html', { cache: 'no-store' });
-                    notificationHandlerWithLog.debug(`[App] Modals fetch status: ${resp.status}`);
-                    if (!resp.ok) {
-                        throw new Error(`HTTP error! status: ${resp.status}`);
-                    }
-
-                    const html = await resp.text();
-                    notificationHandlerWithLog.debug('[App] Modals HTML loaded, length:', html.length);
-
-                    if (html && html.length > 0) {
-                        modalsContainer.innerHTML = html;
-                        notificationHandlerWithLog.debug('[App] Modals HTML injected into DOM');
-                        browserAPI.getDocument().dispatchEvent(new CustomEvent('modalsLoaded'));
-                    } else {
-                        throw new Error('Empty modals HTML response');
-                    }
-                } catch (err) {
-                    showNotification('[App] Modals HTML fetch/injection failed: ' + (err?.message || err), 'error', 5000, { group: true, context: "app" });
-                    browserAPI.getDocument().dispatchEvent(new CustomEvent('modalsLoaded'));
-                }
-            } catch (error) {
-                showNotification('[App] Error during modal HTML loading: ' + (error?.message || error), 'error', 5000, { group: true, context: "app" });
-                browserAPI.getDocument().dispatchEvent(new CustomEvent('modalsLoaded'));
-            }
+        (async () => {
+            await injectAndVerifyHtml('/static/html/modals.html', 'modalsContainer', Object.values(MODAL_MAPPINGS));
         })();
     });
 
@@ -995,24 +1003,7 @@ DependencySystem.register('projectManager', projectManager);
     await modalsReady;
     notificationHandlerWithLog.debug('[App] Modal HTML load promise resolved. Proceeding with initialization.');
 
-    // Verify all modals exist
-    async function verifyModalsExist(modalMappings, maxTries = 10) {
-        for (let attempt = 0; attempt < maxTries; attempt++) {
-            let allFound = true;
-            const doc = browserAPI.getDocument();
-            for (const modalId of Object.values(modalMappings)) {
-                if (!doc.getElementById(modalId)) {
-                    allFound = false;
-                    break;
-                }
-            }
-            if (allFound) return true;
-            await new Promise(r => setTimeout(r, 150));
-        }
-        return false;
-    }
-
-    const modalsOk = await verifyModalsExist(MODAL_MAPPINGS);
+    const modalsOk = await injectAndVerifyHtml('/static/html/modals.html', 'modalsContainer', Object.values(MODAL_MAPPINGS));
     if (!modalsOk) {
         showNotification('[App] One or more modal dialogs failed to appear after HTML injection.', 'error', 5000, { group: true, context: "app" });
         if (APP_CONFIG.DEBUG) {
