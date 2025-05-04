@@ -1004,7 +1004,7 @@ export class ProjectDetailsComponent {
           this.notify.error(`Delete failed: ${e.message}`, {
             group: true,
             context: "projectDetailsComponent",
-            timeout: 0
+            timeout: 0 
           });
         }
       }

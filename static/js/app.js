@@ -796,9 +796,17 @@ async function initializeCoreSystems() {
 
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
+    // Ensure the modalManager is available globally for external consumers (e.g. auth button handlers)
+    window.modalManager = modalManager;
 
     const [apiRequestMod, eventHandlersMod, notificationHandlerMod, modalManagerMod] =
         await DependencySystem.waitFor(['apiRequest', 'eventHandlers', 'notificationHandler', 'modalManager']);
+
+    // Wait for modalsLoaded event before initializing auth module (to ensure loginModal exists in DOM)
+    await new Promise((resolve) => {
+        if (document.getElementById('loginModal')) return resolve();
+        document.addEventListener('modalsLoaded', () => resolve(), { once: true });
+    });
 
     const auth = createAuthModule({
         apiRequest: apiRequestMod,

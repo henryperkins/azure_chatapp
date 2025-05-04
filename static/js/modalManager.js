@@ -715,7 +715,7 @@ class ProjectModal {
     if (!this.projectManager) {
       throw new Error('[ProjectModal] projectManager not available (not injected)');
     }
-    await this.projectManager.createOrUpdateProject(projectId, projectData);
+    await this.projectManager.saveProject(projectId, projectData);
   }
 
   /**
