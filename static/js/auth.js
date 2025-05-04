@@ -762,3 +762,14 @@ export function createAuthModule({
 }
 
 export default createAuthModule;
+
+export async function fetchCurrentUser() {
+  try {
+    const resp = await apiRequest('/api/auth/verify', { method: 'GET' });
+    if (!resp || !resp.user) return null;
+    return resp.user;
+  } catch (err) {
+    console.error('[auth] fetchCurrentUser error:', err);
+    return null;
+  }
+}
