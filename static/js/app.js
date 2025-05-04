@@ -804,7 +804,7 @@ async function initializeCoreSystems() {
         apiRequest: apiRequestMod,
         eventHandlers: eventHandlersMod,
         showNotification: notificationHandlerMod?.show,
-        domAPI: { getElementById: (id) => document.getElementById(id) },
+        domAPI: { getElementById: (id) => document.getElementById(id), isDocumentHidden: () => document.hidden },
         sanitizer: DependencySystem.modules.get('sanitizer'),
         modalManager: modalManagerMod
     });
