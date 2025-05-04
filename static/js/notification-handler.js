@@ -379,6 +379,44 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
     notificationHandler: null // Self-reference will be added below
   });
 
+  // ---- GROUP "CLEAR ALL" BUTTON INJECTOR ----
+  function insertClearAllButtonIfGrouped() {
+    const container = document.getElementById('notificationArea');
+    if (!container) return;
+    // Remove any existing button to prevent duplicates
+    const oldBtn = container.querySelector('.notification-clear-all');
+    if (oldBtn) oldBtn.remove();
+
+    // Only show if groups exist
+    if (groupedHelper.groupedNotifications.size > 0) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'notification-clear-all btn btn-xs btn-outline';
+      btn.textContent = 'Clear All';
+      btn.setAttribute('aria-label', 'Clear all notifications');
+      btn.onclick = () => {
+        clear();
+        btn.remove();
+      };
+      container.insertBefore(btn, container.firstChild);
+    }
+  }
+
+  // Wrap the grouped notification helper to inject "Clear All" button after any update
+
+  const originalShowGrouped = groupedHelper.showGroupedNotificationByTypeAndTime;
+  groupedHelper.showGroupedNotificationByTypeAndTime = function(opts) {
+    const id = originalShowGrouped.call(groupedHelper, opts);
+    insertClearAllButtonIfGrouped();
+    return id;
+  };
+
+  const originalClearAllGrouped = groupedHelper.clearAllGroupedNotifications;
+  groupedHelper.clearAllGroupedNotifications = function() {
+    originalClearAllGrouped.call(groupedHelper);
+    insertClearAllButtonIfGrouped();
+  };
+
   // Create the complete notification handler with all required methods
   const notificationHandler = {
     show,
