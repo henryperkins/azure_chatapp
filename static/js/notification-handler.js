@@ -40,7 +40,9 @@ export function createNotificationHandler({
   globalScope,
   fetchFn,
   getCurrentUser,
-  container
+  container,
+  groupWindowMs = 5000,          // <-- NEW: bubble straight to helper
+  classMap = {}                  // <-- optional style overrides
 } = {}) {
   // -----------------------------
   // 1. Validate and set defaults
@@ -79,6 +81,7 @@ export function createNotificationHandler({
   // -----------------------------
   // 3. Notification Container
   // -----------------------------
+  // Expose so app.js can call it without duplicating container logic.
   function ensureNotificationContainer() {
     // Use provided container if passed
     if (container) return container;
@@ -104,6 +107,9 @@ export function createNotificationHandler({
     }
     return resolved;
   }
+
+  // Public getter (used by app.js now)
+  const getContainer = ensureNotificationContainer;
 
   // -----------------------------
   // 4. Readiness & Queue Flush
@@ -499,46 +505,47 @@ export function createNotificationHandler({
     eventHandlers,
     getIconForType,
     notificationHandler: null, // We'll set reference below
-    globalScope: _globalScope
+    globalScope: _globalScope,
+    groupWindowMs,
+    classMap
   });
 
-  // Insert a "Clear All" button if grouped notifications exist
-  function insertClearAllButton() {
-    const container = domAPI.getElementById('notificationArea');
-    if (!container) return;
-
-    // Remove any existing button to avoid duplicates
-    const existingBtn = container.querySelector('.notification-clear-all');
-    if (existingBtn) existingBtn.remove();
-
-    // Only show if groups exist
-    if (groupedHelper.groupedNotifications.size > 0) {
-      const btn = domAPI.createElement('button');
-      btn.type = 'button';
-      btn.className = 'notification-clear-all btn btn-xs btn-outline';
-      btn.textContent = 'Clear All';
-      btn.setAttribute('aria-label', 'Clear all notifications');
-      btn.style.pointerEvents = 'auto';
-      btn.onclick = () => {
-        clear();
-        btn.remove();
-      };
-      container.insertBefore(btn, container.firstChild);
+  /* --- Clear-all caching (avoids querySelector each time) --- */
+  let clearAllBtnEl = null;
+  function ensureClearAllBtn() {
+    const cont = getContainer();
+    if (groupedHelper.groupedNotifications.size === 0) {
+      clearAllBtnEl?.remove();
+      clearAllBtnEl = null;
+      return;
     }
+    if (clearAllBtnEl && cont.contains(clearAllBtnEl)) return;
+    clearAllBtnEl?.remove();
+
+    clearAllBtnEl = domAPI.createElement('button');
+    clearAllBtnEl.type = 'button';
+    clearAllBtnEl.className = 'notification-clear-all btn btn-xs btn-outline';
+    clearAllBtnEl.textContent = 'Clear All';
+    clearAllBtnEl.setAttribute('aria-label', 'Clear all notifications');
+    clearAllBtnEl.onclick = () => { clear(); clearAllBtnEl.remove(); clearAllBtnEl = null; };
+    cont.insertBefore(clearAllBtnEl, cont.firstChild);
   }
 
   // Wrap grouped methods to inject the Clear All button logic
   const originalShowGrouped = groupedHelper.showGroupedNotificationByTypeAndTime;
   groupedHelper.showGroupedNotificationByTypeAndTime = function (opts) {
+    // We do need to call and return id, but eslint warns 'id' is never used (outside this function).
+    // This usage is intentional: downstream callers expect an id.
+    // eslint-disable-next-line no-unused-vars
     const id = originalShowGrouped.call(groupedHelper, opts);
-    insertClearAllButton();
+    ensureClearAllBtn();
     return id;
   };
 
   const originalClearAllGrouped = groupedHelper.clearAllGroupedNotifications;
   groupedHelper.clearAllGroupedNotifications = function () {
     originalClearAllGrouped.call(groupedHelper);
-    insertClearAllButton();
+    ensureClearAllBtn();
   };
 
   // -----------------------------
@@ -563,6 +570,8 @@ export function createNotificationHandler({
     getIconForType,
     groupedNotifications: groupedHelper.groupedNotifications,
     groupedHelper,
+
+    getContainer,                       // <-- NEW
 
     // Compatibility: methods that existed in older code
     log: (msg, opts) => show(msg, 'info', opts),
