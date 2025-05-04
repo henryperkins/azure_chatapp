@@ -1,4 +1,14 @@
-// globalUtils.js (REFACTORED & CONSOLIDATED)
+/**
+ * globalUtils.js — DI-strict utility module for app-wide helpers.
+ *
+ * - All user- or system-facing warnings/errors MUST flow via Dependency Injection:
+ *     1. Use DI `notify` util if present (DependencySystem.modules.get('notify'))
+ *     2. Else use DI notificationHandler (`show`/`warn`/`error`) with proper context/group
+ *     3. Console use is **allowed only as a last resort,** with explicit fallback comment.
+ * - Never import or use console.* directly for error/feedback outside of guarded fallback blocks.
+ *
+ * For architectural rules: see notification-system.md, custominstructions.md.
+ */
 
 import { isValidProjectId as rawIsValidProjectId } from '../projectManager.js';
 
@@ -40,7 +50,19 @@ export function normaliseUrl(url) {
     u.search = new URLSearchParams(params).toString();
     return u.toString();
   } catch (e) {
-    console.warn(`[globalUtils] Failed to normalize URL: ${url}`, e);
+    // Prefer DI notify (warn) for user/system-facing errors, else last-resort console fallback
+    const notify = (window.DependencySystem && window.DependencySystem.modules?.get?.('notify')) || null;
+    if (notify && typeof notify.warn === 'function') {
+      notify.warn(`[globalUtils] Failed to normalize URL: ${url}: ${e?.message || e}`, { context: 'globalUtils', group: true });
+    } else if (
+      window.DependencySystem &&
+      typeof window.DependencySystem.modules?.get?.('notificationHandler')?.warn === 'function'
+    ) {
+      window.DependencySystem.modules.get('notificationHandler').warn(`[globalUtils] Failed to normalize URL: ${url}: ${e?.message || e}`, { context: 'globalUtils', group: true });
+    } else {
+      // LAST RESORT: Dev/Desktop debugging only, do not rely on for user feedback!
+      console.warn(`[globalUtils] (fallback) Failed to normalize URL: ${url}`, e);
+    }
     return url;
   }
 }
@@ -64,7 +86,18 @@ export function shouldSkipDedup(url) {
       return true;
     }
   } catch (e) {
-    console.warn("[globalUtils] shouldSkipDedup error:", e);
+    const notify = (window.DependencySystem && window.DependencySystem.modules?.get?.('notify')) || null;
+    if (notify && typeof notify.warn === 'function') {
+      notify.warn(`[globalUtils] shouldSkipDedup error: ${e?.message || e}`, { context: 'globalUtils', group: true });
+    } else if (
+      window.DependencySystem &&
+      typeof window.DependencySystem.modules?.get?.('notificationHandler')?.warn === 'function'
+    ) {
+      window.DependencySystem.modules.get('notificationHandler').warn(`[globalUtils] shouldSkipDedup error: ${e?.message || e}`, { context: 'globalUtils', group: true });
+    } else {
+      // LAST RESORT: Dev/Desktop debugging only, do not rely on for user feedback!
+      console.warn("[globalUtils] (fallback) shouldSkipDedup error:", e);
+    }
   }
   return false;
 }
@@ -146,7 +179,18 @@ export function toggleElement(selectorOrElement, show) {
       selectorOrElement.classList.toggle('hidden', !show);
     }
   } catch (e) {
-    console.error(`[globalUtils] Error in toggleElement for ${selectorOrElement}:`, e);
+    const notify = (window.DependencySystem && window.DependencySystem.modules?.get?.('notify')) || null;
+    if (notify && typeof notify.error === 'function') {
+      notify.error(`[globalUtils] Error in toggleElement for ${selectorOrElement}: ${e?.message || e}`, { context: 'globalUtils', group: true });
+    } else if (
+      window.DependencySystem &&
+      typeof window.DependencySystem.modules?.get?.('notificationHandler')?.error === 'function'
+    ) {
+      window.DependencySystem.modules.get('notificationHandler').error(`[globalUtils] Error in toggleElement for ${selectorOrElement}: ${e?.message || e}`, { context: 'globalUtils', group: true });
+    } else {
+      // LAST RESORT: Dev/Desktop debugging only, do not rely on for user feedback!
+      console.error(`[globalUtils] (fallback) Error in toggleElement for ${selectorOrElement}:`, e);
+    }
   }
 }
 

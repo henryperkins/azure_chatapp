@@ -201,7 +201,13 @@ export class FileUploadComponent {
       this._updateUploadProgress(1, 0);
       app.showNotification?.(`${file.name} uploaded successfully`, 'success');
     } catch (error) {
-      console.error(`[FileUploadComponent] Upload error for ${file.name}:`, error);
+      if (app && typeof app.showNotification === "function") {
+        // Optionally log error via notification (rare, normally only notify user)
+        // app.showNotification(`[FileUploadComponent] Upload error for ${file.name}: ${error?.message || error}`, 'error');
+      } else if (typeof console !== "undefined") {
+        // Last-resort fallback for dev debugging only
+        console.error(`[FileUploadComponent] (fallback) Upload error for ${file.name}:`, error);
+      }
       this._updateUploadProgress(0, 1);
       const errorMsg = this._getUploadErrorMessage(error, file.name);
       app.showNotification?.(`Failed to upload ${file.name}: ${errorMsg}`, 'error');

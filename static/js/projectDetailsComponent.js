@@ -1,6 +1,13 @@
 /**
  * projectDetailsComponent.js                     — DI-strict, no window.*, no console.*
  *
+ * ALL user/system notification, error, warning, or info banners must be routed
+ * via the DI notification utility (`notify` injected at construction). Never use
+ * direct `console` or `alert` for any user/system feedback. For dev/debug logs, use
+ * only DI logging utilities (never for user alerts).
+ *
+ * For architectural conventions, see notification-system.md and custominstructions.md.
+ *
  * Component for displaying project details, files, conversations, artifacts and
  * knowledge-base data. -- EVERY dependency is passed in, nothing global.
  *
@@ -58,9 +65,18 @@ export class ProjectDetailsComponent {
     this.router = router;
     this._rawNotify = notify; // save the root adapter
     this.notification = {
-      log: (...args) => notify.info?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
-      warn: (...args) => notify.warn?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
-      error: (...args) => notify.error?.(`[ProjectDetailsComponent] ${args[0]}`, { context: "ProjectDetailsComponent" }),
+      log: (...args) => notify.info?.(
+        `[ProjectDetailsComponent] ${args[0]}`,
+        { group: true, context: "ProjectDetailsComponent" }
+      ),
+      warn: (...args) => notify.warn?.(
+        `[ProjectDetailsComponent] ${args[0]}`,
+        { group: true, context: "ProjectDetailsComponent" }
+      ),
+      error: (...args) => notify.error?.(
+        `[ProjectDetailsComponent] ${args[0]}`,
+        { group: true, context: "ProjectDetailsComponent" }
+      ),
       confirm: (...args) => notify.confirm?.(...args)
     };
     this.sanitizer = sanitizer;
@@ -105,18 +121,36 @@ export class ProjectDetailsComponent {
     // Note: Debug logging removed to adhere to no-console rule. Use notificationHandler if needed.
     if (this.state.initialized) {
       this.notification.log("[ProjectDetailsComponent] Already initialized.", { context: "ProjectDetailsComponent" });
+      this.app.showNotification(
+        "Project Details view already initialized.",
+        "info",
+        4000,
+        { group: true, context: "projectDetailsComponent" }
+      );
       return true;
     }
 
     try {
       if (!this._findElements()) {
+        this.app.showNotification(
+          "Critical error: required DOM nodes missing for Project Details.",
+          "error",
+          0,
+          { group: true, context: "projectDetailsComponent" }
+        );
         throw new Error("Required DOM nodes missing in #projectDetailsView.");
       }
+      this.notification.log("[ProjectDetailsComponent] Found required elements.", { context: "ProjectDetailsComponent" });
       this._bindCoreEvents();
       this._initSubComponents();
       this.state.initialized = true;
       this.notification.log("[ProjectDetailsComponent] Initialised.");
-
+      this.app.showNotification(
+        "Project Details module initialized.",
+        "success",
+        3000,
+        { group: true, context: "projectDetailsComponent" }
+      );
       // Internal ready flag (do NOT emit ready yet: only set UI half of readiness)
       this._uiReadyFlag = true;
       this._maybeEmitReady();
@@ -125,6 +159,12 @@ export class ProjectDetailsComponent {
     } catch (err) {
       this.notification.error("[ProjectDetailsComponent] Init failed:", err, { context: "ProjectDetailsComponent" });
       this.notification.error("Project Details failed to initialise.");
+      this.app.showNotification(
+        "Project Details failed to initialize.",
+        "error",
+        0,
+        { group: true, context: "projectDetailsComponent" }
+      );
       return false;
     }
   }
@@ -375,7 +415,7 @@ export class ProjectDetailsComponent {
     }
     if (!project || !this.app.validateUUID(project.id)) {
       this.notification.error("[ProjectDetailsComponent] Invalid project payload.", { context: "ProjectDetailsComponent" });
-      this.app.showNotification("Failed to load project details.", "error");
+      this.app.showNotification("Failed to load project details: Invalid or missing project ID.", "error");
       this.onBack();
       return;
     }
@@ -409,6 +449,12 @@ export class ProjectDetailsComponent {
     const TABS = ["details", "files", "knowledge", "conversations", "artifacts"];
     if (!TABS.includes(tabName)) {
       this.notification.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`, { context: "ProjectDetailsComponent" });
+      this.app.showNotification(
+        `Attempted to switch to invalid tab: ${tabName}`,
+        "warning",
+        5000,
+        { group: true, context: "projectDetailsComponent" }
+      );
       return;
     }
 
@@ -418,12 +464,23 @@ export class ProjectDetailsComponent {
 
     if (needsProject && !this.app.validateUUID(pid)) {
       this.notification.error(`[ProjectDetailsComponent] tab "${tabName}" needs valid project.`, { context: "ProjectDetailsComponent" });
-      this.app.showNotification("Load a project first.", "warning");
+      this.app.showNotification(
+        "Please select a valid project before accessing this tab.",
+        "warning",
+        5000,
+        { group: true, context: "projectDetailsComponent" }
+      );
       return;
     }
 
       this.notification.log(`[ProjectDetailsComponent] tab => ${tabName}`, { context: "ProjectDetailsComponent" });
     this.state.activeTab = tabName;
+    this.app.showNotification(
+      `Switched to "${tabName}" tab.`,
+      "info",
+      2500,
+      { group: true, context: "projectDetailsComponent" }
+    );
 
     /* aria & visual */
     this.elements.tabContainer
@@ -453,9 +510,21 @@ export class ProjectDetailsComponent {
           sendButtonSelector: "#projectChatSendBtn"
         }).catch((err) => {
           this.notification.error("[ProjectDetailsComponent] Failed to initialize chatManager for conversations tab:", err, { context: "ProjectDetailsComponent" });
+          this.app.showNotification(
+            "Unable to initialize chat manager for Conversations tab.",
+            "error",
+            0,
+            { group: true, context: "projectDetailsComponent" }
+          );
         });
       } else {
         this.notification.error("[ProjectDetailsComponent] chatManager DI missing or invalid during conversations tab init.", { context: "ProjectDetailsComponent" });
+        this.app.showNotification(
+          "Chat functionality is currently unavailable due to missing dependencies.",
+          "error",
+          0,
+          { group: true, context: "projectDetailsComponent" }
+        );
       }
     }
   }
@@ -585,6 +654,12 @@ export class ProjectDetailsComponent {
     } catch (err) {
       this.notification.error("[ProjectDetailsComponent] createConversation failed:", err, { context: "ProjectDetailsComponent" });
       this.app.showNotification(`Failed: ${err.message}`, "error");
+      this.app.showNotification(
+        "Unable to create new conversation. " + (err.message || ""),
+        "error",
+        0,
+        { group: true, context: "projectDetailsComponent" }
+      );
     }
   }
 

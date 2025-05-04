@@ -50,37 +50,41 @@ function setupSidebarEvents({ eventHandlers, domAPI }) {
 }
 ```
 
-### 4. Notifications via DI—With Grouping & Context Options, Never Console/Alert
+### 4. Notifications via DI—Inject `notify` Util, Never Console/Alert
 
 ```javascript
-// Always inject notificationHandler by DI—not globals.
-// To properly group notifications by feature or context, pass the group/context/module/source options.
+// Always inject `notify` via DI—not globals or notification handler directly.
+// Use built-in grouping/context options; do not manually wrap the handler.
+// See: static/js/utils/notify.js
 
-export function createNotificationUtil({ notificationHandler }) {
-  if (!notificationHandler) throw new Error('notificationHandler required');
-  return {
-    // Basic usage (info notification)
-    info: (msg, opts = {}) => notificationHandler.show(msg, 'info', opts),
+export function createProjectManager({ DependencySystem, eventHandlers, notify }) {
+  if (!notify) throw new Error('notify utility required');
+  // ...other dep validations...
 
-    // Example: Project errors grouped by context
-    projectError: (msg, opts = {}) =>
-      notificationHandler.show(msg, 'error', { group: true, context: 'projectManager', ...opts }),
+  function loadProject(id) {
+    notify.info('Loading project…', { group:true, context:'projectManager' });
 
-    // Example: API errors grouped by source
-    apiError: (msg, opts = {}) =>
-      notificationHandler.show(msg, 'error', { group: true, source: 'apiRequest', ...opts }),
+    // On error, grouped by module context
+    notify.error('Could not load project file', { group:true, context:'projectManager' });
 
-    // Example: Global (cross-module) errors
-    globalError: (msg, opts = {}) =>
-      notificationHandler.show(msg, 'error', { group: true, ...opts }),
+    // For API errors (uses built-in grouping/context)
+    notify.apiError('API call failed');
+  }
 
-    // Simple error usage (no grouping)
-    error: (msg, opts = {}) => notificationHandler.show(msg, 'error', opts),
-  };
+  return { loadProject };
 }
 ```
 
-**Notification Grouping Options:**
+**Notification `notify` Util:**
+- Inject `notify` from DI. It provides context- and grouping-aware helpers:
+  - `notify.info(msg, opts)`
+  - `notify.success(msg, opts)`
+  - `notify.warn(msg, opts)`
+  - `notify.error(msg, opts)`
+  - `notify.apiError(msg, opts)` (opinionated for API grouping)
+  - `notify.authWarn(msg, opts)` (opinionated for auth)
+
+**Grouping Options (passed in opts):**
 - `group: true` — Enables grouping/batching in a notification accordion.
 - `context` — Arbitrary string for logical grouping ("auth", "projectManager", etc). Prefer this for feature/module grouping.
 - `module` — Subsystem or feature name ("chatManager", "sidebar").
@@ -90,11 +94,11 @@ export function createNotificationUtil({ notificationHandler }) {
 **Best practices**
 - For module/feature-specific grouping, always provide `group: true` and a `context`:
   ```js
-  notificationHandler.show('Could not load file', 'error', { group: true, context: 'file-upload' });
+  notify.error('Could not load file', { group: true, context: 'file-upload' });
   ```
 - For operation-level grouping:
   ```js
-  notificationHandler.show('Save failed', 'error', { group: true, source: 'saveButton' });
+  notify.error('Save failed', { group: true, source: 'saveButton' });
   ```
 - For global (cross-module) grouping, supply only `group: true` (context/module/source omitted).
 
@@ -104,7 +108,6 @@ export function createNotificationUtil({ notificationHandler }) {
 | context   | Module/feature scope           | 'projectManager'       |
 | module    | Subsystem                     | 'chatManager'          |
 | source    | Fine-grained action           | 'apiRequest'           |
-
 
 ### 5. Error Handling, Context-Rich Logging
 

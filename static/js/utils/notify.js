@@ -1,4 +1,29 @@
-// static/js/utils/notify.js
+/**
+ * Notification Utility Module.
+ * Dependency-injected wrapper for app/site-wide notifications.
+ *
+ * Usage:
+ *   - Always inject `notify` via DI (DependencySystem.modules.get('notify')) in every module/factory; never import notification handler directly.
+ *   - Use grouped/contextual helpers for all user/system messages (e.g. notify.info, notify.success, notify.error, notify.apiError).
+ *   - See notification-system.md and custominstructions.md for DI architecture and usage guidelines.
+ *
+ * API:
+ *   - .info(msg, opts?)         // info banner
+ *   - .success(msg, opts?)      // success banner
+ *   - .warn(msg, opts?)         // warning banner
+ *   - .error(msg, opts?)        // error banner (group/context strongly recommended)
+ *   - .apiError(msg, opts?)     // error, grouped by API context
+ *   - .authWarn(msg, opts?)     // warning, grouped by auth context
+ *
+ * Example DI skeleton:
+ *   export function createFoo({ notify }) {
+ *     notify.error('Could not load', { group: true, context: 'foo' });
+ *   }
+ *
+ * @param {Object} deps - Dependencies for creation
+ * @param {Object} deps.notificationHandler - Registered notification handler (must have .show)
+ * @returns {Object} Notify util with grouped/context helpers
+ */
 export function createNotify({ notificationHandler }) {
   if (!notificationHandler?.show) throw new Error('notificationHandler missing');
 

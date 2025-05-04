@@ -1,57 +1,25 @@
-/**
- * app.js - Application Core (Refactored, with Unified Notification System)
- *
- * ## Notification System Integration Notes
- *
- * - The notification handler, created via createNotificationHandler, is registered as 'notificationHandler'
- *   in the DependencySystem. The wafer-thin notify util is registered as 'notify'. All feature and core
- *   modules should receive 'notify' via dependency injection and **must not import notification-handler.js directly**.
- * - When adding or updating modules (projectManager, chatManager, sidebar, etc.), always accept 'notify'
- *   as a dependency and use notify.success/info/warn/error for all user-facing notifications.
- * - Never call notificationHandler.show directly except inside app.js or notification-system integration wrappers.
- * - For usage and grouping patterns, see notification-system.md.
- *
- * Changes in this refactored version:
- * 1. Centralized event binding using eventHandlers (trackListener).
- * 2. Console logging wrapped with if (APP_CONFIG.DEBUG) checks.
- * 3. Added destroyApp() for cleanup in SPA contexts.
- * 4. Preserved core logic, but reorganized some sections for clarity.
- *
- * Example: Injecting notify in a feature module
- *
- *   export function createSomeFeature({ notify, ...deps }) {
- *     if (!notify) throw new Error('notify is required');
- *     function doSomething() {
- *        notify.success('Action completed!', { context: 'someFeature' });
- *     }
- *     // ...
- *   }
- */
-
+import { createEventHandlers } from './eventHandler.js';
 import * as globalUtils from './utils/globalUtils.js';
-import { createModalManager, createProjectModal } from './modalManager.js';
-import { MODAL_MAPPINGS } from './modalConstants.js';
+import { createChatManager } from './chat.js';
+import { createNotificationHandler } from './notification-handler.js';
+import { createNotify } from './utils/notify.js';
+import { createModalManager } from './modalManager.js';
+import { createAuthModule } from './auth.js';
 import { createProjectManager } from './projectManager.js';
-import { createProjectDashboard } from './projectDashboard.js';
-import { ProjectListComponent } from './projectListComponent.js';
-import { createProjectDetailsComponent } from './projectDetailsComponent.js';
-import { createSidebar } from './sidebar.js';
+import { createProjectModal } from './modalManager.js';
+import { createChatExtensions } from './chatExtensions.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
-import { createChatManager } from './chat.js';
+import { ProjectListComponent } from './projectListComponent.js';
+import { createProjectDashboard } from './projectDashboard.js';
+import { createProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createSidebar } from './sidebar.js';
+// Removed unused imports: initAccessibilityEnhancements, destroyAccessibilityEnhancements
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
-import { createChatExtensions } from './chatExtensions.js';
-import FileUploadComponent from './FileUploadComponent.js';
-import * as formatting from './formatting.js';
-import * as accessibilityUtils from './accessibility-utils.js';
-import { createNotificationHandler } from './notification-handler.js';
-import { createEventHandlers } from './eventHandler.js';
-import { createAuthModule } from './auth.js';
-import { createNotify } from './utils/notify.js';
+import MODAL_MAPPINGS from './modalConstants.js';
+import { FileUploadComponent } from './FileUploadComponent.js';
 
-/**
- * browserAPI: Abstraction for all browser globals to enable DI.
- */
+// browserAPI: Abstraction for all browser globals to enable DI.
 const browserAPI = {
     getDependencySystem: () => window.DependencySystem,
     getLocation: () => window.location,
@@ -68,7 +36,9 @@ const browserAPI = {
     createURLSearchParams: (...args) => new URLSearchParams(...args),
     createEvent: (...args) => new Event(...args),
     requestAnimationFrame: cb => window.requestAnimationFrame(cb),
-    // Console logging wrapped for DI, but still delegates by default
+    // Console (DEBUG ONLY): for internal diagnostics; NEVER use for user/system notification!
+    // All user/system feedback/warnings/errors must flow through DI notification system:
+    //   Use DI `notify`, `showNotification`, or notification handlers—NEVER browserAPI.console for alerts, warnings, or user info.
     console: {
         log: (...args) => console.log(...args),
         info: (...args) => console.info(...args),
@@ -168,7 +138,7 @@ async function apiRequest(url, opts = {}, skipCache = false) {
     // If GET and a matching request is in flight, return the same promise
     if (!skipCache && method === "GET" && pendingRequests.has(requestKey)) {
         if (APP_CONFIG.DEBUG) {
-            console.debug(`[API] Dedup hit for: ${requestKey}`);
+            notificationHandlerWithLog?.debug?.(`[API] Dedup hit for: ${requestKey}`);
         }
         return pendingRequests.get(requestKey);
     }
@@ -211,7 +181,7 @@ async function apiRequest(url, opts = {}, skipCache = false) {
     const reqPromise = (async () => {
         try {
             if (APP_CONFIG.DEBUG) {
-                console.debug(`[API] Requesting: ${method} ${normalizedUrl}`, opts.body ? "with body" : "");
+                notificationHandlerWithLog?.debug?.(`[API] Requesting: ${method} ${normalizedUrl}`, opts.body ? "with body" : "");
             }
             const resp = await fetch(normalizedUrl, opts);
 
@@ -289,7 +259,7 @@ async function apiRequest(url, opts = {}, skipCache = false) {
  */
 function showNotification(message, type = 'info', duration = 5000, options = {}) {
     if (APP_CONFIG.DEBUG) {
-        console.debug(`[App] showNotification: ${message} (type: ${type}, duration: ${duration})`);
+        notificationHandlerWithLog?.debug?.(`[App] showNotification: ${message} (type: ${type}, duration: ${duration})`);
     }
     // Prefer notificationHandler (DI) for unified, robust notifications
     if (typeof notificationHandler?.show === "function") {
@@ -368,25 +338,6 @@ DependencySystem.register('errorReporter', errorReporter);
  * mapped for compatibility with legacy component APIs.
  * Each handler only affects notifications in its own container.
  */
-const domAPI = {
-    getElementById: (id) => document.getElementById(id),
-    createElement: (tag) => document.createElement(tag)
-};
-
-function createBannerHandlerWithLog(containerSelector) {
-    const container = typeof containerSelector === "string"
-        ? document.querySelector(containerSelector)
-        : containerSelector;
-    const h = createNotificationHandler({ container, eventHandlers, DependencySystem, domAPI });
-
-    // Map to expected log/warn/error/confirm for compatibility
-    return {
-        log: (...args) => h.show?.(args[0], "info", args[1] || {}),
-        warn: (...args) => h.show?.(args[0], "warning", args[1] || {}),
-        error: (...args) => h.show?.(args[0], "error", args[1] || {}),
-        confirm: (...args) => h.show?.(args[0], "info", { ...args[1], action: "Confirm" })
-    };
-}
 
 /**
  * The main "app" object, with references to core config/state and key methods.
@@ -571,9 +522,9 @@ const chatManager = createChatManager({
             return typeof authModule?.isAuthenticated === 'function'
                 ? authModule.isAuthenticated()
                 : false;
-        } catch (e) {
-            return false;
-        }
+    } catch { // Removed unused error parameter
+        return false;
+    }
     },
     DOMPurify: DependencySystem.modules.get('sanitizer')
 });
@@ -628,7 +579,7 @@ function onReady() {
         if (notificationHandlerWithLog) {
             notificationHandlerWithLog.error("[App] Unhandled error during async init:", err);
         } else {
-            console.error("[App] Unhandled error during async init:", err);
+            notificationHandlerWithLog?.error?.("[App] Unhandled error during async init:", err);
         }
     });
 }
@@ -645,7 +596,7 @@ function onReady() {
 async function init() {
     if (appState.initialized || appState.initializing) {
         if (APP_CONFIG.DEBUG) {
-            console.info('[App] Initialization attempt skipped (already done or in progress).');
+            notificationHandlerWithLog?.info?.('[App] Initialization attempt skipped (already done or in progress).');
         }
         return appState.initialized;
     }
@@ -656,7 +607,8 @@ async function init() {
         domAPI: {
             getElementById : id  => document.getElementById(id),
             createElement  : tag => document.createElement(tag),
-            createTemplate : html=> { const t=document.createElement('template'); t.innerHTML=html.trim(); return t; }
+            createTemplate : html=> { const t=document.createElement('template'); t.innerHTML=html.trim(); return t; },
+            body: document.body
         },
         groupWindowMs : 7000                // example – 7-second buckets for API chatter
     });
@@ -699,7 +651,7 @@ async function init() {
             setTimeout(() => div.remove(), 5000);
         } catch {
             // Last resort
-            console.error('Critical notification error:', msg);
+            notificationHandlerWithLog?.error?.('Critical notification error:', msg);
         }
     }
 
@@ -708,7 +660,7 @@ async function init() {
         try {
             return originalShow.call(this, message, type, options);
         } catch (err) {
-            console.error('Failed to show notification:', err);
+            notificationHandlerWithLog?.error?.('Failed to show notification:', err);
             showSimpleNotification(message, type, notificationHandler.getContainer?.());
             return null;
         }
@@ -720,14 +672,14 @@ async function init() {
             try {
                 return fn.apply(h, args);
             } catch (err) {
-                console.error(`Error in notification ${fallbackType}:`, err);
+                notificationHandlerWithLog?.error?.(`Error in notification ${fallbackType}:`, err);
                 try {
                     // Simple DOM-based fallback
                     const msg = args[0] || `[${fallbackType}] Notification failed`;
                     showSimpleNotification(msg, fallbackType, document.body);
                 } catch (e) {
                     // Last resort: console
-                    console.error(`[${fallbackType}] ${args[0]}`, e);
+                    notificationHandlerWithLog?.error?.(`[${fallbackType}] ${args[0]}`, e);
                 }
             }
         };
@@ -738,12 +690,12 @@ async function init() {
             warn: safeFn(h.show || ((...args) => h(args[0], 'warning')), 'warning'),
             error: safeFn(h.show || ((...args) => h(args[0], 'error')), 'error'),
             confirm: safeFn(h.show || ((...args) => h(args[0], 'info')), 'info'),
-            debug: safeFn(h.debug || ((...args) => console.debug(...args)), 'debug')
+            debug: safeFn(h.debug || ((...args) => notificationHandlerWithLog?.debug?.(...args)), 'debug')
         };
     }
     notificationHandlerWithLog = createNotificationShim(notificationHandler);
 
-    DependencySystem.register('notificationHandler', notificationHandler);
+    // Removed redundant registration: DependencySystem.register('notificationHandler', notificationHandler);
 
     if (APP_CONFIG.DEBUG) {
         notificationHandlerWithLog.debug('[App] Initializing application...');
@@ -802,7 +754,7 @@ async function init() {
 
         const initEndTime = performance.now();
         if (APP_CONFIG.DEBUG) {
-            console.info(
+            notificationHandlerWithLog?.info?.(
                 `[App] Initialization complete in ${(initEndTime - initStartTime).toFixed(2)} ms.`
             );
         }
@@ -1273,6 +1225,7 @@ async function initializeUIComponents() {
         app,
         projectDashboard,
         projectManager,
+        notify: notifyForUi,
         storageAPI: DependencySystem.modules.get('storage'),
         viewportAPI: {
             getInnerWidth: () => window.innerWidth
@@ -1290,8 +1243,6 @@ async function initializeUIComponents() {
 
     // Register other utilities
     DependencySystem.register('utils', globalUtils);
-    DependencySystem.register('formatting', formatting);
-    DependencySystem.register('accessibilityUtils', accessibilityUtils);
 
     // Knowledge Base Component
     const knowledgeBaseComponent = createKnowledgeBaseComponent({
@@ -1380,7 +1331,7 @@ function renderAuthHeader() {
                 DependencySystem.modules.get('eventHandlers').trackListener(
                     btn,
                     'click',
-                    (e) => {
+                    function (e) {
                         e.preventDefault();
                         if (isAuth) {
                             authMod.logout();

@@ -701,7 +701,6 @@
   <main id="mainContent" class="flex-1 flex flex-col overflow-hidden">
       <h2 class="sr-only">Project Management Dashboard</h2>
 
-      <div id="notificationArea" role="status" aria-live="polite" class="notification-area fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto pointer-events-none"></div>
 
       <div class="flex-1 overflow-y-auto p-4 md:p-6">
         <section id="projectManagerPanel"
@@ -716,6 +715,9 @@
       </div>
     </main>
   </div>
+
+  <!-- Notification Area (ensure always present for reliable CSS targeting) -->
+  <div id="notificationArea" class="notification-area" role="status" aria-live="polite"></div>
 
   <div id="modalsContainer" aria-live="polite" role="complementary">
     <div id="keyboardHelp" class="hidden fixed inset-0 bg-base-300 bg-opacity-70 z-50 flex items-center justify-center"

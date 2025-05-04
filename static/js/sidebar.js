@@ -19,7 +19,7 @@ import { safeParseJSON } from './utils/globalUtils.js';
  * @param {Object} options.projectManager - For project data (optional).
  * @param {Object} options.uiRenderer - For rendering DOM elements (optional).
  * @param {Object} options.DependencySystem - The DI container reference (required).
- * @param {Function} options.notificationHandler - For notifications (optional).
+ * @param {Function} options.notify - Notification util (required, from DI).
  * @param {Object} options.storageAPI - For persistent storage (required).
  * @param {Object} options.viewportAPI - For viewport info (required).
  * @param {Object} options.domAPI - For DOM operations (required). Must provide:
@@ -38,7 +38,7 @@ export function createSidebar({
   projectManager,
   uiRenderer,
   DependencySystem,
-  notificationHandler,
+  notify,
   storageAPI,
   viewportAPI,
   domAPI
@@ -67,8 +67,7 @@ export function createSidebar({
   projectDashboard = projectDashboard || resolveDep('projectDashboard');
   projectManager = projectManager || resolveDep('projectManager');
   uiRenderer = uiRenderer || resolveDep('uiRenderer');
-  notificationHandler = notificationHandler ||
-    (app && app.showNotification ? app.showNotification.bind(app) : (msg, type) => { });
+  if (!notify) throw new Error('[sidebar] notify util (from DI) is required');
 
   /** @type {HTMLElement|null} */
   let el = null;
@@ -104,20 +103,19 @@ export function createSidebar({
       // --- Enhancement: get initial context from URL if needed ---
       if (app && typeof app.getInitialSidebarContext === 'function') {
         // Accepts { projectId, chatId }, returns object or null
-        const { projectId, chatId } = app.getInitialSidebarContext() || {};
+        const { projectId } = app.getInitialSidebarContext() || {};
         if (projectId && projectManager && typeof projectManager.setCurrentProjectId === 'function') {
           projectManager.setCurrentProjectId(projectId);
         }
-        // Optionally: handle chatId for sidebar if sidebar supports chat highlighting
       }
 
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
 
-      notificationHandler('[sidebar] initialized successfully', 'info');
+      notify.info('[sidebar] initialized successfully', { group: true, context: 'sidebar' });
       return true;
     } catch (err) {
-      notificationHandler('[sidebar] Initialization failed: ' + (err && err.message ? err.message : err), 'error');
+      notify.error('[sidebar] Initialization failed: ' + (err && err.message ? err.message : err), { group: true, context: 'sidebar' });
       return false;
     }
   }
@@ -143,7 +141,7 @@ export function createSidebar({
     pinned = false;
     visible = false;
 
-    notificationHandler('[sidebar] destroyed', 'info');
+    notify.info('[sidebar] destroyed', { group: true, context: 'sidebar' });
   }
 
   /**
@@ -252,6 +250,11 @@ export function createSidebar({
     btnToggle.setAttribute('aria-expanded', 'true');
     createBackdrop();
 
+    // NEW: Add class to body for notification offset (FORCE use document.body; domAPI.body may be wrong)
+    if (typeof document !== 'undefined' && document.body && !document.body.classList.contains('with-sidebar-open')) {
+      document.body.classList.add('with-sidebar-open');
+    }
+
     const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
     if (activeTab === 'projects') {
       ensureProjectDashboard();
@@ -277,6 +280,12 @@ export function createSidebar({
     el.setAttribute('aria-hidden', 'true');
     btnToggle.setAttribute('aria-expanded', 'false');
     removeBackdrop();
+
+    // NEW: Remove sidebar offset class if present (FORCE use document.body)
+    if (typeof document !== 'undefined' && document.body && document.body.classList.contains('with-sidebar-open')) {
+      document.body.classList.remove('with-sidebar-open');
+    }
+
     dispatch('sidebarVisibilityChanged', { visible });
   }
 
@@ -370,7 +379,7 @@ export function createSidebar({
         maybeRenderStarredConversations();
       }
     } catch (err) {
-      notificationHandler('[sidebar] Failed to activate tab: ' + (err && err.message ? err.message : err), 'error');
+      notify.error('[sidebar] Failed to activate tab: ' + (err && err.message ? err.message : err), { group: true, context: 'sidebar' });
     }
   }
 
@@ -390,7 +399,7 @@ export function createSidebar({
         uiRenderer.renderProjects(projectManager.projects);
       }
     } catch (err) {
-      notificationHandler('[sidebar] Failed to ensure project dashboard: ' + (err && err.message ? err.message : err), 'error');
+      notify.error('[sidebar] Failed to ensure project dashboard: ' + (err && err.message ? err.message : err), { group: true, context: 'sidebar' });
     }
   }
 
