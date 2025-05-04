@@ -62,11 +62,12 @@ The notification system provides robust, accessible, and theme-aware banners for
 
 ## Styling, Animation, and Theming
 
-- **Theme/color:** Uses DaisyUI/Tailwind theme colors (`--color-error`, `--color-success`, etc) in both enhanced-components and notification-accordion CSS.
+- **Theme/color:** Uses DaisyUI/Tailwind theme colors (`--color-error`, `--color-success`, etc) in `enhanced-components.css`.
 - **Accent border:** Strong left border color by type for immediate recognition.
 - **Animations:** Fade-in/out for both singles and groups; pulse on grouped update.
 - **Responsiveness:** Max width/shrink for mobile, enforced button/tap target sizes.
-- **Integration Points:** All styling centralized via `enhanced-components.css`, `notification-accordion.css`, and theme variable overrides.
+- **Integration Points:** All notification styling is centralized via `enhanced-components.css` and theme variable overrides.
+- **CSS status:** As of 2025-05-04, the classes and rules in `notification-accordion.css` are not used by any current notification JS and may be removed with no effect on notification banners.
 
 ---
 
@@ -161,11 +162,11 @@ notificationHandler.show('Missing project file', 'error', { group: true, module:
 
 ## Reference: Customization and CSS
 
-- Styles are managed via DaisyUI + custom CSS in `enhanced-components.css`, `notification-accordion.css`.
-- Copy button styling uses class `.notification-copy-btn` for singles and `.accordion-copy-btn` for grouped banners.
+- Styles are managed via DaisyUI + custom CSS in `enhanced-components.css`.
+- Copy button styling uses class `.notification-copy-btn` for singles and `.accordion-copy-btn` for grouped banners (legacy only).
 - All color variables are themeable and support both light and dark modes.
 - Animations are managed via Tailwind utility classes and custom keyframes.
-- You may further customize banner layout, iconography (including supplied SVGs for copy/check), or transitions through these partials.
+- Banner and accordion CSS from `notification-accordion.css` are not active as of 2025-05-04—remove this file without impact unless your app requires backward compatibility.
 
 ---
 
@@ -201,52 +202,16 @@ export function notifyProjectLoadError(notificationHandler, projectId) {
 - **Direct handler access (low-level):** `DependencySystem.modules.get('notificationHandler')`
   - For advanced use (e.g. non-standard grouping, low-level hide, etc.), rarely needed.
 - **Grouped notification helper:** Used internally by the handler as `notificationHandler.groupedHelper`
-- Server-side batching/logging is automatic when using `notify` or the handler.
 
-      "notifications": [
-        {
-          "message": "string",
-          "type": "info|warning|error|success",
-          "timestamp": 1714759832.10,
-          "user": "alice"
-        }
-      ]
-    }
-    ```
-  - Responds with `{ "status": "ok", "count": <number> }`
+---
 
-- **Single log:**
-  - **POST** `/api/log_notification`
-  - Body:
-    ```json
-    {
-      "message": "string",
-      "type": "info|warning|error|success",
-      "timestamp": 1714759832.10,
-      "user": "alice"
-    }
-    ```
+## Notification Logging & Backend Integration
 
-> **Note:** The notification system behaves robustly if the logger endpoint is missing or errors—user feedback is never blocked.
-
-### Logging Implementation Details
-
-- Logs are appended to `notifications.txt` at the project root.
-- If the log exceeds 10 MB, logs are rotated (`notifications.txt`, `notifications.txt.1`, up to 5 files).
-- Every log entry is formatted:
-  ```
-  2025-05-04T10:48:22.123456Z [INFO] user=alice Message content here
-  ```
-- Log writes are file-locked (`fcntl.LOCK_EX`) for concurrency and retried; logging runs as a FastAPI background task for non-blocking API response.
-- Only the last 5 log files are retained. After rotation, the new file starts with a comment header line indicating rotation.
-
-### Troubleshooting Backend Logging
-
-- **Banners show but no entries appear in notifications.txt:**
-  - Check that your FastAPI backend is running and has write permission in the project root.
-  - Log rotation may have just happened; check `.1`, `.2` etc. for older logs.
-  - Confirm the `/api/log_notification_batch` endpoint is not returning errors.
-  - Review backend logs for exceptions (permission errors, OS/file errors).
+> **Important Update (2025-05-04):**
+>
+> The *current* notification system implementation is purely frontend and does **not** send log events to the backend API or to `notifications.txt`. No POST to `/api/log_notification` or `/api/log_notification_batch` is performed by any notification JS module. All notification events remain inside the user's browser/app session and backend log files will not reflect frontend banner activity.
+>
+> The backend notification logging endpoints and FastAPI logic remain present for future integration or external/batch use, but as of this date **no frontend code automatically logs notifications** to the backend.
 
 ---
 
@@ -254,7 +219,7 @@ export function notifyProjectLoadError(notificationHandler, projectId) {
 
 - static/js/notification-handler.js – implementation, options, grouped helper
 - static/js/handler-helper.js – grouping logic
-- static/css/notification-accordion.css, static/css/enhanced-components.css – styles
+- static/css/enhanced-components.css – all active notification/app styles
 - static/js/app.js – how notification handler is registered and injected
 - routes/log_notification.py – backend logging (API endpoints, concurrency/rotation logic)
 
@@ -267,9 +232,9 @@ export function notifyProjectLoadError(notificationHandler, projectId) {
 ## Changelog
 
 **2025-05-04:**
-- Added documentation for backend logging endpoints, file locations, and troubleshooting.
-- Clarified API contracts for `/api/log_notification_batch` and batch model shape.
-- Outlined log file concurrency/rotation guarantees and backend log retention policy.
+- Clarified that backend notification logging and notifications.txt are unused by frontend notification banners.
+- Marked notification-accordion.css as obsolete.
+- Updated CSS guidance and integration notes accordingly.
 
 **2025-05-03:**
 - Added copy-to-clipboard feature to all notification banners:
@@ -302,7 +267,6 @@ DependencySystem.register('notificationHandler', notificationHandler);
 
 /* Optional but helpful façade for legacy code */
 export const showNotification = notificationHandler.show;
-```
 ```
 *Nothing else in this guide will touch `app.js`.*
 

@@ -74,15 +74,9 @@ class Project(Base):
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     from typing import Optional
-    
-    knowledge_base_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        postgresql.UUID(as_uuid=True),
-        ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-        unique=True,
-        comment="References knowledge base assets",
-    )
+
+    # Removed knowledge_base_id FK to break the cycle:
+    # Now, relation to KnowledgeBase will be via a relationship property only.
     default_model: Mapped[str] = mapped_column(
         String(50),
         default="claude-3-sonnet-20240229",
@@ -127,8 +121,11 @@ class Project(Base):
     members: Mapped[list[ProjectUserAssociation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    # Relationship to KnowledgeBase, not enforced as FK; join on KnowledgeBase.project_id
     knowledge_base = relationship(
-        "KnowledgeBase", uselist=False, foreign_keys=[knowledge_base_id]
+        "KnowledgeBase",
+        uselist=False,
+        primaryjoin="Project.id==foreign(KnowledgeBase.project_id)"
     )
 
     def __repr__(self) -> str:
@@ -140,22 +137,7 @@ class Project(Base):
         return self.token_usage <= self.max_tokens
 
 
-@event.listens_for(Project.knowledge_base_id, "set")
-def validate_knowledge_base_assignment(
-    _target: Project,
-    value: uuid.UUID | None,
-    _oldvalue: uuid.UUID | None,
-    _initiator: Any,
-) -> uuid.UUID | None:
-    """
-    Prevent reassigning a different knowledge base
-    once this project is already associated with one.
-    """
-    if value and _oldvalue and value != _oldvalue:
-        raise ValueError(
-            "Cannot change knowledge base association - create a new knowledge base instead"
-        )
-    return value
+# Deleted Project.knowledge_base_id event listener; single enforced direction
 
 
 class ProjectUserAssociation(Base):
