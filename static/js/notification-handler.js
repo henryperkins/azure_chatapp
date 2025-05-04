@@ -3,6 +3,10 @@
 import createGroupedNotificationHelper from './handler-helper.js';
 
 export function createNotificationHandler({ eventHandlers, DependencySystem } = {}) {
+  // --- Dependency/DOM readiness state ---
+  let _ready = false;
+  const _pendingQueue = [];
+
   if (!eventHandlers || typeof eventHandlers.trackListener !== 'function') {
     console.error('[NotificationHandler] eventHandlers with trackListener is required.');
     // Fallback implementation that won't crash
@@ -46,6 +50,31 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
       document.body.appendChild(container);
     }
     return container;
+  }
+
+  // --- Readiness check and queue flush ---
+  function _checkReady() {
+    // Check eventHandlers, DependencySystem, and notificationArea DOM
+    const container = document.getElementById('notificationArea');
+    if (eventHandlers && typeof eventHandlers.trackListener === 'function' &&
+        DependencySystem && container) {
+      _ready = true;
+      // Flush pending queue
+      while (_pendingQueue.length > 0) {
+        const args = _pendingQueue.shift();
+        show.apply(null, args);
+      }
+    }
+    return _ready;
+  }
+
+  // Call _checkReady on DOMContentLoaded
+  if (typeof window !== 'undefined' && window.document) {
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      setTimeout(_checkReady, 0);
+    } else {
+      window.addEventListener('DOMContentLoaded', _checkReady, { once: true });
+    }
   }
 
   // Consistent icon generation
@@ -121,6 +150,11 @@ export function createNotificationHandler({ eventHandlers, DependencySystem } = 
 
   // Improved primary notification method with better error handling
   function show(message, type = 'info', options = {}) {
+    if (!_ready && !_checkReady()) {
+      // Queue notification until ready
+      _pendingQueue.push([message, type, options]);
+      return null;
+    }
     try {
       const container = ensureNotificationContainer();
       logNotification(message, type, options.user);

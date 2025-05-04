@@ -1,0 +1,119 @@
+/* notification-accordion.css - idiomatic Tailwind v4 & daisyUI 5, minimal custom CSS */
+
+/* 1. Top-right stacking toast area */
+.notification-area {
+  @apply fixed top-6 right-6 z-[1200] flex flex-col items-end max-h-[96vh] overflow-y-auto pointer-events-none;
+}
+.notification-area > .accordion-banner {
+  @apply pointer-events-auto;
+}
+
+/* 2. Banner using daisyUI alert with custom border-radius */
+.accordion-banner {
+  @apply alert shadow-md my-2 flex flex-col w-full max-w-lg bg-base-100 text-base-content transition-shadow duration-200 ease-in-out relative;
+  border-radius: 0.33rem;
+}
+
+/* 3. Animation classes – use custom keyframes for fadeIn/fadeOut */
+.animate-fadeIn {
+  animation: fadeIn 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+.animate-fadeOut {
+  animation: fadeOut 0.3s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0);   }
+  to   { opacity: 0; transform: translateY(-10px);}
+}
+
+/* 4. Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn, .animate-fadeOut, .accordion-banner.group-updated {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .accordion-banner .accordion-message-list,
+  .accordion-banner .accordion-message-list.expanded {
+    transition: none !important;
+  }
+}
+
+/* 5. Context badge, using daisyUI/base colors */
+.notification-context-badge {
+  @apply inline-flex items-center rounded bg-base-200 px-2 py-0.5 text-xs font-semibold ml-2 mr-2 text-base-content/70 border border-base-300;
+  letter-spacing: 0.01em;
+}
+
+/* 6. Alert accent - semantic left border (uses daisyUI colors) */
+.accordion-banner.notification-error { border-left: 4px solid var(--color-error);}
+.accordion-banner.notification-warning { border-left: 4px solid var(--color-warning);}
+.accordion-banner.notification-info { border-left: 4px solid var(--color-info);}
+.accordion-banner.notification-success { border-left: 4px solid var(--color-success);}
+
+/* 7. Summary/trigger */
+.accordion-banner .accordion-summary {
+  @apply flex items-center justify-between w-full cursor-pointer font-medium p-2 select-none outline-none;
+}
+.accordion-banner .accordion-summary:focus-visible {
+  @apply outline outline-2 outline-primary outline-offset-2;
+}
+
+/* 8. Group update pulse animation */
+.accordion-banner.group-updated {
+  animation: pulse 0.4s linear;
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.4);}
+  70%  { box-shadow: 0 0 0 6px rgba(99,102,241,0);}
+  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0);}
+}
+
+/* 9. Accordion toggle/dismiss buttons (daisyUI button) */
+.accordion-banner .accordion-toggle-btn {
+  @apply btn btn-xs btn-ghost ml-2 min-w-[44px] min-h-[28px];
+}
+.accordion-banner .accordion-dismiss-btn {
+  @apply btn btn-xs btn-ghost text-base-content/70 hover:text-error ml-1 min-w-[28px] min-h-[28px];
+}
+
+/* 10. Message list with smooth collapse/expand transition */
+.accordion-banner .accordion-message-list {
+  @apply mt-2 pl-4 list-disc text-sm text-base-content/80 border-l-2 border-base-300 ml-[0.1em] bg-base-100/75 transition-[max-height] duration-300 ease-in-out max-h-0 overflow-hidden;
+}
+.accordion-banner .accordion-message-list.expanded,
+.accordion-banner.expanded .accordion-message-list {
+  @apply max-h-[50vh] overflow-y-auto;
+}
+.accordion-banner .accordion-message-list li {
+  @apply mb-1 pl-2 break-words;
+}
+
+/* 11. Icon */
+.accordion-banner .accordion-icon {
+  @apply flex-shrink-0;
+}
+
+/* 12. Clear-all button, top-right */
+.notification-clear-all {
+  @apply btn btn-xs btn-outline absolute top-1 right-3 z-20;
+}
+
+/* 13. Dark mode adjustments for Dracula theme from daisyUI */
+[data-theme="dracula-enhanced"] .accordion-banner .accordion-message-list {
+  background: rgba(40, 42, 54, 0.75); /* fallback for dracula */
+  border-left-color: var(--color-base-300, #44475a);
+  /* You may want to further refine colors for your custom theme */
+}
+
+/* 14. Focus ring accessibility for buttons */
+.accordion-banner .accordion-toggle-btn:focus-visible,
+.accordion-banner .accordion-dismiss-btn:focus-visible {
+  @apply outline outline-2 outline-primary outline-offset-2;
+}
+.accordion-banner .accordion-message-list:focus-visible {
+  @apply outline outline-2 outline-primary outline-offset-2;
+}
