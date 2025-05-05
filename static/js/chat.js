@@ -286,15 +286,17 @@ export function createChatManager({
      * @param {string} [options.titleSelector]
      */
     async initialize(options = {}) {
+      const _initStart = performance.now();
+      this.notify(`[ChatManager] initialize() called`, "debug", { phase: "init", options, timestamp: _initStart });
       const requestedProjectId = options.projectId && this.isValidProjectId(options.projectId)
         ? options.projectId
         : null;
 
-      // If re-initialize with the same project, re-bind UI
       if (this.isInitialized && this.projectId === requestedProjectId) {
-        this.notify(`[ChatManager] Already initialized for project ${requestedProjectId}. Re-binding UI...`, "warn");
+        this.notify(`[ChatManager] Already initialized for project ${requestedProjectId}. Re-binding UI...`, "warn", { phase: "init", projectId: requestedProjectId });
         this._setupUIElements(options);
         this._bindEvents();
+        this.notify(`[ChatManager] initialize (rebinding) completed`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
         return true;
       }
 
@@ -304,6 +306,7 @@ export function createChatManager({
       this.isGlobalMode = !this.isValidProjectId(this.projectId);
 
       if (this.isInitialized && previousProjectId !== requestedProjectId) {
+        this.notify(`[ChatManager] Switching to new project: ${requestedProjectId}`, "info", { from: previousProjectId, phase: "init" });
         // Reset relevant state
         this.isInitialized = false;
         this.currentConversationId = null;
@@ -316,6 +319,7 @@ export function createChatManager({
         const msg = "[ChatManager] User not authenticated.";
         this._showErrorMessage(msg);
         this._handleError("initialization", msg);
+        this.notify(msg, "error", { phase: "init", timestamp: performance.now() });
         this.projectDetails?.disableChatUI?.("Not authenticated");
         throw new Error(msg);
       }
@@ -323,43 +327,39 @@ export function createChatManager({
       this._setupUIElements(options);
       this._bindEvents();
 
-      // If no valid project, run "global" (no-project) mode:
       if (this.isGlobalMode) {
-        this.notify("[ChatManager] Starting in global (no-project) mode.", "info");
-        this._clearMessages(); // Ensure clean state
-        this._showMessage("system", "Select a project or start a new global chat."); // Placeholder message
+        this.notify("[ChatManager] Starting in global (no-project) mode.", "info", { phase: "init" });
+        this._clearMessages();
+        this._showMessage("system", "Select a project or start a new global chat.");
         this.isInitialized = true;
+        this.notify(`[ChatManager] initialize complete (global mode)`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
         return true;
       }
 
-      // Otherwise, do a normal project-based init. Check if URL has a chat ID.
-      this.notify(`[ChatManager] Initializing for projectId: ${this.projectId}`, "info");
+      this.notify(`[ChatManager] Initializing for projectId: ${this.projectId}`, "info", { phase: "init", timestamp: performance.now() });
       try {
         const urlParams = new URLSearchParams(this.navAPI.getSearch());
         const urlChatId = urlParams.get('chatId');
         if (urlChatId) {
-          this.notify(`[ChatManager] Found chatId=${urlChatId} in URL, loading conversation...`, "info");
-          // Don't await here directly, let loadConversation handle errors/state
+          this.notify(`[ChatManager] Found chatId=${urlChatId} in URL, loading conversation...`, "info", { phase: "init", chatId: urlChatId });
           this.loadConversation(urlChatId).catch(loadErr => {
               this._handleError("initialization (load from URL)", loadErr);
-              // Show empty state if load fails
-               this._clearMessages();
-               this._showMessage("system", "Failed to load chat from URL.");
+              this._clearMessages();
+              this._showMessage("system", "Failed to load chat from URL.");
+              this.notify(`[ChatManager] loadConversation FAILED`, "error", { phase: "init", chatId: urlChatId, error: loadErr?.message, stack: loadErr?.stack });
           });
         } else {
-          this.notify(`[ChatManager] No chatId in URL. Ready for new chat or selection.`, "info");
-          this._clearMessages(); // Start with empty state
-          // Optional: Load latest conversation here instead of empty state?
-          // For now, keep it empty until user action.
+          this.notify(`[ChatManager] No chatId in URL. Ready for new chat or selection.`, "info", { phase: "init" });
+          this._clearMessages();
         }
-        // Mark initialized regardless of whether chat loaded, UI is ready.
         this.isInitialized = true;
+        this.notify(`[ChatManager] initialize complete (project mode)`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
         return true;
       } catch (error) {
-         // Catch synchronous errors during setup, though less likely now
         this._handleError("initialization (sync setup)", error);
         this.projectDetails?.disableChatUI?.("Chat setup error: " + (error.message || error));
-        throw error; // Re-throw sync errors
+        this.notify(`[ChatManager] initialize threw sync error`, "error", { phase: "init", error: error?.message, stack: error?.stack });
+        throw error;
       }
     }
 
@@ -383,24 +383,28 @@ export function createChatManager({
      * @param {string} conversationId
      */
     async loadConversation(conversationId) {
+      const _loadStart = performance.now();
+      this.notify(`[ChatManager] loadConversation called for conversationId=${conversationId}`, "debug", { phase: "loadConversation", projectId: this.projectId, conversationId, timestamp: _loadStart });
       if (!conversationId) {
-        this.notify("[ChatManager] Invalid conversationId", "error");
+        this.notify("[ChatManager] Invalid conversationId", "error", { phase: "loadConversation" });
         return false;
       }
       if (!this.isAuthenticated()) {
-        this.notify("[ChatManager] loadConversation: not authenticated", "warn");
+        this.notify("[ChatManager] loadConversation: not authenticated", "warn", { phase: "loadConversation" });
         return false;
       }
       if (!this.isValidProjectId(this.projectId)) {
         this._handleError("loading conversation", "No valid projectId set");
         this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
+        this.notify("[ChatManager] loadConversation aborted: invalid/missing projectId", "error", { phase: "loadConversation" });
         return false;
       }
 
       const requestId = ++this.currentRequestId;
       if (this.loadPromise) {
-        this.notify("[ChatManager] Already loading; awaiting existing loadPromise.", "warn");
+        this.notify("[ChatManager] Already loading; awaiting existing loadPromise.", "warn", { phase: "loadConversation" });
         const result = await this.loadPromise;
+        this.notify(`[ChatManager] Awaited previous loadPromise, returning result (${result})`, "debug", { phase: "loadConversation" });
         return requestId === this.currentRequestId ? result : false;
       }
 
@@ -424,9 +428,15 @@ export function createChatManager({
           }
           this._renderMessages(messages);
           this._updateURLWithConversationId(conversationId);
+          const loadMs = performance.now() - _loadStart;
+          this.notify(`[ChatManager] loadConversation complete (conversationId=${conversationId})`, "debug", { phase: "loadConversation", ms: loadMs });
+          if (loadMs > 2000) {
+            this.notify(`[ChatManager] loadConversation perf warning: took ${loadMs.toFixed(1)} ms`, "warn", { phase: "loadConversation", ms: loadMs });
+          }
           return true;
         } catch (error) {
           this._handleError("loading conversation", error);
+          this.notify(`[ChatManager] loadConversation error`, "error", { phase: "loadConversation", error: error?.message, stack: error?.stack });
           return false;
         } finally {
           this.isLoading = false;

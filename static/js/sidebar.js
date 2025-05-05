@@ -6,6 +6,7 @@
  */
 
 import { safeParseJSON } from './utils/globalUtils.js';
+import { safeInvoker } from './utils/notifications-helpers.js';
 
 const MODULE = "Sidebar";
 
@@ -114,18 +115,23 @@ export function createSidebar({
   }
 
   function bindDomEvents() {
-    const track = (element, evtType, handler, description) => {
+    const track = (element, evtType, handler, description, sourceOverride) => {
       if (!element) return;
-      const wrappedHandler = eventHandlers.trackListener(element, evtType, handler, { description });
+      const contextualHandler = safeInvoker(
+        handler,
+        { notify },
+        { context: 'sidebar', module: MODULE, source: sourceOverride || description }
+      );
+      const wrappedHandler = eventHandlers.trackListener(element, evtType, contextualHandler, { description });
       if (wrappedHandler) {
         trackedEvents.push({ element, type: evtType, description });
       }
     };
-    track(btnToggle, 'click', () => toggleSidebar(), 'Sidebar toggle');
-    track(btnClose, 'click', () => closeSidebar(), 'Sidebar close');
-    track(btnPin, 'click', () => togglePin(), 'Sidebar pin');
+    track(btnToggle, 'click', () => toggleSidebar(), 'Sidebar toggle', 'toggleSidebar');
+    track(btnClose, 'click', () => closeSidebar(), 'Sidebar close', 'closeSidebar');
+    track(btnPin, 'click', () => togglePin(), 'Sidebar pin', 'togglePin');
     if (viewportAPI && viewportAPI.onResize) {
-      track(viewportAPI, 'resize', handleResize, 'Sidebar resize');
+      track(viewportAPI, 'resize', handleResize, 'Sidebar resize', 'handleResize');
     }
     [
       { name: 'recent', id: 'recentChatsTab' },
@@ -133,8 +139,29 @@ export function createSidebar({
       { name: 'projects', id: 'projectsTab' },
     ].forEach(({ name, id }) => {
       const btn = domAPI.getElementById(id);
-      track(btn, 'click', () => activateTab(name), `Sidebar tab ${name}`);
+      track(btn, 'click', () => activateTab(name), `Sidebar tab ${name}`, 'activateTab');
     });
+
+    // Bind a generic "error" event handler for child widget error forward
+    if (el) {
+      const errorHandler = safeInvoker(
+        (e) => {
+          notify.error('[sidebar] Widget error: ' + (e && e.detail && e.detail.message ? e.detail.message : String(e)), {
+            group: true,
+            context: 'sidebar',
+            module: MODULE,
+            source: 'childWidgetError',
+            originalError: e?.detail?.error || e?.error || e
+          });
+        },
+        { notify },
+        { context: 'sidebar', module: MODULE, source: 'childWidgetError' }
+      );
+      const handler = eventHandlers.trackListener(el, 'error', errorHandler, { description: 'Sidebar child widget error' });
+      if (handler) {
+        trackedEvents.push({ element: el, type: 'error', description: 'Sidebar child widget error' });
+      }
+    }
   }
 
   function togglePin(force) {
@@ -145,7 +172,15 @@ export function createSidebar({
     if (pinned) showSidebar();
     dispatch('sidebarPinChanged', { pinned });
     notify.info('[sidebar] pin status changed', {
-      group: true, context: 'sidebar', module: MODULE, source: 'togglePin', detail: { pinned }
+      group: true,
+      context: 'sidebar',
+      module: MODULE,
+      source: 'togglePin',
+      detail: {
+        pinned,
+        viewportWidth: viewportAPI.getInnerWidth?.(),
+        pinState: pinned
+      }
     });
   }
 
@@ -161,7 +196,15 @@ export function createSidebar({
     const willShow = (forceVisible !== undefined) ? !!forceVisible : !visible;
     willShow ? showSidebar() : closeSidebar();
     notify.info('[sidebar] toggled', {
-      group: true, context: 'sidebar', module: MODULE, source: 'toggleSidebar', detail: { willShow }
+      group: true,
+      context: 'sidebar',
+      module: MODULE,
+      source: 'toggleSidebar',
+      detail: {
+        willShow,
+        viewportWidth: viewportAPI.getInnerWidth?.(),
+        pinState: pinned
+      }
     });
   }
 
