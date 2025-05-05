@@ -52,6 +52,11 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
   // Try to DI a notify util
   let notify = resolveDep('notify');
 
+  // Helper – always fetch the latest notify instance (may be registered later)
+  function getNotify() {
+    return notify || resolveDep('notify');
+  }
+
   // Storage utility: DI or fallback to window.localStorage
   const storageBackend = storage ||
     (typeof window !== "undefined" && window.localStorage) ||
@@ -117,8 +122,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
           // Don't return the promise directly, wrap in a proper error handler
           // to prevent "message channel closed" errors
           result.catch(error => {
-            if (notify) {
-              notify.error(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
+            const n = getNotify();
+            if (n) {
+              n.error(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
             } else if (app && typeof app.showNotification === "function") {
               app.showNotification(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
             } else if (typeof console !== "undefined") {
@@ -126,8 +132,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
               console.error(`[EventHandler] (fallback) Async error in ${type} event handler:`, error);
             }
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-              if (notify) {
-                notify.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
+              const n = getNotify();
+              if (n) {
+                n.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
               } else if (app && typeof app.showNotification === "function") {
                 app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
               } else if (typeof console !== "undefined") {
@@ -139,8 +146,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
             const duration = performance.now() - startTime;
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
-              if (notify) {
-                notify.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
+              const n = getNotify();
+              if (n) {
+                n.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
               } else if (app && typeof app.showNotification === "function") {
                 app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
               } else if (typeof console !== "undefined") {
@@ -159,8 +167,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         const duration = performance.now() - startTime;
         const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
         if (duration > threshold) {
-          if (notify) {
-            notify.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
+          const n = getNotify();
+          if (n) {
+            n.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
           } else if (app && typeof app.showNotification === "function") {
             app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
           } else if (typeof console !== "undefined") {
@@ -171,8 +180,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
 
         return result;
       } catch (error) {
-        if (notify) {
-          notify.error(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
+        const n = getNotify();
+        if (n) {
+          n.error(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
         } else if (app && typeof app.showNotification === "function") {
           app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
         } else if (typeof console !== "undefined") {
@@ -180,8 +190,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
           console.error(`[EventHandler] (fallback) Error in ${type} event handler:`, error);
         }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-          if (notify) {
-            notify.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
+          const n = getNotify();
+          if (n) {
+            n.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
           } else if (app && typeof app.showNotification === "function") {
             app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
           } else if (typeof console !== "undefined") {
@@ -194,7 +205,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
 
     element.addEventListener(type, wrappedHandler, finalOptions);
 
-    trackedListeners.add({
+    const listenerRecord = {
       element,
       type,
       handler: wrappedHandler,
@@ -202,9 +213,20 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
       originalHandler: handler,
       description,
       priority: options.priority || PRIORITY.NORMAL
-    });
+    };
 
-    return wrappedHandler;
+    trackedListeners.add(listenerRecord);
+
+    return {
+      handler: wrappedHandler,
+      remove: () => {
+        try {
+          element.removeEventListener(type, wrappedHandler, finalOptions);
+        } finally {
+          trackedListeners.delete(listenerRecord);
+        }
+      }
+    };
   }
 
   function listTrackedListeners(filter = {}) {
@@ -779,6 +801,13 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
     }
   }
 
+  // Real untrackListener implementation
+  function untrackListener(el, evt, h, opts = {}) {
+    if (!el || !evt || !h) return;
+    try { el.removeEventListener(evt, h, opts); }
+    finally { cleanupListeners(el, evt); }
+  }
+
   // No self-assignment! Only export for orchestrator/consumer to register.
   return {
     trackListener,
@@ -792,7 +821,6 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
     setupForm,
     init,
     PRIORITY,
-    // DI compatibility for consumers requiring untrackListener
-    untrackListener: () => {}
+    untrackListener
   };
 }
