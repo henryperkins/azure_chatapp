@@ -534,10 +534,10 @@ async def attach_github_repository(
 
     # Process fetched files
     for file_path in fetched_files:
-        with open(file_path, "rb") as file:
+        with open(file_path, "rb") as fp:
             await upload_file_to_project(
                 project_id=project_id,
-                file=UploadFile(file),
+                file=UploadFile(filename=os.path.basename(file_path), file=fp),
                 db=db,
                 user_id=user_id,
             )
