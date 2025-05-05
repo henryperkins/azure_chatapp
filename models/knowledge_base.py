@@ -59,6 +59,11 @@ class KnowledgeBase(Base):
         onupdate=text("CURRENT_TIMESTAMP"),
     )
 
+    # GitHub repository integration attributes
+    repo_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    branch: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    file_paths: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
+
     # Project relationship is handled by backref in Project model
 
     def __repr__(self):
