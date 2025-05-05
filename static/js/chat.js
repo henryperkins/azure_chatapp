@@ -87,14 +87,6 @@ function getInjectedModelConfig(modelConfig) {
   };
 }
 
-/**
- * Constants for API endpoints.
- */
-const API_ENDPOINTS = {
-  CONVERSATIONS: (projectId) => `/api/projects/${projectId}/conversations/`,
-  CONVERSATION: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/`,
-  MESSAGES: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/messages/`
-};
 
 /**
  * Defaults for chat if modelConfig is not provided or incomplete.
@@ -164,7 +156,8 @@ export function createChatManager({
   domAPI,
   navAPI,
   DOMPurify,
-  notificationHandler
+  notificationHandler,
+  apiEndpoints
 } = {}) {
   // Basic validation
   if (typeof apiRequest !== 'function') {
@@ -178,6 +171,9 @@ export function createChatManager({
   }
   if (!DOMPurify) {
     throw new Error("[ChatManager] DOMPurify must be provided via DI.");
+  }
+  if (!apiEndpoints) {
+    throw new Error("[ChatManager] 'apiEndpoints' must be provided via DI.");
   }
 
   // Provide fallback DOM, Nav, and event handlers if not supplied
@@ -417,8 +413,8 @@ export function createChatManager({
 
           // Parallel fetch conversation + messages
           const [conversation, messagesResponse] = await Promise.all([
-            this.apiRequest(API_ENDPOINTS.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
-            this.apiRequest(API_ENDPOINTS.MESSAGES(this.projectId, conversationId), { method: "GET" })
+            this.apiRequest(apiEndpoints.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
+            this.apiRequest(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: "GET" })
           ]);
 
           const messages = messagesResponse.data?.messages || [];
@@ -471,7 +467,7 @@ export function createChatManager({
           model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
         const response = await this.apiRequest(
-          API_ENDPOINTS.CONVERSATIONS(this.projectId),
+          apiEndpoints.CONVERSATIONS(this.projectId),
           { method: "POST", body: payload }
         );
 
@@ -574,7 +570,7 @@ export function createChatManager({
         };
       }
       return this.apiRequest(
-        API_ENDPOINTS.MESSAGES(this.projectId, this.currentConversationId),
+        apiEndpoints.MESSAGES(this.projectId, this.currentConversationId),
         { method: "POST", body: payload }
       );
     }
@@ -634,7 +630,7 @@ export function createChatManager({
       }
       try {
         await this.apiRequest(
-          API_ENDPOINTS.CONVERSATION(this.projectId, this.currentConversationId),
+          apiEndpoints.CONVERSATION(this.projectId, this.currentConversationId),
           { method: "DELETE" }
         );
         this.currentConversationId = null;
@@ -1033,13 +1029,6 @@ export function createChatManager({
       const message = this._extractErrorMessage(error);
       this.notify(`[ChatManager - ${context}] ${message}`, "error", error);
     }
-  async initialize() {
-    // Add any initialization logic needed;
-    // or return immediately if there’s nothing to do.
-    return true;
-  }
-
   } // end ChatManager class
-
   return new ChatManager();
 }

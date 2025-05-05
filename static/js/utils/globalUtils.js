@@ -1,300 +1,420 @@
-/**
- * globalUtils.js — DI-strict utility module for app-wide helpers.
+/* ---------------------------------------------------------------------------
+ *  globalUtils.js — Unified DI‑strict utilities library
+ *  ---------------------------------------------------------------------------
+ *  This single module replaces the former separate files:
+ *    • browserAPI.js
+ *    • storageService.js
+ *    • apiClient.js
+ *    • (legacy) globalUtils.js helpers
  *
- * - All user- or system-facing warnings/errors MUST flow via Dependency Injection:
- *     1. Use DI `notify` util if present (DependencySystem.modules.get('notify'))
- *     2. Else use DI notificationHandler (`show`/`warn`/`error`) with proper context/group
- *     3. Console use is **allowed only as a last resort,** with explicit fallback comment.
- * - Never import or use console.* directly for error/feedback outside of guarded fallback blocks.
+ *  All functionality is now exported here to simplify bundling and ensure that
+ *  every part of the codebase can be imported from one place while still
+ *  adhering to strict dependency‑injection.  Nothing inside this file reaches
+ *  for globals except via the injected browserAPI wrapper created below.
  *
- * For architectural rules: see notification-system.md, custominstructions.md.
- */
+ *  Usage pattern (ESM):
+ *
+ *    import {
+ *      createBrowserAPI,
+ *      createStorageService,
+ *      createApiClient,
+ *      debounce,
+ *      normaliseUrl,
+ *      // …etc.
+ *    } from "./utils/globalUtils.js";
+ *
+ * ------------------------------------------------------------------------ */
 
-import { isValidProjectId as rawIsValidProjectId } from '../projectManager.js';
-
+// ─────────────────────────────────────────────────────────────────────────────
+// 1. Browser API abstraction
+// ─────────────────────────────────────────────────────────────────────────────
 /**
- * Re-export from projectManager.js for convenience.
+ * Returns an abstraction over browser‑only globals so all consumer modules can
+ * be SSR‑safe and testable.  If the module is imported in a non‑browser
+ * context, the factory throws immediately.
  */
+export function createBrowserAPI() {
+  if (typeof window === "undefined")
+    throw new Error("browserAPI: window context required");
+
+  return {
+    /* DependencySystem gateway */
+    getDependencySystem: () => window.DependencySystem,
+
+    /* Navigation / history helpers */
+    getLocation: () => window.location,
+    getHistory: () => window.history,
+
+    /* Current user helpers */
+    getCurrentUser: () => window.currentUser,
+    setCurrentUser: (u) => {
+      window.currentUser = u;
+    },
+
+    /* Runtime metrics */
+    getInnerWidth: () => window.innerWidth,
+
+    /* DOM */
+    getDocument: () => document,
+
+    /* Storage */
+    getLocalStorage: () => window.localStorage,
+
+    /* Event helpers */
+    addEventListener: (...a) => window.addEventListener(...a),
+    removeEventListener: (...a) => window.removeEventListener(...a),
+
+    /* Misc */
+    alert: (...args) => window.alert(...args),
+    createURLSearchParams: (...args) => new URLSearchParams(...args),
+    createEvent: (...args) => new Event(...args),
+    requestAnimationFrame: (cb) => window.requestAnimationFrame(cb),
+
+    /* Optional: expose fetch + AbortController for DI‑strict code */
+    fetch: (...args) => window.fetch(...args),
+    AbortController: window.AbortController,
+
+    /* Console wrapper so tests can stub easily */
+    console: {
+      log: (...a) => console.log(...a),
+      info: (...a) => console.info(...a),
+      warn: (...a) => console.warn(...a),
+      error: (...a) => console.error(...a),
+      debug: (...a) => console.debug(...a),
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2. Storage service (localStorage wrapper)
+// ─────────────────────────────────────────────────────────────────────────────
+export function createStorageService({ browserAPI, APP_CONFIG, notificationHandler }) {
+  function safe(fn, fallback, ctx) {
+    try {
+      return fn();
+    } catch (err) {
+      if (APP_CONFIG?.DEBUG && notificationHandler?.warn)
+        notificationHandler.warn(`[storageService] ${ctx} failed`, { err });
+      return fallback;
+    }
+  }
+
+  return {
+    getItem: (k) => safe(() => browserAPI.getLocalStorage().getItem(k), null, "getItem"),
+    setItem: (k, v) => safe(() => browserAPI.getLocalStorage().setItem(k, v), undefined, "setItem"),
+    removeItem: (k) => safe(() => browserAPI.getLocalStorage().removeItem(k), undefined, "removeItem"),
+    clear: () => safe(() => browserAPI.getLocalStorage().clear(), undefined, "clear"),
+    key: (n) => safe(() => browserAPI.getLocalStorage().key(n), null, "key"),
+    get length() {
+      return safe(() => browserAPI.getLocalStorage().length, 0, "length");
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 3. API client – dedup, timeout, CSRF, JSON handling
+// ─────────────────────────────────────────────────────────────────────────────
+export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, getAuthModule, browserAPI }) {
+  const pending = new Map();
+
+  /**
+   * Main request wrapper.  Mirrors `fetch` signature with extras.
+   *
+   * @param {string} url
+   * @param {RequestInit} opts
+   * @param {boolean} skipCache – bypass GET‑deduplication
+   */
+  return async function apiRequest(url, opts = {}, skipCache = false) {
+    const method = (opts.method || "GET").toUpperCase();
+
+    if (!skipCache && method === "GET" && globalUtils.shouldSkipDedup(url)) {
+      skipCache = true;
+    }
+
+    const auth = getAuthModule?.();
+    const normUrl = globalUtils.normaliseUrl(url);
+    const bodyKey =
+      opts.body instanceof FormData
+        ? `[form-data-${Date.now()}]`
+        : globalUtils.stableStringify(opts.body || {});
+    const key = `${method}-${normUrl}-${bodyKey}`;
+
+    if (!skipCache && method === "GET" && pending.has(key)) {
+      if (APP_CONFIG.DEBUG) notificationHandler?.debug?.(`[API] Dedup hit: ${key}`);
+      return pending.get(key);
+    }
+
+    opts.headers = { Accept: "application/json", ...(opts.headers || {}) };
+
+    // CSRF token injection
+    if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
+      const csrf = auth.getCSRFToken();
+      if (csrf) opts.headers["X-CSRF-Token"] = csrf;
+      else if (APP_CONFIG.DEBUG) notificationHandler?.warn?.(`[API] No CSRF for ${method} ${normUrl}`);
+    }
+
+    // JSON stringify body if plain object (and not FormData)
+    if (opts.body && typeof opts.body === "object" && !(opts.body instanceof FormData)) {
+      opts.headers["Content-Type"] ??= "application/json;charset=UTF-8";
+      if (opts.headers["Content-Type"].includes("application/json")) {
+        try {
+          opts.body = JSON.stringify(opts.body);
+        } catch (err) {
+          notificationHandler?.error?.("[API] Failed to stringify body", err);
+          return Promise.reject(new Error("Failed to serialize request body."));
+        }
+      }
+    }
+
+    // Timeout via AbortController (injected from browserAPI for SSR safety)
+    const abortCtl = new (browserAPI?.AbortController || AbortController)();
+    opts.signal = abortCtl.signal;
+    const timer = setTimeout(
+      () => abortCtl.abort(new Error(`API Timeout (${APP_CONFIG.TIMEOUTS.API_REQUEST}ms)`)),
+      APP_CONFIG.TIMEOUTS.API_REQUEST,
+    );
+
+    const p = (async () => {
+      try {
+        if (APP_CONFIG.DEBUG)
+          notificationHandler?.debug?.(`[API] ${method} ${normUrl}`, opts.body ? "with body" : "");
+
+        const resp = await (browserAPI?.fetch || fetch)(normUrl, opts);
+
+        if (!resp.ok) {
+          let errPayload = { message: `API Error: ${resp.status} ${resp.statusText}` };
+          try {
+            const json = await resp.clone().json();
+            const detail = json.detail || json.message;
+            if (detail)
+              errPayload.message = typeof detail === "string" ? detail : JSON.stringify(detail);
+            Object.assign(errPayload, json);
+          } catch {
+            try {
+              errPayload.raw = await resp.text();
+            } catch (e) {
+              console.warn("[globalUtils] (fallback) Failed to read response text", e);
+            }
+          }
+          const e = new Error(errPayload.message);
+          e.status = resp.status;
+          e.data = errPayload;
+          throw e;
+        }
+
+        // No‑content = undefined
+        if (resp.status === 204 || resp.headers.get("content-length") === "0") return undefined;
+
+        // JSON auto‑parse
+        if (resp.headers.get("content-type")?.includes("application/json")) {
+          const json = await resp.json();
+          return json?.status === "success" && "data" in json ? json.data : json;
+        }
+
+        // Fallback: plain text
+        return resp.text();
+      } finally {
+        clearTimeout(timer);
+        if (!skipCache && method === "GET") pending.delete(key);
+      }
+    })();
+
+    if (!skipCache && method === "GET") pending.set(key, p);
+    return p;
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. General‑purpose helper functions (was legacy globalUtils.js)
+// ─────────────────────────────────────────────────────────────────────────────
+import { isValidProjectId as rawIsValidProjectId } from "../projectManager.js";
 export const isValidProjectId = rawIsValidProjectId;
 
-
-
-/**
- * Debounce: delay function calls until after `wait` ms have elapsed
- * since the last invocation.
- */
+// ░░ Debounce ░░───────────────────────────────────────────────────────────────
 export function debounce(fn, wait = 250) {
-  let timeoutId = null;
-  return function (...args) {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => {
-      timeoutId = null;
-      fn.apply(this, args);
+  let t = null;
+  return function (...a) {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      t = null;
+      fn.apply(this, a);
     }, wait);
   };
 }
 
-/**
- * Normalizes a given URL by removing trailing slashes and sorting query params.
- */
+// ░░ URL helpers ░░────────────────────────────────────────────────────────────
 export function normaliseUrl(url) {
   try {
-    const origin = window.location?.origin || 'http://localhost';
+    const origin = window.location?.origin || "http://localhost";
     const u = new URL(url, origin);
-    // Trim any trailing slash if not the root
-    if (u.pathname.length > 1 && u.pathname.endsWith("/")) {
-      u.pathname = u.pathname.slice(0, -1);
-    }
-    // Sort query params
-    const params = Array.from(u.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
-    u.search = new URLSearchParams(params).toString();
+    if (u.pathname.length > 1 && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
+    const sorted = Array.from(u.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
+    u.search = new URLSearchParams(sorted).toString();
     return u.toString();
   } catch (e) {
-    // Prefer DI notify (warn) for user/system-facing errors, else last-resort console fallback
-    const notify = (window.DependencySystem && window.DependencySystem.modules?.get?.('notify')) || null;
-    if (notify && typeof notify.warn === 'function') {
-      notify.warn(`[globalUtils] Failed to normalize URL: ${url}: ${e?.message || e}`, { context: 'globalUtils', group: true });
-    } else if (
-      window.DependencySystem &&
-      typeof window.DependencySystem.modules?.get?.('notificationHandler')?.warn === 'function'
-    ) {
-      window.DependencySystem.modules.get('notificationHandler').warn(`[globalUtils] Failed to normalize URL: ${url}: ${e?.message || e}`, { context: 'globalUtils', group: true });
-    } else {
-      // LAST RESORT: Dev/Desktop debugging only, do not rely on for user feedback!
-      console.warn(`[globalUtils] (fallback) Failed to normalize URL: ${url}`, e);
-    }
+    /* eslint-disable no-console */
+    console.warn("[globalUtils] (fallback) Failed to normalise URL", url, e);
+    /* eslint-enable */
     return url;
   }
 }
 
-/**
- * Checks if the given URL should skip deduplication logic.
- */
 export function shouldSkipDedup(url) {
   try {
     const lower = url.toLowerCase();
     if (
       lower.includes("/api/projects/") &&
-      (
-        lower.endsWith("/stats") ||
+      (lower.endsWith("/stats") ||
         lower.endsWith("/files") ||
         lower.endsWith("/artifacts") ||
         lower.endsWith("/conversations") ||
-        lower.includes("/conversations?")
-      )
+        lower.includes("/conversations?"))
     ) {
       return true;
     }
   } catch (e) {
-    const notify = (window.DependencySystem && window.DependencySystem.modules?.get?.('notify')) || null;
-    if (notify && typeof notify.warn === 'function') {
-      notify.warn(`[globalUtils] shouldSkipDedup error: ${e?.message || e}`, { context: 'globalUtils', group: true });
-    } else if (
-      window.DependencySystem &&
-      typeof window.DependencySystem.modules?.get?.('notificationHandler')?.warn === 'function'
-    ) {
-      window.DependencySystem.modules.get('notificationHandler').warn(`[globalUtils] shouldSkipDedup error: ${e?.message || e}`, { context: 'globalUtils', group: true });
-    } else {
-      // LAST RESORT: Dev/Desktop debugging only, do not rely on for user feedback!
-      console.warn("[globalUtils] (fallback) shouldSkipDedup error:", e);
-    }
+    console.warn("[globalUtils] (fallback) shouldSkipDedup error", e);
   }
   return false;
 }
 
-/**
- * JSON-serializes a value deterministically by sorting object keys.
- */
-export function stableStringify(value) {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-  return `{${Object.keys(value)
+// ░░ JSON helpers ░░───────────────────────────────────────────────────────────
+export function stableStringify(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
+  return `{${Object.keys(v)
     .sort()
-    .map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
+    .map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`)
     .join(",")}}`;
 }
 
-/**
- * Safely parse JSON, returning `defaultVal` if parsing fails.
- */
-export function safeParseJSON(jsonString, defaultVal) {
-  if (typeof jsonString !== 'string') return defaultVal;
+export function safeParseJSON(str, fallback) {
+  if (typeof str !== "string") return fallback;
   try {
-    return JSON.parse(jsonString);
+    return JSON.parse(str);
   } catch {
-    return defaultVal;
+    return fallback;
   }
 }
 
-/**
- * Create an element with classes, events, data-* attributes, etc.
- */
-export function createElement(tag, options = {}, trackListener) {
+// ░░ DOM helpers ░░────────────────────────────────────────────────────────────
+export function createElement(tag, opts = {}, trackListener) {
   const el = document.createElement(tag);
-  if (options.className) el.className = options.className;
-  if (options.id) el.id = options.id;
-  if (options.textContent !== undefined) el.textContent = options.textContent;
-  if (options.innerHTML !== undefined) el.innerHTML = options.innerHTML;
+  if (opts.className) el.className = opts.className;
+  if (opts.id) el.id = opts.id;
+  if ("textContent" in opts) el.textContent = opts.textContent;
+  if ("innerHTML" in opts) el.innerHTML = opts.innerHTML;
 
-  // Attach events if provided (onClick, onChange, etc.)
-  Object.entries(options).forEach(([key, val]) => {
-    if (key.startsWith('on') && typeof val === 'function') {
-      const evt = key.slice(2).toLowerCase();
-      if (!trackListener) {
-        throw new Error(`[globalUtils] createElement requires a trackListener for event: ${evt}`);
-      }
-      trackListener(el, evt, val);
+  // Attach event listeners via DI tracker
+  Object.entries(opts).forEach(([k, v]) => {
+    if (k.startsWith("on") && typeof v === "function") {
+      const evt = k.slice(2).toLowerCase();
+      if (!trackListener)
+        throw new Error(`[globalUtils] createElement requires trackListener for ${evt}`);
+      trackListener(el, evt, v);
     }
   });
 
-  // data-* attributes
-  Object.entries(options).forEach(([key, val]) => {
-    if (key.startsWith('data-')) el.setAttribute(key, val);
+  // data‑* attributes & common HTML props
+  Object.entries(opts).forEach(([k, v]) => {
+    if (k.startsWith("data-")) el.setAttribute(k, v);
   });
-
-  // Set common HTML properties if present in options
-  ['title', 'alt', 'src', 'href', 'placeholder', 'type', 'value', 'name']
-    .forEach(prop => {
-      if (options[prop] !== undefined) el[prop] = options[prop];
-    });
+  [
+    "title",
+    "alt",
+    "src",
+    "href",
+    "placeholder",
+    "type",
+    "value",
+    "name",
+  ].forEach((p) => {
+    if (opts[p] !== undefined) el[p] = opts[p];
+  });
 
   return el;
 }
 
-/**
- * Toggles "hidden" class on an element or collection of elements.
- * Accepts a DOM element or a string selector.
- */
-export function toggleElement(selectorOrElement, show) {
+export function toggleElement(selOrEl, show) {
   try {
-    if (typeof selectorOrElement === 'string') {
-      document.querySelectorAll(selectorOrElement).forEach(el => {
-        el.classList.toggle('hidden', !show);
-      });
-    } else if (selectorOrElement instanceof HTMLElement) {
-      selectorOrElement.classList.toggle('hidden', !show);
+    if (typeof selOrEl === "string") {
+      document.querySelectorAll(selOrEl).forEach((el) => el.classList.toggle("hidden", !show));
+    } else if (selOrEl instanceof HTMLElement) {
+      selOrEl.classList.toggle("hidden", !show);
     }
   } catch (e) {
-    const notify = (window.DependencySystem && window.DependencySystem.modules?.get?.('notify')) || null;
-    if (notify && typeof notify.error === 'function') {
-      notify.error(`[globalUtils] Error in toggleElement for ${selectorOrElement}: ${e?.message || e}`, { context: 'globalUtils', group: true });
-    } else if (
-      window.DependencySystem &&
-      typeof window.DependencySystem.modules?.get?.('notificationHandler')?.error === 'function'
-    ) {
-      window.DependencySystem.modules.get('notificationHandler').error(`[globalUtils] Error in toggleElement for ${selectorOrElement}: ${e?.message || e}`, { context: 'globalUtils', group: true });
-    } else {
-      // LAST RESORT: Dev/Desktop debugging only, do not rely on for user feedback!
-      console.error(`[globalUtils] (fallback) Error in toggleElement for ${selectorOrElement}:`, e);
-    }
+    console.error("[globalUtils] (fallback) toggleElement error", e);
   }
 }
 
-/**
- * Formatting helpers
- */
-export function formatNumber(number) {
-  return new Intl.NumberFormat().format(number || 0);
-}
-
-export function formatDate(date) {
-  if (!date) return '';
+// ░░ Formatting helpers ░░────────────────────────────────────────────────────
+export const formatNumber = (n) => new Intl.NumberFormat().format(n || 0);
+export const formatDate = (d) => {
+  if (!d) return "";
   try {
-    return new Date(date).toLocaleDateString();
+    return new Date(d).toLocaleDateString();
   } catch {
-    return String(date);
+    return String(d);
   }
-}
-
+};
 export function formatBytes(num) {
-  if (num == null) return '';
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  if (num === 0) return '0 B';
+  if (num == null) return "";
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  if (num === 0) return "0 B";
   const i = Math.floor(Math.log(num) / Math.log(1024));
-  return (num / Math.pow(1024, i)).toFixed(2) + ' ' + sizes[i];
+  return `${(num / 1024 ** i).toFixed(2)} ${sizes[i]}`;
 }
+export const fileIcon = (t = "") =>
+(
+  {
+    pdf: "📄",
+    doc: "📝",
+    docx: "📝",
+    txt: "📄",
+    csv: "📊",
+    json: "📋",
+    md: "📄",
+    py: "🐍",
+    js: "📜",
+    html: "🌐",
+    css: "🎨",
+    jpg: "🖼️",
+    jpeg: "🖼️",
+    png: "🖼️",
+    gif: "🖼️",
+    zip: "📦",
+  }[t.toLowerCase()] || "📄"
+);
 
-export function fileIcon(fileType) {
-  const icons = {
-    pdf: '📄', doc: '📝', docx: '📝', txt: '📄',
-    csv: '📊', json: '📋', md: '📄', py: '🐍',
-    js: '📜', html: '🌐', css: '🎨',
-    jpg: '🖼️', jpeg: '🖼️', png: '🖼️', gif: '🖼️',
-    zip: '📦'
-  };
-  return icons[(fileType || '').toLowerCase()] || '📄';
-}
-
-/**
- * Waits for named dependencies in DependencySystem and required DOM selectors.
- * Polls at `pollInterval` until `timeout` is reached.
- */
+// ░░ Misc helpers ░░───────────────────────────────────────────────────────────
 export async function waitForDepsAndDom({
   deps = [],
   DependencySystem = window.DependencySystem,
   domSelectors = [],
   pollInterval = 30,
-  timeout = 4000
+  timeout = 4000,
 } = {}) {
-  if (!DependencySystem) {
-    throw new Error('DependencySystem not present for waitForDepsAndDom');
-  }
-
+  if (!DependencySystem) throw new Error("waitForDepsAndDom: DependencySystem missing");
   const start = Date.now();
   while (true) {
-    // Check dependencies
-    let depsReady = true;
-    for (const d of deps) {
-      if (!DependencySystem.modules.has(d) || !DependencySystem.modules.get(d)) {
-        depsReady = false;
-        break;
-      }
-    }
-
-    // Check DOM elements
-    let domReady = true;
-    for (const selector of domSelectors) {
-      if (!document.querySelector(selector)) {
-        domReady = false;
-        break;
-      }
-    }
-
+    const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
+    const domReady = domSelectors.every((s) => document.querySelector(s));
     if (depsReady && domReady) return;
-
-    if (Date.now() - start > timeout) {
+    if (Date.now() - start > timeout)
       throw new Error(
-        `waitForDepsAndDom: Not ready within ${timeout}ms.\n` +
-        `Deps missing: ${deps.filter(d => !DependencySystem.modules.has(d)).join(', ')}\n` +
-        `DOM missing: ${domSelectors.filter(s => !document.querySelector(s)).join(', ')}`
+        `waitForDepsAndDom timeout ${timeout}ms — deps: ${deps.filter((d) => !DependencySystem.modules.has(d))}, dom: ${domSelectors.filter((s) => !document.querySelector(s))}`,
       );
-    }
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
+    await new Promise((r) => setTimeout(r, pollInterval));
   }
 }
 
-/**
- * Context-rich error-handling async fetch utility.
- * Usage: await fetchData({ apiClient, errorReporter }, id)
- *
- * @param {Object} deps - DI bundle.
- * @param {Object} deps.apiClient - API client with a .get(url) method.
- * @param {Object} deps.errorReporter - Error tracker with .capture(err, ctx).
- * @param {any} id - Resource identifier for API endpoint.
- * @returns {Promise<any>} - Resolves with data or rethrows error after reporting.
- */
 export async function fetchData({ apiClient, errorReporter }, id) {
   try {
-    const data = await apiClient.get(`/item/${id}`);
-    return data;
+    return await apiClient.get(`/item/${id}`);
   } catch (err) {
     errorReporter?.capture?.(err, {
-      module: 'projectManager',
-      method: 'fetchData',
+      module: "projectManager",
+      method: "fetchData",
       itemId: id,
     });
     throw err;
