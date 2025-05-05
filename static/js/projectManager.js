@@ -69,10 +69,15 @@ class ProjectManager {
     listenerTracker = null,
     timer = typeof setTimeout === 'function' ? setTimeout : (cb) => cb(),
     storage = { setItem: () => { }, getItem: () => null },
+    apiEndpoints
   } = {}) {
     if (!DependencySystem) {
       if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
       throw new Error('DependencySystem required');
+    }
+    if (!apiEndpoints) {
+      if (notify) notify.error('[ProjectManager] apiEndpoints required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
+      throw new Error('apiEndpoints required');
     }
     this.app = app ?? DependencySystem.modules.get('app');
     this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
@@ -111,16 +116,17 @@ class ProjectManager {
     /** @type {?Object} */
     this.currentProject = null;
     this._loadingProjects = false;
-    this._CONFIG = Object.freeze({
-      PROJECTS: '/api/projects/',
-      DETAIL: '/api/projects/{id}/',
-      FILES: '/api/projects/{id}/files/',
-      CONVOS: '/api/projects/{id}/conversations/',
-      STATS: '/api/projects/{id}/stats/',
-      ARTIFACTS: '/api/projects/{id}/artifacts/',
-      KB: '/api/projects/{id}/knowledge-bases/',
-      ARCHIVE: '/api/projects/{id}/archive',
-    });
+    this.apiEndpoints = apiEndpoints;
+    this._CONFIG = {
+      PROJECTS: apiEndpoints.PROJECTS || '/api/projects/',
+      DETAIL: apiEndpoints.DETAIL   || '/api/projects/{id}/',
+      STATS: apiEndpoints.STATS     || '/api/projects/{id}/stats/',
+      FILES: apiEndpoints.FILES     || '/api/projects/{id}/files/',
+      CONVOS: apiEndpoints.CONVOS   || '/api/projects/{id}/conversations/',
+      ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
+      KB: apiEndpoints.KB           || '/api/projects/{id}/knowledge_base/',
+      ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/'
+    };
 
     this.notify.info('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
   }
@@ -179,10 +185,13 @@ class ProjectManager {
     this._emit('projectsLoading', { filter });
 
     try {
-      const url = new URL(this._CONFIG.PROJECTS, location.origin);
-      url.searchParams.set('filter', filter);
+      const url = typeof this.apiEndpoints.PROJECTS === 'function'
+        ? this.apiEndpoints.PROJECTS()
+        : this.apiEndpoints.PROJECTS || '/api/projects/';
+      const urlObj = new URL(url, location.origin);
+      urlObj.searchParams.set('filter', filter);
 
-      const res = await this.app.apiRequest(String(url));
+      const res = await this.app.apiRequest(String(urlObj));
       const list = extractResourceList(res, ['projects']);
       this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
       this._emit('projectsLoaded', { projects: list, filter });
@@ -198,7 +207,9 @@ class ProjectManager {
     if (!isValidProjectId(id)) throw new Error('Invalid projectId');
     if (!this._authOk('projectDetailsError', { id })) return null;
 
-    const detailUrl = this._CONFIG.DETAIL.replace('{id}', id);
+    const detailUrl = typeof this.apiEndpoints.DETAIL === 'function'
+      ? this.apiEndpoints.DETAIL(id)
+      : (this.apiEndpoints.DETAIL || '/api/projects/{id}/').replace('{id}', id);
     this.currentProject = null;
 
     try {

@@ -533,6 +533,42 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
       }, { resetOnSuccess: false });
     }
   }
+  function setupProjectModalForm() {
+    if (!document.getElementById('projectModalForm')) return;
+    setupForm('projectModalForm', async (formData) => {
+      const projectId = (formData.get('projectId') || '').trim();
+      const name = (formData.get('name') || '').trim();
+      const description = (formData.get('description') || '').trim();
+      const goals = (formData.get('goals') || '').trim();
+      const maxTokens = parseInt((formData.get('maxTokens') || '200000'), 10);
+
+      if (!name) {
+        throw new Error('Project name is required');
+      }
+      if (!projectId) {
+        await projectManager.createProject({
+          name,
+          description,
+          goals,
+          max_tokens: maxTokens
+        });
+      } else {
+        await projectManager.saveProject(projectId, {
+          name,
+          description,
+          goals,
+          max_tokens: maxTokens
+        });
+      }
+      if (modalManager?.hide) {
+        modalManager.hide('project');
+      } else {
+        const modalEl = document.getElementById('projectModal');
+        modalEl?.close?.();
+      }
+    });
+  }
+  setupProjectModalForm();
 
   function validatePassword(password) {
     if (password && password.length >= 3) {
@@ -760,5 +796,3 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
     untrackListener: () => {}
   };
 }
-
-export default createEventHandlers;
