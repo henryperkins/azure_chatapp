@@ -463,6 +463,7 @@ async function init() {
         document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
         return false;
     } finally {
+        console.log("[App] init() finally block executed, hiding spinner.");
         appState.initializing = false;
         globalUtils.toggleElement(APP_CONFIG.SELECTORS.APP_LOADING_SPINNER, false);
         appState.currentPhase = appState.initialized ? 'initialized' : 'failed';
