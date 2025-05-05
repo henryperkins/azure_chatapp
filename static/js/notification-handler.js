@@ -1,14 +1,12 @@
 /* ---------------------------------------------------------------------------
- *  notificationHandler.js  ★ refined v3.4  (2025-05-04)
+ *  notificationHandler.js  ★ refined v3.5  (2025-05-04, context/groupKey/metadata support)
  *  --------------------------------------------------------------------------
- *  CHANGES (v3.4)
+ *  CHANGES (v3.5)
  *  --------------------------------------------------------------------------
- *  • **Longer default lifetime** - banners auto-dismiss after 15 s (was 8 s).
- *    Pass `timeout` in opts or set `timeout:0` for sticky.
- *  • **Smoother animation** - 250 ms ease-out, subtle scale.
- *  • **Responsive width** - container shrinks on small screens; banners never
- *    cover the whole viewport.
- *  • API is unchanged - all per-module overrides still work.
+ *  • Deterministic composite grouping (groupKey) now preferred (for dedup/correlation)
+ *  • Banner details accordion exposes full metadata (groupKey, transactionId, traceId, etc.)
+ *  • 'Copy Group Metadata' button available in details for debug/correlation
+ *  • Remains 100% backward compatible
  *  -------------------------------------------------------------------------- */
 export function createNotificationHandler({
   DependencySystem,
@@ -28,7 +26,7 @@ export function createNotificationHandler({
     error  : "#DC2626",
   },
 } = {}) {
-  const DEFAULT_TIMEOUT = 15000; // ← 15 s
+  const DEFAULT_TIMEOUT = 15000; // ← 15s
 
   /* ────────────────────────── container ─────────────────────────── */
   const CONTAINER_ID = "notificationArea";
@@ -97,7 +95,7 @@ export function createNotificationHandler({
     setTimeout(() => el.remove(), 250);
   };
 
-  function buildBanner(type, key) {
+  function buildBanner(type, key, opts = {}) {
     const root = domAPI.createElement("div");
     root.setAttribute("role", "alert");
     root.setAttribute("aria-live", "polite");
@@ -146,9 +144,56 @@ export function createNotificationHandler({
     Object.assign(list.style, { display:"none", margin:0, paddingLeft:"1rem", listStyle:"disc", fontSize:"0.75rem" });
     root.appendChild(list);
 
+    // ==== Expanded Group Metadata Pane ====
+    const metaPanel = domAPI.createElement("div");
+    Object.assign(metaPanel.style, {
+      display: "none",
+      fontSize: "0.75rem",
+      marginTop: "0.5rem",
+      wordBreak: "break-word",
+      opacity: 0.9,
+    });
+    root.appendChild(metaPanel);
+
+    // Only show metadata if at least one extra field (besides message/type etc) is present
+    function updateMetaPanel(opts) {
+      // Expose: groupKey, module, source, traceId, transactionId, context, id
+      const meta = [];
+      if (opts.groupKey) meta.push(`<b>groupKey:</b> <code>${opts.groupKey}</code>`);
+      if (opts.module) meta.push(`<b>module:</b> <code>${opts.module}</code>`);
+      if (opts.source) meta.push(`<b>source:</b> <code>${opts.source}</code>`);
+      if (opts.context) meta.push(`<b>context:</b> <code>${opts.context}</code>`);
+      if (opts.traceId) meta.push(`<b>traceId:</b> <code>${opts.traceId}</code>`);
+      if (opts.transactionId) meta.push(`<b>transactionId:</b> <code>${opts.transactionId}</code>`);
+      if (opts.id) meta.push(`<b>id:</b> <code>${opts.id}</code>`);
+      if (meta.length) {
+        metaPanel.innerHTML = meta.join("<br>");
+        metaPanel.style.display = "block";
+      }
+    }
+    updateMetaPanel(opts);
+
+    // Copy all group metadata (not just messages) as JSON to clipboard
+    const metaCopyBtn = iconBtn("Copy group metadata", "📝");
+    metaCopyBtn.style.marginLeft = "0.25rem";
+    header.appendChild(metaCopyBtn);
+    metaCopyBtn.addEventListener("click", async e => {
+      e.stopPropagation();
+      try {
+        // Grab all serializable keys in opts (and flatten duplicates)
+        const { groupKey, module, source, context, traceId, transactionId, id } = opts || {};
+        const meta = { groupKey, module, source, context, traceId, transactionId, id };
+        await navigator.clipboard.writeText(JSON.stringify(meta, null, 2));
+        flashIcon(metaCopyBtn, "✅");
+      } catch {
+        flashIcon(metaCopyBtn, "⚠️");
+      }
+    });
+
     toggler.addEventListener("click", () => {
       const open = list.style.display !== "none";
       list.style.display = open ? "none" : "block";
+      metaPanel.style.display = open ? "none" : "block";
       toggler.textContent = open ? "▸" : "▾";
       toggler.title = open ? "Show details" : "Hide details";
     });
@@ -180,13 +225,25 @@ export function createNotificationHandler({
     groups.delete(key);
   }
 
+  // Helper: deterministic fallback for groupKey when missing (matches notify.js)
+  function computeFallbackKey({ type, context, module, source } = {}) {
+    return [type, module || '', source || '', context || ''].join('|');
+  }
+
   /* ───────────────────────── show() core ────────────────────────── */
   function show(message, type = "info", opts = {}) {
     if (!message) return null;
-    const scope = opts.scope || "type"; // "type" | "type+context"
-    const ctx   = opts.context || "";
-    const key   = opts.group === false ? `${type}|${Date.now()}|${Math.random()}`
-                                       : (scope === "type+context" ? `${type}|${ctx}` : type);
+
+    // Compose grouping key: use groupKey if provided, else composite fallback; use group:false for ungrouped
+    const _type = ['info', 'success', 'warning', 'error', 'debug'].includes(type) ? type : 'info';
+    let key;
+    if (opts.group === false) {
+      // Always display individually (unique key)
+      key = `${_type}|${Date.now()}|${Math.random()}`;
+    } else {
+      key = opts.groupKey
+        || computeFallbackKey({ type: _type, context: opts.context, module: opts.module, source: opts.source });
+    }
     const now = Date.now();
     let g = groups.get(key);
 
@@ -207,7 +264,7 @@ export function createNotificationHandler({
       return g.root;
     }
 
-    g = buildBanner(type, key);
+    g = buildBanner(_type, key, opts);
     g.messages = [message];
     g.msgShort.textContent = message;
     const li = domAPI.createElement("li");
@@ -235,7 +292,7 @@ export function createNotificationHandler({
   }
 
   const api = { show, clear, getContainer: () => container };
-  ["debug","info","success","warning","error"].forEach(lvl => {
+  ["debug", "info", "success", "warning", "error"].forEach(lvl => {
     api[lvl] = (msg, opts = {}) => show(msg, lvl, opts);
   });
 

@@ -1,14 +1,17 @@
 /**
- * projectManager.js – DI-strict, Notification-aware, Advanced Edition
+ * projectManager.js – DI-strict, Notification-aware, Advanced Edition (context-rich notifications)
  *
  * Combines:
  *  - Modern DI/notification patterns from Untitled 4
  *  - Full feature set from projectManager (file upload, KB, archive, etc)
+ *  - Notification calls always emit context/module/source/module for end-to-end traceability
  */
 
 /* -------------------------------------------------------------------------- */
 /* Local utility helpers – pure and safe to unit-test                         */
 /* -------------------------------------------------------------------------- */
+
+const MODULE = "ProjectManager";
 
 function isValidProjectId(id) {
   return typeof id === 'string' && /^[0-9a-f-]{32,36}$/i.test(id ?? '');
@@ -68,7 +71,7 @@ class ProjectManager {
     storage = { setItem: () => { }, getItem: () => null },
   } = {}) {
     if (!DependencySystem) {
-      if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager' });
+      if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
       throw new Error('DependencySystem required');
     }
     this.app = app ?? DependencySystem.modules.get('app');
@@ -82,10 +85,10 @@ class ProjectManager {
     if (!this.notify && notificationHandler?.show) {
       const h = notificationHandler;
       this.notify = {
-        info: (m, o = {}) => h.show(m, 'info', 4000, { ...o, group: true, context: 'projectManager' }),
-        success: (m, o = {}) => h.show(m, 'success', 4000, { ...o, group: true, context: 'projectManager' }),
-        warn: (m, o = {}) => h.show(m, 'warning', 6000, { ...o, group: true, context: 'projectManager' }),
-        error: (m, o = {}) => h.show(m, 'error', 0, { ...o, group: true, context: 'projectManager' }),
+        info: (m, o = {}) => h.show(m, 'info', 4000, { ...o, group: true, context: 'projectManager', module: MODULE }),
+        success: (m, o = {}) => h.show(m, 'success', 4000, { ...o, group: true, context: 'projectManager', module: MODULE }),
+        warn: (m, o = {}) => h.show(m, 'warning', 6000, { ...o, group: true, context: 'projectManager', module: MODULE }),
+        error: (m, o = {}) => h.show(m, 'error', 0, { ...o, group: true, context: 'projectManager', module: MODULE }),
       };
     }
     if (!this.notify) {
@@ -95,7 +98,7 @@ class ProjectManager {
     if (!listenerTracker) {
       const ev = DependencySystem.modules.get('eventHandlers');
       if (!ev?.trackListener) {
-        this.notify.error('[ProjectManager] eventHandlers.trackListener missing', { group: true, context: 'projectManager' });
+        this.notify.error('[ProjectManager] eventHandlers.trackListener missing', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
         throw new Error('eventHandlers.trackListener missing');
       }
       listenerTracker = {
@@ -119,7 +122,7 @@ class ProjectManager {
       ARCHIVE: '/api/projects/{id}/archive',
     });
 
-    this.notify.info('[ProjectManager] Initialized', { group: true, context: 'projectManager' });
+    this.notify.info('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
   }
 
   /* ---------------------------------------------------------------------- */
@@ -131,7 +134,7 @@ class ProjectManager {
   }
   _authOk(failEvent, extraDetail = {}) {
     if (this.app?.state?.isAuthenticated) return true;
-    this.notify.warn('[ProjectManager] Auth required', { group: true, context: 'projectManager' });
+    this.notify.warn('[ProjectManager] Auth required', { group: true, context: 'projectManager', module: MODULE, source: '_authOk', extra: extraDetail });
     this._emit(failEvent, { error: 'auth_required', ...extraDetail });
     return false;
   }
@@ -147,7 +150,17 @@ class ProjectManager {
       if (status) errMsg += ` HTTP ${status};`;
       if (detail) errMsg += ` detail: ${detail}`;
     }
-    this.notify.error(errMsg, { group: true, context: 'projectManager', method: extra?.method, event: eventName, status, endpoint, detail, originalError: err });
+    this.notify.error(errMsg, {
+      group: true,
+      context: 'projectManager',
+      module: MODULE,
+      source: eventName,
+      status,
+      endpoint,
+      detail,
+      originalError: err,
+      extra
+    });
     this._emit(eventName, { error: err.message, status, endpoint, detail });
     return fallback;
   }
@@ -158,7 +171,7 @@ class ProjectManager {
 
   async loadProjects(filter = 'all') {
     if (this._loadingProjects) {
-      this.notify.info('[ProjectManager] loadProjects already running');
+      this.notify.info('[ProjectManager] loadProjects already running', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
       return [];
     }
     if (!this._authOk('projectsLoaded', { filter })) return [];
@@ -171,7 +184,7 @@ class ProjectManager {
 
       const res = await this.app.apiRequest(String(url));
       const list = extractResourceList(res, ['projects']);
-      this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager' });
+      this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
       this._emit('projectsLoaded', { projects: list, filter });
       return list;
     } catch (err) {
@@ -212,10 +225,13 @@ class ProjectManager {
         .filter(r => r.status === 'rejected')
         .map(r => r.reason);
       if (criticalErrors.length > 0) {
-        this.notify.error(`[ProjectManager] Some components failed: ${criticalErrors.map(e => e.message).join(', ')}`, { group: true, context: 'projectManager' });
+        this.notify.error(
+          `[ProjectManager] Some components failed: ${criticalErrors.map(e => e.message).join(', ')}`,
+          { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id, failed: criticalErrors } }
+        );
         this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
-      this.notify.success(`[ProjectManager] Project ${id} ready`, { group: true, context: 'projectManager' });
+      this.notify.success(`[ProjectManager] Project ${id} ready`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id } });
       return { ...this.currentProject };
     } catch (err) {
       this._handleErr('projectDetailsError', err, null);
@@ -270,14 +286,14 @@ class ProjectManager {
   }
   async loadProjectKnowledgeBase(id) {
     try {
-      this.notify.info(`[ProjectManager] Loading knowledge base for project ${id}...`, { group: true, context: 'projectManager' });
+      this.notify.info(`[ProjectManager] Loading knowledge base for project ${id}...`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
       const res = await this.app.apiRequest(this._CONFIG.KB.replace('{id}', id));
       const kb = res?.data || res;
       if (!kb) {
-        this.notify.warn(`[ProjectManager] No knowledge base for: ${id}`, { group: true, context: 'projectManager' });
+        this.notify.warn(`[ProjectManager] No knowledge base for: ${id}`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
         this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
       } else {
-        this.notify.success(`[ProjectManager] Knowledge base loaded for ${id}: ${kb.id}`, { group: true, context: 'projectManager' });
+        this.notify.success(`[ProjectManager] Knowledge base loaded for ${id}: ${kb.id}`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
         this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: kb });
       }
       return kb;
@@ -301,7 +317,10 @@ class ProjectManager {
       const res = await this.app.apiRequest(url, { method, body: payload });
       const proj = res?.data ?? res;
       this._emit(isUpdate ? 'projectUpdated' : 'projectCreated', proj);
-      this.notify.success(`[ProjectManager] Project ${isUpdate ? 'updated' : 'created'}: ${proj.id}`, { group: true, context: 'projectManager', method: 'saveProject', endpoint: url });
+      this.notify.success(
+        `[ProjectManager] Project ${isUpdate ? 'updated' : 'created'}: ${proj.id}`,
+        { group: true, context: 'projectManager', module: MODULE, source: 'saveProject', endpoint: url, method, detail: { id: proj.id } }
+      );
       return proj;
     } catch (err) {
       this._handleErr('projectSaveError', err, null, { method: 'saveProject', endpoint: url });
@@ -314,7 +333,7 @@ class ProjectManager {
       await this.app.apiRequest(this._CONFIG.DETAIL.replace('{id}', id), { method: 'DELETE' });
       if (this.currentProject?.id === id) this.currentProject = null;
       this._emit('projectDeleted', { id });
-      this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager' });
+      this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProject', detail: { id } });
     } catch (err) {
       this._handleErr('projectDeleteError', err, null, { method: 'deleteProject', endpoint: this._CONFIG.DETAIL.replace('{id}', id) });
       throw err;
@@ -325,6 +344,7 @@ class ProjectManager {
     try {
       const res = await this.app.apiRequest(this._CONFIG.ARCHIVE.replace('{id}', id), { method: "PATCH" });
       this._emit('projectArchiveToggled', { id, archived: res?.archived ?? !this.currentProject?.archived });
+      this.notify.success(`[ProjectManager] Project ${id} archive toggled`, { group: true, context: 'projectManager', module: MODULE, source: 'toggleArchiveProject', detail: { id, archived: res?.archived } });
       return res;
     } catch (err) {
       this._handleErr('projectArchiveToggled', err, null, { method: 'toggleArchiveProject', endpoint: this._CONFIG.ARCHIVE.replace('{id}', id) });
@@ -341,7 +361,7 @@ class ProjectManager {
       this.storage.setItem?.('selectedProjectId', projectId);
       return await this.chatManager.createNewConversation(projectId, opts);
     } catch (err) {
-      this._handleErr('conversationCreateError', err);
+      this._handleErr('conversationCreateError', err, null, { source: 'createConversation', detail: { projectId } });
       throw err;
     }
   }
@@ -349,7 +369,7 @@ class ProjectManager {
     if (!this._authOk('conversationLoadError', { conversationId })) throw new Error('auth');
     const projectId = this.currentProject?.id;
     if (!isValidProjectId(projectId)) {
-      this.notify.error('[ProjectManager] No valid current project ID', { group: true, context: 'projectManager' });
+      this.notify.error('[ProjectManager] No valid current project ID', { group: true, context: 'projectManager', module: MODULE, source: 'getConversation' });
       throw new Error('No valid project context');
     }
     try {
@@ -357,10 +377,10 @@ class ProjectManager {
       const res = await this.app.apiRequest(endpoint);
       const convo = res?.data || res;
       if (!convo || !convo.id) throw new Error('Invalid conversation data received');
-      this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`);
+      this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
       return convo;
     } catch (err) {
-      this._handleErr(`conversationLoadError`, err, null);
+      this._handleErr(`conversationLoadError`, err, null, { source: 'getConversation', detail: { conversationId, projectId } });
       throw err;
     }
   }
@@ -368,9 +388,10 @@ class ProjectManager {
     try {
       this.storage.setItem?.('selectedProjectId', projectId);
       await this.chatManager.deleteConversation(conversationId);
+      this.notify.success(`[ProjectManager] Conversation ${conversationId} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       return true;
     } catch (err) {
-      this._handleErr('deleteProjectConversationError', err);
+      this._handleErr('deleteProjectConversationError', err, null, { source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       throw err;
     }
   }
@@ -384,7 +405,7 @@ class ProjectManager {
   }
   setCurrentProject(project) {
     if (!project || !project.id) {
-      this.notify.error('[ProjectManager] Cannot set invalid project as current', { group: true, context: 'projectManager' });
+      this.notify.error('[ProjectManager] Cannot set invalid project as current', { group: true, context: 'projectManager', module: MODULE, source: 'setCurrentProject' });
       return;
     }
     const previous = this.currentProject;
@@ -412,6 +433,7 @@ class ProjectManager {
         method: 'POST',
         body: formData
       });
+      this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
       return true;
     }, maxRetries, this.timer);
   }
@@ -428,7 +450,7 @@ class ProjectManager {
       });
       const project = response.data || response;
       if (!project || !project.id) throw new Error('Invalid project response');
-      this.notify.success('[ProjectManager] Project created: ' + project.id, { group: true, context: 'projectManager' });
+      this.notify.success('[ProjectManager] Project created: ' + project.id, { group: true, context: 'projectManager', module: MODULE, source: 'createProject' });
       const ensureConversation = async () => {
         const hasConvo = (Array.isArray(project.conversations) && project.conversations.length > 0)
           || Number(project.conversation_count) > 0;
@@ -454,7 +476,7 @@ class ProjectManager {
         if (status) message += ` HTTP ${status};`;
         if (detail) message += ` detail: ${detail}`;
       }
-      this.notify.error(message, { context: "projectManager", group: true, method: "createProject", endpoint, status, detail, originalError: err });
+      this.notify.error(message, { context: "projectManager", group: true, module: MODULE, source: "createProject", endpoint, status, detail, originalError: err });
       throw err;
     }
   }
@@ -475,10 +497,10 @@ class ProjectManager {
         response?.conversation ||
         response;
       if (!conversation || !conversation.id) throw new Error('Failed to create default conversation');
-      this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id, { group: true, context: 'projectManager' });
+      this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id, { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId, conversationId: conversation.id } });
       return conversation;
     } catch (err) {
-      this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { group: true, context: 'projectManager' });
+      this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId }, originalError: err });
       return null;
     }
   }
@@ -510,8 +532,22 @@ class ProjectManager {
 /* -------------------------------------------------------------------------- */
 
 export function createProjectManager(deps = {}) {
-  if (!deps.DependencySystem) throw new Error('DependencySystem missing');
-  return new ProjectManager(deps);
+  if (!deps.DependencySystem) {
+    const msg = '[createProjectManager] DependencySystem missing: Did you forget to inject it via DI?';
+    if (typeof console !== 'undefined') {
+      console.error(msg, { deps });
+    }
+    throw new Error(msg);
+  }
+  try {
+    return new ProjectManager(deps);
+  } catch (err) {
+    const diag = `[createProjectManager] Construction failed: ${err && err.message ? err.message : err}`;
+    if (typeof console !== 'undefined') {
+      console.error(diag, { deps, error: err });
+    }
+    throw new Error(diag);
+  }
 }
 
 export { isValidProjectId, extractResourceList, normalizeProjectResponse, retryWithBackoff };
