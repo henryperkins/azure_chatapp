@@ -523,11 +523,11 @@ async def attach_github_repository(
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
 
     # Initialize GitHub service
-    github_service = GitHubService(token=project.user.github_token)
+    user = await get_by_id(db, User, user_id) if user_id else None
+    github_service = GitHubService(token=user.github_token if user else None)
 
     # Clone repository
     repo_path = github_service.clone_repository(repo_url=repo_url, branch=branch)
-
     # Fetch specified files
     file_paths = file_paths or []
     fetched_files = github_service.fetch_files(repo_path, file_paths)
