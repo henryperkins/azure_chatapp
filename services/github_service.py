@@ -6,21 +6,35 @@ from git import Repo, GitCommandError
 
 logger = logging.getLogger(__name__)
 
+
 class GitHubService:
+    """
+    A service class for performing basic GitHub repository operations using GitPython.
+
+    This class provides methods to clone repositories, fetch files, add and remove files,
+    and push changes to a remote repository. Optionally, a personal access token can be
+    provided for authenticated operations.
+    """
+
     def __init__(self, token: Optional[str] = None):
         """
-        Initializes the GitHubService with an optional authentication token.
-        
+        Initializes the GitHubService.
+
         Args:
-            token: Personal access token for authenticating GitHub operations. If not provided, operations will be unauthenticated.
+            token: Optional personal access token for authenticating GitHub operations.
         """
         self.token = token
 
     def _get_repo_url(self, repo_url: str) -> str:
         """
         Returns the repository URL with the authentication token embedded if available.
-        
-        If a token is provided, it is inserted into the URL for authenticated access; otherwise, the original URL is returned.
+
+        Args:
+            repo_url: The original repository URL.
+
+        Returns:
+            The repository URL with the token embedded for authenticated access,
+            or the original URL if no token is provided.
         """
         if self.token:
             return repo_url.replace("https://", f"https://{self.token}@")
@@ -29,14 +43,14 @@ class GitHubService:
     def clone_repository(self, repo_url: str, branch: str = "main") -> str:
         """
         Clones a GitHub repository branch into a temporary directory.
-        
+
         Args:
             repo_url: The URL of the GitHub repository to clone.
             branch: The branch to clone. Defaults to "main".
-        
+
         Returns:
             The path to the temporary directory containing the cloned repository.
-        
+
         Raises:
             GitCommandError: If the repository cannot be cloned.
         """
@@ -52,13 +66,14 @@ class GitHubService:
     def fetch_files(self, repo_path: str, file_paths: List[str]) -> List[str]:
         """
         Returns the full paths of files that exist in the specified repository directory.
-        
-        Checks each provided file path within the given repository path and collects the full paths of files that are found. Logs a warning for any files that are missing.
-        
+
+        Checks each provided file path within the given repository path and collects
+        the full paths of files that are found. Logs a warning for any files that are missing.
+
         Args:
             repo_path: Path to the local repository directory.
             file_paths: List of file paths (relative to the repository root) to check.
-        
+
         Returns:
             A list of full file paths for files that exist in the repository directory.
         """
@@ -74,8 +89,13 @@ class GitHubService:
     def add_files(self, repo_path: str, file_paths: List[str]) -> None:
         """
         Adds specified files to the Git index and commits them in the given repository.
-        
-        Attempts to add the provided files to the repository at the specified path and commits the addition with the message "Add files". If the repository path does not exist or a Git command fails, an error is logged and the exception is raised.
+
+        Args:
+            repo_path: Path to the local Git repository.
+            file_paths: List of file paths (relative to the repository root) to add.
+
+        Raises:
+            GitCommandError: If adding or committing files fails.
         """
         try:
             repo = Repo(repo_path)
@@ -85,22 +105,33 @@ class GitHubService:
             logger.error(f"Failed to add files: {e}")
             raise
 
+    def remove_files(self, repo_path: str, file_paths: List[str]) -> None:
+        """
+        Removes specified files from the Git index and commits the removal in the given repository.
+
+        Args:
+            repo_path: Path to the local Git repository.
+            file_paths: List of file paths (relative to the repository root) to remove.
+
+        Raises:
+            GitCommandError: If removing or committing files fails.
+        """
         try:
-            if not os.path.exists(repo_path):
-                raise GitCommandError(f"Repository not found at {repo_path}")
             repo = Repo(repo_path)
             repo.index.remove(file_paths, working_tree=True)
             repo.index.commit("Remove files")
         except GitCommandError as e:
+            logger.error(f"Failed to remove files: {e}")
+            raise
 
     def push_changes(self, repo_path: str, branch: str = "main") -> None:
         """
         Pushes committed changes to the specified branch on the remote origin.
-        
+
         Args:
             repo_path: Path to the local Git repository.
             branch: Name of the branch to push to. Defaults to "main".
-        
+
         Raises:
             GitCommandError: If pushing to the remote repository fails.
         """
