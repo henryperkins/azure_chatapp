@@ -500,11 +500,12 @@ async def search_project_context(
 async def attach_github_repository(
     project_id: UUID,
     repo_url: str,
-    branch: Optional[str] = "main",
-    file_paths: Optional[List[str]] = None,
     db: AsyncSession,
+    branch: str = "main",
+    file_paths: Optional[List[str]] = None,
     user_id: Optional[int] = None,
 ) -> dict[str, Any]:
+    ...
     """
     Attaches a GitHub repository as a data source for a project's knowledge base.
     
