@@ -44,14 +44,13 @@ class GitHubService:
             logger.error(f"Failed to add files: {e}")
             raise
 
-    def remove_files(self, repo_path: str, file_paths: List[str]) -> None:
         try:
+            if not os.path.exists(repo_path):
+                raise GitCommandError(f"Repository not found at {repo_path}")
             repo = Repo(repo_path)
             repo.index.remove(file_paths, working_tree=True)
             repo.index.commit("Remove files")
         except GitCommandError as e:
-            logger.error(f"Failed to remove files: {e}")
-            raise
 
     def push_changes(self, repo_path: str, branch: str = "main") -> None:
         try:
