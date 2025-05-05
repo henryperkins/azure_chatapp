@@ -8,6 +8,11 @@
  */
 
 /* -------------------------------------------------------------------------- */
+/* Imports                                                                   */
+/* -------------------------------------------------------------------------- */
+import { wrapApi, emitReady } from "./utils/notifications-helpers.js";
+
+/* -------------------------------------------------------------------------- */
 /* Local utility helpers – pure and safe to unit-test                         */
 /* -------------------------------------------------------------------------- */
 
@@ -69,7 +74,8 @@ class ProjectManager {
     listenerTracker = null,
     timer = typeof setTimeout === 'function' ? setTimeout : (cb) => cb(),
     storage = { setItem: () => { }, getItem: () => null },
-    apiEndpoints
+    apiEndpoints,
+    errorReporter = null
   } = {}) {
     if (!DependencySystem) {
       if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
@@ -83,6 +89,7 @@ class ProjectManager {
     this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
     this.notify = notify ?? DependencySystem.modules.get?.('notify');
+    this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
     this.timer = timer;
     this.storage = storage;
 
@@ -129,6 +136,24 @@ class ProjectManager {
     };
 
     this.notify.info('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
+  }
+
+  /* ---------------------------------------------------------------------- */
+  /* Standardized DI-safe API request wrapper with error grouping            */
+  /* ---------------------------------------------------------------------- */
+  /**
+   * _req: Unified API request layer with error notification and grouping.
+   * Automatically captures endpoint/method and groups API errors.
+   * Usage: await this._req(url, opts, src)
+   */
+  async _req(url, opts = {}, src = MODULE) {
+    return wrapApi(
+      this.app.apiRequest.bind(this.app),
+      { notify: this.notify, errorReporter: this.errorReporter },
+      url,
+      opts,
+      src
+    );
   }
 
   /* ---------------------------------------------------------------------- */
@@ -191,7 +216,7 @@ class ProjectManager {
       const urlObj = new URL(url, location.origin);
       urlObj.searchParams.set('filter', filter);
 
-      const res = await this.app.apiRequest(String(urlObj));
+      const res = await this._req(String(urlObj), undefined, "loadProjects");
       const list = extractResourceList(res, ['projects']);
       this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
       this._emit('projectsLoaded', { projects: list, filter });
@@ -213,7 +238,7 @@ class ProjectManager {
     this.currentProject = null;
 
     try {
-      const detailRes = await this.app.apiRequest(detailUrl);
+      const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
       this.currentProject = normalizeProjectResponse(detailRes);
       this._emit('projectLoaded', this.currentProject);
 
@@ -257,7 +282,7 @@ class ProjectManager {
 
   async loadProjectStats(id) {
     try {
-      const res = await this.app.apiRequest(this._CONFIG.STATS.replace('{id}', id));
+      const res = await this._req(this._CONFIG.STATS.replace('{id}', id), undefined, "loadProjectStats");
       const stats = res?.data ?? {};
       this._emit('projectStatsLoaded', { id, ...stats });
       return stats;
@@ -267,7 +292,7 @@ class ProjectManager {
   }
   async loadProjectFiles(id) {
     try {
-      const res = await this.app.apiRequest(this._CONFIG.FILES.replace('{id}', id));
+      const res = await this._req(this._CONFIG.FILES.replace('{id}', id), undefined, "loadProjectFiles");
       const files = extractResourceList(res, ['files', 'file']) ?? [];
       this._emit('projectFilesLoaded', { id, files });
       return files;
@@ -277,7 +302,7 @@ class ProjectManager {
   }
   async loadProjectConversations(id) {
     try {
-      const res = await this.app.apiRequest(this._CONFIG.CONVOS.replace('{id}', id));
+      const res = await this._req(this._CONFIG.CONVOS.replace('{id}', id), undefined, "loadProjectConversations");
       const conversations = extractResourceList(res, ['conversations']) ?? [];
       this._emit('projectConversationsLoaded', { id, conversations });
       return conversations;
@@ -287,7 +312,7 @@ class ProjectManager {
   }
   async loadProjectArtifacts(id) {
     try {
-      const res = await this.app.apiRequest(this._CONFIG.ARTIFACTS.replace('{id}', id));
+      const res = await this._req(this._CONFIG.ARTIFACTS.replace('{id}', id), undefined, "loadProjectArtifacts");
       const artifacts = extractResourceList(res, ['artifacts']) ?? [];
       this._emit('projectArtifactsLoaded', { id, artifacts });
       return artifacts;
@@ -298,7 +323,7 @@ class ProjectManager {
   async loadProjectKnowledgeBase(id) {
     try {
       this.notify.info(`[ProjectManager] Loading knowledge base for project ${id}...`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
-      const res = await this.app.apiRequest(this._CONFIG.KB.replace('{id}', id));
+      const res = await this._req(this._CONFIG.KB.replace('{id}', id), undefined, "loadProjectKnowledgeBase");
       const kb = res?.data || res;
       if (!kb) {
         this.notify.warn(`[ProjectManager] No knowledge base for: ${id}`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
@@ -325,7 +350,7 @@ class ProjectManager {
     const method = isUpdate ? 'PATCH' : 'POST';
 
     try {
-      const res = await this.app.apiRequest(url, { method, body: payload });
+      const res = await this._req(url, { method, body: payload }, "saveProject");
       const proj = res?.data ?? res;
       this._emit(isUpdate ? 'projectUpdated' : 'projectCreated', proj);
       this.notify.success(
@@ -341,7 +366,7 @@ class ProjectManager {
   async deleteProject(id) {
     if (!this._authOk('projectDeleteError', { id })) throw new Error('auth');
     try {
-      await this.app.apiRequest(this._CONFIG.DETAIL.replace('{id}', id), { method: 'DELETE' });
+      await this._req(this._CONFIG.DETAIL.replace('{id}', id), { method: 'DELETE' }, "deleteProject");
       if (this.currentProject?.id === id) this.currentProject = null;
       this._emit('projectDeleted', { id });
       this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProject', detail: { id } });
@@ -353,7 +378,7 @@ class ProjectManager {
   async toggleArchiveProject(id) {
     if (!this._authOk('projectArchiveToggled', { id })) throw new Error('auth');
     try {
-      const res = await this.app.apiRequest(this._CONFIG.ARCHIVE.replace('{id}', id), { method: "PATCH" });
+      const res = await this._req(this._CONFIG.ARCHIVE.replace('{id}', id), { method: "PATCH" }, "toggleArchiveProject");
       this._emit('projectArchiveToggled', { id, archived: res?.archived ?? !this.currentProject?.archived });
       this.notify.success(`[ProjectManager] Project ${id} archive toggled`, { group: true, context: 'projectManager', module: MODULE, source: 'toggleArchiveProject', detail: { id, archived: res?.archived } });
       return res;
@@ -385,7 +410,7 @@ class ProjectManager {
     }
     try {
       const endpoint = `/api/projects/${projectId}/conversations/${conversationId}/`;
-      const res = await this.app.apiRequest(endpoint);
+      const res = await this._req(endpoint, undefined, "getConversation");
       const convo = res?.data || res;
       if (!convo || !convo.id) throw new Error('Invalid conversation data received');
       this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
@@ -440,10 +465,10 @@ class ProjectManager {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('projectId', projectId);
-      await this.app.apiRequest(`/api/projects/${projectId}/files/`, {
+      await this._req(`/api/projects/${projectId}/files/`, {
         method: 'POST',
         body: formData
-      });
+      }, "uploadFileWithRetry");
       this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
       return true;
     }, maxRetries, this.timer);
@@ -455,10 +480,10 @@ class ProjectManager {
 
   async createProject(projectData) {
     try {
-      const response = await this.app.apiRequest(this._CONFIG.PROJECTS, {
+      const response = await this._req(this._CONFIG.PROJECTS, {
         method: 'POST',
         body: projectData
-      });
+      }, "createProject");
       const project = response.data || response;
       if (!project || !project.id) throw new Error('Invalid project response');
       this.notify.success('[ProjectManager] Project created: ' + project.id, { group: true, context: 'projectManager', module: MODULE, source: 'createProject' });
@@ -493,14 +518,15 @@ class ProjectManager {
   }
   async createDefaultConversation(projectId) {
     try {
-      const response = await this.app.apiRequest(
-        `/api/projects/${projectId}/conversations/`, {
-        method: 'POST',
-        body: {
-          title: 'Default Conversation',
-          model_id: this.modelConfig?.getConfig?.()?.modelName || 'claude-3-sonnet-20240229'
-        }
-      }
+      const response = await this._req(
+        `/api/projects/${projectId}/conversations/`,
+        {
+          method: 'POST',
+          body: {
+            title: 'Default Conversation',
+            model_id: this.modelConfig?.getConfig?.()?.modelName || 'claude-3-sonnet-20240229'
+          }
+        }, "createDefaultConversation"
       );
       const conversation =
         response?.data?.conversation ||
@@ -534,6 +560,7 @@ class ProjectManager {
    */
   async initialize() {
     // If you need to preload projects or state at startup, do it here in future.
+    emitReady({ notify: this.notify }, MODULE);
     return true;
   }
 }
