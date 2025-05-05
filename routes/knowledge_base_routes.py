@@ -50,6 +50,7 @@ from services.knowledgebase_service import (
     upload_file_to_project,
     delete_project_file,
 )
+from services.github_service import GitHubService
 
 # Models and Utils
 from models.user import User
@@ -95,6 +96,22 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
     top_k: int = Field(5, ge=1, le=20)
     filters: Optional[dict[str, Any]] = None
+
+
+class GitHubRepoAttach(BaseModel):
+    """Schema for attaching a GitHub repository"""
+
+    repo_url: str = Field(..., description="GitHub repository URL")
+    branch: Optional[str] = Field("main", description="Branch to use")
+    file_paths: Optional[list[str]] = Field(
+        None, description="Specific file paths to include"
+    )
+
+
+class GitHubRepoDetach(BaseModel):
+    """Schema for detaching a GitHub repository"""
+
+    repo_url: str = Field(..., description="GitHub repository URL")
 
 
 # ----------------------------------------------------------------------
@@ -576,4 +593,105 @@ async def toggle_knowledge_base(
         logger.error(f"Failed to toggle knowledge base: {str(e)}")
         raise HTTPException(
             status_code=500, detail="Failed to toggle knowledge base"
+        ) from e
+
+
+# ----------------------------------------------------------------------
+# GitHub Repository Operations
+# ----------------------------------------------------------------------
+
+
+@router.post("/{project_id}/knowledge-bases/github/attach", response_model=dict)
+async def attach_github_repository(
+    project_id: UUID,
+    repo_data: GitHubRepoAttach,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Attach a GitHub repository as a data source for the project's knowledge base.
+    """
+    try:
+        current_user = current_user_tuple[0]
+
+        # Validate project access
+        project: Project = await validate_project_access(project_id, current_user, db)
+
+        if not project.knowledge_base_id:
+            raise HTTPException(status_code=400, detail="Project has no knowledge base")
+
+        # Initialize GitHub service
+        github_service = GitHubService(token=current_user.github_token)
+
+        # Clone repository
+        repo_path = github_service.clone_repository(
+            repo_url=repo_data.repo_url, branch=repo_data.branch
+        )
+
+        # Fetch specified files
+        file_paths = repo_data.file_paths or []
+        fetched_files = github_service.fetch_files(repo_path, file_paths)
+
+        # Process fetched files
+        for file_path in fetched_files:
+            with open(file_path, "rb") as file:
+                await upload_file_to_project(
+                    project_id=project_id,
+                    file=UploadFile(file),
+                    db=db,
+                    user_id=current_user.id,
+                )
+
+        return await create_standard_response(
+            {"repo_url": repo_data.repo_url, "files_processed": len(fetched_files)},
+            "GitHub repository attached successfully",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to attach GitHub repository: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to attach GitHub repository"
+        ) from e
+
+
+@router.post("/{project_id}/knowledge-bases/github/detach", response_model=dict)
+async def detach_github_repository(
+    project_id: UUID,
+    repo_data: GitHubRepoDetach,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Detach a GitHub repository from the project's knowledge base.
+    """
+    try:
+        current_user = current_user_tuple[0]
+
+        # Validate project access
+        project: Project = await validate_project_access(project_id, current_user, db)
+
+        if not project.knowledge_base_id:
+            raise HTTPException(status_code=400, detail="Project has no knowledge base")
+
+        # Initialize GitHub service
+        github_service = GitHubService(token=current_user.github_token)
+
+        # Remove files associated with the repository
+        repo_path = github_service.clone_repository(repo_url=repo_data.repo_url)
+        file_paths = github_service.fetch_files(repo_path, [])
+        github_service.remove_files(repo_path, file_paths)
+
+        return await create_standard_response(
+            {"repo_url": repo_data.repo_url, "files_removed": len(file_paths)},
+            "GitHub repository detached successfully",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to detach GitHub repository: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to detach GitHub repository"
         ) from e
