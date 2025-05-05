@@ -35,6 +35,7 @@ from models.knowledge_base import KnowledgeBase
 from models.user import User
 from models.conversation import Conversation
 from services.vector_db import VectorDB, process_file_for_search, get_vector_db
+from services.github_service import GitHubService
 from utils.file_validation import FileValidator, sanitize_filename
 from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
@@ -439,7 +440,20 @@ async def delete_project_file(
 async def search_project_context(
     project_id: UUID, query: str, db: AsyncSession, top_k: int = 5
 ) -> dict[str, Any]:
-    """Search project knowledge base"""
+    """
+    Performs a semantic search against a project's knowledge base and returns relevant results.
+    
+    Args:
+        project_id: The unique identifier of the project to search within.
+        query: The search query string.
+        top_k: The maximum number of top results to return (default is 5).
+    
+    Returns:
+        A dictionary containing the original query, a list of search results with file metadata, and the total result count.
+    
+    Raises:
+        ValueError: If the query is too short or if top_k is outside the allowed range.
+    """
     if not query or len(query.strip()) < 2:
         raise ValueError("Query must be at least 2 characters")
     if top_k < 1 or top_k > 20:
@@ -474,6 +488,111 @@ async def search_project_context(
         "query": query,
         "results": [serialize_vector_result(r) for r in enhanced_results],
         "result_count": len(enhanced_results),
+    }
+
+
+# ---------------------------------------------------------------------
+# GitHub Repository Operations
+# ---------------------------------------------------------------------
+
+
+@handle_service_errors("Error attaching GitHub repository")
+async def attach_github_repository(
+    project_id: UUID,
+    repo_url: str,
+    db: AsyncSession,
+    branch: str = "main",
+    file_paths: Optional[List[str]] = None,
+    user_id: Optional[int] = None,
+) -> dict[str, Any]:
+    ...
+    """
+    Attaches a GitHub repository as a data source for a project's knowledge base.
+    
+    Clones the specified repository and branch, fetches the given files (or all files if none specified), uploads each file to the project, and updates the knowledge base with repository information.
+    
+    Args:
+        project_id: The unique identifier of the project.
+        repo_url: The URL of the GitHub repository to attach.
+        branch: The branch to use from the repository. Defaults to "main".
+        file_paths: Optional list of file paths within the repository to include. If not provided, all files are fetched.
+        user_id: Optional user identifier for access validation.
+    
+    Returns:
+        A dictionary containing the repository URL, branch, and the number of files processed.
+    """
+    project, kb = await _validate_project_and_kb(project_id, user_id, db)
+
+    # Initialize GitHub service
+    user = await get_by_id(db, User, user_id) if user_id else None
+    github_service = GitHubService(token=user.github_token if user else None)
+
+    # Clone repository
+    repo_path = github_service.clone_repository(repo_url=repo_url, branch=branch)
+    # Fetch specified files
+    file_paths = file_paths or []
+    fetched_files = github_service.fetch_files(repo_path, file_paths)
+
+    # Process fetched files
+    for file_path in fetched_files:
+        with open(file_path, "rb") as fp:
+            await upload_file_to_project(
+                project_id=project_id,
+                file=UploadFile(filename=os.path.basename(file_path), file=fp),
+                db=db,
+                user_id=user_id,
+            )
+
+    # Update knowledge base with repository info
+    kb.repo_url = repo_url
+    kb.branch = branch
+    kb.file_paths = file_paths
+    await save_model(db, kb)
+
+    return {
+        "repo_url": repo_url,
+        "branch": branch,
+        "files_processed": len(fetched_files),
+    }
+
+
+@handle_service_errors("Error detaching GitHub repository")
+async def detach_github_repository(
+    project_id: UUID,
+    repo_url: str,
+    db: AsyncSession,
+    user_id: Optional[int] = None,
+) -> dict[str, Any]:
+    """
+    Detaches a GitHub repository from a project's knowledge base and removes its associated files.
+    
+    Args:
+        project_id: The unique identifier of the project.
+        repo_url: The URL of the GitHub repository to detach.
+        user_id: Optional user identifier for access validation.
+    
+    Returns:
+        A dictionary containing the repository URL and the number of files removed.
+    """
+    project, kb = await _validate_project_and_kb(project_id, user_id, db)
+
+    # Initialize GitHub service
+    github_service = GitHubService(token=project.user.github_token)
+
+    # Remove files associated with the repository
+    repo_path = github_service.clone_repository(repo_url=repo_url)
+    file_paths = github_service.fetch_files(repo_path, [])
+    github_service.remove_files(repo_path, file_paths)
+
+    # Update knowledge base to remove repository info
+    kb.repo_url = None
+    kb.branch = None
+    kb.file_paths = None
+    await save_model(db, kb)
+
+    return {
+        "repo_url": repo_url,
+        "files_removed": len(file_paths),
     }
 
 
