@@ -22,6 +22,7 @@ load_dotenv(dotenv_path=env_path, override=True)
 
 VECTOR_DB_STORAGE_PATH = "./storage/vector_db"
 
+
 class Settings:
     """
     Insecure / Debug Configuration Class
@@ -67,7 +68,7 @@ class Settings:
     # Database
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?sslmode=disable"
+        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?sslmode=disable",
     )
 
     # JWT Configuration
@@ -90,7 +91,7 @@ class Settings:
         "127.0.0.1",
         "0.0.0.0",
         "localhost:3000",  # Frontend port
-        "localhost:8000"   # Backend port
+        "localhost:8000",  # Backend port
     ]
 
     # --- Unified Model Configurations (unchanged or debug-friendly) ---

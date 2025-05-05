@@ -40,7 +40,8 @@ export function createAuthModule({
   eventHandlers,
   domAPI,
   sanitizer,
-  modalManager
+  modalManager,
+  apiEndpoints
 } = {}) {
   /* =========================
      1) Validate Dependencies (Strict DI, No Globals)
@@ -59,6 +60,9 @@ export function createAuthModule({
   }
   if (!notify) {
     throw new Error('Auth module requires a notify object for notifications');
+  }
+  if (!apiEndpoints) {
+    throw new Error('Auth module requires apiEndpoints as a dependency');
   }
 
   /* =========================
@@ -100,7 +104,10 @@ export function createAuthModule({
      ========================= */
   async function fetchCSRFToken() {
     try {
-      const response = await fetch(`/api/auth/csrf?ts=${Date.now()}`, {
+      const url =
+        (apiEndpoints.AUTH_CSRF?.includes('?') ? apiEndpoints.AUTH_CSRF + `&ts=${Date.now()}` :
+          apiEndpoints.AUTH_CSRF + `?ts=${Date.now()}`);
+      const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
         cache: 'no-store',
@@ -161,15 +168,15 @@ export function createAuthModule({
      ========================= */
   async function authRequest(endpoint, method, body = null) {
     const AUTH_PROTECTED_ENDPOINTS = [
-      '/api/auth/login',
-      '/api/auth/register',
-      '/api/auth/logout',
-      '/api/auth/refresh'
+      apiEndpoints.AUTH_LOGIN,
+      apiEndpoints.AUTH_REGISTER,
+      apiEndpoints.AUTH_LOGOUT,
+      apiEndpoints.AUTH_REFRESH
     ];
     const isAuthProtected = AUTH_PROTECTED_ENDPOINTS.includes(endpoint);
 
     // Defer to injected apiRequest for non-auth endpoints
-    if (!isAuthProtected && apiRequest && endpoint !== '/api/auth/csrf') {
+    if (!isAuthProtected && apiRequest && endpoint !== apiEndpoints.AUTH_CSRF) {
       return apiRequest(endpoint, { method, body });
     }
 
@@ -181,7 +188,7 @@ export function createAuthModule({
     };
 
     const isStateChanging = !['GET', 'HEAD', 'OPTIONS'].includes(options.method)
-      && endpoint !== '/api/auth/csrf';
+      && endpoint !== apiEndpoints.AUTH_CSRF;
 
     // Ensure CSRF token for state-changing calls
     if (isStateChanging) {
@@ -238,7 +245,7 @@ export function createAuthModule({
     tokenRefreshPromise = (async () => {
       try {
         await getCSRFTokenAsync();
-        const response = await authRequest('/api/auth/refresh', 'POST');
+        const response = await authRequest(apiEndpoints.AUTH_REFRESH, 'POST');
         return { success: true, response };
       } catch (error) {
         notify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), {
@@ -305,7 +312,7 @@ export function createAuthModule({
     authCheckInProgress = true;
 
     try {
-      const response = await authRequest('/api/auth/verify', 'GET');
+      const response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
       if (response?.authenticated) {
         broadcastAuth(true, response.username, 'verify_success');
         return true;
@@ -351,7 +358,7 @@ export function createAuthModule({
     });
     try {
       await getCSRFTokenAsync();
-      const response = await authRequest('/api/auth/login', 'POST', {
+      const response = await authRequest(apiEndpoints.AUTH_LOGIN, 'POST', {
         username: username.trim(),
         password,
       });
@@ -398,7 +405,7 @@ export function createAuthModule({
 
     try {
       await getCSRFTokenAsync();
-      await authRequest('/api/auth/logout', 'POST');
+      await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
       notify.success('Logout successful.', {
         group: true,
         context: 'auth'
@@ -423,7 +430,7 @@ export function createAuthModule({
 
     try {
       await getCSRFTokenAsync();
-      const response = await authRequest('/api/auth/register', 'POST', {
+      const response = await authRequest(apiEndpoints.AUTH_REGISTER, 'POST', {
         username: userData.username.trim(),
         password: userData.password,
       });
@@ -463,7 +470,7 @@ export function createAuthModule({
     loginForms.forEach(loginForm => {
       if (loginForm && !loginForm._listenerAttached) {
         loginForm._listenerAttached = true;
-        loginForm.action = '/api/auth/login';
+        loginForm.action = apiEndpoints.AUTH_LOGIN;
         loginForm.method = 'POST';
 
         const handler = async (e) => {

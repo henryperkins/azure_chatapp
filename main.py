@@ -239,6 +239,7 @@ try:
         logger.critical(f"CRITICAL: modals.html not found at: {modals_path}")
         # Try to locate modals.html anywhere in the project
         import glob
+
         modals_files = glob.glob("**/modals.html", recursive=True)
         if modals_files:
             logger.info(f"Found modals.html in alternative locations: {modals_files}")
@@ -282,7 +283,7 @@ async def serve_modals(request: Request) -> Response:
         logger.error(f"modals.html not found at {modals_path} in direct route")
         return JSONResponse(
             status_code=404,
-            content={"detail": f"modals.html not found at {modals_path}"}
+            content={"detail": f"modals.html not found at {modals_path}"},
         )
 
 
@@ -313,9 +314,7 @@ app.include_router(
     prefix="/api/projects/{project_id}/artifacts",
     tags=["artifacts"],
 )
-app.include_router(
-    user_preferences_router, tags=["preferences"]
-)
+app.include_router(user_preferences_router, tags=["preferences"])
 app.include_router(conversations_router, prefix="/api/projects", tags=["conversations"])
 app.include_router(log_notification_router, tags=["notification-log"])
 
