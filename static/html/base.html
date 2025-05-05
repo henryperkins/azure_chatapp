@@ -234,9 +234,7 @@
         <div class="relative z-[101]" id="authContainer">
           <!-- When logged out: Auth Button -->
           <button id="authButton" type="button"
-                  class="btn btn-primary btn-sm min-w-[44px] min-h-[44px]"
-                  aria-haspopup="true"
-                  aria-expanded="false">
+                  class="btn btn-primary btn-sm min-w-[44px] min-h-[44px]">
             <span class="flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
                    fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
@@ -246,108 +244,6 @@
               Login
             </span>
           </button>
-
-          <!-- Auth Dropdown -->
-          <div id="authDropdown" role="menu"
-               aria-labelledby="authButton"
-               aria-hidden="true"
-               class="hidden card absolute right-0 mt-2 w-80 bg-base-100 border border-base-300 rounded-box shadow-lg z-[102]">
-            <div class="card-body p-4">
-              <!-- Auth Tabs -->
-              <div class="enhanced-tabs mb-4" role="tablist">
-                <button id="loginTab" type="button"
-                        class="enhanced-tab tab-active"
-                        onclick="switchAuthTab('login')"
-                        role="tab"
-                        aria-selected="true"
-                        aria-controls="loginForm">
-                  <span class="flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
-                         fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                    </svg>
-                    Login
-                  </span>
-                </button>
-                <button id="registerTab" type="button"
-                        class="enhanced-tab"
-                        onclick="switchAuthTab('register')"
-                        role="tab"
-                        aria-selected="false"
-                        aria-controls="registerForm">
-                  <span class="flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4"
-                         fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                    </svg>
-                    Register
-                  </span>
-                </button>
-              </div>
-
-              <!-- Login Form -->
-              <form id="loginForm" class="space-y-4">
-                <div class="form-control-enhanced">
-                  <label for="loginUsername" class="label font-medium">Username</label>
-                  <input type="text" id="loginUsername"
-                         name="username"
-                         required
-                         aria-required="true"
-                         class="input input-bordered w-full validator"
-                         autocomplete="username" />
-                  <p id="loginUsername-hint" class="validator-hint hidden" role="alert"></p>
-                </div>
-
-                <div class="form-control-enhanced">
-                  <label for="loginPassword" class="label font-medium">Password</label>
-                  <input type="password" id="loginPassword"
-                         name="password"
-                         required
-                         aria-required="true"
-                         class="input input-bordered w-full validator"
-                         autocomplete="current-password" />
-                  <p id="loginPassword-hint" class="validator-hint hidden" role="alert"></p>
-                </div>
-
-                <button type="submit" class="btn btn-primary w-full">Sign In</button>
-              </form>
-
-              <!-- Register Form -->
-              <form id="registerForm" class="hidden space-y-4">
-                <div class="form-control-enhanced">
-                  <label for="registerUsername" class="label font-medium">Username</label>
-                  <input type="text" id="registerUsername"
-                         name="username"
-                         required
-                         aria-required="true"
-                         class="input input-bordered w-full validator"
-                         autocomplete="username" />
-                  <p id="registerUsername-hint" class="validator-hint hidden" role="alert"></p>
-                </div>
-
-                <div class="form-control-enhanced">
-                  <label for="registerPassword" class="label font-medium">Password</label>
-                  <input type="password" id="registerPassword"
-                         name="password"
-                         required
-                         aria-required="true"
-                         minlength="12"
-                         pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?])[A-Za-z\\d!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>/?]{12,}$"
-                         title="Password must be at least 12 characters with uppercase, lowercase, number and special character"
-                         class="input input-bordered w-full validator"
-                         autocomplete="new-password" />
-                  <p id="registerPassword-hint" class="validator-hint hidden" role="alert"></p>
-                  <p class="text-xs text-base-content/70 mt-1">
-                    Password must be at least 12 characters with uppercase, lowercase, number and special character.
-                  </p>
-                </div>
-
-                <button type="submit" class="btn btn-primary w-full">Create Account</button>
-              </form>
-            </div>
-          </div>
 
           <!-- When logged in: Show username and logout -->
           <div id="userMenu" class="hidden flex items-center gap-2">

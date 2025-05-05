@@ -319,11 +319,9 @@
 <!-- Knowledge Result Detail Modal (Enhanced) -->
 <dialog id="loginModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="loginRegisterModalTitle">
   <div class="modal-box max-w-sm">
-    <form method="dialog" class="absolute right-2 top-2">
-      <button class="btn btn-sm btn-circle btn-ghost" aria-label="Close dialog">
-        <span class="sr-only">Close</span>✕
-      </button>
-    </form>
+    <button id="loginModalCloseBtn" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close dialog" type="button">
+      <span class="sr-only">Close</span>✕
+    </button>
     <h3 id="loginRegisterModalTitle" class="font-bold text-xl mb-3 mt-2 text-center">Welcome</h3>
     <div class="flex border-b border-base-200 mb-3">
       <button id="modalLoginTab" type="button" class="tab tab-bordered flex-1 tab-active rounded-t-lg" aria-selected="true">Login</button>
@@ -376,7 +374,7 @@
       </form>
     </div>
   </div>
-  <form method="dialog" class="modal-backdrop">
+  <form method="dialog" class="modal-backdrop" tabindex="-1">
     <button aria-label="Close"></button>
   </form>
 </dialog>
@@ -449,6 +447,25 @@
 
 <!-- At the end of modals.html -->
 <script>
+  // Helper: Show the login modal always with the Login tab (reset tab state)
+  function showLoginModalAlwaysLoginTab() {
+    const loginModal = document.getElementById('loginModal');
+    if (!loginModal) return;
+    const loginTab = loginModal.querySelector('#modalLoginTab');
+    const registerTab = loginModal.querySelector('#modalRegisterTab');
+    const loginPanel = loginModal.querySelector('#loginPanel');
+    const registerPanel = loginModal.querySelector('#registerPanel');
+    if (loginTab && registerTab && loginPanel && registerPanel) {
+      loginTab.classList.add('tab-active');
+      loginTab.setAttribute('aria-selected', 'true');
+      registerTab.classList.remove('tab-active');
+      registerTab.setAttribute('aria-selected', 'false');
+      loginPanel.style.display = 'block';
+      registerPanel.style.display = 'none';
+    }
+  }
+
+  // Focus trap and Esc handler for true accessibility
   function trapFocus(modal) {
     const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
     const focusableEls = modal.querySelectorAll(focusableSelectors);
@@ -471,48 +488,57 @@
         }
       }
       if (e.key === 'Escape') {
-        modal.close();
+        // Always route close through modalManager if possible
+        if (window.modalManager && typeof window.modalManager.hide === 'function') {
+          window.modalManager.hide('login');
+        } else {
+          modal.close();
+        }
       }
     });
     firstEl.focus();
   }
 
   document.addEventListener('DOMContentLoaded', function() {
+    // Focus trap for loginModal (also for others)
     document.querySelectorAll('dialog.modal').forEach(dialog => {
       dialog.addEventListener('show', () => trapFocus(dialog));
     });
 
-    // Wait for correct HTML, then attach any modal-init logic if needed (tab switching delegated to eventHandler.js)
-    document.addEventListener('modalsLoaded', function() {});
-
-    // Initialize modal close buttons
-    // Helper function to find the modal name from its ID
-    function getModalNameFromId(modalId) {
-        // Use the mappings directly from the global modalManager instance
-        const mappings = window.modalManager?.modalMappings || {
-            project: 'projectFormModal',
-            delete: 'deleteConfirmModal',
-            confirm: 'confirmActionModal', // Added mapping
-            knowledge: 'knowledgeBaseSettingsModal',
-            knowledgeResult: 'knowledgeResultModal',
-            instructions: 'instructionsModal',
-            contentView: 'contentViewModal'
-            // Ensure this matches the ModalManager class mappings
-        };
-        for (const name in mappings) {
-            if (mappings[name] === modalId) {
-                return name;
-            }
-        }
-        console.warn(`[Modals Init] Could not find modal name for ID: ${modalId}`);
-        return null; // Return null if no mapping found
+    // Always reset the login modal to "Login" tab when shown (robust to any modalManager JS call)
+    const loginModal = document.getElementById('loginModal');
+    if (loginModal) {
+      loginModal.addEventListener('show', showLoginModalAlwaysLoginTab);
     }
 
-    // [REMOVED] Centralized modal close logic for close/cancel buttons is now handled EXCLUSIVELY via ModalManager and DI,
-    // to avoid duplication, race conditions, and unreliable modal state cleanup.
-    // All modals must be closed via modalManager.hide(modalName), which tracks events and uses DI for cleanup.
-    // No direct DOM event listeners for modal closure are attached in this script.
+    // Background/backdrop & close button: always close via modalManager
+    const loginModalCloseBtn = document.getElementById('loginModalCloseBtn');
+    if (loginModalCloseBtn) {
+      loginModalCloseBtn.addEventListener('click', function() {
+        if (window.modalManager && typeof window.modalManager.hide === 'function') {
+          window.modalManager.hide('login');
+        } else {
+          loginModal?.close();
+        }
+      });
+    }
+    // Also capture backdrop form/button to close via manager
+    const loginModalBackdrop = loginModal?.querySelector('form.modal-backdrop');
+    if (loginModalBackdrop) {
+      loginModalBackdrop.addEventListener('submit', function(e) {
+        e.preventDefault();
+        if (window.modalManager && typeof window.modalManager.hide === 'function') {
+          window.modalManager.hide('login');
+        } else {
+          loginModal?.close();
+        }
+      });
+    }
 
+    // Wait for correct HTML, then attach modal-init logic if needed for other modals...
+    document.addEventListener('modalsLoaded', function() {});
+
+    // Other code continues (unchanged)
     // DRY helper for button loading state
     function setButtonLoading(btn, isLoading, loadingText = "Saving...") {
       if (!btn) return;
@@ -593,12 +619,8 @@
         }
       });
     }
-
     // --- Registration form submit logic removed: now handled in auth.js & eventHandler.js DI.
     // See eventHandler.js and auth.js for real registration submission, error display, and feedback.
     // --- end registration form hookup ---
-
-
-
   });
 </script>

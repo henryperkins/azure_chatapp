@@ -458,7 +458,7 @@ const storageService = {
             return browserAPIForStorage.getLocalStorage().length;
         } catch {
             if (APP_CONFIG.DEBUG) {
-                notificationHandlerWithLog.warn('[storageService] length getter failed', { });
+                notificationHandlerWithLog.warn('[storageService] length getter failed', {});
             }
             return 0;
         }
@@ -522,9 +522,9 @@ const chatManager = createChatManager({
             return typeof authModule?.isAuthenticated === 'function'
                 ? authModule.isAuthenticated()
                 : false;
-    } catch { // Removed unused error parameter
-        return false;
-    }
+        } catch { // Removed unused error parameter
+            return false;
+        }
     },
     DOMPurify: DependencySystem.modules.get('sanitizer')
 });
@@ -605,12 +605,12 @@ async function init() {
         eventHandlers,
         DependencySystem,
         domAPI: {
-            getElementById : id  => document.getElementById(id),
-            createElement  : tag => document.createElement(tag),
-            createTemplate : html=> { const t=document.createElement('template'); t.innerHTML=html.trim(); return t; },
+            getElementById: id => document.getElementById(id),
+            createElement: tag => document.createElement(tag),
+            createTemplate: html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t; },
             body: document.body
         },
-        groupWindowMs : 7000                // example – 7-second buckets for API chatter
+        groupWindowMs: 7000                // example – 7-second buckets for API chatter
     });
 
     // Register notificationHandler and notify util in DI
@@ -621,7 +621,7 @@ async function init() {
     window.showNotification = notificationHandler.show;
 
     // Add a global loading handler to hide notifications on page changes
-    document.addEventListener('locationchange', function() {
+    document.addEventListener('locationchange', function () {
         // Only clear notifications if they're not important
         const container = notificationHandler.getContainer?.() || document.getElementById('notificationArea');
         if (container) {
@@ -656,7 +656,7 @@ async function init() {
     }
 
     const originalShow = notificationHandler.show;
-    notificationHandler.show = function(message, type, options) {
+    notificationHandler.show = function (message, type, options) {
         try {
             return originalShow.call(this, message, type, options);
         } catch (err) {
@@ -936,62 +936,62 @@ async function initializeCoreSystems() {
                 // ---- Attach project modal submit handler robustly ----
                 // Wait until modals are injected
                 setTimeout(() => {
-                  const projectForm = document.getElementById('projectModalForm');
-                  if (!projectForm) return;
-                  // Remove any previous handler
-                  projectForm.onsubmit = null;
-                  projectForm.addEventListener('submit', async (e) => {
-                      e.preventDefault();
-                      const submitBtn = projectForm.querySelector('button[type="submit"]');
-                      if (submitBtn) {
-                        submitBtn.disabled = true;
-                        submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
-                      }
-                      const formData = new FormData(projectForm);
-                      const data = {};
-                      for (let [key, value] of formData.entries()) {
-                          if (key === 'projectId' && !value) continue;
-                          if (key === 'maxTokens' || key === 'max_tokens') {
-                              data.max_tokens = parseInt(value, 10);
-                          } else {
-                              data[key] = value;
-                          }
-                      }
-                      if (!data.name) {
-                          showNotification('Project name is required', 'error', 5000, { group: true, context: 'projectModal' });
-                          if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.textContent = 'Save Project';
-                          }
-                          return;
-                      }
-                      try {
-                          const pm = window.projectManager || (window.DependencySystem?.modules?.get?.('projectManager'));
-                          if (pm?.createProject) {
-                              await pm.createProject(data);
-                          } else if (pm?.saveProject) {
-                              await pm.saveProject(undefined, data);
-                          } else {
-                              throw new Error('ProjectManager unavailable in DI');
-                          }
-                          showNotification('Project created', 'success', 5000, { group: true, context: 'projectModal' });
-                          const mm = window.modalManager || (window.DependencySystem?.modules?.get?.('modalManager'));
-                          if (mm?.hide) {
-                              mm.hide('project');
-                          }
-                          if (pm?.loadProjects) {
-                              pm.loadProjects('all');
-                          }
-                      } catch (err) {
-                          showNotification('Failed to create project: ' + (err?.message || err), 'error', 5000, { group: true, context: 'projectModal' });
-                          // Optionally rethrow
-                      } finally {
-                          if (submitBtn) {
-                            submitBtn.disabled = false;
-                            submitBtn.textContent = 'Save Project';
-                          }
-                      }
-                  });
+                    const projectForm = document.getElementById('projectModalForm');
+                    if (!projectForm) return;
+                    // Remove any previous handler
+                    projectForm.onsubmit = null;
+                    projectForm.addEventListener('submit', async (e) => {
+                        e.preventDefault();
+                        const submitBtn = projectForm.querySelector('button[type="submit"]');
+                        if (submitBtn) {
+                            submitBtn.disabled = true;
+                            submitBtn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> Saving...`;
+                        }
+                        const formData = new FormData(projectForm);
+                        const data = {};
+                        for (let [key, value] of formData.entries()) {
+                            if (key === 'projectId' && !value) continue;
+                            if (key === 'maxTokens' || key === 'max_tokens') {
+                                data.max_tokens = parseInt(value, 10);
+                            } else {
+                                data[key] = value;
+                            }
+                        }
+                        if (!data.name) {
+                            showNotification('Project name is required', 'error', 5000, { group: true, context: 'projectModal' });
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Save Project';
+                            }
+                            return;
+                        }
+                        try {
+                            const pm = window.projectManager || (window.DependencySystem?.modules?.get?.('projectManager'));
+                            if (pm?.createProject) {
+                                await pm.createProject(data);
+                            } else if (pm?.saveProject) {
+                                await pm.saveProject(undefined, data);
+                            } else {
+                                throw new Error('ProjectManager unavailable in DI');
+                            }
+                            showNotification('Project created', 'success', 5000, { group: true, context: 'projectModal' });
+                            const mm = window.modalManager || (window.DependencySystem?.modules?.get?.('modalManager'));
+                            if (mm?.hide) {
+                                mm.hide('project');
+                            }
+                            if (pm?.loadProjects) {
+                                pm.loadProjects('all');
+                            }
+                        } catch (err) {
+                            showNotification('Failed to create project: ' + (err?.message || err), 'error', 5000, { group: true, context: 'projectModal' });
+                            // Optionally rethrow
+                        } finally {
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.textContent = 'Save Project';
+                            }
+                        }
+                    });
                 }, 0);
                 // ---- End submit handler attach ----
 
@@ -1540,9 +1540,9 @@ function setupChatInitializationTrigger() {
         );
         debouncedInitChat();
     }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)
-    .catch(err => {
-        notificationHandlerWithLog.error('[App] Failed setup for chat init triggers:', err);
-    });
+        .catch(err => {
+            notificationHandlerWithLog.error('[App] Failed setup for chat init triggers:', err);
+        });
 }
 
 // ---------------------------------------------------------------------
