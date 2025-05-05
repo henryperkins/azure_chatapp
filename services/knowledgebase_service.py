@@ -440,7 +440,20 @@ async def delete_project_file(
 async def search_project_context(
     project_id: UUID, query: str, db: AsyncSession, top_k: int = 5
 ) -> dict[str, Any]:
-    """Search project knowledge base"""
+    """
+    Performs a semantic search against a project's knowledge base and returns relevant results.
+    
+    Args:
+        project_id: The unique identifier of the project to search within.
+        query: The search query string.
+        top_k: The maximum number of top results to return (default is 5).
+    
+    Returns:
+        A dictionary containing the original query, a list of search results with file metadata, and the total result count.
+    
+    Raises:
+        ValueError: If the query is too short or if top_k is outside the allowed range.
+    """
     if not query or len(query.strip()) < 2:
         raise ValueError("Query must be at least 2 characters")
     if top_k < 1 or top_k > 20:
@@ -492,7 +505,21 @@ async def attach_github_repository(
     db: AsyncSession,
     user_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Attach a GitHub repository as a data source for the project's knowledge base"""
+    """
+    Attaches a GitHub repository as a data source for a project's knowledge base.
+    
+    Clones the specified repository and branch, fetches the given files (or all files if none specified), uploads each file to the project, and updates the knowledge base with repository information.
+    
+    Args:
+        project_id: The unique identifier of the project.
+        repo_url: The URL of the GitHub repository to attach.
+        branch: The branch to use from the repository. Defaults to "main".
+        file_paths: Optional list of file paths within the repository to include. If not provided, all files are fetched.
+        user_id: Optional user identifier for access validation.
+    
+    Returns:
+        A dictionary containing the repository URL, branch, and the number of files processed.
+    """
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
 
     # Initialize GitHub service
@@ -535,7 +562,17 @@ async def detach_github_repository(
     db: AsyncSession,
     user_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    """Detach a GitHub repository from the project's knowledge base"""
+    """
+    Detaches a GitHub repository from a project's knowledge base and removes its associated files.
+    
+    Args:
+        project_id: The unique identifier of the project.
+        repo_url: The URL of the GitHub repository to detach.
+        user_id: Optional user identifier for access validation.
+    
+    Returns:
+        A dictionary containing the repository URL and the number of files removed.
+    """
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
 
     # Initialize GitHub service
