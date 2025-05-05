@@ -18,17 +18,22 @@
  * @param {string} [src] - Optional logical source, like 'projectManager'.
  * @returns {Promise<any>} API response if successful; pipes error otherwise.
  */
+/**
+ * Returns an apiNotify instance with preregistered context/module for wrapped API error reporting.
+ * Use this at top-level before calling wrapApi.
+ */
+export function getApiNotify(notify) {
+  return notify.withContext({ context: 'apiRequest', module: 'api' });
+}
+
 export async function wrapApi(apiFn, { notify, errorReporter }, endpoint, opts = {}, src = 'api') {
+  const apiNotify = notify.withContext
+    ? notify.withContext({ context: 'apiRequest', module: 'api' })
+    : notify;
   try {
     return await apiFn(endpoint, opts);
   } catch (err) {
-    notify.apiError(`API call failed: ${endpoint}`, {
-      group: true,
-      context: src,
-      endpoint,
-      method: opts && opts.method,
-      originalError: err
-    });
+    apiNotify.error(`API call failed: ${endpoint}`, { endpoint, method: opts && opts.method, originalError: err });
     if (errorReporter) {
       errorReporter.capture(err, {
         context: src,
