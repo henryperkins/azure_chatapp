@@ -568,7 +568,13 @@ async def toggle_knowledge_base(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Enable or disable a project's knowledge base.
+    Enables or disables the knowledge base for a specified project.
+    
+    Raises:
+        HTTPException: If the project does not have a knowledge base or if an error occurs during the operation.
+    
+    Returns:
+        A standardized response indicating the result of the toggle operation and the new status.
     """
     try:
         current_user = current_user_tuple[0]
@@ -609,7 +615,9 @@ async def attach_github_repository(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Attach a GitHub repository as a data source for the project's knowledge base.
+    Attaches a GitHub repository as a data source for a project's knowledge base.
+    
+    Validates project access and knowledge base existence, clones the specified repository and branch, fetches the specified or all files, and uploads them to the project's knowledge base. Returns the repository URL and the number of files processed.
     """
     try:
         current_user = current_user_tuple[0]
@@ -664,7 +672,9 @@ async def detach_github_repository(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Detach a GitHub repository from the project's knowledge base.
+    Detaches a GitHub repository from a project's knowledge base and removes its files.
+    
+    Removes all files associated with the specified GitHub repository from the project's knowledge base. Returns the repository URL and the number of files removed. Raises an HTTP 400 error if the project has no knowledge base, and an HTTP 500 error if the operation fails.
     """
     try:
         current_user = current_user_tuple[0]

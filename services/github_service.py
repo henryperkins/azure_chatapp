@@ -8,14 +8,38 @@ logger = logging.getLogger(__name__)
 
 class GitHubService:
     def __init__(self, token: Optional[str] = None):
+        """
+        Initializes the GitHubService with an optional authentication token.
+        
+        Args:
+            token: Personal access token for authenticating GitHub operations. If not provided, operations will be unauthenticated.
+        """
         self.token = token
 
     def _get_repo_url(self, repo_url: str) -> str:
+        """
+        Returns the repository URL with the authentication token embedded if available.
+        
+        If a token is provided, it is inserted into the URL for authenticated access; otherwise, the original URL is returned.
+        """
         if self.token:
             return repo_url.replace("https://", f"https://{self.token}@")
         return repo_url
 
     def clone_repository(self, repo_url: str, branch: str = "main") -> str:
+        """
+        Clones a GitHub repository branch into a temporary directory.
+        
+        Args:
+            repo_url: The URL of the GitHub repository to clone.
+            branch: The branch to clone. Defaults to "main".
+        
+        Returns:
+            The path to the temporary directory containing the cloned repository.
+        
+        Raises:
+            GitCommandError: If the repository cannot be cloned.
+        """
         try:
             temp_dir = tempfile.mkdtemp()
             repo_url_with_token = self._get_repo_url(repo_url)
@@ -26,6 +50,18 @@ class GitHubService:
             raise
 
     def fetch_files(self, repo_path: str, file_paths: List[str]) -> List[str]:
+        """
+        Returns the full paths of files that exist in the specified repository directory.
+        
+        Checks each provided file path within the given repository path and collects the full paths of files that are found. Logs a warning for any files that are missing.
+        
+        Args:
+            repo_path: Path to the local repository directory.
+            file_paths: List of file paths (relative to the repository root) to check.
+        
+        Returns:
+            A list of full file paths for files that exist in the repository directory.
+        """
         fetched_files = []
         for file_path in file_paths:
             full_path = os.path.join(repo_path, file_path)
@@ -35,13 +71,19 @@ class GitHubService:
                 logger.warning(f"File not found: {full_path}")
         return fetched_files
 
+    def add_files(self, repo_path: str, file_paths: List[str]) -> None:
+        """
+        Adds specified files to the Git index and commits them in the given repository.
+        
+        Attempts to add the provided files to the repository at the specified path and commits the addition with the message "Add files". If the repository path does not exist or a Git command fails, an error is logged and the exception is raised.
+        """
         try:
-            if not os.path.exists(repo_path):
-                raise GitCommandError(f"Repository not found at {repo_path}")
             repo = Repo(repo_path)
             repo.index.add(file_paths)
             repo.index.commit("Add files")
         except GitCommandError as e:
+            logger.error(f"Failed to add files: {e}")
+            raise
 
         try:
             if not os.path.exists(repo_path):
@@ -51,10 +93,21 @@ class GitHubService:
             repo.index.commit("Remove files")
         except GitCommandError as e:
 
+    def push_changes(self, repo_path: str, branch: str = "main") -> None:
+        """
+        Pushes committed changes to the specified branch on the remote origin.
+        
+        Args:
+            repo_path: Path to the local Git repository.
+            branch: Name of the branch to push to. Defaults to "main".
+        
+        Raises:
+            GitCommandError: If pushing to the remote repository fails.
+        """
         try:
-            if not os.path.exists(repo_path):
-                raise GitCommandError(f"Repository not found at {repo_path}")
             repo = Repo(repo_path)
             origin = repo.remote(name="origin")
             origin.push(refspec=f"HEAD:{branch}")
         except GitCommandError as e:
+            logger.error(f"Failed to push changes: {e}")
+            raise

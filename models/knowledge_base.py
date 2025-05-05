@@ -67,4 +67,7 @@ class KnowledgeBase(Base):
     # Project relationship is handled by backref in Project model
 
     def __repr__(self):
+        """
+        Returns a string representation of the KnowledgeBase instance with its name and ID.
+        """
         return f"<KnowledgeBase {self.name} (#{self.id})>"
