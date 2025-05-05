@@ -51,11 +51,10 @@ class GitHubService:
             repo.index.commit("Remove files")
         except GitCommandError as e:
 
-    def push_changes(self, repo_path: str, branch: str = "main") -> None:
         try:
+            if not os.path.exists(repo_path):
+                raise GitCommandError(f"Repository not found at {repo_path}")
             repo = Repo(repo_path)
             origin = repo.remote(name="origin")
             origin.push(refspec=f"HEAD:{branch}")
         except GitCommandError as e:
-            logger.error(f"Failed to push changes: {e}")
-            raise
