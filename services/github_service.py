@@ -35,14 +35,13 @@ class GitHubService:
                 logger.warning(f"File not found: {full_path}")
         return fetched_files
 
-    def add_files(self, repo_path: str, file_paths: List[str]) -> None:
         try:
+            if not os.path.exists(repo_path):
+                raise GitCommandError(f"Repository not found at {repo_path}")
             repo = Repo(repo_path)
             repo.index.add(file_paths)
             repo.index.commit("Add files")
         except GitCommandError as e:
-            logger.error(f"Failed to add files: {e}")
-            raise
 
         try:
             if not os.path.exists(repo_path):
