@@ -638,24 +638,7 @@ export function createAuthModule({
         context: 'auth'
       });
 
-      // Added event listener for the login button to open the login modal
-      const loginBtn = domAPI.getElementById('authButton');
-      if (loginBtn && !loginBtn._listenerAttached) {
-        loginBtn._listenerAttached = true;
-        const handler = (e) => {
-          e.preventDefault();
-          // Try window.modalManager first, then DI system
-          const mm = window.modalManager || (window.DependencySystem && window.DependencySystem.modules.get('modalManager'));
-          if (mm?.show) {
-            mm.show('login');
-          } else {
-            notify.error('No modalManager available to show login.', { group: true, context: 'auth' });
-          }
-        };
-        registeredListeners.push(
-          eventHandlers.trackListener(loginBtn, 'click', handler, { description: 'Auth Button open login modal' })
-        );
-      }
+      // Removed duplicate loginBtn handler for opening login modal (now handled centrally in app.js)
       return true;
     }
     notify.info('[Auth] Initializing auth module...', {
