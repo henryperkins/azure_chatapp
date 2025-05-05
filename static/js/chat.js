@@ -1033,6 +1033,12 @@ export function createChatManager({
       const message = this._extractErrorMessage(error);
       this.notify(`[ChatManager - ${context}] ${message}`, "error", error);
     }
+  async initialize() {
+    // Add any initialization logic needed;
+    // or return immediately if there’s nothing to do.
+    return true;
+  }
+
   } // end ChatManager class
 
   return new ChatManager();
