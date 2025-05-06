@@ -25,7 +25,9 @@ export function createNotify({
           transactionId: t?.spanId || t?.name || null
         };
       }
-    } catch (err) { }
+    } catch { // Silent catch - previously renamed to avoid conflict if outer scope has err
+      // console.warn('[notify] Error in getCurrentTraceIds:', _errCaught); // Optional: log if needed
+    }
     return { traceId: null, transactionId: null };
   };
 
@@ -52,14 +54,16 @@ export function createNotify({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-    } catch (err) { }
+    } catch { // Silent catch - previously had unused variable
+      // console.warn('[notify] Failed to log notification to backend:', _errCaught); // Optional: log if needed
+    }
   };
 
   // DEV-mode: warn on missing context/module/source for grouped notifications
   const devCheckContextCoverage = (type, opts, msg) => {
     if (
-      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
-      (typeof window !== 'undefined' && window.NODE_ENV === 'production')
+      (typeof window !== 'undefined' && window.NODE_ENV === 'production') ||
+      (typeof window !== 'undefined' && window.__ENV__ && window.__ENV__.NODE_ENV === 'production')
     ) return;
 
     const grouping = opts?.group || opts?.groupKey;
@@ -79,11 +83,18 @@ export function createNotify({
     // Dependency-injected user/session
     let user = 'unknown';
     try {
-      user = (DependencySystem?.modules?.get?.('currentUser')?.username)
-        || (window.currentUser?.username)
-        || (window.currentUser?.name)
-        || 'unknown';
-    } catch (err) { }
+      if (DependencySystem && DependencySystem.modules && typeof DependencySystem.modules.get === 'function') {
+        const currentUserModule = DependencySystem.modules.get('currentUser');
+        if (currentUserModule) {
+          user = currentUserModule.username || currentUserModule.name || 'unknown';
+        }
+      } else if (window.currentUser) { // Fallback if DependencySystem.modules is not available
+        user = window.currentUser.username || window.currentUser.name || 'unknown';
+      }
+    } catch (_userError) { // Changed err to error to avoid conflict if outer scope has err
+      // Optional: log this internal error during development if DependencySystem was expected
+      // console.warn('[notify] Error retrieving current user for notification:', _userError);
+    }
 
     const timestamp = Date.now() / 1000;
 
@@ -138,7 +149,9 @@ export function createNotify({
           message: msg,
           data: payload
         });
-      } catch (err) { }
+      } catch (_sentryBreadcrumbErr) { // Renamed to avoid conflict
+        // console.warn('[notify] Error adding Sentry breadcrumb:', _sentryBreadcrumbErr); // Optional: log if needed
+      }
     }
 
     notificationHandler.show(msg, _type, {

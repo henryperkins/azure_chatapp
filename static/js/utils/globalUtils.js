@@ -116,6 +116,7 @@ export function createStorageService({ browserAPI, APP_CONFIG, notificationHandl
 // ─────────────────────────────────────────────────────────────────────────────
 export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, getAuthModule, browserAPI }) {
   const pending = new Map();
+  const BASE_URL = APP_CONFIG?.BASE_API_URL || ''; // Get base URL from config
 
   /**
    * Main request wrapper.  Mirrors `fetch` signature with extras.
@@ -132,7 +133,9 @@ export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, 
     }
 
     const auth = getAuthModule?.();
-    const normUrl = globalUtils.normaliseUrl(url);
+    // Construct full URL using BASE_URL if url is relative
+    const fullUrl = globalUtils.isAbsoluteUrl(url) ? url : `${BASE_URL}${url}`;
+    const normUrl = globalUtils.normaliseUrl(fullUrl); // Normalize the potentially full URL
     const bodyKey =
       opts.body instanceof FormData
         ? `[form-data-${Date.now()}]`
@@ -169,9 +172,10 @@ export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, 
     // Timeout via AbortController (injected from browserAPI for SSR safety)
     const abortCtl = new (browserAPI?.AbortController || AbortController)();
     opts.signal = abortCtl.signal;
+    const apiTimeout = APP_CONFIG?.TIMEOUTS?.API_REQUEST || 15000; // Use configured timeout or default
     const timer = setTimeout(
-      () => abortCtl.abort(new Error(`API Timeout (${APP_CONFIG.TIMEOUTS.API_REQUEST}ms)`)),
-      APP_CONFIG.TIMEOUTS.API_REQUEST,
+      () => abortCtl.abort(new Error(`API Timeout (${apiTimeout}ms)`)),
+      apiTimeout,
     );
 
     const p = (async () => {
@@ -243,10 +247,19 @@ export function debounce(fn, wait = 250) {
 }
 
 // ░░ URL helpers ░░────────────────────────────────────────────────────────────
+export function isAbsoluteUrl(url) {
+    try {
+        new URL(url);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
 export function normaliseUrl(url) {
   try {
-    const origin = window.location?.origin || "http://localhost";
-    const u = new URL(url, origin);
+    // Assume url is already absolute or has been prefixed
+    const u = new URL(url);
     if (u.pathname.length > 1 && u.pathname.endsWith("/")) u.pathname = u.pathname.slice(0, -1);
     const sorted = Array.from(u.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
     u.search = new URLSearchParams(sorted).toString();

@@ -4,6 +4,7 @@
  */
 export const APP_CONFIG = {
   DEBUG: true,
+  BASE_API_URL: 'http://localhost:8001', // Explicitly set API base URL
   SELECTORS: {
     APP_LOADING_SPINNER: '#appLoadingSpinner',
     APP_FATAL_ERROR: '#appFatalError',
@@ -16,12 +17,14 @@ export const APP_CONFIG = {
     PROJECT_LIST_VIEW: '#projectListView'
   },
   TIMEOUTS: {
-    DEPENDENCY_WAIT: 15000
+    DEPENDENCY_WAIT: 15000,
+    API_REQUEST: 10000 // Added a default API timeout, was missing in globalUtils for timer
   },
   PERFORMANCE_THRESHOLDS: {
     INIT_WARN: 3000
   },
   API_ENDPOINTS: {
     // Example: CURRENT_USER: '/api/v1/users/me'
+    // Relative paths here will be prefixed by BASE_API_URL
   }
 };
