@@ -21,6 +21,8 @@ export class FileUploadComponent {
    * @param {Object} options.app - Required. App/core dependency system with notification & api.
    * @param {Object} options.eventHandlers - Required. Tracked event handler utils.
    * @param {Object} options.projectManager - Required. Project file upload API.
+   * @param {Object} options.notify - Required. Notification handler (DI, context-wrapped).
+   * @param {Object} [options.scheduler] - Optional. Deterministic timer utilities (setTimeout/clearTimeout).
    * @param {string} [options.projectId] - Optional, can be set later
    * @param {Function} [options.onUploadComplete]
    * @param {HTMLElement} [options.fileInput]
@@ -43,6 +45,13 @@ export class FileUploadComponent {
     this.eventHandlers = getDep('eventHandlers');
     /** @type {Object} */
     this.projectManager = getDep('projectManager');
+    this.notify   = getDep('notify')?.withContext?.({ context: 'fileUploadComponent',
+                                                      module : 'FileUploadComponent' });
+    if (!this.notify) throw new Error('[FileUploadComponent] notify dependency is required');
+
+    // deterministic timers (DI-friendly)
+    this.scheduler = getDep('scheduler', () => ({ setTimeout, clearTimeout }));
+
     if (!this.app || !this.eventHandlers || !this.projectManager) {
       throw new Error(
         "FileUploadComponent requires explicit 'app', 'eventHandlers', and 'projectManager' dependencies passed via options."
@@ -159,7 +168,7 @@ export class FileUploadComponent {
     const { app } = this;
     const projectId = this.projectId || app.getProjectId?.();
     if (!projectId || !app.validateUUID?.(projectId)) {
-      app.showNotification?.('No valid project selected', 'error');
+      this.notify.error('No valid project selected');
       return;
     }
 
@@ -167,7 +176,7 @@ export class FileUploadComponent {
     const { validFiles, invalidFiles } = this._validateFiles(files);
 
     invalidFiles.forEach(({ file, error }) => {
-      app.showNotification?.(`Skipped ${file.name}: ${error}`, 'error');
+      this.notify.error(`Skipped ${file.name}: ${error}`);
     });
 
     if (validFiles.length === 0) return;
@@ -199,18 +208,12 @@ export class FileUploadComponent {
       }
       await projectManager.uploadFileWithRetry(projectId, { file });
       this._updateUploadProgress(1, 0);
-      app.showNotification?.(`${file.name} uploaded successfully`, 'success');
+      this.notify.success(`${file.name} uploaded successfully`);
     } catch (error) {
-      if (app && typeof app.showNotification === "function") {
-        // Optionally log error via notification (rare, normally only notify user)
-        // app.showNotification(`[FileUploadComponent] Upload error for ${file.name}: ${error?.message || error}`, 'error');
-      } else if (typeof console !== "undefined") {
-        // Last-resort fallback for dev debugging only
-        console.error(`[FileUploadComponent] (fallback) Upload error for ${file.name}:`, error);
-      }
+      this.notify.error(`[FileUploadComponent] Upload error for ${file.name}: ${error?.message || error}`);
       this._updateUploadProgress(0, 1);
       const errorMsg = this._getUploadErrorMessage(error, file.name);
-      app.showNotification?.(`Failed to upload ${file.name}: ${errorMsg}`, 'error');
+      this.notify.error(`Failed to upload ${file.name}: ${errorMsg}`);
     }
   }
 
@@ -291,7 +294,7 @@ export class FileUploadComponent {
     // Cosmetic: Keep the progress bar visible for 2 seconds after all uploads finish for user feedback.
     // If you want a CSS fadeout/transition instead, prefer to add it in CSS and remove this timer for a snappier UI.
     if (completed === total && uploadProgress) {
-      setTimeout(() => {
+      this.scheduler.setTimeout?.(() => {
         uploadProgress.classList.add('hidden');
       }, 2000);
     }
@@ -311,4 +314,4 @@ export class FileUploadComponent {
   }
 }
 
-export default FileUploadComponent;
+export const createFileUploadComponent = (opts) => new FileUploadComponent(opts);
