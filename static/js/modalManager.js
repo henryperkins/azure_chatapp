@@ -72,11 +72,7 @@ class ModalManager {
     /** @type {number|undefined} Scroll position for body scroll lock */
     this._scrollLockY = undefined;
 
-    /**
-     * Store tracked events for removal in destroy().
-     * Each entry: { element, type, description }.
-     */
-    this._trackedEvents = [];
+    // No internal event tracking; rely on eventHandlers context-based cleanup.
   }
 
   /**
@@ -202,62 +198,56 @@ class ModalManager {
    * Attach 'close' listeners to each mapped dialog. Orchestrator must call after DOM is ready.
    * Also validates mappings for missing/duplicate IDs.
    */
-  init() {
-    if (this._isDebug()) {
-      this._notify('info', '[ModalManager] init() called. Setting up modals...', true);
-    }
-
-    this.validateModalMappings(this.modalMappings);
-
-    Object.values(this.modalMappings).forEach((modalId) => {
-      const modalEl = document.getElementById(modalId);
-      if (modalEl) {
-        const handler = () => this._onDialogClose(modalId);
-        if (this.eventHandlers?.trackListener) {
-          const wrappedHandler = this.eventHandlers.trackListener(
-            modalEl,
-            'close',
-            handler,
-            { description: `Close event for ${modalId}` }
-          );
-          if (wrappedHandler) {
-            this._trackedEvents.push({
-              element: modalEl,
-              type: 'close',
-              description: `Close event for ${modalId}`,
-            });
-          }
-        } else {
-          this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`);
-        }
+    init() {
+      if (this._isDebug()) {
+        this._notify('info', '[ModalManager] init() called. Setting up modals...', true);
       }
-    });
 
-    if (this._isDebug()) {
-      this._notify('info', '[ModalManager] Initialization complete.', true);
+      this.validateModalMappings(this.modalMappings);
+
+      Object.values(this.modalMappings).forEach((modalId) => {
+        const modalEl = document.getElementById(modalId);
+        if (modalEl) {
+          const handler = () => this._onDialogClose(modalId);
+          if (this.eventHandlers?.trackListener) {
+            this.eventHandlers.trackListener(
+              modalEl,
+              'close',
+              handler,
+              {
+                description: `Close event for ${modalId}`,
+                context: 'modalManager',
+                source: 'ModalManager.init'
+              }
+            );
+          } else {
+            this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`);
+          }
+        }
+      });
+
+      if (this._isDebug()) {
+        this._notify('info', '[ModalManager] Initialization complete.', true);
+      }
     }
-  }
 
   /**
    * Remove all tracked event listeners. For use in SPAs or dynamic re-inits.
    */
-  destroy() {
-    if (!this.eventHandlers?.cleanupListeners) {
-      if (this._isDebug()) {
-        this._notify('warn', '[ModalManager] destroy() called but no eventHandlers.cleanupListeners available.');
+    destroy() {
+      if (!this.eventHandlers?.cleanupListeners) {
+        if (this._isDebug()) {
+          this._notify('warn', '[ModalManager] destroy() called but no eventHandlers.cleanupListeners available.');
+        }
+        return;
       }
-      return;
-    }
-    // Remove each tracked event:
-    this._trackedEvents.forEach((evt) => {
-      this.eventHandlers.cleanupListeners(evt.element, evt.type, evt.description);
-    });
-    this._trackedEvents = [];
+      // Remove all listeners for this context
+      this.eventHandlers.cleanupListeners({ context: 'modalManager' });
 
-    if (this._isDebug()) {
-      this._notify('info', '[ModalManager] destroyed: all tracked listeners removed.', true);
+      if (this._isDebug()) {
+        this._notify('info', '[ModalManager] destroyed: all tracked listeners removed.', true);
+      }
     }
-  }
 
   /**
    * Check for missing or duplicate modal IDs in the DOM.
@@ -377,11 +367,15 @@ class ModalManager {
       if (newConfirmBtn) {
         this.eventHandlers.trackListener(newConfirmBtn, 'click', confirmHandler, {
           description: 'Confirm Modal Confirm Click',
+          context: 'modalManager',
+          source: 'ModalManager.confirmAction'
         });
       }
       if (newCancelBtn) {
         this.eventHandlers.trackListener(newCancelBtn, 'click', cancelHandler, {
           description: 'Confirm Modal Cancel Click',
+          context: 'modalManager',
+          source: 'ModalManager.confirmAction'
         });
       }
     } else {
@@ -466,8 +460,7 @@ class ProjectModal {
     this.isOpen = false;
     this.currentProjectId = null;
 
-    // Track events if destruction may be needed
-    this._trackedEvents = [];
+    // No internal event tracking; rely on eventHandlers context-based cleanup.
   }
 
   /**
@@ -553,21 +546,19 @@ class ProjectModal {
   /**
    * Provide a cleanup method to remove event listeners in an SPA scenario.
    */
-  destroy() {
-    if (!this.eventHandlers?.cleanupListeners) {
-      if (this._isDebug()) {
-        this._notify('warn', '[ProjectModal] destroy() called but eventHandlers.cleanupListeners is unavailable.');
+    destroy() {
+      if (!this.eventHandlers?.cleanupListeners) {
+        if (this._isDebug()) {
+          this._notify('warn', '[ProjectModal] destroy() called but eventHandlers.cleanupListeners is unavailable.');
+        }
+        return;
       }
-      return;
+      // Remove all listeners for this context
+      this.eventHandlers.cleanupListeners({ context: 'projectModal' });
+      if (this._isDebug()) {
+        this._notify('info', '[ProjectModal] destroyed: all tracked listeners removed.');
+      }
     }
-    this._trackedEvents.forEach((evt) => {
-      this.eventHandlers.cleanupListeners(evt.element, evt.type, evt.description);
-    });
-    this._trackedEvents = [];
-    if (this._isDebug()) {
-      this._notify('info', '[ProjectModal] destroyed: all tracked listeners removed.');
-    }
-  }
 
   /**
    * Open the project modal (for creating or editing).
@@ -738,19 +729,18 @@ class ProjectModal {
    * @param {string} description - A short description for debugging.
    * @param {object} [options] - Additional event options (capture, passive, etc.).
    */
-  _bindEvent(element, type, handler, description, options = {}) {
-    if (this.eventHandlers?.trackListener) {
-      const wrapped = this.eventHandlers.trackListener(element, type, handler, {
-        description,
-        ...options,
-      });
-      if (wrapped) {
-        this._trackedEvents.push({ element, type, description });
+    _bindEvent(element, type, handler, description, options = {}) {
+      if (this.eventHandlers?.trackListener) {
+        this.eventHandlers.trackListener(element, type, handler, {
+          description,
+          context: 'projectModal',
+          source: 'ProjectModal._bindEvent',
+          ...options,
+        });
+      } else {
+        throw new Error('[ProjectModal] eventHandlers.trackListener is required');
       }
-    } else {
-      throw new Error('[ProjectModal] eventHandlers.trackListener is required');
     }
-  }
 }
 
 /**
