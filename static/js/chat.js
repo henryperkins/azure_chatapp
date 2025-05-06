@@ -160,45 +160,10 @@ export function createChatManager({
   apiEndpoints
 } = {}) {
   // Basic validation
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] START createChatManager');
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Checking apiRequest:', typeof apiRequest);
-  if (typeof apiRequest !== 'function') {
-    throw new Error("[ChatManager] 'apiRequest' must be a function.");
-  }
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Checking app:', typeof app, !!app);
-  if (!app) {
-    throw new Error("[ChatManager] 'app' is required; provide at least showNotification().");
-  }
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Checking isValidProjectId:', typeof isValidProjectId);
-  console.log('[ChatManager Debug] Checking isAuthenticated:', typeof isAuthenticated);
-  if (typeof isValidProjectId !== 'function' || typeof isAuthenticated !== 'function') {
-    throw new Error("[ChatManager] 'isValidProjectId' and 'isAuthenticated' must be functions.");
-  }
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Checking DOMPurify:', typeof DOMPurify, !!DOMPurify);
-  if (!DOMPurify) {
-    throw new Error("[ChatManager] DOMPurify must be provided via DI.");
-  }
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Checking apiEndpoints:', typeof apiEndpoints, !!apiEndpoints);
-  if (!apiEndpoints) {
-    throw new Error("[ChatManager] 'apiEndpoints' must be provided via DI.");
-  }
-
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Basic validation passed.');
-
   // Provide fallback DOM, Nav, and event handlers if not supplied
   const _domAPI = domAPI || createDefaultDomAPI();
   const _navAPI = navAPI || createDefaultNavAPI();
   const _EH = eventHandlers || createDefaultEventHandlers();
-
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Fallbacks created/assigned.');
 
   // Notification handler: prefer injected, then app.showNotification, else throw
   // Unified notification: always inject grouping/context for chatManager
@@ -253,16 +218,14 @@ export function createChatManager({
         }
       });
 
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Notify function configured.');
+  notify('[ChatManager Debug] Notify function configured.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'notify-configured' });
 
   /**
    * The main ChatManager class, constructed with all DI references enclosed.
    */
   class ChatManager {
     constructor() {
-      // ADD LOGGING HERE
-      console.log('[ChatManager Debug] START ChatManager constructor');
+      notify('[ChatManager Debug] START ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'start' });
       this.apiRequest = apiRequest;
       this.app = app;
       this.modelConfigAPI = getInjectedModelConfig(modelConfig);
@@ -297,8 +260,7 @@ export function createChatManager({
 
       // Track event listeners for cleanup
       this._listeners = [];
-      // ADD LOGGING HERE
-      console.log('[ChatManager Debug] END ChatManager constructor');
+      notify('[ChatManager Debug] END ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'end' });
     }
 
     /**
@@ -1066,10 +1028,8 @@ export function createChatManager({
       this.notify(`[ChatManager - ${context}] ${message}`, "error", error);
     }
   } // end ChatManager class
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] Instantiating ChatManager class...');
+  notify('[ChatManager Debug] Instantiating ChatManager class...', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'instantiate' });
   const instance = new ChatManager();
-  // ADD LOGGING HERE
-  console.log('[ChatManager Debug] ChatManager instance CREATED.');
+  notify('[ChatManager Debug] ChatManager instance CREATED.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'instantiated' });
   return instance;
 }

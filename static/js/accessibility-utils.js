@@ -366,6 +366,7 @@ function trapFocus(container) {
   // Ensure focus is inside container.
   // Timing hack: Without setTimeout, browser may not be ready to focus immediately after dialog opens.
   // This is required to ensure focus is visible for assistive tech and keyboard navigation.
+  // Timing hack for focus-after-dialog: Ensures focus is moved after reflow (required for accessibility/screen readers)
   setTimeout(() => {
     if (!container.contains(document.activeElement)) first.focus();
   }, 50);
@@ -397,6 +398,7 @@ function focusElement(target, delay = 0) {
   if (delay) {
     // Timing hack: Required for cases where element may not be immediately focusable on DOM mutation/dialog open.
     // For accessibility, this ensures screen readers and keyboard users get expected focus behavior.
+    // Timing hack for asynchronous focus: Ensures focus after potential DOM mutation (for accessibility, see MDN 'Managing Focus')
     setTimeout(() => el.focus(), delay);
   } else {
     el.focus();
@@ -432,6 +434,7 @@ function announce(text, mode = 'polite') {
   region.textContent = '';
   // Timing hack: Needed for ARIA live region announcement (screen readers require DOM mutation separation).
   // Ensures assistive technology announces the updated string.
+  // Timing hack for ARIA live region: Forces DOM mutation separation so screen readers announce updates
   setTimeout(() => {
     region.textContent = text;
   }, 50);

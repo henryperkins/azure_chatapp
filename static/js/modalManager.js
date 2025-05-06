@@ -47,13 +47,18 @@ class ModalManager {
     eventHandlers,
     DependencySystem,
     modalMapping,
-    showNotification,
+    notify,
     domPurify,
   } = {}) {
     this.DependencySystem = DependencySystem || undefined;
     this.eventHandlers = eventHandlers || this.DependencySystem?.modules?.get?.('eventHandlers') || undefined;
     this.modalMappings = modalMapping || this.DependencySystem?.modules?.get?.('modalMapping') || MODAL_MAPPINGS;
-    this.showNotification = showNotification || this.DependencySystem?.modules?.get?.('app')?.showNotification || undefined;
+    // Canonical context-aware notify for all modalManager notifications:
+    if (!notify) {
+      notify = this.DependencySystem?.modules?.get?.('notify');
+      if (!notify) throw new Error('[modalManager] notify DI not provided');
+    }
+    this.notify = notify.withContext({ module: 'ModalManager', context: 'modalManager' });
     this.domPurify = domPurify || this.DependencySystem?.modules?.get?.('domPurify') || null;
 
     /**
@@ -91,19 +96,15 @@ class ModalManager {
    * @param {string} message
    * @param {boolean} [debugOnly=false]
    */
-  _notify(level, message, debugOnly = false) {
+  // Unified notification interface
+  _notify(level, message, debugOnly = false, extra = {}) {
     if (debugOnly && !this._isDebug()) {
       return;
     }
-    if (this.showNotification) {
-      this.showNotification(
-        message,
-        level,
-        undefined,
-        { group: true, context: "modalManager" }
-      );
+    if (typeof this.notify?.[level] === 'function') {
+      this.notify[level](message, { group: true, ...extra, context: "modalManager" });
     }
-    // else do nothing (no direct console usage allowed)
+    // else do nothing
   }
 
   // ---------------------------
@@ -266,9 +267,9 @@ class ModalManager {
     Object.entries(modalMapping).forEach(([key, modalId]) => {
       const elements = document.querySelectorAll(`#${modalId}`);
       if (elements.length === 0) {
-        this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`, false);
+        this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`, false, { source: 'validateModalMappings', modalId });
       } else if (elements.length > 1) {
-        this._notify('error', `ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`, false);
+        this._notify('error', `ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`, false, { source: 'validateModalMappings', modalId });
       }
     });
   }
@@ -290,13 +291,13 @@ class ModalManager {
 
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false);
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false, { source: 'show', modalName });
       return false;
     }
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false);
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false, { source: 'show', modalId });
       return false;
     }
 
@@ -321,13 +322,13 @@ class ModalManager {
     const modalName = 'confirm';
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      this._notify('error', '[ModalManager] Confirm modal ID not mapped.', false);
+      this._notify('error', '[ModalManager] Confirm modal ID not mapped.', false, { source: 'confirmAction' });
       return;
     }
 
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      this._notify('error', '[ModalManager] Confirm modal element not found.', false);
+      this._notify('error', '[ModalManager] Confirm modal element not found.', false, { source: 'confirmAction' });
       return;
     }
 
@@ -400,12 +401,12 @@ class ModalManager {
   hide(modalName) {
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`);
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false, { source: 'hide', modalName });
       return;
     }
     const modalEl = document.getElementById(modalId);
     if (!modalEl) {
-      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`);
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false, { source: 'hide', modalId });
       return;
     }
     this._hideModalElement(modalEl);
@@ -420,8 +421,8 @@ class ModalManager {
  * The init() method must be called separately after the modal DOM is ready.
  * @returns {ModalManager} A new ModalManager instance.
  */
-export function createModalManager({ eventHandlers, DependencySystem, modalMapping } = {}) {
-  return new ModalManager({ eventHandlers, DependencySystem, modalMapping });
+export function createModalManager({ eventHandlers, DependencySystem, modalMapping, notify } = {}) {
+  return new ModalManager({ eventHandlers, DependencySystem, modalMapping, notify });
 }
 
 /**
@@ -443,23 +444,22 @@ class ProjectModal {
    *   @param {Function} [opts.showNotification] - Notification function.
    *   @param {Object} [opts.DependencySystem] - For dynamic injection (optional).
    */
-  constructor({ projectManager, eventHandlers, showNotification, DependencySystem } = {}) {
-    this.DependencySystem =
-      DependencySystem ||
+  constructor({ projectManager, eventHandlers, notify, DependencySystem } = {}) {
+    this.DependencySystem = DependencySystem ||
       (typeof window !== 'undefined' ? window.DependencySystem : undefined);
 
-    this.eventHandlers =
-      eventHandlers ||
+    this.eventHandlers = eventHandlers ||
       this.DependencySystem?.modules?.get?.('eventHandlers') ||
       undefined;
-    this.projectManager =
-      projectManager ||
+    this.projectManager = projectManager ||
       this.DependencySystem?.modules?.get?.('projectManager') ||
       undefined;
-    this.showNotification =
-      showNotification ||
-      this.DependencySystem?.modules?.get?.('app')?.showNotification ||
-      undefined;
+    // Canonical context-aware notify
+    if (!notify) {
+      notify = this.DependencySystem?.modules?.get?.('notify');
+      if (!notify) throw new Error('[ProjectModal] notify DI not provided');
+    }
+    this.notify = notify.withContext({ module: 'ProjectModal', context: 'projectModal' });
 
     this.modalElement = null;
     this.formElement = null;
@@ -504,16 +504,11 @@ class ProjectModal {
    * Provide unified user notification approach (errors, success, etc.).
    * @private
    */
-  _notify(type, message) {
-    if (this.showNotification) {
-      this.showNotification(
-        message,
-        type,
-        undefined,
-        { group: true, context: "projectModal" }
-      );
+  _notify(type, message, extra = {}) {
+    if (typeof this.notify?.[type] === 'function') {
+      this.notify[type](message, { group: true, ...extra, context: 'projectModal' });
     }
-    // else do nothing (no direct alert/console)
+    // else do nothing
   }
 
   /**
@@ -580,7 +575,7 @@ class ProjectModal {
    */
   openModal(project = null) {
     if (!this.modalElement) {
-      this._notify('error', '[ProjectModal] No modalElement found!');
+      this._notify('error', '[ProjectModal] No modalElement found!', { source: 'openModal' });
       return;
     }
 
@@ -671,7 +666,7 @@ class ProjectModal {
   async handleSubmit(e) {
     e.preventDefault();
     if (!this.formElement) {
-      this._notify('error', '[ProjectModal] No formElement found!');
+      this._notify('error', '[ProjectModal] No formElement found!', { source: 'handleSubmit' });
       return;
     }
 
@@ -686,7 +681,7 @@ class ProjectModal {
       const projectId = formData.get('projectId');
 
       if (!projectData.name.trim()) {
-        this._notify('error', 'Project name is required');
+        this._notify('error', 'Project name is required', { source: 'handleSubmit' });
         return;
       }
 
@@ -696,9 +691,9 @@ class ProjectModal {
       await this.saveProject(projectId, projectData);
 
       this.closeModal();
-      this._notify('success', projectId ? 'Project updated' : 'Project created');
+      this._notify('success', projectId ? 'Project updated' : 'Project created', { source: 'handleSubmit' });
     } catch {
-      this._notify('error', 'Failed to save project');
+      this._notify('error', 'Failed to save project', { source: 'handleSubmit' });
     } finally {
       const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
       this._setButtonLoading(saveBtn, false);
@@ -763,6 +758,6 @@ class ProjectModal {
  * This allows app.js (or another orchestrator) to decide when to initialize/destroy.
  * @returns {ProjectModal} A new ProjectModal instance.
  */
-export function createProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem } = {}) {
-  return new ProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem });
+export function createProjectModal({ projectManager, eventHandlers, notify, DependencySystem } = {}) {
+  return new ProjectModal({ projectManager, eventHandlers, notify, DependencySystem });
 }
