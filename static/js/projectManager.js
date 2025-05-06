@@ -18,8 +18,27 @@ import { wrapApi, emitReady } from "./utils/notifications-helpers.js";
 
 const MODULE = "ProjectManager";
 
+/**
+ * Validate a project identifier.
+ * Accepts:
+ *   • UUID strings (32–36 hex chars plus optional hyphens)
+ *   • Pure numeric identifiers (one or more digits)
+ *   • Already–numeric values (will be coerced to string)
+ *
+ * This wider validation is required because the backend may return either
+ * database-numeric IDs or UUIDs depending on configuration/migration state.
+ *
+ * @param {string|number} id - Candidate identifier
+ * @returns {boolean} True if the value looks like a valid project ID
+ */
 function isValidProjectId(id) {
-  return typeof id === 'string' && /^[0-9a-f-]{32,36}$/i.test(id ?? '');
+  if (id == null) return false;
+  const idStr = String(id).trim();
+  // UUID v4 or similar: 32-36 hex chars with optional hyphens
+  const uuidLike = /^[0-9a-f-]{32,36}$/i.test(idStr);
+  // Numeric (database PK)
+  const numeric = /^\d+$/.test(idStr);
+  return uuidLike || numeric;
 }
 
 function normalizeProjectResponse(res) {
