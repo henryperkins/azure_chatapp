@@ -65,6 +65,8 @@ export function createAuthModule({
     throw new Error('Auth module requires apiEndpoints as a dependency');
   }
 
+  // Canonical, context-aware notifier for this whole module:
+  const authNotify = notify.withContext({ module: 'AuthModule', context: 'auth' });
   /* =========================
      2) Diagnostic & Code Comment
      - No side effects at import-time
@@ -128,9 +130,9 @@ export function createAuthModule({
       }
       return data.token;
     } catch (error) {
-      notify.error('[Auth] CSRF token fetch failed: ' + (error?.message || error), {
+      authNotify.error('[Auth] CSRF token fetch failed: ' + (error?.message || error), {
         group: true,
-        context: 'auth',
+        source: 'fetchCSRFToken'
       });
       return null;
     }
@@ -157,9 +159,9 @@ export function createAuthModule({
     // Fire off a refresh if none is loaded yet (bonus: async load).
     if (!csrfToken && !csrfTokenPromise) {
       getCSRFTokenAsync().catch(err => {
-        notify.warn("[Auth] getCSRFToken error: " + (err?.message || err), {
+        authNotify.warn("[Auth] getCSRFToken error: " + (err?.message || err), {
           group: true,
-          context: 'auth'
+          source: 'getCSRFToken'
         });
       });
     }
@@ -199,9 +201,9 @@ export function createAuthModule({
       if (token) {
         options.headers['X-CSRF-Token'] = token;
       } else {
-        notify.warn(`[Auth] CSRF token missing for request: ${endpoint}`, {
+        authNotify.warn(`[Auth] CSRF token missing for request: ${endpoint}`, {
           group: true,
-          context: 'auth'
+          source: 'authRequest'
         });
       }
     }
@@ -226,9 +228,9 @@ export function createAuthModule({
       if (response.status === 204) return null;
       return await response.json();
     } catch (error) {
-      notify.apiError(`[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`, {
+      authNotify.apiError(`[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`, {
         group: true,
-        context: 'auth'
+        source: 'authRequest'
       });
       if (!error.status) {
         error.status = 0;
@@ -251,9 +253,9 @@ export function createAuthModule({
         const response = await authRequest(apiEndpoints.AUTH_REFRESH, 'POST');
         return { success: true, response };
       } catch (error) {
-        notify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), {
+        authNotify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), {
           group: true,
-          context: 'auth'
+          source: 'refreshTokens'
         });
         if (error.status === 401) {
           await clearTokenState({ source: 'refresh_401_error', isError: true });
@@ -279,9 +281,9 @@ export function createAuthModule({
     authState.username = username;
 
     if (changed) {
-      notify.info(`[Auth] State changed (${source}): Auth=${authenticated}, User=${username ?? 'None'}`, {
+      authNotify.info(`[Auth] State changed (${source}): Auth=${authenticated}, User=${username ?? 'None'}`, {
         group: true,
-        context: 'auth'
+        source: 'broadcastAuth'
       });
       AuthBus.dispatchEvent(
         new CustomEvent('authStateChanged', {
@@ -297,9 +299,9 @@ export function createAuthModule({
   }
 
   async function clearTokenState(options = { source: 'unknown', isError: false }) {
-    notify.info(`[Auth] Clearing auth state. Source: ${options.source}`, {
+    authNotify.info(`[Auth] Clearing auth state. Source: ${options.source}`, {
       group: true,
-      context: 'auth'
+      source: 'clearTokenState'
     });
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
     // Actual cookie clearing must be done on server-side.
@@ -324,9 +326,9 @@ export function createAuthModule({
       await clearTokenState({ source: 'verify_negative' });
       return false;
     } catch (error) {
-      notify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), {
+      authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), {
         group: true,
-        context: 'auth'
+        source: 'verifyAuthState'
       });
 
       // Possible server error
@@ -355,9 +357,9 @@ export function createAuthModule({
      10) Public Auth Actions
      ========================= */
   async function loginUser(username, password) {
-    notify.info(`[Auth] Attempting login for user: ${username}`, {
+    authNotify.info(`[Auth] Attempting login for user: ${username}`, {
       group: true,
-      context: 'auth'
+      source: 'loginUser'
     });
     try {
       await getCSRFTokenAsync();
@@ -368,55 +370,55 @@ export function createAuthModule({
       if (response && response.username) {
         const verified = await verifyAuthState(true);
         if (verified) {
-          notify.success("Login successful.", {
+          authNotify.success("Login successful.", {
             group: true,
-            context: "auth"
+            source: "loginUser"
           });
           return response;
         } else {
           await clearTokenState({ source: 'login_verify_fail' });
-          notify.error("Login succeeded but could not verify session.", {
+          authNotify.error("Login succeeded but could not verify session.", {
             group: true,
-            context: "auth"
+            source: "loginUser"
           });
           throw new Error('Login succeeded but session could not be verified.');
         }
       } else {
         await clearTokenState({ source: 'login_bad_response' });
-        notify.error("Login succeeded but received invalid response from server.", {
+        authNotify.error("Login succeeded but received invalid response from server.", {
           group: true,
-          context: "auth"
+          source: "loginUser"
         });
         throw new Error('Login succeeded but invalid response data.');
       }
     } catch (error) {
       await clearTokenState({ source: 'login_error' });
-      notify.error("Login failed: " + (error.message || "Unknown login error."), {
+      authNotify.error("Login failed: " + (error.message || "Unknown login error."), {
         group: true,
-        context: "auth"
+        source: "loginUser"
       });
       throw error;
     }
   }
 
   async function logout() {
-    notify.info('[Auth] Initiating logout...', {
+    authNotify.info('[Auth] Initiating logout...', {
       group: true,
-      context: 'auth'
+      source: 'logout'
     });
     await clearTokenState({ source: 'logout_manual' });
 
     try {
       await getCSRFTokenAsync();
       await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
-      notify.success('Logout successful.', {
+      authNotify.success('Logout successful.', {
         group: true,
-        context: 'auth'
+        source: 'logout'
       });
     } catch (err) {
-      notify.warn('[Auth] Backend logout call failed: ' + (err?.message || err), {
+      authNotify.warn('[Auth] Backend logout call failed: ' + (err?.message || err), {
         group: true,
-        context: 'auth'
+        source: 'logout'
       });
     }
     // SPA might choose to redirect or show a login modal afterward
@@ -424,9 +426,9 @@ export function createAuthModule({
 
   async function registerUser(userData) {
     if (!userData?.username || !userData?.password) {
-      notify.error('Username and password required.', {
+      authNotify.error('Username and password required.', {
         group: true,
-        context: 'auth'
+        source: 'registerUser'
       });
       throw new Error('Username and password required.');
     }
@@ -440,22 +442,22 @@ export function createAuthModule({
 
       const verified = await verifyAuthState(true);
       if (!verified) {
-        notify.warn('[Auth] Registration succeeded but verification failed.', {
+        authNotify.warn('[Auth] Registration succeeded but verification failed.', {
           group: true,
-          context: 'auth'
+          source: 'registerUser'
         });
       } else {
-        notify.success('Registration successful.', {
+        authNotify.success('Registration successful.', {
           group: true,
-          context: 'auth'
+          source: 'registerUser'
         });
       }
       return response;
     } catch (error) {
       await clearTokenState({ source: 'register_error', isError: true });
-      notify.error("Registration failed: " + (error.message || "Unknown error."), {
+      authNotify.error("Registration failed: " + (error.message || "Unknown error."), {
         group: true,
-        context: "auth"
+        source: "registerUser"
       });
       throw error;
     }
@@ -508,9 +510,9 @@ export function createAuthModule({
                 errorEl.classList.remove('hidden');
               }
             } else {
-              notify.error('Username and password are required.', {
+              authNotify.error('Username and password are required.', {
                 group: true,
-                context: 'auth'
+                source: 'loginForm'
               });
             }
             if (submitBtn) {
@@ -541,7 +543,7 @@ export function createAuthModule({
                 errorEl.classList.remove('hidden');
               }
             } else {
-              notify.error(msg, { group: true, context: 'auth' });
+              authNotify.error(msg, { group: true, source: 'loginForm' });
             }
           } finally {
             if (submitBtn) {
@@ -607,9 +609,9 @@ export function createAuthModule({
         try {
           await publicAuth.register({ username, password });
           if (modalManager?.hide) modalManager.hide('login');
-          notify.success('Registration successful. You may now log in.', {
+          authNotify.success('Registration successful. You may now log in.', {
             group: true,
-            context: 'auth'
+            source: 'registerModalForm'
           });
         } catch (error) {
           let msg;
@@ -643,17 +645,17 @@ export function createAuthModule({
      ========================= */
   async function init() {
     if (authState.isReady) {
-      notify.warn('[Auth] init called multiple times.', {
+      authNotify.warn('[Auth] init called multiple times.', {
         group: true,
-        context: 'auth'
+        source: 'init'
       });
 
       // Removed duplicate loginBtn handler for opening login modal (now handled centrally in app.js)
       return true;
     }
-    notify.info('[Auth] Initializing auth module...', {
+    authNotify.info('[Auth] Initializing auth module...', {
       group: true,
-      context: 'auth'
+      source: 'init'
     });
 
     // Attach form handlers
@@ -665,7 +667,10 @@ export function createAuthModule({
       );
     } else {
       // fallback if no trackListener
-      document.addEventListener('modalsLoaded', setupAuthForms);
+      // WARNING: Should not use addEventListener directly; for SPA teardown safety, inject eventHandlers.trackListener everywhere possible.
+      registeredListeners.push(
+        eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms)
+      );
     }
 
     try {
@@ -674,13 +679,14 @@ export function createAuthModule({
       authState.isReady = true;
 
       // Start periodic verification
+      // Timing hack for periodic auth verification: Required for auto-expiry and session re-check (see SPA security best-practices).
       verifyInterval = setInterval(() => {
         // Use the injected method to check if the document is hidden
         if (!domAPI.isDocumentHidden() && authState.isAuthenticated) {
           verifyAuthState(false).catch(e => {
-            notify.warn('[Auth] verifyAuthState periodic error: ' + (e?.message || e), {
+            authNotify.warn('[Auth] verifyAuthState periodic error: ' + (e?.message || e), {
               group: true,
-              context: 'auth'
+              source: 'verifyAuthState'
             });
           });
         }
@@ -698,9 +704,9 @@ export function createAuthModule({
       );
       return verified;
     } catch (err) {
-      notify.error('[Auth] Initial verification failed in init: ' + (err?.stack || err), {
+      authNotify.error('[Auth] Initial verification failed in init: ' + (err?.stack || err), {
         group: true,
-        context: 'auth'
+        source: 'init'
       });
       await clearTokenState({ source: 'init_fail', isError: true });
       authState.isReady = true;
@@ -791,7 +797,14 @@ export async function fetchCurrentUser() {
     if (!data || !data.user) return null;
     return data.user;
   } catch (err) {
-    console.error('[auth] fetchCurrentUser error:', err);
+    // For minimal/legacy usage, mimic notify pattern if available, else fallback
+    if (typeof window !== 'undefined' && window?.app?.notify) {
+      window.app.notify.apiError('[auth] fetchCurrentUser error: ' + (err?.message || err), {
+        group: true,
+        context: 'auth'
+      });
+    }
+    // If DI notification is not available, swallow (do not console.error; maintain silent fail per minimal fallback contract)
     return null;
   }
 }
