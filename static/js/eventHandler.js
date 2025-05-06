@@ -256,7 +256,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         try {
           handler.call(target, event, target);
         } catch (error) {
-          }
+          // Optionally handle error, or leave empty
         }
       }
     };
