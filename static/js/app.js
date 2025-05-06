@@ -160,9 +160,27 @@ if (APP_CONFIG.DEBUG) {
     notify?.debug?.('[App] Phase: create_event_handlers', { phase: appState.currentPhase, timestamp: performance.now() });
 }
 
-let eventHandlers;
+let notificationHandler, eventHandlers;
 try {
-    eventHandlers = createEventHandlers({ DependencySystem });
+    // Create and register notificationHandler and notify before eventHandlers
+    notificationHandler = createNotificationHandler({
+        eventHandlers: undefined, // eventHandlers not yet available
+        DependencySystem,
+        domAPI: {
+            getElementById: id => document.getElementById(id),
+            createElement: tag => document.createElement(tag),
+            createTemplate: html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t; },
+            body: document.body
+        },
+        groupWindowMs: 7000
+    });
+    DependencySystem.register('notificationHandler', notificationHandler);
+    notify = createNotify({ notificationHandler });
+    notify = notify.withContext({ context: 'app', module: 'App' });
+    DependencySystem.register('notify', notify);
+
+    // Now create eventHandlers with notify DI
+    eventHandlers = createEventHandlers({ DependencySystem, notify });
     DependencySystem.register('eventHandlers', eventHandlers);
 } catch (err) {
     // Fallback that always throws if used
