@@ -197,10 +197,9 @@ DependencySystem.register('notify', notify);
 
 // ────────────── 4. Application Modules (DI-based) ──────────────
 import { createChatManager } from './chat.js';
-import { createModalManager } from './modalManager.js';
 import { createAuthModule } from './auth.js';
 import { createProjectManager } from './projectManager.js';
-import { createProjectModal } from './modalManager.js'; // Assuming this is different from core modalManager
+import { createProjectModal, createModalManager } from './modalManager.js'; // Assuming this is different from core modalManager
 import { createChatExtensions } from './chatExtensions.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
