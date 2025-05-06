@@ -34,8 +34,6 @@ async_engine = create_async_engine(
 
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,
-    autocommit=False,
-    autoflush=False,
     expire_on_commit=False
 )
 
@@ -45,7 +43,7 @@ AsyncSessionLocal = async_sessionmaker(
 sync_url = DATABASE_URL.replace("+asyncpg", "")
 sync_url = sync_url.replace("postgresql://", "postgresql+psycopg2://")  # Explicit psycopg2 driver
 # For psycopg2, we can use the query parameter
-sync_url += "?sslmode=disable"  
+sync_url += "?sslmode=disable"
 sync_engine = create_engine(
     sync_url,
     pool_pre_ping=True

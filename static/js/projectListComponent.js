@@ -488,7 +488,8 @@ export class ProjectListComponent {
         }
         switch (action) {
             case "view":
-                this.onViewProject(project);
+                // Always pass only the project ID to avoid URL coercion issues
+                this.onViewProject(project.id);
                 break;
             case "edit":
                 this._openEditModal(project);
@@ -536,8 +537,8 @@ export class ProjectListComponent {
             this.notify.info(`[Debug] Navigating to project details for: ${projectId}...`, {
                 group: true, context: 'projectListComponent'
             });
-            // Prefer passing the project object to the navigation callback
-            this.onViewProject(projectObj || projectId);
+            // Pass only the project ID to the navigation callback (avoid objects in URL)
+            this.onViewProject(projectId);
         }
     }
 
