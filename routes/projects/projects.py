@@ -17,7 +17,7 @@ from enum import Enum
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sentry_sdk import (
     capture_exception,
     configure_scope,
@@ -29,7 +29,7 @@ from sentry_sdk import (
 )
 
 from db import get_async_session
-from models.user import User
+from models.user import User, UserRole
 from models.project import Project
 from models.conversation import Conversation
 from models.project_file import ProjectFile
@@ -212,6 +212,7 @@ async def list_projects(
     ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
+    all_users: bool = Query(False, description="Admin only: List projects for all users"),
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -235,11 +236,18 @@ async def list_projects(
             metrics.incr("project.list.attempt")
             start_time = time.time()
 
+            # Determine base query condition
+            if all_users and current_user.role == UserRole.ADMIN.value:
+                condition = true()  # Admin requested all users, no user filter
+                span.set_tag("admin.all_users", True)
+            else:
+                condition = Project.user_id == current_user.id # Default: filter by current user
+
             # Query projects
             projects = await get_all_by_condition(
                 db,
                 Project,
-                Project.user_id == current_user.id,
+                condition,
                 limit=limit,
                 offset=skip,
                 order_by=Project.created_at.desc(),

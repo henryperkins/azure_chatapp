@@ -60,6 +60,10 @@ let notificationHandlerWithLog = null;
 
 // ────────────── 1. Construct browserAPI & DependencySystem before DI usage ──────────────
 import * as globalUtils from './utils/globalUtils.js';
+
+// Register browserService with DependencySystem
+import { createBrowserService } from './utils/browserService.js';
+
 const browserAPI = globalUtils.createBrowserAPI();
 let DependencySystem = browserAPI.getDependencySystem();
 if (!DependencySystem) {
@@ -72,6 +76,8 @@ if (!DependencySystem) {
   throw new Error("DependencySystem is required but not available.");
 }
 DependencySystem.register('browserAPI', browserAPI);
+// Register browserService for robust URL & browser helpers (DI strict)
+DependencySystem.register('browserService', createBrowserService({ windowObject: window }));
 const waitFor = DependencySystem.waitFor.bind(DependencySystem);
 
 // ────────────── 2. Only now (after DependencySystem is ready), set up Sentry ──────────────
@@ -1642,4 +1648,3 @@ function handleInitError(error) {
     }
     globalUtils.toggleElement(APP_CONFIG.SELECTORS.APP_LOADING_SPINNER, false);
 }
-

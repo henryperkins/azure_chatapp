@@ -40,27 +40,8 @@ class ProjectDashboard {
     // Injected browser abstractions
     // Note: setTimeout & requestAnimationFrame default shims provided for browser environments only.
     // Prefer explicit scheduling/animation abstractions via DI for testability and portability.
-    this.browserService = getModule('browserService') || {
-      getLocationHref: () => '',
-      setHistory: () => { },
-      getSearchParam: () => null,
-      setSearchParam: () => { },
-      removeSearchParam: () => { },
-      setItem: () => { },
-      getItem: () => null,
-      removeItem: () => { },
-      /**
-       * For DOM style/layout flushes or async updates—use ONLY if needed for UI smoothness, else prefer hooks/events.
-       */
-      setTimeout: (fn, ms) => setTimeout(fn, ms),
-      /**
-       * For animation frames—prefer explicit DI for tests.
-       */
-      requestAnimationFrame: (fn) =>
-        typeof requestAnimationFrame === 'function'
-          ? requestAnimationFrame(fn)
-          : setTimeout(fn, 0)
-    };
+    this.browserService = getModule('browserService');
+    if (!this.browserService) throw new Error('[ProjectDashboard] browserService module required');
 
     this.state = { currentView: null, currentProject: null, initialized: false };
     this._unsubs = [];
