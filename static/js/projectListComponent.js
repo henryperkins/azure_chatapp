@@ -944,16 +944,16 @@ export class ProjectListComponent {
             showDate: true
         };
     }
-    // Expose helpers for unit tests if in test environment
-    if (typeof process !== "undefined" && process?.env?.NODE_ENV === 'test') {
-        this._testHelpers = {
-            _buildCardHeader: this._buildCardHeader.bind(this),
-            _buildCardDescription: this._buildCardDescription.bind(this),
-            _buildCardFooter: this._buildCardFooter.bind(this),
-            _createActionButton: this._createActionButton.bind(this),
-            _computeCardClasses: this._computeCardClasses.bind(this),
-            _bindSingleFilterTab: this._bindSingleFilterTab.bind(this),
-            _bindFilterTablistKeyboardNav: this._bindFilterTablistKeyboardNav.bind(this)
-        };
-    }
+}
+// Expose helpers for unit tests if in test environment
+if (typeof process !== "undefined" && process?.env?.NODE_ENV === 'test') {
+    ProjectListComponent.prototype._testHelpers = {
+        _buildCardHeader: ProjectListComponent.prototype._buildCardHeader,
+        _buildCardDescription: ProjectListComponent.prototype._buildCardDescription,
+        _buildCardFooter: ProjectListComponent.prototype._buildCardFooter,
+        _createActionButton: ProjectListComponent.prototype._createActionButton,
+        _computeCardClasses: ProjectListComponent.prototype._computeCardClasses,
+        _bindSingleFilterTab: ProjectListComponent.prototype._bindSingleFilterTab,
+        _bindFilterTablistKeyboardNav: ProjectListComponent.prototype._bindFilterTablistKeyboardNav
+    };
 }
