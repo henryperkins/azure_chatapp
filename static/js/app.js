@@ -100,12 +100,12 @@ DependencySystem.register('sanitizer', sanitizerInstance);
  * --------------------------------------------------------------------- */
 const defaultApiEndpoints = {
   /* --- Auth --- */
-  AUTH_CSRF: '/api/auth/csrf/',
-  AUTH_LOGIN: '/api/auth/login/',
-  AUTH_REGISTER: '/api/auth/register/',
-  AUTH_LOGOUT: '/api/auth/logout/',
-  AUTH_REFRESH: '/api/auth/refresh/',
-  AUTH_VERIFY: '/api/auth/verify/',
+  AUTH_CSRF: '/api/auth/csrf',
+  AUTH_LOGIN: '/api/auth/login',
+  AUTH_REGISTER: '/api/auth/register',
+  AUTH_LOGOUT: '/api/auth/logout',
+  AUTH_REFRESH: '/api/auth/refresh',
+  AUTH_VERIFY: '/api/auth/verify',
 
   /* --- Projects --- */
   PROJECTS: '/api/projects/',
