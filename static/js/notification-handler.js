@@ -52,7 +52,14 @@ export function createNotificationHandler({
     const [v, h] = position.split("-");
     el.style[v] = "1rem";
     el.style[h] = "1rem";
-    domAPI.body.appendChild(el);
+    // Robustly append to domAPI.body or fallback to document.body
+    const bodyToAppendTo = (domAPI && domAPI.body) ? domAPI.body : (typeof document !== "undefined" && document.body ? document.body : null);
+    if (bodyToAppendTo) {
+      bodyToAppendTo.appendChild(el);
+    } else {
+      // eslint-disable-next-line no-console
+      console.error('[NotificationHandler] Could not find a body element to append the notification container.');
+    }
     return el;
   })();
 

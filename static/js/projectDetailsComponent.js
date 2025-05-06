@@ -127,7 +127,6 @@ export class ProjectDetailsComponent {
   _clearSafe(el) { el.innerHTML = ""; }
 
   _findElements() {
-    const doc = this.domAPI.getDocument();
     this.elements.container = this.domAPI.getElementById("projectDetailsView");
     if (!this.elements.container) {
       this.notify.error("[ProjectDetailsComponent] #projectDetailsView not found", {
@@ -281,19 +280,22 @@ export class ProjectDetailsComponent {
       }
 
       this.fileUploadComponent = new this.FileUploadComponentClass({
-        fileInput: els.fileInput,
-        uploadBtn: els.uploadBtn,
-        dragZone: els.dragZone,
-        uploadProgress: els.uploadProgress,
-        progressBar: els.progressBar,
-        uploadStatus: els.uploadStatus,
-        projectManager: this.projectManager,
         app: this.app,
         eventHandlers: this.eventHandlers,
+        projectManager: this.projectManager,
         notify: this.notify,
+        domAPI: this.domAPI,
         onUploadComplete: () => {
           const id = this.state.currentProject?.id;
           if (id) this.projectManager.loadProjectFiles(id);
+        },
+        elements: {
+          fileInput: els.fileInput,
+          uploadBtn: els.uploadBtn,
+          dragZone: els.dragZone,
+          uploadProgress: els.uploadProgress,
+          progressBar: els.progressBar,
+          uploadStatus: els.uploadStatus
         }
       });
 
@@ -873,7 +875,7 @@ export class ProjectDetailsComponent {
        * Note: projectManager is injected (DI), adhering to the “No Globals”
        * rule in .roo/rules/rules.md.
        */
-      const conversation = await this.projectManager.getConversation(cv.id);
+      await this.projectManager.getConversation(cv.id);
 
       /**
        * Capture the current SPA location as a mutable, native `URL` object.
