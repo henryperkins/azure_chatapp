@@ -1462,6 +1462,9 @@ async function handleNavigationChange() {
     }
 }
 
+let _authStateChangedAttached = false;
+let _chatInitAuthAttached = false;
+
 function attachAuthBusListener(event, handler, markerGlobalName) {
     const notify = DependencySystem.modules.get('notify');
     const bus = getAuthBus();
@@ -1469,20 +1472,46 @@ function attachAuthBusListener(event, handler, markerGlobalName) {
         notify?.error?.('[App] Cannot attach listener: AuthBus missing or invalid.', { group: true, context: 'app', module: 'App', source: 'attachAuthBusListener', authBus: bus });
         return false;
     }
-    if (!window[markerGlobalName] || window[markerGlobalName] !== bus) {
+    // Use internal flags instead of window globals
+    if (markerGlobalName === '_globalAuthStateChangedAttached') {
+        if (_authStateChangedAttached) return false;
         eventHandlers.trackListener(
             bus,
             event,
             handler,
             { description: `[App] AuthBus ${event} listener (via attachAuthBusListener)` }
         );
-        window[markerGlobalName] = bus;
+        _authStateChangedAttached = true;
         if (APP_CONFIG.DEBUG) {
-            notify?.debug?.(`[App] Attached ${event} listener to AuthBus (global marker ${markerGlobalName}).`, { context: 'app', module: 'App', source: 'attachAuthBusListener' });
+            notify?.debug?.(`[App] Attached ${event} listener to AuthBus (internal marker _authStateChangedAttached).`, { context: 'app', module: 'App', source: 'attachAuthBusListener' });
+        }
+        return true;
+    } else if (markerGlobalName === '_globalChatInitAuthAttached') {
+        if (_chatInitAuthAttached) return false;
+        eventHandlers.trackListener(
+            bus,
+            event,
+            handler,
+            { description: `[App] AuthBus ${event} listener (via attachAuthBusListener)` }
+        );
+        _chatInitAuthAttached = true;
+        if (APP_CONFIG.DEBUG) {
+            notify?.debug?.(`[App] Attached ${event} listener to AuthBus (internal marker _chatInitAuthAttached).`, { context: 'app', module: 'App', source: 'attachAuthBusListener' });
+        }
+        return true;
+    } else {
+        // fallback for any other marker name (should not occur)
+        eventHandlers.trackListener(
+            bus,
+            event,
+            handler,
+            { description: `[App] AuthBus ${event} listener (via attachAuthBusListener)` }
+        );
+        if (APP_CONFIG.DEBUG) {
+            notify?.debug?.(`[App] Attached ${event} listener to AuthBus (no marker).`, { context: 'app', module: 'App', source: 'attachAuthBusListener' });
         }
         return true;
     }
-    return false;
 }
 
 function getAuthBus() {
@@ -1594,7 +1623,8 @@ function handleInitError(error) {
             phase: appState.currentPhase
         });
     } catch (err) {
-        if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
+        // notificationHandlerWithLog is not defined; remove this reference.
+        if (APP_CONFIG.DEBUG) {
             notify.error('[App] Error in errorReporter.capture:', err);
         }
     }
