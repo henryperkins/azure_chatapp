@@ -258,8 +258,6 @@ export function createChatManager({
       // Local copy of the model config
       this.modelConfig = this.modelConfigAPI.getConfig();
 
-      // Track event listeners for cleanup
-      this._listeners = [];
       notify('[ChatManager Debug] END ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'end' });
     }
 
@@ -355,10 +353,10 @@ export function createChatManager({
      * Cleanup method to remove all tracked event listeners, etc.
      */
     cleanup() {
-      for (const { element, event, handler, options } of this._listeners) {
-        this.eventHandlers.untrackListener(element, event, handler, options);
+      // Remove all tracked listeners for this ChatManager instance
+      if (typeof this.eventHandlers.cleanupListeners === 'function') {
+        this.eventHandlers.cleanupListeners({ context: 'chatManager' });
       }
-      this._listeners = [];
       this.isInitialized = false;
       this.currentConversationId = null;
       this.projectId = null;
@@ -722,15 +720,18 @@ export function createChatManager({
      * @private
      */
     _bindEvents() {
-      for (const { element, event, handler, options } of this._listeners) {
-        this.eventHandlers.untrackListener(element, event, handler, options);
+      // Remove all listeners for this ChatManager context before rebinding
+      if (typeof this.eventHandlers.cleanupListeners === 'function') {
+        this.eventHandlers.cleanupListeners({ context: 'chatManager' });
       }
-      this._listeners = [];
 
       const track = (element, event, fn, opts = {}) => {
         if (!element || !fn) return;
-        this.eventHandlers.trackListener(element, event, fn, opts);
-        this._listeners.push({ element, event, handler: fn, options: opts });
+        this.eventHandlers.trackListener(element, event, fn, {
+          ...opts,
+          context: 'chatManager',
+          source: 'ChatManager._bindEvents'
+        });
       };
 
       if (this.inputField) {
@@ -878,8 +879,11 @@ export function createChatManager({
           if (chevron) chevron.style.transform = "rotate(180deg)";
         }
       };
-      this.eventHandlers.trackListener(toggle, "click", handler);
-      this._listeners.push({ element: toggle, event: "click", handler });
+      this.eventHandlers.trackListener(toggle, "click", handler, {
+        description: 'Thinking block toggle',
+        context: 'chatManager',
+        source: 'ChatManager._createThinkingBlock'
+      });
 
       this.domAPI.appendChild(container, toggle);
       this.domAPI.appendChild(container, content);
