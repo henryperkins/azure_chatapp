@@ -171,7 +171,6 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.eventHandlers = eventHandlers;
       this.uiUtils = uiUtils;
       this.apiRequest = apiRequest;
-      this.showNotification = showNotification;
       this.validateUUID = validateUUID;
       this.config = config;
 
@@ -1139,7 +1138,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _showStatusAlert(message, type = "info") {
       const statusIndicator = document.getElementById("kbStatusIndicator");
       if (!statusIndicator) {
-        this.showNotification?.(message, type);
+        this._notify(type, message);
         return;
       }
       statusIndicator.textContent = "";
@@ -1351,4 +1350,3 @@ export function createKnowledgeBaseComponent(options = {}) {
 
   return new KnowledgeBaseComponentWithDestroy(options);
 }
-

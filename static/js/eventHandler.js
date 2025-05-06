@@ -44,7 +44,7 @@ export function createEventHandlers({
   const storageBackend = storage || browserService; // Assuming browserService provides getItem/setItem
 
   // Context-aware notifier (Guideline #4)
-  const handlerNotify = notify.withContext({ module: MODULE, context: 'eventHandler' });
+  const handlerNotify = notify; // Use DI notify directly; grouping/context via options (see rules)
 
   // Navigation utility (Guideline #2 - uses injected deps)
   function redirect(url) {
@@ -523,7 +523,6 @@ export function createEventHandlers({
   return {
     trackListener,
     cleanupListeners, // Expose central cleanup
-    listTrackedListeners, // Keep for debugging if needed
     delegate,
     debounce: globalDebounce, // Keep using utility
     toggleVisible, // Keep using utility

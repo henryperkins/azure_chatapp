@@ -158,20 +158,54 @@ if (APP_CONFIG.DEBUG) {
 
 let notificationHandler, eventHandlers;
 try {
+    // Defensive domAPI resolution: prefer DS, fallback to basic impl, ensure .body prop
+    let domAPIInstance = null;
+    try {
+        const ds = window.DependencySystem || (typeof DependencySystem !== 'undefined' ? DependencySystem : null);
+        if (ds && typeof ds.get === 'function') {
+            domAPIInstance = ds.get('domAPI');
+        }
+        if (!domAPIInstance) {
+            // Fallback to a plain implementation
+            domAPIInstance = {
+                getElementById: (id) => document.getElementById(id),
+                createElement: (tag) => document.createElement(tag),
+                body: document.body
+            };
+        } else if (!('body' in domAPIInstance)) {
+            // Add .body prop for notification-handler.js compatibility
+            domAPIInstance.body = document.body;
+        }
+    } catch (e) {
+        // Defensive: ensure at least minimal domAPI to prevent crash
+        domAPIInstance = {
+            getElementById: () => null,
+            createElement: (tag) => document.createElement(tag),
+            body: document.body
+        };
+        // eslint-disable-next-line no-console
+        console.error('[App.js] Error retrieving domAPI for notificationHandler:', e);
+    }
+
     // Create and register notificationHandler and notify before eventHandlers
     notificationHandler = createNotificationHandler({
         eventHandlers: undefined, // eventHandlers not yet available
         DependencySystem,
-        domAPI,
+        domAPI: domAPIInstance,
         groupWindowMs: 7000
     });
     DependencySystem.register('notificationHandler', notificationHandler);
     notify = createNotify({ notificationHandler });
-    notify = notify.withContext({ context: 'app', module: 'App' });
+    // Removed use of withContext – pass context/module in notify calls explicitly (see rules)
     DependencySystem.register('notify', notify);
 
-    // Now create eventHandlers with notify DI
-    eventHandlers = createEventHandlers({ DependencySystem, notify });
+    // Now create eventHandlers with notify DI (use contextified notify)
+    eventHandlers = createEventHandlers({
+        DependencySystem,
+        notify,
+        domAPI: domAPIInstance,
+        browserService: DependencySystem.modules.get('browserService')
+    });
     DependencySystem.register('eventHandlers', eventHandlers);
 } catch (err) {
     // Fallback that always throws if used
@@ -342,8 +376,20 @@ function onReady() {
     })
     .catch(err => {
         const duration = performance.now() - startTime;
+        let errorString = '';
+        if (err) {
+            if (err instanceof Error) {
+                errorString = err.message + (err.stack ? '\n' + err.stack : '');
+            } else if (typeof err === 'object') {
+                try { errorString = JSON.stringify(err); } catch { errorString = String(err); }
+            } else {
+                errorString = String(err);
+            }
+        } else {
+            errorString = '[Unknown or undefined error]';
+        }
         if (notify) {
-            notify.error("[App] Unhandled error during async init:", err, { phase: 'onReady', duration, errorStack: err?.stack });
+            notify.error("[App] Unhandled error during async init: " + errorString, { phase: 'onReady', duration });
         }
     });
 }
@@ -369,7 +415,7 @@ async function init() {
     notify = createNotify({ notificationHandler });
     DependencySystem.register('notify', notify);
     // Contexto canónico para todo el archivo
-    notify = notify.withContext({ context: 'app', module: 'App' });
+    // Removed use of withContext – pass context/module in notify calls explicitly (see rules)
 
     if (APP_CONFIG.DEBUG) notify.debug('[App Debug] START init function', { context: 'app', module: 'App', source: 'init' });
     if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating Notification Handler...', { context: 'app', module: 'App', source: 'init' });
@@ -423,7 +469,8 @@ if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating API Client...', { conte
             }
         },
         DOMPurify: DependencySystem.modules.get('sanitizer'),
-        apiEndpoints: DependencySystem.modules.get('apiEndpoints') // ADDED THIS LINE
+        apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
+        notificationHandler: DependencySystem.modules.get('notificationHandler')
     });
     // ADD LOGGING HERE
     if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Chat Manager CREATED.', { context: 'app', module: 'App', source: 'init' });
@@ -1076,7 +1123,6 @@ async function initializeUIComponents() {
         apiRequest,
         auth: DependencySystem.modules.get('auth'),
         projectManager,
-        showNotification: DependencySystem.modules.get('notificationHandler').show,
         uiUtils: globalUtils,
         sanitizer: DependencySystem.modules.get('sanitizer')
     });
@@ -1605,7 +1651,10 @@ function handleInitError(error) {
 
     try {
         const notify = DependencySystem.modules.get('notify');
-        notify?.error?.(`Application failed to start: ${error.message}. Please refresh.`, { group: true, context: "app", timeout: 15000 });
+        const msg =
+            error && (error.message || (typeof error === "string" ? error : (() => { try { return JSON.stringify(error); } catch { return String(error); } })()))
+            || '[Unknown error]';
+        notify?.error?.(`Application failed to start: ${msg}. Please refresh.`, { group: true, context: "app", timeout: 15000 });
     } catch {
         // ignored
     }
