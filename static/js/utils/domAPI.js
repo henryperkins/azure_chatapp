@@ -11,6 +11,7 @@
  *   - addEventListener(el, type, handler, opts): Proxy to el.addEventListener or documentObject.addEventListener.
  *   - removeEventListener(el, type, handler, opts): Proxy to el.removeEventListener or documentObject.removeEventListener.
  *   - getDocument(): Returns the injected documentObject.
+ *   - dispatchEvent(el, event): Proxies native dispatchEvent.
  *
  * @param {Object} opts
  * @param {Document} opts.documentObject
@@ -22,6 +23,8 @@
  *   Remove event listener from element or documentObject. Proxies native removeEventListener.
  * @method getDocument()
  *   Returns the injected documentObject.
+ * @method dispatchEvent(el, event)
+ *   Dispatches an Event at the specified EventTarget, (synchronously) invoking the affected EventListeners in the appropriate order.
  */
 export function createDomAPI({ documentObject = document, windowObject = window } = {}) {
   if (!documentObject || !windowObject)
@@ -70,6 +73,27 @@ export function createDomAPI({ documentObject = document, windowObject = window 
      */
     removeEventListener: (el, ...args) => {
       (el ?? documentObject).removeEventListener(...args);
+    },
+
+    /**
+     * Dispatches an Event at the specified EventTarget, (synchronously) invoking the affected EventListeners in the appropriate order.
+     * @param {EventTarget|null|undefined} target - The target to dispatch the event on. If null/undefined, defaults to documentObject.
+     * @param {Event} event - The event to dispatch.
+     * @returns {boolean} Indicates whether the event was canceled.
+     */
+    dispatchEvent: (target, event) => {
+      if (!target || typeof target.dispatchEvent !== 'function') {
+        // Fallback to documentObject if target is null/undefined and meant for document
+        if (target === null || target === undefined) {
+          return documentObject.dispatchEvent(event);
+        }
+        // Optionally warn in dev mode
+        if (typeof window !== "undefined" && window.console && window.console.warn) {
+          window.console.warn('domAPI.dispatchEvent: Invalid target or target does not support dispatchEvent.', { target });
+        }
+        return false;
+      }
+      return target.dispatchEvent(event);
     },
 
     /**

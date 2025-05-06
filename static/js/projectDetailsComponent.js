@@ -40,14 +40,55 @@ export class ProjectDetailsComponent {
         "router, notify, sanitizer, domAPI)."
       );
     }
-
+gi
     this.app = app;
     this.projectManager = projectManager;
     this.eventHandlers = eventHandlers;
     this.modalManager = modalManager;
     this.FileUploadComponentClass = FileUploadComponentClass;
     this.router = router;
-    this.notify = notify.withContext({ context: "projectDetailsComponent", module: MODULE });
+
+    // Defensive handling for notify - ensure we have withContext or create a fallback
+    if (notify && typeof notify.withContext === 'function') {
+      this.notify = notify.withContext({ context: "projectDetailsComponent", module: MODULE });
+    } else {
+      console.error("[ProjectDetailsComponent] notify missing withContext method, creating fallback");
+      // Create a fallback notify implementation
+      this.notify = {
+        debug: (msg, opts = {}) => {
+          console.debug(`[ProjectDetailsComponent] ${msg}`, opts);
+          if (notify && typeof notify.debug === 'function') {
+            notify.debug(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+          }
+        },
+        info: (msg, opts = {}) => {
+          console.info(`[ProjectDetailsComponent] ${msg}`, opts);
+          if (notify && typeof notify.info === 'function') {
+            notify.info(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+          }
+        },
+        warn: (msg, opts = {}) => {
+          console.warn(`[ProjectDetailsComponent] ${msg}`, opts);
+          if (notify && typeof notify.warn === 'function') {
+            notify.warn(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+          }
+        },
+        error: (msg, opts = {}) => {
+          console.error(`[ProjectDetailsComponent] ${msg}`, opts);
+          if (notify && typeof notify.error === 'function') {
+            notify.error(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+          }
+        },
+        success: (msg, opts = {}) => {
+          console.info(`[ProjectDetailsComponent] SUCCESS: ${msg}`, opts);
+          if (notify && typeof notify.success === 'function') {
+            notify.success(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+          }
+        },
+        withContext: (ctx) => this.notify // Self-returning stub to prevent cascading failures
+      };
+    }
+
     this.sanitizer = sanitizer;
     this.domAPI = domAPI;
     this.knowledgeBaseComponent = knowledgeBaseComponent;
