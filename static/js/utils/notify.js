@@ -1,3 +1,5 @@
+import { computeGroupKey } from './notifications-helpers.js';
+
 export function createNotify({
   notificationHandler,
   sentry = typeof window !== 'undefined' ? window.Sentry : undefined,
@@ -8,8 +10,6 @@ export function createNotify({
   const DURATION = { info: 4000, success: 4000, warning: 6000, error: 0 };
 
   // --- Helpers ---
-  const computeGroupKey = ({ type, context, module, source }) =>
-    [type, module || '', source || '', context || ''].join('|');
 
   const getCurrentTraceIds = () => {
     try {

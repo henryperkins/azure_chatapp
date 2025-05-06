@@ -26,6 +26,11 @@ export function getApiNotify(notify) {
   return notify.withContext({ context: 'apiRequest', module: 'api' });
 }
 
+// ─── Shared helper: build deterministic notification group key ──
+export function computeGroupKey({ type, context, module, source } = {}) {
+  return [type, module || '', source || '', context || ''].join('|');
+}
+
 export async function wrapApi(apiFn, { notify, errorReporter }, endpoint, opts = {}, src = 'api') {
   const apiNotify = notify.withContext
     ? notify.withContext({ context: 'apiRequest', module: 'api' })
