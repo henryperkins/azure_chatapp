@@ -52,8 +52,8 @@ const appState = {
 };
 
 // Global initialization guards
-let _globalInitCompleted = false;
-let _globalInitInProgress = false;
+var _globalInitCompleted = false;
+var _globalInitInProgress = false;
 
 // ────────────── 1. Construct browserAPI & DependencySystem ──────────────
 import * as globalUtils from './utils/globalUtils.js';
@@ -999,12 +999,24 @@ function handleInitError(error) {
     appState.initializing = false;
     appState.currentPhase = 'failed_init';
 
-    const errorReporter = DependencySystem?.modules?.get('errorReporter');
+    // Defensive accessor so this handler never throws even if DependencySystem
+    // or its module map is undefined during early-stage failures.
+    const safeGetModule = (name) => {
+        try {
+            return (DependencySystem && DependencySystem.modules && typeof DependencySystem.modules.get === 'function')
+                ? DependencySystem.modules.get(name)
+                : undefined;
+        } catch {
+            return undefined;
+        }
+    };
+
+    const errorReporter = safeGetModule('errorReporter');
     errorReporter?.capture?.(error, {
         tags: { module: 'app', method: 'init', phase: appState.currentPhase || 'unknown' }
     });
 
-    const localNotify = DependencySystem?.modules?.get('notify') || notificationPlaceholder;
+    const localNotify = safeGetModule('notify') || notificationPlaceholder;
     const errorMsgString = error?.message || (typeof error === "string" ? error : "Unknown initialization error.");
     localNotify?.error?.(`Application failed to start: ${errorMsgString}. Please refresh.`, {
         group: true, context: "app", module: "App", source: "handleInitError", timeout: 0 // Keep error visible

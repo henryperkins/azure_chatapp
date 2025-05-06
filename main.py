@@ -84,6 +84,20 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
         allow_headers=["*"],
     )
 
+    # Add a simple CSP header middleware if you want CSP headers:
+    @app.middleware("http")
+    async def csp_header_middleware(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "connect-src 'self' http://localhost:8001 https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self';"
+        )
+        return response
+
     # If you still want to test or see behavior, you could add HTTPSRedirectMiddleware,
     # but here we skip it to remain on plain HTTP (insecure).
 
@@ -370,6 +384,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=int(os.getenv("PORT", "8000")),
+        port=int(os.getenv("PORT", "8001")),
         log_level="debug",
     )
