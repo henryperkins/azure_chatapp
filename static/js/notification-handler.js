@@ -1,4 +1,4 @@
-/* ---------------------------------------------------------------------------
+ /* ---------------------------------------------------------------------------
  *  notificationHandler.js  ★ refined v3.5  (2025-05-04, context/groupKey/metadata support)
  *  --------------------------------------------------------------------------
  *  CHANGES (v3.5)
@@ -8,7 +8,12 @@
  *  • 'Copy Group Metadata' button available in details for debug/correlation
  *  • Remains 100% backward compatible
  *  -------------------------------------------------------------------------- */
-import { computeGroupKey } from './utils/notify.js';
+/**
+ * Deterministic fallback for groupKey when missing (matches notify.js)
+ */
+function computeFallbackKey({ type, context, module, source } = {}) {
+  return [type, module || '', source || '', context || ''].join('|');
+}
 
 export function createNotificationHandler({
   DependencySystem,
@@ -239,7 +244,7 @@ export function createNotificationHandler({
       key = `${_type}|${Date.now()}|${Math.random()}`;
     } else {
       key = opts.groupKey
-        || computeGroupKey({ type: _type, context: opts.context, module: opts.module, source: opts.source });
+        || computeFallbackKey({ type: _type, context: opts.context, module: opts.module, source: opts.source });
     }
     const now = Date.now();
     let g = groups.get(key);
@@ -292,6 +297,13 @@ export function createNotificationHandler({
   ["debug", "info", "success", "warning", "error"].forEach(lvl => {
     api[lvl] = (msg, opts = {}) => show(msg, lvl, opts);
   });
+
+  /* ─────────── Backward-compatibility aliases ────────────
+   * Some legacy modules call `notificationHandler.warn` instead
+   * of the v3.5 `warning` level.  Provide a thin alias so those
+   * calls keep working without code-wide refactors.
+   */
+  api.warn = api.warning;
 
   if (DependencySystem?.modules?.has("notificationHandler")) {
     return DependencySystem.modules.get("notificationHandler");

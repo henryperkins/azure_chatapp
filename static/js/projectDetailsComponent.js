@@ -864,7 +864,23 @@ export class ProjectDetailsComponent {
       return;
     }
     try {
+      /**
+       * Retrieve the full conversation record from backend/cache for the
+       * provided conversation-view model. Awaiting here ensures downstream
+       * logic (URL mutation & navigation) executes only after we have the
+       * latest messages/metadata.
+       *
+       * Note: projectManager is injected (DI), adhering to the “No Globals”
+       * rule in .roo/rules/rules.md.
+       */
       const conversation = await this.projectManager.getConversation(cv.id);
+
+      /**
+       * Capture the current SPA location as a mutable, native `URL` object.
+       * This gives us a safe, ergonomic API (`searchParams`, `pathname`, etc.)
+       * to modify the query string (e.g., set `chatId`) before calling
+       * `router.navigate()`.  Avoids brittle manual string concatenation.
+       */
       const url = new URL(this.router.getURL());
       url.searchParams.set("chatId", cv.id);
       this.router.navigate(url.toString());
