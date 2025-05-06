@@ -168,7 +168,11 @@ export function createNotify({
       extra
     });
 
-    logNotificationToBackend(payload);
+    // Sólo registrar en backend errores, warnings u operaciones
+    // explícitamente marcadas con logToBackend=true.
+    if (opts.logToBackend || ['error', 'warning'].includes(_type)) {
+      logNotificationToBackend(payload);
+    }
 
     return eventId;
   };
