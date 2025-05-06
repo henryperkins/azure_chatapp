@@ -47,7 +47,7 @@ export class ProjectDetailsComponent {
     this.modalManager = modalManager;
     this.FileUploadComponentClass = FileUploadComponentClass;
     this.router = router;
-    this.notify = notify;
+    this.notify = notify.withContext({ context: "projectDetailsComponent", module: MODULE });
     this.sanitizer = sanitizer;
     this.domAPI = domAPI;
     this.knowledgeBaseComponent = knowledgeBaseComponent;
@@ -123,8 +123,8 @@ export class ProjectDetailsComponent {
     }
   }
 
-  _html(el, raw) { el.innerHTML = this.sanitizer.sanitize(raw); }
-  _clear(el) { el.innerHTML = ""; }
+  _htmlSafe(el, raw) { el.innerHTML = this.sanitizer.sanitize(raw); }
+  _clearSafe(el) { el.innerHTML = ""; }
 
   _findElements() {
     const doc = this.domAPI.getDocument();
@@ -487,7 +487,7 @@ export class ProjectDetailsComponent {
       return;
     }
     if (!files.length) {
-      this._html(
+      this._htmlSafe(
         c,
         `<div class="text-center py-8 text-base-content/60">
            <p>No files uploaded yet.</p>
@@ -496,7 +496,7 @@ export class ProjectDetailsComponent {
       );
       return;
     }
-    this._clear(c);
+    this._clearSafe(c);
     files.forEach(f => c.appendChild(this._fileItem(f)));
   }
 
@@ -514,7 +514,7 @@ export class ProjectDetailsComponent {
       return;
     }
     if (!convs.length) {
-      this._html(
+      this._htmlSafe(
         c,
         `<div class="text-center py-8">
            <p>No conversations yet. Click “New Chat”.</p>
@@ -522,7 +522,7 @@ export class ProjectDetailsComponent {
       );
       return;
     }
-    this._clear(c);
+    this._clearSafe(c);
     convs.forEach(cv => c.appendChild(this._conversationItem(cv)));
   }
 
@@ -540,10 +540,10 @@ export class ProjectDetailsComponent {
       return;
     }
     if (!arts.length) {
-      this._html(c, `<div class="py-8 text-center">No artifacts yet.</div>`);
+      this._htmlSafe(c, `<div class="py-8 text-center">No artifacts yet.</div>`);
       return;
     }
-    this._clear(c);
+    this._clearSafe(c);
     arts.forEach(a => c.appendChild(this._artifactItem(a)));
   }
 
@@ -659,7 +659,7 @@ export class ProjectDetailsComponent {
     const fmtD = this.app.formatDate || (d => new Date(d).toLocaleDateString());
     const icon = this.app.getFileTypeIcon?.(file.file_type) || "📄";
 
-    this._html(div, `
+    this._htmlSafe(div, `
       <div class="flex items-center gap-3 min-w-0 flex-1">
         <span class="text-xl text-primary">${icon}</span>
         <div class="flex flex-col min-w-0 flex-1">
@@ -702,7 +702,7 @@ export class ProjectDetailsComponent {
 
     const fmt = this.app.formatDate || (d => new Date(d).toLocaleDateString());
 
-    this._html(div, `
+    this._htmlSafe(div, `
       <h4 class="font-medium truncate mb-1">${cv.title || "Untitled conversation"}</h4>
       <p class="text-sm text-base-content/70 truncate">${cv.last_message || "No messages yet"}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
@@ -728,7 +728,7 @@ export class ProjectDetailsComponent {
 
     const fmt = this.app.formatDate || (d => new Date(d).toLocaleDateString());
 
-    this._html(div, `
+    this._htmlSafe(div, `
       <div class="flex justify-between items-center">
         <h4 class="font-medium truncate">${art.name || "Untitled artifact"}</h4>
         <span class="text-xs text-base-content/60">${fmt(art.created_at)}</span>
