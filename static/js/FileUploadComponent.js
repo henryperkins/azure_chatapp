@@ -1,65 +1,51 @@
 /**
- * FileUploadComponent.js (DependencySystem/DI Strict, NO window.*)
- * Handles file upload functionality for projects.
+ * @module FileUploadComponent
+ * @description Handles file upload UI and logic for projects using strict Dependency Injection.
+ * Manages drag-and-drop, file selection, validation, and upload progress display.
  *
- * Dependencies (DI ONLY, NO window.*):
- * - app: required (for notification, utility, API)
- * - eventHandlers: required (for listener binding)
- * - projectManager: required (for file upload workflows)
- *
- * Usage (from orchestrator or parent):
- *   import { FileUploadComponent } from './FileUploadComponent.js';
- *   const uploadComponent = new FileUploadComponent({ ...deps, ...elements });
- *   uploadComponent.init();
- *
- * No window.* access or global assignments. No DOM polling or event replay.
+ * @param {Object} options - Dependency Injection options.
+ * @param {Object} options.app - Required. App core utilities (validateUUID).
+ * @param {Object} options.eventHandlers - Required. Event listener management (trackListener).
+ * @param {Object} options.projectManager - Required. Handles the actual file upload API calls.
+ * @param {Object} options.notify - Required. Context-aware notification utility.
+ * @param {Object} options.domAPI - Required. DOM manipulation abstraction.
+ * @param {Object} [options.scheduler] - Optional. Timing utilities (setTimeout, clearTimeout).
+ * @param {string} [options.projectId] - Optional initial project ID.
+ * @param {Function} [options.onUploadComplete] - Optional callback after uploads finish.
+ * @param {Object} [options.elements] - Optional pre-resolved DOM element references.
+ * @returns {FileUploadComponent} Instance of the component.
  */
-
 export class FileUploadComponent {
   /**
-   * @param {Object} options
-   * @param {Object} options.app - Required. App/core dependency system with notification & api.
-   * @param {Object} options.eventHandlers - Required. Tracked event handler utils.
-   * @param {Object} options.projectManager - Required. Project file upload API.
-   * @param {Object} options.notify - Required. Notification handler (DI, context-wrapped).
-   * @param {Object} [options.scheduler] - Optional. Deterministic timer utilities (setTimeout/clearTimeout).
-   * @param {string} [options.projectId] - Optional, can be set later
-   * @param {Function} [options.onUploadComplete]
-   * @param {HTMLElement} [options.fileInput]
-   * @param {HTMLElement} [options.uploadBtn]
-   * @param {HTMLElement} [options.dragZone]
-   * @param {HTMLElement} [options.uploadProgress]
-   * @param {HTMLElement} [options.progressBar]
-   * @param {HTMLElement} [options.uploadStatus]
+   * @param {Object} options - Constructor options (see factory function JSDoc).
    */
   constructor(options = {}) {
-    // --- Dependency resolution (DI only; no window/global fallback) ---
-    const getDep = (name, fallback) =>
-      options[name] !== undefined
-        ? options[name]
-        : (typeof fallback === "function" ? fallback() : fallback);
+    // --- Dependency resolution & Validation (Guideline #2) ---
+    const getDep = (name, isRequired = true) => {
+      const dep = options[name];
+      if (isRequired && !dep) {
+        throw new Error(`[FileUploadComponent] Missing required dependency: ${name}`);
+      }
+      return dep;
+    };
 
-    /** @type {Object} */
     this.app = getDep('app');
-    /** @type {Object} */
     this.eventHandlers = getDep('eventHandlers');
-    /** @type {Object} */
     this.projectManager = getDep('projectManager');
-    this.notify   = getDep('notify')?.withContext?.({ context: 'fileUploadComponent',
-                                                      module : 'FileUploadComponent' });
-    if (!this.notify) throw new Error('[FileUploadComponent] notify dependency is required');
+    this.domAPI = getDep('domAPI'); // Inject domAPI
+    const notifyRaw = getDep('notify');
 
-    // deterministic timers (DI-friendly)
-    this.scheduler = getDep('scheduler', () => ({ setTimeout, clearTimeout }));
+    // Guideline #4: Use notify.withContext()
+    this.notify = notifyRaw.withContext({
+      module: 'FileUploadComponent',
+      context: 'fileUpload'
+    });
 
-    if (!this.app || !this.eventHandlers || !this.projectManager) {
-      throw new Error(
-        "FileUploadComponent requires explicit 'app', 'eventHandlers', and 'projectManager' dependencies passed via options."
-      );
-    }
+    // Deterministic timers (DI-friendly)
+    this.scheduler = getDep('scheduler', false) || { setTimeout, clearTimeout }; // Optional dep
 
     this.projectId = options.projectId || null;
-    this.onUploadComplete = options.onUploadComplete || (() => {});
+    this.onUploadComplete = options.onUploadComplete || (() => { });
 
     // --- Configuration ---
     this.fileConstants = {
@@ -67,20 +53,24 @@ export class FileUploadComponent {
       maxSizeMB: 30
     };
 
-    // --- Elements (all DI or assigned on init, never polled) ---
+    // --- Elements (Lookup via domAPI on init, Guideline #2) ---
     this.elements = {
-      fileInput: options.fileInput || document.getElementById('fileInput'),
-      uploadBtn: options.uploadBtn || document.getElementById('uploadFileBtn'),
-      dragZone: options.dragZone || document.getElementById('dragDropZone'),
-      uploadProgress: options.uploadProgress || document.getElementById('filesUploadProgress'),
-      progressBar: options.progressBar || document.getElementById('fileProgressBar'),
-      uploadStatus: options.uploadStatus || document.getElementById('uploadStatus')
+      fileInput: null, uploadBtn: null, dragZone: null,
+      uploadProgress: null, progressBar: null, uploadStatus: null,
+      // Store selectors from options or use defaults
+      selectors: {
+        fileInput: options.elements?.fileInput || '#fileInput',
+        uploadBtn: options.elements?.uploadBtn || '#uploadFileBtn',
+        dragZone: options.elements?.dragZone || '#dragDropZone',
+        uploadProgress: options.elements?.uploadProgress || '#filesUploadProgress',
+        progressBar: options.elements?.progressBar || '#fileProgressBar',
+        uploadStatus: options.elements?.uploadStatus || '#uploadStatus'
+      }
     };
 
-    /** @type {{total:number, completed:number, failed:number}} */
-    this.uploadStatus = null;
-
+    this.uploadState = { total: 0, completed: 0, failed: 0 }; // Renamed from uploadStatus
     this._handlersBound = false;
+    this._listeners = []; // Guideline #3: Internal tracking for cleanup
   }
 
   /**
@@ -89,43 +79,77 @@ export class FileUploadComponent {
    */
   setProjectId(projectId) {
     this.projectId = projectId;
+    this.notify.info('Project context set for uploads.', { source: 'setProjectId', extra: { projectId } });
   }
 
   /**
-   * Initialize component: (re)binds events, checks required DOM is present.
-   * Should be called only when elements are ready.
+   * Initialize component: Find elements, bind events.
+   * Should be called only when the DOM context (e.g., project details view) is ready.
    */
   init() {
     if (this._handlersBound) return;
+    if (!this._findElements()) {
+      this.notify.error("Initialization failed: Could not find required DOM elements for file upload.", {
+        source: 'init',
+        group: true // Group critical init errors
+      });
+      return;
+    }
     this._bindEvents();
     this._handlersBound = true;
+    this.notify.info("File upload component initialized.", { source: 'init' });
   }
 
-  /** Bind event listeners (never poll DOM) */
+  /** Find elements using injected domAPI */
+  _findElements() {
+    const els = this.elements;
+    const sel = els.selectors;
+    els.fileInput = this.domAPI.querySelector(sel.fileInput);
+    els.uploadBtn = this.domAPI.querySelector(sel.uploadBtn);
+    els.dragZone = this.domAPI.querySelector(sel.dragZone);
+    els.uploadProgress = this.domAPI.querySelector(sel.uploadProgress);
+    els.progressBar = this.domAPI.querySelector(sel.progressBar);
+    els.uploadStatus = this.domAPI.querySelector(sel.uploadStatus);
+
+    // Check if critical elements were found
+    return !!(els.fileInput && els.uploadBtn && els.dragZone && els.uploadProgress && els.progressBar && els.uploadStatus);
+  }
+
+
+  /** Bind event listeners via eventHandlers (Guideline #3) */
   _bindEvents() {
     const { fileInput, uploadBtn, dragZone } = this.elements;
     const EH = this.eventHandlers;
 
-    // --- File input: file selection
-    if (fileInput) {
-      EH.trackListener(fileInput, 'change', (e) => {
-        this._handleFileSelection(e);
+    const track = (el, type, handler, description) => {
+      if (!el) return;
+      // Use Guideline #3 pattern: track locally for specific component cleanup
+      const listener = EH.trackListener(el, type, handler, {
+        description: `FileUpload: ${description}`,
+        module: 'FileUploadComponent', // Add context for central cleanup if supported
+        context: 'fileUpload'
       });
-    }
+      if (listener && typeof listener.remove === 'function') { // Check if trackListener returns a removal handle
+        this._listeners.push(listener);
+      } else {
+        // Fallback if trackListener doesn't return a handle (less ideal)
+        this._listeners.push({ element: el, type, handler: handler, description });
+      }
+    };
 
-    // --- Upload button: triggers file input
-    if (uploadBtn) {
-      EH.trackListener(uploadBtn, 'click', () => {
-        fileInput?.click();
-      });
-    }
+    // --- File input ---
+    track(fileInput, 'change', (e) => this._handleFileSelection(e), 'File Input Change');
 
-    // --- Drag-n-drop: highlight, drop, click
+    // --- Upload button ---
+    track(uploadBtn, 'click', () => fileInput?.click(), 'Upload Button Click');
+
+    // --- Drag-n-drop ---
     if (dragZone) {
       ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
-        EH.trackListener(dragZone, eventName, (e) => {
+        track(dragZone, eventName, (e) => {
           e.preventDefault();
           e.stopPropagation();
+          // Use domAPI compatible classList access if needed, but direct is usually fine here
           if (eventName === 'dragenter' || eventName === 'dragover') {
             dragZone.classList.add('border-primary');
           } else {
@@ -134,22 +158,34 @@ export class FileUploadComponent {
               this._handleFileDrop(e);
             }
           }
-        });
+        }, `DragZone ${eventName}`);
       });
-      // Click on dragZone mimics clicking input
-      EH.trackListener(dragZone, 'click', () => {
-        fileInput?.click();
-      });
+      track(dragZone, 'click', () => fileInput?.click(), 'DragZone Click');
     }
+  }
+
+  /** Cleanup listeners (Guideline #3) */
+  destroy() {
+    this.notify.info("Destroying FileUploadComponent, removing listeners.", { source: 'destroy' });
+    this._listeners.forEach(l => {
+      if (typeof l.remove === 'function') {
+        l.remove(); // Use removal handle if provided by trackListener
+      } else if (l.element && this.eventHandlers.untrackListener) {
+        // Fallback to untrackListener if no handle
+        this.eventHandlers.untrackListener(l.element, l.type, l.handler);
+      }
+    });
+    this._listeners = [];
+    this._handlersBound = false;
   }
 
   /** @private */
   _handleFileSelection(e) {
-    const files = e.target.files;
+    const files = e.target?.files; // Safely access files
     if (!files || files.length === 0) return;
     this._uploadFiles(files);
     // Reset input so same file can be selected again
-    e.target.value = null;
+    if (e.target) e.target.value = null;
   }
 
   /** @private */
@@ -159,87 +195,133 @@ export class FileUploadComponent {
     this._uploadFiles(files);
   }
 
-  /**
-   * Main upload flow: validates, batches, uploads, and shows progress.
-   * @private
-   * @param {FileList|Array<File>} files
-   */
+  /** Main upload flow (Guideline #4 for notifications) */
   async _uploadFiles(files) {
-    const { app } = this;
-    const projectId = this.projectId || app.getProjectId?.();
-    if (!projectId || !app.validateUUID?.(projectId)) {
-      this.notify.error('No valid project selected');
+    const projectId = this.projectId || this.app.getProjectId?.();
+    if (!projectId || !this.app.validateUUID?.(projectId)) {
+      // Guideline #4: Structured notification
+      this.notify.error('Cannot upload: No valid project selected.', {
+        source: '_uploadFiles',
+        group: true
+      });
       return;
     }
 
-    // Centralized file validation — use internal method for extension/filename, let manager do size as needed
     const { validFiles, invalidFiles } = this._validateFiles(files);
 
     invalidFiles.forEach(({ file, error }) => {
-      this.notify.error(`Skipped ${file.name}: ${error}`);
+      // Guideline #4: Structured notification
+      this.notify.error(`Skipped File: ${error}`, {
+        source: '_uploadFiles',
+        group: true, // Group validation errors
+        extra: { fileName: file.name, fileSize: file.size }
+      });
     });
 
-    if (validFiles.length === 0) return;
+    if (validFiles.length === 0) {
+      this.notify.info('No valid files selected for upload.', { source: '_uploadFiles' });
+      return;
+    }
 
     this._setupUploadProgress(validFiles.length);
+    this.notify.info(`Starting upload of ${validFiles.length} file(s).`, {
+      source: '_uploadFiles',
+      extra: { count: validFiles.length, projectId }
+    });
 
-    // Batch in groups to avoid overwhelming the backend
+
+    // Batching logic remains the same
     const BATCH_SIZE = 3;
     for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
       const batch = validFiles.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(file => this._uploadFile(projectId, file)));
     }
 
-    this.onUploadComplete();
-  }
+    this.notify.info(`Upload process finished for ${validFiles.length} file(s).`, {
+      source: '_uploadFiles',
+      extra: { completed: this.uploadState.completed, failed: this.uploadState.failed }
+    });
 
-  /**
-   * Upload a single file
-   * @private
-   * @param {string} projectId
-   * @param {File} file
-   * @returns {Promise<void>}
-   */
-  async _uploadFile(projectId, file) {
-    const { app, projectManager } = this;
-    try {
-      if (typeof projectManager.uploadFileWithRetry !== "function") {
-        throw new Error('Upload function not available');
-      }
-      await projectManager.uploadFileWithRetry(projectId, { file });
-      this._updateUploadProgress(1, 0);
-      this.notify.success(`${file.name} uploaded successfully`);
-    } catch (error) {
-      this.notify.error(`[FileUploadComponent] Upload error for ${file.name}: ${error?.message || error}`);
-      this._updateUploadProgress(0, 1);
-      const errorMsg = this._getUploadErrorMessage(error, file.name);
-      this.notify.error(`Failed to upload ${file.name}: ${errorMsg}`);
+    // Check if onUploadComplete is a function before calling
+    if (typeof this.onUploadComplete === 'function') {
+      this.onUploadComplete();
     }
   }
 
-  /**
-   * Validate files against extension, name, and size.
-   * @private
-   * @param {FileList|Array<File>} files
-   * @returns {{validFiles: File[], invalidFiles: Array<{file: File, error: string}>}}
-   */
+  /** Upload a single file (Guideline #4, #5) */
+  async _uploadFile(projectId, file) {
+    const { projectManager } = this;
+    const trace = this.app.DependencySystem?.getCurrentTraceIds?.() || {}; // Get trace info if possible
+    const transactionId = trace.transactionId || this.app.DependencySystem?.generateTransactionId?.();
+
+    try {
+      if (typeof projectManager.uploadFileWithRetry !== "function") {
+        throw new Error('projectManager.uploadFileWithRetry function not available');
+      }
+      // Use projectManager's method which should handle API calls and retries
+      await projectManager.uploadFileWithRetry(projectId, { file });
+
+      this._updateUploadProgress(1, 0);
+      // Guideline #4: Structured notification
+      this.notify.success(`Uploaded: ${file.name}`, {
+        source: '_uploadFile',
+        group: false, // Individual success messages are often better
+        extra: { fileName: file.name, fileSize: file.size, projectId }
+      });
+    } catch (error) {
+      // Guideline #5: Rich error context
+      const errorMsg = this._getUploadErrorMessage(error);
+      this.notify.error(`Upload Failed: ${file.name} - ${errorMsg}`, {
+        source: '_uploadFile',
+        group: true, // Group upload errors
+        originalError: error, // Include original error
+        traceId: trace.traceId,
+        transactionId: transactionId,
+        extra: { fileName: file.name, fileSize: file.size, projectId }
+      });
+      this._updateUploadProgress(0, 1);
+      // No need for a second user-facing notification here, the error above is sufficient.
+    }
+  }
+
+  /** File validation logic remains the same */
   _validateFiles(files) {
     const { allowedExtensions, maxSizeMB } = this.fileConstants;
     const validFiles = [];
     const invalidFiles = [];
     for (const file of files) {
-      const sanitizedName = file.name.replace(/[^\w.-]/g, '_');
+      // Basic sanitization - replace potentially problematic characters
+      // A more robust library might be needed for complex cases, but this covers common issues.
+      const sanitizedName = file.name.replace(/[<>:"/\\|?*#%\s\x00-\x1F\x7F]/g, '_');
+
       if (sanitizedName !== file.name) {
-        invalidFiles.push({ file, error: `Invalid characters in filename` });
+        // Use a temporary File object with the sanitized name for validation checks
+        // Note: This doesn't change the actual File object being uploaded,
+        // the backend MUST perform its own robust sanitization.
+        // This client-side check is mainly for early feedback.
+        try {
+          const tempFile = new File([file], sanitizedName, { type: file.type });
+          file = tempFile; // Use the sanitized version for checks below
+        } catch (e) {
+          // If File constructor fails (e.g., in older envs or due to name issues)
+          invalidFiles.push({ file: file, error: `Filename contains invalid characters` });
+          continue;
+        }
+      }
+
+      if (file.name.length === 0 || file.name === '.' || file.name === '..') {
+        invalidFiles.push({ file: file, error: `Invalid filename` });
         continue;
       }
-      const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+      const ext = file.name.includes('.') ? '.' + file.name.split('.').pop().toLowerCase() : '';
       const isValidExt = allowedExtensions.includes(ext);
       const isValidSize = file.size <= maxSizeMB * 1024 * 1024;
+
       if (!isValidExt) {
         invalidFiles.push({
           file,
-          error: `Invalid file type (${ext}). Allowed: ${allowedExtensions.join(', ')}`
+          error: `Invalid file type (${ext || 'none'}). Allowed: ${allowedExtensions.join(', ')}`
         });
       } else if (!isValidSize) {
         invalidFiles.push({
@@ -247,71 +329,74 @@ export class FileUploadComponent {
           error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`
         });
       } else {
-        validFiles.push(file);
+        validFiles.push(file); // Add the original file if valid
       }
     }
     return { validFiles, invalidFiles };
   }
 
-  /** Show initial progress state. */
+
+  /** Show initial progress */
   _setupUploadProgress(total) {
-    this.uploadStatus = { total, completed: 0, failed: 0 };
+    this.uploadState = { total, completed: 0, failed: 0 };
     const { uploadProgress, progressBar, uploadStatus: statusEl } = this.elements;
-    // Show progress bar
-    if (uploadProgress) {
-      uploadProgress.classList.remove('hidden');
-    }
+    if (uploadProgress) uploadProgress.classList.remove('hidden');
     if (progressBar) {
       progressBar.value = 0;
-      progressBar.classList.remove('progress-success', 'progress-error', 'progress-warning');
-      progressBar.classList.add('progress-info');
+      progressBar.max = 100; // Ensure max is set
+      progressBar.className = 'progress progress-info'; // Use daisyUI classes
     }
-    if (statusEl) {
-      statusEl.textContent = `Uploading 0/${total} files`;
-    }
+    if (statusEl) statusEl.textContent = `Uploading 0/${total} files...`;
   }
 
-  /** Update progress, state, and finish UX. */
-  _updateUploadProgress(success, failed) {
-    this.uploadStatus.completed += (success + failed);
-    this.uploadStatus.failed += failed;
-    const { total, completed, failed: totalFailed } = this.uploadStatus;
+  /** Update progress */
+  _updateUploadProgress(successCount, failedCount) {
+    this.uploadState.completed += successCount;
+    this.uploadState.failed += failedCount;
+    const { total, completed, failed } = this.uploadState;
     const { progressBar, uploadStatus: statusEl, uploadProgress } = this.elements;
 
+    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+
     if (progressBar) {
-      const percent = Math.round((completed / total) * 100);
       progressBar.value = percent;
-      progressBar.classList.remove('progress-info', 'progress-success', 'progress-error', 'progress-warning');
-      progressBar.classList.add(
-        totalFailed > 0 ?
-          (totalFailed === completed ? 'progress-error' : 'progress-warning') :
-          'progress-success'
-      );
+      // Update progress bar color based on state
+      progressBar.className = 'progress'; // Reset base class
+      if (failed > 0) {
+        progressBar.classList.add(completed === total ? 'progress-error' : 'progress-warning');
+      } else if (completed === total) {
+        progressBar.classList.add('progress-success');
+      } else {
+        progressBar.classList.add('progress-info');
+      }
     }
+
     if (statusEl) {
-      statusEl.textContent = `Uploading ${completed}/${total} files${totalFailed > 0 ? ` (${totalFailed} failed)` : ''}`;
+      statusEl.textContent = `Uploaded ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}.`;
     }
-    // Cosmetic: Keep the progress bar visible for 2 seconds after all uploads finish for user feedback.
-    // If you want a CSS fadeout/transition instead, prefer to add it in CSS and remove this timer for a snappier UI.
+
     if (completed === total && uploadProgress) {
-      this.scheduler.setTimeout?.(() => {
-        uploadProgress.classList.add('hidden');
-      }, 2000);
+      this.notify.info(`Upload complete. ${this.uploadState.completed - this.uploadState.failed}/${total} succeeded.`, { source: '_updateUploadProgress' });
+      // Use injected scheduler (Guideline #2)
+      this.scheduler.setTimeout(() => {
+        if (uploadProgress) uploadProgress.classList.add('hidden');
+      }, 2500); // Slightly longer delay
     }
   }
 
-  /**
-   * Derives user friendly error message from error/response.
-   * @private
-   */
+  /** Error message helper remains the same */
   _getUploadErrorMessage(error) {
-    const message = error?.message || "Unknown error";
-    if (message.includes('auth') || error?.status === 401) return "Authentication failed";
-    if (message.includes('too large') || message.includes('size')) return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;
-    if (message.includes('token limit')) return 'Project token limit exceeded';
-    if (message.includes('validation') || error?.status === 422) return "File format not supported";
-    return message;
+    const message = error?.message || error?.data?.detail || "Unknown error";
+    // Be more specific based on potential status codes or messages
+    if (error?.status === 401 || error?.status === 403) return "Authentication/Authorization failed";
+    if (error?.status === 413 || message.includes('too large') || message.includes('size')) return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;
+    if (error?.status === 400 && message.includes('token limit')) return 'Project token limit exceeded';
+    if (error?.status === 422 || message.includes('validation')) return "Invalid file type or format";
+    if (error?.status === 500) return "Server error during upload";
+    if (message.includes('NetworkError') || error?.message === 'Failed to fetch') return "Network error. Please check connection.";
+    return message; // Fallback to original message
   }
 }
 
+// Guideline #1: Factory function export
 export const createFileUploadComponent = (opts) => new FileUploadComponent(opts);
