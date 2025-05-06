@@ -182,7 +182,6 @@ from routes.projects.artifacts import router as project_artifacts_router
 from routes.user_preferences import router as user_preferences_router
 from routes.unified_conversations import router as conversations_router
 from routes.sentry_test import router as sentry_test_router
-from routes.user_preferences import router as user_preferences_router
 from routes.log_notification import router as log_notification_router
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
