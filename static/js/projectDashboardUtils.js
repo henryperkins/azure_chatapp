@@ -14,96 +14,64 @@
  *   const utils = createProjectDashboardUtils({...});
  */
 
+const MODULE = 'ProjectDashboardUtils';
+
 function getDependency(dep, name, DependencySystem) {
   return dep || DependencySystem?.modules?.get?.(name) || DependencySystem?.get?.(name);
 }
 
-/**
- * Notification util: strict DI – inject notify, use appropriate context/group.
- * @param {Function} notify - Notification util (required, from DI)
- */
-function createShowNotification(notify, DependencySystem) {
-  if (!notify) {
-    if (DependencySystem?.modules?.get?.('notify')) {
-      DependencySystem.modules.get('notify').error(
-        '[projectDashboardUtils] notify util required for notification',
-        { group: true, context: 'projectDashboard' }
-      );
+// --- Centralized sanitizer helper ---
+function _safeSetInnerHTML(el, html, sanitizer) {
+  if (!sanitizer?.sanitize) throw new Error(`[${MODULE}] sanitizer missing`);
+  el.innerHTML = sanitizer.sanitize(html);
+}
+
+// --- UI Utils helpers split for <40 LOC ---
+function applyCommonProps(element, options, sanitizer) {
+  if (options.className) element.className = options.className;
+  if (options.id) element.id = options.id;
+  if (options.textContent !== undefined) element.textContent = options.textContent;
+  if (options.innerHTML !== undefined) {
+    _safeSetInnerHTML(element, options.innerHTML, sanitizer);
+  }
+  // Data attributes: data-*
+  Object.entries(options).forEach(([key, value]) => {
+    if (key.startsWith('data-')) {
+      element.setAttribute(key, value);
     }
-    throw new Error('[projectDashboardUtils] notify util required for notification');
+  });
+  // Common props
+  ['title', 'alt', 'src', 'href', 'placeholder', 'type', 'value', 'name'].forEach(prop => {
+    if (options[prop] !== undefined) element[prop] = options[prop];
+  });
+  // Optional: support options.data = {foo: "bar"} for dataset
+  if (options.data && typeof options.data === 'object') {
+    Object.entries(options.data).forEach(([k, v]) => {
+      element.dataset[k] = v;
+    });
   }
-  return (msg, type = 'info') => {
-    if (type === 'error') {
-      notify.error(msg, { group: true, context: "projectDashboard" });
-    } else if (type === 'success') {
-      notify.success(msg, { group: true, context: "projectDashboard" });
-    } else if (type === 'warning' || type === 'warn') {
-      notify.warn(msg, { group: true, context: "projectDashboard" });
-    } else {
-      notify.info(msg, { group: true, context: "projectDashboard" });
+}
+
+function wireEventHandlers(element, options, trackListener) {
+  Object.entries(options).forEach(([key, handler]) => {
+    if (key.startsWith('on') && typeof handler === 'function') {
+      const eventType = key.slice(2).toLowerCase();
+      trackListener(element, eventType, handler);
     }
-  };
+  });
 }
 
-function createTrackListener(eventHandlers, DependencySystem) {
-  if (eventHandlers?.trackListener) {
-    return eventHandlers.trackListener.bind(eventHandlers);
-  }
-  if (DependencySystem?.modules?.get?.('notify')) {
-    DependencySystem.modules.get('notify').error(
-      '[projectDashboardUtils] eventHandlers.trackListener is required',
-      { group: true, context: 'projectDashboard' }
-    );
-  }
-  throw new Error('trackListener is required for event handling');
+function createElementAdvanced(tag, options, sanitizer, trackListener) {
+  const el = document.createElement(tag);
+  applyCommonProps(el, options, sanitizer);
+  wireEventHandlers(el, options, trackListener);
+  return el;
 }
 
-function sanitizeHTMLContent(html, sanitizeHTML) {
-  if (sanitizeHTML) return sanitizeHTML(html);
-  // If no sanitizer is provided, refuse to set innerHTML
-  throw new Error('sanitizeHTML function is required for setting innerHTML');
-}
-
-function createUIUtils({ trackListener, formatDate, formatBytes, sanitizeHTML }) {
+function createUIUtils({ trackListener, formatDate, formatBytes, sanitizer }) {
   return {
     createElement(tag, options = {}) {
-      const element = document.createElement(tag);
-
-      if (options.className) element.className = options.className;
-      if (options.id) element.id = options.id;
-      if (options.textContent !== undefined) element.textContent = options.textContent;
-      if (options.innerHTML !== undefined) {
-        element.innerHTML = sanitizeHTMLContent(options.innerHTML, sanitizeHTML);
-      }
-
-      // Events: onClick, onChange, etc.
-      Object.entries(options).forEach(([key, handler]) => {
-        if (key.startsWith('on') && typeof handler === 'function') {
-          const eventType = key.slice(2).toLowerCase();
-          trackListener(element, eventType, handler);
-        }
-      });
-
-      // Data attributes: data-*
-      Object.entries(options).forEach(([key, value]) => {
-        if (key.startsWith('data-')) {
-          element.setAttribute(key, value);
-        }
-      });
-
-      // Common props
-      ['title', 'alt', 'src', 'href', 'placeholder', 'type', 'value', 'name'].forEach(prop => {
-        if (options[prop] !== undefined) element[prop] = options[prop];
-      });
-
-      // Optional: support options.data = {foo: "bar"} for dataset
-      if (options.data && typeof options.data === 'object') {
-        Object.entries(options.data).forEach(([k, v]) => {
-          element.dataset[k] = v;
-        });
-      }
-
-      return element;
+      return createElementAdvanced(tag, options, sanitizer, trackListener);
     },
 
     formatNumber(number) {
@@ -149,16 +117,9 @@ function createUIUtils({ trackListener, formatDate, formatBytes, sanitizeHTML })
   };
 }
 
-function setupEventListeners({
-  projectManager,
-  modalManager,
-  showNotification,
-  trackListener,
-  DependencySystem,
-  notify // inject notify directly for errors
-}) {
-  // Edit project
-  const editBtn = typeof document !== 'undefined' ? document.getElementById('editProjectBtn') : null;
+// --- Button binding helpers ---
+function bindEditButton(editBtn, deps) {
+  const { projectManager, trackListener, DependencySystem, notifyCtx } = deps;
   if (editBtn) {
     trackListener(editBtn, 'click', () => {
       const currentProject = projectManager?.currentProject;
@@ -166,13 +127,14 @@ function setupEventListeners({
       if (currentProject && pm?.openModal) {
         pm.openModal(currentProject);
       } else {
-        notify?.error?.('[projectDashboardUtils] projectModal.openModal not available', { group: true, context: 'projectDashboard' });
+        notifyCtx?.error?.('[projectDashboardUtils] projectModal.openModal not available');
       }
     });
   }
+}
 
-  // Pin project
-  const pinBtn = typeof document !== 'undefined' ? document.getElementById('pinProjectBtn') : null;
+function bindPinButton(pinBtn, deps) {
+  const { projectManager, trackListener, showNotification, notifyCtx } = deps;
   if (pinBtn) {
     trackListener(pinBtn, 'click', async () => {
       const currentProject = projectManager?.currentProject;
@@ -184,14 +146,15 @@ function setupEventListeners({
             'success'
           );
         } catch (error) {
-          notify?.error?.('Failed to toggle pin: ' + (error?.message || error), { group: true, context: 'projectDashboard' });
+          notifyCtx?.error?.('Failed to toggle pin: ' + (error?.message || error));
         }
       }
     });
   }
+}
 
-  // Archive project
-  const archiveBtn = typeof document !== 'undefined' ? document.getElementById('archiveProjectBtn') : null;
+function bindArchiveButton(archiveBtn, deps) {
+  const { projectManager, modalManager, trackListener, showNotification, notifyCtx } = deps;
   if (archiveBtn) {
     trackListener(archiveBtn, 'click', async () => {
       const currentProject = projectManager?.currentProject;
@@ -211,7 +174,7 @@ function setupEventListeners({
                 'success'
               );
             } catch (error) {
-              notify?.error?.('Failed to toggle archive: ' + (error?.message || error), { group: true, context: 'projectDashboard' });
+              notifyCtx?.error?.('Failed to toggle archive: ' + (error?.message || error));
             }
           },
         });
@@ -220,27 +183,63 @@ function setupEventListeners({
   }
 }
 
-export function createProjectDashboardUtils({
-  DependencySystem,
-  eventHandlers,
+// --- setupEventListeners split ---
+function setupEventListeners({
   projectManager,
   modalManager,
-  notify,
-  formatDate,
-  formatBytes,
-  sanitizeHTML
-} = {}) {
-  if (!DependencySystem) throw new Error('DependencySystem is required');
-  eventHandlers = getDependency(eventHandlers, 'eventHandlers', DependencySystem);
-  projectManager = getDependency(projectManager, 'projectManager', DependencySystem);
-  modalManager = getDependency(modalManager, 'modalManager', DependencySystem);
-  notify = getDependency(notify, 'notify', DependencySystem);
-  formatDate = getDependency(formatDate, 'formatDate', DependencySystem);
-  formatBytes = getDependency(formatBytes, 'formatBytes', DependencySystem);
-  sanitizeHTML = getDependency(sanitizeHTML, 'sanitizeHTML', DependencySystem);
+  showNotification,
+  trackListener,
+  DependencySystem,
+  notifyCtx
+}) {
+  const editBtn = typeof document !== 'undefined' ? document.getElementById('editProjectBtn') : null;
+  const pinBtn = typeof document !== 'undefined' ? document.getElementById('pinProjectBtn') : null;
+  const archiveBtn = typeof document !== 'undefined' ? document.getElementById('archiveProjectBtn') : null;
+  const deps = { projectManager, modalManager, trackListener, DependencySystem, notifyCtx, showNotification };
+  bindEditButton(editBtn, deps);
+  bindPinButton(pinBtn, deps);
+  bindArchiveButton(archiveBtn, deps);
+}
 
-  const showNotification = createShowNotification(notify, DependencySystem);
-  const trackListener = createTrackListener(eventHandlers, DependencySystem);
+// --- Notificación canónica ---
+function createShowNotification(notifyCtx) {
+  return (msg, type = 'info') => {
+    if (type === 'error') {
+      notifyCtx.error(msg);
+    } else if (type === 'success') {
+      notifyCtx.success(msg);
+    } else if (type === 'warning' || type === 'warn') {
+      notifyCtx.warn(msg);
+    } else {
+      notifyCtx.info(msg);
+    }
+  };
+}
+
+// --- Resolver dependencias en helper dedicado ---
+function resolveDependencies(opts) {
+  const { DependencySystem } = opts;
+  return {
+    eventHandlers   : getDependency(opts.eventHandlers,   'eventHandlers',   DependencySystem),
+    projectManager  : getDependency(opts.projectManager,  'projectManager',  DependencySystem),
+    modalManager    : getDependency(opts.modalManager,    'modalManager',    DependencySystem),
+    notify          : getDependency(opts.notify,          'notify',          DependencySystem),
+    formatDate      : getDependency(opts.formatDate,      'formatDate',      DependencySystem),
+    formatBytes     : getDependency(opts.formatBytes,     'formatBytes',     DependencySystem),
+    sanitizer       : getDependency(opts.sanitizer,       'sanitizer',       DependencySystem)
+  };
+}
+
+export function createProjectDashboardUtils() {
+  const args = arguments[0] || {};
+  const { DependencySystem } = args;
+  if (!DependencySystem) throw new Error('DependencySystem is required');
+  const deps = resolveDependencies({ DependencySystem, ...args });
+  const { eventHandlers, projectManager, modalManager, notify, formatDate, formatBytes, sanitizer } = deps;
+  const notifyCtx = notify.withContext({ context: 'projectDashboard', module: MODULE });
+
+  const showNotification = createShowNotification(notifyCtx);
+  const trackListener = eventHandlers?.trackListener?.bind(eventHandlers);
 
   const ProjectDashboard = {};
 
@@ -248,7 +247,7 @@ export function createProjectDashboardUtils({
     trackListener,
     formatDate,
     formatBytes,
-    sanitizeHTML
+    sanitizer
   });
 
   let initialized = false;
@@ -260,14 +259,14 @@ export function createProjectDashboardUtils({
       showNotification,
       trackListener,
       DependencySystem,
-      notify
+      notifyCtx
     });
   };
 
   ProjectDashboard.init = function () {
     if (initialized) return this;
     initialized = true;
-    notify.info('[ProjectDashboard] Initializing...', { group: true, context: 'projectDashboard' });
+    notifyCtx.info('[ProjectDashboard] Initializing...');
     ProjectDashboard.setupEventListeners();
     if (typeof document !== 'undefined') {
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized'));
