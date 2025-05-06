@@ -29,29 +29,7 @@ const domAPI = {
   appendChild: (parent, child) => parent && child && parent.appendChild(child),
 };
 const storage = window.localStorage;
-const notification = {
-  log: (...args) => {
-    try {
-      console.log(...args);
-    } catch {
-      /* noop: console may be unavailable in some environments */
-    }
-  },
-  warn: (...args) => {
-    try {
-      console.warn(...args);
-    } catch {
-      /* noop: console may be unavailable in some environments */
-    }
-  },
-  error: (...args) => {
-    try {
-      console.error(...args);
-    } catch {
-      /* noop: console may be unavailable in some environments */
-    }
-  },
-};
+const notification = { log(){}, warn(){}, error(){} };   // placeholder (no longer uses console)
 const sentryNamespace = typeof window !== 'undefined' && window.Sentry
   ? window
   : { Sentry: undefined };
@@ -386,6 +364,8 @@ async function init() {
     DependencySystem.register('notificationHandler', notificationHandler);
     notify = createNotify({ notificationHandler });
     DependencySystem.register('notify', notify);
+    // Contexto canónico para todo el archivo
+    notify = notify.withContext({ context: 'app', module: 'App' });
 
     if (APP_CONFIG.DEBUG) notify.debug('[App Debug] START init function', { context: 'app', module: 'App', source: 'init' });
     if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating Notification Handler...', { context: 'app', module: 'App', source: 'init' });
@@ -1623,7 +1603,6 @@ function handleInitError(error) {
             phase: appState.currentPhase
         });
     } catch (err) {
-        // notificationHandlerWithLog is not defined; remove this reference.
         if (APP_CONFIG.DEBUG) {
             notify.error('[App] Error in errorReporter.capture:', err);
         }
@@ -1645,7 +1624,6 @@ function handleInitError(error) {
             container.textContent = `Application Error: ${error.message}. Please refresh.`;
             container.classList.remove('hidden');
         } else {
-            const notify = DependencySystem.modules.get('notify');
             notify?.error?.(`Application Critical Error: ${error.message}. Please refresh.`, { group: true, context: "app", timeout: 30000 });
         }
     } catch {
