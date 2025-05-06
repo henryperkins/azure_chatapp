@@ -19,6 +19,15 @@
  */
 
 export function createSentryManager(deps) {
+  // Provide a robust notification fallback if not supplied
+  if (!deps.notification) {
+    deps.notification = {
+      log: (...args) => { try { console.log(...args); } catch {} },
+      warn: (...args) => { try { console.warn(...args); } catch {} },
+      error: (...args) => { try { console.error(...args); } catch {} },
+      debug: (...args) => { try { console.debug(...args); } catch {} }
+    };
+  }
   // Dependency validation
   const required = [
     "config",

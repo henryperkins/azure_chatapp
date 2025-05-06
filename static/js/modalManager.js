@@ -1,6 +1,10 @@
 import { MODAL_MAPPINGS } from './modalConstants.js';
 
 /**
+ * @typedef {import('./utils/domAPI.js').createDomAPI} DomAPI
+ * @typedef {import('./utils/browserService.js').createBrowserService} BrowserService
+ */
+/**
  * @fileoverview
  * Manages all application modals and their interactions (showing, hiding, etc.).
  * Provides a flexible design for registering event handlers and customizing each modal’s content.
@@ -16,17 +20,7 @@ import { MODAL_MAPPINGS } from './modalConstants.js';
  *  - createProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem })
  */
 
-/**
- * A small utility to get the primary scrolling element (consistent across browsers).
- * @returns {HTMLElement} The scrolling element or fallback.
- */
-function getScrollingElement() {
-  return (
-    document.scrollingElement ||
-    document.documentElement ||
-    document.body
-  );
-}
+/* getScrollingElement (old) removed; now available via injected domAPI */
 
 /**
  * @class ModalManager
@@ -43,8 +37,20 @@ class ModalManager {
    * @param {Function} [opts.showNotification] - Notification function override.
    * @param {Object} [opts.domPurify] - Sanitization library for any needed HTML.
    */
+  /**
+   * @param {Object} opts - Dependencies config object.
+   * @param {Object} [opts.eventHandlers]
+   * @param {DomAPI} [opts.domAPI]
+   * @param {BrowserService} [opts.browserService]
+   * @param {Object} [opts.DependencySystem]
+   * @param {Object} [opts.modalMapping]
+   * @param {Function} [opts.notify]
+   * @param {Object} [opts.domPurify]
+   */
   constructor({
     eventHandlers,
+    domAPI,
+    browserService,
     DependencySystem,
     modalMapping,
     notify,
@@ -52,6 +58,10 @@ class ModalManager {
   } = {}) {
     this.DependencySystem = DependencySystem || undefined;
     this.eventHandlers = eventHandlers || this.DependencySystem?.modules?.get?.('eventHandlers') || undefined;
+    this.domAPI = domAPI || this.DependencySystem?.modules?.get?.('domAPI');
+    if (!this.domAPI) throw new Error('[ModalManager] domAPI DI not provided');
+    this.browserService = browserService || this.DependencySystem?.modules?.get?.('browserService');
+    if (!this.browserService) throw new Error('[ModalManager] browserService DI not provided');
     this.modalMappings = modalMapping || this.DependencySystem?.modules?.get?.('modalMapping') || MODAL_MAPPINGS;
     // Canonical context-aware notify for all modalManager notifications:
     if (!notify) {
@@ -71,7 +81,6 @@ class ModalManager {
 
     /** @type {number|undefined} Scroll position for body scroll lock */
     this._scrollLockY = undefined;
-
     // No internal event tracking; rely on eventHandlers context-based cleanup.
   }
 
@@ -114,22 +123,22 @@ class ModalManager {
    * @private
    */
   _manageBodyScroll(enableScroll) {
-    const scrollingEl = getScrollingElement();
+    const scrollingEl = this.domAPI.getScrollingElement();
     if (!enableScroll) {
       // Lock scrolling (modal open)
       this._scrollLockY = scrollingEl.scrollTop;
-      document.body.style.position = 'fixed';
-      document.body.style.top = `-${this._scrollLockY}px`;
-      document.body.style.width = '100vw';
-      document.body.style.overflow = 'hidden';
-      document.documentElement.style.overflow = 'hidden';
+      this.domAPI.getBody().style.position = 'fixed';
+      this.domAPI.getBody().style.top = `-${this._scrollLockY}px`;
+      this.domAPI.getBody().style.width = '100vw';
+      this.domAPI.getBody().style.overflow = 'hidden';
+      this.domAPI.getDocumentElement().style.overflow = 'hidden';
     } else {
       // Unlock scrolling (modal close)
-      document.body.style.position = '';
-      document.body.style.top = '';
-      document.body.style.width = '';
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
+      this.domAPI.getBody().style.position = '';
+      this.domAPI.getBody().style.top = '';
+      this.domAPI.getBody().style.width = '';
+      this.domAPI.getBody().style.overflow = '';
+      this.domAPI.getDocumentElement().style.overflow = '';
       if (this._scrollLockY !== undefined) {
         scrollingEl.scrollTop = this._scrollLockY;
         this._scrollLockY = undefined;
@@ -185,7 +194,7 @@ class ModalManager {
         this._notify('info', `[ModalManager] Dialog ${modalId} closed (native event).`, true);
       }
       this.activeModal = null;
-      document.body.style.overflow = '';
+      this.domAPI.getBody().style.overflow = '';
     }
   }
 
@@ -206,7 +215,7 @@ class ModalManager {
       this.validateModalMappings(this.modalMappings);
 
       Object.values(this.modalMappings).forEach((modalId) => {
-        const modalEl = document.getElementById(modalId);
+        const modalEl = this.domAPI.getElementById(modalId);
         if (modalEl) {
           const handler = () => this._onDialogClose(modalId);
           if (this.eventHandlers?.trackListener) {
@@ -255,7 +264,7 @@ class ModalManager {
    */
   validateModalMappings(modalMapping) {
     Object.entries(modalMapping).forEach(([key, modalId]) => {
-      const elements = document.querySelectorAll(`#${modalId}`);
+      const elements = this.domAPI.querySelectorAll(`#${modalId}`);
       if (elements.length === 0) {
         this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`, false, { source: 'validateModalMappings', modalId });
       } else if (elements.length > 1) {
@@ -285,7 +294,7 @@ class ModalManager {
       return false;
     }
 
-    const modalEl = document.getElementById(modalId);
+    const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
       this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false, { source: 'show', modalId });
       return false;
@@ -316,7 +325,7 @@ class ModalManager {
       return;
     }
 
-    const modalEl = document.getElementById(modalId);
+    const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
       this._notify('error', '[ModalManager] Confirm modal element not found.', false, { source: 'confirmAction' });
       return;
@@ -398,7 +407,7 @@ class ModalManager {
       this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false, { source: 'hide', modalName });
       return;
     }
-    const modalEl = document.getElementById(modalId);
+    const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
       this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false, { source: 'hide', modalId });
       return;
@@ -415,8 +424,11 @@ class ModalManager {
  * The init() method must be called separately after the modal DOM is ready.
  * @returns {ModalManager} A new ModalManager instance.
  */
-export function createModalManager({ eventHandlers, DependencySystem, modalMapping, notify } = {}) {
-  return new ModalManager({ eventHandlers, DependencySystem, modalMapping, notify });
+/**
+ * Factory: Create ModalManager with full DI context (REQUIRED: domAPI, browserService)
+ */
+export function createModalManager({ eventHandlers, domAPI, browserService, DependencySystem, modalMapping, notify } = {}) {
+  return new ModalManager({ eventHandlers, domAPI, browserService, DependencySystem, modalMapping, notify });
 }
 
 /**
