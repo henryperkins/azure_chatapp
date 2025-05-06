@@ -97,6 +97,7 @@
  * const kb = createKnowledgeBaseComponent({ DependencySystem, app, projectManager, eventHandlers, uiUtils });
  * kb.initialize(true);
  */
+const MODULE = "KnowledgeBaseComponent";
 export function createKnowledgeBaseComponent(options = {}) {
   // ------------------------------------------------------------------
   // Dependency resolution (strictly from options or DS, no window.*)
@@ -113,13 +114,15 @@ export function createKnowledgeBaseComponent(options = {}) {
   if (!DOMPurify || typeof DOMPurify.sanitize !== 'function') {
     throw new Error("KnowledgeBaseComponent requires 'DOMPurify' dependency for HTML sanitization.");
   }
+  const notify = getDep("notify");
+  if (!notify) throw new Error(`${MODULE} requires 'notify' dependency`);
 
   /**
    * Safely set element innerHTML, using DOMPurify.
    * @param {HTMLElement} el
    * @param {string} html
    */
-  function setSanitizedHTML(el, html) {
+  function _safeSetInnerHTML(el, html) {
     if (!el) return;
     el.innerHTML = DOMPurify.sanitize(html);
   }
@@ -139,8 +142,7 @@ export function createKnowledgeBaseComponent(options = {}) {
   // Extract needed methods from `app`
   const {
     validateUUID = app.validateUUID,
-    apiRequest = app.apiRequest,
-    showNotification = app.showNotification,
+    apiRequest = app.apiRequest
   } = app;
 
   // Configuration handling
@@ -176,29 +178,22 @@ export function createKnowledgeBaseComponent(options = {}) {
       // --------------------------------------------------------------
       // DRY helpers for loading state and notification fallback
       // --------------------------------------------------------------
+      this.notify = notify.withContext({ context: "knowledgeBaseComponent", module: MODULE });
+      this._notify = (type, msg, extra = {}) =>
+        (this.notify[type] || this.notify.info)(msg, { group: true, source: extra.source || "" });
+
       this._setButtonLoading = function(btn, isLoading, loadingText = "Saving...") {
         if (!btn) return;
         if (isLoading) {
           btn.disabled = true;
           btn.dataset.originalText = btn.textContent;
-          setSanitizedHTML(btn, `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`);
+          _safeSetInnerHTML(btn, `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`);
         } else {
           btn.disabled = false;
           if (btn.dataset.originalText) {
             btn.textContent = btn.dataset.originalText;
             delete btn.dataset.originalText;
           }
-        }
-      };
-      // Use only showNotification; remove direct alert/console
-      this._notify = function(type, message) {
-        if (this.showNotification) {
-          this.showNotification(
-            message,
-            type,
-            undefined,
-            { group: true, context: "knowledgeBaseComponent" }
-          );
         }
       };
 
@@ -310,6 +305,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       // --------------------------------------------------------------
       // Debounced Search Setup
       // --------------------------------------------------------------
+      this.scheduler = getDep("scheduler") || { setTimeout, clearTimeout };
       this.debouncedSearch = this._debounce(
         this.searchKnowledgeBase.bind(this),
         this.config.searchDebounceTime,
@@ -747,16 +743,22 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @private
      */
     _renderSearchResults(results) {
-      const { resultsContainer, resultsSection, noResultsSection } =
-        this.elements;
+      this._clearSearchResults();
+      if (!results?.length) return this._showNoResults();
+      this._appendSearchResults(results);
+      this._toggleResultSections(true);
+    }
+
+    _clearSearchResults() {
+      const { resultsContainer, resultsSection, noResultsSection } = this.elements;
+      if (resultsContainer) resultsContainer.textContent = "";
+      resultsSection?.classList.add("hidden");
+      noResultsSection?.classList.add("hidden");
+    }
+
+    _appendSearchResults(results) {
+      const { resultsContainer } = this.elements;
       if (!resultsContainer) return;
-
-      resultsContainer.textContent = "";
-      if (!results.length) {
-        this._showNoResults();
-        return;
-      }
-
       results.forEach((res) => {
         const item = this._createResultItem(res);
         this.eventHandlers.trackListener(item, "click", () =>
@@ -770,9 +772,12 @@ export function createKnowledgeBaseComponent(options = {}) {
         });
         resultsContainer.appendChild(item);
       });
+    }
 
-      resultsSection?.classList.remove("hidden");
-      noResultsSection?.classList.add("hidden");
+    _toggleResultSections(show) {
+      const { resultsSection, noResultsSection } = this.elements;
+      if (resultsSection) resultsSection.classList.toggle("hidden", !show);
+      if (noResultsSection) noResultsSection.classList.toggle("hidden", show);
     }
 
     /**
@@ -793,11 +798,9 @@ export function createKnowledgeBaseComponent(options = {}) {
         fileInfo.filename || result.metadata?.file_name || "Unknown source";
       const scorePct = Math.round((result.score || 0) * 100);
 
-      let badgeClass = "badge-ghost";
-      if (scorePct >= 80) badgeClass = "badge-success";
-      else if (scorePct >= 60) badgeClass = "badge-warning";
+      const badgeClass = this._getBadgeClass(scorePct);
 
-      item.innerHTML = DOMPurify.sanitize(`
+      _safeSetInnerHTML(item, `
         <div class="card-body p-3">
           <div class="card-title text-sm justify-between items-center mb-1">
             <div class="flex items-center gap-2 truncate">
@@ -816,6 +819,12 @@ export function createKnowledgeBaseComponent(options = {}) {
       return item;
     }
 
+    _getBadgeClass(scorePct) {
+      if (scorePct >= 80) return "badge-success";
+      if (scorePct >= 60) return "badge-warning";
+      return "badge-ghost";
+    }
+
     /**
      * Show detailed view of a search result
      * @param {SearchResult} result
@@ -827,7 +836,11 @@ export function createKnowledgeBaseComponent(options = {}) {
         this._notify('error', "[KB] Result detail modal not found or invalid.");
         return;
       }
+      this._populateResultDetail(result);
+      modal.showModal();
+    }
 
+    _populateResultDetail(result) {
       const {
         resultTitle,
         resultSource,
@@ -843,9 +856,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         fileInfo.filename || result.metadata?.file_name || "Unknown Source";
       const scorePct = Math.round((result.score || 0) * 100);
 
-      let badgeClass = "badge-ghost";
-      if (scorePct >= 80) badgeClass = "badge-success";
-      else if (scorePct >= 60) badgeClass = "badge-warning";
+      const badgeClass = this._getBadgeClass(scorePct);
 
       resultTitle.textContent = `Detail: ${filename}`;
       resultSource.textContent = filename;
@@ -860,8 +871,6 @@ export function createKnowledgeBaseComponent(options = {}) {
           this._hideResultDetailModal();
         };
       }
-
-      modal.showModal();
     }
 
     /**
@@ -905,10 +914,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     async toggleKnowledgeBase(enabled) {
       const pid = this._getCurrentProjectId();
       if (!pid) {
-        this.showNotification?.(
-          "No valid project selected for Knowledge Base toggle",
-          "error",
-        );
+        this._notify("error", "No valid project selected for Knowledge Base toggle");
         return;
       }
 
@@ -947,10 +953,7 @@ export function createKnowledgeBaseComponent(options = {}) {
      */
     async reprocessFiles(projectId) {
       if (!this.validateUUID(projectId)) {
-        this.showNotification?.(
-          "No valid project selected for reprocessing",
-          "error",
-        );
+        this._notify("error", "No valid project selected for reprocessing");
         return;
       }
       try {
@@ -989,10 +992,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       const form = e.target;
       const projectId = form.dataset.projectId || this._getCurrentProjectId();
       if (!this.validateUUID(projectId)) {
-        this.showNotification?.(
-          "Cannot save settings: Project ID missing or invalid.",
-          "error",
-        );
+        this._notify("error", "Cannot save settings: Project ID missing or invalid.");
         return;
       }
 
@@ -1151,7 +1151,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       const alertDiv = document.createElement("div");
       alertDiv.className = `alert ${cls} shadow-xs text-sm py-2 px-3`;
       alertDiv.setAttribute("role", "alert");
-      setSanitizedHTML(alertDiv, `<span>${message}</span>`);
+      _safeSetInnerHTML(alertDiv, `<span>${message}</span>`);
 
       if (type !== "error") {
         const btn = document.createElement("button");
@@ -1185,7 +1185,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       resultsSection?.classList.remove("hidden");
       noResultsSection?.classList.add("hidden");
       if (resultsContainer) {
-        setSanitizedHTML(resultsContainer, `
+        _safeSetInnerHTML(resultsContainer, `
           <div class="flex justify-center items-center p-4 text-base-content/70">
             <span class="loading loading-dots loading-md mr-2"></span>
             <span>Searching knowledge base...</span>
@@ -1233,7 +1233,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         originalDisabled: btn.disabled,
       };
       btn.disabled = true;
-      btn.innerHTML = DOMPurify.sanitize(`<span class="loading loading-spinner loading-xs"></span> Processing...`);
+      _safeSetInnerHTML(btn, `<span class="loading loading-spinner loading-xs"></span> Processing...`);
     }
 
     /**
@@ -1244,7 +1244,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       const btn = this.elements.reprocessButton;
       if (!btn || !this._processingState) return;
       btn.disabled = this._processingState.originalDisabled;
-      btn.innerHTML = DOMPurify.sanitize(this._processingState.originalContent);
+      _safeSetInnerHTML(btn, this._processingState.originalContent);
       this._processingState = null;
     }
 
@@ -1283,16 +1283,16 @@ export function createKnowledgeBaseComponent(options = {}) {
 
     /**
      * Debounce helper
-     * @param {Function} func
+     * @param {Function} fn
      * @param {number} wait - milliseconds
      * @returns {Function}
      * @private
      */
-    _debounce(func, wait) {
-      let timeout;
-      return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
+    _debounce(fn, wait) {
+      let id;
+      return (...a) => {
+        this.scheduler.clearTimeout?.(id);
+        id = this.scheduler.setTimeout?.(() => fn.apply(this, a), wait);
       };
     }
 
@@ -1352,4 +1352,3 @@ export function createKnowledgeBaseComponent(options = {}) {
   return new KnowledgeBaseComponentWithDestroy(options);
 }
 
-export default createKnowledgeBaseComponent;
