@@ -30,6 +30,7 @@ export class ProjectListComponent {
      * @param {Object} deps.notify               - DI notification interface (required: success, error, warn, info, etc)
      * @param {Object} deps.storage              - Storage abstraction (required)
      * @param {Object} deps.sanitizer            - HTML sanitizer abstraction (required)
+     * @param {Object} deps.apiClient            - API client abstraction (required for preference patch)
      */
     constructor({
         projectManager,
@@ -39,7 +40,8 @@ export class ProjectListComponent {
         router,
         notify,
         storage,
-        sanitizer
+        sanitizer,
+        apiClient
     } = {}) {
         // Assign DI fields before any usage
         this.projectManager = projectManager;
@@ -49,16 +51,8 @@ export class ProjectListComponent {
         this.router = router;
 
         // DI notify: use context/group everywhere; see notification-system.md
-        this.notify = notify;
-        this.notification = {
-            log : (msg, opts = {}) => notify.info?.(msg, { group: true, context: 'projectListComponent', ...opts }),
-            warn: (msg, opts = {}) => notify.warn?.(msg, { group: true, context: 'projectListComponent', ...opts }),
-            error: (msg, opts = {}) => notify.error?.(msg, { group: true, context: 'projectListComponent', ...opts }),
-            confirm: (...args) => notify.confirm?.(...args),
-            show: (msg, type = 'info', opts = {}) =>
-                notify[type]?.(msg, { group: true, context: 'projectListComponent', ...opts }) ||
-                notify.info?.(msg, { group: true, context: 'projectListComponent', ...opts })
-        };
+        this.notify = notify.withContext({ context: 'projectListComponent', module: 'ProjectListComponent' });
+        this.apiClient = apiClient;
 
         this.storage = storage;
         this.sanitizer = sanitizer;
@@ -77,7 +71,6 @@ export class ProjectListComponent {
             !this.projectManager ||
             !this.eventHandlers ||
             !this.router ||
-            !this.notification ||
             !this.storage ||
             !this.sanitizer
         ) {
@@ -98,18 +91,14 @@ export class ProjectListComponent {
             if (this.app && typeof this.app.setCurrentProjectId === "function") {
                 this.app.setCurrentProjectId(projectId);
             } else {
-                this.notification.warn("[ProjectListComponent] Cannot set current project; app.setCurrentProjectId not available.");
+                this.notify.warn("[ProjectListComponent] Cannot set current project; app.setCurrentProjectId not available.");
             }
             // (Optional) Persist to user preferences via API for cross-session behavior
-            if (this.apiClient && typeof this.apiClient.patch === "function") {
-                this.apiClient.patch('/api/user/preferences', { last_project_id: projectId }).catch(() => {});
-            } else if (typeof fetch === "function") {
-                this.notification.warn("[ProjectListComponent] Using direct fetch as apiClient is not available. Please inject apiClient.");
-                fetch('/api/user/preferences', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ last_project_id: projectId })
-                }).catch(() => {});
+            if (this.apiClient?.patch) {
+                this.apiClient.patch('/api/user/preferences', { last_project_id: projectId })
+                  .catch(() => {});
+            } else {
+                this.notify.error('[ProjectListComponent] apiClient not available; cannot save user preferences.', { group: true });
             }
             // Now navigate SPA without ?project= in the URL, e.g., to /project-details or "main view"
             if (this.router && typeof this.router.navigate === "function") {
@@ -187,7 +176,7 @@ export class ProjectListComponent {
     }
 
     /** Private helper: sanitize and set HTML */
-    _setElementHTML(element, rawHtml) {
+    _safeSetInnerHTML(element, rawHtml) {
         if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
             throw new Error("[ProjectListComponent] Missing sanitizer implementation");
         }
@@ -300,7 +289,7 @@ export class ProjectListComponent {
         this.state.filter = filter;
         this._updateActiveTab();
         this._updateUrl(filter);
-        this.notification.show(`Filter applied: ${filter}`, "info", { group: true });
+        this.notify.info(`Filter applied: ${filter}`, { group: true });
         this._loadProjects();
     }
 
@@ -661,7 +650,7 @@ export class ProjectListComponent {
               <div class="h-4 bg-base-300 rounded w-2/3 mb-2"></div>
               <div class="h-3 bg-base-300 rounded w-1/3 mt-6"></div>
             `;
-            this._setElementHTML(skeleton, raw);
+            this._safeSetInnerHTML(skeleton, raw);
             this.gridElement.appendChild(skeleton);
         }
     }
@@ -818,7 +807,7 @@ export class ProjectListComponent {
             btn.setAttribute("aria-label", btnDef.title);
             btn.dataset.action = btnDef.action;
             btn.title = btnDef.title;
-            this._setElementHTML(btn, btnDef.icon);
+            this._safeSetInnerHTML(btn, btnDef.icon);
             actions.appendChild(btn);
         });
 
