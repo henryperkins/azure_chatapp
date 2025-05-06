@@ -141,7 +141,8 @@ export function createNotify({
       } catch (err) { }
     }
 
-    notificationHandler.show(msg, _type, DURATION[_type], {
+    notificationHandler.show(msg, _type, {
+      timeout: DURATION[_type],           // ← moved inside opts
       ...restOpts,
       group,
       context,
