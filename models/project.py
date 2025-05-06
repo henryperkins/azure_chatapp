@@ -136,6 +136,14 @@ class Project(Base):
         """Returns True if current token usage is within the max tokens limit."""
         return self.token_usage <= self.max_tokens
 
+    @property
+    def knowledge_base_id(self) -> Optional[uuid.UUID]:
+        """
+        Property to maintain backward compatibility with code expecting knowledge_base_id.
+        Returns the ID of the associated knowledge base if it exists.
+        """
+        return self.knowledge_base.id if self.knowledge_base else None
+
 
 # Deleted Project.knowledge_base_id event listener; single enforced direction
 
