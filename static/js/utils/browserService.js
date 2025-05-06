@@ -1,5 +1,5 @@
 /**
- * Browser-level helpers (DI strict).
+ * Browser-level helpers (DI strict, testable).
  * @param {Object} deps
  * @param {Window} deps.windowObject – injected window for testability
  */
@@ -18,26 +18,45 @@ export function createBrowserService({ windowObject = window } = {}) {
     return url.pathname + (url.search ? `?${url.search}` : '');
   }
 
+  // --------- DI wrappers for browser APIs ---------
+  function FormDataImpl(form) {
+    return new windowObject.FormData(form);
+  }
+
+  function MutationObserverImpl(callback) {
+    return new windowObject.MutationObserver(callback);
+  }
+
+  async function fetchImpl(...args) {
+    // Direct passthrough; you may inject/wrap for testability in tests
+    return windowObject.fetch(...args);
+  }
+
   return {
-    /* Query-string helpers */
+    // Query-string helpers
     buildUrl,
     getSearchParam: (k) => new URL(windowObject.location.href).searchParams.get(k),
     setSearchParam: (k, v) => windowObject.history.replaceState({}, '', buildUrl({ [k]: v })),
     removeSearchParam: (k) => windowObject.history.replaceState({}, '', buildUrl({ [k]: '' })),
 
-    /* Storage helpers (localStorage is already wrapped elsewhere) */
+    // Storage helpers
     getItem: (k) => windowObject.localStorage.getItem(k),
     setItem: (k, v) => windowObject.localStorage.setItem(k, v),
     removeItem: (k) => windowObject.localStorage.removeItem(k),
 
-    /* Timing helpers */
+    // Timing helpers
     setTimeout: windowObject.setTimeout.bind(windowObject),
     requestAnimationFrame: (cb) =>
       typeof windowObject.requestAnimationFrame === 'function'
         ? windowObject.requestAnimationFrame(cb)
         : windowObject.setTimeout(cb, 0),
 
-    /* Passthroughs for test harnesses */
+    // Browser APIs for DI/testability
+    FormData: FormDataImpl,
+    MutationObserver: MutationObserverImpl,
+    fetch: fetchImpl,
+
+    // Passthroughs for test harnesses
     getLocationHref: () => windowObject.location.href,
     setHistory: (...a) => windowObject.history.pushState(...a),
   };

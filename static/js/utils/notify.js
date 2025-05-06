@@ -7,7 +7,7 @@ export function createNotify({
 } = {}) {
   if (!notificationHandler?.show) throw new Error('notificationHandler missing');
 
-  const DURATION = { info: 4000, success: 4000, warning: 6000, error: 0 };
+  const DURATION = { debug: 3000, info: 4000, success: 4000, warning: 6000, error: 0 };
 
   // --- Helpers ---
 
@@ -74,7 +74,7 @@ export function createNotify({
   const send = (msg, type = 'info', opts = {}) => {
     // Map 'warn' to 'warning'
     let _type = type === 'warn' ? 'warning' : type;
-    if (!['info', 'success', 'warning', 'error'].includes(_type)) _type = 'info';
+    if (!['debug', 'info', 'success', 'warning', 'error'].includes(_type)) _type = 'info';
 
     // Dependency-injected user/session
     let user = 'unknown';
@@ -165,6 +165,7 @@ export function createNotify({
     if (!preset) throw new Error('notify.withContext requires a context/module/source preset');
     const { module, context, source } = preset;
     return {
+      debug: (msg, o = {}) => send(msg, 'debug', { module, context, source, ...defaults, ...o }),
       info: (msg, o = {}) => send(msg, 'info', { module, context, source, ...defaults, ...o }),
       success: (msg, o = {}) => send(msg, 'success', { module, context, source, ...defaults, ...o }),
       warn: (msg, o = {}) => send(msg, 'warning', { module, context, source, ...defaults, ...o }),
@@ -175,6 +176,7 @@ export function createNotify({
   };
 
   return {
+    debug: (msg, o = {}) => send(msg, 'debug', o),
     info: (msg, o = {}) => send(msg, 'info', o),
     success: (msg, o = {}) => send(msg, 'success', o),
     warn: (msg, o = {}) => send(msg, 'warning', o),

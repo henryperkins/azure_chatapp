@@ -22,12 +22,8 @@ const sentryConfig = {
 };
 
 const sentryEnv = {};
-const domAPI = {
-  createElement: tag => document.createElement(tag),
-  addEventListener: (...args) => (args[0]?.addEventListener ? args[0].addEventListener(...args.slice(1)) : undefined),
-  removeEventListener: (...args) => (args[0]?.removeEventListener ? args[0].removeEventListener(...args.slice(1)) : undefined),
-  appendChild: (parent, child) => parent && child && parent.appendChild(child),
-};
+import { createDomAPI } from './utils/domAPI.js';
+const domAPI = createDomAPI({ documentObject: document, windowObject: window });
 const storage = window.localStorage;
 const notification = { log(){}, warn(){}, error(){} };   // placeholder (no longer uses console)
 const sentryNamespace = typeof window !== 'undefined' && window.Sentry
@@ -166,12 +162,7 @@ try {
     notificationHandler = createNotificationHandler({
         eventHandlers: undefined, // eventHandlers not yet available
         DependencySystem,
-        domAPI: {
-            getElementById: id => document.getElementById(id),
-            createElement: tag => document.createElement(tag),
-            createTemplate: html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t; },
-            body: document.body
-        },
+        domAPI,
         groupWindowMs: 7000
     });
     DependencySystem.register('notificationHandler', notificationHandler);
@@ -371,12 +362,7 @@ async function init() {
     const notificationHandler = createNotificationHandler({
         eventHandlers,
         DependencySystem,
-        domAPI: {
-            getElementById: id => document.getElementById(id),
-            createElement: tag => document.createElement(tag),
-            createTemplate: html => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t; },
-            body: document.body
-        },
+        domAPI,
         groupWindowMs: 7000
     });
     DependencySystem.register('notificationHandler', notificationHandler);
@@ -417,16 +403,7 @@ if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating API Client...', { conte
         auth: () => DependencySystem.modules.get('auth'),
         eventHandlers,
         app,
-        domAPI: {
-            querySelector: (selector) => chatBrowserAPI.getDocument().querySelector(selector),
-            getElementById: (id) => chatBrowserAPI.getDocument().getElementById(id),
-            querySelectorAll: (selector) => chatBrowserAPI.getDocument().querySelectorAll(selector),
-            appendChild: (parent, child) => parent && child && parent.appendChild(child),
-            replaceChildren: (parent, ...children) => parent && parent.replaceChildren(...children),
-            createElement: (tag) => chatBrowserAPI.getDocument().createElement(tag),
-            removeChild: (parent, child) => parent && parent.removeChild(child),
-            setInnerHTML: (el, html) => { if (el) el.innerHTML = html; }
-        },
+        domAPI,
         navAPI: {
             getSearch: () => chatBrowserAPI.getLocation().search,
             getHref: () => chatBrowserAPI.getLocation().href,
@@ -586,7 +563,12 @@ async function initializeCoreSystems() {
     }
     notify.getContainer?.();
 
-    const modalManager = createModalManager();
+    const browserService = DependencySystem.modules.get('browserService');
+    const domAPI = DependencySystem.modules.get('domAPI') || createDomAPI({ documentObject: document, windowObject: window });
+    // Register domAPI if not registered already
+    if (!DependencySystem.modules.get('domAPI')) DependencySystem.register('domAPI', domAPI);
+
+    const modalManager = createModalManager({ domAPI, browserService, eventHandlers, DependencySystem, modalMapping: MODAL_MAPPINGS, notify });
     DependencySystem.register('modalManager', modalManager);
     window.modalManager = modalManager;
 
@@ -669,7 +651,12 @@ async function initializeCoreSystems() {
 
     validateModule('projectManager', projectManager, 'initialize');
 
-    const projectModal = createProjectModal();
+    const projectModal = createProjectModal({
+      DependencySystem,
+      eventHandlers,
+      notify,
+      // Optionally inject domAPI and browserService if needed in future refactor
+    });
     DependencySystem.register('projectModal', projectModal);
 
     async function injectAndVerifyHtml(url, containerId, requiredElementIds, maxTries = 10) {
@@ -1061,13 +1048,7 @@ async function initializeUIComponents() {
             },
             getURL: () => window.location.href
         },
-        domAPI: {
-            getDocument: () => document,
-            getElementById: (id) => document.getElementById(id),
-            createElement: (tag) => document.createElement(tag),
-            querySelector: (selector) => document.querySelector(selector),
-            dispatchEvent: (event) => document.dispatchEvent(event)
-        },
+        domAPI,
         notify: notifyForUi,
         sanitizer: DependencySystem.modules.get('sanitizer')
     });
@@ -1084,14 +1065,7 @@ async function initializeUIComponents() {
         viewportAPI: {
             getInnerWidth: () => window.innerWidth
         },
-        domAPI: {
-            getElementById: (id) => document.getElementById(id),
-            createElement: (tag) => document.createElement(tag),
-            querySelector: (selector) => document.querySelector(selector),
-            getActiveElement: () => document.activeElement,
-            ownerDocument: document,
-            body: document.body
-        }
+        domAPI,
     });
     DependencySystem.register('sidebar', sidebar);
 
