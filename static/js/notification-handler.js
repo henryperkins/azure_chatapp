@@ -8,12 +8,7 @@
  *  • 'Copy Group Metadata' button available in details for debug/correlation
  *  • Remains 100% backward compatible
  *  -------------------------------------------------------------------------- */
-/**
- * Deterministic fallback for groupKey when missing (matches notify.js)
- */
-function computeFallbackKey({ type, context, module, source } = {}) {
-  return [type, module || '', source || '', context || ''].join('|');
-}
+import { computeGroupKey } from './utils/notifications-helpers.js';
 
 export function createNotificationHandler({
   DependencySystem,
@@ -244,7 +239,7 @@ export function createNotificationHandler({
       key = `${_type}|${Date.now()}|${Math.random()}`;
     } else {
       key = opts.groupKey
-        || computeFallbackKey({ type: _type, context: opts.context, module: opts.module, source: opts.source });
+        || computeGroupKey({ type: _type, context: opts.context, module: opts.module, source: opts.source });
     }
     const now = Date.now();
     let g = groups.get(key);

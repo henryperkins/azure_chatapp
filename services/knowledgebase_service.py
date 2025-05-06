@@ -21,6 +21,8 @@ from datetime import datetime
 from typing import Any, Optional, Tuple, List
 from uuid import UUID
 
+from services.knowledgebase_helpers import KBConfig, StorageManager
+
 from fastapi import HTTPException, UploadFile, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, update, exists
@@ -41,48 +43,6 @@ from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------
-# Configuration and Helpers
-# ---------------------------------------------------------------------
-
-
-class KBConfig:
-    """Centralized configuration for knowledge base service"""
-
-    @staticmethod
-    def get() -> dict[str, Any]:
-        return {
-            "max_file_bytes": getattr(config, "MAX_FILE_SIZE", 30_000_000),
-            "stream_threshold": getattr(config, "STREAM_THRESHOLD", 10_000_000),
-            "default_embedding_model": getattr(
-                config, "DEFAULT_EMBEDDING_MODEL", "all-MiniLM-L6-v2"
-            ),
-            "vector_db_storage_path": getattr(
-                config, "VECTOR_DB_STORAGE_PATH", "./storage/vector_db"
-            ),
-            "default_chunk_size": getattr(config, "DEFAULT_CHUNK_SIZE", 1000),
-            "default_chunk_overlap": getattr(config, "DEFAULT_CHUNK_OVERLAP", 200),
-            "allowed_sort_fields": {"created_at", "filename", "file_size"},
-        }
-
-
-class StorageManager:
-    """Handles all file storage operations"""
-
-    @staticmethod
-    def get() -> Any:
-        from services.file_storage import (
-            get_file_storage,
-        )  # pylint: disable=import-outside-toplevel
-
-        return get_file_storage(
-            {
-                "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-                "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-            }
-        )
 
 
 class VectorDBManager:
