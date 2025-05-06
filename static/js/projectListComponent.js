@@ -233,35 +233,51 @@ export class ProjectListComponent {
         this._bindFilterEvents();
     }
 
-    /** Bind filter tab clicks & ARIA tab keyboard navigation */
+    /**
+     * Bind filter tab clicks & ARIA tab keyboard navigation
+     * Splits into per-tab and tablist helpers for testability and hygiene.
+     */
     _bindFilterEvents() {
         const container = document.getElementById("projectFilterTabs");
         if (!container) return;
+        const tabs = [...container.querySelectorAll(".tab[data-filter]")];
+        tabs.forEach(tab => this._bindSingleFilterTab(tab, tab.dataset.filter));
+        this._bindFilterTablistKeyboardNav(container, tabs);
+    }
 
-        const tabs = Array.from(container.querySelectorAll(".tab[data-filter]"));
-        tabs.forEach((tab) => {
-            const filterValue = tab.dataset.filter;
-            if (!filterValue) return;
-            const clickHandler = () => this._setFilter(filterValue);
-            this.eventHandlers.trackListener(tab, "click", clickHandler, {
-                description: `ProjectList: Filter tab click (${filterValue})`
-            });
-            // Accessibility: handle keydown on individual tab for activation (Enter, Space)
-            this.eventHandlers.trackListener(tab, "keydown", (event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    this._setFilter(filterValue);
-                    tab.focus();
-                }
-            }, {
-                description: `ProjectList: Tab keydown (Enter/Space) activation (${filterValue})`
-            });
+    /**
+     * Wire click/activation events for a single filter tab.
+     * @param {HTMLElement} tab
+     * @param {string} filterValue
+     * @private
+     */
+    _bindSingleFilterTab(tab, filterValue) {
+        if (!filterValue) return;
+        const clickHandler = () => this._setFilter(filterValue);
+        this.eventHandlers.trackListener(tab, "click", clickHandler, {
+            description: `ProjectList: Filter tab click (${filterValue})`
         });
+        // Accessibility: handle keydown on individual tab for activation (Enter, Space)
+        this.eventHandlers.trackListener(tab, "keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                this._setFilter(filterValue);
+                tab.focus();
+            }
+        }, {
+            description: `ProjectList: Tab keydown (Enter/Space) activation (${filterValue})`
+        });
+    }
 
-        // Accessibility: Arrow/End/Home navigation for ARIA tabs
+    /**
+     * Global keyboard navigation for the whole tab-list (Arrow, Home, End).
+     * @param {HTMLElement} container
+     * @param {HTMLElement[]} tabs
+     * @private
+     */
+    _bindFilterTablistKeyboardNav(container, tabs) {
         this.eventHandlers.trackListener(container, "keydown", (event) => {
             const currentTab = document.activeElement;
-            // Only process if current focus is on a tab inside this tablist
             if (!tabs.includes(currentTab)) return;
             let idx = tabs.indexOf(currentTab);
             if (event.key === "ArrowRight" || event.key === "Right") {
@@ -662,10 +678,7 @@ export class ProjectListComponent {
         this.gridElement.classList.add("grid", "project-list");
         const emptyDiv = document.createElement("div");
         emptyDiv.className = "project-list-empty";
-        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
-            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
-        }
-        emptyDiv.innerHTML = this.sanitizer.sanitize(`
+        this._safeSetInnerHTML(emptyDiv, `
           <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
           </svg>
@@ -693,10 +706,7 @@ export class ProjectListComponent {
         this.element.classList.add("grid", "project-list");
         const loginDiv = document.createElement("div");
         loginDiv.className = "project-list-fallback";
-        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
-            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
-        }
-        loginDiv.innerHTML = this.sanitizer.sanitize(`
+        this._safeSetInnerHTML(loginDiv, `
           <p class="mt-4 text-lg">Please log in to view your projects</p>
           <button id="loginButton" class="btn btn-primary mt-4">Login</button>
         `);
@@ -727,10 +737,7 @@ export class ProjectListComponent {
         const msg = message || "An unknown error occurred.";
         const errorDiv = document.createElement("div");
         errorDiv.className = "project-list-error";
-        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
-            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
-        }
-        errorDiv.innerHTML = this.sanitizer.sanitize(`
+        this._safeSetInnerHTML(errorDiv, `
           <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -750,17 +757,44 @@ export class ProjectListComponent {
         }
     }
 
-    /** Create a project card element */
+    /**
+     * Create a project card element (delegates to header/desc/footer helpers).
+     * @param {Object} project
+     * @returns {HTMLElement}
+     */
     _createProjectCard(project) {
+        const card = document.createElement("div");
+        card.className = this._computeCardClasses(project);
+        card.dataset.projectId = project.id;
+
+        card.append(
+            this._buildCardHeader(project),
+            this._buildCardDescription(project),
+            this._buildCardFooter(project)
+        );
+        return card;
+    }
+
+    /**
+     * Compute the card's className string (theming, layout).
+     * @param {Object} project
+     * @returns {string}
+     * @private
+     */
+    _computeCardClasses(project) {
         const theme = this.state.customization.theme || "default";
         const themeBg = theme === "default" ? "bg-base-100" : `bg-${theme}`;
         const themeText = theme === "default" ? "text-base-content" : `text-${theme}-content`;
+        return `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-x-auto`;
+    }
 
-        const card = document.createElement("div");
-        card.className = `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-x-auto`;
-        card.dataset.projectId = project.id;
-
-        // Header
+    /**
+     * Build the card header (title + action buttons).
+     * @param {Object} project
+     * @returns {HTMLElement}
+     * @private
+     */
+    _buildCardHeader(project) {
         const header = document.createElement("div");
         header.className = "flex justify-between items-start";
 
@@ -768,7 +802,6 @@ export class ProjectListComponent {
         title.className = "font-semibold text-lg sm:text-xl mb-2 project-name truncate";
         title.textContent = project.name || "Unnamed Project";
 
-        // Action Buttons
         const actions = document.createElement("div");
         actions.className = "flex gap-1";
         [
@@ -802,28 +835,38 @@ export class ProjectListComponent {
                 className: "text-error hover:bg-error/10"
             }
         ].forEach((btnDef) => {
-            const btn = document.createElement("button");
-            btn.className = `btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] ${btnDef.className || ""}`;
-            btn.setAttribute("aria-label", btnDef.title);
-            btn.dataset.action = btnDef.action;
-            btn.title = btnDef.title;
-            this._safeSetInnerHTML(btn, btnDef.icon);
-            actions.appendChild(btn);
+            actions.appendChild(this._createActionButton(btnDef));
         });
 
         header.appendChild(title);
         header.appendChild(actions);
-        card.appendChild(header);
+        return header;
+    }
 
-        // Description
+    /**
+     * Build the card description section (if enabled).
+     * @param {Object} project
+     * @returns {HTMLElement}
+     * @private
+     */
+    _buildCardDescription(project) {
         if (this.state.customization.showDescription && project.description) {
             const description = document.createElement("p");
             description.className = "text-sm text-base-content/70 mb-3 line-clamp-2";
             description.textContent = project.description;
-            card.appendChild(description);
+            return description;
         }
+        // Return a fragment or empty span to keep structure
+        return document.createElement("span");
+    }
 
-        // Footer
+    /**
+     * Build the card footer (date + badges).
+     * @param {Object} project
+     * @returns {HTMLElement}
+     * @private
+     */
+    _buildCardFooter(project) {
         const footer = document.createElement("div");
         footer.className = "mt-auto pt-2 flex justify-between text-xs text-base-content/70";
 
@@ -851,9 +894,23 @@ export class ProjectListComponent {
         }
 
         footer.appendChild(badges);
-        card.appendChild(footer);
+        return footer;
+    }
 
-        return card;
+    /**
+     * Create an action button for the card header.
+     * @param {Object} btnDef
+     * @returns {HTMLElement}
+     * @private
+     */
+    _createActionButton(btnDef) {
+        const btn = document.createElement("button");
+        btn.className = `btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] ${btnDef.className || ""}`;
+        btn.setAttribute("aria-label", btnDef.title);
+        btn.dataset.action = btnDef.action;
+        btn.title = btnDef.title;
+        this._safeSetInnerHTML(btn, btnDef.icon);
+        return btn;
     }
 
     /** Format ISO date strings */
@@ -885,6 +942,18 @@ export class ProjectListComponent {
             theme: "default",
             showDescription: true,
             showDate: true
+        };
+    }
+    // Expose helpers for unit tests if in test environment
+    if (typeof process !== "undefined" && process?.env?.NODE_ENV === 'test') {
+        this._testHelpers = {
+            _buildCardHeader: this._buildCardHeader.bind(this),
+            _buildCardDescription: this._buildCardDescription.bind(this),
+            _buildCardFooter: this._buildCardFooter.bind(this),
+            _createActionButton: this._createActionButton.bind(this),
+            _computeCardClasses: this._computeCardClasses.bind(this),
+            _bindSingleFilterTab: this._bindSingleFilterTab.bind(this),
+            _bindFilterTablistKeyboardNav: this._bindFilterTablistKeyboardNav.bind(this)
         };
     }
 }
