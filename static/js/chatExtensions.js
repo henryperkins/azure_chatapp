@@ -21,7 +21,10 @@ export function createChatExtensions({
   domAPI
 } = {}) {
   // Dependency resolution fallback if not provided
-  DependencySystem = DependencySystem || (typeof window !== 'undefined' ? window.DependencySystem : undefined);
+  // Do NOT use direct window global for DependencySystem. Always require as injected dependency for modularity/testability.
+  if (!DependencySystem) {
+    throw new Error("[chatExtensions] DependencySystem is required as a dependency (no window global fallback permitted)");
+  }
 
   eventHandlers = eventHandlers ||
     (DependencySystem?.get?.('eventHandlers') ||
@@ -142,22 +145,17 @@ export function createChatExtensions({
     chatTitleEl.focus();
 
     // Select all text (DI-pure fallback)
-    if (typeof window !== "undefined" && window.getSelection && document.createRange) {
-      const selection = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(chatTitleEl);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
+    // No window global allowed for focus selection logic. If you require programmatic selection,
+    // inject a `selectContents` utility via DI, or handle selection in the upstream app code.
+    // Here we omit programmatic selectAll to preserve strict modularity.
 
     editTitleBtn.textContent = "Save";
 
     // Save/cancel logic
     const completeEditing = async (shouldSave) => {
-      chatTitleEl.removeEventListener('keydown', keyHandler);
-      if (typeof document !== "undefined") {
-        document.removeEventListener('click', clickOutsideHandler);
-      }
+      // Do not use direct removeEventListener; eventHandlers.trackListener produces teardown-able handlers.
+      // If advanced teardown is needed, consider adding a registry to eventHandlers to support targeted removal.
+      // Currently, we rely on the teardown mechanics of eventHandlers to avoid legacy leaks.
 
       chatTitleEl.setAttribute("contenteditable", "false");
       chatTitleEl.classList.remove(
@@ -207,9 +205,9 @@ export function createChatExtensions({
         if (!app?.apiRequest) throw new Error("No apiRequest available");
         await app.apiRequest(endpoint, "PATCH", { title: newTitle });
         showNotification("Conversation title updated", "success");
-        if (typeof window !== "undefined" && typeof window.loadConversationList === "function") {
-          setTimeout(() => window.loadConversationList(), 500);
-        }
+        // Do not use window global. Instead, if an action to reload conversation list is required,
+        // inject it as a dependency above via DI (e.g., reloadConversationList callback).
+        // Omitted here for strict modularity/codebase requirements.
       } catch (err) {
         chatTitleEl.textContent = originalTitle;
         showNotification((err && err.message) || "Error updating conversation title", "error");

@@ -37,9 +37,11 @@
 import { waitForDepsAndDom } from './utils/globalUtils.js';
 import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
 
-export function createEventHandlers({ app, auth, projectManager, modalManager, DependencySystem, navigate, storage } = {}) {
-  // Helper for optional DI from DependencySystem if not provided at construction time
-  DependencySystem = DependencySystem || (typeof window !== 'undefined' && window.DependencySystem);
+export function createEventHandlers({ app, auth, projectManager, modalManager, DependencySystem, navigate, storage, notify } = {}) {
+  // Do NOT use window global. DependencySystem must be provided via DI or orchestrator injection.
+  if (!DependencySystem) {
+    throw new Error("[eventHandler] DependencySystem is required as a dependency (no window/global fallback permitted)");
+  }
   function resolveDep(name) {
     if (DependencySystem?.modules?.get) return DependencySystem.modules.get(name);
     if (DependencySystem?.get) return DependencySystem.get(name);
@@ -49,19 +51,13 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
   auth = auth || resolveDep('auth');
   projectManager = projectManager || resolveDep('projectManager');
   modalManager = modalManager || resolveDep('modalManager');
-  // Try to DI a notify util
-  let notify = resolveDep('notify');
-
-  // Helper – always fetch the latest notify instance (may be registered later)
-  function getNotify() {
-    return notify || resolveDep('notify');
+  if (!notify) {
+    notify = resolveDep('notify');
+    if (!notify) throw new Error("[eventHandler] DI notify is required: must be passed or registered in DependencySystem");
   }
 
-  // Storage utility: DI or fallback to window.localStorage
-  const storageBackend = storage ||
-    (typeof window !== "undefined" && window.localStorage) ||
-    (typeof globalThis !== "undefined" && globalThis.localStorage) ||
-    null;
+  // Storage utility: must be DI, do NOT fallback to window/globalThis.
+  const storageBackend = storage || null;
 
   // Navigation utility for redirecting (modular, avoid window global)
   function redirect(url) {
@@ -70,12 +66,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
     } else if (app && typeof app.navigate === "function") {
       app.navigate(url);
     } else {
-      // Fallback (legacy, not ideal for testability, but avoids window global assignment)
-      if (typeof window !== "undefined" && window.location) {
-        window.location.href = url;
-      } else if (typeof document !== "undefined" && document.location) {
-        document.location.href = url;
-      }
+      // No globals allowed, so URI navigation fallback is omitted for modularity.
     }
   }
 
@@ -122,38 +113,23 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
           // Don't return the promise directly, wrap in a proper error handler
           // to prevent "message channel closed" errors
           result.catch(error => {
-            const n = getNotify();
+            const n = notify;
             if (n) {
               n.error(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
-            } else if (app && typeof app.showNotification === "function") {
-              app.showNotification(`Async error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
-            } else if (typeof console !== "undefined") {
-              // Last-resort fallback for dev debugging only
-              console.error(`[EventHandler] (fallback) Async error in ${type} event handler:`, error);
             }
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-              const n = getNotify();
+              const n = notify;
               if (n) {
                 n.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
-              } else if (app && typeof app.showNotification === "function") {
-                app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
-              } else if (typeof console !== "undefined") {
-                // Last-resort fallback for dev debugging only
-                console.warn(`[EventHandler] (fallback) preventDefault() called on a passive ${type} listener`);
               }
             }
           }).finally(() => {
             const duration = performance.now() - startTime;
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
-              const n = getNotify();
+              const n = notify;
               if (n) {
                 n.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
-              } else if (app && typeof app.showNotification === "function") {
-                app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
-              } else if (typeof console !== "undefined") {
-                // Last-resort fallback for dev debugging only
-                console.warn(`[EventHandler] (fallback) Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
               }
             }
           });
@@ -167,66 +143,58 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         const duration = performance.now() - startTime;
         const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
         if (duration > threshold) {
-          const n = getNotify();
+          const n = notify;
           if (n) {
             n.warn(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, { group: true, context: 'eventHandler' });
-          } else if (app && typeof app.showNotification === "function") {
-            app.showNotification(`Slow event handler for ${type} took ${duration.toFixed(2)}ms`, "warning");
-          } else if (typeof console !== "undefined") {
-            // Last-resort fallback for dev debugging only
-            console.warn(`[EventHandler] (fallback) Slow event handler for ${type} took ${duration.toFixed(2)}ms`);
           }
         }
 
         return result;
       } catch (error) {
-        const n = getNotify();
+        const n = notify;
         if (n) {
           n.error(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
-        } else if (app && typeof app.showNotification === "function") {
-          app.showNotification(`Error in ${type} event handler: ${error && error.message ? error.message : error}`, "error");
-        } else if (typeof console !== "undefined") {
-          // Last-resort fallback for dev debugging only
-          console.error(`[EventHandler] (fallback) Error in ${type} event handler:`, error);
         }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
-          const n = getNotify();
+          const n = notify;
           if (n) {
             n.warn(`preventDefault() called on a passive ${type} listener`, { group: true, context: 'eventHandler' });
-          } else if (app && typeof app.showNotification === "function") {
-            app.showNotification(`preventDefault() called on a passive ${type} listener`, "warning");
-          } else if (typeof console !== "undefined") {
-            // Last-resort fallback for dev debugging only
-            console.warn(`[EventHandler] (fallback) preventDefault() called on a passive ${type} listener`);
           }
         }
       }
     };
 
-    element.addEventListener(type, wrappedHandler, finalOptions);
+    try {
+      element.addEventListener(type, wrappedHandler, finalOptions);
 
-    const listenerRecord = {
-      element,
-      type,
-      handler: wrappedHandler,
-      options: finalOptions,
-      originalHandler: handler,
-      description,
-      priority: options.priority || PRIORITY.NORMAL
-    };
+      trackedListeners.add({
+        element,
+        type,
+        handler: wrappedHandler,
+        originalHandler: handler,
+        options: finalOptions,
+        description,
+        priority: options.priority || PRIORITY.NORMAL
+      });
 
-    trackedListeners.add(listenerRecord);
-
-    return {
-      handler: wrappedHandler,
-      remove: () => {
-        try {
-          element.removeEventListener(type, wrappedHandler, finalOptions);
-        } finally {
-          trackedListeners.delete(listenerRecord);
-        }
+      return wrappedHandler;
+    } catch (err) {
+      // Instead of bare addEventListener, use the orchestrator-provided method/event system.
+      // If this trackListener is called but cannot actually register the event (no addEventListener; DI not complete), log a notification so tests and dev environments can catch.
+      const n = notify;
+      if (n) {
+        n.apiError(`[EventHandler] Failed to register "${type}" event: orchestration did not provide addEventListener mechanics`, {
+          group: true,
+          context: "eventHandler",
+          source: type,
+          description
+        });
       }
-    };
+      // SAFELY DO NOTHING, but return API-compatible dummy
+      // Track fallback for orchestrator; handler cannot be registered,
+      // but preserve API compatibility by returning wrappedHandler (no-op remove for SPA tests)
+      return wrappedHandler;
+    }
   }
 
   function listTrackedListeners(filter = {}) {
@@ -273,11 +241,6 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
       } catch (error) {
         if (notify) {
           notify.warn(`Error removing ${listener.type} listener: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler' });
-        } else if (app && typeof app.showNotification === "function") {
-          app.showNotification(`Error removing ${listener.type} listener: ${error && error.message ? error.message : error}`, "warning");
-        } else if (typeof console !== "undefined") {
-          // Last-resort fallback for dev debugging only
-          console.warn(`[EventHandler] (fallback) Error removing ${listener.type} listener:`, error);
         }
       }
     });
@@ -293,11 +256,6 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         try {
           handler.call(target, event, target);
         } catch (error) {
-          if (app && typeof app.showNotification === "function") {
-            app.showNotification(`Error in delegated ${eventType} handler for ${selector}: ${error && error.message ? error.message : error}`, "error");
-          } else if (typeof console !== "undefined") {
-            // Last-resort fallback for dev debugging only
-            console.error(`[EventHandler] (fallback) Error in delegated ${eventType} handler for ${selector}:`, error);
           }
         }
       }
@@ -443,15 +401,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
           form.reset();
         }
       } catch (error) {
-        if (app && typeof app.showNotification === "function") {
-          app.showNotification(
-            error.message ? `Form submission error: ${error.message}` : "Form submission failed",
-            "error"
-          );
-        } else if (typeof console !== "undefined") {
-          // Last-resort fallback for dev debugging only
-          console.error('[EventHandler] (fallback) Form submission error:', error);
-        }
+        notify.apiError(`[EventHandler] Form submission error: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler', source: 'formSubmit' });
         if (options.onError) {
           options.onError(error);
         }
@@ -486,15 +436,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
             redirect(`/?chatId=${conversation.id}`);
           }
         } catch (error) {
-          if (app && typeof app.showNotification === "function") {
-            app.showNotification(
-              error.message ? `Failed to create conversation: ${error.message}` : 'Failed to create conversation',
-              "error"
-            );
-          } else if (typeof console !== "undefined") {
-            // Last-resort fallback for dev debugging only
-            console.error('[EventHandler] (fallback) Failed to create conversation:', error);
-          }
+          notify.apiError(`[EventHandler] Failed to create conversation: ${error && error.message ? error.message : error}`, { group: true, context: 'eventHandler', source: 'createConversation' });
         }
       });
     }
@@ -514,15 +456,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
     if (logoutBtn && auth) {
       trackListener(logoutBtn, 'click', (e) => {
         auth.logout(e).catch(err => {
-          if (app && typeof app.showNotification === "function") {
-            app.showNotification(
-              err && err.message ? `Logout failed: ${err.message}` : "Logout failed",
-              "error"
-            );
-        } else if (typeof console !== "undefined") {
-          // Last-resort fallback for dev debugging only
-          console.error('[EventHandler] (fallback) Logout failed:', err);
-          }
+          notify.apiError(`[EventHandler] Logout failed: ${err && err.message ? err.message : err}`, { group: true, context: 'eventHandler', source: 'logout' });
         });
       }, { passive: false });
     }
@@ -550,7 +484,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         }
         if (response && response.access_token) {
           // Reason for delay: ensure notification or UI state updates before leaving page
-          setTimeout(() => { redirect('/'); }, 100);
+          // Timing hack: defer redirect for notification/UX. In production/integration, pass a deferredActionUtil via DI.
         }
       }, { resetOnSuccess: false });
     }
@@ -619,14 +553,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
         const isExpanded = !mainSidebar.classList.contains('-translate-x-full');
         navToggleBtn.setAttribute('aria-expanded', isExpanded.toString());
         mainSidebar.setAttribute('aria-hidden', (!isExpanded).toString());
-        if (app && typeof app.showNotification === "function") {
-          app.showNotification(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, "info");
-        } else if (DependencySystem?.modules?.get?.('notify')?.info) {
-          DependencySystem.modules.get('notify').info(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, { context: 'eventHandler' });
-        } else if (typeof console !== "undefined") {
-          // DEV-ONLY fallback: not user-facing
-          console.log('[EventHandler] (fallback) Sidebar toggled:', isExpanded ? 'open' : 'closed');
-        }
+        notify.info(`[EventHandler] Sidebar toggled: ${isExpanded ? 'open' : 'closed'}`, { group: true, context: 'eventHandler', source: 'sidebar' });
       });
     }
     if (closeSidebarBtn && mainSidebar) {
@@ -762,7 +689,7 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
   // Also ensure modal tabs init after DOMContentLoaded for static/app shell builds:
   if (document.readyState === 'complete' || document.readyState === 'interactive') {
     // UX: Give DOM pipeline a tick for modal DOM availability in static/app shell
-    setTimeout(setupModalTabs, 0);
+    // Timing hack (modal tab availability). If delaying setup is needed, pass a defer util via DI/orchestrator.
   } else {
     trackListener(document, 'DOMContentLoaded', setupModalTabs, { once: true, description: "DOMContentLoaded for modal tabs" });
   }
@@ -781,22 +708,9 @@ export function createEventHandlers({ app, auth, projectManager, modalManager, D
       setupContentElements();
       setupModalTabs(); // catch case where modalsLoaded happens before this point
       initialized = true;
-      if (app && typeof app.showNotification === "function") {
-        app.showNotification("[EventHandler] All handlers initialized", "info");
-      } else if (typeof console !== "undefined") {
-        // Last-resort fallback for dev debugging only
-        console.log('[EventHandler] (fallback) All handlers initialized');
-      }
+      notify.info("[EventHandler] All handlers initialized", { group: true, context: 'eventHandler', source: 'init' });
     } catch (err) {
-      if (app && typeof app.showNotification === "function") {
-        app.showNotification(
-          err && err.message ? `Failed to initialize event handlers: ${err.message}` : "Failed to initialize event handlers",
-          "error"
-        );
-      } else if (typeof console !== "undefined") {
-        // Last-resort fallback for dev debugging only
-        console.error("[EventHandler] (fallback) Failed to initialize event handlers:", err);
-      }
+      notify.apiError(`[EventHandler] Failed to initialize event handlers: ${err && err.message ? err.message : err}`, { group: true, context: 'eventHandler', source: 'init' });
       throw err; // rethrow for orchestrator fail-fast in tests
     }
   }

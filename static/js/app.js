@@ -56,7 +56,7 @@ const sentryNamespace = typeof window !== 'undefined' && window.Sentry
   ? window
   : { Sentry: undefined };
 
-let notificationHandlerWithLog = null;
+let notify = null;
 
 // ────────────── 1. Construct browserAPI & DependencySystem before DI usage ──────────────
 import * as globalUtils from './utils/globalUtils.js';
@@ -179,7 +179,7 @@ import { fetchCurrentUser } from './auth.js';
 
 appState.currentPhase = 'create_event_handlers';
 if (APP_CONFIG.DEBUG) {
-    notificationHandlerWithLog?.debug?.('[App] Phase: create_event_handlers', { phase: appState.currentPhase, timestamp: performance.now() });
+    notify?.debug?.('[App] Phase: create_event_handlers', { phase: appState.currentPhase, timestamp: performance.now() });
 }
 
 let eventHandlers;
@@ -264,7 +264,7 @@ const app = {
             if (!chatManager) throw new Error('Chat Manager dependency not available.');
             const success = await chatManager.loadConversation(conversationId);
             if (!success && APP_CONFIG.DEBUG) {
-                notificationHandlerWithLog.warn(`[App] navigateToConversation: chatManager reported failure loading ${conversationId}`);
+                notify.warn(`[App] navigateToConversation: chatManager reported failure loading ${conversationId}`);
             }
             return success;
         } catch (err) {
@@ -294,7 +294,7 @@ DependencySystem.register('DOMPurify', DOMPurify);
 const storageService = globalUtils.createStorageService({
     browserAPI,
     APP_CONFIG,
-    notificationHandler: notificationHandlerWithLog
+    notificationHandler: notify
 });
 DependencySystem.register('storage', storageService);
 
@@ -306,7 +306,7 @@ DependencySystem.register('storage', storageService);
             const current = ds.modules.get('chatManager');
             if (current && typeof current.loadConversation === 'function') {
                 if (APP_CONFIG.DEBUG) {
-                    notificationHandlerWithLog.warn('[App] Prevented overwriting of valid chatManager instance.');
+                    notify.warn('[App] Prevented overwriting of valid chatManager instance.');
                 }
                 return current;
             }
@@ -339,26 +339,24 @@ async function bootstrap() {
 bootstrap();
 
 function onReady() {
-    if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-        notificationHandlerWithLog.debug(`[App] DOM ready. Starting init...`, { phase: 'onReady', timestamp: performance.now(), location: window.location.href });
+    if (APP_CONFIG.DEBUG && notify) {
+        notify.debug(`[App] DOM ready. Starting init...`, { phase: 'onReady', timestamp: performance.now(), location: window.location.href });
         if (window.currentUser) {
-            notificationHandlerWithLog.debug("[App] Current user loaded from auth.js:", window.currentUser, { phase: 'onReady' });
+            notify.debug("[App] Current user loaded from auth.js:", window.currentUser, { phase: 'onReady' });
         }
     }
     const startTime = performance.now();
     init()
     .then(() => {
         const duration = performance.now() - startTime;
-        if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-            notificationHandlerWithLog.info(`[App] init() resolved successfully in ${duration.toFixed(2)} ms`, { phase: 'onReady', duration });
+        if (APP_CONFIG.DEBUG && notify) {
+            notify.info(`[App] init() resolved successfully in ${duration.toFixed(2)} ms`, { phase: 'onReady', duration });
         }
     })
     .catch(err => {
         const duration = performance.now() - startTime;
-        if (notificationHandlerWithLog) {
-            notificationHandlerWithLog.error("[App] Unhandled error during async init:", err, { phase: 'onReady', duration, errorStack: err?.stack });
-        } else if (window.console) {
-            console.error("[App] Unhandled error during async init:", err);
+        if (notify) {
+            notify.error("[App] Unhandled error during async init:", err, { phase: 'onReady', duration, errorStack: err?.stack });
         }
     });
 }
@@ -367,14 +365,14 @@ async function init() {
     const _initStart = performance.now();
     if (appState.initialized || appState.initializing) {
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog?.info?.('[App] Initialization attempt skipped (already done or in progress).', { phase: 'init', initializing: appState.initializing, initialized: appState.initialized, timestamp: performance.now() });
+            notify?.info?.('[App] Initialization attempt skipped (already done or in progress).', { phase: 'init', initializing: appState.initializing, initialized: appState.initialized, timestamp: performance.now() });
         }
         return appState.initialized;
     }
     // ADD LOGGING HERE
-    console.log('[App Debug] START init function');
-    console.log('[App Debug] Creating Notification Handler...');
-    notificationHandlerWithLog = createNotificationHandler({
+    // console.log('[App Debug] START init function');
+    // console.log('[App Debug] Creating Notification Handler...');
+    const notificationHandler = createNotificationHandler({
         eventHandlers,
         DependencySystem,
         domAPI: {
@@ -385,34 +383,34 @@ async function init() {
         },
         groupWindowMs: 7000
     });
-// ADD LOGGING HERE
-console.log('[App Debug] Notification Handler CREATED.');
-DependencySystem.register('notificationHandler', notificationHandlerWithLog);
-// ADD LOGGING HERE
-console.log('[App Debug] Creating Notify Util...');
-DependencySystem.register('notify', createNotify({ notificationHandler: notificationHandlerWithLog }));
-// ADD LOGGING HERE
-console.log('[App Debug] Notify Util CREATED.');
+    DependencySystem.register('notificationHandler', notificationHandler);
+    notify = createNotify({ notificationHandler });
+    DependencySystem.register('notify', notify);
+
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] START init function', { context: 'app', module: 'App', source: 'init' });
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating Notification Handler...', { context: 'app', module: 'App', source: 'init' });
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Notification Handler CREATED.', { context: 'app', module: 'App', source: 'init' });
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating Notify Util...', { context: 'app', module: 'App', source: 'init' });
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Notify Util CREATED.', { context: 'app', module: 'App', source: 'init' });
+
 
 // ADD LOGGING HERE
-console.log('[App Debug] Creating API Client...');
-if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating API client...');
+// console.log('[App Debug] Creating API Client...');
+if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating API Client...', { context: 'app', module: 'App', source: 'init' });
 
     apiRequest = globalUtils.createApiClient({
         APP_CONFIG,
         globalUtils,
-        notificationHandler: notificationHandlerWithLog,
+        notificationHandler: notify,
         getAuthModule: () => DependencySystem.modules.get('auth'),
         browserAPI
     });
-    // ADD LOGGING HERE
-    console.log('[App Debug] API Client CREATED.');
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] API Client CREATED.', { context: 'app', module: 'App', source: 'init' });
     DependencySystem.register('apiRequest', apiRequest);
     app.apiRequest = apiRequest;
 
     // ADD LOGGING HERE
-    console.log('[App Debug] Creating Chat Manager...');
-    if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating ChatManager...');
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Creating Chat Manager...', { context: 'app', module: 'App', source: 'init' });
 
     const chatBrowserAPI = DependencySystem.modules.get('browserAPI');
     const chatManager = createChatManager({
@@ -445,7 +443,7 @@ if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating API clien
                     ? authModule.isAuthenticated()
                     : false;
             } catch (e) {
-                notificationHandlerWithLog?.warn?.('[App] Error checking isAuthenticated during ChatManager DI', e, { phase: 'init' });
+                notify?.warn?.('[App] Error checking isAuthenticated during ChatManager DI', e, { phase: 'init' });
                 return false;
             }
         },
@@ -453,9 +451,9 @@ if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating API clien
         apiEndpoints: DependencySystem.modules.get('apiEndpoints') // ADDED THIS LINE
     });
     // ADD LOGGING HERE
-    console.log('[App Debug] Chat Manager CREATED.');
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Chat Manager CREATED.', { context: 'app', module: 'App', source: 'init' });
     if (!chatManager || typeof chatManager.initialize !== 'function') {
-        notificationHandlerWithLog.error('[App] createChatManager() did not return a valid ChatManager instance.', { phase: 'init', timestamp: performance.now() });
+        notify.error('[App] createChatManager() did not return a valid ChatManager instance.', { group: true, context: 'app', module: 'App', source: 'init', phase: 'init', timestamp: performance.now() });
         throw new Error('[App] createChatManager() did not return a valid ChatManager instance.');
     }
     DependencySystem.register('chatManager', chatManager);
@@ -468,23 +466,21 @@ if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating API clien
         DependencySystem.register('chatManager', chatManager);
     }
 
-    window.showNotification = notificationHandlerWithLog.show;
-
+    // Deprecated: Remove window.showNotification and all direct fallback notificationHandlerWithLog access.
     document.addEventListener('locationchange', function () {
-        const container = notificationHandlerWithLog.getContainer?.() || document.getElementById('notificationArea');
+        const container = notify.getContainer?.() || document.getElementById('notificationArea');
         if (container) {
             const notificationsToKeep = Array.from(container.children).filter(
                 el => el.classList.contains('priority') || el.classList.contains('sticky')
             );
-            notificationHandlerWithLog.clear();
+            notify.clear();
             notificationsToKeep.forEach(el => container.appendChild(el));
         }
     });
-
-    // Do not override .show – use notification-handler's implementation with grouping/timer.
+    // .show is handled by notification-handler's implementation with grouping/timer.
 
     if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] Initializing application...', { phase: 'init', timestamp: performance.now() });
+        notify.debug('[App] Initializing application...', { phase: 'init', timestamp: performance.now() });
     }
     appState.initializing = true;
     appState.currentPhase = 'starting';
@@ -493,89 +489,87 @@ if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating API clien
     const initStartTime = performance.now();
 
     // ADD LOGGING HERE
-    console.log('[App Debug] Entering main async try block...');
-    // ADD LOGGING HERE
-    console.log('[App Debug] Entering main async try block...');
+    if (APP_CONFIG.DEBUG) notify.debug('[App Debug] Entering main async try block...', { context: 'app', module: 'App', source: 'init' });
     try {
         const _phaseStart = performance.now();
         appState.currentPhase = 'init_core_systems';
-        notificationHandlerWithLog.debug('[App] Phase: init_core_systems - STARTING', { phase: appState.currentPhase, timestamp: _phaseStart }); // MODIFIED
+        notify.debug('[App] Phase: init_core_systems - STARTING', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: _phaseStart });
         await initializeCoreSystems();
-        notificationHandlerWithLog.debug(`[App] Phase "init_core_systems" completed in ${(performance.now() - _phaseStart).toFixed(2)} ms - FINISHED`, { phase: appState.currentPhase }); // MODIFIED
+        notify.debug(`[App] Phase "init_core_systems" completed in ${(performance.now() - _phaseStart).toFixed(2)} ms - FINISHED`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
 
         appState.currentPhase = 'waiting_core_deps';
-        notificationHandlerWithLog.debug('[App] Phase: waiting_core_deps, waiting for DI deps', { phase: appState.currentPhase, timestamp: performance.now() });
+        notify.debug('[App] Phase: waiting_core_deps, waiting for DI deps', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: performance.now() });
         await waitFor(['auth', 'eventHandlers', 'notificationHandler', 'modalManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
 
         appState.currentPhase = 'init_auth';
         const _authInitStart = performance.now();
-        notificationHandlerWithLog.debug('[App] Phase: init_auth - STARTING', { phase: appState.currentPhase, timestamp: _authInitStart }); // MODIFIED
+        notify.debug('[App] Phase: init_auth - STARTING', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: _authInitStart });
         await initializeAuthSystem();
-        notificationHandlerWithLog.debug(`[App] initializeAuthSystem complete in ${(performance.now() - _authInitStart).toFixed(2)} ms - FINISHED`, { phase: appState.currentPhase }); // MODIFIED
+        notify.debug(`[App] initializeAuthSystem complete in ${(performance.now() - _authInitStart).toFixed(2)} ms - FINISHED`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
 
         if (appState.isAuthenticated) {
-            notificationHandlerWithLog.debug(`[App] User is authenticated; fetching current user`, { phase: appState.currentPhase, timestamp: performance.now() });
+            notify.debug(`[App] User is authenticated; fetching current user`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: performance.now() });
             const _currUserStart = performance.now();
             currentUser = await fetchCurrentUser();
             if (currentUser) {
                 browserAPI.setCurrentUser(currentUser);
                 DependencySystem.register('currentUser', currentUser);
-                notificationHandlerWithLog.info(`[App] Current user loaded`, { phase: appState.currentPhase, user: currentUser, ms: (performance.now() - _currUserStart) });
+                notify.info(`[App] Current user loaded`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, user: currentUser, ms: (performance.now() - _currUserStart) });
             } else {
-                notificationHandlerWithLog.warn(`[App] No current user found (was expected)`, { phase: appState.currentPhase, ms: (performance.now() - _currUserStart) });
+                notify.warn(`[App] No current user found (was expected)`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, ms: (performance.now() - _currUserStart) });
             }
         }
 
         appState.currentPhase = 'init_ui';
         const _uiStart = performance.now();
-        notificationHandlerWithLog.debug('[App] Phase: init_ui', { phase: appState.currentPhase, timestamp: _uiStart });
+        notify.debug('[App] Phase: init_ui', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: _uiStart });
         await initializeUIComponents();
-        notificationHandlerWithLog.debug(`[App] initializeUIComponents complete in ${(performance.now() - _uiStart).toFixed(2)} ms`, { phase: appState.currentPhase });
+        notify.debug(`[App] initializeUIComponents complete in ${(performance.now() - _uiStart).toFixed(2)} ms`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
 
         appState.currentPhase = 'registering_listeners';
         const _listenersStart = performance.now();
-        notificationHandlerWithLog.debug('[App] Phase: registering_listeners', { phase: appState.currentPhase, timestamp: _listenersStart });
+        notify.debug('[App] Phase: registering_listeners', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: _listenersStart });
         registerAppListeners();
-        notificationHandlerWithLog.debug(`[App] registerAppListeners complete in ${(performance.now() - _listenersStart).toFixed(2)} ms`, { phase: appState.currentPhase });
+        notify.debug(`[App] registerAppListeners complete in ${(performance.now() - _listenersStart).toFixed(2)} ms`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
 
         appState.currentPhase = 'finalizing';
         appState.initialized = true;
 
         try {
-            notificationHandlerWithLog.debug('[App] Phase: finalization sub-tasks', { phase: appState.currentPhase });
+            notify.debug('[App] Phase: finalization sub-tasks', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
             const eh = DependencySystem.modules.get('eventHandlers');
             eh?.init?.();
             DependencySystem.modules.get('modelConfig')?.initializeUI?.();
         } catch (err) {
-            notificationHandlerWithLog.warn('[App] Post-initialization safety net failed:', err, { phase: appState.currentPhase, errorStack: err?.stack });
+            notify.warn('[App] Post-initialization safety net failed:', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, error: err, errorStack: err?.stack });
         }
 
-        notificationHandlerWithLog.debug('[App] handleNavigationChange() (final phase)', { phase: appState.currentPhase, timestamp: performance.now() });
+        notify.debug('[App] handleNavigationChange() (final phase)', { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, timestamp: performance.now() });
         handleNavigationChange();
 
         const initEndTime = performance.now();
         const totalMs = initEndTime - initStartTime;
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog?.info?.(
+            notify?.info?.(
                 `[App] Initialization complete in ${totalMs.toFixed(2)} ms. (phase=${appState.currentPhase})`,
-                { phase: appState.currentPhase, ms: totalMs, timestamp: initEndTime, authenticated: appState.isAuthenticated, initialized: appState.initialized }
+                { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, ms: totalMs, timestamp: initEndTime, authenticated: appState.isAuthenticated, initialized: appState.initialized }
             );
             if (totalMs > 3000) {
-                notificationHandlerWithLog?.warn?.(`[App] Initialization exceeded perf warning threshold: ${totalMs.toFixed(1)} ms`, { phase: appState.currentPhase, ms: totalMs });
+                notify?.warn?.(`[App] Initialization exceeded perf warning threshold: ${totalMs.toFixed(1)} ms`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, ms: totalMs });
             }
         }
         document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: true } }));
         return true;
 
     } catch (err) {
-        notificationHandlerWithLog?.error?.('[App] Caught error in main init()', err, { phase: appState.currentPhase, timestamp: performance.now(), errorStack: err?.stack });
+        notify?.error?.('[App] Caught error in main init()', { group: true, context: 'app', module: 'App', source: 'init', error: err, phase: appState.currentPhase, timestamp: performance.now(), errorStack: err?.stack });
         handleInitError(err);
         document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
         return false;
     } finally {
         const totalFinalMs = performance.now() - _initStart;
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.debug(`[App] init() finally block executed, hiding spinner. Total init=${totalFinalMs.toFixed(1)} ms`, { phase: appState.currentPhase, ms: totalFinalMs });
+            notify.debug(`[App] init() finally block executed, hiding spinner. Total init=${totalFinalMs.toFixed(1)} ms`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase, ms: totalFinalMs });
         }
         appState.initializing = false;
         globalUtils.toggleElement(APP_CONFIG.SELECTORS.APP_LOADING_SPINNER, false);
@@ -585,14 +579,14 @@ if (APP_CONFIG.DEBUG) notificationHandlerWithLog.debug('[App] Creating API clien
 
 async function initializeCoreSystems() {
     if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] Initializing core systems...');
+        notify.debug('[App] Initializing core systems...', { context: 'app', module: 'App', source: 'initializeCoreSystems' });
     }
     if (document.readyState !== 'complete' && document.readyState !== 'interactive') {
         await new Promise(resolve => {
             document.addEventListener('DOMContentLoaded', resolve, { once: true });
         });
     }
-    notificationHandlerWithLog.getContainer();
+    notify.getContainer?.();
 
     const modalManager = createModalManager();
     DependencySystem.register('modalManager', modalManager);
@@ -610,7 +604,7 @@ async function initializeCoreSystems() {
     try {
         auth = createAuthModule({
             apiRequest: apiRequestMod,
-            notify: DependencySystem.modules.get('notify'),
+            notify: notify,
             eventHandlers: eventHandlersMod,
             domAPI: { getElementById: (id) => document.getElementById(id), isDocumentHidden: () => document.hidden },
             sanitizer: DependencySystem.modules.get('sanitizer'),
@@ -619,13 +613,11 @@ async function initializeCoreSystems() {
         });
         DependencySystem.register('auth', auth);
     } catch (err) {
-        // Fallback DI registration and surface error
         auth = {
             isAuthenticated: () => false,
             init: () => { throw new Error("[App] auth unavailable due to error during initialization: " + err.message); }
         };
         DependencySystem.register('auth', auth);
-        const notify = DependencySystem.modules.get('notify');
         if (notify && typeof notify.error === "function") {
             notify.error("[App] Critical error initializing auth module: " + err.message, { group: true, context: "app" });
         }
@@ -645,7 +637,6 @@ async function initializeCoreSystems() {
         throw new Error('[App] chatManager registration: not a valid instance with "initialize".');
     }
 
-    const notify = DependencySystem.modules.get('notify');
     const projectManager = createProjectManager({
         DependencySystem,
         chatManager: chatMgrInstance,
@@ -674,9 +665,6 @@ async function initializeCoreSystems() {
         }
         if (!instance || typeof instance[requiredMethod] !== 'function') {
             notify?.error?.(`[App] ${name} invalid: see developer console for details.`, { group: true, context: name });
-            if (APP_CONFIG.DEBUG) {
-                notificationHandlerWithLog.error(`[App] ${name} invalid:`, instance);
-            }
             throw new Error(`[App] ${name} registration: not a valid instance with "${requiredMethod}" method`);
         }
     }
@@ -690,28 +678,28 @@ async function initializeCoreSystems() {
         const doc = browserAPI.getDocument();
         let container = doc.getElementById(containerId);
         if (!container) {
-            notificationHandlerWithLog.error(`[App] #${containerId} element not found in DOM`);
+            notify.error(`[App] #${containerId} element not found in DOM`);
             container = doc.createElement('div');
             container.id = containerId;
             doc.body.appendChild(container);
-            notificationHandlerWithLog.debug(`[App] Created missing #${containerId}`);
+            notify.debug(`[App] Created missing #${containerId}`, { context: 'app', module: 'App', source: 'injectAndVerifyHtml' });
         }
 
-        notificationHandlerWithLog.debug(`[App] Attempting to load and inject HTML from ${url}...`);
+        notify.debug(`[App] Attempting to load and inject HTML from ${url}...`, { context: 'app', module: 'App', source: 'injectAndVerifyHtml' });
 
         try {
             const resp = await fetch(url, { cache: 'no-store' });
-            notificationHandlerWithLog.debug(`[App] Fetch status for ${url}: ${resp.status}`);
+            notify.debug(`[App] Fetch status for ${url}: ${resp.status}`, { context: 'app', module: 'App', source: 'injectAndVerifyHtml' });
             if (!resp.ok) {
                 throw new Error(`HTTP error! status: ${resp.status}`);
             }
 
             const html = await resp.text();
-            notificationHandlerWithLog.debug(`[App] HTML loaded from ${url}, length: ${html.length}`);
+            notify.debug(`[App] HTML loaded from ${url}, length: ${html.length}`, { context: 'app', module: 'App', source: 'injectAndVerifyHtml' });
 
             if (html && html.length > 0) {
                 container.innerHTML = html;
-                notificationHandlerWithLog.debug(`[App] HTML injected into #${containerId}`);
+                notify.debug(`[App] HTML injected into #${containerId}`, { context: 'app', module: 'App', source: 'injectAndVerifyHtml' });
                 doc.dispatchEvent(new CustomEvent('modalsLoaded'));
             } else {
                 throw new Error('Empty HTML response');
@@ -816,7 +804,7 @@ async function initializeCoreSystems() {
     });
 
     const modalsTimeout = setTimeout(() => {
-        notificationHandlerWithLog.error('[App] TIMEOUT: Modal HTML failed to load in 10 seconds');
+        notify?.error?.('[App] TIMEOUT: Modal HTML failed to load in 10 seconds', { group: true, context: "app", module: "App", source: "initializeCoreSystems" });
         browserAPI.getDocument().dispatchEvent(new CustomEvent('modalsLoaded'));
     }, 10000);
 
@@ -833,31 +821,27 @@ async function initializeCoreSystems() {
     );
 
     await modalsReady;
-    notificationHandlerWithLog.debug('[App] Modal HTML load promise resolved. Proceeding with initialization.');
+    notify.debug('[App] Modal HTML load promise resolved. Proceeding with initialization.', { context: 'app', module: 'App', source: 'initializeCoreSystems' });
 
-    // ADD LOGGING HERE
-    notificationHandlerWithLog.debug('[App] Injecting and verifying modals HTML...');
+    notify.debug('[App] Injecting and verifying modals HTML...', { context: 'app', module: 'App', source: 'initializeCoreSystems' });
     const modalsOk = await injectAndVerifyHtml('/static/html/modals.html', 'modalsContainer', Object.values(MODAL_MAPPINGS));
-    // ADD LOGGING HERE
-    notificationHandlerWithLog.debug(`[App] Modal HTML injection result: ${modalsOk}`);
+    notify.debug(`[App] Modal HTML injection result: ${modalsOk}`, { context: 'app', module: 'App', source: 'initializeCoreSystems' });
     if (!modalsOk) {
-        const notify = DependencySystem.modules.get('notify');
-        notify?.error?.('[App] One or more modal dialogs failed to appear after HTML injection.', { group: true, context: "app" });
+        notify?.error?.('[App] One or more modal dialogs failed to appear after HTML injection.', { group: true, context: "app", module: "App", source: "initializeCoreSystems" });
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.error('[App] One or more modal dialogs failed to appear in DOM after modal HTML injection.');
+            notify.error('[App] One or more modal dialogs failed to appear in DOM after modal HTML injection.', { group: true, context: 'app', module: 'App', source: 'initializeCoreSystems' });
         }
     }
 
     if (typeof modalManager.init === 'function') {
         modalManager.init();
     } else {
-        const notify = DependencySystem.modules.get('notify');
         notify?.error?.('[App] modalManager.init function not found!', { group: true, context: "app" });
     }
 
     if (typeof chatMgrInstance.initialize === 'function' && appState.isAuthenticated) {
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.debug('[App] Initializing ChatManager (user already authenticated)…');
+            notify.debug('[App] Initializing ChatManager (user already authenticated)…', { context: 'app', module: 'App', source: 'initializeCoreSystems' });
         }
         await chatMgrInstance.initialize();
     }
@@ -865,10 +849,9 @@ async function initializeCoreSystems() {
     if (typeof projectModal.init === 'function') {
         projectModal.init();
     } else {
-        const notify = DependencySystem.modules.get('notify');
-        notify?.error?.('[App] Project modal init function not found!', { group: true, context: "app" });
+        notify?.error?.('[App] Project modal init function not found!', { group: true, context: "app", module: "App", source: "initializeCoreSystems" });
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.error('[App] projectModal.init function not found!');
+            notify.error('[App] projectModal.init function not found!', { group: true, context: 'app', module: 'App', source: 'initializeCoreSystems' });
         }
     }
 
@@ -879,13 +862,13 @@ async function initializeCoreSystems() {
         eventHandlersMod.init();
     }
     if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] Core systems initialized.');
+        notify.debug('[App] Core systems initialized.', { context: 'app', module: 'App', source: 'initializeCoreSystems' });
     }
 }
 
 async function initializeAuthSystem() {
     if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] Initializing authentication system...');
+        notify.debug('[App] Initializing authentication system...', { context: 'app', module: 'App', source: 'initializeAuthSystem' });
     }
     const auth = DependencySystem.modules.get('auth');
     if (!auth || typeof auth.init !== 'function') {
@@ -898,7 +881,7 @@ async function initializeAuthSystem() {
         }
         appState.isAuthenticated = auth.isAuthenticated();
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.debug(`[App] Initial authentication state: ${appState.isAuthenticated}`);
+            notify.debug(`[App] Initial authentication state: ${appState.isAuthenticated}`, { context: 'app', module: 'App', source: 'initializeAuthSystem' });
         }
         const bus = auth.AuthBus;
         if (bus && typeof eventHandlers.trackListener === 'function') {
@@ -914,28 +897,28 @@ async function initializeAuthSystem() {
         }
         renderAuthHeader();
     } catch (err) {
-        notificationHandlerWithLog.error('[App] Auth system initialization/check failed:', err);
+        notify.error('[App] Auth system initialization/check failed:', { group: true, context: 'app', module: 'App', source: 'initializeAuthSystem', error: err });
         appState.isAuthenticated = false;
-        const notify = DependencySystem.modules.get('notify');
-        notify?.error?.(`Authentication check failed: ${err.message}`, { group: true, context: "auth" });
+        notify?.error?.(`Authentication check failed: ${err.message}`, { group: true, context: "auth", module: "Auth", source: "init" });
         throw new Error(`[App] initializeAuthSystem failed: ${err.message}`);
     }
 }
 
 let _uiComponentsInitialized = false;
 async function initializeUIComponents() {
+    const notify = DependencySystem.modules.get('notify'); // Reverted to notify for this scope, or ensure it's consistently named
     const browserAPI = DependencySystem.modules.get('browserAPI');
     const doc = browserAPI.getDocument();
 
     if (_uiComponentsInitialized) {
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.warn('[App] initializeUIComponents called twice, skipping.');
+            notify.warn('[App] initializeUIComponents called twice, skipping.', { context: 'app', module: 'App', source: 'initializeUIComponents' });
         }
         return;
     }
     _uiComponentsInitialized = true;
     if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] Initializing UI components...');
+        notify.debug('[App] Initializing UI components...', { context: 'app', module: 'App', source: 'initializeUIComponents' });
     }
 
     await globalUtils.waitForDepsAndDom({
@@ -960,7 +943,7 @@ async function initializeUIComponents() {
     }
 
     // ADD LOGGING HERE
-    notificationHandlerWithLog.debug('[App] Injecting and verifying project list HTML...');
+    notify.debug('[App] Injecting and verifying project list HTML...', { context: 'app', module: 'App', source: 'initializeUIComponents' });
     if (!doc.getElementById('projectList')) {
         try {
             const resp = await fetch('/static/html/project_list.html', { cache: 'reload' });
@@ -973,21 +956,19 @@ async function initializeUIComponents() {
             }
             projectListView.innerHTML = html;
             if (!doc.getElementById('projectList')) {
-                const notify = DependencySystem.modules.get('notify');
-                notify?.error?.('Static /static/html/project_list.html inject failed (missing #projectList)!', { group: true, context: "app", timeout: 10000 });
+                notify?.error?.('Static /static/html/project_list.html inject failed (missing #projectList)!', { group: true, context: "app", module: "App", source: "initializeUIComponents", timeout: 10000 });
                 throw new Error('Injected /static/html/project_list.html but #projectList is still missing!');
             }
             // ADD LOGGING HERE
-            notificationHandlerWithLog.debug('[App] Project list HTML injection complete.');
+            notify.debug('[App] Project list HTML injection complete.', { context: 'app', module: 'App', source: 'initializeUIComponents' });
         } catch (err) {
-            const notify = DependencySystem.modules.get('notify');
-            notify?.error?.(`Failed to load project list UI: ${err.message}`, { group: true, context: "app", timeout: 10000 });
+            notify?.error?.(`Failed to load project list UI: ${err.message}`, { group: true, context: "app", module: "App", source: "initializeUIComponents", timeout: 10000 });
             throw err;
         }
     }
 
     // ADD LOGGING HERE
-    notificationHandlerWithLog.debug('[App] Injecting and verifying project details HTML...');
+    notify.debug('[App] Injecting and verifying project details HTML...', { context: 'app', module: 'App', source: 'initializeUIComponents' });
     if (!doc.getElementById('projectDetails')) {
         try {
             const resp = await fetch('/static/html/project_details.html', { cache: 'reload' });
@@ -1000,15 +981,13 @@ async function initializeUIComponents() {
             }
             projectDetailsView.innerHTML = html;
             if (!doc.getElementById('projectDetails')) {
-                const notify = DependencySystem.modules.get('notify');
-                notify?.error?.('Static /static/html/project_details.html inject failed (missing #projectDetails)!', { group: true, context: "app", timeout: 10000 });
+                notify?.error?.('Static /static/html/project_details.html inject failed (missing #projectDetails)!', { group: true, context: "app", module: "App", source: "initializeUIComponents", timeout: 10000 });
                 throw new Error('Injected /static/html/project_details.html but #projectDetails is still missing!');
             }
             // ADD LOGGING HERE
-            notificationHandlerWithLog.debug('[App] Project details HTML injection complete.');
+            notify.debug('[App] Project details HTML injection complete.', { context: 'app', module: 'App', source: 'initializeUIComponents' });
         } catch (err) {
-            const notify = DependencySystem.modules.get('notify');
-            notify?.error?.(`Failed to load project details UI: ${err.message}`, { group: true, context: "app", timeout: 10000 });
+            notify?.error?.(`Failed to load project details UI: ${err.message}`, { group: true, context: "app", module: "App", source: "initializeUIComponents", timeout: 10000 });
             throw err;
         }
     }
@@ -1027,7 +1006,7 @@ async function initializeUIComponents() {
     const chatExtensions = createChatExtensions({
         DependencySystem,
         eventHandlers,
-        notificationHandler: notificationHandlerWithLog
+        notificationHandler: DependencySystem.modules.get('notificationHandler')
     });
     DependencySystem.register('chatExtensions', chatExtensions);
 
@@ -1125,7 +1104,7 @@ async function initializeUIComponents() {
         apiRequest,
         auth: DependencySystem.modules.get('auth'),
         projectManager,
-        showNotification: notificationHandlerWithLog.show,
+        showNotification: DependencySystem.modules.get('notificationHandler').show,
         uiUtils: globalUtils,
         sanitizer: DependencySystem.modules.get('sanitizer')
     });
@@ -1135,8 +1114,7 @@ async function initializeUIComponents() {
         try {
             await sidebar.init();
         } catch (err) {
-            const notify = DependencySystem.modules.get('notify');
-            notify?.error?.('[App] Failed to initialize sidebar: ' + (err?.message || err), { group: true, context: "sidebar" });
+            notify?.error?.('[App] Failed to initialize sidebar: ' + (err?.message || err), { group: true, context: "sidebar", module: "Sidebar", source: "init" });
         }
     }
     chatExtensions.init();
@@ -1147,19 +1125,17 @@ async function initializeUIComponents() {
         try {
             await knowledgeBaseComponent.initialize();
         } catch (err) {
-            const notify = DependencySystem.modules.get('notify');
-            notify?.error?.('[App] Failed to initialize knowledge base component: ' + (err?.message || err), { group: true, context: "knowledgeBaseComponent" });
+            notify?.error?.('[App] Failed to initialize knowledge base component: ' + (err?.message || err), { group: true, context: "knowledgeBaseComponent", module: "KnowledgeBaseComponent", source: "initialize" });
         }
     }
     if (typeof projectDashboard.initialize === 'function') {
         try {
             if (APP_CONFIG.DEBUG) {
-                notificationHandlerWithLog.debug('[App] Initializing ProjectDashboard instance...');
+                notify.debug('[App] Initializing ProjectDashboard instance...', { context: 'app', module: 'App', source: 'initializeUIComponents' });
             }
             await projectDashboard.initialize();
         } catch (err) {
-            const notify = DependencySystem.modules.get('notify');
-            notify?.error?.('[App] Failed to initialize project dashboard: ' + (err?.message || err), { group: true, context: "projectDashboard" });
+            notify?.error?.('[App] Failed to initialize project dashboard: ' + (err?.message || err), { group: true, context: "projectDashboard", module: "ProjectDashboard", source: "initialize" });
         }
     }
     const projectListComp = DependencySystem.modules.get('projectListComponent');
@@ -1173,19 +1149,17 @@ async function initializeUIComponents() {
 
     if (appState.isAuthenticated) {
         if (projectManager?.loadProjects) {
-            notificationHandlerWithLog.debug('[App] Calling projectManager.loadProjects from initializeUIComponents');
+            notify.debug('[App] Calling projectManager.loadProjects from initializeUIComponents', { context: 'app', module: 'App', source: 'initializeUIComponents' });
             projectManager.loadProjects('all').catch(err => {
-                notificationHandlerWithLog.error('[App] Failed to load projects during initialization:', err);
-                const notify = DependencySystem.modules.get('notify');
-                notify?.error?.('Failed to load projects. Please try refreshing.', { group: true, context: "projectManager" });
+                notify.error('[App] Failed to load projects during initialization:', { group: true, context: 'app', module: 'App', source: 'initializeUIComponents', error: err });
+                notify?.error?.('Failed to load projects. Please try refreshing.', { group: true, context: "projectManager", module: "ProjectManager", source: "loadProjects" });
             });
         } else {
-            notificationHandlerWithLog.error('[App] projectManager or loadProjects method not available:', projectManager);
-            const notify = DependencySystem.modules.get('notify');
-            notify?.error?.('Project manager initialization issue. Please try refreshing.', { group: true, context: "projectManager" });
+            notify.error('[App] projectManager or loadProjects method not available:', { group: true, context: 'app', module: 'App', source: 'initializeUIComponents', projectManagerInstance: projectManager });
+            notify?.error?.('Project manager initialization issue. Please try refreshing.', { group: true, context: "projectManager", module: "ProjectManager", source: "initialize" });
         }
     } else {
-        notificationHandlerWithLog.warn('[App] Not authenticated, skipping initial project load');
+        notify.warn('[App] Not authenticated, skipping initial project load', { context: 'app', module: 'App', source: 'initializeUIComponents' });
     }
 
     if (typeof window.initAccessibilityEnhancements === 'function') {
@@ -1196,7 +1170,7 @@ async function initializeUIComponents() {
     }
 
     if (APP_CONFIG.DEBUG) {
-        notificationHandlerWithLog.debug('[App] UI components initialized.');
+        notify.debug('[App] UI components initialized.', { context: 'app', module: 'App', source: 'initializeUIComponents' });
     }
 }
 
@@ -1240,8 +1214,9 @@ function renderAuthHeader() {
 
 
 function registerAppListeners() {
-    if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-        notificationHandlerWithLog.debug('[App] Registering global event listeners...');
+    const notify = DependencySystem.modules.get('notify');
+    if (APP_CONFIG.DEBUG && notify) {
+        notify.debug('[App] Registering global event listeners...', { context: 'app', module: 'App', source: 'registerAppListeners' });
     }
 
     waitFor(['auth', 'chatManager', 'projectManager'], () => {
@@ -1251,11 +1226,11 @@ function registerAppListeners() {
             description: 'Global locationchange event'
         });
     }).catch(err => {
-        if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Failed to wait for dependencies:', err);
+        if (notify) notify.error('[App] Failed to wait for dependencies:', { group: true, context: 'app', module: 'App', source: 'registerAppListeners', error: err });
     });
 
-    if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-        notificationHandlerWithLog.debug('[App] Global event listeners registered.');
+    if (APP_CONFIG.DEBUG && notify) {
+        notify.debug('[App] Global event listeners registered.', { context: 'app', module: 'App', source: 'registerAppListeners' });
     }
 }
 
@@ -1280,13 +1255,13 @@ function setupChatInitializationTrigger() {
                 const [authMod, chatMgr, pm] = await waitFor(requiredDeps, null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT / 2);
                 if (!authMod || !chatMgr) {
                     if (APP_CONFIG.DEBUG) {
-                        notificationHandlerWithLog.warn('[App] Chat init: Required dependency missing.', [authMod, chatMgr, pm]);
+                        DependencySystem.modules.get('notify')?.warn?.('[App] Chat init: Required dependency missing.', { group: true, context: 'app', module: 'App', source: 'debouncedInitChat', deps: [authMod, chatMgr, pm] });
                     }
                     return;
                 }
                 if (typeof authMod.isAuthenticated !== "function") {
                     if (APP_CONFIG.DEBUG) {
-                        notificationHandlerWithLog.warn('[App] Chat init: auth.isAuthenticated is not a function.', authMod);
+                        DependencySystem.modules.get('notify')?.warn?.('[App] Chat init: auth.isAuthenticated is not a function.', { group: true, context: 'app', module: 'App', source: 'debouncedInitChat', authModule: authMod });
                     }
                     return;
                 }
@@ -1297,26 +1272,27 @@ function setupChatInitializationTrigger() {
                 // Ensure user is authenticated AND we have a valid project ID before initializing chat
                 if (authMod.isAuthenticated() && typeof chatMgr.initialize === "function") {
                     if (APP_CONFIG.DEBUG) {
-                        notificationHandlerWithLog.debug(`[App] Debounced chat init triggered. Auth: true, Project ID check: ${finalProjectId}`);
+                        DependencySystem.modules.get('notify')?.debug?.(`[App] Debounced chat init triggered. Auth: true, Project ID check: ${finalProjectId}`, { group: true, context: 'app', module: 'App', source: 'debouncedInitChat' });
                     }
                     // Only initialize if we have a valid project ID determined by the logic above
                     if (finalProjectId && globalUtils.isValidProjectId(finalProjectId)) {
                          if (APP_CONFIG.DEBUG) {
-                             notificationHandlerWithLog.debug(`[App] Initializing chat with Project ID: ${finalProjectId}`);
+                             DependencySystem.modules.get('notify')?.debug?.(`[App] Initializing chat with Project ID: ${finalProjectId}`, { group: true, context: 'app', module: 'App', source: 'debouncedInitChat' });
                          }
                         await chatMgr.initialize({ projectId: finalProjectId });
                     } else {
                         // If authenticated but no project ID yet (likely due to timing), clear the chat state.
                         if (APP_CONFIG.DEBUG) {
-                            notificationHandlerWithLog.debug(`[App] Skipping chat initialize: No valid project ID found (Project: ${finalProjectId}). Clearing chat.`);
+                            DependencySystem.modules.get('notify')?.debug?.(`[App] Skipping chat initialize: No valid project ID found (Project: ${finalProjectId}). Clearing chat.`, { group: true, context: 'app', module: 'App', source: 'debouncedInitChat' });
                         }
                         chatMgr?.clear?.(); // Call clear instead if no valid project
                     }
                 } else { // Not authenticated or chatMgr invalid
                     if (APP_CONFIG.DEBUG) {
-                        notificationHandlerWithLog.debug(
+                        DependencySystem.modules.get('notify')?.debug?.(
                             `[App] Skipping debounced chat init. Auth: ${authMod.isAuthenticated?.() ?? 'N/A'}, ` +
-                            `chatMgr valid: ${typeof chatMgr.initialize === "function"}, Project: ${finalProjectId}`
+                            `chatMgr valid: ${typeof chatMgr.initialize === "function"}, Project: ${finalProjectId}`,
+                            { group: true, context: 'app', module: 'App', source: 'debouncedInitChat' }
                         );
                     }
                     chatMgr?.clear?.();
@@ -1364,7 +1340,7 @@ function setupChatInitializationTrigger() {
             );
             document._chatInitProjListenerAttached = true;
             if (APP_CONFIG.DEBUG) {
-                notificationHandlerWithLog.warn('[App] Using eventHandlers for currentProjectChanged -> chat reinit listener.');
+                DependencySystem.modules.get('notify')?.warn?.('[App] Using eventHandlers for currentProjectChanged -> chat reinit listener.', { group: true, context: 'app', module: 'App', source: 'setupChatInitializationTrigger' });
             }
         }
         eventHandlers.trackListener(
@@ -1379,7 +1355,7 @@ function setupChatInitializationTrigger() {
         debouncedInitChat();
     }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)
         .catch(err => {
-            notificationHandlerWithLog.error('[App] Failed setup for chat init triggers:', err);
+            DependencySystem.modules.get('notify')?.error?.('[App] Failed setup for chat init triggers:', { group: true, context: 'app', module: 'App', source: 'setupChatInitializationTrigger', error: err });
         });
 }
 
@@ -1387,34 +1363,34 @@ let lastHandledProj = null;
 let lastHandledChat = null;
 
 async function handleNavigationChange() {
+    const notify = DependencySystem.modules.get('notify');
     if (!appState.initialized) {
         if (appState.initializing) {
             await new Promise(r => setTimeout(r, 150));
             if (!appState.initialized) {
-                if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                    notificationHandlerWithLog.warn("[App] handleNavigationChange: Aborted, initialization didn't complete.");
+                if (APP_CONFIG.DEBUG && notify) {
+                    notify.warn("[App] handleNavigationChange: Aborted, initialization didn't complete.", { context: 'app', module: 'App', source: 'handleNavigationChange' });
                 }
                 return;
             }
         } else {
-            if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                notificationHandlerWithLog.warn("[App] handleNavigationChange: Aborted, application not initialized.");
+            if (APP_CONFIG.DEBUG && notify) {
+                notify.warn("[App] handleNavigationChange: Aborted, application not initialized.", { context: 'app', module: 'App', source: 'handleNavigationChange' });
             }
             return;
         }
     }
 
     const currentUrl = window.location.href;
-    if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-        notificationHandlerWithLog.debug(`[App] Handling navigation change. URL: ${currentUrl}`);
+    if (APP_CONFIG.DEBUG && notify) {
+        notify.debug(`[App] Handling navigation change. URL: ${currentUrl}`, { context: 'app', module: 'App', source: 'handleNavigationChange' });
     }
     let projectDashboard;
     try {
         [projectDashboard] = await waitFor(['projectDashboard'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
     } catch (e) {
-        const notify = DependencySystem.modules.get('notify');
-        if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Project Dashboard unavailable for navigation:', e);
-        notify?.error?.('UI Navigation Error.', { group: true, context: "app" });
+        if (notify) notify.error('[App] Project Dashboard unavailable for navigation:', { group: true, context: 'app', module: 'App', source: 'handleNavigationChange', error: e });
+        notify?.error?.('UI Navigation Error.', { group: true, context: "app", module: "App", source: "handleNavigationChange" });
         globalUtils.toggleElement(APP_CONFIG.SELECTORS.APP_FATAL_ERROR, true);
         const errorEl = document.querySelector(APP_CONFIG.SELECTORS.APP_FATAL_ERROR);
         if (errorEl) errorEl.textContent = 'Core UI component failed to load. Please refresh.';
@@ -1426,8 +1402,8 @@ async function handleNavigationChange() {
     const chatId = url.searchParams.get('chatId') || null;
 
     if (projectId === lastHandledProj && chatId === lastHandledChat) {
-        if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-            notificationHandlerWithLog.debug('[App] handleNavigationChange: Same project/chat; skipping re-load.');
+        if (APP_CONFIG.DEBUG && notify) {
+            notify.debug('[App] handleNavigationChange: Same project/chat; skipping re-load.', { context: 'app', module: 'App', source: 'handleNavigationChange' });
         }
         return;
     }
@@ -1435,8 +1411,8 @@ async function handleNavigationChange() {
     lastHandledChat = chatId;
 
     if (!appState.isAuthenticated) {
-        if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-            notificationHandlerWithLog.debug('[App] Navigation change: User not authenticated.');
+        if (APP_CONFIG.DEBUG && notify) {
+            notify.debug('[App] Navigation change: User not authenticated.', { context: 'app', module: 'App', source: 'handleNavigationChange' });
         }
         projectDashboard.showLoginRequiredMessage?.();
         return;
@@ -1446,23 +1422,23 @@ async function handleNavigationChange() {
     try {
         const [projectManager] = await waitFor(['projectManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
         if (projectId && globalUtils.isValidProjectId(projectId)) {
-            if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                notificationHandlerWithLog.debug(`[App] Ensuring project ${projectId} details are loaded before UI...`);
+            if (APP_CONFIG.DEBUG && notify) {
+                notify.debug(`[App] Ensuring project ${projectId} details are loaded before UI...`, { context: 'app', module: 'App', source: 'handleNavigationChange' });
             }
             await projectManager.loadProjectDetails(projectId);
             if (typeof projectDashboard.showProjectDetails === 'function') {
-                if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                    notificationHandlerWithLog.debug(`[App] Navigating to project details: ${projectId}, chatId=${chatId ?? 'none'}`);
+                if (APP_CONFIG.DEBUG && notify) {
+                    notify.debug(`[App] Navigating to project details: ${projectId}, chatId=${chatId ?? 'none'}`, { context: 'app', module: 'App', source: 'handleNavigationChange' });
                 }
                 await projectDashboard.showProjectDetails(projectId);
             }
         } else if (typeof projectDashboard.showProjectList === 'function') {
-            if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                notificationHandlerWithLog.debug('[App] Navigating to project list view.');
+            if (APP_CONFIG.DEBUG && notify) {
+                notify.debug('[App] Navigating to project list view.', { context: 'app', module: 'App', source: 'handleNavigationChange' });
             }
             await projectDashboard.showProjectList();
         } else {
-            if (notificationHandlerWithLog) notificationHandlerWithLog.warn('[App] Unhandled navigation or missing dashboard methods.');
+            if (notify) notify.warn('[App] Unhandled navigation or missing dashboard methods.', { group: true, context: 'app', module: 'App', source: 'handleNavigationChange' });
             globalUtils.toggleElement(APP_CONFIG.SELECTORS.PROJECT_DETAILS_VIEW, false);
             globalUtils.toggleElement(APP_CONFIG.SELECTORS.PROJECT_LIST_VIEW, true);
         }
@@ -1470,27 +1446,27 @@ async function handleNavigationChange() {
         if (projectId && globalUtils.isValidProjectId(projectId) && chatId) {
             try {
                 const success = await app.navigateToConversation(chatId);
-                if (!success && notificationHandlerWithLog) {
-                    notificationHandlerWithLog.warn("[App] Chat load failed for chatId:", chatId);
+                if (!success && notify) {
+                    notify.warn("[App] Chat load failed for chatId:", { group: true, context: 'app', module: 'App', source: 'handleNavigationChange', chatId });
                 }
             } catch (e) {
-                if (notificationHandlerWithLog) notificationHandlerWithLog.warn("[App] Error loading chatId after project ready:", e);
+                if (notify) notify.warn("[App] Error loading chatId after project ready:", { group: true, context: 'app', module: 'App', source: 'handleNavigationChange', error: e });
             }
         }
     } catch (navError) {
-        const notify = DependencySystem.modules.get('notify');
-        if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Error during navigation handling:', navError);
-        notify?.error?.(`Navigation failed: ${navError.message}`, { group: true, context: "app" });
+        if (notify) notify.error('[App] Error during navigation handling:', { group: true, context: 'app', module: 'App', source: 'handleNavigationChange', error: navError });
+        notify?.error?.(`Navigation failed: ${navError.message}`, { group: true, context: "app", module: "App", source: "handleNavigationChange" });
         projectDashboard.showProjectList?.().catch(fb => {
-            if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Fallback failed:', fb);
+            if (notify) notify.error('[App] Fallback failed:', { group: true, context: 'app', module: 'App', source: 'handleNavigationChange', error: fb });
         });
     }
 }
 
 function attachAuthBusListener(event, handler, markerGlobalName) {
+    const notify = DependencySystem.modules.get('notify');
     const bus = getAuthBus();
     if (!bus || typeof eventHandlers.trackListener !== "function") {
-        notificationHandlerWithLog.error('[App] Cannot attach listener: AuthBus missing or invalid.', bus);
+        notify?.error?.('[App] Cannot attach listener: AuthBus missing or invalid.', { group: true, context: 'app', module: 'App', source: 'attachAuthBusListener', authBus: bus });
         return false;
     }
     if (!window[markerGlobalName] || window[markerGlobalName] !== bus) {
@@ -1502,7 +1478,7 @@ function attachAuthBusListener(event, handler, markerGlobalName) {
         );
         window[markerGlobalName] = bus;
         if (APP_CONFIG.DEBUG) {
-            notificationHandlerWithLog.debug(`[App] Attached ${event} listener to AuthBus (global marker ${markerGlobalName}).`);
+            notify?.debug?.(`[App] Attached ${event} listener to AuthBus (global marker ${markerGlobalName}).`, { context: 'app', module: 'App', source: 'attachAuthBusListener' });
         }
         return true;
     }
@@ -1515,14 +1491,15 @@ function getAuthBus() {
 }
 
 function handleAuthStateChange(event) {
+    const notify = DependencySystem.modules.get('notify');
     const { authenticated, username } = event?.detail || {};
     const newAuthState = !!authenticated;
     if (newAuthState === appState.isAuthenticated) return false;
 
     const previousAuthState = appState.isAuthenticated;
     appState.isAuthenticated = newAuthState;
-    if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-        notificationHandlerWithLog.debug(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}, User: ${username || 'N/A'}`);
+    if (APP_CONFIG.DEBUG && notify) {
+        notify.debug(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}, User: ${username || 'N/A'}`, { context: 'app', module: 'App', source: 'handleAuthStateChange' });
     }
 
     requestAnimationFrame(() => {
@@ -1552,15 +1529,14 @@ function handleAuthStateChange(event) {
                 waitFor('storage')
             ]);
         } catch (e) {
-            const notify = DependencySystem.modules.get('notify');
-            if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Failed to get modules during auth state change:', e);
-            notify?.error?.('Failed to update UI after auth change.', { group: true, context: "app" });
+            notify?.error?.('[App] Failed to get modules during auth state change:', { group: true, context: 'app', module: 'App', source: 'updateAuthStateUI', error: e });
+            notify?.error?.('Failed to update UI after auth change.', { group: true, context: "app", module: "App", source: "updateAuthStateUI" });
             return;
         }
 
         if (appState.isAuthenticated && !previousAuthState) {
-            if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                notificationHandlerWithLog.debug('[App] User logged in. Refreshing data/UI.');
+            if (APP_CONFIG.DEBUG && notify) {
+                notify.debug('[App] User logged in. Refreshing data/UI.', { context: 'app', module: 'App', source: 'updateAuthStateUI' });
             }
             globalUtils.toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
 
@@ -1569,22 +1545,21 @@ function handleAuthStateChange(event) {
                 if (projectManager.loadProjects) {
                     try {
                         const projects = await projectManager.loadProjects('all');
-                        if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                            notificationHandlerWithLog.debug(`[App] Projects loaded after login: ${projects.length}`);
+                        if (APP_CONFIG.DEBUG && notify) {
+                            notify.debug(`[App] Projects loaded after login: ${projects.length}`, { context: 'app', module: 'App', source: 'updateAuthStateUI' });
                         }
                         sidebar.renderProjects?.(projects);
                     } catch (err) {
-                        const notify = DependencySystem.modules.get('notify');
-                        if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Failed to load projects after login:', err);
-                        notify?.error?.('Failed to load projects.', { group: true, context: "projectManager" });
+                        notify?.error?.('[App] Failed to load projects after login:', { group: true, context: 'app', module: 'App', source: 'updateAuthStateUI', error: err });
+                        notify?.error?.('Failed to load projects.', { group: true, context: "projectManager", module: "ProjectManager", source: "loadProjects" });
                     }
                 }
             } catch (err) {
-                if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Error refreshing UI after login:', err);
+                if (notify) notify.error('[App] Error refreshing UI after login:', { group: true, context: 'app', module: 'App', source: 'updateAuthStateUI', error: err });
             }
         } else if (!appState.isAuthenticated && previousAuthState) {
-            if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-                notificationHandlerWithLog.debug('[App] User logged out. Clearing data/UI.');
+            if (APP_CONFIG.DEBUG && notify) {
+                notify.debug('[App] User logged out. Clearing data/UI.', { context: 'app', module: 'App', source: 'updateAuthStateUI' });
             }
             try {
                 globalUtils.toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, true);
@@ -1596,14 +1571,14 @@ function handleAuthStateChange(event) {
                 try {
                     handleNavigationChange();
                 } catch (navError) {
-                    if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Navigation error after logout:', navError);
+                    if (notify) notify.error('[App] Navigation error after logout:', { group: true, context: 'app', module: 'App', source: 'updateAuthStateUI', error: navError });
                 }
             } catch (err) {
-                if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Error updating UI after logout:', err);
+                if (notify) notify.error('[App] Error updating UI after logout:', { group: true, context: 'app', module: 'App', source: 'updateAuthStateUI', error: err });
             }
         }
     })().catch(err => {
-        if (notificationHandlerWithLog) notificationHandlerWithLog.error('[App] Unhandled error in auth state change handler:', err);
+        if (notify) notify.error('[App] Unhandled error in auth state change handler:', { group: true, context: 'app', module: 'App', source: 'updateAuthStateUI', error: err });
     });
 
     return false;
@@ -1620,7 +1595,7 @@ function handleInitError(error) {
         });
     } catch (err) {
         if (APP_CONFIG.DEBUG && notificationHandlerWithLog) {
-            notificationHandlerWithLog.error('[App] Error in errorReporter.capture:', err);
+            notify.error('[App] Error in errorReporter.capture:', err);
         }
     }
     appState.initialized = false;
