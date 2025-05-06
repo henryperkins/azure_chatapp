@@ -748,7 +748,7 @@
         // Always log this to help with debugging
         console.log('[ModalLoader] DOM content loaded, will attempt to load modals.html');
 
-        const modalsContainer = document.getElementById('modalsContainer');
+        let modalsContainer = document.getElementById('modalsContainer');
         if (!modalsContainer) {
           console.error('[ModalLoader] #modalsContainer not found in DOM.');
           // Try to recover by creating the container
