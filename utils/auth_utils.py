@@ -157,8 +157,6 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 # -----------------------------------------------------------------------------
 # CSRF Protection Utilities
 # -----------------------------------------------------------------------------
-from fastapi import Request
-
 def validate_csrf_token(request: Request) -> None:
     """
     Validates CSRF token for state-changing (non-GET/HEAD/OPTIONS) requests.
