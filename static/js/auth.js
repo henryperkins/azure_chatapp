@@ -104,9 +104,12 @@ export function createAuthModule({
      ========================= */
   async function fetchCSRFToken() {
     try {
-      const url =
-        (apiEndpoints.AUTH_CSRF?.includes('?') ? apiEndpoints.AUTH_CSRF + `&ts=${Date.now()}` :
-          apiEndpoints.AUTH_CSRF + `?ts=${Date.now()}`);
+      // ADDED GUARD CLAUSE
+      if (!apiEndpoints || !apiEndpoints.AUTH_CSRF) {
+        throw new Error("AUTH_CSRF endpoint is not defined in apiEndpoints dependency.");
+      }
+      const csrfUrl = apiEndpoints.AUTH_CSRF;
+      const url = csrfUrl.includes('?') ? `${csrfUrl}&ts=${Date.now()}` : `${csrfUrl}?ts=${Date.now()}`;
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',

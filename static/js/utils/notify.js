@@ -1,26 +1,3 @@
-/**
- * Notification Utility Module.
- * Dependency-injected wrapper for app/site-wide notifications—ensuring context-rich grouping and full observability.
- *
- * Usage:
- *   - Always inject `notify` via DI in every factory/module (see notification-system.md & custominstructions.md).
- *   - All calls should provide context/module/source via options, or use notify.withContext() to enforce context.
- *   - Notifies are logged to backend and Sentry with deterministic groupKey and full context for every event.
- *
- * API:
- *   - .info(msg, opts?)
- *   - .success(msg, opts?)
- *   - .warn(msg, opts?)
- *   - .error(msg, opts?)
- *   - .apiError(msg, opts?) [context:'apiRequest']
- *   - .authWarn(msg, opts?) [context:'auth']
- *   - .withContext({module, context, source}[, extraOpts]) => boundNotifyUtil
- *   - Internal helpers: ._computeGroupKey, ._getCurrentTraceIds
- *   - DEV-only: ._devCheckContextCoverage
- *
- * @param {Object} deps - { notificationHandler, sentry, DependencySystem }
- * @returns {Object} - Notify util with grouped/context helpers
- */
 export function createNotify({
   notificationHandler,
   sentry = typeof window !== 'undefined' ? window.Sentry : undefined,
@@ -31,12 +8,10 @@ export function createNotify({
   const DURATION = { info: 4000, success: 4000, warning: 6000, error: 0 };
 
   // --- Helpers ---
-  function computeGroupKey({ type, context, module, source }) {
-    // Deterministic: type|module|source|context
-    return [type, module || '', source || '', context || ''].join('|');
-  }
+  const computeGroupKey = ({ type, context, module, source }) =>
+    [type, module || '', source || '', context || ''].join('|');
 
-  function getCurrentTraceIds() {
+  const getCurrentTraceIds = () => {
     try {
       if (DependencySystem?.getCurrentTraceIds) {
         return DependencySystem.getCurrentTraceIds();
@@ -50,37 +25,42 @@ export function createNotify({
           transactionId: t?.spanId || t?.name || null
         };
       }
-    } catch (err) {
-      // Silent error handling as designed
-    }
+    } catch (err) { }
     return { traceId: null, transactionId: null };
-  }
+  };
 
-  function generateTransactionId() {
+  const generateTransactionId = () => {
     if (DependencySystem?.generateTransactionId) {
       return DependencySystem.generateTransactionId();
     }
-    return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
-      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-    );
-  }
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+      return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+        (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+      );
+    }
+    // Fallback: not cryptographically secure
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  };
 
-  async function logNotificationToBackend(payload) {
+  const logNotificationToBackend = async (payload) => {
     try {
       await fetch('/api/log_notification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-    } catch (err) {
-      // Silent error handling as designed
-    }
-  }
+    } catch (err) { }
+  };
 
   // DEV-mode: warn on missing context/module/source for grouped notifications
-  function devCheckContextCoverage(type, opts, msg) {
-    if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return;
-    if (window?.NODE_ENV === 'production') return;
+  const devCheckContextCoverage = (type, opts, msg) => {
+    if (
+      (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') ||
+      (typeof window !== 'undefined' && window.NODE_ENV === 'production')
+    ) return;
 
     const grouping = opts?.group || opts?.groupKey;
     if (grouping && !(opts.context || opts.module || opts.source)) {
@@ -89,9 +69,13 @@ export function createNotify({
     if (!opts.context && !opts.module && !opts.source) {
       console.warn('[notify] Notification missing context/module/source (should provide at least context):', { type, msg, opts });
     }
-  }
+  };
 
-  function send(msg, type = 'info', opts = {}) {
+  const send = (msg, type = 'info', opts = {}) => {
+    // Map 'warn' to 'warning'
+    let _type = type === 'warn' ? 'warning' : type;
+    if (!['info', 'success', 'warning', 'error'].includes(_type)) _type = 'info';
+
     // Dependency-injected user/session
     let user = 'unknown';
     try {
@@ -99,12 +83,10 @@ export function createNotify({
         || (window.currentUser?.username)
         || (window.currentUser?.name)
         || 'unknown';
-    } catch (err) {
-      // Silent error handling as designed
-    }
+    } catch (err) { }
+
     const timestamp = Date.now() / 1000;
 
-    // Pull out those opts - allow all, but surface context/module/source strongly
     const {
       group,
       context,
@@ -118,7 +100,6 @@ export function createNotify({
       ...restOpts
     } = opts || {};
 
-    // Cover trace info, allow override or fallback to DI/Sentry
     const { traceId, transactionId } = {
       ...getCurrentTraceIds(),
       ...(explicitTransactionId || explicitTraceId ? {
@@ -127,14 +108,10 @@ export function createNotify({
       } : {})
     };
 
-    const _type = ['info', 'success', 'warning', 'error'].includes(type) ? type : 'info';
-
-    // Always deterministic—never allow blank legacy keys
     const groupKey = explicitGroupKey ||
       computeGroupKey({ type: _type, context, module, source });
     const eventId = id || `${groupKey}:${timestamp}`;
 
-    // Canonical/observable notification payload, for backend, UI, Sentry, etc.
     const payload = {
       id: eventId,
       message: msg,
@@ -150,7 +127,6 @@ export function createNotify({
       extra
     };
 
-    // DEV-mode: surface missing context/module/source early for correctness
     devCheckContextCoverage(_type, opts, msg);
 
     // --- Sentry Breadcrumb/Event ---
@@ -162,12 +138,9 @@ export function createNotify({
           message: msg,
           data: payload
         });
-      } catch (err) {
-        // Silent error handling as designed
-      }
+      } catch (err) { }
     }
 
-    // Show notification to user (grouped/context, propagation of keys)
     notificationHandler.show(msg, _type, DURATION[_type], {
       ...restOpts,
       group,
@@ -181,16 +154,14 @@ export function createNotify({
       extra
     });
 
-    // Backend log (fire and forget)
     logNotificationToBackend(payload);
 
     return eventId;
-  }
+  };
 
   // -- Contextual helper factory: pre-binds module/context/source to avoid context misses
-  function withContext(preset, defaults = {}) {
+  const withContext = (preset, defaults = {}) => {
     if (!preset) throw new Error('notify.withContext requires a context/module/source preset');
-
     const { module, context, source } = preset;
     return {
       info: (msg, o = {}) => send(msg, 'info', { module, context, source, ...defaults, ...o }),
@@ -200,25 +171,18 @@ export function createNotify({
       apiError: (msg, o = {}) => send(msg, 'error', { group: true, context: context || 'apiRequest', module, source, ...defaults, ...o }),
       authWarn: (msg, o = {}) => send(msg, 'warning', { group: true, context: context || 'auth', module, source, ...defaults, ...o })
     };
-  }
+  };
 
-  // --- Grouped/contextual helpers ---
-  const notifyUtil = {
+  return {
     info: (msg, o = {}) => send(msg, 'info', o),
     success: (msg, o = {}) => send(msg, 'success', o),
     warn: (msg, o = {}) => send(msg, 'warning', o),
     error: (msg, o = {}) => send(msg, 'error', o),
-    apiError: (msg, o = {}) => send(
-      msg, 'error', { group: true, context: 'apiRequest', ...o }
-    ),
-    authWarn: (msg, o = {}) => send(
-      msg, 'warning', { group: true, context: 'auth', ...o }
-    ),
+    apiError: (msg, o = {}) => send(msg, 'error', { group: true, context: 'apiRequest', ...o }),
+    authWarn: (msg, o = {}) => send(msg, 'warning', { group: true, context: 'auth', ...o }),
     withContext,
     _computeGroupKey: computeGroupKey,
     _getCurrentTraceIds: getCurrentTraceIds,
     _devCheckContextCoverage: devCheckContextCoverage
   };
-
-  return notifyUtil;
 }
