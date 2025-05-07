@@ -30,6 +30,58 @@ export function createAuthModule({
   // Canonical, context-aware notifier for this whole module:
   const authNotify = notify.withContext({ module: 'AuthModule', context: 'auth' });
 
+  // --- Input Validation Utilities ---
+  function validateUsername(username) {
+    // 3-32 chars, a-zA-Z0-9_.-
+    return typeof username === 'string' && /^[a-zA-Z0-9_.-]{3,32}$/.test(username);
+  }
+  function validateEmail(email) {
+    // Simple RFC 5322 compliant regex (not perfect, but sufficient for client-side)
+    return typeof email === 'string' && /^[^@]+@[^@]+\.[^@]+$/.test(email);
+  }
+  function validatePassword(password) {
+    if (typeof password !== 'string' || password.length < 12) {
+      return { valid: false, message: "Password must be at least 12 characters" };
+    }
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+    if (!hasUpper) return { valid: false, message: "Password must contain an uppercase letter" };
+    if (!hasLower) return { valid: false, message: "Password must contain a lowercase letter" };
+    if (!hasNumber) return { valid: false, message: "Password must contain a number" };
+    if (!hasSpecial) return { valid: false, message: "Password must contain a special character" };
+    return { valid: true };
+  }
+
+  // --- Centralized UI helpers for loading/error state ---
+  function setButtonLoading(btn, isLoading, loadingText = "Saving...") {
+    if (!btn) return;
+    if (isLoading) {
+      btn.disabled = true;
+      btn.dataset.originalText = btn.textContent;
+      btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.originalText) {
+        btn.textContent = btn.dataset.originalText;
+        delete btn.dataset.originalText;
+      }
+    }
+  }
+  function showError(el, msg) {
+    if (el) {
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+  }
+  function hideError(el) {
+    if (el) {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
   // --- Internal Auth State & Event Bus
   const AUTH_CONFIG = { VERIFICATION_INTERVAL: 300000 }; // 5 min
   const authState = { isAuthenticated: false, username: null, isReady: false };
@@ -52,11 +104,14 @@ export function createAuthModule({
         credentials: 'include',
         cache: 'no-store'
       });
-      if (!data || !data.token) throw new Error('CSRF token missing in response');
+      if (!data || !data.token) {
+        authNotify.error('CSRF token fetch failed, cannot proceed with authentication.');
+        throw new Error('CSRF token missing');
+      }
       return data.token;
     } catch (error) {
       authNotify.error('[Auth] CSRF token fetch failed: ' + (error?.message || error), { group: true, source: 'fetchCSRFToken' });
-      return null;
+      throw error;
     }
   }
   async function getCSRFTokenAsync() {
@@ -247,26 +302,28 @@ export function createAuthModule({
         loginForm.method = 'POST';
         const handler = async (e) => {
           e.preventDefault();
-          if (loginForm.id === 'loginModalForm') {
-            const errorEl = domAPI.getElementById('loginModalError');
-            if (errorEl) { errorEl.textContent = ''; errorEl.classList.add('hidden'); }
-          }
+          const errorEl = domAPI.getElementById('loginModalError');
+          hideError(errorEl);
           const submitBtn = loginForm.querySelector('button[type="submit"]');
-          if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = sanitizer.sanitize(`<span class="loading loading-spinner loading-xs"></span> Logging in...`);
-          }
+          setButtonLoading(submitBtn, true, "Logging in...");
           const formData = new FormData(loginForm);
-          const username = formData.get('username');
+          const username = formData.get('username')?.trim();
           const password = formData.get('password');
+          // --- Robust input validation ---
           if (!username || !password) {
-            if (loginForm.id === 'loginModalForm') {
-              const errorEl = domAPI.getElementById('loginModalError');
-              if (errorEl) { errorEl.textContent = 'Username and password are required.'; errorEl.classList.remove('hidden'); }
-            } else {
-              authNotify.error('Username and password are required.', { group: true, source: 'loginForm' });
-            }
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Login'; }
+            showError(errorEl, 'Username and password are required.');
+            setButtonLoading(submitBtn, false, "Login");
+            return;
+          }
+          if (!validateUsername(username)) {
+            showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
+            setButtonLoading(submitBtn, false, "Login");
+            return;
+          }
+          const pwCheck = validatePassword(password);
+          if (!pwCheck.valid) {
+            showError(errorEl, pwCheck.message);
+            setButtonLoading(submitBtn, false, "Login");
             return;
           }
           try {
@@ -277,14 +334,9 @@ export function createAuthModule({
             if (error.status === 401) msg = 'Incorrect username or password.';
             else if (error.status === 400) msg = (error.data && error.data.detail) || 'Invalid login request.';
             else msg = (error.data && error.data.detail) || error.message || 'Login failed due to server error.';
-            if (loginForm.id === 'loginModalForm') {
-              const errorEl = domAPI.getElementById('loginModalError');
-              if (errorEl) { errorEl.textContent = msg; errorEl.classList.remove('hidden'); }
-            } else {
-              authNotify.error(msg, { group: true, source: 'loginForm' });
-            }
+            showError(errorEl, msg);
           } finally {
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Login'; }
+            setButtonLoading(submitBtn, false, "Login");
           }
         };
         registeredListeners.push(eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false }));
@@ -297,24 +349,38 @@ export function createAuthModule({
         e.preventDefault();
         const errorEl = domAPI.getElementById('registerModalError');
         const submitBtn = domAPI.getElementById('registerModalSubmitBtn');
-        if (errorEl) errorEl.classList.add('hidden');
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.innerHTML = sanitizer.sanitize(`<span class="loading loading-spinner loading-xs"></span> Registering...`);
-        }
+        hideError(errorEl);
+        setButtonLoading(submitBtn, true, "Registering...");
         const formData = new FormData(registerModalForm);
         const username = formData.get('username')?.trim();
         const email = formData.get('email')?.trim();
         const password = formData.get('password');
         const passwordConfirm = formData.get('passwordConfirm');
+        // --- Robust input validation ---
         if (!username || !email || !password || !passwordConfirm) {
-          if (errorEl) { errorEl.textContent = 'All fields are required.'; errorEl.classList.remove('hidden'); }
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Register'; }
+          showError(errorEl, 'All fields are required.');
+          setButtonLoading(submitBtn, false, "Register");
+          return;
+        }
+        if (!validateUsername(username)) {
+          showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
+          setButtonLoading(submitBtn, false, "Register");
+          return;
+        }
+        if (!validateEmail(email)) {
+          showError(errorEl, 'Invalid email address.');
+          setButtonLoading(submitBtn, false, "Register");
+          return;
+        }
+        const pwCheck = validatePassword(password);
+        if (!pwCheck.valid) {
+          showError(errorEl, pwCheck.message);
+          setButtonLoading(submitBtn, false, "Register");
           return;
         }
         if (password !== passwordConfirm) {
-          if (errorEl) { errorEl.textContent = 'Passwords do not match.'; errorEl.classList.remove('hidden'); }
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Register'; }
+          showError(errorEl, 'Passwords do not match.');
+          setButtonLoading(submitBtn, false, "Register");
           return;
         }
         try {
@@ -326,9 +392,9 @@ export function createAuthModule({
           if (error.status === 409) msg = 'A user with that username already exists.';
           else if (error.status === 400) msg = (error.data && error.data.detail) || 'Invalid registration data.';
           else msg = (error.data && error.data.detail) || error.message || 'Registration failed due to server error.';
-          if (errorEl) { errorEl.textContent = msg; errorEl.classList.remove('hidden'); }
+          showError(errorEl, msg);
         } finally {
-          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Register'; }
+          setButtonLoading(submitBtn, false, "Register");
         }
       };
       registeredListeners.push(eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false }));
