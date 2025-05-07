@@ -448,15 +448,25 @@ async function init() {
 
     if (_globalInitCompleted || _globalInitInProgress) {
         notify?.warn?.('[App] Duplicate initialization attempt blocked by global guard.', {
-            group: true, context: 'app', module: 'App', phase: 'guard',
-            globalInitCompleted: _globalInitCompleted, globalInitInProgress: _globalInitInProgress
+            group: true,
+            context: 'app',
+            module: 'App',
+            source: 'init',
+            phase: 'guard',
+            globalInitCompleted: _globalInitCompleted,
+            globalInitInProgress: _globalInitInProgress
         });
         return _globalInitCompleted;
     }
     if (appState.initialized || appState.initializing) {
         notify?.info?.('[App] Initialization attempt skipped (already done or in progress).', {
-            group: true, context: 'app', module: 'App', phase: 'guard',
-            appStateInitialized: appState.initialized, appStateInitializing: appState.initializing
+            group: true,
+            context: 'app',
+            module: 'App',
+            source: 'init',
+            phase: 'guard',
+            appStateInitialized: appState.initialized,
+            appStateInitializing: appState.initializing
         });
         return appState.initialized;
     }
@@ -895,12 +905,23 @@ async function initializeCoreSystems() {
                         getModuleSafe('modalManager', { context: 'app', module: 'App', source: 'projectModalFormSubmit' }).hide('project');
                         projMgr.loadProjects?.('all');
                     } catch (err) {
-                        notify?.error?.('Failed to save project.', { context: 'projectModal', error: err });
+                        notify?.error?.('Failed to save project.', {
+                            group: true,
+                            context: 'projectModal',
+                            module: 'App',
+                            source: 'projectModalFormSubmit',
+                            error: err
+                        });
                     }
                 }, { description: 'Project Modal Form Submit', module: 'App', context: 'projectModal' });
             }
         } else {
-            notify?.warn?.('[App] projectModalForm not found after modalsLoaded signal.');
+            notify?.warn?.('[App] projectModalForm not found after modalsLoaded signal.', {
+                group: true,
+                context: 'app',
+                module: 'App',
+                source: 'initializeCoreSystems'
+            });
         }
     }
 
@@ -1153,12 +1174,13 @@ async function initializeUIComponents() {
         }
     } else {
         notify?.warn?.('[App] Not authenticated, skipping initial project load in UI init.', {
-        context: 'app',
-        module: 'App',
-        source: 'initializeUIComponents',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
-    });
+            group: true,
+            context: 'app',
+            module: 'App',
+            source: 'initializeUIComponents',
+            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
+            transactionId: DependencySystem?.generateTransactionId?.()
+        });
     }
 
     // Optional script calls
@@ -1248,7 +1270,12 @@ function registerAppListeners() {
     }).catch(err => {
         notify?.error?.('[App] Failed to wait for dependencies for global listeners.', { group: true, error: err });
     });
-    notify?.debug?.('[App] Global application listeners registered.');
+    notify?.debug?.('[App] Global application listeners registered.', {
+        group: true,
+        context: 'app',
+        module: 'App',
+        source: 'registerAppListeners'
+    });
 }
 
 function setupChatInitializationTrigger() {
@@ -1398,9 +1425,21 @@ async function handleNavigationChange() {
             await projectDashboard.showProjectList();
         }
     } catch (navError) {
-        localNotify?.error?.('[App] Error during navigation handling logic.', { group: true, error: navError });
+        localNotify?.error?.('[App] Error during navigation handling logic.', {
+            group: true,
+            context: 'app',
+            module: 'App',
+            source: 'handleNavigationChange',
+            error: navError
+        });
         projectDashboard.showProjectList?.().catch(fbErr => {
-            localNotify?.error?.('[App] Fallback to showProjectList also failed.', { group: true, error: fbErr });
+            localNotify?.error?.('[App] Fallback to showProjectList also failed.', {
+                group: true,
+                context: 'app',
+                module: 'App',
+                source: 'handleNavigationChange',
+                error: fbErr
+            });
         });
     }
 }
@@ -1479,7 +1518,13 @@ function handleAuthStateChange(event) {
     appState.isAuthenticated = newAuthState;
     if (user) currentUser = user;
 
-    localNotify?.info?.(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}`, { user: currentUser?.username });
+    localNotify?.info?.(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}`, {
+        group: true,
+        context: 'app',
+        module: 'App',
+        source: 'handleAuthStateChange',
+        user: currentUser?.username
+    });
     renderAuthHeader();
 
     (async () => {
@@ -1491,7 +1536,12 @@ function handleAuthStateChange(event) {
             );
 
             if (appState.isAuthenticated && !previousAuthState) {
-                localNotify?.debug?.('[App] User logged IN. Refreshing data/UI.');
+                localNotify?.debug?.('[App] User logged IN. Refreshing data/UI.', {
+                    group: true,
+                    context: 'app',
+                    module: 'App',
+                    source: 'handleAuthStateChange'
+                });
                 globalUtils.toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
                 pd.showProjectList?.();
                 const projects = await pm.loadProjects?.('all');
@@ -1499,7 +1549,12 @@ function handleAuthStateChange(event) {
                 handleNavigationChange();
 
             } else if (!appState.isAuthenticated && previousAuthState) {
-                localNotify?.debug?.('[App] User logged OUT. Clearing data/UI.');
+                localNotify?.debug?.('[App] User logged OUT. Clearing data/UI.', {
+                    group: true,
+                    context: 'app',
+                    module: 'App',
+                    source: 'handleAuthStateChange'
+                });
                 globalUtils.toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, true);
                 pm.currentProject = null;
                 st.removeItem('selectedProjectId');
@@ -1511,7 +1566,13 @@ function handleAuthStateChange(event) {
                 handleNavigationChange();
             }
         } catch (err) {
-            localNotify?.error?.('[App] Error updating UI/data after auth state change.', { group: true, error: err });
+            localNotify?.error?.('[App] Error updating UI/data after auth state change.', {
+                group: true,
+                context: 'app',
+                module: 'App',
+                source: 'handleAuthStateChange',
+                error: err
+            });
         }
     })();
     return false;
@@ -1540,7 +1601,11 @@ function handleInitError(error) {
     const errorMsgString = error?.message || (typeof error === "string" ? error : "Unknown initialization error.");
 
     localNotify?.error?.(`Application failed to start: ${errorMsgString}. Please refresh.`, {
-        group: true, context: "app", module: "App", source: "handleInitError", timeout: 0
+        group: true,
+        context: "app",
+        module: "App",
+        source: "handleInitError",
+        timeout: 0
     });
 
     const errorContainer = domAPI.querySelector(APP_CONFIG.SELECTORS.APP_FATAL_ERROR);
