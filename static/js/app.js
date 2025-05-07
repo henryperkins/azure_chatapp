@@ -15,6 +15,7 @@ import {
   stableStringify,
   normaliseUrl,
   isAbsoluteUrl,
+  isValidProjectId,          // ← nuevo
   toggleElement,
   waitForDepsAndDom                      // ← use global helper for DOM-ready checks
 } from './utils/globalUtils.js';
@@ -40,6 +41,12 @@ import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
 // Removed import for ./auth/authUI.js (now obsolete)
+
+// Back-compat: si la clase aún no define validateUUID, añade alias al helper global
+if (ProjectDetailsComponent &&
+    typeof ProjectDetailsComponent.prototype.validateUUID !== 'function') {
+  ProjectDetailsComponent.prototype.validateUUID = isValidProjectId;
+}
 
 // Example: For consistent message durations, etc.
 
@@ -219,7 +226,8 @@ const app = {
         if (chatMgr?.loadConversation) return chatMgr.loadConversation(chatId);
         notify.warn('[App] chatManager not available for navigateToConversation');
         return false;
-    }
+    },
+    validateUUID: (id) => isValidProjectId(id)   // ← nuevo
 };
 DependencySystem.register('app', app);
 
@@ -916,7 +924,7 @@ function createOrGetChatManager() {
             pushState: (url, title = '') => browserAPI.getHistory().pushState({}, title, url),
             getPathname: () => browserAPI.getLocation().pathname
         },
-        isValidProjectId: () => true, // or a real util
+        isValidProjectId,             // util real de globalUtils
         isAuthenticated: () => authModule?.isAuthenticated?.() || false,
         DOMPurify: DependencySystem.modules.get('sanitizer'),
         apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
