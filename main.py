@@ -89,12 +89,24 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
     async def csp_header_middleware(request: Request, call_next):
         response = await call_next(request)
         response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "connect-src 'self' http://localhost:8001 https://o4508070823395328.ingest.us.sentry.io https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            # ────────── BASE DIRECTIVES ──────────
+            "default-src 'self' blob:; "
+            # allow API calls to backend + sentry endpoints
+            "connect-src 'self' http://localhost:8000 http://localhost:8001 "
+            "https://o4508070823395328.ingest.us.sentry.io "
+            "https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
+            # ────────── JS LOADERS ──────────
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+            "https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
+            "script-src-elem 'self' 'unsafe-inline' 'unsafe-eval' "
+            "https://js.sentry-cdn.com https://browser.sentry-cdn.com; "
+            # ────────── WORKERS / CHILDREN ──────────
+            "worker-src 'self' blob:; "
+            "child-src  'self' blob:; "
+            # ────────── MEDIA / STYLES ──────────
+            "img-src 'self' data: blob: https://*.sentry.io https://*.sentry-cdn.com; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self';"
+            "font-src  'self';"
         )
         return response
 
