@@ -45,14 +45,23 @@ const browserServiceInstance = createBrowserService({
     windowObject: browserAPI.getWindow()
 });
 
-// Create initial “notify” stub for early usage if needed
+// ---------------------------------------------------------------------------
+// Provide a temporary no-op notification utility so early-boot code (e.g. Sentry
+// manager construction) can safely reference `notify` before the real instance
+// is created later in the bootstrap sequence.
+//
+// It is *re-assigned* once `createNotify()` returns the fully-featured object.
+// ---------------------------------------------------------------------------
+/**
+ * @type {import('./utils/notify.js').Notify|Object<string,Function>}
+ * Using a broad type to satisfy IDEs until real notify is assigned.
+ */
 let notify = {
-    debug() { },
-    info() { },
-    warn() { },
-    error() { },
-    success() { },
-    log() { } // Added for Sentry compatibility
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  apiError: () => {}
 };
 
 const sentryConfig = {
@@ -65,23 +74,13 @@ const sentryConfig = {
 const sentryEnv = {};
 const sentryNamespace = browserAPI.getWindow()?.Sentry ? browserAPI.getWindow() : { Sentry: undefined };
 
-// Build our error-reporting integration
-const sentryManager = createSentryManager({
-    config: sentryConfig,
-    env: sentryEnv,
-    domAPI,
-    storage: browserServiceInstance,
-    notification: notify,
-    navigator: browserAPI.getWindow()?.navigator,
-    window: browserAPI.getWindow(),
-    document: browserAPI.getDocument(),
-    sentryNamespace
-});
-sentryManager.initialize();
+// (sentryManager is now constructed only after notify is available; see below)
 
-// ---------------------------------------------------------------------------
-// 2) Initialize our DependencySystem (if you have a standard approach)
-// ---------------------------------------------------------------------------
+/*
+ * ---------------------------------------------------------------------------
+ * 2) Initialize our DependencySystem (if you have a standard approach)
+ * ---------------------------------------------------------------------------
+ */
 const DependencySystem = browserAPI.getDependencySystem();
 if (!DependencySystem?.modules?.get) {
     // Hard-fail if not present.
@@ -93,8 +92,6 @@ DependencySystem.register('domAPI', domAPI);
 DependencySystem.register('browserAPI', browserAPI);
 DependencySystem.register('browserService', browserServiceInstance);
 DependencySystem.register('storage', browserServiceInstance);
-DependencySystem.register('sentryManager', sentryManager);
-DependencySystem.register('errorReporter', sentryManager);
 
 // Register sanitizer (DOMPurify) for DI
 const sanitizer = (typeof window !== 'undefined' && window.DOMPurify) ? window.DOMPurify : undefined;
@@ -116,17 +113,6 @@ const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
 DependencySystem.register('apiEndpoints', apiEndpoints);
 
 // ---------------------------------------------------------------------------
-// 3) Create the event handlers (with minimal stub notify first)
-// ---------------------------------------------------------------------------
-const eventHandlers = createEventHandlers({
-    DependencySystem,
-    domAPI,
-    browserService: browserServiceInstance,
-    notify
-});
-DependencySystem.register('eventHandlers', eventHandlers);
-
-// ---------------------------------------------------------------------------
 // 4) Create the actual notification system + register
 // ---------------------------------------------------------------------------
 const notificationHandler = createNotificationHandler({ DependencySystem, domAPI });
@@ -137,6 +123,48 @@ notify = createNotify({
     DependencySystem
 });
 DependencySystem.register('notify', notify);
+
+// ---------------------------------------------------------------------------
+// 3) Create the event handlers (now notify is initialized)
+// ---------------------------------------------------------------------------
+const eventHandlers = createEventHandlers({
+    DependencySystem,
+    domAPI,
+    browserService: browserServiceInstance,
+    notify
+});
+DependencySystem.register('eventHandlers', eventHandlers);
+
+// ---------------------------------------------------------------------------
+// 2.5) Build our error-reporting integration (depends on notify)
+const sentryManager = createSentryManager({
+    config: sentryConfig,
+    env: sentryEnv,
+    domAPI,
+    storage: browserServiceInstance,
+    notification: notify,
+    navigator: browserAPI.getWindow()?.navigator,
+    window: browserAPI.getWindow(),
+    document: browserAPI.getDocument(),
+    sentryNamespace
+});
+DependencySystem.register('sentryManager', sentryManager);
+DependencySystem.register('errorReporter', sentryManager);
+sentryManager.initialize();
+
+// Late-bind the real notify into eventHandlers so all new events use the correct notifier
+eventHandlers.setNotifier?.(notify);
+
+// ---------------------------------------------------------------------------
+// Global error catch (fail-fast at window level)
+if (typeof window !== "undefined") {
+    window.addEventListener('error',  e =>
+        notify?.error?.(e.message, { source:'global' })
+    );
+    window.addEventListener('unhandledrejection', e =>
+        notify?.error?.(e.reason?.message || 'unhandled rejection', { source:'global' })
+    );
+}
 
 // ---------------------------------------------------------------------------
 // 5) Create the unified apiRequest using our new “createApiClient”
@@ -203,11 +231,16 @@ export async function init() {
 
     try {
         await initializeCoreSystems();
-        await DependencySystem.waitFor(
-            ['auth', 'eventHandlers', 'notificationHandler', 'modalManager'],
-            null,
-            APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
-        );
+        try {
+            await DependencySystem.waitFor(
+                ['auth', 'eventHandlers', 'notificationHandler', 'modalManager'],
+                null,
+                APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
+            );
+        } catch (err) {
+            notify.error('[App] Critical deps not met', { error: err });
+            throw err;
+        }
         await initializeAuthSystem();
 
         if (appState.isAuthenticated) {
@@ -410,52 +443,64 @@ function renderAuthHeader() {
     try {
         const authMod = DependencySystem.modules.get('auth');
         const isAuth = authMod?.isAuthenticated?.();
-        const btn = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || domAPI.getElementById('loginButton');
-if (btn) {
-    domAPI.setInnerHTML(btn, isAuth ? 'Logout' : 'Login');
-    eventHandlers.trackListener(
-        btn,
-        'click',
-        (e) => {
-            domAPI.preventDefault(e);
-            if (isAuth) {
-                authMod.logout();
-                return;
-            }
+        const user = currentUser || { username: authMod?.getCurrentUser?.() };
+        const authBtn = domAPI.getElementById('authButton');
+        const userMenu = domAPI.getElementById('userMenu');
+        const logoutBtn = domAPI.getElementById('logoutBtn');
+        const userInitialsEl = domAPI.getElementById('userInitials');
+        const authStatus = domAPI.getElementById('authStatus');
+        const userStatus = domAPI.getElementById('userStatus');
 
-            const modalMgr = DependencySystem.modules.get('modalManager');
-            if (!modalMgr) return;
-
-            // Attempt to show the login modal immediately; if it fails because
-            // modals haven't been injected yet, wait for the `modalsLoaded`
-            // signal and then retry *once*.
-            const opened = modalMgr.show('login');
-            if (!opened) {
-                const retryHandler = () => {
-                    modalMgr.show('login');
-                    // Remove the listener after a single retry to avoid leaks.
-                    eventHandlers.cleanupListeners({ context: 'authLoginRetry' });
-                };
-                eventHandlers.trackListener(
-                    domAPI.getDocument(),
-                    'modalsLoaded',
-                    retryHandler,
-                    {
-                        description: '[Auth] Retry login modal display after modalsLoaded',
-                        once: true,
-                        context: 'authLoginRetry'
-                    }
-                );
+        // Sync visibility
+        if (isAuth) {
+            if (authBtn) domAPI.addClass(authBtn, 'hidden');
+            if (userMenu) domAPI.removeClass(userMenu, 'hidden');
+        } else {
+            if (authBtn) domAPI.removeClass(authBtn, 'hidden');
+            if (userMenu) domAPI.addClass(userMenu, 'hidden');
+        }
+        // Update user initials and details if logged in
+        if (isAuth && userMenu && userInitialsEl) {
+            let initials = '?';
+            if (user.name) {
+                initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
+            } else if (user.username) {
+                initials = user.username.trim().slice(0, 2).toUpperCase();
             }
-        },
-        { description: 'Auth login/logout button' }
-    );
-}
-        const authStatus = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
-        const userStatus = domAPI.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
-        if (authStatus) domAPI.setInnerHTML(authStatus, isAuth ? 'Signed in' : 'Not signed in');
+            domAPI.setTextContent(userInitialsEl, initials);
+        }
+        // Auth status text
+        if (authStatus) {
+            domAPI.setTextContent(authStatus, isAuth ?
+                (user?.username ? `Signed in as ${user.username}` : 'Authenticated') :
+                'Not Authenticated'
+            );
+        }
+        // User status text ("Offline" or greeting)
         if (userStatus) {
-            domAPI.setInnerHTML(userStatus, isAuth && currentUser ? `Hello, ${currentUser.name ?? currentUser.username}` : '');
+            domAPI.setTextContent(userStatus, isAuth && user?.username ?
+                `Hello, ${user.name ?? user.username}` : 'Offline'
+            );
+        }
+        // DO NOT update authBtn innerHTML or rebind .trackListener on authBtn.
+        // Login button handler and modal opening is managed robustly by eventHandler.js via event delegation.
+        // If at some point the login button label needs to reflect logout/login, update a <span> child only:
+        // (but base.html already hard-codes "Login" text with correct icon)
+        // Example:
+        // const loginText = domAPI.querySelector('#authButton span');
+        // if (loginText) domAPI.setTextContent(loginText, isAuth ? 'Logout' : 'Login');
+
+        // Logout button: bind logout if authenticated
+        if (logoutBtn) {
+            eventHandlers.trackListener(
+                logoutBtn,
+                'click',
+                (e) => {
+                    domAPI.preventDefault(e);
+                    authMod?.logout?.();
+                },
+                { description: 'Auth logout button' }
+            );
         }
     } catch (err) {
         notify.error('[App] Error rendering auth header.', { error: err });
@@ -560,7 +605,13 @@ async function initializeUIComponents() {
             sanitizer: DependencySystem.modules.get('sanitizer'),
             app,
             onBack: async () => {
-                const pd = await DependencySystem.waitFor('projectDashboard');
+                let pd;
+                try {
+                    pd = await DependencySystem.waitFor('projectDashboard');
+                } catch (err) {
+                    notify.error('[App] Dependency not met: projectDashboard', { error: err });
+                    throw err;
+                }
                 pd?.showProjectList?.();
             }
         });
@@ -672,7 +723,7 @@ async function handleNavigationChange() {
         if (!appState.initialized) {
             // If still not ready, short-circuit or wait briefly
             if (appState.initializing) {
-                await delay(150); // a small helper that wraps setTimeout
+                await new Promise(r => browserAPI.requestAnimationFrame(r)); // yield to browser; replaced delay(150)
                 if (!appState.initialized) {
                     notify.warn("[App] handleNavigationChange: Aborted, initialization didn't complete in time.");
                     return;
