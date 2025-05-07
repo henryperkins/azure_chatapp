@@ -1,6 +1,5 @@
 export function createNotify({
-  notificationHandler,
-  DependencySystem = typeof window !== 'undefined' ? window.DependencySystem : undefined
+  notificationHandler
 } = {}) {
   if (!notificationHandler?.show) throw new Error('notificationHandler missing');
 
