@@ -180,6 +180,25 @@ const eventHandlers = createEventHandlers({
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
+// Initialize eventHandlers immediately after registration
+if (typeof eventHandlers.init === 'function') {
+    notify?.debug?.('[App] Initializing eventHandlers...', { context: 'app', module: 'App' });
+    try {
+        await eventHandlers.init();
+        if (DEBUG_INIT) {
+            console.log('[DEBUG] EventHandlers initialized successfully');
+        }
+    } catch (ehErr) {
+        notify?.error?.('[App] Error initializing eventHandlers', { 
+            group: true, 
+            context: 'app', 
+            module: 'App', 
+            error: ehErr 
+        });
+        throw ehErr; // Re-throw as this is a critical initialization
+    }
+}
+
 // Create NotificationHandler. It needs the eventHandlers instance.
 const notificationHandler = createNotificationHandler({
     eventHandlers, // Pass the created instance
@@ -324,12 +343,41 @@ async function init() {
     try {
         appState.currentPhase = 'init_core_systems';
         notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
-        await initializeCoreSystems();
+        
+        // Add timeout and granular error handling for core systems
+        try {
+            await executeWithTimeout(
+                () => initializeCoreSystems(),
+                APP_CONFIG.TIMEOUTS.PHASE_TIMEOUT || 10000,
+                'Core systems initialization timed out'
+            ).catch(err => {
+                throw new Error(`Core systems initialization failed: ${err.message || err}`);
+            });
+            if (DEBUG_INIT) {
+                console.log(`[DEBUG] Phase ${appState.currentPhase}: Core systems initialized successfully`);
+            }
+        } catch (coreError) {
+            if (DEBUG_INIT) {
+                console.error('[DEBUG] Core systems initialization failed:', coreError);
+            }
+            throw new Error(`Core systems initialization failed: ${coreError.message || coreError}`);
+        }
+        
         notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - initStartTime).toFixed(2)} ms`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
 
         appState.currentPhase = 'waiting_core_deps';
         notify?.debug?.(`[App] Phase: ${appState.currentPhase}, waiting for DI deps`, { group: true, context: 'app', module: 'App', source: 'init', phase: appState.currentPhase });
-        await waitFor(['auth', 'eventHandlers', 'notificationHandler', 'modalManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+        try {
+            await waitFor(['auth', 'eventHandlers', 'notificationHandler', 'modalManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
+            if (DEBUG_INIT) {
+                console.log(`[DEBUG] Phase ${appState.currentPhase}: Core dependencies resolved successfully`);
+            }
+        } catch (depError) {
+            if (DEBUG_INIT) {
+                console.error('[DEBUG] Core dependency resolution failed:', depError);
+            }
+            throw new Error(`Core dependency resolution failed: ${depError.message || depError}`);
+        }
 
         appState.currentPhase = 'init_auth';
         const _authInitStart = performance.now();
@@ -409,7 +457,29 @@ async function init() {
         return true;
 
     } catch (err) {
-        notify?.error?.('[App] CRITICAL ERROR in main init() try block.', { group: true, context: 'app', module: 'App', source: 'init', error: err, phase: appState.currentPhase, errorStack: err?.stack });
+        // Enhanced error reporting with phase information
+        const errorPhase = appState.currentPhase || 'unknown';
+        const errorMessage = `[App] Initialization failed in phase '${errorPhase}': ${err?.message || String(err)}`;
+        
+        if (DEBUG_INIT) {
+            console.error('[App Debug] Initialization failed:', {
+                phase: errorPhase,
+                error: err,
+                appState: { ...appState },
+                stack: err?.stack
+            });
+        }
+        
+        notify?.error?.(errorMessage, { 
+            group: true, 
+            context: 'app', 
+            module: 'App', 
+            source: 'init', 
+            error: err, 
+            phase: errorPhase, 
+            errorStack: err?.stack 
+        });
+        
         handleInitError(err);
         domAPI.dispatchEvent(document, new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
         return false;
@@ -680,14 +750,39 @@ async function initializeUIComponents() {
     const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({ DependencySystem, apiRequest, auth: () => DependencySystem.modules.get('auth'), projectManager: () => DependencySystem.modules.get('projectManager'), uiUtils: globalUtils, sanitizer: DependencySystem.modules.get('sanitizer') });
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
 
-    // Initialize UI modules that have an `init` or `initialize` method
-    if (typeof sidebarInstance.init === 'function') await sidebarInstance.init();
-    if (typeof chatExtensionsInstance.init === 'function') chatExtensionsInstance.init();
+    // Initialize UI modules with granular error handling
+    async function initializeComponent(instance, name, method = 'init') {
+        if (typeof instance?.[method] === 'function') {
+            try {
+                if (DEBUG_INIT) {
+                    console.log(`[DEBUG] Initializing UI component: ${name}`);
+                }
+                await instance[method]();
+                if (DEBUG_INIT) {
+                    console.log(`[DEBUG] Successfully initialized: ${name}`);
+                }
+            } catch (err) {
+                notify?.warn?.(`[App] ${name} initialization failed but continuing`, {
+                    context: 'app',
+                    module: 'App',
+                    error: err
+                });
+                if (DEBUG_INIT) {
+                    console.warn(`[DEBUG] Failed to initialize ${name}:`, err);
+                }
+                // Don't re-throw; allow other components to initialize
+            }
+        }
+    }
+
+    // Initialize each UI component independently
+    await initializeComponent(sidebarInstance, 'Sidebar', 'init');
+    await initializeComponent(chatExtensionsInstance, 'ChatExtensions', 'init');
     // modelConfig.initializeUI is called in main init's finalization phase
-    if (typeof knowledgeBaseComponentInstance.initialize === 'function') await knowledgeBaseComponentInstance.initialize();
-    if (typeof projectDashboardInstance.initialize === 'function') await projectDashboardInstance.initialize();
-    if (typeof projectListComponentInstance.initialize === 'function') await projectListComponentInstance.initialize();
-    if (typeof projectDetailsComponentInstance.initialize === 'function') await projectDetailsComponentInstance.initialize();
+    await initializeComponent(knowledgeBaseComponentInstance, 'KnowledgeBase', 'initialize');
+    await initializeComponent(projectDashboardInstance, 'ProjectDashboard', 'initialize');
+    await initializeComponent(projectListComponentInstance, 'ProjectList', 'initialize');
+    await initializeComponent(projectDetailsComponentInstance, 'ProjectDetails', 'initialize');
 
 
     if (appState.isAuthenticated) {
@@ -808,24 +903,34 @@ function setupChatInitializationTrigger() {
     }, 350);
 
     waitFor(requiredDeps, (resolvedDeps) => {
-        const localEventHandlers = resolvedDeps[4]; // eventHandlers instance from waitFor
+        const localEventHandlers = resolvedDeps[4];
         const authMod = resolvedDeps[0];
 
-        if (authMod.AuthBus) { // Check if AuthBus exists
+        if (authMod.AuthBus) {
             attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
         } else {
             DependencySystem.modules.get('notify')?.warn?.('[App] AuthBus not found on auth module, cannot attach authStateChanged for chat init.', { context: 'app', module: 'App' });
         }
 
-        if (!document._chatInitProjListenerAttached) { // Use a local flag if possible, or manage via eventHandlers state
+        if (!document._chatInitProjListenerAttached) {
             localEventHandlers.trackListener(document, 'currentProjectChanged', () => debouncedInitChat(),
                 { description: 'Current project changed -> reinit chat', module: 'App', context: 'chatTrigger' });
-            document._chatInitProjListenerAttached = true; // Example of a simple guard
+            document._chatInitProjListenerAttached = true;
         }
         localEventHandlers.trackListener(document, 'currentProjectReady', e => debouncedInitChat(e.detail?.project?.id),
             { description: 'Project ready -> reinit chat', module: 'App', context: 'chatTrigger' });
 
-        debouncedInitChat(); // Initial attempt
+        // Replace immediate call with a safe, delayed version
+        setTimeout(() => {
+            if (authMod?.isAuthenticated?.()) {
+                if (DEBUG_INIT) {
+                    console.log('[DEBUG] Triggering initial chat initialization (authenticated)');
+                }
+                debouncedInitChat();
+            } else if (DEBUG_INIT) {
+                console.log('[DEBUG] Skipping initial chat initialization (not authenticated)');
+            }
+        }, 100);
     }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)
         .catch(err => {
             DependencySystem.modules.get('notify')?.error?.('[App] Failed setup for chat init triggers.', { group: true, context: 'app', module: 'App', source: 'setupChatInitializationTrigger', error: err });
