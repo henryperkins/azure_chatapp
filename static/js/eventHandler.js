@@ -118,7 +118,6 @@ export function createEventHandlers({
     const listenerSource = options.source || 'trackListener';
     const listenerModule = options.module || MODULE;
 
-
     const elementMap = trackedListeners.get(element);
     if (elementMap) {
       const typeMap = elementMap.get(type);
@@ -180,84 +179,6 @@ export function createEventHandlers({
       } else {
         localNotify.warn(`domAPI.addEventListener unavailable in trackListener for '${description}', using direct addEventListener.`, {
           group: true, context: listenerContext, source: listenerSource, module: MODULE,
-          extra: { elementId: element.id || null, eventType: type }
-        });
-        // This is the ONLY allowed direct addEventListener usage in the codebase.
-        // It is always routed through trackListener and logged via notify for traceability.
-        // eslint-disable-next-line no-restricted-syntax
-        element.addEventListener(type, wrappedHandler, finalOptions);
-      }
-
-      if (!trackedListeners.has(element)) trackedListeners.set(element, new Map());
-      const currentElementMap = trackedListeners.get(element);
-      if (!currentElementMap.has(type)) currentElementMap.set(type, new Map());
-      currentElementMap.get(type).set(handler, {
-        wrappedHandler, originalHandler: handler, options: finalOptions, description,
-        priority: options.priority || PRIORITY.NORMAL,
-        context: listenerContext, module: listenerModule, // Store context and module
-        addedAt: new Date().toISOString(),
-        elementInfo: { id: element.id || null, tagName: element.tagName || null, className: element.className || null }
-      });
-      return wrappedHandler;
-    } catch (err) {
-      localNotify.error('Failed to attach event listener', {
-        group: true, context: listenerContext, source: listenerSource, module: MODULE,
-        originalError: err,
-        extra: { type, description, elementId: element.id || null, errorMessage: err.message, errorStack: err.stack, callerStack: new Error().stack }
-      });
-      return undefined;
-    }
-  }
-
-  function cleanupListeners(filter = {}) {
-    const { targetElement, targetType, targetDescription, context, module: filterModule } = filter;
-    let removeCount = 0;
-
-    trackedListeners.forEach((elementMap, element) => {
-      if (targetElement && element !== targetElement) return;
-      elementMap.forEach((typeMap, type) => {
-        if (targetType && type !== targetType) return;
-        typeMap.forEach((details, originalHandler) => {
-          const descMatches = !targetDescription || details.description === targetDescription;
-          const contextMatches = !context || details.context === context;
-          const moduleMatches = !filterModule || details.module === filterModule;
-
-          if (descMatches && contextMatches && moduleMatches) {
-            try {
-              if (domAPI && typeof domAPI.removeEventListener === 'function') {
-                domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
-              } else {
-                element.removeEventListener(type, details.wrappedHandler, details.options);
-              }
-              typeMap.delete(originalHandler);
-              removeCount++;
-            } catch (error) {
-              handlerNotify.warn('Error removing listener', {
-                group: true, context: 'eventHandler', module: MODULE, source: 'cleanupListeners',
-                originalError: error, extra: { description: details.description, type }
-              });
-            }
-          }
-        });
-        if (typeMap.size === 0) elementMap.delete(type);
-      });
-      if (elementMap.size === 0) trackedListeners.delete(element);
-    });
-
-    if (removeCount > 0) {
-      handlerNotify.info(`Cleaned up ${removeCount} listeners.`, {
-        module: MODULE, source: 'cleanupListeners',
-        extra: { filter: JSON.stringify(filter) }
-      });
-    }
-  }
-
-  function delegate(container, eventType, selector, handler, options = {}) {
-    if (!container) {
-      handlerNotify.warn('Delegate called with no container.', { module: MODULE, source: 'delegate', extra: { selector } });
-      return;
-    }
-    const delegatedHandler = function (event) {
       const target = domAPI.closest(event.target, selector); // Assuming domAPI has `closest`
       if (target) {
         handler.call(target, event, target);
@@ -461,6 +382,23 @@ export function createEventHandlers({
       } else {
         trackListener(domAPI.getDocument(), 'DOMContentLoaded', checkProjectModalForm, { once: true, module: MODULE, context: 'init' });
       }
+
+      // --- BEGIN: LOGIN BUTTON/MODAL HANDLING ---
+      // Header Login Button
+      const loginBtn = domAPI.getElementById('authButton');
+      if (loginBtn && modalManager && typeof modalManager.show === 'function') {
+        trackListener(loginBtn, 'click', (e) => {
+          domAPI.preventDefault(e);
+          modalManager.show('login');
+        }, { description: 'Show Login Modal', context: 'auth', module: MODULE });
+      }
+      // Listen for requestLogin event (used by project list and others)
+      trackListener(domAPI.getDocument(), 'requestLogin', (e) => {
+        if (modalManager && typeof modalManager.show === 'function') {
+          modalManager.show('login');
+        }
+      }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
+      // --- END: LOGIN BUTTON/MODAL HANDLING ---
 
       initialized = true;
       handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
