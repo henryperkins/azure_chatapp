@@ -4,7 +4,8 @@
  */
 export const APP_CONFIG = {
   DEBUG: true,
-  BASE_API_URL: 'http://localhost:8000', // Explicitly set API base URL
+  // Mantener vacío para usar la misma URL de origen que la página
+  BASE_API_URL: '',
   SELECTORS: {
     APP_LOADING_SPINNER: '#appLoading',
     APP_FATAL_ERROR: '#appFatalError',
