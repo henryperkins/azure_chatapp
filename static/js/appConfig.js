@@ -25,7 +25,12 @@ export const APP_CONFIG = {
     INIT_WARN: 3000
   },
   API_ENDPOINTS: {
-    // Example: CURRENT_USER: '/api/v1/users/me'
-    // Relative paths here will be prefixed by BASE_API_URL
+    AUTH_CSRF: '/api/auth/csrf',
+    AUTH_LOGIN: '/api/auth/login',
+    AUTH_LOGOUT: '/api/auth/logout',
+    AUTH_REGISTER: '/api/auth/register',
+    AUTH_VERIFY: '/api/auth/verify',
+    AUTH_REFRESH: '/api/auth/refresh'
+    // Add other endpoints as needed
   }
 };
