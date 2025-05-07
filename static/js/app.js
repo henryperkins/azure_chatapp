@@ -1287,9 +1287,8 @@ function setupChatInitializationTrigger() {
         }
     }, 350);
 
-    waitFor(requiredDeps, (resolvedDeps) => {
-        const localEventHandlers = resolvedDeps[4];
-        const authMod = resolvedDeps[0];
+    waitFor(requiredDeps, (...resolvedDeps) => {
+        const [authMod, chatMgr, projMgr, localNotify, localEventHandlers] = resolvedDeps;
         // Diagnostic log for authMod
         console.error('[App] setupChatInitializationTrigger diagnostic:', {
             authMod,
@@ -1298,7 +1297,7 @@ function setupChatInitializationTrigger() {
             modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
             modulesAuth: DependencySystem.modules ? DependencySystem.modules.get('auth') : null
         });
-        if (authMod.AuthBus) {
+        if (authMod && authMod.AuthBus) {
             attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
         } else {
             DependencySystem.modules.get('notify')?.warn?.('[App] AuthBus not found on auth module.');
