@@ -45,12 +45,8 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
                 o.strip() for o in allowed_origins.split(",") if o.strip()
             ]
     else:
-        allowed_origins = [
-            "http://localhost",
-            "http://127.0.0.1",
-            "http://localhost:8000",
-            "http://127.0.0.1:8000",
-        ]
+        # Allow all origins for local development and debugging
+        allowed_origins = ["*"]
 
     if is_production:
         # Extra hard lock—never allow this CORS in prod!
