@@ -40,7 +40,7 @@ export class ProjectDetailsComponent {
         "router, notify, sanitizer, domAPI)."
       );
     }
-gi
+
     this.app = app;
     this.projectManager = projectManager;
     this.eventHandlers = eventHandlers;
@@ -85,7 +85,8 @@ gi
             notify.success(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
           }
         },
-        withContext: (ctx) => this.notify // Self-returning stub to prevent cascading failures
+        // eslint-disable-next-line no-unused-vars
+        withContext: (_ctx) => this.notify // Self-returning stub to prevent cascading failures
       };
     }
 
