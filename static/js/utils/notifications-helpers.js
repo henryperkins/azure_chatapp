@@ -22,10 +22,18 @@
  * Returns an apiNotify instance with preregistered context/module for wrapped API error reporting.
  * Use this at top-level before calling wrapApi.
  */
-function maybeCapture(errorReporter, err, meta = {}) {
-  if (errorReporter && typeof errorReporter.capture === 'function') {
-    errorReporter.capture(err, meta);
-  }
+export function maybeCapture(errorReporter, err, meta = {}) {
+  if (!errorReporter) return;
+
+  // Accepts both capture and captureException
+  const captureFn =
+    (typeof errorReporter.capture === 'function'
+      ? errorReporter.capture
+      : (typeof errorReporter.captureException === 'function'
+          ? errorReporter.captureException
+          : null));
+
+  if (captureFn) captureFn.call(errorReporter, err, meta);
 }
 
 export function getApiNotify(notify) {
