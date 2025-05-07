@@ -58,6 +58,9 @@ export function createEventHandlers({
   projectManager = projectManager || _resolveDep('projectManager');
   modalManager = modalManager || _resolveDep('modalManager');
 
+  // ---- singleton flags ---------------------------------------------------
+  let authButtonDelegationBound = false;   // prevents duplicate binding
+
   const storageBackend = storage || browserService; // Assuming browserService provides getItem/setItem
   let handlerNotify = notify; // Allow updating later via setNotifier
 
@@ -395,6 +398,7 @@ export function createEventHandlers({
        * ensuring handler works even if #authButton is dynamically replaced.
        */
       function bindAuthButtonDelegate() {
+        if (authButtonDelegationBound) return;          // already bound
         // Use a stable parent for delegation: header (if present), otherwise fallback to document.
         let parentNode = domAPI.getElementById('header') || domAPI.getDocument();
         // Ensure modalManager dependency is met before binding
@@ -422,6 +426,7 @@ export function createEventHandlers({
           { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
         );
         handlerNotify.debug('Delegated click listener bound for #authButton', { module: MODULE, source: 'bindAuthButtonDelegate' });
+        authButtonDelegationBound = true;               // mark as bound
       }
 
       // Listen for requestLogin event (used by project list and others)
