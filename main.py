@@ -203,6 +203,9 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# --- DB availability flag ---
+DB_AVAILABLE = True
+
 # Apply insecure middlewares
 setup_middlewares_insecure(app)
 
@@ -213,6 +216,7 @@ configure_sentry_insecure(APP_NAME, APP_VERSION, ENVIRONMENT)
 @app.on_event("startup")
 async def on_startup():
     """Initialize services for debugging, with minimal checks."""
+    global DB_AVAILABLE
     try:
         await init_db()
         # Run schema migration/validation at startup
@@ -221,8 +225,10 @@ async def on_startup():
         await create_default_user()  # Insecure default user creation
         await schedule_token_cleanup(interval_minutes=30)
         logger.info(f"{APP_NAME} v{APP_VERSION} started in debug mode.")
+        DB_AVAILABLE = True
     except Exception as exc:
         logger.critical(f"Startup failed: {exc}", exc_info=True)
+        DB_AVAILABLE = False
 
 
 @app.on_event("shutdown")
@@ -303,10 +309,11 @@ async def serve_modals(request: Request) -> Response:
 @app.get("/health")
 async def health_check() -> Dict[str, Any]:
     """
-    Debug health endpoint with minimal data.
+    Debug health endpoint with DB status.
     """
     return {
         "status": "healthy (INSECURE DEBUG)",
+        "db_available": DB_AVAILABLE,
         "environment": ENVIRONMENT,
         "app_name": APP_NAME,
         "version": APP_VERSION,
@@ -351,6 +358,24 @@ async def debug_routes() -> list[Dict[str, Any]]:
 
 
 # -----------------------------------------------------------------------------
+# DB Down Middleware (friendly error if DB unavailable)
+# -----------------------------------------------------------------------------
+@app.middleware("http")
+async def db_availability_middleware(request: Request, call_next):
+    # Allow health, static, and root pages even if DB is down
+    allowed_paths = [
+        "/health", "/static", "/", "/login", "/modals", "/docs", "/redoc"
+    ]
+    if not DB_AVAILABLE and not any(request.url.path == p or request.url.path.startswith(p + "/") for p in allowed_paths):
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Service temporarily unavailable: database connection failed at startup. Please try again later or contact support."
+            },
+        )
+    return await call_next(request)
+
+# -----------------------------------------------------------------------------
 # Exception Handlers
 # -----------------------------------------------------------------------------
 @app.exception_handler(HTTPException)
@@ -383,6 +408,6 @@ if __name__ == "__main__":
     uvicorn.run(
         app,
         host="0.0.0.0",
-        port=int(os.getenv("PORT", "8001")),
+        port=int(os.getenv("PORT", "8000")),
         log_level="debug",
     )
