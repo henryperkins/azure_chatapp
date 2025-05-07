@@ -204,7 +204,7 @@ export function createEventHandlers({
     handlerMap.set(handler, { wrappedHandler, options: finalOptions });
 
     return wrappedHandler;
-  } // Add missing closing brace for trackListener function
+  }
 
   function toggleVisible(elementSelectorOrElement, show) {
     const element = typeof elementSelectorOrElement === 'string'
@@ -212,7 +212,6 @@ export function createEventHandlers({
       : elementSelectorOrElement;
     return globalToggleElement(element, show); // globalToggleElement should use domAPI or be pure
   }
-
 
   function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
     const toggleButton = domAPI.getElementById(toggleId);
@@ -379,9 +378,6 @@ export function createEventHandlers({
       const checkProjectModalForm = () => {
         if (domAPI.getElementById('projectModalForm')) {
           setupProjectModalForm();
-        } else {
-          // This might be normal if modals are loaded asynchronously.
-          // Consider if specific logging is needed or if modalsLoaded handles it.
         }
       };
 
@@ -396,17 +392,37 @@ export function createEventHandlers({
       let loginButtonDelegatedHandler = null;
       function bindAuthButtonDelegate() {
         const authContainer = domAPI.getElementById('authContainer');
-        if (authContainer && modalManager && typeof modalManager.show === 'function') {
+        if (!authContainer) {
+            throw new Error("[EventHandler] #authContainer not found; login button delegate requires it");
+        }
+        if (!modalManager || typeof modalManager.show !== 'function') {
+            throw new Error("[EventHandler] modalManager is missing or .show is not a function");
+        }
           // Remove previous delegate, if present
           if (loginButtonDelegatedHandler) {
             try {
-              eventHandlers.untrackListener(authContainer, 'click', loginButtonDelegatedHandler);
-            } catch {}
+              // use closure-scope 'trackListener' API, not accidental 'eventHandlers'
+              untrackListener(authContainer, 'click', loginButtonDelegatedHandler);
+            } catch (err) {
+              handlerNotify.warn('Failed to untrack previous login button delegate', { module: MODULE, source: 'bindAuthButtonDelegate', originalError: err });
+            }
             loginButtonDelegatedHandler = null;
           }
           // Attach new delegate handler
           loginButtonDelegatedHandler = function(e) {
-            const target = domAPI.closest(e.target, '#authButton');
+            // Robust: fallback to native Element.closest if available, else shim
+            function nativeClosest(el, sel) {
+              if (!el) return null;
+              if (typeof el.closest === 'function') return el.closest(sel);
+              // Simple manual traverse (very rare fallback)
+              let node = el;
+              while (node) {
+                if (node.matches && node.matches(sel)) return node;
+                node = node.parentElement;
+              }
+              return null;
+            }
+            const target = nativeClosest(e.target, '#authButton');
             if (target) {
               domAPI.preventDefault(e);
               handlerNotify.info('Login button delegated click, attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
@@ -421,14 +437,14 @@ export function createEventHandlers({
           trackListener(authContainer, 'click', loginButtonDelegatedHandler, { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE });
         }
       }
-      bindAuthButtonDelegate();
 
       // Listen for requestLogin event (used by project list and others)
-      trackListener(domAPI.getDocument(), 'requestLogin', (e) => {
+      trackListener(domAPI.getDocument(), 'requestLogin', () => {
         if (modalManager && typeof modalManager.show === 'function') {
           modalManager.show('login');
         }
       }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
+
       // --- END: LOGIN BUTTON/MODAL HANDLING ---
 
       // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
@@ -532,7 +548,6 @@ export function createEventHandlers({
     });
   }
 
-
   function untrackListener(el, evt, handler) {
     const elementMap = trackedListeners.get(el);
     if (!elementMap) return;
@@ -544,7 +559,7 @@ export function createEventHandlers({
       if (domAPI && typeof domAPI.removeEventListener === 'function') {
         domAPI.removeEventListener(el, evt, details.wrappedHandler, details.options);
       } else {
-        el.removeEventListener(el, evt, details.wrappedHandler, details.options);
+        el.removeEventListener(evt, details.wrappedHandler, details.options);
       }
       typeMap.delete(handler);
       if (typeMap.size === 0) elementMap.delete(evt);
