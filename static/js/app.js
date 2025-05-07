@@ -946,11 +946,6 @@ function toggleLoadingSpinner(show) {
     toggleElement(APP_CONFIG.SELECTORS?.APP_LOADING_SPINNER, show);
 }
 
-function toggleElement(sel, show) {
-    domAPI.querySelectorAll(sel).forEach(el => {
-        el.classList.toggle('hidden', !show);
-    });
-}
 
 function isDocumentReady() {
     const doc = domAPI.getDocument();
