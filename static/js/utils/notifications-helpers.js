@@ -22,6 +22,12 @@
  * Returns an apiNotify instance with preregistered context/module for wrapped API error reporting.
  * Use this at top-level before calling wrapApi.
  */
+function maybeCapture(errorReporter, err, meta = {}) {
+  if (errorReporter && typeof errorReporter.capture === 'function') {
+    errorReporter.capture(err, meta);
+  }
+}
+
 export function getApiNotify(notify) {
   return notify.withContext({ context: 'apiRequest', module: 'api' });
 }
@@ -39,14 +45,12 @@ export async function wrapApi(apiFn, { notify, errorReporter }, endpoint, opts =
     return await apiFn(endpoint, opts);
   } catch (err) {
     apiNotify.error(`API call failed: ${endpoint}`, { endpoint, method: opts && opts.method, originalError: err });
-    if (errorReporter) {
-      errorReporter.capture(err, {
-        context: src,
-        module: src,
-        endpoint,
-        method: opts && opts.method
-      });
-    }
+    maybeCapture(errorReporter, err, {
+      context : src,
+      module  : src,
+      endpoint,
+      method  : opts && opts.method
+    });
     throw err;
   }
 }
@@ -73,14 +77,12 @@ export function safeInvoker(fn, { notify, errorReporter }, ctx) {
         group: true,
         ...contextObj
       });
-      if (errorReporter) {
-        errorReporter.capture(err, {
-          ...ctx,
-          module: ctx && ctx.module,
-          handler: fn.name || '(anonymous)',
-          uncaughtCallback: true
-        });
-      }
+      maybeCapture(errorReporter, err, {
+        ...ctx,
+        module : ctx && ctx.module,
+        handler: fn.name || '(anonymous)',
+        uncaughtCallback: true
+      });
       // Silent: rethrow only for debugging, not production
     }
   };
