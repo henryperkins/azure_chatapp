@@ -238,12 +238,12 @@ class ModalManager {
 
         // --- Standardized "modalmanager:initialized" event ---
         const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-        if (doc && typeof (this.domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
-          (this.domAPI?.dispatchEvent || doc.dispatchEvent).call(
-            doc,
-            new CustomEvent('modalmanager:initialized', { detail: { success: true } })
-          );
-        }
+if (doc && typeof this.domAPI?.dispatchEvent === "function") {
+  this.domAPI.dispatchEvent(
+    doc,
+    new CustomEvent('modalmanager:initialized', { detail: { success: true } })
+  );
+}
 
       } catch (err) {
         this._notify('error', '[ModalManager] Initialization failed: ' + (err && err.message ? err.message : err), false, { context: 'modalManager', module: 'ModalManager', source: 'init', originalError: err });
@@ -458,18 +458,12 @@ class ProjectModal {
    * @param {Object} opts
    *   @param {Object} [opts.projectManager] - Project manager instance.
    *   @param {Object} [opts.eventHandlers] - Event handler utilities.
-   *   @param {Function} [opts.showNotification] - Notification function.
-   *   @param {Object} [opts.DependencySystem] - For dynamic injection (optional).
-   */
-  /**
-   * @param {Object} opts
-   *   @param {Object} [opts.projectManager] - Project manager instance.
-   *   @param {Object} [opts.eventHandlers] - Event handler utilities.
    *   @param {Function} [opts.notify] - Notification function.
    *   @param {Object} [opts.DependencySystem] - For dynamic injection (optional).
+   *   @param {Object} [opts.domAPI] - Injected domAPI abstraction (REQUIRED).
    *   @param {Object} [opts.domPurify] - Sanitization library for any needed HTML.
    */
-  constructor({ projectManager, eventHandlers, notify, DependencySystem, domPurify } = {}) {
+  constructor({ projectManager, eventHandlers, notify, DependencySystem, domAPI, domPurify } = {}) {
     this.DependencySystem = DependencySystem || undefined;
 
     this.eventHandlers = eventHandlers ||
@@ -478,6 +472,8 @@ class ProjectModal {
     this.projectManager = projectManager ||
       this.DependencySystem?.modules?.get?.('projectManager') ||
       undefined;
+    this.domAPI = domAPI || this.DependencySystem?.modules?.get?.('domAPI');
+    if (!this.domAPI) throw new Error('[ProjectModal] domAPI DI not provided');
     // Canonical context-aware notify
     if (!notify) {
       notify = this.DependencySystem?.modules?.get?.('notify');
@@ -577,8 +573,8 @@ class ProjectModal {
    * Typically called from the orchestrator (e.g. app.js).
    */
   init() {
-    this.modalElement = document.getElementById('projectModal');
-    this.formElement = document.getElementById('projectModalForm');
+    this.modalElement = this.domAPI.getElementById('projectModal');
+    this.formElement = this.domAPI.getElementById('projectModalForm');
     if (!this.modalElement || !this.formElement) {
       throw new Error('[ProjectModal] Required DOM elements not found on init.');
     }
@@ -676,7 +672,8 @@ class ProjectModal {
         this.closeModal();
       }
     };
-    this._bindEvent(document, 'keydown', escHandler, 'ProjectModal ESC handler');
+    // Use injected domAPI.ownerDocument for event binding on the document node for SPA/testability
+    this._bindEvent(this.domAPI.ownerDocument, 'keydown', escHandler, 'ProjectModal ESC handler');
 
     const backdropHandler = (e) => {
       if (e.target === this.modalElement && this.isOpen) {
@@ -797,6 +794,6 @@ class ProjectModal {
 /**
  * Factory: Create ProjectModal with full DI context (RECOMMENDED: inject domPurify for HTML sanitization)
  */
-export function createProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domPurify } = {}) {
-  return new ProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domPurify });
+export function createProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domAPI, domPurify } = {}) {
+  return new ProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domAPI, domPurify });
 }

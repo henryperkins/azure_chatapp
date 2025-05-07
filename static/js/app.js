@@ -28,6 +28,7 @@ import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
+import { createAuthUI } from './auth/authUI.js';
 
 // Example: For consistent message durations, etc.
 const NOTIFY_DURATION = { debug: 3000, info: 4000, success: 4000, warning: 6000, error: 0 };
@@ -341,6 +342,10 @@ async function initializeCoreSystems() {
             );
         });
 
+        // New: Initialize authUI (modal tabs, password validation...)
+        const authUI = createAuthUI({ domAPI, eventHandlers, notify });
+        authUI.init();
+
         if (modalManager.init) modalManager.init();
 
         // Always register chatManager so dependencies are satisfied
@@ -406,11 +411,46 @@ function renderAuthHeader() {
         const authMod = DependencySystem.modules.get('auth');
         const isAuth = authMod?.isAuthenticated?.();
         const btn = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || domAPI.getElementById('loginButton');
-        if (btn) {
-            domAPI.setInnerHTML(btn, isAuth ? 'Logout' : 'Login');\n            eventHandlers.trackListener(\n                btn,\n                'click',\n                (e) => {\n                    domAPI.preventDefault(e);\n                    if (isAuth) {\n                        authMod.logout();\n                        return;\n                    }\n\n                    const modalMgr = DependencySystem.modules.get('modalManager');\n                    if (!modalMgr) return;\n\n                    // Attempt to show the login modal immediately; if it fails because\n                    // modals haven't been injected yet, wait for the `modalsLoaded`\n                    // signal and then retry *once*.\n                    const opened = modalMgr.show('login');\n                    if (!opened) {\n                        const retryHandler = () => {\n                            modalMgr.show('login');\n                            // Remove the listener after a single retry to avoid leaks.\n                            eventHandlers.cleanupListeners({ context: 'authLoginRetry' });\n                        };\n                        eventHandlers.trackListener(\n                            domAPI.getDocument(),\n                            'modalsLoaded',\n                            retryHandler,\n                            {\n                                description: '[Auth] Retry login modal display after modalsLoaded',\n                                once: true,\n                                context: 'authLoginRetry'\n                            }\n                        );\n                    }\n                },
-                { description: 'Auth login/logout button' }
-            );
-        }
+if (btn) {
+    domAPI.setInnerHTML(btn, isAuth ? 'Logout' : 'Login');
+    eventHandlers.trackListener(
+        btn,
+        'click',
+        (e) => {
+            domAPI.preventDefault(e);
+            if (isAuth) {
+                authMod.logout();
+                return;
+            }
+
+            const modalMgr = DependencySystem.modules.get('modalManager');
+            if (!modalMgr) return;
+
+            // Attempt to show the login modal immediately; if it fails because
+            // modals haven't been injected yet, wait for the `modalsLoaded`
+            // signal and then retry *once*.
+            const opened = modalMgr.show('login');
+            if (!opened) {
+                const retryHandler = () => {
+                    modalMgr.show('login');
+                    // Remove the listener after a single retry to avoid leaks.
+                    eventHandlers.cleanupListeners({ context: 'authLoginRetry' });
+                };
+                eventHandlers.trackListener(
+                    domAPI.getDocument(),
+                    'modalsLoaded',
+                    retryHandler,
+                    {
+                        description: '[Auth] Retry login modal display after modalsLoaded',
+                        once: true,
+                        context: 'authLoginRetry'
+                    }
+                );
+            }
+        },
+        { description: 'Auth login/logout button' }
+    );
+}
         const authStatus = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
         const userStatus = domAPI.querySelector(APP_CONFIG.SELECTORS.USER_STATUS_SPAN);
         if (authStatus) domAPI.setInnerHTML(authStatus, isAuth ? 'Signed in' : 'Not signed in');
