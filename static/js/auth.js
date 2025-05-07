@@ -87,6 +87,15 @@ export function createAuthModule({
   const authState = { isAuthenticated: false, username: null, isReady: false };
   const AuthBus = new EventTarget();
 
+  // --- Cookie helper ------------------------------------------------------
+  function readCookie(name) {
+    if (typeof document === 'undefined') return null;
+    const m = document.cookie.match(
+      new RegExp('(?:^|;\\s*)' + name + '\\s*=\\s*([^;]+)')
+    );
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+
   let authCheckInProgress = false, tokenRefreshInProgress = false, tokenRefreshPromise = null;
   let csrfToken = '', csrfTokenPromise = null;
   let verifyInterval = null;
@@ -114,8 +123,13 @@ export function createAuthModule({
       throw error;
     }
   }
-  async function getCSRFTokenAsync() {
-    if (csrfToken) return csrfToken;
+  async function getCSRFTokenAsync(forceFetch = false) {
+    const cookieVal = readCookie('csrf_token');
+    if (!forceFetch && cookieVal) {
+      csrfToken = cookieVal;
+      return csrfToken;
+    }
+    if (csrfToken && !forceFetch) return csrfToken;
     if (csrfTokenPromise) return csrfTokenPromise;
     csrfTokenPromise = (async () => {
       try {
@@ -129,10 +143,9 @@ export function createAuthModule({
     return csrfTokenPromise;
   }
   function getCSRFToken() {
-    if (!csrfToken && !csrfTokenPromise) {
-      getCSRFTokenAsync().catch(err => {
-        authNotify.warn("[Auth] getCSRFToken error: " + (err?.message || err), { group: true, source: 'getCSRFToken' });
-      });
+    const current = readCookie('csrf_token');
+    if (current && current !== csrfToken) {
+      csrfToken = current;          // Mantener variable y cookie sincronizadas
     }
     return csrfToken;
   }
@@ -143,7 +156,7 @@ export function createAuthModule({
     const options = { method: method.toUpperCase(), headers, credentials: 'include' };
     const isStateChanging = !['GET', 'HEAD', 'OPTIONS'].includes(options.method) && endpoint !== apiEndpoints.AUTH_CSRF;
     if (isStateChanging) {
-      const token = await getCSRFTokenAsync();
+      const token = getCSRFToken() || await getCSRFTokenAsync();
       if (token) options.headers['X-CSRF-Token'] = token;
       else authNotify.warn(`[Auth] CSRF token missing for request: ${endpoint}`, { group: true, source: 'authRequest' });
     }
