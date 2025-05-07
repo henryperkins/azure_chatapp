@@ -270,14 +270,24 @@ export function isAbsoluteUrl(url) {
 
 export function normaliseUrl(url) {
   try {
-    // Turn relative paths into absolute URLs using current origin
+    /* ── Build a safe base for relative paths ─────────────────────────── */
     const hasProtocol = /^[a-z][a-z0-9+.+-]*:\/\//i.test(url);
-    const base =
-      hasProtocol
-        ? undefined
-        : (typeof window !== "undefined" &&
-           window.location &&
-           window.location.origin) || "http://localhost";
+    let base;
+    if (!hasProtocol) {
+      // Prefer window.location.origin when valid
+      if (typeof window !== "undefined" && window.location) {
+        const { origin, protocol, hostname, port } = window.location;
+        // origin may literally be the string "null" on file:// pages – guard that
+        if (origin && origin !== "null" && origin !== "undefined") {
+          base = origin;
+        } else if (protocol && /^https?:$/.test(protocol) && hostname) {
+          base = `${protocol}//${hostname}${port ? `:${port}` : ""}`;
+        }
+      }
+      // Absolute fallback (development)
+      if (!base) base = "http://localhost:8000";
+    }
+
     const u = base ? new URL(url, base) : new URL(url);
 
     // strip trailing “/”, sort query params – keep existing behaviour
