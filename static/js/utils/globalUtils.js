@@ -140,7 +140,22 @@ export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, 
     const auth = getAuthModule?.();
     // Construct full URL using BASE_URL if url is relative
     const fullUrl = globalUtils.isAbsoluteUrl(url) ? url : `${BASE_URL}${url}`;
-    const normUrl = globalUtils.normaliseUrl(fullUrl); // Normalize the potentially full URL
+
+    let normUrl;
+    try {
+      normUrl = globalUtils.normaliseUrl(fullUrl);
+    } catch (err) {
+      // graceful fallback: usa la URL sin normalizar y registra la incidencia
+      normUrl = fullUrl;
+      if (APP_CONFIG?.DEBUG && notificationHandler?.warn) {
+        notificationHandler.warn(`[API] normaliseUrl failed for "${fullUrl}"`, {
+          context : 'apiClient',
+          module  : 'ApiClient',
+          source  : 'apiRequest',
+          originalError: err
+        });
+      }
+    }
     const bodyKey =
       opts.body instanceof FormData
         ? `[form-data-${Date.now()}]`
