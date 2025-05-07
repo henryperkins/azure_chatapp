@@ -4011,6 +4011,9 @@
     --btn-shadow: 0 0 0 0 oklch(0% 0 0/0), 0 0 0 0 oklch(0% 0 0/0);
     isolation: isolate;
   }
+  .isolate {
+    isolation: isolate;
+  }
   .mockup-phone-camera {
     grid-column: 1/1;
     grid-row: 1/1;

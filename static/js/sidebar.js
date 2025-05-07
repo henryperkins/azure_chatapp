@@ -355,7 +355,7 @@ export function createSidebar({
 
   function dispatch(name, detail) {
     if (domAPI && domAPI.ownerDocument && typeof CustomEvent !== 'undefined') {
-      domAPI.ownerDocument.dispatchEvent(new CustomEvent(name, { detail }));
+      domAPI.dispatchEvent(domAPI.ownerDocument, new CustomEvent(name, { detail }));
     }
   }
 

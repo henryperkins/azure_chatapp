@@ -474,6 +474,8 @@ class ProjectDashboard {
     this.state._aborted = true;
     const loginMessage = document.getElementById('loginRequiredMessage');
     if (loginMessage) loginMessage.classList.remove('hidden');
+    const mainContent = document.getElementById('mainContent');
+    if (mainContent) mainContent.classList.add('hidden');
     const sidebar = document.getElementById('mainSidebar');
     if (sidebar && sidebar.contains(document.activeElement)) {
       document.activeElement.blur();
@@ -672,14 +674,17 @@ class ProjectDashboard {
     const { authenticated } = event.detail || {};
     this.browserService.requestAnimationFrame(() => {
       const loginRequiredMessage = document.getElementById('loginRequiredMessage');
+      const mainContent = document.getElementById('mainContent');
       const projectListView = document.getElementById('projectListView');
       const projectDetailsView = document.getElementById('projectDetailsView');
       if (!authenticated) {
         if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
+        if (mainContent) mainContent.classList.add('hidden');
         if (projectListView) projectListView.classList.add('hidden');
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
       } else {
         if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
+        if (mainContent) mainContent.classList.remove('hidden');
         this.state.currentView = 'list';
         this.state.currentProject = null;
         this.browserService.removeSearchParam('project');
