@@ -207,30 +207,42 @@ class ModalManager {
    * Attach 'close' listeners to each mapped dialog. Orchestrator must call after DOM is ready.
    * Also validates mappings for missing/duplicate IDs.
    */
-    init() {
+    async init() {
       this._notify('info', '[ModalManager] init() called. Setting up modals...', { context: 'modalManager', module: 'ModalManager', source: 'init' });
 
       try {
+        // PHASE: Strict waitFor on core deps
+        const depSys = this.DependencySystem;
+        if (!depSys) throw new Error('[ModalManager] DependencySystem missing in init');
+        try {
+          await depSys.waitFor(['eventHandlers', 'notify'], null, 5000);
+        } catch (err) {
+          this._notify('error', '[ModalManager] Core deps not satisfied before modal init', false, { source: 'init', module: 'ModalManager', extra: { err } });
+          throw err;
+        }
+
         this.validateModalMappings(this.modalMappings);
 
         Object.values(this.modalMappings).forEach((modalId) => {
           const modalEl = this.domAPI.getElementById(modalId);
-          if (modalEl) {
-            const handler = () => this._onDialogClose(modalId);
-            if (this.eventHandlers?.trackListener) {
-              this.eventHandlers.trackListener(
-                modalEl,
-                'close',
-                handler,
-                {
-                  description: `Close event for ${modalId}`,
-                  context: 'modalManager',
-                  source: 'ModalManager.init'
-                }
-              );
-            } else {
-              this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`, false, { source: 'init', modalId });
-            }
+          if (!modalEl) {
+            this._notify('error', `[ModalManager] Required modal missing in DOM: ${modalId}`, false, { context: 'modalManager', source: 'init', modalId });
+            throw new Error(`[ModalManager] Required modal missing in DOM: ${modalId}`);
+          }
+          const handler = () => this._onDialogClose(modalId);
+          if (this.eventHandlers?.trackListener) {
+            this.eventHandlers.trackListener(
+              modalEl,
+              'close',
+              handler,
+              {
+                description: `Close event for ${modalId}`,
+                context: 'modalManager',
+                source: 'ModalManager.init'
+              }
+            );
+          } else {
+            this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`, false, { source: 'init', modalId });
           }
         });
 
@@ -238,12 +250,12 @@ class ModalManager {
 
         // --- Standardized "modalmanager:initialized" event ---
         const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-if (doc && typeof this.domAPI?.dispatchEvent === "function") {
-  this.domAPI.dispatchEvent(
-    doc,
-    new CustomEvent('modalmanager:initialized', { detail: { success: true } })
-  );
-}
+        if (doc && typeof this.domAPI?.dispatchEvent === "function") {
+          this.domAPI.dispatchEvent(
+            doc,
+            new CustomEvent('modalmanager:initialized', { detail: { success: true } })
+          );
+        }
 
       } catch (err) {
         this._notify('error', '[ModalManager] Initialization failed: ' + (err && err.message ? err.message : err), false, { context: 'modalManager', module: 'ModalManager', source: 'init', originalError: err });
@@ -275,6 +287,7 @@ if (doc && typeof this.domAPI?.dispatchEvent === "function") {
    */
   validateModalMappings(modalMapping) {
     Object.entries(modalMapping).forEach(([key, modalId]) => {
+      // USE domAPI ONLY (no global document)
       const elements = this.domAPI.querySelectorAll(`#${modalId}`);
       if (elements.length === 0) {
         this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`, false, { source: 'validateModalMappings', modalId });

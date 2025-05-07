@@ -59,7 +59,7 @@ export function createEventHandlers({
   modalManager = modalManager || _resolveDep('modalManager');
 
   const storageBackend = storage || browserService; // Assuming browserService provides getItem/setItem
-  const handlerNotify = notify; // Use the injected notify utility
+  let handlerNotify = notify; // Allow updating later via setNotifier
 
   function redirect(url) {
     if (typeof navigate === "function") navigate(url);
@@ -390,23 +390,39 @@ export function createEventHandlers({
       } else {
         trackListener(domAPI.getDocument(), 'DOMContentLoaded', checkProjectModalForm, { once: true, module: MODULE, context: 'init' });
       }
-
       // --- BEGIN: LOGIN BUTTON/MODAL HANDLING ---
       // Header Login Button
       // Delegated event handler for Login button (robust against header re-render)
-      const authContainer = domAPI.getElementById('authContainer');
-      if (authContainer && modalManager && typeof modalManager.show === 'function') {
-        delegate(authContainer, 'click', '#authButton', (e) => {
-          domAPI.preventDefault(e);
-          handlerNotify.info('Login button delegated click, attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
-          try {
-            const result = modalManager.show('login');
-            handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
-          } catch (error) {
-            handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'LoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
+      let loginButtonDelegatedHandler = null;
+      function bindAuthButtonDelegate() {
+        const authContainer = domAPI.getElementById('authContainer');
+        if (authContainer && modalManager && typeof modalManager.show === 'function') {
+          // Remove previous delegate, if present
+          if (loginButtonDelegatedHandler) {
+            try {
+              eventHandlers.untrackListener(authContainer, 'click', loginButtonDelegatedHandler);
+            } catch {}
+            loginButtonDelegatedHandler = null;
           }
-        }, { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE });
+          // Attach new delegate handler
+          loginButtonDelegatedHandler = function(e) {
+            const target = domAPI.closest(e.target, '#authButton');
+            if (target) {
+              domAPI.preventDefault(e);
+              handlerNotify.info('Login button delegated click, attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+              try {
+                const result = modalManager.show('login');
+                handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+              } catch (error) {
+                handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'LoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
+              }
+            }
+          };
+          trackListener(authContainer, 'click', loginButtonDelegatedHandler, { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE });
+        }
       }
+      bindAuthButtonDelegate();
+
       // Listen for requestLogin event (used by project list and others)
       trackListener(domAPI.getDocument(), 'requestLogin', (e) => {
         if (modalManager && typeof modalManager.show === 'function') {
@@ -416,26 +432,14 @@ export function createEventHandlers({
       // --- END: LOGIN BUTTON/MODAL HANDLING ---
 
       // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
-      // Also delegate again after modalsLoaded to be robust on any modals/header changes
+      // After modalsLoaded, rebind but ensure only one handler exists.
       trackListener(domAPI.getDocument(), 'modalsLoaded', () => {
-        const authContainer = domAPI.getElementById('authContainer');
-        if (authContainer && modalManager && typeof modalManager.show === 'function') {
-          delegate(authContainer, 'click', '#authButton', (e) => {
-            domAPI.preventDefault(e);
-            handlerNotify.info('Login button delegated click [after modalsLoaded], attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
-            try {
-              const result = modalManager.show('login');
-              handlerNotify.info('modalManager.show("login") executed (delegated) [modalsLoaded], result: ' + JSON.stringify(result), { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
-            } catch (error) {
-              handlerNotify.error('modalManager.show("login") failed (delegated) [modalsLoaded]', { source: 'LoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
-            }
-          }, { description: 'Delegated Login Modal Show [modalsLoaded]', context: 'auth', module: MODULE });
-          handlerNotify.info('Rebound login button delegation after modalsLoaded', {
-            module: MODULE,
-            context: 'auth',
-            source: 'modalsLoaded'
-          });
-        }
+        bindAuthButtonDelegate();
+        handlerNotify.info('Rebound login button delegation after modalsLoaded', {
+          module: MODULE,
+          context: 'auth',
+          source: 'modalsLoaded'
+        });
       }, {
         once: true,
         description: 'Rebind login after modalsLoaded',
@@ -460,6 +464,7 @@ export function createEventHandlers({
       handlerNotify.error('EventHandler initialization failed', {
         group: true, context: 'initialization', module: MODULE, source: 'init', originalError: err
       });
+      throw err;
     }
     return this; // Return API object
   }
@@ -591,6 +596,10 @@ export function createEventHandlers({
     setupForm,
     init,
     PRIORITY,
-    untrackListener
+    untrackListener,
+    setNotifier: (newNotify) => {
+      handlerNotify = newNotify;
+      handlerNotify?.debug?.('[eventHandler] Notifier updated via setNotifier', { module: MODULE, source: 'setNotifier' });
+    }
   };
 }
