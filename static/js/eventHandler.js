@@ -436,6 +436,9 @@ export function createEventHandlers({
         }
       }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
 
+      // Bind immediately so we don’t miss an already-fired modalsLoaded
+      bindAuthButtonDelegate();
+
       // --- END: LOGIN BUTTON/MODAL HANDLING ---
 
       // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
