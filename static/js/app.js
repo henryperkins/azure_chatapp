@@ -28,10 +28,9 @@ import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
-import { createAuthUI } from './auth/authUI.js';
+// Removed import for ./auth/authUI.js (now obsolete)
 
 // Example: For consistent message durations, etc.
-const NOTIFY_DURATION = { debug: 3000, info: 4000, success: 4000, warning: 6000, error: 0 };
 
 // ---------------------------------------------------------------------------
 // 1) Create DI-based references: browserAPI, domAPI, notify, etc.
@@ -375,9 +374,8 @@ async function initializeCoreSystems() {
             );
         });
 
-        // New: Initialize authUI (modal tabs, password validation...)
-        const authUI = createAuthUI({ domAPI, eventHandlers, notify });
-        authUI.init();
+        // No longer initializing authUI—auth logic is now entirely internal to auth.js
+
 
         if (modalManager.init) modalManager.init();
 
@@ -482,7 +480,21 @@ function renderAuthHeader() {
                 `Hello, ${user.name ?? user.username}` : 'Offline'
             );
         }
-        // DO NOT update authBtn innerHTML or rebind .trackListener on authBtn.
+if (!isAuth && authBtn && !authBtn._listenerAttached) {
+    authBtn._listenerAttached = true;
+    eventHandlers.trackListener(
+        authBtn,
+        'click',
+        e => {
+            domAPI.preventDefault(e);
+            const mm = DependencySystem.modules.get('modalManager');
+            if (mm?.show) {
+                mm.show('login');
+            }
+        },
+        { description: 'Auth login button' }
+    );
+}
         // Login button handler and modal opening is managed robustly by eventHandler.js via event delegation.
         // If at some point the login button label needs to reflect logout/login, update a <span> child only:
         // (but base.html already hard-codes "Login" text with correct icon)
@@ -909,11 +921,6 @@ function isDocumentReady() {
 }
 
 // A small helper for very short delays
-function delay(ms) {
-    return new Promise((resolve) => {
-        browserAPI.getWindow().setTimeout(resolve, ms);
-    });
-}
 
 // ---------------------------------------------------------------------------
 // 15) Export or attach init for external usage
