@@ -91,6 +91,7 @@ class TokenBlacklist(Base):
         Index("ix_token_blacklist_token_type", "token_type"),
         Index("ix_token_blacklist_expires", "expires"),
         Index("ix_token_blacklist_created_at", "created_at"),
+        Index("ix_tokenblacklist_jti", "jti"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
