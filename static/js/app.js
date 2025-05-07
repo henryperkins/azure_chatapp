@@ -1429,14 +1429,14 @@ function attachAuthBusListener(event, handler, markerFlagName) {
         });
         throw new Error('[App] attachAuthBusListener: auth module is undefined.');
     }
-    if (!auth.AuthBus) {
-        localNotify?.error?.('[App] attachAuthBusListener: auth.AuthBus is undefined.', {
+    if (!auth.AuthBus || typeof auth.AuthBus.addEventListener !== 'function') {
+        localNotify?.error?.('[App] attachAuthBusListener: auth.AuthBus is not an EventTarget.', {
             group: true,
             context: 'app',
             module: 'App',
             source: 'attachAuthBusListener'
         });
-        throw new Error('[App] attachAuthBusListener: auth.AuthBus is undefined.');
+        throw new Error('[App] attachAuthBusListener: auth.AuthBus is not an EventTarget.');
     }
     const bus = auth.AuthBus;
     if (!bus || typeof eventHandlers.trackListener !== "function") {
@@ -1453,6 +1453,7 @@ function attachAuthBusListener(event, handler, markerFlagName) {
         return false;
     }
 
+    // Attach the listener to the AuthBus EventTarget, not the auth object itself!
     eventHandlers.trackListener(bus, event, handler, {
         description: `[App] AuthBus ${event} (${markerFlagName})`,
         module: 'App',
