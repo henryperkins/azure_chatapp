@@ -15,8 +15,12 @@ import {
   stableStringify,
   normaliseUrl,
   isAbsoluteUrl,
-  toggleElement                      // ← YA existe en utils, reaprovéchalo
-} from './utils/globalUtils.js';  // your new unified API client
+  toggleElement,
+  waitForDepsAndDom                      // ← use global helper for DOM-ready checks
+} from './utils/globalUtils.js';
+
+import { safeInvoker } from './utils/notifications-helpers.js';  // reuse error-wrapped invoker
+
 import { createEventHandlers } from './eventHandler.js';
 import { createNotificationHandler } from './notification-handler.js';
 
@@ -313,17 +317,8 @@ export async function init() {
 async function initializeCoreSystems() {
     try {
         notify.debug('[App] Initializing core systems...');
-        // Wait for DOM (if you want to ensure certain readiness)
-        if (!isDocumentReady()) {
-            await new Promise((resolve) => {
-                eventHandlers.trackListener(
-                    domAPI.getDocument(),
-                    'DOMContentLoaded',
-                    resolve,
-                    { once: true, description: 'DOM ready event' }
-                );
-            });
-        }
+        // Ensure DOM is ready using shared util (also future-proofs for SSR tests)
+        await waitForDepsAndDom({ DependencySystem });
 
         // Initialize modal manager
         const modalManager = createModalManager({
@@ -732,13 +727,14 @@ async function initializeUIComponents() {
 }
 
 async function safeInit(instance, name, method = 'init') {
-    if (typeof instance?.[method] === 'function') {
-        try {
-            await instance[method]();
-        } catch (err) {
-            notify.warn(`[App] ${name} initialization failed but continuing`, { error: err });
-        }
-    }
+  if (typeof instance?.[method] !== 'function') return;
+  const errorReporter = DependencySystem.modules.get?.('errorReporter');
+  const wrapped = safeInvoker(
+    instance[method].bind(instance),
+    { notify, errorReporter },
+    { context: 'app', module: name, source: method }
+  );
+  await wrapped();        // errors now handled by notifications-helpers util
 }
 
 // ---------------------------------------------------------------------------
@@ -786,8 +782,7 @@ async function handleNavigationChange() {
                 return;
             }
         }
-        const currentUrl = browserAPI.getLocation().href;
-        notify.debug(`[App] Navigation changed -> ${currentUrl}`);
+        notify.debug(`[App] Navigation changed -> ${browserAPI.getLocation().href}`);
 
         let projectDashboard;
         try {
@@ -798,9 +793,8 @@ async function handleNavigationChange() {
             return;
         }
 
-        const url = new URL(currentUrl);
-        const projectId = url.searchParams.get('project') || null;
-        const chatId = url.searchParams.get('chatId') || null;
+        const projectId = browserServiceInstance.getSearchParam('project');
+        const chatId    = browserServiceInstance.getSearchParam('chatId');
 
         if (projectId === lastHandledProj && chatId === lastHandledChat) {
             notify.debug('[App] Same project/chat; skipping re-load.');
