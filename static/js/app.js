@@ -1542,3 +1542,7 @@ if (typeof window !== 'undefined') {
         init();
     }
 }
+/**
+ * All module access must use getModuleSafe('modulename', { context, module, source })
+ * This ensures robust, context-rich error handling and eliminates redundant DependencySystem checks.
+ */
