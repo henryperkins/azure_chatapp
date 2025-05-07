@@ -584,6 +584,12 @@ async function initializeUIComponents() {
         }
         notify.debug('[App] Initializing UI components...');
 
+        // Ensure DOM element for ProjectList exists before continuing.
+        await waitForDepsAndDom({
+            DependencySystem,
+            domSelectors: ['#projectList']
+        });
+
         // -------------------------------------------------------------------
         // Resolve concrete dependency instances up-front for strict DI
         // -------------------------------------------------------------------
