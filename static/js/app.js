@@ -480,27 +480,8 @@ function renderAuthHeader() {
                 `Hello, ${user.name ?? user.username}` : 'Offline'
             );
         }
-if (!isAuth && authBtn && !authBtn._listenerAttached) {
-    authBtn._listenerAttached = true;
-    eventHandlers.trackListener(
-        authBtn,
-        'click',
-        e => {
-            domAPI.preventDefault(e);
-            const mm = DependencySystem.modules.get('modalManager');
-            if (mm?.show) {
-                mm.show('login');
-            }
-        },
-        { description: 'Auth login button' }
-    );
-}
+        // NOTE: Removed direct click handler for #authButton to avoid redundant binding.
         // Login button handler and modal opening is managed robustly by eventHandler.js via event delegation.
-        // If at some point the login button label needs to reflect logout/login, update a <span> child only:
-        // (but base.html already hard-codes "Login" text with correct icon)
-        // Example:
-        // const loginText = domAPI.querySelector('#authButton span');
-        // if (loginText) domAPI.setTextContent(loginText, isAuth ? 'Logout' : 'Login');
 
         // Logout button: bind logout if authenticated
         if (logoutBtn) {
