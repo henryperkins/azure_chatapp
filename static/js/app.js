@@ -433,7 +433,8 @@ const app = {
         }
         notify?.warn?.('[App] ChatManager not available for navigateToConversation');
         return false;
-    }
+    },
+    validateUUID: globalUtils.isValidProjectId
 };
 DependencySystem.register('app', app);
 
@@ -1289,6 +1290,14 @@ function setupChatInitializationTrigger() {
     waitFor(requiredDeps, (resolvedDeps) => {
         const localEventHandlers = resolvedDeps[4];
         const authMod = resolvedDeps[0];
+        // Diagnostic log for authMod
+        console.error('[App] setupChatInitializationTrigger diagnostic:', {
+            authMod,
+            authModType: typeof authMod,
+            authModKeys: authMod ? Object.keys(authMod) : null,
+            modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
+            modulesAuth: DependencySystem.modules ? DependencySystem.modules.get('auth') : null
+        });
         if (authMod.AuthBus) {
             attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
         } else {
@@ -1404,7 +1413,33 @@ let _globalChatInitAuthAttached = false;
 function attachAuthBusListener(event, handler, markerFlagName) {
     const localNotify = DependencySystem.modules.get('notify');
     const auth = DependencySystem.modules.get('auth');
-    const bus = auth?.AuthBus;
+    // Diagnostic logging
+    console.error('[App] attachAuthBusListener diagnostic:', {
+        auth,
+        authType: typeof auth,
+        authKeys: auth ? Object.keys(auth) : null,
+        modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
+        modulesAuth: DependencySystem.modules ? DependencySystem.modules.get('auth') : null
+    });
+    if (!auth) {
+        localNotify?.error?.('[App] attachAuthBusListener: DependencySystem.modules.get("auth") returned undefined.', {
+            group: true,
+            context: 'app',
+            module: 'App',
+            source: 'attachAuthBusListener'
+        });
+        throw new Error('[App] attachAuthBusListener: auth module is undefined.');
+    }
+    if (!auth.AuthBus) {
+        localNotify?.error?.('[App] attachAuthBusListener: auth.AuthBus is undefined.', {
+            group: true,
+            context: 'app',
+            module: 'App',
+            source: 'attachAuthBusListener'
+        });
+        throw new Error('[App] attachAuthBusListener: auth.AuthBus is undefined.');
+    }
+    const bus = auth.AuthBus;
     if (!bus || typeof eventHandlers.trackListener !== "function") {
         localNotify?.error?.('[App] Cannot attach AuthBus listener: AuthBus or trackListener missing.');
         return false;
