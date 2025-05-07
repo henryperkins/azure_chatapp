@@ -9,7 +9,13 @@ import { createBrowserAPI } from './utils/globalUtils.js'; // for SSR-safe refer
 import { createBrowserService } from './utils/browserService.js';
 import { createNotify } from './utils/notify.js';
 import { createSentryManager } from './sentry-init.js';
-import { createApiClient } from './utils/globalUtils.js';  // your new unified API client
+import {
+  createApiClient,
+  shouldSkipDedup,
+  stableStringify,
+  normaliseUrl,
+  isAbsoluteUrl
+} from './utils/globalUtils.js';  // your new unified API client
 import { createEventHandlers } from './eventHandler.js';
 import { createNotificationHandler } from './notification-handler.js';
 
@@ -170,9 +176,14 @@ if (typeof window !== "undefined") {
 // ---------------------------------------------------------------------------
 const apiRequest = createApiClient({
     APP_CONFIG,
-    globalUtils: { /* you may pass stableStringify, normaliseUrl, etc. from your utils */ },
+    globalUtils: {
+        shouldSkipDedup,
+        stableStringify,
+        normaliseUrl,
+        isAbsoluteUrl
+    },
     notificationHandler: notify,
-    getAuthModule: () => DependencySystem.modules.get('auth'), /* TODO: replace with direct injection after api client refactor */
+    getAuthModule: () => DependencySystem.modules.get('auth'),
     browserAPI
 });
 DependencySystem.register('apiRequest', apiRequest);
