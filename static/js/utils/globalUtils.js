@@ -261,6 +261,7 @@ try {
 // 4. General‑purpose helper functions (was legacy globalUtils.js)
 // ─────────────────────────────────────────────────────────────────────────────
 import { isValidProjectId as rawIsValidProjectId } from "../projectManager.js";
+import { maybeCapture } from './notifications-helpers.js';   // ruta relativa a utils/
 export const isValidProjectId = rawIsValidProjectId;
 
 // ░░ Debounce ░░───────────────────────────────────────────────────────────────
@@ -485,7 +486,7 @@ export async function fetchData({ apiClient, errorReporter }, id) {
   try {
     return await apiClient.get(`/item/${id}`);
   } catch (err) {
-    errorReporter?.capture?.(err, {
+    maybeCapture(errorReporter, err, {
       module: "projectManager",
       method: "fetchData",
       itemId: id,

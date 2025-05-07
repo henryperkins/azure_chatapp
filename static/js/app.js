@@ -20,7 +20,7 @@ import {
   waitForDepsAndDom                      // ← use global helper for DOM-ready checks
 } from './utils/globalUtils.js';
 
-import { safeInvoker } from './utils/notifications-helpers.js';  // reuse error-wrapped invoker
+import { safeInvoker, maybeCapture } from './utils/notifications-helpers.js';  // reuse error-wrapped invoker
 
 import { createEventHandlers } from './eventHandler.js';
 import { createNotificationHandler } from './notification-handler.js';
@@ -408,7 +408,7 @@ async function initializeCoreSystems() {
         notify.debug('[App] Core systems initialized.');
     } catch (err) {
         const errorReporter = DependencySystem.modules.get('errorReporter');
-        errorReporter?.capture?.(err, {
+        maybeCapture(errorReporter, err, {
             module: 'app',
             method: 'initializeCoreSystems'
         });
@@ -724,7 +724,7 @@ async function initializeUIComponents() {
         notify.debug('[App] UI components initialized.');
     } catch (err) {
         const errorReporter = DependencySystem.modules.get('errorReporter');
-        errorReporter?.capture?.(err, {
+        maybeCapture(errorReporter, err, {
             module: 'app',
             method: 'initializeUIComponents'
         });
@@ -842,7 +842,7 @@ async function handleNavigationChange() {
         }
     } catch (err) {
         const errorReporter = DependencySystem.modules.get('errorReporter');
-        errorReporter?.capture?.(err, {
+        maybeCapture(errorReporter, err, {
             module: 'app',
             method: 'handleNavigationChange'
         });
@@ -940,7 +940,7 @@ function handleInitError(error) {
     appState.currentPhase = 'failed_init';
 
     const errorReporter = DependencySystem.modules.get('errorReporter');
-    errorReporter?.capture?.(error, {
+    maybeCapture(errorReporter, error, {
         tags: { module: 'app', method: 'init', phase: appState.currentPhase }
     });
     notify.error(`Application failed to start: ${error?.message}`, { error });
