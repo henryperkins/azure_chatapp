@@ -52,35 +52,29 @@ export class ProjectDetailsComponent {
     if (notify && typeof notify.withContext === 'function') {
       this.notify = notify.withContext({ context: "projectDetailsComponent", module: MODULE });
     } else {
-      console.error("[ProjectDetailsComponent] notify missing withContext method, creating fallback");
-      // Create a fallback notify implementation
+      // Fallback notify: only call injected notify methods with context, no direct console output.
       this.notify = {
         debug: (msg, opts = {}) => {
-          console.debug(`[ProjectDetailsComponent] ${msg}`, opts);
           if (notify && typeof notify.debug === 'function') {
             notify.debug(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
           }
         },
         info: (msg, opts = {}) => {
-          console.info(`[ProjectDetailsComponent] ${msg}`, opts);
           if (notify && typeof notify.info === 'function') {
             notify.info(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
           }
         },
         warn: (msg, opts = {}) => {
-          console.warn(`[ProjectDetailsComponent] ${msg}`, opts);
           if (notify && typeof notify.warn === 'function') {
             notify.warn(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
           }
         },
         error: (msg, opts = {}) => {
-          console.error(`[ProjectDetailsComponent] ${msg}`, opts);
           if (notify && typeof notify.error === 'function') {
             notify.error(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
           }
         },
         success: (msg, opts = {}) => {
-          console.info(`[ProjectDetailsComponent] SUCCESS: ${msg}`, opts);
           if (notify && typeof notify.success === 'function') {
             notify.success(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
           }
@@ -129,6 +123,9 @@ export class ProjectDetailsComponent {
   }
 
   async initialize() {
+    this.notify.info("[ProjectDetailsComponent] initialize() called", {
+      group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
+    });
     if (this.state.initialized) {
       this.notify.info("[ProjectDetailsComponent] Already initialized.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
@@ -166,6 +163,7 @@ export class ProjectDetailsComponent {
   }
 
   _htmlSafe(el, raw) { el.innerHTML = this.sanitizer.sanitize(raw); }
+  // Clearing innerHTML is safe and does not require sanitization.
   _clearSafe(el) { el.innerHTML = ""; }
 
   _findElements() {

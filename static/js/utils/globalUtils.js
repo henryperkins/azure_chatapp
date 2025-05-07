@@ -41,6 +41,9 @@ export function createBrowserAPI() {
     /* DependencySystem gateway */
     getDependencySystem: () => window.DependencySystem,
 
+    /* Window accessor for DI (used by app.js and others) */
+    getWindow: () => window,
+
     /* Navigation / history helpers */
     getLocation: () => window.location,
     getHistory: () => window.history,
@@ -417,19 +420,19 @@ export async function waitForDepsAndDom({
   timeout = 4000,
 } = {}) {
   if (!DependencySystem) throw new Error("waitForDepsAndDom: DependencySystem missing");
-  
+
   // Verify DependencySystem has expected structure
   if (!DependencySystem.modules || typeof DependencySystem.modules.has !== 'function' || typeof DependencySystem.modules.get !== 'function') {
     throw new Error("waitForDepsAndDom: DependencySystem.modules is missing or invalid");
   }
-  
+
   const start = Date.now();
   while (true) {
     try {
       const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
       const domReady = domSelectors.every((s) => document.querySelector(s));
       if (depsReady && domReady) return;
-      
+
       if (Date.now() - start > timeout) {
         const missingDeps = deps.filter((d) => !DependencySystem.modules.has(d) || !DependencySystem.modules.get(d));
         const missingDom = domSelectors.filter((s) => !document.querySelector(s));

@@ -106,26 +106,22 @@ export function createAuthModule({
      ========================= */
   async function fetchCSRFToken() {
     try {
-      // ADDED GUARD CLAUSE
       if (!apiEndpoints || !apiEndpoints.AUTH_CSRF) {
         throw new Error("AUTH_CSRF endpoint is not defined in apiEndpoints dependency.");
       }
       const csrfUrl = apiEndpoints.AUTH_CSRF;
       const url = csrfUrl.includes('?') ? `${csrfUrl}&ts=${Date.now()}` : `${csrfUrl}?ts=${Date.now()}`;
-      const response = await fetch(url, {
+      // Use injected apiRequest for CSRF fetch
+      const data = await apiRequest(url, {
         method: 'GET',
-        credentials: 'include',
-        cache: 'no-store',
         headers: {
           'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
+          'Cache-Control': 'no-cache'
         },
+        credentials: 'include',
+        cache: 'no-store'
       });
-      if (!response.ok) {
-        throw new Error(`CSRF fetch failed: ${response.status}`);
-      }
-      const data = await response.json();
-      if (!data.token) {
+      if (!data || !data.token) {
         throw new Error('CSRF token missing in response');
       }
       return data.token;
@@ -172,19 +168,7 @@ export function createAuthModule({
      6) Auth Request Wrapper (with fallback)
      ========================= */
   async function authRequest(endpoint, method, body = null) {
-    const AUTH_PROTECTED_ENDPOINTS = [
-      apiEndpoints.AUTH_LOGIN,
-      apiEndpoints.AUTH_REGISTER,
-      apiEndpoints.AUTH_LOGOUT,
-      apiEndpoints.AUTH_REFRESH
-    ];
-    const isAuthProtected = AUTH_PROTECTED_ENDPOINTS.includes(endpoint);
-
-    // Defer to injected apiRequest for non-auth endpoints
-    if (!isAuthProtected && apiRequest && endpoint !== apiEndpoints.AUTH_CSRF) {
-      return apiRequest(endpoint, { method, body });
-    }
-
+    // Always use injected apiRequest for all requests (no direct fetch)
     const headers = { Accept: 'application/json' };
     const options = {
       method: method.toUpperCase(),
@@ -214,19 +198,8 @@ export function createAuthModule({
     }
 
     try {
-      const response = await fetch(endpoint, options);
-      if (!response.ok) {
-        const error = new Error(`API error: ${response.status} ${response.statusText}`);
-        error.status = response.status;
-        try {
-          error.data = await response.json();
-        } catch {
-          error.data = { detail: await response.text() };
-        }
-        throw error;
-      }
-      if (response.status === 204) return null;
-      return await response.json();
+      const data = await apiRequest(endpoint, options);
+      return data;
     } catch (error) {
       authNotify.apiError(`[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`, {
         group: true,
@@ -317,37 +290,45 @@ export function createAuthModule({
     authCheckInProgress = true;
 
     try {
-      const response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
-      if (response?.authenticated) {
-        broadcastAuth(true, response.username, 'verify_success');
-        return true;
+      try {
+        const response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
+        if (response?.authenticated) {
+          broadcastAuth(true, response.username, 'verify_success');
+          return true;
+        }
+        // Server says not authenticated
+        await clearTokenState({ source: 'verify_negative' });
+        return false;
+      } catch (error) {
+        authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), {
+          group: true,
+          source: 'verifyAuthState'
+        });
+
+        // Possible server error
+        if (error.status === 500) {
+          await clearTokenState({ source: 'verify_500' });
+          throw new Error('Server error during verification');
+        }
+        // If unauthorized, attempt refresh, then re-verify
+        if (error.status === 401) {
+          try {
+            await refreshTokens();
+            return verifyAuthState(true);
+          } catch {
+            await clearTokenState({ source: 'refresh_failed' });
+            return false;
+          }
+        }
+        // Otherwise, keep current state
+        return authState.isAuthenticated;
       }
-      // Server says not authenticated
-      await clearTokenState({ source: 'verify_negative' });
-      return false;
-    } catch (error) {
-      authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), {
+    } catch (outerErr) {
+      authNotify.error('[Auth] verifyAuthState outer error: ' + (outerErr?.message || outerErr), {
         group: true,
         source: 'verifyAuthState'
       });
-
-      // Possible server error
-      if (error.status === 500) {
-        await clearTokenState({ source: 'verify_500' });
-        throw new Error('Server error during verification');
-      }
-      // If unauthorized, attempt refresh, then re-verify
-      if (error.status === 401) {
-        try {
-          await refreshTokens();
-          return verifyAuthState(true);
-        } catch {
-          await clearTokenState({ source: 'refresh_failed' });
-          return false;
-        }
-      }
-      // Otherwise, keep current state
-      return authState.isAuthenticated;
+      throw outerErr;
     } finally {
       authCheckInProgress = false;
     }
@@ -732,6 +713,28 @@ export function createAuthModule({
   /* =========================
      14) Exposed Auth API
      ========================= */
+
+  /**
+   * Fetches the current user using the injected apiRequest.
+   * Returns user object or null if not authenticated.
+   */
+  async function fetchCurrentUser() {
+    try {
+      const resp = await apiRequest(apiEndpoints.AUTH_VERIFY, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json'
+        }
+      });
+      if (!resp || !resp.user) return null;
+      return resp.user;
+    } catch {
+      // Silent fail per minimal fallback contract (no notify on fallback)
+      return null;
+    }
+  }
+
   const publicAuth = {
     /**
      * @returns {boolean} If user is currently authenticated
@@ -773,40 +776,13 @@ export function createAuthModule({
     /**
      * Cleanup method for removing event listeners and intervals (helpful in SPA or unit tests).
      */
-    cleanup
+    cleanup,
+
+    /**
+     * Fetches the current user using the injected apiRequest.
+     */
+    fetchCurrentUser
   };
 
   return publicAuth;
-  }
-/**
- * Provide a minimal direct fetch-based version of fetchCurrentUser,
- * so callers can still import { fetchCurrentUser } without referencing
- * the main module DI.
- */
-export async function fetchCurrentUser() {
-  try {
-    const resp = await fetch('/api/auth/verify', {
-      method: 'GET',
-      credentials: 'include',
-      headers: {
-        'Accept': 'application/json'
-      }
-    });
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    if (!data || !data.user) return null;
-    return data.user;
-  } catch (err) {
-    // For minimal/legacy usage, mimic notify pattern if available, else fallback
-    if (typeof window !== 'undefined' && window?.app?.notify) {
-      window.app.notify.apiError('[auth] fetchCurrentUser error: ' + (err?.message || err), {
-        group: true,
-        context: 'auth'
-      });
-    }
-    // If DI notification is not available, swallow (do not console.error; maintain silent fail per minimal fallback contract)
-    return null;
-  }
 }
-
-export default createAuthModule;
