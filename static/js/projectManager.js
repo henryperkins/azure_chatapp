@@ -578,6 +578,7 @@ class ProjectManager {
    * @returns {Promise<boolean>}
    */
   async initialize() {
+    this.notify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
     // If you need to preload projects or state at startup, do it here in future.
     emitReady({ notify: this.notify }, MODULE);
     return true;
@@ -591,8 +592,23 @@ class ProjectManager {
 export function createProjectManager(deps = {}) {
   if (!deps.DependencySystem) {
     const msg = '[createProjectManager] DependencySystem missing: Did you forget to inject it via DI?';
-    if (typeof console !== 'undefined') {
-      console.error(msg, { deps });
+    // Use notification system instead of console.error
+    if (deps.notify) {
+      deps.notify.error(msg, {
+        group: true,
+        context: 'projectManager',
+        module: MODULE,
+        source: 'createProjectManager',
+        extra: { deps }
+      });
+    } else if (deps.notificationHandler?.show) {
+      deps.notificationHandler.show(msg, 'error', 0, {
+        group: true,
+        context: 'projectManager',
+        module: MODULE,
+        source: 'createProjectManager',
+        extra: { deps }
+      });
     }
     throw new Error(msg);
   }
@@ -600,8 +616,23 @@ export function createProjectManager(deps = {}) {
     return new ProjectManager(deps);
   } catch (err) {
     const diag = `[createProjectManager] Construction failed: ${err && err.message ? err.message : err}`;
-    if (typeof console !== 'undefined') {
-      console.error(diag, { deps, error: err });
+    // Use notification system instead of console.error
+    if (deps.notify) {
+      deps.notify.error(diag, {
+        group: true,
+        context: 'projectManager',
+        module: MODULE,
+        source: 'createProjectManager',
+        extra: { deps, error: err }
+      });
+    } else if (deps.notificationHandler?.show) {
+      deps.notificationHandler.show(diag, 'error', 0, {
+        group: true,
+        context: 'projectManager',
+        module: MODULE,
+        source: 'createProjectManager',
+        extra: { deps, error: err }
+      });
     }
     throw new Error(diag);
   }

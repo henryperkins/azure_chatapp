@@ -59,6 +59,7 @@ export function createNotify({
     error: (msg, o = {}) => send(msg, 'error', o),
     apiError: (msg, o = {}) => send(msg, 'error', { group: true, context: 'apiRequest', ...o }),
     authWarn: (msg, o = {}) => send(msg, 'warning', { group: true, context: 'auth', ...o }),
+    log: (msg, o = {}) => send(msg, 'debug', o), // Sentry expects .log
     withContext
   };
 }

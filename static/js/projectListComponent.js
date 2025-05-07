@@ -55,7 +55,7 @@ export class ProjectListComponent {
         this.apiClient = apiClient;
 
         this.storage = storage;
-        this.sanitizer = sanitizer;
+        this.htmlSanitizer = sanitizer;
 
         // --- DI-logged construction ---
         if (this.appConfig && this.appConfig.DEBUG) {
@@ -72,7 +72,7 @@ export class ProjectListComponent {
             !this.eventHandlers ||
             !this.router ||
             !this.storage ||
-            !this.sanitizer
+            !this.htmlSanitizer
         ) {
             this.notify.error(
                 '[ProjectListComponent] Missing required dependencies: projectManager, eventHandlers, router, notificationHandler, storage, sanitizer are required.',
@@ -81,6 +81,9 @@ export class ProjectListComponent {
             throw new Error(
                 "[ProjectListComponent] Missing required dependencies: projectManager, eventHandlers, router, notificationHandler, storage, sanitizer are required."
             );
+        }
+        if (typeof this.htmlSanitizer.sanitize !== "function") {
+            throw new Error("[ProjectListComponent] htmlSanitizer must provide a .sanitize(html) method.");
         }
 
         // Default navigation callback - now prefers passing project object if possible
@@ -177,10 +180,10 @@ export class ProjectListComponent {
 
     /** Private helper: sanitize and set HTML */
     _safeSetInnerHTML(element, rawHtml) {
-        if (!this.sanitizer || typeof this.sanitizer.sanitize !== "function") {
-            throw new Error("[ProjectListComponent] Missing sanitizer implementation");
+        if (!this.htmlSanitizer || typeof this.htmlSanitizer.sanitize !== "function") {
+            throw new Error("[ProjectListComponent] Missing htmlSanitizer implementation");
         }
-        element.innerHTML = this.sanitizer.sanitize(rawHtml);
+        element.innerHTML = this.htmlSanitizer.sanitize(rawHtml);
     }
 
     /** Private helper: clear element content */
@@ -618,13 +621,29 @@ export class ProjectListComponent {
         });
     }
 
-    /** Confirmation via notificationHandler */
+    /**
+     * Confirmation for destructive actions is handled strictly via DI modalManager.confirmAction.
+     * If modalManager.confirmAction is not available, show an error and do not proceed.
+     */
     async _confirmDelete(project) {
-        const ok = await this.notify.confirm(
-            `Delete "${project.name}"? This cannot be undone.`,
-            { group: true, context: 'projectListComponent' }
-        );
-        if (ok) this._executeDelete(project.id);
+        if (this.modalManager?.confirmAction) {
+            const ok = await new Promise(resolve => {
+                this.modalManager.confirmAction({
+                    title: `Delete "${project.name}"?`,
+                    message: `This cannot be undone.`,
+                    confirmText: "Delete",
+                    confirmClass: "btn-error",
+                    onConfirm: () => resolve(true),
+                    onCancel: () => resolve(false)
+                });
+            });
+            if (ok) this._executeDelete(project.id);
+        } else {
+            this.notify.error(
+                "[ProjectListComponent] No DI modalManager.confirmAction available for confirmation. Delete action cancelled.",
+                { group: true, context: 'projectListComponent' }
+            );
+        }
     }
 
     async _executeDelete(projectId) {

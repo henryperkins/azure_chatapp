@@ -75,12 +75,17 @@ class ProjectDashboard {
   }
 
   async initialize() {
+    this.notificationHandler.show(
+      '[ProjectDashboard] initialize() called',
+      'info',
+      { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: 'initialize' }
+    );
     if (this.state.initialized) {
       this.logger.info('[ProjectDashboard] Already initialized.', { context: 'ProjectDashboard' });
       this.notificationHandler.show(
         'Project dashboard is already initialized.',
         'info',
-        { group: true, context: 'projectDashboard' }
+        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: 'initialize' }
       );
       return true;
     }
@@ -101,7 +106,17 @@ class ProjectDashboard {
       this._processUrlParameters();
       this._setupEventListeners();
       // ---------- NEW: keep URL and UI in sync ----------
-      window.addEventListener('popstate', this._handlePopState.bind(this));
+      // Use DI-injected windowObject if available, else fallback to window with warning.
+      const win = this.getModule && this.getModule('windowObject') ? this.getModule('windowObject') : (typeof window !== 'undefined' ? window : null);
+      if (win) {
+        this.eventHandlers.trackListener(win, 'popstate', this._handlePopState.bind(this), {
+          description: 'ProjectDashboard: popstate (DI windowObject or global window)',
+          context: 'projectDashboard'
+        });
+        this._unsubs.push(() => win.removeEventListener('popstate', this._handlePopState.bind(this)));
+      } else {
+        this.logger.warn('[ProjectDashboard] No windowObject available for popstate event binding');
+      }
       this.state.initialized = true;
       document.dispatchEvent(new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
       this.logger.info('[ProjectDashboard] Initialization complete.', { context: 'ProjectDashboard' });
@@ -163,6 +178,7 @@ class ProjectDashboard {
     this._loadProjects();
 
     // Minimal reflow for styling transitions
+    // UI reflow after DOM update: ensure visibility transitions apply after view change.
     this.browserService.setTimeout(() => {
       const listView = document.getElementById('projectListView');
       if (listView) {
@@ -551,26 +567,27 @@ class ProjectDashboard {
 
     // Ensure all expected rendering events will fire, even if components aren't ready
     if (project && project.id) {
-      this.browserService.setTimeout(() => {
-        // Emit any missing rendered events to prevent potential UI timeouts
-        const projectId = project.id;
-        const events = [
-          'projectStatsRendered',
-          'projectFilesRendered',
-          'projectConversationsRendered',
-          'projectArtifactsRendered',
-          'projectKnowledgeBaseRendered'
-        ];
+    // Delay event emission to ensure all components are ready and avoid UI race conditions.
+    this.browserService.setTimeout(() => {
+      // Emit any missing rendered events to prevent potential UI timeouts
+      const projectId = project.id;
+      const events = [
+        'projectStatsRendered',
+        'projectFilesRendered',
+        'projectConversationsRendered',
+        'projectArtifactsRendered',
+        'projectKnowledgeBaseRendered'
+      ];
 
-        // Emit these events after a short delay if they haven't been fired yet
-        events.forEach((eventName) => {
-          document.dispatchEvent(
-            new CustomEvent(eventName, {
-              detail: { projectId }
-            })
-          );
-        });
-      }, 3000);
+      // Emit these events after a short delay if they haven't been fired yet
+      events.forEach((eventName) => {
+        document.dispatchEvent(
+          new CustomEvent(eventName, {
+            detail: { projectId }
+          })
+        );
+      });
+    }, 3000);
     }
 
     this.showProjectDetails(project.id);
@@ -601,6 +618,7 @@ class ProjectDashboard {
       return;
     }
 
+    // Defer project loading to avoid race conditions with UI/component initialization.
     this.browserService.setTimeout(() => {
       this.logger.info('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
       this.projectManager
@@ -630,7 +648,23 @@ class ProjectDashboard {
 
   _handleBackToList() {
     // Push url for list-view (no project param) then show list
-    history.pushState({}, '', this.browserService.buildUrl ? this.browserService.buildUrl({ project: '' }) : window.location.pathname);
+    // Use DI-injected historyObject and location if available, else fallback with warning.
+    // DI-only: Never use window globals for history/location. Fallback to null or '/' and log a warning.
+    const historyObj = this.getModule && this.getModule('historyObject')
+      ? this.getModule('historyObject')
+      : (this.logger && typeof this.logger.warn === 'function' && this.logger.warn('[ProjectDashboard] No DI-injected historyObject available for pushState'), null);
+    const pathname = this.browserService.getLocationPathname
+      ? this.browserService.getLocationPathname()
+      : (this.logger && typeof this.logger.warn === 'function' && this.logger.warn('[ProjectDashboard] No DI-injected location/pathname available, using \'/\''), '/');
+    if (historyObj && typeof historyObj.pushState === 'function') {
+      historyObj.pushState(
+        {},
+        '',
+        this.browserService.buildUrl ? this.browserService.buildUrl({ project: '' }) : pathname
+      );
+    } else {
+      this.logger.warn('[ProjectDashboard] No historyObject available for pushState');
+    }
     this.showProjectList();
   }
 
@@ -662,6 +696,7 @@ class ProjectDashboard {
         } else {
           if (this.components.projectList) this.components.projectList.show();
           if (this.components.projectDetails) this.components.projectDetails.hide();
+          // Defer project loading and UI update to next tick after auth state change.
           this.browserService.setTimeout(() => {
             this.logger.info('[ProjectDashboard] Loading projects after authentication state change');
             this._loadProjects();

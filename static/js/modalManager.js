@@ -450,9 +450,16 @@ class ProjectModal {
    *   @param {Function} [opts.showNotification] - Notification function.
    *   @param {Object} [opts.DependencySystem] - For dynamic injection (optional).
    */
-  constructor({ projectManager, eventHandlers, notify, DependencySystem } = {}) {
-    this.DependencySystem = DependencySystem ||
-      (typeof window !== 'undefined' ? window.DependencySystem : undefined);
+  /**
+   * @param {Object} opts
+   *   @param {Object} [opts.projectManager] - Project manager instance.
+   *   @param {Object} [opts.eventHandlers] - Event handler utilities.
+   *   @param {Function} [opts.notify] - Notification function.
+   *   @param {Object} [opts.DependencySystem] - For dynamic injection (optional).
+   *   @param {Object} [opts.domPurify] - Sanitization library for any needed HTML.
+   */
+  constructor({ projectManager, eventHandlers, notify, DependencySystem, domPurify } = {}) {
+    this.DependencySystem = DependencySystem || undefined;
 
     this.eventHandlers = eventHandlers ||
       this.DependencySystem?.modules?.get?.('eventHandlers') ||
@@ -466,6 +473,8 @@ class ProjectModal {
       if (!notify) throw new Error('[ProjectModal] notify DI not provided');
     }
     this.notify = notify.withContext({ module: 'ProjectModal', context: 'projectModal' });
+
+    this.domPurify = domPurify || this.DependencySystem?.modules?.get?.('domPurify') || null;
 
     this.modalElement = null;
     this.formElement = null;
@@ -523,12 +532,26 @@ class ProjectModal {
    * @param {boolean} isLoading
    * @param {string} [loadingText="Saving..."]
    */
+  /**
+   * Indicate loading/spinner on buttons to prevent double-submits.
+   * @private
+   * @param {HTMLElement} btn
+   * @param {boolean} isLoading
+   * @param {string} [loadingText="Saving..."]
+   * Uses domPurify if available for sanitization.
+   */
   _setButtonLoading(btn, isLoading, loadingText = 'Saving...') {
     if (!btn) return;
     if (isLoading) {
       btn.disabled = true;
       btn.dataset.originalText = btn.textContent;
-      btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+      let html = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+      if (this.domPurify && typeof this.domPurify.sanitize === 'function') {
+        btn.innerHTML = this.domPurify.sanitize(html);
+      } else {
+        // Fallback: strip tags, set as textContent (safe, but no spinner)
+        btn.textContent = loadingText;
+      }
     } else {
       btn.disabled = false;
       if (btn.dataset.originalText) {
@@ -760,6 +783,9 @@ class ProjectModal {
  * This allows app.js (or another orchestrator) to decide when to initialize/destroy.
  * @returns {ProjectModal} A new ProjectModal instance.
  */
-export function createProjectModal({ projectManager, eventHandlers, notify, DependencySystem } = {}) {
-  return new ProjectModal({ projectManager, eventHandlers, notify, DependencySystem });
+/**
+ * Factory: Create ProjectModal with full DI context (RECOMMENDED: inject domPurify for HTML sanitization)
+ */
+export function createProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domPurify } = {}) {
+  return new ProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domPurify });
 }
