@@ -83,15 +83,13 @@ export function createDomAPI({ documentObject = document, windowObject = window 
      */
     dispatchEvent: (target, event) => {
       if (!target || typeof target.dispatchEvent !== 'function') {
-        // Fallback to documentObject if target is null/undefined and meant for document
-        if (target === null || target === undefined) {
-          return documentObject.dispatchEvent(event);
-        }
-        // Optionally warn in dev mode
-        if (typeof window !== "undefined" && window.console && window.console.warn) {
-          window.console.warn('domAPI.dispatchEvent: Invalid target or target does not support dispatchEvent.', { target });
-        }
-        return false;
+        const n = (typeof window !== 'undefined' && window.DependencySystem?.modules?.get?.('notify')) || null;
+        n?.error?.('dispatchEvent target invalid', {
+          module: 'domAPI',
+          source: 'dispatchEvent',
+          extra: { eventType: event?.type, target }
+        });
+        throw new Error('dispatchEvent: invalid target');
       }
       return target.dispatchEvent(event);
     },
