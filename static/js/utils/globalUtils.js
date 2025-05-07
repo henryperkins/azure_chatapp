@@ -270,34 +270,26 @@ export function isAbsoluteUrl(url) {
 
 export function normaliseUrl(url) {
   try {
-    /* ─────────── Resolver URL absoluta o relativa ─────────── */
-    let u;
+    // Turn relative paths into absolute URLs using current origin
     const hasProtocol = /^[a-z][a-z0-9+.+-]*:\/\//i.test(url);
-    if (hasProtocol) {
-      // Ya incluye esquema (http://, https://, etc.)
-      u = new URL(url);
-    } else {
-      // Relativa → usa origin actual (si existe) o fallback seguro
-      const base =
-        (typeof window !== "undefined" &&
-         window.location &&
-         window.location.origin) ||
-        "http://localhost";
-      u = new URL(url, base);
-    }
+    const base =
+      hasProtocol
+        ? undefined
+        : (typeof window !== "undefined" &&
+           window.location &&
+           window.location.origin) || "http://localhost";
+    const u = base ? new URL(url, base) : new URL(url);
 
-    /* ─────────── Normalizaciones ─────────── */
-    if (u.pathname.length > 1 && u.pathname.endsWith("/")) {
+    // strip trailing “/”, sort query params – keep existing behaviour
+    if (u.pathname.length > 1 && u.pathname.endsWith("/"))
       u.pathname = u.pathname.slice(0, -1);
-    }
-    const sorted = Array.from(u.searchParams.entries()).sort(([a], [b]) =>
-      a.localeCompare(b)
-    );
+    const sorted = Array.from(u.searchParams.entries())
+      .sort(([a], [b]) => a.localeCompare(b));
     u.search = new URLSearchParams(sorted).toString();
     return u.toString();
   } catch (e) {
-    console.warn("[globalUtils] (fallback) Failed to normalise URL", url, e);
-    return url;
+    console.warn("[globalUtils] normaliseUrl failed", url, e);
+    return url; // graceful fallback
   }
 }
 
