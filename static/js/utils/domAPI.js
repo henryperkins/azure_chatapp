@@ -32,8 +32,18 @@ export function createDomAPI({ documentObject = document, windowObject = window 
 
   return {
     getElementById: (id) => documentObject.getElementById(id),
-    querySelector: (selector) => documentObject.querySelector(selector),
-    querySelectorAll: (selector) => documentObject.querySelectorAll(selector),
+    querySelector: (selector, contextEl) => {
+      if (contextEl && typeof contextEl.querySelector === 'function') {
+        return contextEl.querySelector(selector);
+      }
+      return documentObject.querySelector(selector);
+    },
+    querySelectorAll: (selector, contextEl) => {
+      if (contextEl && typeof contextEl.querySelectorAll === 'function') {
+        return contextEl.querySelectorAll(selector);
+      }
+      return documentObject.querySelectorAll(selector);
+    },
     createElement: (tag) => documentObject.createElement(tag),
     getBody: () => documentObject.body,
     getDocumentElement: () => documentObject.documentElement,
@@ -51,7 +61,185 @@ export function createDomAPI({ documentObject = document, windowObject = window 
     window: windowObject,
     // Add getActiveElement for DI strictness; see sidebar/notification rules
     getActiveElement: () => documentObject.activeElement,
-    // For event, dispatch, etc. attaching to ownerDocument/window, use domAPI.ownerDocument, domAPI.window
+
+    /**
+     * Prevent default on event if possible
+     */
+    preventDefault: (e) => {
+      if (e && typeof e.preventDefault === 'function') {
+        e.preventDefault();
+      }
+    },
+
+    /**
+     * Return el.closest(selector) if available, else null
+     */
+    closest: (el, selector) => {
+      if (el && typeof el.closest === 'function') {
+        return el.closest(selector);
+      }
+      return null;
+    },
+
+    /**
+     * Add class to element
+     */
+    addClass: (el, cls) => {
+      if (el && el.classList) el.classList.add(cls);
+    },
+
+    /**
+     * Remove class from element
+     */
+    removeClass: (el, cls) => {
+      if (el && el.classList) el.classList.remove(cls);
+    },
+
+    /**
+     * Toggle class on element
+     */
+    toggleClass: (el, cls, force) => {
+      if (el && el.classList) {
+        return el.classList.toggle(cls, force);
+      }
+      return null;
+    },
+
+    /**
+     * Check class existence
+     */
+    hasClass: (el, cls) => {
+      return !!(el && el.classList && el.classList.contains(cls));
+    },
+
+    /**
+     * Set attribute
+     */
+    setAttribute: (el, k, v) => {
+      if (el && typeof el.setAttribute === 'function') {
+        el.setAttribute(k, v);
+      }
+    },
+
+    /**
+     * Get attribute
+     */
+    getAttribute: (el, k) => {
+      if (el && typeof el.getAttribute === 'function') {
+        return el.getAttribute(k);
+      }
+      return null;
+    },
+
+    /**
+     * Remove attribute
+     */
+    removeAttribute: (el, k) => {
+      if (el && typeof el.removeAttribute === 'function') {
+        el.removeAttribute(k);
+      }
+    },
+
+    /**
+     * Set data attribute
+     */
+    setDataAttribute: (el, k, v) => {
+      if (el && el.dataset) {
+        el.dataset[k] = v;
+      }
+    },
+
+    /**
+     * Get data attribute
+     */
+    getDataAttribute: (el, k) => {
+      return (el && el.dataset) ? el.dataset[k] : undefined;
+    },
+
+    /**
+     * Remove data attribute
+     */
+    removeDataAttribute: (el, k) => {
+      if (el && el.dataset) {
+        delete el.dataset[k];
+      }
+    },
+
+    /**
+     * Set style property
+     */
+    setStyle: (el, prop, val) => {
+      if (el && el.style) {
+        el.style[prop] = val;
+      }
+    },
+
+    /**
+     * Set property (like el.disabled = true)
+     */
+    setProperty: (el, property, value) => {
+      if (el) {
+        el[property] = value;
+      }
+    },
+
+    /**
+     * Get textContent
+     */
+    getTextContent: (el) => {
+      if (el && typeof el.textContent === 'string') {
+        return el.textContent;
+      }
+      return '';
+    },
+
+    /**
+     * Set textContent
+     */
+    setTextContent: (el, text) => {
+      if (el && typeof text === 'string') {
+        el.textContent = text;
+      }
+    },
+
+    /**
+     * Get form-like element value
+     */
+    getValue: (el) => {
+      if (el && typeof el.value !== 'undefined') {
+        return el.value;
+      }
+      return '';
+    },
+
+    /**
+     * Set form-like element value
+     */
+    setValue: (el, value) => {
+      if (el && typeof el.value !== 'undefined') {
+        el.value = value;
+      }
+    },
+
+    /**
+     * Compare two elements by isSameNode if possible
+     */
+    isSameNode: (elA, elB) => {
+      if (elA && typeof elA.isSameNode === 'function') {
+        return elA.isSameNode(elB);
+      }
+      return elA === elB;
+    },
+
+    /**
+     * Safe get element's id
+     */
+    getId: (el) => {
+      if (el && typeof el.id === 'string') {
+        return el.id;
+      }
+      return null;
+    },
 
     /**
      * Attach event listener to element or documentObject.
