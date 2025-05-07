@@ -202,7 +202,7 @@ try {
  * @param {object} contextInfo - { context, module, source }
  * @returns {*} - The requested module, or throws if unavailable.
  */
-function getModuleSafe(key, contextInfo = {}) {
+function getModuleSafe(key, contextInfo = {}, required = true) {
     // Verify DependencySystem exists
     if (typeof DependencySystem === 'undefined' || DependencySystem === null) {
         const errorMsg = `[App] DependencySystem is ${typeof DependencySystem === 'undefined' ? 'undefined' : 'null'} when attempting to get ${key}`;
@@ -222,7 +222,6 @@ function getModuleSafe(key, contextInfo = {}) {
         if (typeof DependencySystem === 'undefined' || DependencySystem === null) {
             if (notify) {
                 notify.error?.(errorMsg, {
-                    group: true,
                     ...contextInfo
                 });
             }
@@ -247,10 +246,7 @@ function getModuleSafe(key, contextInfo = {}) {
         if (!DependencySystem.modules) {
             if (notify) {
                 notify.error?.(errorMsg, {
-                    group: true,
-                    ...contextInfo,
-                    traceId: DependencySystem?.getCurrentTraceIds?.()?.traceId,
-                    transactionId: DependencySystem?.generateTransactionId?.()
+                    ...contextInfo
                 });
             }
             throw new Error(errorMsg);
@@ -287,7 +283,6 @@ function getModuleSafe(key, contextInfo = {}) {
         if (typeof DependencySystem.modules.get !== 'function') {
             if (notify) {
                 notify.error?.(errorMsg, {
-                    group: true,
                     ...contextInfo,
                     moduleType: typeof DependencySystem.modules
                 });
@@ -296,8 +291,13 @@ function getModuleSafe(key, contextInfo = {}) {
         }
     }
 
-    // Return the module (which may be undefined if not registered)
-    return DependencySystem.modules.get(key);
+    const mod = DependencySystem.modules.get(key);
+    if (!mod && required) {
+        const errMsg = `[App] Dependency '${key}' not found (required).`;
+        notify?.error?.(errMsg, { context: 'app', module: 'App', source: 'getModuleSafe' });
+        throw new Error(errMsg);
+    }
+    return mod;            // undefined allowed when required === false
 }
 
 if (!DependencySystem) {
@@ -397,13 +397,11 @@ DependencySystem.register('eventHandlers', eventHandlers);
 // Do not call it here to avoid dependency issues
 
 const notificationHandler = createNotificationHandler({
-    eventHandlers,
     DependencySystem,
-    domAPI,
-    groupWindowMs: 7000
+    domAPI
 });
 DependencySystem.register('notificationHandler', notificationHandler);
-notify = createNotify({ notificationHandler, sentry: sentryManager, DependencySystem });
+notify = createNotify({ notificationHandler, DependencySystem });
 DependencySystem.register('notify', notify);
 
 import { createChatManager } from './chat.js';
@@ -448,7 +446,6 @@ async function init() {
 
     if (_globalInitCompleted || _globalInitInProgress) {
         notify?.warn?.('[App] Duplicate initialization attempt blocked by global guard.', {
-            group: true,
             context: 'app',
             module: 'App',
             source: 'init',
@@ -460,7 +457,6 @@ async function init() {
     }
     if (appState.initialized || appState.initializing) {
         notify?.info?.('[App] Initialization attempt skipped (already done or in progress).', {
-            group: true,
             context: 'app',
             module: 'App',
             source: 'init',
@@ -493,12 +489,9 @@ async function init() {
     notify?.debug?.('[App] Creating Chat Manager...', { context: 'app', module: 'App', source: 'init' });
     if (!DependencySystem || !DependencySystem.modules) {
         notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing browserAPI', {
-            group: true,
             context: 'app',
             module: 'App',
-            source: 'init',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.()
+            source: 'init'
         });
         throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing browserAPI');
     }
@@ -535,10 +528,7 @@ async function init() {
     // Ensure locationchange is tracked exactly once.
     if (!_locationChangeListenerAttached) {
         document.addEventListener('locationchange', function () {
-            const container = notify.getContainer?.() || domAPI.getElementById('notificationArea');
-            if (container) {
-                notify.clearNonSticky?.();
-            }
+            notify.clear?.();
         });
         _locationChangeListenerAttached = true;
     }
@@ -551,12 +541,9 @@ async function init() {
         // Initialize core systems with a timeout
         appState.currentPhase = 'init_core_systems';
         notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'init',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'init'
     });
         await executeWithTimeout(
             () => initializeCoreSystems(),
@@ -566,22 +553,16 @@ async function init() {
         if (DEBUG_INIT) console.log(`[DEBUG] Phase ${appState.currentPhase}: Core systems initialized successfully`);
 
         notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - initStartTime).toFixed(2)} ms`, {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'init',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'init'
     });
 
         appState.currentPhase = 'waiting_core_deps';
         notify?.debug?.(`[App] Phase: ${appState.currentPhase}, waiting for DI deps`, {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'init',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'init'
     });
         await waitFor(['auth', 'eventHandlers', 'notificationHandler', 'modalManager'], null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
         if (DEBUG_INIT) console.log(`[DEBUG] Phase ${appState.currentPhase}: Core dependencies resolved successfully`);
@@ -590,21 +571,15 @@ async function init() {
         appState.currentPhase = 'init_auth';
         const _authInitStart = performance.now();
         notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'init',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'init'
     });
         await initializeAuthSystem();
         notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _authInitStart).toFixed(2)} ms`, {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'init',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'init'
     });
 
         // If authenticated, fetch current user
@@ -630,19 +605,16 @@ async function init() {
         appState.currentPhase = 'init_ui';
         const _uiStart = performance.now();
         notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'init',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'init'
     });
         await initializeUIComponents();
-        notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _uiStart).toFixed(2)} ms`, { group: true });
+        notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _uiStart).toFixed(2)} ms`);
 
         // Finalizing
         appState.currentPhase = 'finalizing';
-        notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING sub-tasks`, { group: true });
+        notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING sub-tasks`);
 
         // Initialize eventHandlers - critical to do this at the right time
         // when DependencySystem is ready and modules are available
@@ -650,7 +622,6 @@ async function init() {
             // First verify DependencySystem is properly initialized
             if (!DependencySystem || !DependencySystem.modules) {
                 notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing eventHandlers', {
-                    group: true,
                     context: 'app',
                     module: 'App',
                     source: 'eventHandlersInit'
@@ -667,15 +638,14 @@ async function init() {
 
             // Initialize if available
             if (eh && typeof eh.init === 'function') {
-                notify?.debug?.('[App] Initializing eventHandlers', { group: true });
+                notify?.debug?.('[App] Initializing eventHandlers');
                 await eh.init();
-                notify?.info?.('[App] EventHandlers initialized successfully', { group: true });
+                notify?.info?.('[App] EventHandlers initialized successfully');
             } else {
-                notify?.error?.('[App] eventHandlers.init is not a function or module not found', { group: true });
+                notify?.error?.('[App] eventHandlers.init is not a function or module not found');
             }
         } catch (ehErr) {
             notify?.error?.('[App] Error initializing eventHandlers', {
-                group: true,
                 error: ehErr,
                 errorStack: ehErr?.stack
             });
@@ -695,11 +665,11 @@ async function init() {
         // Register global listeners (moved here after all core modules are registered)
         appState.currentPhase = 'registering_listeners';
         const _listenersStart = performance.now();
-        notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, { group: true });
+        notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`);
         registerAppListeners();
-        notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _listenersStart).toFixed(2)} ms`, { group: true });
+        notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _listenersStart).toFixed(2)} ms`);
 
-        notify?.debug?.('[App] Calling handleNavigationChange() during finalization', { group: true });
+        notify?.debug?.('[App] Calling handleNavigationChange() during finalization');
         handleNavigationChange();
 
         // Mark init as completed
@@ -708,10 +678,10 @@ async function init() {
         const totalMs = initEndTime - initStartTime;
         notify?.info?.(
             `[App] Initialization complete in ${totalMs.toFixed(2)} ms.`,
-            { group: true, ms: totalMs, authenticated: appState.isAuthenticated }
+            { ms: totalMs, authenticated: appState.isAuthenticated }
         );
         if (totalMs > (APP_CONFIG.PERFORMANCE_THRESHOLDS?.INIT_WARN || 3000)) {
-            notify?.warn?.(`[App] Initialization exceeded perf warning threshold: ${totalMs.toFixed(1)} ms`, { group: true });
+            notify?.warn?.(`[App] Initialization exceeded perf warning threshold: ${totalMs.toFixed(1)} ms`);
         }
 
         _globalInitCompleted = true;
@@ -746,12 +716,9 @@ async function init() {
     } finally {
         const totalFinalMs = performance.now() - _initStart;
         notify?.debug?.(`[App] init() finally block. Total execution: ${totalFinalMs.toFixed(1)} ms. Hiding spinner.`, {
-            group: true,
             context: 'app',
             module: 'App',
-            source: 'init',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.()
+            source: 'init'
         });
         _globalInitInProgress = false;
         appState.initializing = false;
@@ -764,9 +731,7 @@ async function initializeCoreSystems() {
     notify?.debug?.('[App] Initializing core systems...', {
         context: 'app',
         module: 'App',
-        source: 'initializeCoreSystems',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'initializeCoreSystems'
     });
     if (document.readyState !== 'complete' && document.readyState !== 'interactive') {
         await new Promise(resolve => {
@@ -848,8 +813,6 @@ async function initializeCoreSystems() {
                 context: 'app',
                 module: 'App',
                 source: 'modalsLoadedHandler',
-                traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-                transactionId: DependencySystem?.generateTransactionId?.(),
                 detail: event?.detail
             });
             resolve(true);
@@ -863,7 +826,7 @@ async function initializeCoreSystems() {
     });
     const modalsLoaded = await modalsReadyPromise;
     if (!modalsLoaded) {
-        notify?.error?.('[App] Modal loading signal not received or timed out. UI may be incomplete.', { group: true });
+        notify?.error?.('[App] Modal loading signal not received or timed out. UI may be incomplete.');
     } else {
         const projectForm = domAPI.getElementById('projectModalForm');
         if (projectForm) {
@@ -884,7 +847,6 @@ async function initializeCoreSystems() {
                         projMgr.loadProjects?.('all');
                     } catch (err) {
                         notify?.error?.('Failed to save project.', {
-                            group: true,
                             context: 'projectModal',
                             module: 'App',
                             source: 'projectModalFormSubmit',
@@ -895,7 +857,6 @@ async function initializeCoreSystems() {
             }
         } else {
             notify?.warn?.('[App] projectModalForm not found after modalsLoaded signal.', {
-                group: true,
                 context: 'app',
                 module: 'App',
                 source: 'initializeCoreSystems'
@@ -923,12 +884,9 @@ async function initializeCoreSystems() {
         projectModal.init();
     }
     notify?.debug?.('[App] Core systems initialized.', {
-        group: true,
         context: 'app',
         module: 'App',
-        source: 'initializeCoreSystems',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'initializeCoreSystems'
     });
 }
 
@@ -936,9 +894,7 @@ async function initializeAuthSystem() {
     notify?.debug?.('[App] Initializing authentication system...', {
         context: 'app',
         module: 'App',
-        source: 'initializeAuthSystem',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'initializeAuthSystem'
     });
     const auth = getModuleSafe('auth', { context: 'app', module: 'App', source: 'initializeAuthSystem' });
     if (!auth || typeof auth.init !== 'function') {
@@ -950,9 +906,7 @@ async function initializeAuthSystem() {
         notify?.debug?.(`[App] Initial auth state: ${appState.isAuthenticated}`, {
             context: 'app',
             module: 'App',
-            source: 'initializeAuthSystem',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.()
+            source: 'initializeAuthSystem'
         });
         const bus = auth.AuthBus;
         if (bus && typeof eventHandlers.trackListener === 'function') {
@@ -1092,22 +1046,17 @@ async function initializeUIComponents() {
             notify?.debug?.('[App] Loading projects (UI init, authenticated)...', {
         context: 'app',
         module: 'App',
-        source: 'initializeUIComponents',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'initializeUIComponents'
     });
             pm.loadProjects('all').catch(err => {
-                notify?.error?.('[App] Failed to load projects during UI initialization.', { group: true, error: err });
+                notify?.error?.('[App] Failed to load projects during UI initialization.', { error: err });
             });
         }
     } else {
         notify?.warn?.('[App] Not authenticated, skipping initial project load in UI init.', {
-            group: true,
             context: 'app',
             module: 'App',
-            source: 'initializeUIComponents',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.()
+            source: 'initializeUIComponents'
         });
     }
 
@@ -1123,9 +1072,7 @@ async function initializeUIComponents() {
     notify?.debug?.('[App] UI components initialized.', {
         context: 'app',
         module: 'App',
-        source: 'initializeUIComponents',
-        traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-        transactionId: DependencySystem?.generateTransactionId?.()
+        source: 'initializeUIComponents'
     });
 }
 
@@ -1153,8 +1100,6 @@ function renderAuthHeader() {
             context: 'app',
             module: 'App',
             source: 'renderAuthHeader',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.(),
             error: err
         });
     }
@@ -1185,10 +1130,9 @@ function registerAppListeners() {
             description: 'Global locationchange event', module: 'App', context: 'navigation'
         });
     }).catch(err => {
-        notify?.error?.('[App] Failed to wait for dependencies for global listeners.', { group: true, error: err });
+        notify?.error?.('[App] Failed to wait for dependencies for global listeners.', { error: err });
     });
     notify?.debug?.('[App] Global application listeners registered.', {
-        group: true,
         context: 'app',
         module: 'App',
         source: 'registerAppListeners'
@@ -1233,14 +1177,16 @@ function setupChatInitializationTrigger() {
 
     waitFor(requiredDeps, (...resolvedDeps) => {
         const [authMod, chatMgr, projMgr, localNotify, localEventHandlers] = resolvedDeps;
-        // Diagnostic log for authMod
-        console.error('[App] setupChatInitializationTrigger diagnostic:', {
-            authMod,
-            authModType: typeof authMod,
-            authModKeys: authMod ? Object.keys(authMod) : null,
-            modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
-            modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'setupChatInitializationTrigger' })
-        });
+        if (DEBUG_INIT) {
+            // Diagnostic log for authMod
+            console.error('[App] setupChatInitializationTrigger diagnostic:', {
+                authMod,
+                authModType: typeof authMod,
+                authModKeys: authMod ? Object.keys(authMod) : null,
+                modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
+                modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'setupChatInitializationTrigger' })
+            });
+        }
         if (authMod && authMod.AuthBus) {
             attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
         } else {
@@ -1268,7 +1214,7 @@ function setupChatInitializationTrigger() {
         }, 100);
     }, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT * 2)
     .catch(err => {
-        DependencySystem.modules.get('notify')?.error?.('[App] Failed setup for chat init triggers.', { group: true, error: err });
+        DependencySystem.modules.get('notify')?.error?.('[App] Failed setup for chat init triggers.', { error: err });
     });
 }
 
@@ -1296,7 +1242,7 @@ async function handleNavigationChange() {
     try {
         projectDashboard = await waitFor('projectDashboard', null, APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT);
     } catch (e) {
-        localNotify?.error?.('[App] Project Dashboard unavailable for navigation.', { group: true, error: e });
+        localNotify?.error?.('[App] Project Dashboard unavailable for navigation.', { error: e });
         globalUtils.toggleElement(APP_CONFIG.SELECTORS.APP_FATAL_ERROR, true);
         const errorEl = domAPI.querySelector(APP_CONFIG.SELECTORS.APP_FATAL_ERROR);
         if (errorEl) {
@@ -1335,7 +1281,6 @@ async function handleNavigationChange() {
                 const success = await app.navigateToConversation(chatId);
                 if (!success) {
                     localNotify?.warn?.("[App] Chat load failed from navigation for chatId:", {
-                        group: true,
                         context: 'app',
                         module: 'App',
                         source: 'handleNavigationChange',
@@ -1349,7 +1294,6 @@ async function handleNavigationChange() {
         }
     } catch (navError) {
         localNotify?.error?.('[App] Error during navigation handling logic.', {
-            group: true,
             context: 'app',
             module: 'App',
             source: 'handleNavigationChange',
@@ -1357,7 +1301,6 @@ async function handleNavigationChange() {
         });
         projectDashboard.showProjectList?.().catch(fbErr => {
             localNotify?.error?.('[App] Fallback to showProjectList also failed.', {
-                group: true,
                 context: 'app',
                 module: 'App',
                 source: 'handleNavigationChange',
@@ -1375,16 +1318,17 @@ function attachAuthBusListener(event, handler, markerFlagName) {
     const localNotify = getModuleSafe('notify', { context: 'app', module: 'App', source: 'attachAuthBusListener' });
     const auth = getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' });
     // Diagnostic logging
-    console.error('[App] attachAuthBusListener diagnostic:', {
-        auth,
-        authType: typeof auth,
-        authKeys: auth ? Object.keys(auth) : null,
-        modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
-        modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' })
-    });
+    if (DEBUG_INIT) {
+        console.error('[App] attachAuthBusListener diagnostic:', {
+            auth,
+            authType: typeof auth,
+            authKeys: auth ? Object.keys(auth) : null,
+            modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
+            modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' })
+        });
+    }
     if (!auth) {
         localNotify?.error?.('[App] attachAuthBusListener: DependencySystem.modules.get("auth") returned undefined.', {
-            group: true,
             context: 'app',
             module: 'App',
             source: 'attachAuthBusListener'
@@ -1393,7 +1337,6 @@ function attachAuthBusListener(event, handler, markerFlagName) {
     }
     if (!auth.AuthBus || typeof auth.AuthBus.addEventListener !== 'function') {
         localNotify?.error?.('[App] attachAuthBusListener: auth.AuthBus is not an EventTarget.', {
-            group: true,
             context: 'app',
             module: 'App',
             source: 'attachAuthBusListener'
@@ -1442,7 +1385,6 @@ function handleAuthStateChange(event) {
     if (user) currentUser = user;
 
     localNotify?.info?.(`[App] Auth state changed. Authenticated: ${appState.isAuthenticated}`, {
-        group: true,
         context: 'app',
         module: 'App',
         source: 'handleAuthStateChange',
@@ -1460,7 +1402,6 @@ function handleAuthStateChange(event) {
 
             if (appState.isAuthenticated && !previousAuthState) {
                 localNotify?.debug?.('[App] User logged IN. Refreshing data/UI.', {
-                    group: true,
                     context: 'app',
                     module: 'App',
                     source: 'handleAuthStateChange'
@@ -1473,7 +1414,6 @@ function handleAuthStateChange(event) {
 
             } else if (!appState.isAuthenticated && previousAuthState) {
                 localNotify?.debug?.('[App] User logged OUT. Clearing data/UI.', {
-                    group: true,
                     context: 'app',
                     module: 'App',
                     source: 'handleAuthStateChange'
@@ -1490,7 +1430,6 @@ function handleAuthStateChange(event) {
             }
         } catch (err) {
             localNotify?.error?.('[App] Error updating UI/data after auth state change.', {
-                group: true,
                 context: 'app',
                 module: 'App',
                 source: 'handleAuthStateChange',
@@ -1515,7 +1454,6 @@ function handleInitError(error) {
     const errorMsgString = error?.message || (typeof error === "string" ? error : "Unknown initialization error.");
 
     localNotify?.error?.(`Application failed to start: ${errorMsgString}. Please refresh.`, {
-        group: true,
         context: "app",
         module: "App",
         source: "handleInitError",
