@@ -181,7 +181,14 @@ export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, 
     const p = (async () => {
       try {
         if (APP_CONFIG.DEBUG)
-          notificationHandler?.debug?.(`[API] ${method} ${normUrl}`, opts.body ? "with body" : "");
+          notificationHandler?.debug?.(`[API] ${method} ${normUrl}`, {
+            context: 'api',
+            module: 'ApiClient',
+            source: 'apiRequest',
+            traceId: APP_CONFIG?.DependencySystem?.getCurrentTraceIds?.().traceId,
+            transactionId: APP_CONFIG?.DependencySystem?.generateTransactionId?.(),
+            extra: { hasBody: !!opts.body }
+          });
 
         const resp = await (browserAPI?.fetch || fetch)(normUrl, opts);
 
@@ -408,15 +415,32 @@ export async function waitForDepsAndDom({
   timeout = 4000,
 } = {}) {
   if (!DependencySystem) throw new Error("waitForDepsAndDom: DependencySystem missing");
+  
+  // Verify DependencySystem has expected structure
+  if (!DependencySystem.modules || typeof DependencySystem.modules.has !== 'function' || typeof DependencySystem.modules.get !== 'function') {
+    throw new Error("waitForDepsAndDom: DependencySystem.modules is missing or invalid");
+  }
+  
   const start = Date.now();
   while (true) {
-    const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
-    const domReady = domSelectors.every((s) => document.querySelector(s));
-    if (depsReady && domReady) return;
-    if (Date.now() - start > timeout)
-      throw new Error(
-        `waitForDepsAndDom timeout ${timeout}ms — deps: ${deps.filter((d) => !DependencySystem.modules.has(d))}, dom: ${domSelectors.filter((s) => !document.querySelector(s))}`,
-      );
+    try {
+      const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
+      const domReady = domSelectors.every((s) => document.querySelector(s));
+      if (depsReady && domReady) return;
+      
+      if (Date.now() - start > timeout) {
+        const missingDeps = deps.filter((d) => !DependencySystem.modules.has(d) || !DependencySystem.modules.get(d));
+        const missingDom = domSelectors.filter((s) => !document.querySelector(s));
+        throw new Error(
+          `waitForDepsAndDom timeout ${timeout}ms — deps: ${missingDeps.join(', ')}, dom: ${missingDom.join(', ')}`,
+        );
+      }
+    } catch (err) {
+      if (Date.now() - start > timeout) {
+        throw new Error(`waitForDepsAndDom error: ${err.message}`);
+      }
+      console.warn('waitForDepsAndDom: Caught error while checking dependencies, retrying...', err);
+    }
     await new Promise((r) => setTimeout(r, pollInterval));
   }
 }

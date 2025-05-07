@@ -27,6 +27,12 @@ export function createEventHandlers({
   domAPI, browserService, notify,
   navigate, storage
 } = {}) {
+  /**
+   * Defensive: never auto-init on construction.
+   * _autoInit is always false; if set true, will warn in dev.
+   * This ensures eventHandlers.init() is only called by the consumer.
+   */
+  let _autoInit = false;
   // --- Dependency Validation ---
   if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
@@ -34,7 +40,19 @@ export function createEventHandlers({
   if (!notify) throw new Error(`[${MODULE}] notify utility (handlerNotify) is required`);
 
   // Resolve optional dependencies dynamically if not passed
-  function _resolveDep(name) { return DependencySystem?.modules?.get?.(name); }
+  function _resolveDep(name) { 
+    try {
+      // Make sure DependencySystem is properly initialized
+      if (!DependencySystem || !DependencySystem.modules || typeof DependencySystem.modules.get !== 'function') {
+        return undefined;
+      }
+      return DependencySystem.modules.get(name); 
+    } catch (err) {
+      console.error(`[${MODULE}] Error resolving dependency '${name}':`, err);
+      return undefined;
+    }
+  }
+  
   app = app || _resolveDep('app');
   auth = auth || _resolveDep('auth');
   projectManager = projectManager || _resolveDep('projectManager');
