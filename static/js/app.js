@@ -1,4 +1,4 @@
-const DEBUG_INIT = true; // Change to true if you want to enable debug logs.
+const DEBUG_INIT = false; // Change to true if you want to enable debug logs.
 if (typeof window !== 'undefined') window.DEBUG_INIT = DEBUG_INIT;
 
 /****************************************
@@ -1179,13 +1179,7 @@ function setupChatInitializationTrigger() {
         const [authMod, chatMgr, projMgr, localNotify, localEventHandlers] = resolvedDeps;
         if (DEBUG_INIT) {
             // Diagnostic log for authMod
-            console.error('[App] setupChatInitializationTrigger diagnostic:', {
-                authMod,
-                authModType: typeof authMod,
-                authModKeys: authMod ? Object.keys(authMod) : null,
-                modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
-                modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'setupChatInitializationTrigger' })
-            });
+            console.debug('[App] setupChatInitializationTrigger:', { authModType: typeof authMod });
         }
         if (authMod && authMod.AuthBus) {
             attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
@@ -1319,13 +1313,7 @@ function attachAuthBusListener(event, handler, markerFlagName) {
     const auth = getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' });
     // Diagnostic logging
     if (DEBUG_INIT) {
-        console.error('[App] attachAuthBusListener diagnostic:', {
-            auth,
-            authType: typeof auth,
-            authKeys: auth ? Object.keys(auth) : null,
-            modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
-            modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' })
-        });
+        console.debug('[App] attachAuthBusListener:', { authType: typeof auth });
     }
     if (!auth) {
         localNotify?.error?.('[App] attachAuthBusListener: DependencySystem.modules.get("auth") returned undefined.', {
