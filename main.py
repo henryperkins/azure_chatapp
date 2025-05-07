@@ -44,6 +44,12 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             allowed_origins = [
                 o.strip() for o in allowed_origins.split(",") if o.strip()
             ]
+        elif isinstance(allowed_origins, list):
+            # Already a list, make sure all items are properly stripped strings
+            allowed_origins = [str(o).strip() for o in allowed_origins if str(o).strip()]
+        else:
+            # Handle any other data type by converting to a single-item list
+            allowed_origins = [str(allowed_origins).strip()]
     else:
         # Allow all origins for local development and debugging
         allowed_origins = ["*"]

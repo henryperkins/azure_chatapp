@@ -141,10 +141,12 @@ export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, 
     // Construct full URL using BASE_URL if url is relative
     const fullUrl = globalUtils.isAbsoluteUrl(url) ? url : `${BASE_URL}${url}`;
 
-    let normUrl;
-    try {
-      normUrl = globalUtils.normaliseUrl(fullUrl);
-    } catch (err) {
+let normUrl;
+try {
+  // Always pass base for DI strictness and robustness
+  const base = browserAPI?.getLocation?.().origin;
+  normUrl = globalUtils.normaliseUrl(fullUrl, base);
+} catch (err) {
       // graceful fallback: usa la URL sin normalizar y registra la incidencia
       normUrl = fullUrl;
       if (APP_CONFIG?.DEBUG && notificationHandler?.warn) {
@@ -283,37 +285,32 @@ export function isAbsoluteUrl(url) {
     }
 }
 
-export function normaliseUrl(url) {
+/**
+ * Normalize a URL to absolute, optionally using a provided base.
+ * @param {string} url - The URL or path to normalize.
+ * @param {string} [base] - Optional base URL. If not provided, tries window.location.origin.
+ * @returns {string} - The normalized absolute URL.
+ */
+export function normaliseUrl(url, base) {
+  if (!url || typeof url !== 'string') throw new Error('normaliseUrl: url is required and must be a string');
+  let finalBase = base;
+  if (!finalBase && typeof window !== "undefined" && window.location && window.location.origin && window.location.origin !== "null" && window.location.origin !== "undefined") {
+    finalBase = window.location.origin;
+  }
+  if (!finalBase) {
+    finalBase = "http://localhost:8000";
+    console.warn("[globalUtils] normaliseUrl: No valid base, using localhost fallback.");
+  }
   try {
-    /* ── Build a safe base for relative paths ─────────────────────────── */
-    const hasProtocol = /^[a-z][a-z0-9+.+-]*:\/\//i.test(url);
-    let base;
-    if (!hasProtocol) {
-      // Prefer window.location.origin when valid
-      if (typeof window !== "undefined" && window.location) {
-        const { origin, protocol, hostname, port } = window.location;
-        // origin may literally be the string "null" on file:// pages – guard that
-        if (origin && origin !== "null" && origin !== "undefined") {
-          base = origin;
-        } else if (protocol && /^https?:$/.test(protocol) && hostname) {
-          base = `${protocol}//${hostname}${port ? `:${port}` : ""}`;
-        }
-      }
-      // Absolute fallback (development)
-      if (!base) base = "http://localhost:8000";
-    }
-
-    const u = base ? new URL(url, base) : new URL(url);
-
+    const u = new URL(url, finalBase);
     // strip trailing “/”, sort query params – keep existing behaviour
     if (u.pathname.length > 1 && u.pathname.endsWith("/"))
       u.pathname = u.pathname.slice(0, -1);
-    const sorted = Array.from(u.searchParams.entries())
-      .sort(([a], [b]) => a.localeCompare(b));
+    const sorted = Array.from(u.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
     u.search = new URLSearchParams(sorted).toString();
     return u.toString();
-  } catch (e) {
-    console.warn("[globalUtils] normaliseUrl failed", url, e);
+  } catch (_e) {
+    console.warn("[globalUtils] normaliseUrl failed", url, _e);
     return url; // graceful fallback
   }
 }
