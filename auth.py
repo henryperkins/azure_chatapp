@@ -551,36 +551,30 @@ async def set_cookies_endpoint(
     if client_host not in ["localhost", "127.0.0.1"]:
         raise HTTPException(status_code=403, detail="Only available from localhost")
 
-    logger.warning(f"Manual cookie set from {client_host} - THIS IS INSECURE")
+    access_expires  = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN)
+    refresh_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
-    access_expires = int(timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN).total_seconds())
-    refresh_expires = int(timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS).total_seconds())
     try:
-        response.set_cookie(
+        # usa la misma rutina que el resto de la app → atributos coherentes
+        set_secure_cookie(
+            response,
             "access_token",
             token_req.access_token,
-            max_age=access_expires,
-            path="/",
-            secure=True,
-            httponly=False,
-            samesite="none",
+            int(access_expires.total_seconds()),
+            request,
         )
-        logger.warning("Set non-HttpOnly access_token.")
         if token_req.refresh_token:
-            response.set_cookie(
+            set_secure_cookie(
+                response,
                 "refresh_token",
                 token_req.refresh_token,
-                max_age=refresh_expires,
-                path="/",
-                secure=True,
-                httponly=False,
-                samesite="none",
+                int(refresh_expires.total_seconds()),
+                request,
             )
-            logger.warning("Set non-HttpOnly refresh_token.")
     except Exception as e:
         logger.error("Insecure set-cookie error => %s", e)
         return {"status": "error", "message": str(e)}
-    return {"status": "non-HttpOnly cookies set"}
+    return {"status": "cookies set"}
 
 
 @router.post("/logout", response_model=dict[str, str])
