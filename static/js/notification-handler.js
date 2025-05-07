@@ -47,8 +47,8 @@ export function createNotificationHandler({
     if (bodyToAppendTo) {
       bodyToAppendTo.appendChild(el);
     } else {
-      // eslint-disable-next-line no-console
-      console.error('[NotificationHandler] Could not find a body element to append the notification container.');
+      // DI-only: No safe way to surface error without globals; fail silently per modularity rules.
+      // If you want to surface this error, inject a logger or errorReporter via DI.
     }
     return el;
   })();
@@ -61,6 +61,7 @@ export function createNotificationHandler({
   const fadeOut = el => {
     el.style.opacity = "0";
     el.style.transform = "translateY(-6px) scale(.96)";
+    // UI/UX: Delay removal to allow fade-out transition to complete for smooth notification dismissal.
     setTimeout(() => el.remove(), 250);
   };
 
@@ -110,7 +111,12 @@ export function createNotificationHandler({
       userSelect    : "none",
     });
     closeBtn.textContent = "✕";
-    closeBtn.addEventListener("click", () => fadeOut(root));
+    // Use DI eventHandlers.trackListener only. If not available, close button is not interactive.
+    if (typeof DependencySystem?.modules?.get === "function" && DependencySystem.modules.get("eventHandlers")?.trackListener) {
+      DependencySystem.modules.get("eventHandlers").trackListener(closeBtn, "click", () => fadeOut(root), { description: "Notification_Close" });
+    } else if (DependencySystem?.modules?.get?.("logger")) {
+      DependencySystem.modules.get("logger").warn("[notificationHandler] No DI eventHandlers.trackListener available; close button will not be interactive.");
+    }
     root.appendChild(closeBtn);
 
     fadeIn(root);
@@ -131,6 +137,7 @@ export function createNotificationHandler({
     position.startsWith("bottom") ? container.appendChild(banner) : container.prepend(banner);
 
     const timeout = typeof opts.timeout === "number" ? opts.timeout : DEFAULT_TIMEOUT;
+    // UI/UX: Auto-dismiss notification after timeout to avoid notification overload.
     if (timeout > 0) setTimeout(() => fadeOut(banner), timeout);
 
     return banner;
@@ -152,4 +159,4 @@ export function createNotificationHandler({
   return api;
 }
 
-export default { createNotificationHandler };
+export default createNotificationHandler;

@@ -1,3 +1,4 @@
+/* global APP_CONFIG */
 /**
  * @module eventHandler
  * @description DI-strict, orchestrated UI event utility collection. Manages tracked event listeners
@@ -6,7 +7,6 @@
  *
  * @param {Object} deps - Dependencies injected via DI.
  * @param {Object} deps.app - Core application reference (optional, for app-specific logic like redirects).
- * @param {Object} deps.auth - Auth module reference (optional, for auth-related handlers).
  * @param {Object} deps.projectManager - Project Manager reference (optional, for project actions).
  * @param {Object} deps.modalManager - Modal Manager reference (optional, for modal actions).
  * @param {Object} deps.DependencySystem - Required. DI registry.
@@ -23,16 +23,10 @@ import { debounce as globalDebounce, toggleElement as globalToggleElement } from
 const MODULE = 'EventHandler';
 
 export function createEventHandlers({
-  app, auth, projectManager, modalManager, DependencySystem,
+  app, projectManager, modalManager, DependencySystem,
   domAPI, browserService, notify,
   navigate, storage
 } = {}) {
-  /**
-   * Defensive: never auto-init on construction.
-   * _autoInit is always false; if set true, will warn in dev.
-   * This ensures eventHandlers.init() is only called by the consumer.
-   */
-  let _autoInit = false;
   // --- Dependency Validation ---
   if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
@@ -40,21 +34,27 @@ export function createEventHandlers({
   if (!notify) throw new Error(`[${MODULE}] notify utility (handlerNotify) is required`);
 
   // Resolve optional dependencies dynamically if not passed
-  function _resolveDep(name) { 
+  function _resolveDep(name) {
     try {
       // Make sure DependencySystem is properly initialized
       if (!DependencySystem || !DependencySystem.modules || typeof DependencySystem.modules.get !== 'function') {
         return undefined;
       }
-      return DependencySystem.modules.get(name); 
+      return DependencySystem.modules.get(name);
     } catch (err) {
-      console.error(`[${MODULE}] Error resolving dependency '${name}':`, err);
+      handlerNotify.error(`Error resolving dependency '${name}'`, {
+        group: true,
+        context: 'dependencyResolution',
+        module: MODULE,
+        source: '_resolveDep',
+        originalError: err,
+        extra: { depName: name }
+      });
       return undefined;
     }
   }
-  
+
   app = app || _resolveDep('app');
-  auth = auth || _resolveDep('auth');
   projectManager = projectManager || _resolveDep('projectManager');
   modalManager = modalManager || _resolveDep('modalManager');
 
@@ -78,13 +78,13 @@ export function createEventHandlers({
     // Use injected handlerNotify, fallback to DependencySystem then console for early/critical logs
     const localNotify = handlerNotify ||
       (DependencySystem?.modules?.get?.('notify')) ||
-    { // Basic console fallback
-      debug: (...args) => console.debug('[EventHandler Notify Fallback]', ...args),
-      info: (...args) => console.info('[EventHandler Notify Fallback]', ...args),
-      warn: (...args) => console.warn('[EventHandler Notify Fallback]', ...args),
-      error: (...args) => console.error('[EventHandler Notify Fallback]', ...args),
-      success: (...args) => console.info('[EventHandler Notify Fallback]', ...args)
-    };
+      {
+        debug: () => {},
+        info: () => {},
+        warn: () => {},
+        error: () => {},
+        success: () => {}
+      };
 
     if (!element) {
       const { description = 'Unnamed Listener', context = 'eventHandler', source = 'trackListener', module: optModule = MODULE } = options;
@@ -182,6 +182,9 @@ export function createEventHandlers({
           group: true, context: listenerContext, source: listenerSource, module: MODULE,
           extra: { elementId: element.id || null, eventType: type }
         });
+        // This is the ONLY allowed direct addEventListener usage in the codebase.
+        // It is always routed through trackListener and logged via notify for traceability.
+        // eslint-disable-next-line no-restricted-syntax
         element.addEventListener(type, wrappedHandler, finalOptions);
       }
 

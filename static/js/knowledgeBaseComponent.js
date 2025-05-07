@@ -109,22 +109,22 @@ export function createKnowledgeBaseComponent(options = {}) {
   const getDep = (name) =>
     // Strictly require via options, else from DependencySystem (never window.*)
     name in options ? options[name] : DS.modules.get(name);
-  // DOMPurify global sanitizer for innerHTML
-  const DOMPurify = getDep("sanitizer"); // Changed "DOMPurify" to "sanitizer"
-  if (!DOMPurify || typeof DOMPurify.sanitize !== 'function') {
-    throw new Error("KnowledgeBaseComponent requires 'sanitizer' (expected DOMPurify instance) for HTML sanitization.");
+  // DI sanitizer for innerHTML (must provide .sanitize)
+  const sanitizer = getDep("sanitizer");
+  if (!sanitizer || typeof sanitizer.sanitize !== 'function') {
+    throw new Error("KnowledgeBaseComponent requires 'sanitizer' (object with .sanitize) for HTML sanitization.");
   }
   const notify = getDep("notify");
   if (!notify) throw new Error(`${MODULE} requires 'notify' dependency`);
 
   /**
-   * Safely set element innerHTML, using DOMPurify.
+   * Safely set element innerHTML, using DI sanitizer.
    * @param {HTMLElement} el
    * @param {string} html
    */
   function _safeSetInnerHTML(el, html) {
     if (!el) return;
-    el.innerHTML = DOMPurify.sanitize(html);
+    el.innerHTML = sanitizer.sanitize(html);
   }
 
   // Required dependencies
@@ -323,6 +323,9 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async initialize(isVisible, kbData = null, projectId = null) {
+      this.notify.info("[KnowledgeBaseComponent] initialize() called", {
+        group: true, context: "knowledgeBaseComponent", module: MODULE, source: "initialize"
+      });
       this._notify('info', `[KnowledgeBaseComponent] Initializing, isVisible: ${isVisible}, projectId: ${projectId}`);
 
       // Fast path for hiding

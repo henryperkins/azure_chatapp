@@ -85,6 +85,9 @@ export function createChatExtensions({
   };
 
   function init() {
+    notify.info("[ChatExtensions] init() called", {
+      group: true, context: "chatExtensions", module: "ChatExtensions", source: "init"
+    });
     try {
       setupChatTitleEditing();
 

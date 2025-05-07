@@ -21,8 +21,15 @@ const MODULE = 'ProjectDashboardUtils';
 function _getDependency(dep, name, DependencySystem, isRequired = true) {
   const resolved = dep || DependencySystem?.modules?.get?.(name) || DependencySystem?.get?.(name);
   if (isRequired && !resolved) {
-    // Use console.error as notify might not be ready if called early
-    console.error(`[${MODULE}] Missing required dependency: ${name}`);
+    // Use notify if available, else throw
+    if (DependencySystem?.modules?.get?.('notify')) {
+      DependencySystem.modules.get('notify').error(`[${MODULE}] Missing required dependency: ${name}`, {
+        context: MODULE,
+        module: MODULE,
+        source: '_getDependency',
+        group: true
+      });
+    }
     throw new Error(`[${MODULE}] Missing required dependency: ${name}`);
   }
   return resolved;
@@ -45,22 +52,38 @@ function _resolveDependencies(opts) {
 }
 
 // --- Centralized sanitizer helper (Guideline #6) ---
-function _safeSetInnerHTML(el, html, sanitizer) {
+function _safeSetInnerHTML(el, html, sanitizer, notify, notificationHandler) {
   if (!sanitizer?.sanitize) {
-    console.error(`[${MODULE}] Sanitizer function is missing, cannot safely set innerHTML.`);
+    // DI-only: Use injected notify or notificationHandler, never window globals.
+    if (notify) {
+      notify.error(`[${MODULE}] Sanitizer function is missing, cannot safely set innerHTML.`, {
+        group: true,
+        context: 'projectDashboardUtils',
+        module: MODULE,
+        source: 'setInnerHTMLSafe'
+      });
+    } else if (notificationHandler?.show) {
+      notificationHandler.show(`[${MODULE}] Sanitizer function is missing, cannot safely set innerHTML.`, 'error', {
+        group: true,
+        context: 'projectDashboardUtils',
+        module: MODULE,
+        source: 'setInnerHTMLSafe'
+      });
+    }
+    // else: fail silently per modularity rules
     throw new Error(`[${MODULE}] sanitizer.sanitize is required for setting innerHTML`);
   }
-  // Guideline #6: Always sanitize
+  // Guideline #6: Always sanitize before setting innerHTML.
   el.innerHTML = sanitizer.sanitize(html);
 }
 
 // --- UI Utils helpers refactored (Guideline #2) ---
-function applyCommonProps(element, options, domAPI, sanitizer) { // Pass domAPI, sanitizer
+function applyCommonProps(element, options, domAPI, sanitizer, notify, notificationHandler) {
   if (options.className) element.className = options.className;
   if (options.id) element.id = options.id;
   if (options.textContent !== undefined) element.textContent = options.textContent;
   if (options.innerHTML !== undefined) {
-    _safeSetInnerHTML(element, options.innerHTML, sanitizer); // Use safe helper
+    _safeSetInnerHTML(element, options.innerHTML, sanitizer, notify, notificationHandler);
   }
   Object.entries(options).forEach(([key, value]) => {
     if (key.startsWith('data-')) element.setAttribute(key, value);
@@ -88,17 +111,17 @@ function wireEventHandlers(element, options, eventHandlers) { // Pass eventHandl
   });
 }
 
-function createElementAdvanced(tag, options, domAPI, sanitizer, eventHandlers) { // Pass all needed deps
-  const el = domAPI.createElement(tag); // Use domAPI
-  applyCommonProps(el, options, domAPI, sanitizer);
+function createElementAdvanced(tag, options, domAPI, sanitizer, notify, notificationHandler, eventHandlers) {
+  const el = domAPI.createElement(tag);
+  applyCommonProps(el, options, domAPI, sanitizer, notify, notificationHandler);
   wireEventHandlers(el, options, eventHandlers);
   return el;
 }
 
-function createUIUtils({ eventHandlers, sanitizer, domAPI }) {
+function createUIUtils({ eventHandlers, sanitizer, notify, notificationHandler, domAPI }) {
   return {
     createElement(tag, options = {}) {
-      return createElementAdvanced(tag, options, domAPI, sanitizer, eventHandlers);
+      return createElementAdvanced(tag, options, domAPI, sanitizer, notify, notificationHandler, eventHandlers);
     }
   };
 }
@@ -261,6 +284,8 @@ export function createProjectDashboardUtils(options = {}) {
   ProjectDashboardUtilsAPI.UIUtils = createUIUtils({
     eventHandlers,
     sanitizer,
+    notify,
+    notificationHandler: options.notificationHandler,
     domAPI
   });
 
