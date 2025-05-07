@@ -579,8 +579,13 @@ class ProjectManager {
    */
   async initialize() {
     this.notify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
-    // If you need to preload projects or state at startup, do it here in future.
+
     emitReady({ notify: this.notify }, MODULE);
+
+    /* ---- external coordination hook ---- */
+    // Consumers can now wait for “projectManagerReady”.
+    this._emit('projectManagerReady', { success: true });
+
     return true;
   }
 }
