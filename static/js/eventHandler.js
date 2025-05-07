@@ -448,13 +448,22 @@ export function createEventHandlers({
 
       // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
       // After modalsLoaded, rebind but ensure only one handler exists.
-      trackListener(domAPI.getDocument(), 'modalsLoaded', () => {
-        bindAuthButtonDelegate();
-        handlerNotify.info('Rebound login button delegation after modalsLoaded', {
-          module: MODULE,
-          context: 'auth',
-          source: 'modalsLoaded'
-        });
+      trackListener(domAPI.getDocument(), 'modalsLoaded', (event) => {
+        if (event && event.detail && event.detail.success) {
+          bindAuthButtonDelegate();
+          handlerNotify.info('Rebound login button delegation after successful modalsLoaded', {
+            module: MODULE,
+            context: 'auth',
+            source: 'modalsLoaded'
+          });
+        } else {
+          handlerNotify.error('Modals failed to load or event detail missing. Login button delegation may not work as expected.', {
+            module: MODULE,
+            context: 'auth',
+            source: 'modalsLoaded',
+            eventDetail: event && event.detail ? event.detail : 'N/A'
+          });
+        }
       }, {
         once: true,
         description: 'Rebind login after modalsLoaded',
