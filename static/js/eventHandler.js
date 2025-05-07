@@ -376,11 +376,6 @@ export function createEventHandlers({
       setupNavigationElements();
       setupContentElements();
 
-      trackListener(domAPI.getDocument(), 'modalsLoaded', () => {
-        handlerNotify.info('Modals loaded, setting up modal tabs.', { module: MODULE, source: 'init' });
-        setupModalTabs();
-      }, { once: true, description: 'Setup Modal Tabs on modalsLoaded', module: MODULE, context: 'init' });
-
       const checkProjectModalForm = () => {
         if (domAPI.getElementById('projectModalForm')) {
           setupProjectModalForm();
@@ -398,12 +393,19 @@ export function createEventHandlers({
 
       // --- BEGIN: LOGIN BUTTON/MODAL HANDLING ---
       // Header Login Button
-      const loginBtn = domAPI.getElementById('authButton');
-      if (loginBtn && modalManager && typeof modalManager.show === 'function') {
-        trackListener(loginBtn, 'click', (e) => {
+      // Delegated event handler for Login button (robust against header re-render)
+      const authContainer = domAPI.getElementById('authContainer');
+      if (authContainer && modalManager && typeof modalManager.show === 'function') {
+        delegate(authContainer, 'click', '#authButton', (e) => {
           domAPI.preventDefault(e);
-          modalManager.show('login');
-        }, { description: 'Show Login Modal', context: 'auth', module: MODULE });
+          handlerNotify.info('Login button delegated click, attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+          try {
+            const result = modalManager.show('login');
+            handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+          } catch (error) {
+            handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'LoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
+          }
+        }, { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE });
       }
       // Listen for requestLogin event (used by project list and others)
       trackListener(domAPI.getDocument(), 'requestLogin', (e) => {
@@ -412,6 +414,35 @@ export function createEventHandlers({
         }
       }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
       // --- END: LOGIN BUTTON/MODAL HANDLING ---
+
+      // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
+      // Also delegate again after modalsLoaded to be robust on any modals/header changes
+      trackListener(domAPI.getDocument(), 'modalsLoaded', () => {
+        const authContainer = domAPI.getElementById('authContainer');
+        if (authContainer && modalManager && typeof modalManager.show === 'function') {
+          delegate(authContainer, 'click', '#authButton', (e) => {
+            domAPI.preventDefault(e);
+            handlerNotify.info('Login button delegated click [after modalsLoaded], attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+            try {
+              const result = modalManager.show('login');
+              handlerNotify.info('modalManager.show("login") executed (delegated) [modalsLoaded], result: ' + JSON.stringify(result), { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+            } catch (error) {
+              handlerNotify.error('modalManager.show("login") failed (delegated) [modalsLoaded]', { source: 'LoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
+            }
+          }, { description: 'Delegated Login Modal Show [modalsLoaded]', context: 'auth', module: MODULE });
+          handlerNotify.info('Rebound login button delegation after modalsLoaded', {
+            module: MODULE,
+            context: 'auth',
+            source: 'modalsLoaded'
+          });
+        }
+      }, {
+        once: true,
+        description: 'Rebind login after modalsLoaded',
+        context: 'auth',
+        module: MODULE
+      });
+      // --- END: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
 
       initialized = true;
       handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
@@ -496,30 +527,6 @@ export function createEventHandlers({
     });
   }
 
-  function setupModalTabs() {
-    // Example: Setup tabs within a modal
-    const tabContainers = domAPI.querySelectorAll('.modal-tabs'); // Common container for tabs
-    tabContainers.forEach(container => {
-      const tabs = domAPI.querySelectorAll(container, '.tab-link'); // Query relative to container
-      const tabPanels = domAPI.querySelectorAll(container, '.tab-panel');
-
-      tabs.forEach((tab, index) => {
-        trackListener(tab, 'click', (e) => {
-          domAPI.preventDefault(e);
-          tabs.forEach(t => domAPI.removeClass(t, 'active'));
-          tabPanels.forEach(p => domAPI.addClass(p, 'hidden'));
-
-          domAPI.addClass(tab, 'active');
-          if (tabPanels[index]) domAPI.removeClass(tabPanels[index], 'hidden');
-        }, { description: `Modal Tab ${index}`, module: MODULE, context: 'modalTabs' });
-      });
-      // Activate first tab by default
-      if (tabs.length > 0) domAPI.addClass(tabs[0], 'active');
-      if (tabPanels.length > 0) domAPI.removeClass(tabPanels[0], 'hidden');
-      for (let i = 1; i < tabPanels.length; i++) domAPI.addClass(tabPanels[i], 'hidden');
-
-    });
-  }
 
   function untrackListener(el, evt, handler) {
     const elementMap = trackedListeners.get(el);
