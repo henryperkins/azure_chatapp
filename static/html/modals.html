@@ -538,6 +538,11 @@
     // Wait for correct HTML, then attach modal-init logic if needed for other modals...
     document.addEventListener('modalsLoaded', function() {});
 
+    // Notify application bootstrap that modal HTML is ready
+    document.dispatchEvent(
+      new CustomEvent('modalsLoaded', { detail: { success: true } })
+    );
+
     // Other code continues (unchanged)
     // DRY helper for button loading state
     function setButtonLoading(btn, isLoading, loadingText = "Saving...") {
@@ -623,4 +628,9 @@
     // See eventHandler.js and auth.js for real registration submission, error display, and feedback.
     // --- end registration form hookup ---
   });
+
+  // Immediate-fire fallback: emit modalsLoaded if DOM is already ready
+  if (document.readyState !== 'loading') {
+    document.dispatchEvent(new CustomEvent('modalsLoaded', { detail: { success: true } }));
+  }
 </script>
