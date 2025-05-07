@@ -630,13 +630,6 @@ async function init() {
         await initializeUIComponents();
         notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _uiStart).toFixed(2)} ms`, { group: true });
 
-        // Register global listeners
-        appState.currentPhase = 'registering_listeners';
-        const _listenersStart = performance.now();
-        notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, { group: true });
-        registerAppListeners();
-        notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _listenersStart).toFixed(2)} ms`, { group: true });
-
         // Finalizing
         appState.currentPhase = 'finalizing';
         notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING sub-tasks`, { group: true });
@@ -688,6 +681,13 @@ async function init() {
         } catch (mcErr) {
             notify?.warn?.('[App] Error initializing modelConfig UI', { error: mcErr });
         }
+
+        // Register global listeners (moved here after all core modules are registered)
+        appState.currentPhase = 'registering_listeners';
+        const _listenersStart = performance.now();
+        notify?.debug?.(`[App] Phase: ${appState.currentPhase} - STARTING`, { group: true });
+        registerAppListeners();
+        notify?.debug?.(`[App] Phase "${appState.currentPhase}" completed in ${(performance.now() - _listenersStart).toFixed(2)} ms`, { group: true });
 
         notify?.debug?.('[App] Calling handleNavigationChange() during finalization', { group: true });
         handleNavigationChange();
