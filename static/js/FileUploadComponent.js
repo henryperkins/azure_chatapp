@@ -87,6 +87,7 @@ export class FileUploadComponent {
    * Should be called only when the DOM context (e.g., project details view) is ready.
    */
   init() {
+    this.notify.info("Initializing file upload component...", { source: 'init' });
     if (this._handlersBound) return;
     if (!this._findElements()) {
       this.notify.error("Initialization failed: Could not find required DOM elements for file upload.", {
@@ -98,6 +99,15 @@ export class FileUploadComponent {
     this._bindEvents();
     this._handlersBound = true;
     this.notify.info("File upload component initialized.", { source: 'init' });
+
+    // --- Standardized "fileuploadcomponent:initialized" event ---
+    const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+    if (doc && typeof (this.domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
+      (this.domAPI?.dispatchEvent || doc.dispatchEvent).call(
+        doc,
+        new CustomEvent('fileuploadcomponent:initialized', { detail: { success: true } })
+      );
+    }
   }
 
   /** Find elements using injected domAPI */
