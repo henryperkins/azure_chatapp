@@ -7,6 +7,7 @@ ONLY for local development or troubleshooting. NOT for production!
 
 import os
 import logging
+import uuid
 from typing import Dict, Any, Optional, cast
 
 import sentry_sdk
@@ -368,6 +369,38 @@ async def debug_routes() -> list[Dict[str, Any]]:
 
 
 # -----------------------------------------------------------------------------
+# Request ID Logging Middleware
+# -----------------------------------------------------------------------------
+@app.middleware("http")
+async def request_id_logging_middleware(request: Request, call_next):
+    """
+    Attach a per-request UUID so every log/Sentry event can be correlated.
+    Also logs basic ↗/↘ lines and returns the ID in a response header.
+    """
+    request_id = str(uuid.uuid4())
+    request.state.request_id = request_id
+
+    logger.info("[%s] ↗ %s %s%s",
+                request_id,
+                request.method,
+                request.url.path,
+                f"?{request.url.query}" if request.url.query else "")
+
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        # delegate to generic handler so it still gets Sentry + JSON payload
+        response = await generic_exception_handler(request, exc)
+
+    response.headers["X-Request-ID"] = request_id
+    logger.info("[%s] ↘ %s %s – %s",
+                request_id,
+                response.status_code,
+                request.method,
+                request.url.path)
+    return response
+
+# -----------------------------------------------------------------------------
 # DB Down Middleware (friendly error if DB unavailable)
 # -----------------------------------------------------------------------------
 @app.middleware("http")
@@ -390,23 +423,32 @@ async def db_availability_middleware(request: Request, call_next):
 # -----------------------------------------------------------------------------
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Return a JSON error response for HTTP-related issues."""
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail},
-    )
+    rid = getattr(request.state, "request_id", "n/a")
+    logger.warning("[%s] HTTPException %s – %s", rid, exc.status_code, exc.detail)
+
+    if exc.status_code >= 500:
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("request_id", rid)
+            scope.set_tag("http_status", exc.status_code)
+            scope.set_extra("path", request.url.path)
+            sentry_sdk.capture_exception(exc)
+
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    Catch-all for unhandled exceptions. Returns a generic debug message.
-    """
-    logger.error(f"Unhandled exception (debug mode): {str(exc)}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error (insecure debug)"},
-    )
+    rid = getattr(request.state, "request_id", "n/a")
+    logger.error("[%s] Unhandled exception: %s", rid, exc, exc_info=True)
+
+    with sentry_sdk.push_scope() as scope:
+        scope.set_tag("request_id", rid)
+        scope.set_extra("path", request.url.path)
+        scope.set_extra("query_params", dict(request.query_params))
+        sentry_sdk.capture_exception(exc)
+
+    return JSONResponse(status_code=500,
+                        content={"detail": "Internal server error (insecure debug)"})
 
 
 # -----------------------------------------------------------------------------
