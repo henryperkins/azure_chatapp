@@ -94,6 +94,9 @@ class Settings:
         "localhost:8000",  # Backend port
     ]
 
+    # CORS: Allow all origins for local development and debugging
+    CORS_ORIGINS = ["*"]
+
     # --- Unified Model Configurations (unchanged or debug-friendly) ---
 
     # Azure / OpenAI

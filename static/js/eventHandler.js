@@ -388,53 +388,40 @@ export function createEventHandlers({
       }
       // --- BEGIN: LOGIN BUTTON/MODAL HANDLING ---
       // Header Login Button
-      // Delegated event handler for Login button (robust against header re-render)
-      let loginButtonDelegatedHandler = null;
+      // Direct event handler for Login button
+      /**
+       * Robust login button delegation using event delegation.
+       * Attaches a click handler to a stable parent (header or document) that listens for #authButton clicks,
+       * ensuring handler works even if #authButton is dynamically replaced.
+       */
       function bindAuthButtonDelegate() {
-        const authContainer = domAPI.getElementById('authContainer');
-        if (!authContainer) {
-            throw new Error("[EventHandler] #authContainer not found; login button delegate requires it");
+        // Use a stable parent for delegation: header (if present), otherwise fallback to document.
+        let parentNode = domAPI.getElementById('header') || domAPI.getDocument();
+        // Ensure modalManager dependency is met before binding
+        const currentModalManager = modalManager || _resolveDep('modalManager');
+        if (!currentModalManager || typeof currentModalManager.show !== 'function') {
+            handlerNotify.error("[EventHandler] modalManager is missing or .show is not a function during bindAuthButtonDelegate", { module: MODULE, source: 'bindAuthButtonDelegate' });
+            return;
         }
-        if (!modalManager || typeof modalManager.show !== 'function') {
-            throw new Error("[EventHandler] modalManager is missing or .show is not a function");
-        }
-        // Remove previous delegate, if present
-        if (loginButtonDelegatedHandler) {
-          try {
-            // use closure-scope 'trackListener' API, not accidental 'eventHandlers'
-            untrackListener(authContainer, 'click', loginButtonDelegatedHandler);
-          } catch (err) {
-            handlerNotify.warn('Failed to untrack previous login button delegate', { module: MODULE, source: 'bindAuthButtonDelegate', originalError: err });
-          }
-          loginButtonDelegatedHandler = null;
-        }
-        // Attach new delegate handler
-        loginButtonDelegatedHandler = function(e) {
-          // Robust: fallback to native Element.closest if available, else shim
-          function nativeClosest(el, sel) {
-            if (!el) return null;
-            if (typeof el.closest === 'function') return el.closest(sel);
-            // Simple manual traverse (very rare fallback)
-            let node = el;
-            while (node) {
-              if (node.matches && node.matches(sel)) return node;
-              node = node.parentElement;
-            }
-            return null;
-          }
-          const target = nativeClosest(e.target, '#authButton');
-          if (target) {
+        // Remove any previous delegate to avoid duplicate binding (optional: could track and cleanup if needed)
+        // Attach delegated listener for #authButton click
+        delegate(
+          parentNode,
+          'click',
+          '#authButton',
+          function(e) {
             domAPI.preventDefault(e);
-            handlerNotify.info('Login button delegated click, attempting modalManager.show("login")', { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+            handlerNotify.info('Login button DELEGATED click, attempting modalManager.show("login")', { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE });
             try {
-              const result = modalManager.show('login');
-              handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'LoginButtonHandler', context: 'auth', module: MODULE });
+              const result = currentModalManager.show('login');
+              handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE });
             } catch (error) {
-              handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'LoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
+              handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
             }
-          }
-        };
-        trackListener(authContainer, 'click', loginButtonDelegatedHandler, { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE });
+          },
+          { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
+        );
+        handlerNotify.debug('Delegated click listener bound for #authButton', { module: MODULE, source: 'bindAuthButtonDelegate' });
       }
 
       // Listen for requestLogin event (used by project list and others)
@@ -449,15 +436,15 @@ export function createEventHandlers({
       // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
       // After modalsLoaded, rebind but ensure only one handler exists.
       trackListener(domAPI.getDocument(), 'modalsLoaded', (event) => {
+        bindAuthButtonDelegate();
         if (event && event.detail && event.detail.success) {
-          bindAuthButtonDelegate();
           handlerNotify.info('Rebound login button delegation after successful modalsLoaded', {
             module: MODULE,
             context: 'auth',
             source: 'modalsLoaded'
           });
         } else {
-          handlerNotify.error('Modals failed to load or event detail missing. Login button delegation may not work as expected.', {
+          handlerNotify.warn('Modals failed to load or event detail missing. Login button delegation rebound anyway.', {
             module: MODULE,
             context: 'auth',
             source: 'modalsLoaded',
