@@ -1,6 +1,8 @@
 Below are **concrete code patterns and idioms** you must adopt—illustrated with code-snippet examples matching both the guideline and your codebase’s style.
 
-### 1. Factory Function Export Pattern
+---
+
+## 1. Factory Function Export Pattern
 
 ```javascript
 /**
@@ -19,7 +21,9 @@ export function createProjectManager(deps) {
 }
 ```
 
-### 2. Strict Dependency Injection, No Globals
+---
+
+## 2. Strict Dependency Injection, No Globals
 
 ```javascript
 export function createSidebar({ eventHandlers, app, DependencySystem, domAPI }) {
@@ -30,7 +34,9 @@ export function createSidebar({ eventHandlers, app, DependencySystem, domAPI }) 
 }
 ```
 
-### 3. Event Listener & Cleanup Pattern
+---
+
+## 3. Event Listener & Cleanup Pattern
 
 ```javascript
 function setupSidebarEvents({ eventHandlers, domAPI }) {
@@ -50,84 +56,139 @@ function setupSidebarEvents({ eventHandlers, domAPI }) {
 }
 ```
 
-### 4. Notifications via DI—Inject `notify` Util, Never Console/Alert
+---
+
+## 4. Notifications via DI—Inject `notify` Util, Never Console/Alert
+
+### 🚨 **You MUST use the canonical structured payload pattern for notifications:**
+
+**Always provide as much context as possible for logging, grouping, tracing, and debugging.**
+
+### **Notification Usage Pattern**
 
 ```javascript
-// Always inject `notify` via DI—not globals or notification handler directly.
-// Use built-in grouping/context options; do not manually wrap the handler.
-// See: static/js/utils/notify.js
-
 export function createProjectManager({ DependencySystem, eventHandlers, notify }) {
   if (!notify) throw new Error('notify utility required');
   // ...other dep validations...
 
   function loadProject(id) {
-    notify.info('Loading project…', { group:true, context:'projectManager' });
+    // Always provide context, module, source, and if possible, traceId/transactionId.
+    notify.info('Loading project…', {
+      group: true,
+      context: 'projectManager',
+      module: 'ProjectManager',
+      source: 'loadProject',
+      traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
+      transactionId: DependencySystem?.generateTransactionId?.(),
+      extra: { projectId: id }
+    });
 
-    // On error, grouped by module context
-    notify.error('Could not load project file', { group:true, context:'projectManager' });
+    // On error, grouped by module context with traceability
+    notify.error('Could not load project file', {
+      group: true,
+      context: 'projectManager',
+      module: 'ProjectManager',
+      source: 'loadProject',
+      traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
+      transactionId: DependencySystem?.generateTransactionId?.(),
+      extra: { projectId: id, reason: 'file not found' }
+    });
 
     // For API errors (uses built-in grouping/context)
-    notify.apiError('API call failed');
+    notify.apiError('API call failed', {
+      module: 'ProjectManager',
+      source: 'loadProject',
+      context: 'projectManager',
+      traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
+      transactionId: DependencySystem?.generateTransactionId?.(),
+      extra: { apiUri: '/api/project/load', projectId: id }
+    });
   }
 
   return { loadProject };
 }
 ```
 
-**Notification `notify` Util:**
-- Inject `notify` from DI. It provides context- and grouping-aware helpers:
-  - `notify.info(msg, opts)`
-  - `notify.success(msg, opts)`
-  - `notify.warn(msg, opts)`
-  - `notify.error(msg, opts)`
-  - `notify.apiError(msg, opts)` (opinionated for API grouping)
-  - `notify.authWarn(msg, opts)` (opinionated for auth)
-
-**Grouping Options (passed in opts):**
-- `group: true` — Enables grouping/batching in a notification accordion.
-- `context` — Arbitrary string for logical grouping ("auth", "projectManager", etc). Prefer this for feature/module grouping.
-- `module` — Subsystem or feature name ("chatManager", "sidebar").
-- `source` — Fine-grained action or operation ("formSubmit", "apiRequest").
-- Group keys resolve in this order: `context` → `module` → `source` → `"general"`.
-
-**Best practices**
-- For module/feature-specific grouping, always provide `group: true` and a `context`:
-  ```js
-  notify.error('Could not load file', { group: true, context: 'file-upload' });
-  ```
-- For operation-level grouping:
-  ```js
-  notify.error('Save failed', { group: true, source: 'saveButton' });
-  ```
-- For global (cross-module) grouping, supply only `group: true` (context/module/source omitted).
-
-| Option    | Purpose                        | Example Value           |
-|-----------|-------------------------------|------------------------|
-| group     | Enable notification grouping   | true                   |
-| context   | Module/feature scope           | 'projectManager'       |
-| module    | Subsystem                     | 'chatManager'          |
-| source    | Fine-grained action           | 'apiRequest'           |
-
-### 5. Error Handling, Context-Rich Logging
+#### **Preferred: Use notify.withContext() for modules/components**
 
 ```javascript
-async function fetchData({ apiClient, errorReporter }, id) {
+const pmNotify = notify.withContext({
+  module: 'ProjectManager',
+  context: 'projectManager'
+});
+pmNotify.info('Loading project', { source: 'loadProject' });
+```
+
+### **Notification Payload Contract**
+
+Supply these fields where possible (auto-generated if omitted):
+
+- `groupKey` – Deterministic key (type|module|source|context) – preferred for grouping/deduplication
+- `context` – Feature or workflow context ("projectManager")
+- `module` – Subsystem/component name ("ProjectManager")
+- `source` – Specific method/event ("loadProject")
+- `traceId`, `transactionId` – For distributed tracing; inject/generate/propagate using DI
+- `group` – Boolean: group accordion display in UI
+- `extra` – Arbitrary metadata (object)
+- `id` – Event ID (`groupKey:timestamp`, auto if omitted)
+
+**Minimum for grouped notifications:**
+At least one of `context`, `module`, or `source` (preferably all).
+
+#### Example:
+
+```javascript
+notify.error('Could not load file', {
+  group: true,
+  context: 'file-upload',
+  module: 'FileUploadComponent',
+  source: 'handleUpload',
+  traceId,
+  transactionId,
+  extra: { fileName: 'foo.txt', reason: 'quota' }
+});
+```
+
+**DEV Tip:** If you omit `context`, `module`, and `source` for grouped notifications, you’ll get a developer warning (`devCheckContextCoverage`).
+
+---
+
+### **Notification API**
+
+- `notify.info(msg, opts)`
+- `notify.success(msg, opts)`
+- `notify.warn(msg, opts)`
+- `notify.error(msg, opts)`
+- `notify.apiError(msg, opts)` – opinionated for API grouping/context
+- `notify.authWarn(msg, opts)` – opinionated for auth
+- `notify.withContext({ module, context, source })` – generates a helper with context attached
+
+---
+
+## 5. Error Handling, Context-Rich Logging
+
+```javascript
+async function fetchData({ apiClient, errorReporter, DependencySystem }, id) {
   try {
     const data = await apiClient.get(`/item/${id}`);
     return data;
   } catch (err) {
+    // Provide all available context for tracing and analysis
     errorReporter.capture(err, {
       module: 'projectManager',
       method: 'fetchData',
       itemId: id,
+      traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
+      transactionId: DependencySystem?.generateTransactionId?.()
     });
     throw err;
   }
 }
 ```
 
-### 6. DOM & Security—Sanitized Inputs Only
+---
+
+## 6. DOM & Security—Sanitized Inputs Only
 
 ```javascript
 export function renderUserComment({ domAPI, sanitizer }, userHtml) {
@@ -139,7 +200,9 @@ export function renderUserComment({ domAPI, sanitizer }, userHtml) {
 }
 ```
 
-### 7. Testing & Mockability—Pure Module Contracts
+---
+
+## 7. Testing & Mockability—Pure Module Contracts
 
 ```javascript
 // No side-effects or state modifications at import-time!
@@ -149,7 +212,9 @@ export function createSomething(deps) {
 }
 ```
 
-### 8. File-level Docstring, JSDoc, Idiomatic Modern JS
+---
+
+## 8. File-level Docstring, JSDoc, Idiomatic Modern JS
 
 ```javascript
 /**
@@ -161,3 +226,5 @@ export function createSomething(deps) {
  */
 // (Code follows...)
 ```
+
+---
