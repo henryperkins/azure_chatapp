@@ -43,10 +43,7 @@ import { FileUploadComponent } from './FileUploadComponent.js';
 // Removed import for ./auth/authUI.js (now obsolete)
 
 // Back-compat: si la clase aún no define validateUUID, añade alias al helper global
-if (ProjectDetailsComponent &&
-    typeof ProjectDetailsComponent.prototype.validateUUID !== 'function') {
-  ProjectDetailsComponent.prototype.validateUUID = isValidProjectId;
-}
+// (Removed: ProjectDetailsComponent is not defined. This block is obsolete.)
 
 // Example: For consistent message durations, etc.
 
