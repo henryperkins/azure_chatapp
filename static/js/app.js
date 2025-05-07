@@ -1417,7 +1417,13 @@ async function handleNavigationChange() {
                 localNotify?.debug?.(`[App] Attempting to load conversation: ${chatId}`);
                 const success = await app.navigateToConversation(chatId);
                 if (!success) {
-                    localNotify?.warn?.("[App] Chat load failed from navigation for chatId:", { chatId });
+                    localNotify?.warn?.("[App] Chat load failed from navigation for chatId:", {
+                        group: true,
+                        context: 'app',
+                        module: 'App',
+                        source: 'handleNavigationChange',
+                        chatId
+                    });
                 }
             }
         } else {
