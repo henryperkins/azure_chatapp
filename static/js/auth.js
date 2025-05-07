@@ -46,7 +46,7 @@ export function createAuthModule({
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /\d/.test(password);
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+    const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
     if (!hasUpper) return { valid: false, message: "Password must contain an uppercase letter" };
     if (!hasLower) return { valid: false, message: "Password must contain a lowercase letter" };
     if (!hasNumber) return { valid: false, message: "Password must contain a number" };
