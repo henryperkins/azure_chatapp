@@ -205,10 +205,33 @@ export function createAuthModule({
     try {
       try {
         const response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
-        if (response?.authenticated) {
-          broadcastAuth(true, response.username, 'verify_success');
+
+        // -----------------------------
+        // NUEVA lógica de verificación
+        // -----------------------------
+        // El backend puede devolver distintos campos; consideramos autenticado si
+        //  • authenticated === true            (camelCase)
+        //  • is_authenticated === true         (snake_case)
+        //  • existe username / user            (string u objeto con username)
+        // Si se detecta usuario, lo extraemos para difundirlo.
+        const usernameField =
+          response?.username ??
+          (typeof response?.user === 'string'
+             ? response.user
+             : response?.user?.username) ??
+          null;
+
+        const isAuthenticatedResp =
+          response?.authenticated === true ||
+          response?.is_authenticated === true ||
+          Boolean(usernameField);
+
+        if (isAuthenticatedResp) {
+          broadcastAuth(true, usernameField, 'verify_success');
           return true;
         }
+
+        // Si no se valida, procedemos como antes
         await clearTokenState({ source: 'verify_negative' });
         return false;
       } catch (error) {
