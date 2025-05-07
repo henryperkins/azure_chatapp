@@ -14,7 +14,8 @@ import {
   shouldSkipDedup,
   stableStringify,
   normaliseUrl,
-  isAbsoluteUrl
+  isAbsoluteUrl,
+  toggleElement                      // ← YA existe en utils, reaprovéchalo
 } from './utils/globalUtils.js';  // your new unified API client
 import { createEventHandlers } from './eventHandler.js';
 import { createNotificationHandler } from './notification-handler.js';
@@ -942,11 +943,7 @@ function handleInitError(error) {
 }
 
 function toggleLoadingSpinner(show) {
-    const sel = APP_CONFIG.SELECTORS?.APP_LOADING_SPINNER;
-    if (!sel) return;
-    domAPI.querySelectorAll(sel).forEach(spinner => {
-        spinner.classList.toggle('hidden', !show);
-    });
+    toggleElement(APP_CONFIG.SELECTORS?.APP_LOADING_SPINNER, show);
 }
 
 function toggleElement(sel, show) {
