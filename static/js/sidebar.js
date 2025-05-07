@@ -59,6 +59,7 @@ export function createSidebar({
   );
 
   async function init() {
+    notify.debug('[sidebar] init() called', { group: true, context: 'sidebar', module: MODULE, source: 'init' });
     try {
       findDom();
       restorePersistentState();
@@ -72,6 +73,16 @@ export function createSidebar({
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
       notify.info('[sidebar] initialized successfully', { group: true, context: 'sidebar', module: MODULE, source: 'init', activeTab });
+
+      // --- Standardized "sidebar:initialized" event ---
+      const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+      if (doc && typeof (domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
+        (domAPI?.dispatchEvent || doc.dispatchEvent).call(
+          doc,
+          new CustomEvent('sidebar:initialized', { detail: { success: true } })
+        );
+      }
+
       return true;
     } catch (err) {
       notify.error('[sidebar] Initialization failed: ' + (err && err.message ? err.message : err), {

@@ -316,6 +316,11 @@ export function createProjectDashboardUtils(options = {}) {
             domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));
         }
         notifyCtx.info('ProjectDashboard Utilities Initialized.', { source: 'init' });
+
+        // --- Standardized "projectdashboardutils:initialized" event ---
+        const d = typeof document !== "undefined" ? document : null;
+        if (d) d.dispatchEvent(new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } }));
+
     } catch(error) {
         notifyCtx.error('Initialization failed.', { source: 'init', originalError: error, group: true });
         initialized = false;

@@ -319,6 +319,11 @@ export function createChatManager({
         this._showMessage("system", "Select a project or start a new global chat.");
         this.isInitialized = true;
         this.notify(`[ChatManager] initialize complete (global mode)`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
+
+        // --- Standardized "chatmanager:initialized" event ---
+        const doc = typeof document !== "undefined" ? document : null;
+        if (doc) doc.dispatchEvent(new CustomEvent('chatmanager:initialized', { detail: { success: true } }));
+
         return true;
       }
 
@@ -340,6 +345,11 @@ export function createChatManager({
         }
         this.isInitialized = true;
         this.notify(`[ChatManager] initialize complete (project mode)`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
+
+        // --- Standardized "chatmanager:initialized" event ---
+        const doc = typeof document !== "undefined" ? document : null;
+        if (doc) doc.dispatchEvent(new CustomEvent('chatmanager:initialized', { detail: { success: true } }));
+
         return true;
       } catch (error) {
         this._handleError("initialization (sync setup)", error);

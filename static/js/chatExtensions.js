@@ -103,6 +103,11 @@ export function createChatExtensions({
       }
 
       showNotification('[ChatExtensions] Initialized', 'debug');
+
+      // --- Standardized "chatextensions:initialized" event ---
+      const doc = typeof document !== "undefined" ? document : null;
+      if (doc) doc.dispatchEvent(new CustomEvent('chatextensions:initialized', { detail: { success: true } }));
+
     } catch (error) {
       showNotification("[ChatExtensions] Initialization failed: " + (error && error.message ? error.message : error), "error");
     }

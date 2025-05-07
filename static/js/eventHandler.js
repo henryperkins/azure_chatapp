@@ -178,20 +178,33 @@ export function createEventHandlers({
         domAPI.addEventListener(element, type, wrappedHandler, finalOptions);
       } else {
         localNotify.warn(`domAPI.addEventListener unavailable in trackListener for '${description}', using direct addEventListener.`, {
-          group: true, context: listenerContext, source: listenerSource, module: MODULE,
-      const target = domAPI.closest(event.target, selector); // Assuming domAPI has `closest`
-      if (target) {
-        handler.call(target, event, target);
+          group: true, context: listenerContext, source: listenerSource, module: MODULE
+        });
+        element.addEventListener(type, wrappedHandler, finalOptions);
       }
-    };
-    return trackListener(container, eventType, delegatedHandler, {
-      ...options,
-      description: options.description || `Delegate ${eventType} on ${selector}`,
-      context: options.context || 'eventHandlerDelegate',
-      module: options.module || MODULE,
-      source: options.source || 'delegate'
-    });
-  }
+    } catch (err) {
+      localNotify.error('Error registering event listener', {
+        group: true, context: listenerContext, source: listenerSource, module: listenerModule,
+        originalError: err, extra: { type, description }
+      });
+      return undefined;
+    }
+
+    // Bookkeeping for cleanup
+    let typeMap = trackedListeners.get(element);
+    if (!typeMap) {
+      typeMap = new Map();
+      trackedListeners.set(element, typeMap);
+    }
+    let handlerMap = typeMap.get(type);
+    if (!handlerMap) {
+      handlerMap = new Map();
+      typeMap.set(type, handlerMap);
+    }
+    handlerMap.set(handler, { wrappedHandler, options: finalOptions });
+
+    return wrappedHandler;
+  } // Add missing closing brace for trackListener function
 
   function toggleVisible(elementSelectorOrElement, show) {
     const element = typeof elementSelectorOrElement === 'string'
@@ -402,6 +415,16 @@ export function createEventHandlers({
 
       initialized = true;
       handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
+
+      // --- Standardized "eventhandler:initialized" event ---
+      const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+      if (doc && typeof (domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
+        (domAPI?.dispatchEvent || doc.dispatchEvent).call(
+          doc,
+          new CustomEvent('eventhandler:initialized', { detail: { success: true } })
+        );
+      }
+
     } catch (err) {
       handlerNotify.error('EventHandler initialization failed', {
         group: true, context: 'initialization', module: MODULE, source: 'init', originalError: err
@@ -517,6 +540,37 @@ export function createEventHandlers({
     } catch (error) {
       handlerNotify.warn('Error in untrackListener', { module: MODULE, source: 'untrackListener', originalError: error });
     }
+  }
+
+  function cleanupListeners() {
+    trackedListeners.forEach((typeMap, element) => {
+      typeMap.forEach((handlerMap, type) => {
+        handlerMap.forEach(({ wrappedHandler, options }) => {
+          if (domAPI && typeof domAPI.removeEventListener === 'function') {
+            domAPI.removeEventListener(element, type, wrappedHandler, options);
+          } else {
+            element.removeEventListener(type, wrappedHandler, options);
+          }
+        });
+      });
+    });
+    trackedListeners.clear();
+  }
+
+  function delegate(container, eventType, selector, handler, options = {}) {
+    const delegatedHandler = function(event) {
+      const target = domAPI.closest(event.target, selector);
+      if (target) {
+        handler.call(target, event, target);
+      }
+    };
+    return trackListener(container, eventType, delegatedHandler, {
+      ...options,
+      description: options.description || `Delegate ${eventType} on ${selector}`,
+      context: options.context || 'eventHandlerDelegate',
+      module: options.module || MODULE,
+      source: options.source || 'delegate'
+    });
   }
 
   return {

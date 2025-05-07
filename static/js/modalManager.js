@@ -208,35 +208,46 @@ class ModalManager {
    * Also validates mappings for missing/duplicate IDs.
    */
     init() {
-      if (this._isDebug()) {
-        this._notify('info', '[ModalManager] init() called. Setting up modals...', true);
-      }
+      this._notify('info', '[ModalManager] init() called. Setting up modals...', { context: 'modalManager', module: 'ModalManager', source: 'init' });
 
-      this.validateModalMappings(this.modalMappings);
+      try {
+        this.validateModalMappings(this.modalMappings);
 
-      Object.values(this.modalMappings).forEach((modalId) => {
-        const modalEl = this.domAPI.getElementById(modalId);
-        if (modalEl) {
-          const handler = () => this._onDialogClose(modalId);
-          if (this.eventHandlers?.trackListener) {
-            this.eventHandlers.trackListener(
-              modalEl,
-              'close',
-              handler,
-              {
-                description: `Close event for ${modalId}`,
-                context: 'modalManager',
-                source: 'ModalManager.init'
-              }
-            );
-          } else {
-            this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`);
+        Object.values(this.modalMappings).forEach((modalId) => {
+          const modalEl = this.domAPI.getElementById(modalId);
+          if (modalEl) {
+            const handler = () => this._onDialogClose(modalId);
+            if (this.eventHandlers?.trackListener) {
+              this.eventHandlers.trackListener(
+                modalEl,
+                'close',
+                handler,
+                {
+                  description: `Close event for ${modalId}`,
+                  context: 'modalManager',
+                  source: 'ModalManager.init'
+                }
+              );
+            } else {
+              this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`, false, { source: 'init', modalId });
+            }
           }
-        }
-      });
+        });
 
-      if (this._isDebug()) {
-        this._notify('info', '[ModalManager] Initialization complete.', true);
+        this._notify('info', '[ModalManager] Initialization complete.', { context: 'modalManager', module: 'ModalManager', source: 'init' });
+
+        // --- Standardized "modalmanager:initialized" event ---
+        const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+        if (doc && typeof (this.domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
+          (this.domAPI?.dispatchEvent || doc.dispatchEvent).call(
+            doc,
+            new CustomEvent('modalmanager:initialized', { detail: { success: true } })
+          );
+        }
+
+      } catch (err) {
+        this._notify('error', '[ModalManager] Initialization failed: ' + (err && err.message ? err.message : err), false, { context: 'modalManager', module: 'ModalManager', source: 'init', originalError: err });
+        throw err;
       }
     }
 

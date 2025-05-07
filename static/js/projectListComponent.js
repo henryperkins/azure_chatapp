@@ -175,6 +175,11 @@ export class ProjectListComponent {
             this.notify.info('[ProjectListComponent] Initialized successfully.', { group: true, context: 'projectListComponent' });
         }
         this.notify.success('Project list loaded.', { group: true, context: 'projectListComponent' });
+
+        // --- Standardized "projectlistcomponent:initialized" event ---
+        const doc = typeof document !== "undefined" ? document : null;
+        if (doc) doc.dispatchEvent(new CustomEvent('projectlistcomponent:initialized', { detail: { success: true } }));
+
         this._loadProjects();
     }
 

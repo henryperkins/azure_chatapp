@@ -254,9 +254,20 @@ export function createModelConfig({
   // 5) UI Initialization (initializeUI) < 40 lines
   // -------------------------------------------------------------------------
   function initializeUI(api, state) {
-    setupModelDropdown(api, state);
-    setupMaxTokensUI(api, state);
-    setupVisionUI(api, state);
+    api.notify.notify("[modelConfig] initializeUI() called");
+    try {
+      setupModelDropdown(api, state);
+      setupMaxTokensUI(api, state);
+      setupVisionUI(api, state);
+      api.notify.notify("[modelConfig] initializeUI successful");
+
+      // --- Standardized "modelconfig:initialized" event ---
+      const doc = typeof document !== "undefined" ? document : null;
+      if (doc) doc.dispatchEvent(new CustomEvent('modelconfig:initialized', { detail: { success: true } }));
+
+    } catch (err) {
+      api.notify.error("[modelConfig] initializeUI failed: " + (err && err.message ? err.message : err));
+    }
   }
 
   function setupModelDropdown(api, state) {
