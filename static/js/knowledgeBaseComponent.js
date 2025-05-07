@@ -110,9 +110,9 @@ export function createKnowledgeBaseComponent(options = {}) {
     // Strictly require via options, else from DependencySystem (never window.*)
     name in options ? options[name] : DS.modules.get(name);
   // DOMPurify global sanitizer for innerHTML
-  const DOMPurify = getDep("DOMPurify");
+  const DOMPurify = getDep("sanitizer"); // Changed "DOMPurify" to "sanitizer"
   if (!DOMPurify || typeof DOMPurify.sanitize !== 'function') {
-    throw new Error("KnowledgeBaseComponent requires 'DOMPurify' dependency for HTML sanitization.");
+    throw new Error("KnowledgeBaseComponent requires 'sanitizer' (expected DOMPurify instance) for HTML sanitization.");
   }
   const notify = getDep("notify");
   if (!notify) throw new Error(`${MODULE} requires 'notify' dependency`);
@@ -140,10 +140,8 @@ export function createKnowledgeBaseComponent(options = {}) {
   }
 
   // Extract needed methods from `app`
-  const {
-    validateUUID = app.validateUUID,
-    apiRequest = app.apiRequest
-  } = app;
+  const validateUUID = app.validateUUID;
+  const apiRequest = app.apiRequest;
 
   // Configuration handling
   const config = {
@@ -939,8 +937,7 @@ export function createKnowledgeBaseComponent(options = {}) {
             this.renderKnowledgeBaseInfo(this.state.knowledgeBase);
           }
         }
-      } catch (err) {
-        this._notify('error', "Failed to toggle knowledge base");
+      } catch {
         this._notify("error", "Failed to toggle knowledge base");
       }
     }
@@ -1054,8 +1051,10 @@ export function createKnowledgeBaseComponent(options = {}) {
           throw new Error(resp.message || "Invalid response from server");
         }
       } catch (err) {
-        this._notify('error', `Failed to save settings: ${err.message}`);
-        this._notify("error", `Failed to save settings: ${err.message}`);
+        this._notify('error', `Failed to save settings: ${err.message}`, { source: '_submitKnowledgeBaseForm', originalError: err });
+        // The second notify call seems redundant if the first one already captures the error.
+        // If it's for a different purpose, it should be clarified. For now, I'll assume it's a duplicate.
+        // this._notify("error", `Failed to save settings: ${err.message}`);
       }
     }
 

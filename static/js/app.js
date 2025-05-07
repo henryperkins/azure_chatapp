@@ -1,4 +1,4 @@
-const DEBUG_INIT = false; // Change to true if you want to enable debug logs.
+const DEBUG_INIT = true; // Change to true if you want to enable debug logs.
 if (typeof window !== 'undefined') window.DEBUG_INIT = DEBUG_INIT;
 
 /****************************************
@@ -75,19 +75,106 @@ import { createBrowserService } from './utils/browserService.js';
 const browserAPI = globalUtils.createBrowserAPI();
 let DependencySystem = null;
 
+// Define a robust fallback DependencySystem factory
+function createFallbackDependencySystem() {
+    console.warn('[App] Creating a fallback DependencySystem');
+
+    // Create a basic but robust implementation
+    const fallbackSystem = {
+        modules: new Map(),
+        states: new Map(),
+        waiters: new Map(),
+
+        register(name, instance) {
+            console.log(`[FallbackDependencySystem] Registering ${name}`);
+            this.modules.set(name, instance);
+            return instance;
+        },
+
+        waitFor(names, callback, timeout = 5000) {
+            const nameArray = Array.isArray(names) ? names : [names];
+            return new Promise((resolve) => {
+                // Fast path: check if all dependencies are already available
+                const checkAndResolve = () => {
+                    try {
+                        if (!this.modules || typeof this.modules.has !== 'function') {
+                            console.error('[FallbackDependencySystem] modules Map is invalid');
+                            return false;
+                        }
+
+                        const modulesReady = nameArray.every(name => this.modules.has(name));
+                        if (modulesReady) {
+                            const modules = nameArray.map(name => this.modules.get(name));
+                            if (callback) callback(...modules);
+                            resolve(modules);
+                            return true;
+                        }
+                        return false;
+                    } catch (err) {
+                        console.error('[FallbackDependencySystem] Error in checkAndResolve:', err);
+                        return false;
+                    }
+                };
+
+                if (checkAndResolve()) return;
+
+                // Otherwise poll until dependencies are ready or timeout
+                const intervalId = setInterval(() => {
+                    try {
+                        if (checkAndResolve()) {
+                            clearInterval(intervalId);
+                            clearTimeout(timeoutId);
+                        }
+                    } catch (err) {
+                        console.error('[FallbackDependencySystem] Error in interval checker:', err);
+                    }
+                }, 100);
+
+                const timeoutId = setTimeout(() => {
+                    clearInterval(intervalId);
+                    console.warn(`[FallbackDependencySystem] Timeout waiting for: ${nameArray.join(', ')}`);
+                    try {
+                        const availableModules = nameArray.map(name =>
+                            this.modules && typeof this.modules.get === 'function'
+                                ? this.modules.get(name)
+                                : null
+                        );
+                        resolve(availableModules);
+                    } catch (err) {
+                        console.error('[FallbackDependencySystem] Error in timeout handler:', err);
+                        resolve(nameArray.map(() => null));
+                    }
+                }, timeout);
+            });
+        },
+
+        getCurrentTraceIds() {
+            return { traceId: `fallback-${Date.now()}` };
+        },
+
+        generateTransactionId() {
+            return `fallback-tx-${Math.random().toString(36).substring(2, 9)}`;
+        }
+    };
+
+    return fallbackSystem;
+}
+
 try {
     // Get DependencySystem from the window object (should be initialized in HTML)
     DependencySystem = browserAPI.getDependencySystem();
-    
+
     // Verify it has the expected structure
     if (!DependencySystem) {
+        console.error('[App] DependencySystem was not found on window object');
         throw new Error('DependencySystem was not found on window object');
     }
-    
+
     if (!DependencySystem.modules || typeof DependencySystem.modules.get !== 'function') {
+        console.error('[App] DependencySystem.modules is missing or not a Map');
         throw new Error('DependencySystem.modules is missing or not a Map');
     }
-    
+
     console.log('[App] DependencySystem initialized successfully', {
         hasModules: !!DependencySystem.modules,
         modulesType: typeof DependencySystem.modules,
@@ -98,50 +185,15 @@ try {
     // Log detailed error and attempt recovery
     console.error('[App] Failed to initialize DependencySystem:', dsError);
     console.warn('[App] Attempting to initialize a fallback DependencySystem...');
-    
-    // Create a basic fallback if needed
-    DependencySystem = window.DependencySystem = window.DependencySystem || {
-        modules: new Map(),
-        states: new Map(),
-        waiters: new Map(),
-        register(name, instance) {
-            console.log(`[FallbackDependencySystem] Registering ${name}`);
-            this.modules.set(name, instance);
-            return instance;
-        },
-        waitFor(names, callback, timeout = 5000) {
-            // Simplified waitFor implementation
-            const nameArray = Array.isArray(names) ? names : [names];
-            return new Promise((resolve) => {
-                const checkAndResolve = () => {
-                    const modules = nameArray.map(name => this.modules.get(name));
-                    if (nameArray.every(name => this.modules.has(name))) {
-                        if (callback) callback(...modules);
-                        resolve(modules);
-                        return true;
-                    }
-                    return false;
-                };
-                
-                if (checkAndResolve()) return;
-                
-                const intervalId = setInterval(() => {
-                    if (checkAndResolve()) {
-                        clearInterval(intervalId);
-                        clearTimeout(timeoutId);
-                    }
-                }, 100);
-                
-                const timeoutId = setTimeout(() => {
-                    clearInterval(intervalId);
-                    console.warn(`[FallbackDependencySystem] Timeout waiting for: ${nameArray.join(', ')}`);
-                    resolve(nameArray.map(name => this.modules.get(name) || null));
-                }, timeout);
-            });
-        }
-    };
-    
-    console.log('[App] Fallback DependencySystem created');
+
+    // Create a fallback instance
+    const fallbackSystem = createFallbackDependencySystem();
+
+    // Assign it to both our local variable and window.DependencySystem
+    DependencySystem = fallbackSystem;
+    window.DependencySystem = fallbackSystem;
+
+    console.log('[App] Fallback DependencySystem created and installed');
 }
 
 /**
@@ -152,45 +204,99 @@ try {
  */
 function getModuleSafe(key, contextInfo = {}) {
     // Verify DependencySystem exists
-    if (typeof DependencySystem === 'undefined') {
-        console.error(`[App] DependencySystem is completely undefined when attempting to get ${key}`);
-        if (notify) {
-            notify.error?.(`[App] DependencySystem is undefined before accessing ${key}`, {
-                group: true,
-                ...contextInfo
-            });
+    if (typeof DependencySystem === 'undefined' || DependencySystem === null) {
+        const errorMsg = `[App] DependencySystem is ${typeof DependencySystem === 'undefined' ? 'undefined' : 'null'} when attempting to get ${key}`;
+        console.error(errorMsg);
+
+        // Try to create a fallback system if possible
+        if (typeof createFallbackDependencySystem === 'function') {
+            console.warn(`[App] Attempting to create emergency fallback DependencySystem for ${key}`);
+            try {
+                DependencySystem = window.DependencySystem = createFallbackDependencySystem();
+            } catch (fallbackErr) {
+                console.error('[App] Emergency fallback DependencySystem creation failed:', fallbackErr);
+            }
         }
-        throw new Error(`[App] DependencySystem is undefined when trying to access ${key}`);
+
+        // If we still don't have a valid DependencySystem, throw
+        if (typeof DependencySystem === 'undefined' || DependencySystem === null) {
+            if (notify) {
+                notify.error?.(errorMsg, {
+                    group: true,
+                    ...contextInfo
+                });
+            }
+            throw new Error(errorMsg);
+        }
     }
-    
+
     // Verify modules property exists
     if (!DependencySystem.modules) {
-        console.error(`[App] DependencySystem.modules is undefined when attempting to get ${key}`);
-        if (notify) {
-            notify.error?.(`[App] DependencySystem.modules is undefined before accessing ${key}`, {
-                group: true,
-                ...contextInfo,
-                traceId: DependencySystem?.getCurrentTraceIds?.()?.traceId,
-                transactionId: DependencySystem?.generateTransactionId?.()
-            });
+        const errorMsg = `[App] DependencySystem.modules is undefined when attempting to get ${key}`;
+        console.error(errorMsg);
+
+        // Attempt to initialize modules if missing
+        try {
+            DependencySystem.modules = new Map();
+            console.warn('[App] Created new modules Map for DependencySystem');
+        } catch (mapErr) {
+            console.error('[App] Failed to create modules Map:', mapErr);
         }
-        throw new Error(`[App] DependencySystem.modules is undefined when trying to access ${key}`);
+
+        // If still no modules map, throw
+        if (!DependencySystem.modules) {
+            if (notify) {
+                notify.error?.(errorMsg, {
+                    group: true,
+                    ...contextInfo,
+                    traceId: DependencySystem?.getCurrentTraceIds?.()?.traceId,
+                    transactionId: DependencySystem?.generateTransactionId?.()
+                });
+            }
+            throw new Error(errorMsg);
+        }
     }
-    
+
     // Verify modules.get is a function
     if (typeof DependencySystem.modules.get !== 'function') {
-        console.error(`[App] DependencySystem.modules.get is not a function when attempting to get ${key}`);
-        if (notify) {
-            notify.error?.(`[App] DependencySystem.modules.get is not a function when accessing ${key}`, {
-                group: true,
-                ...contextInfo,
-                moduleType: typeof DependencySystem.modules
-            });
+        const errorMsg = `[App] DependencySystem.modules.get is not a function when attempting to get ${key}`;
+        console.error(errorMsg, {
+            modulesType: typeof DependencySystem.modules,
+            isMap: DependencySystem.modules instanceof Map,
+            objectKeys: Object.keys(DependencySystem.modules)
+        });
+
+        // Attempt to fix modules if it's not a proper Map
+        try {
+            if (!(DependencySystem.modules instanceof Map)) {
+                const oldModules = DependencySystem.modules;
+                DependencySystem.modules = new Map();
+                // Copy any entries if oldModules was an object with entries
+                if (oldModules && typeof oldModules === 'object') {
+                    Object.entries(oldModules).forEach(([k, v]) => {
+                        if (k && v) DependencySystem.modules.set(k, v);
+                    });
+                }
+                console.warn('[App] Replaced DependencySystem.modules with proper Map');
+            }
+        } catch (fixErr) {
+            console.error('[App] Failed to fix modules Map:', fixErr);
         }
-        throw new Error(`[App] DependencySystem.modules.get is not a function when trying to access ${key}`);
+
+        // If still no get method, throw
+        if (typeof DependencySystem.modules.get !== 'function') {
+            if (notify) {
+                notify.error?.(errorMsg, {
+                    group: true,
+                    ...contextInfo,
+                    moduleType: typeof DependencySystem.modules
+                });
+            }
+            throw new Error(errorMsg);
+        }
     }
-    
-    // Return the module
+
+    // Return the module (which may be undefined if not registered)
     return DependencySystem.modules.get(key);
 }
 
@@ -213,6 +319,7 @@ let sanitizerInstance;
 try {
   sanitizerInstance = (typeof DOMPurify === 'function') ? DOMPurify(window) : DOMPurify;
 } catch (err) {
+  console.warn('[App] Error initializing DOMPurify, falling back to default export:', err);
   sanitizerInstance = DOMPurify;
 }
 DependencySystem.register('sanitizer', sanitizerInstance);
@@ -269,6 +376,12 @@ const preliminaryNotifyForEventHandlers = {
     error: (...args) => console.error('[EH Prelim Notify]', ...args),
     success: (...args) => console.info('[EH Prelim Notify]', ...args)
 };
+
+// First verify DependencySystem is properly initialized before creating eventHandlers
+if (!DependencySystem || !DependencySystem.modules || typeof DependencySystem.modules.get !== 'function') {
+    console.error('[App] DependencySystem not properly initialized before creating eventHandlers');
+    throw new Error('[App] DependencySystem not properly initialized before creating eventHandlers');
+}
 
 // Create eventHandlers but wait to initialize until later
 const eventHandlers = createEventHandlers({
@@ -540,14 +653,14 @@ async function init() {
                 });
                 throw new Error('[App] DependencySystem or DependencySystem.modules is undefined');
             }
-            
+
             // Get eventHandlers using the safe getter method
-            const eh = getModuleSafe('eventHandlers', { 
-                context: 'app', 
-                module: 'App', 
-                source: 'eventHandlersInit' 
+            const eh = getModuleSafe('eventHandlers', {
+                context: 'app',
+                module: 'App',
+                source: 'eventHandlersInit'
             });
-            
+
             // Initialize if available
             if (eh && typeof eh.init === 'function') {
                 notify?.debug?.('[App] Initializing eventHandlers', { group: true });
@@ -557,8 +670,8 @@ async function init() {
                 notify?.error?.('[App] eventHandlers.init is not a function or module not found', { group: true });
             }
         } catch (ehErr) {
-            notify?.error?.('[App] Error initializing eventHandlers', { 
-                group: true, 
+            notify?.error?.('[App] Error initializing eventHandlers', {
+                group: true,
                 error: ehErr,
                 errorStack: ehErr?.stack
             });
@@ -918,7 +1031,7 @@ async function initializeUIComponents() {
     });
     DependencySystem.register('projectListComponent', projectListComponentInstance);
 
-    const projectDashboardInstance = createProjectDashboard({ DependencySystem });
+    const projectDashboardInstance = createProjectDashboard(DependencySystem);
     DependencySystem.register('projectDashboard', projectDashboardInstance);
 
     const projectDetailsComponentInstance = createProjectDetailsComponent({
