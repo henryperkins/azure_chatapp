@@ -25,7 +25,19 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = settings.DATABASE_URL.split("?")[0]  # Remove any existing query parameters
 
 # ---------------------------------------------------------
-# SSL/TLS configuration for Azure PostgreSQL
+# Modalità self-signed / debug
+# ---------------------------------------------------------
+def _str_is_true(v: str | bool | None) -> bool:
+    return str(v).lower() in ("1", "true", "yes")
+
+ALLOW_SELF_SIGNED = (
+    _str_is_true(os.getenv("PG_SSL_ALLOW_SELF_SIGNED"))
+    or _str_is_true(getattr(settings, "PG_SSL_ALLOW_SELF_SIGNED", None))
+    or bool(getattr(settings, "DEBUG", False))
+)
+
+# ---------------------------------------------------------
+# SSL/TLS configuration
 # ---------------------------------------------------------
 def _find_pg_ssl_cert():
     # Try environment variable first
@@ -48,24 +60,14 @@ def _find_pg_ssl_cert():
             return fpath
     raise RuntimeError("No valid PostgreSQL CA root certificate found for SSL.")
 
-PG_SSL_CERT_PATH = _find_pg_ssl_cert()
-logger.info(f"Using PostgreSQL SSL root certificate: {PG_SSL_CERT_PATH}")
-
-# Allow override for self-signed/dev mode
-ALLOW_SELF_SIGNED = (
-    getattr(settings, "PG_SSL_ALLOW_SELF_SIGNED", None)
-    or os.getenv("PG_SSL_ALLOW_SELF_SIGNED", "0")
-) in ("1", "true", "True")
-
 if ALLOW_SELF_SIGNED:
+    PG_SSL_CERT_PATH = None
     ssl_context = ssl._create_unverified_context()
-    logger.warning("PG_SSL_ALLOW_SELF_SIGNED is set: using unverified SSL context for asyncpg (INSECURE, DEV ONLY).")
+    logger.warning("Using UNVERIFIED SSL context (self-signed allowed).")
 else:
-    try:
-        ssl_context = ssl.create_default_context(cafile=PG_SSL_CERT_PATH)
-    except Exception as e:
-        logger.error(f"Failed to create SSL context with CA file {PG_SSL_CERT_PATH}: {e}")
-        raise
+    PG_SSL_CERT_PATH = _find_pg_ssl_cert()
+    logger.info(f"Using PostgreSQL SSL root certificate: {PG_SSL_CERT_PATH}")
+    ssl_context = ssl.create_default_context(cafile=PG_SSL_CERT_PATH)
 
 # ---------------------------------------------------------
 # Async engine/session: for normal runtime usage
@@ -85,25 +87,20 @@ AsyncSessionLocal = async_sessionmaker(
 # ---------------------------------------------------------
 # Sync engine/session: for DDL operations
 # ---------------------------------------------------------
-sync_url = DATABASE_URL.replace("+asyncpg", "")
-sync_url = sync_url.replace("postgresql://", "postgresql+psycopg2://")  # Explicit psycopg2 driver
-# For psycopg2, use sslmode and sslrootcert
-sync_url += f"?sslmode=verify-full&sslrootcert={PG_SSL_CERT_PATH}"
-sync_engine = None
-try:
-    sync_engine = create_engine(
-        sync_url,
-        pool_pre_ping=True
-    )
-except Exception as e:
-    logger.error(f"Failed to create sync engine with CA file {PG_SSL_CERT_PATH}: {e}")
-    # Fallback: Insecure for dev only
-    fallback_url = sync_url.replace("sslmode=verify-full", "sslmode=require")
-    sync_engine = create_engine(
-        fallback_url,
-        pool_pre_ping=True
-    )
-    logger.warning("Falling back to sslmode=require (no cert validation) for psycopg2 sync engine.")
+base_sync_url = DATABASE_URL.replace("+asyncpg", "").replace(
+    "postgresql://", "postgresql+psycopg2://"
+)
+
+if not ALLOW_SELF_SIGNED and PG_SSL_CERT_PATH:
+    sync_url = f"{base_sync_url}?sslmode=verify-full&sslrootcert={PG_SSL_CERT_PATH}"
+else:
+    # sslmode=require non verifica il certificato, adatto per self-signed
+    sync_url = f"{base_sync_url}?sslmode=require"
+
+sync_engine = create_engine(
+    sync_url,
+    pool_pre_ping=True
+)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
