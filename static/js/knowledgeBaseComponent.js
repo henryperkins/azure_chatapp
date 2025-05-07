@@ -398,6 +398,11 @@ export function createKnowledgeBaseComponent(options = {}) {
       );
 
       this._notify('info', `[KnowledgeBaseComponent] Initialization complete for projectId: ${projectId}`);
+
+      // --- Standardized "knowledgebasecomponent:initialized" event ---
+      const doc = typeof document !== "undefined" ? document : null;
+      if (doc) doc.dispatchEvent(new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: true } }));
+
     }
 
     /**

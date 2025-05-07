@@ -144,7 +144,7 @@ const apiRequest = createApiClient({
     APP_CONFIG,
     globalUtils: { /* you may pass stableStringify, normaliseUrl, etc. from your utils */ },
     notificationHandler: notify,
-    getAuthModule: () => DependencySystem.modules.get('auth'),
+    getAuthModule: () => DependencySystem.modules.get('auth'), /* TODO: replace with direct injection after api client refactor */
     browserAPI
 });
 DependencySystem.register('apiRequest', apiRequest);
@@ -303,10 +303,13 @@ async function initializeCoreSystems() {
         });
         DependencySystem.register('auth', authModule);
 
+        // Ensure chatManager is available prior to projectManager creation
+        const chatManager = createOrGetChatManager();
+
         // Project manager
         const projectManager = createProjectManager({
             DependencySystem,
-            chatManager: () => DependencySystem.modules.get('chatManager'),
+            chatManager,
             app,
             notify,
             apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
@@ -341,10 +344,9 @@ async function initializeCoreSystems() {
         if (modalManager.init) modalManager.init();
 
         // Always register chatManager so dependencies are satisfied
-        const chatMgr = createOrGetChatManager();
         // If user is authed, initialize chatManager
-        if (appState.isAuthenticated && chatMgr?.initialize) {
-            await chatMgr.initialize({ projectId: app.getProjectId() });
+        if (appState.isAuthenticated && chatManager?.initialize) {
+            await chatManager.initialize({ projectId: app.getProjectId() });
         }
 
         // Initialize projectManager
@@ -405,15 +407,7 @@ function renderAuthHeader() {
         const isAuth = authMod?.isAuthenticated?.();
         const btn = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || domAPI.getElementById('loginButton');
         if (btn) {
-            domAPI.setInnerHTML(btn, isAuth ? 'Logout' : 'Login');
-            eventHandlers.trackListener(
-                btn,
-                'click',
-                (e) => {
-                    domAPI.preventDefault(e);
-                    if (isAuth) authMod.logout();
-                    else DependencySystem.modules.get('modalManager')?.show('login');
-                },
+            domAPI.setInnerHTML(btn, isAuth ? 'Logout' : 'Login');\n            eventHandlers.trackListener(\n                btn,\n                'click',\n                (e) => {\n                    domAPI.preventDefault(e);\n                    if (isAuth) {\n                        authMod.logout();\n                        return;\n                    }\n\n                    const modalMgr = DependencySystem.modules.get('modalManager');\n                    if (!modalMgr) return;\n\n                    // Attempt to show the login modal immediately; if it fails because\n                    // modals haven't been injected yet, wait for the `modalsLoaded`\n                    // signal and then retry *once*.\n                    const opened = modalMgr.show('login');\n                    if (!opened) {\n                        const retryHandler = () => {\n                            modalMgr.show('login');\n                            // Remove the listener after a single retry to avoid leaks.\n                            eventHandlers.cleanupListeners({ context: 'authLoginRetry' });\n                        };\n                        eventHandlers.trackListener(\n                            domAPI.getDocument(),\n                            'modalsLoaded',\n                            retryHandler,\n                            {\n                                description: '[Auth] Retry login modal display after modalsLoaded',\n                                once: true,\n                                context: 'authLoginRetry'\n                            }\n                        );\n                    }\n                },
                 { description: 'Auth login/logout button' }
             );
         }
@@ -457,10 +451,17 @@ async function initializeUIComponents() {
         }
         notify.debug('[App] Initializing UI components...');
 
+        // -------------------------------------------------------------------
+        // Resolve concrete dependency instances up-front for strict DI
+        // -------------------------------------------------------------------
+        const projectManager = DependencySystem.modules.get('projectManager');
+        const modalManager = DependencySystem.modules.get('modalManager');
         // Register or create any optional modules
         if (FileUploadComponent) {
             DependencySystem.register('FileUploadComponent', FileUploadComponent);
         }
+        const fileUploadComponentClass = DependencySystem.modules.get('FileUploadComponent');
+        const authModule = DependencySystem.modules.get('auth');
 
         const chatExtensionsInstance = createChatExtensions({
             DependencySystem, eventHandlers, notificationHandler: notify
@@ -478,9 +479,9 @@ async function initializeUIComponents() {
         DependencySystem.register('projectDashboardUtils', projectDashboardUtilsInstance);
 
         const projectListComponentInstance = new ProjectListComponent({
-            projectManager: () => DependencySystem.modules.get('projectManager'),
+            projectManager,
             eventHandlers,
-            modalManager: () => DependencySystem.modules.get('modalManager'),
+            modalManager,
             app,
             router: {
                 navigate: (url) => {
@@ -499,12 +500,21 @@ async function initializeUIComponents() {
         const projectDashboardInstance = createProjectDashboard(DependencySystem);
         DependencySystem.register('projectDashboard', projectDashboardInstance);
 
+        // Details component expects DI with proper router methods
+        const detailsRouter = {
+            navigate: (url) => {
+                browserAPI.getHistory().pushState({}, '', url);
+                domAPI.dispatchEvent(browserAPI.getWindow(), new Event('locationchange'));
+            },
+            getURL: () => browserAPI.getLocation().href
+        };
+
         const projectDetailsComponentInstance = createProjectDetailsComponent({
-            projectManager: () => DependencySystem.modules.get('projectManager'),
+            projectManager,
             eventHandlers,
-            modalManager: () => DependencySystem.modules.get('modalManager'),
-            FileUploadComponentClass: () => DependencySystem.modules.get('FileUploadComponent'),
-            router: {},
+            modalManager,
+            FileUploadComponentClass: fileUploadComponentClass,
+            router: detailsRouter,
             domAPI,
             notify,
             sanitizer: DependencySystem.modules.get('sanitizer'),
@@ -521,7 +531,7 @@ async function initializeUIComponents() {
             eventHandlers,
             app,
             projectDashboard: projectDashboardInstance,
-            projectManager: () => DependencySystem.modules.get('projectManager'),
+            projectManager,
             notify,
             storageAPI: DependencySystem.modules.get('storage'),
             domAPI,
@@ -532,8 +542,8 @@ async function initializeUIComponents() {
         const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
             DependencySystem,
             apiRequest,
-            auth: () => DependencySystem.modules.get('auth'),
-            projectManager: () => DependencySystem.modules.get('projectManager'),
+            auth: authModule,
+            projectManager,
             uiUtils: {}, // pass shortcut utils as needed
             sanitizer: DependencySystem.modules.get('sanitizer')
         });
@@ -747,10 +757,12 @@ function createOrGetChatManager() {
     let cm = DependencySystem.modules.get('chatManager');
     if (cm) return cm;
 
+    const authModule = DependencySystem.modules.get('auth');
+
     cm = createChatManager({
         DependencySystem,
         apiRequest,
-        auth: () => DependencySystem.modules.get('auth'),
+        auth: authModule,
         eventHandlers,
         app,
         domAPI,
@@ -761,7 +773,7 @@ function createOrGetChatManager() {
             getPathname: () => browserAPI.getLocation().pathname
         },
         isValidProjectId: () => true, // or a real util
-        isAuthenticated: () => DependencySystem.modules.get('auth')?.isAuthenticated?.() || false,
+        isAuthenticated: () => authModule?.isAuthenticated?.() || false,
         DOMPurify: DependencySystem.modules.get('sanitizer'),
         apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
         notificationHandler: notify

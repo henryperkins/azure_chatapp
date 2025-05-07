@@ -150,6 +150,15 @@ export class ProjectDetailsComponent {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize", timeout: 3000
       });
 
+      // --- Standardized "projectdetailscomponent:initialized" event ---
+      const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+      if (doc && typeof (this.domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
+        (this.domAPI?.dispatchEvent || doc.dispatchEvent).call(
+          doc,
+          new CustomEvent('projectdetailscomponent:initialized', { detail: { success: true } })
+        );
+      }
+
       this._uiReadyFlag = true;
       this._maybeEmitReady();
 
