@@ -217,7 +217,11 @@ export function createAuthModule({
     authCheckInProgress = true;
     try {
       try {
-        const response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
+        let response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
+        // If backend sent plain text, attempt JSON parse
+        if (typeof response === 'string') {
+          try { response = JSON.parse(response); } catch { /* keep as string */ }
+        }
 
         // -----------------------------
         // NUEVA lógica de verificación
@@ -234,9 +238,10 @@ export function createAuthModule({
              : response?.user?.username) ??
           null;
 
+        const truthy = (v) => v === true || v === 'true' || v === 1 || v === '1';
         const isAuthenticatedResp =
-          response?.authenticated === true ||
-          response?.is_authenticated === true ||
+          truthy(response?.authenticated) ||
+          truthy(response?.is_authenticated) ||
           Boolean(usernameField);
 
         if (isAuthenticatedResp) {

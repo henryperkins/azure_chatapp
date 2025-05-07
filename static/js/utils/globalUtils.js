@@ -235,17 +235,28 @@ try {
           throw e;
         }
 
-        // No‑content = undefined
+        // No-content → undefined
         if (resp.status === 204 || resp.headers.get("content-length") === "0") return undefined;
 
-        // JSON auto‑parse
-        if (resp.headers.get("content-type")?.includes("application/json")) {
+        const cType = resp.headers.get("content-type") || "";
+
+        // 1) Correct header → parse JSON
+        if (cType.includes("application/json")) {
           const json = await resp.json();
           return json?.status === "success" && "data" in json ? json.data : json;
         }
 
-        // Fallback: plain text
-        return resp.text();
+        // 2) Header missing / wrong → try to parse anyway
+        const rawText = await resp.text();
+        try {
+          const json = JSON.parse(rawText);
+          return json?.status === "success" && "data" in json ? json.data : json;
+        } catch {
+          /* not JSON */
+        }
+
+        // 3) Plain text fallback
+        return rawText;
       } finally {
         clearTimeout(timer);
         if (!skipCache && method === "GET") pending.delete(key);
