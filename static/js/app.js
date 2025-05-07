@@ -427,7 +427,7 @@ const app = {
         return params.get('project');
     },
     navigateToConversation: async (chatId) => {
-        const chatMgr = await waitFor('chatManager');
+        const chatMgr = getModuleSafe('chatManager', { context: 'app', module: 'App', source: 'navigateToConversation' });
         if (chatMgr && typeof chatMgr.loadConversation === 'function') {
             return chatMgr.loadConversation(chatId);
         }
@@ -518,11 +518,11 @@ async function init() {
         },
         isValidProjectId: globalUtils.isValidProjectId,
         isAuthenticated: () => {
-            const authModule = DependencySystem.modules.get('auth');
+            const authModule = getModuleSafe('auth', { context: 'app', module: 'App', source: 'isAuthenticated' });
             return typeof authModule?.isAuthenticated === 'function' ? authModule.isAuthenticated() : false;
         },
-        DOMPurify: DependencySystem.modules.get('sanitizer'),
-        apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
+        DOMPurify: getModuleSafe('sanitizer', { context: 'app', module: 'App', source: 'chatManager' }),
+        apiEndpoints: getModuleSafe('apiEndpoints', { context: 'app', module: 'App', source: 'chatManager' }),
         notificationHandler: notify
     });
     if (!chatManager || typeof chatManager.initialize !== 'function') {
@@ -791,19 +791,19 @@ async function initializeCoreSystems() {
         notify,
         eventHandlers,
         domAPI,
-        sanitizer: DependencySystem.modules.get('sanitizer'),
+        sanitizer: getModuleSafe('sanitizer', { context: 'app', module: 'App', source: 'createAuthModule' }),
         modalManager,
-        apiEndpoints: DependencySystem.modules.get('apiEndpoints')
+        apiEndpoints: getModuleSafe('apiEndpoints', { context: 'app', module: 'App', source: 'createAuthModule' })
     });
     DependencySystem.register('auth', authModule);
 
     const projectManager = createProjectManager({
         DependencySystem,
-        chatManager: () => DependencySystem.modules.get('chatManager'),
+        chatManager: () => getModuleSafe('chatManager', { context: 'app', module: 'App', source: 'createProjectManager' }),
         app,
         notify,
-        apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
-        storage: DependencySystem.modules.get('storage'),
+        apiEndpoints: getModuleSafe('apiEndpoints', { context: 'app', module: 'App', source: 'createProjectManager' }),
+        storage: getModuleSafe('storage', { context: 'app', module: 'App', source: 'createProjectManager' }),
         listenerTracker: {
             add: (target, event, handler, description) =>
                 eventHandlers.trackListener(target, event, handler, {
@@ -877,28 +877,6 @@ async function initializeCoreSystems() {
                     const formData = new FormData(projectForm);
                     const data = Object.fromEntries(formData.entries());
                     try {
-                        if (!DependencySystem || !DependencySystem.modules) {
-                            notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (projectModalForm submit)', {
-                                group: true,
-                                context: 'app',
-                                module: 'App',
-                                source: 'projectModalFormSubmit',
-                                traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-                                transactionId: DependencySystem?.generateTransactionId?.()
-                            });
-                            throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (projectModalForm submit)');
-                        }
-                        if (!DependencySystem || !DependencySystem.modules) {
-                            notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (projectModalForm submit direct)', {
-                                group: true,
-                                context: 'app',
-                                module: 'App',
-                                source: 'projectModalFormSubmitDirect',
-                                traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-                                transactionId: DependencySystem?.generateTransactionId?.()
-                            });
-                            throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (projectModalForm submit direct)');
-                        }
                         const projMgr = getModuleSafe('projectManager', { context: 'app', module: 'App', source: 'projectModalFormSubmit' });
                         await projMgr.saveProject(data.projectId, data);
                         notify?.success?.('Project saved.', { context: 'projectModal' });
@@ -931,7 +909,7 @@ async function initializeCoreSystems() {
 
     // If already authenticated, initialize chat manager
     if (appState.isAuthenticated) {
-        const chatMgrInstance = DependencySystem.modules.get('chatManager');
+        const chatMgrInstance = getModuleSafe('chatManager', { context: 'app', module: 'App', source: 'initializeCoreSystems' });
         if (chatMgrInstance && typeof chatMgrInstance.initialize === 'function') {
             notify?.debug?.('[App] Initializing ChatManager (authenticated)...');
             await chatMgrInstance.initialize({ projectId: app.getProjectId() });
@@ -962,18 +940,7 @@ async function initializeAuthSystem() {
         traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
         transactionId: DependencySystem?.generateTransactionId?.()
     });
-    if (!DependencySystem || !DependencySystem.modules) {
-        notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing auth', {
-            group: true,
-            context: 'app',
-            module: 'App',
-            source: 'initializeAuthSystem',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.()
-        });
-        throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing auth');
-    }
-    const auth = DependencySystem.modules.get('auth');
+    const auth = getModuleSafe('auth', { context: 'app', module: 'App', source: 'initializeAuthSystem' });
     if (!auth || typeof auth.init !== 'function') {
         throw new Error("[App] Auth module is missing or invalid.");
     }
@@ -1047,8 +1014,8 @@ async function initializeUIComponents() {
             getURL: () => browserAPI.getLocation().href
         },
         notify,
-        storage: DependencySystem.modules.get('storage'),
-        sanitizer: DependencySystem.modules.get('sanitizer'),
+        storage: getModuleSafe('storage', { context: 'app', module: 'App', source: 'ProjectListComponent' }),
+        sanitizer: getModuleSafe('sanitizer', { context: 'app', module: 'App', source: 'ProjectListComponent' }),
         domAPI
     });
     DependencySystem.register('projectListComponent', projectListComponentInstance);
@@ -1057,27 +1024,14 @@ async function initializeUIComponents() {
     DependencySystem.register('projectDashboard', projectDashboardInstance);
 
     const projectDetailsComponentInstance = createProjectDetailsComponent({
-        projectManager: () => {
-            if (!DependencySystem || !DependencySystem.modules) {
-                notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (ProjectDetailsComponent)', {
-                    group: true,
-                    context: 'app',
-                    module: 'App',
-                    source: 'ProjectDetailsComponent',
-                    traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-                    transactionId: DependencySystem?.generateTransactionId?.()
-                });
-                throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (ProjectDetailsComponent)');
-            }
-            return DependencySystem.modules.get('projectManager');
-        },
+        projectManager: () => getModuleSafe('projectManager', { context: 'app', module: 'App', source: 'ProjectDetailsComponent' }),
         eventHandlers,
-        modalManager: () => DependencySystem.modules.get('modalManager'),
-        FileUploadComponentClass: () => DependencySystem.modules.get('FileUploadComponent'),
+        modalManager: () => getModuleSafe('modalManager', { context: 'app', module: 'App', source: 'ProjectDetailsComponent' }),
+        FileUploadComponentClass: () => getModuleSafe('FileUploadComponent', { context: 'app', module: 'App', source: 'ProjectDetailsComponent' }, false),
         router: {},
         domAPI,
         notify,
-        sanitizer: DependencySystem.modules.get('sanitizer'),
+        sanitizer: getModuleSafe('sanitizer', { context: 'app', module: 'App', source: 'ProjectDetailsComponent' }),
         app,
         onBack: async () => {
             const pd = await waitFor('projectDashboard');
@@ -1091,20 +1045,7 @@ async function initializeUIComponents() {
         eventHandlers,
         app,
         projectDashboard: projectDashboardInstance,
-        projectManager: () => {
-            if (!DependencySystem || !DependencySystem.modules) {
-                notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (Sidebar)', {
-                    group: true,
-                    context: 'app',
-                    module: 'App',
-                    source: 'Sidebar',
-                    traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-                    transactionId: DependencySystem?.generateTransactionId?.()
-                });
-                throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (Sidebar)');
-            }
-            return DependencySystem.modules.get('projectManager');
-        },
+        projectManager: () => getModuleSafe('projectManager', { context: 'app', module: 'App', source: 'Sidebar' }),
         notify,
         storageAPI: getModuleSafe('storage', { context: 'app', module: 'App', source: 'storageAPIInjection' }),
         domAPI,
@@ -1117,23 +1058,10 @@ async function initializeUIComponents() {
     const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
         DependencySystem,
         apiRequest,
-        auth: () => DependencySystem.modules.get('auth'),
-        projectManager: () => {
-            if (!DependencySystem || !DependencySystem.modules) {
-                notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (KnowledgeBaseComponent)', {
-                    group: true,
-                    context: 'app',
-                    module: 'App',
-                    source: 'KnowledgeBaseComponent',
-                    traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-                    transactionId: DependencySystem?.generateTransactionId?.()
-                });
-                throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing projectManager (KnowledgeBaseComponent)');
-            }
-            return DependencySystem.modules.get('projectManager');
-        },
+        auth: () => getModuleSafe('auth', { context: 'app', module: 'App', source: 'KnowledgeBaseComponent' }),
+        projectManager: () => getModuleSafe('projectManager', { context: 'app', module: 'App', source: 'KnowledgeBaseComponent' }),
         uiUtils: globalUtils,
-        sanitizer: DependencySystem.modules.get('sanitizer')
+        sanitizer: getModuleSafe('sanitizer', { context: 'app', module: 'App', source: 'KnowledgeBaseComponent' })
     });
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
 
@@ -1203,7 +1131,7 @@ async function initializeUIComponents() {
 
 function renderAuthHeader() {
     try {
-        const authMod = DependencySystem.modules.get('auth');
+        const authMod = getModuleSafe('auth', { context: 'app', module: 'App', source: 'renderAuthHeader' });
         const isAuth = authMod?.isAuthenticated?.();
         const btn = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_BUTTON) || domAPI.getElementById('loginButton');
         if (btn) {
@@ -1211,7 +1139,7 @@ function renderAuthHeader() {
             eventHandlers.trackListener(btn, 'click', (e) => {
                 domAPI.preventDefault(e);
                 if (isAuth) authMod.logout();
-                else DependencySystem.modules.get('modalManager')?.show('login');
+                else getModuleSafe('modalManager', { context: 'app', module: 'App', source: 'renderAuthHeader' })?.show('login');
             }, { description: '[App] Auth login/logout button', module: 'App', context: 'authHeader' });
         }
         const authStatus = domAPI.querySelector(APP_CONFIG.SELECTORS.AUTH_STATUS_SPAN);
@@ -1234,18 +1162,7 @@ function renderAuthHeader() {
 
 async function fetchCurrentUser() {
     try {
-        if (!DependencySystem || !DependencySystem.modules) {
-        notify?.error?.('[App] DependencySystem or DependencySystem.modules is undefined before accessing auth (fetchCurrentUser)', {
-            group: true,
-            context: 'app',
-            module: 'App',
-            source: 'fetchCurrentUser',
-            traceId: DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: DependencySystem?.generateTransactionId?.()
-        });
-        throw new Error('[App] DependencySystem or DependencySystem.modules is undefined before accessing auth (fetchCurrentUser)');
-    }
-    const authModule = DependencySystem.modules.get('auth');
+        const authModule = getModuleSafe('auth', { context: 'app', module: 'App', source: 'fetchCurrentUser' });
         if (authModule?.getCurrentUserAsync) {
             return await authModule.getCurrentUserAsync();
         }
@@ -1322,12 +1239,12 @@ function setupChatInitializationTrigger() {
             authModType: typeof authMod,
             authModKeys: authMod ? Object.keys(authMod) : null,
             modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
-            modulesAuth: DependencySystem.modules ? DependencySystem.modules.get('auth') : null
+            modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'setupChatInitializationTrigger' })
         });
         if (authMod && authMod.AuthBus) {
             attachAuthBusListener('authStateChanged', debouncedInitChat, '_globalChatInitAuthAttached');
         } else {
-            DependencySystem.modules.get('notify')?.warn?.('[App] AuthBus not found on auth module.');
+            getModuleSafe('notify', { context: 'app', module: 'App', source: 'setupChatInitializationTrigger' })?.warn?.('[App] AuthBus not found on auth module.');
         }
         if (!document._chatInitProjListenerAttached) {
             localEventHandlers.trackListener(document, 'currentProjectChanged',
@@ -1455,15 +1372,15 @@ let _globalAuthStateChangedAttached = false;
 let _globalChatInitAuthAttached = false;
 
 function attachAuthBusListener(event, handler, markerFlagName) {
-    const localNotify = DependencySystem.modules.get('notify');
-    const auth = DependencySystem.modules.get('auth');
+    const localNotify = getModuleSafe('notify', { context: 'app', module: 'App', source: 'attachAuthBusListener' });
+    const auth = getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' });
     // Diagnostic logging
     console.error('[App] attachAuthBusListener diagnostic:', {
         auth,
         authType: typeof auth,
         authKeys: auth ? Object.keys(auth) : null,
         modulesKeys: DependencySystem.modules ? Array.from(DependencySystem.modules.keys()) : null,
-        modulesAuth: DependencySystem.modules ? DependencySystem.modules.get('auth') : null
+        modulesAuth: getModuleSafe('auth', { context: 'app', module: 'App', source: 'attachAuthBusListener' })
     });
     if (!auth) {
         localNotify?.error?.('[App] attachAuthBusListener: DependencySystem.modules.get("auth") returned undefined.', {
@@ -1513,7 +1430,7 @@ function attachAuthBusListener(event, handler, markerFlagName) {
 }
 
 function handleAuthStateChange(event) {
-    const localNotify = DependencySystem.modules.get('notify');
+    const localNotify = getModuleSafe('notify', { context: 'app', module: 'App', source: 'handleAuthStateChange' });
     const { authenticated, user } = event?.detail || {};
     const newAuthState = !!authenticated;
 
@@ -1589,21 +1506,12 @@ function handleInitError(error) {
     appState.initializing = false;
     appState.currentPhase = 'failed_init';
 
-    const safeGetModule = (name) => {
-        try {
-            return (DependencySystem && DependencySystem.modules && typeof DependencySystem.modules.get === 'function')
-                ? DependencySystem.modules.get(name)
-                : undefined;
-        } catch {
-            return undefined;
-        }
-    };
-    const errorReporter = safeGetModule('errorReporter');
+    const errorReporter = getModuleSafe('errorReporter', { context: 'app', module: 'App', source: 'handleInitError' }, false);
     errorReporter?.capture?.(error, {
         tags: { module: 'app', method: 'init', phase: appState.currentPhase || 'unknown' }
     });
 
-    const localNotify = safeGetModule('notify') || notificationPlaceholder;
+    const localNotify = getModuleSafe('notify', { context: 'app', module: 'App', source: 'handleInitError' }, false) || notificationPlaceholder;
     const errorMsgString = error?.message || (typeof error === "string" ? error : "Unknown initialization error.");
 
     localNotify?.error?.(`Application failed to start: ${errorMsgString}. Please refresh.`, {
