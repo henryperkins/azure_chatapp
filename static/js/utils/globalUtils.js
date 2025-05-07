@@ -126,6 +126,8 @@ export function createApiClient({ APP_CONFIG, globalUtils, notificationHandler, 
    * @param {boolean} skipCache – bypass GET‑deduplication
    */
   return async function apiRequest(url, opts = {}, skipCache = false) {
+    // hard-kill deprecated backend logging endpoint
+    if (url.includes('/api/log_notification')) return { skipped: true };
     const method = (opts.method || "GET").toUpperCase();
 
     if (!skipCache && method === "GET" && globalUtils.shouldSkipDedup(url)) {
