@@ -206,6 +206,7 @@ logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logging.getLogger("urllib3").setLevel(logging.INFO)  # suprime spam DEBUG
 logger = logging.getLogger(__name__)
 
 # Create app with docs always enabled (even in "production" - insecure for debug)
