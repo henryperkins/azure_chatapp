@@ -765,27 +765,43 @@ let lastHandledProj = null;
 let lastHandledChat = null;
 
 async function handleNavigationChange() {
+    // Generate a traceId for this navigation event for grouping logs
+    const traceId = (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     try {
+        notify.debug('[App] handleNavigationChange: Navigation event triggered', {
+            context: 'navigation',
+            traceId,
+            url: browserAPI.getLocation().href
+        });
         if (!appState.initialized) {
             // If still not ready, short-circuit or wait briefly
             if (appState.initializing) {
-                await new Promise(r => browserAPI.requestAnimationFrame(r)); // yield to browser; replaced delay(150)
+                notify.debug('[App] handleNavigationChange: Waiting for initialization', { context: 'navigation', traceId });
+                await new Promise(r => browserAPI.requestAnimationFrame(r));
                 if (!appState.initialized) {
-                    notify.warn("[App] handleNavigationChange: Aborted, initialization didn't complete in time.");
+                    notify.warn("[App] handleNavigationChange: Aborted, initialization didn't complete in time.", { context: 'navigation', traceId });
                     return;
                 }
             } else {
-                notify.warn("[App] handleNavigationChange: Aborted, application not initialized.");
+                notify.warn("[App] handleNavigationChange: Aborted, application not initialized.", { context: 'navigation', traceId });
                 return;
             }
         }
-        notify.debug(`[App] Navigation changed -> ${browserAPI.getLocation().href}`);
+        notify.info('[App] Navigation changed', {
+            context: 'navigation',
+            traceId,
+            url: browserAPI.getLocation().href
+        });
 
         let projectDashboard;
         try {
+            notify.debug('[App] Waiting for projectDashboard dependency', { context: 'navigation', traceId });
             projectDashboard = await DependencySystem.waitFor('projectDashboard', null, APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT);
+            notify.debug('[App] projectDashboard dependency resolved', { context: 'navigation', traceId });
         } catch (e) {
-            notify.error('[App] Project Dashboard unavailable for navigation.', { error: e });
+            notify.error('[App] Project Dashboard unavailable for navigation.', { error: e, context: 'navigation', traceId });
             toggleElement(APP_CONFIG.SELECTORS.APP_FATAL_ERROR, true);
             return;
         }
@@ -793,49 +809,70 @@ async function handleNavigationChange() {
         const projectId = browserServiceInstance.getSearchParam('project');
         const chatId    = browserServiceInstance.getSearchParam('chatId');
 
+        notify.debug('[App] Navigation state', {
+            context: 'navigation',
+            traceId,
+            projectId,
+            chatId,
+            lastHandledProj,
+            lastHandledChat
+        });
+
         if (projectId === lastHandledProj && chatId === lastHandledChat) {
-            notify.debug('[App] Same project/chat; skipping re-load.');
+            notify.debug('[App] Same project/chat; skipping re-load.', { context: 'navigation', traceId });
             return;
         }
         lastHandledProj = projectId;
         lastHandledChat = chatId;
 
         if (!appState.isAuthenticated) {
-            notify.debug('[App] Not authenticated -> show login required');
+            notify.info('[App] Not authenticated -> show login required', { context: 'navigation', traceId });
             projectDashboard.showLoginRequiredMessage?.();
             return;
         }
         toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
 
         try {
+            notify.debug('[App] Waiting for projectManager dependency', { context: 'navigation', traceId });
             const pm = await DependencySystem.waitFor('projectManager', null, APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT);
+            notify.debug('[App] projectManager dependency resolved', { context: 'navigation', traceId });
+
             if (projectId) {
+                notify.info('[App] Loading project details', { context: 'navigation', traceId, projectId });
                 await pm.loadProjectDetails(projectId);
+                notify.info('[App] Showing project details', { context: 'navigation', traceId, projectId });
                 await projectDashboard.showProjectDetails(projectId);
 
                 if (chatId) {
+                    notify.info('[App] Navigating to conversation', { context: 'navigation', traceId, chatId });
                     const ok = await app.navigateToConversation(chatId);
-                    if (!ok) notify.warn('[App] Chat load failed from navigation, chatId:', { chatId });
+                    if (!ok) notify.warn('[App] Chat load failed from navigation', { context: 'navigation', traceId, chatId });
+                    else notify.info('[App] Chat loaded successfully', { context: 'navigation', traceId, chatId });
                 }
             } else {
+                notify.info('[App] Showing project list', { context: 'navigation', traceId });
                 await projectDashboard.showProjectList();
+                notify.info('[App] Project list shown', { context: 'navigation', traceId });
             }
         } catch (navErr) {
-            notify.error('[App] Error during navigation logic.', { error: navErr });
+            notify.error('[App] Error during navigation logic.', { error: navErr, context: 'navigation', traceId });
             projectDashboard.showProjectList?.().catch(fbErr => {
-                notify.error('[App] Fallback to showProjectList also failed.', { error: fbErr });
+                notify.error('[App] Fallback to showProjectList also failed.', { error: fbErr, context: 'navigation', traceId });
             });
         }
     } catch (err) {
         const errorReporter = DependencySystem.modules.get('errorReporter');
         maybeCapture(errorReporter, err, {
             module: 'app',
-            method: 'handleNavigationChange'
+            method: 'handleNavigationChange',
+            traceId
         });
         notify.error('[App] Navigation change handler failed.', {
             error: err,
             module: 'app',
-            source: 'handleNavigationChange'
+            source: 'handleNavigationChange',
+            context: 'navigation',
+            traceId
         });
         throw err;
     }
@@ -855,6 +892,14 @@ function handleAuthStateChange(e) {
 
     notify.info(`[App] Auth state changed -> ${appState.isAuthenticated}`);
     renderAuthHeader();
+
+    // --- DISPATCH authStateChanged on document for all listeners (e.g. ProjectListComponent) ---
+    try {
+        const doc = domAPI?.getDocument?.() || document;
+        doc.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated, user } }));
+    } catch (err) {
+        notify.warn("[App] Failed to dispatch authStateChanged on document", { error: err });
+    }
 
     (async () => {
         const pm = DependencySystem.modules.get('projectManager');
