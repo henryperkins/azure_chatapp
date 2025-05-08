@@ -5,6 +5,8 @@
  * All troubleshooting events are immediately tied to their action in logs/Sentry/support.
  */
 
+import { waitForDepsAndDom } from './utils/globalUtils.js';
+
 const MODULE = "ProjectDetailsComponent";
 
 export class ProjectDetailsComponent {
@@ -133,6 +135,15 @@ export class ProjectDetailsComponent {
     this.notify.info("[ProjectDetailsComponent] initialize() called", {
       group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
     });
+
+    // Wait for DOM to be ready before finding elements
+    await waitForDepsAndDom({
+      DependencySystem: this.eventHandlers?.DependencySystem
+                        ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+      domSelectors : ['#projectDetailsView'],
+      timeout      : 5000
+    });
+
     if (this.state.initialized) {
       this.notify.info("[ProjectDetailsComponent] Already initialized.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
@@ -150,7 +161,7 @@ export class ProjectDetailsComponent {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
       });
       this._bindCoreEvents();
-      this._initSubComponents();
+      await this._initSubComponents();
 
       this.state.initialized = true;
       this.notify.success("Project Details module initialized.", {
@@ -330,7 +341,7 @@ this.domAPI.dispatchEvent(
     }, "PD_FullyLoaded");
   }
 
-  _initSubComponents() {
+  async _initSubComponents() {
     if (!this.fileUploadComponent && this.FileUploadComponentClass) {
       const els = this.elements;
       const ready =
@@ -364,7 +375,7 @@ this.domAPI.dispatchEvent(
         }
       });
 
-      (this.fileUploadComponent.init ?? this.fileUploadComponent.initialize)?.();
+      await (this.fileUploadComponent.init ?? this.fileUploadComponent.initialize)?.();
       this.notify.info("[ProjectDetailsComponent] FileUploadComponent ready.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_initSubComponents"
       });
