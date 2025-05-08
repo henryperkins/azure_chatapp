@@ -601,41 +601,82 @@ class ProjectDashboard {
     this.logger.info('[ProjectDashboard] Loading projects...');
 
     if (!this.app) {
+      this.notificationHandler.show(
+        'Project dashboard unavailable. Please refresh the page.',
+        'error',
+        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
+      );
       this.logger.error('[ProjectDashboard] app is null or undefined');
       return;
     }
 
     if (!this.app?.state?.isAuthenticated) {
+      this.notificationHandler.show(
+        'Not authenticated. Please log in to view projects.',
+        'warning',
+        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
+      );
       this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', this.app?.state);
       return;
     }
 
     if (!this.projectManager) {
+      this.notificationHandler.show(
+        'Project manager unavailable. Please refresh the page.',
+        'error',
+        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
+      );
       this.logger.error('[ProjectDashboard] projectManager is null or undefined');
       return;
     }
 
-    if (!this.projectManager?.loadProjects) {
+    if (typeof this.projectManager.loadProjects !== 'function') {
+      this.notificationHandler.show(
+        'Cannot load projects. Project manager is incomplete.',
+        'error',
+        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
+      );
       this.logger.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
       return;
     }
 
+    if (!this.browserService || typeof this.browserService.setTimeout !== 'function') {
+      this.logger.error('[ProjectDashboard] browserService.setTimeout not available');
+      // Fall back to direct execution if setTimeout isn't available
+      this._executeProjectLoad();
+      return;
+    }
+
     // Defer project loading to avoid race conditions with UI/component initialization.
-    this.browserService.setTimeout(() => {
-      this.logger.info('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
-      this.projectManager
-        .loadProjects('all')
-        .then((projects) => {
-          if (this.state._aborted) {
-            this.logger.info('[ProjectDashboard] _loadProjects aborted, ignoring loaded projects');
-            return;
-          }
-          this.logger.info('[ProjectDashboard] Projects loaded successfully:', projects);
-        })
-        .catch((error) => {
-          this.logger.error('[ProjectDashboard] Error loading projects:', error);
-        });
-    }, 100);
+    this.browserService.setTimeout(() => this._executeProjectLoad(), 100);
+  }
+
+  // New helper method to encapsulate the loading logic
+  _executeProjectLoad() {
+    if (this.state._aborted) {
+      this.logger.info('[ProjectDashboard] Project loading aborted before execution');
+      return;
+    }
+
+    this.logger.info('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
+
+    this.projectManager
+      .loadProjects('all')
+      .then((projects) => {
+        if (this.state._aborted) {
+          this.logger.info('[ProjectDashboard] _loadProjects aborted, ignoring loaded projects');
+          return;
+        }
+        this.logger.info('[ProjectDashboard] Projects loaded successfully:', projects);
+      })
+      .catch((error) => {
+        this.logger.error('[ProjectDashboard] Error loading projects:', error);
+        this.notificationHandler.show(
+          'Failed to load projects. Please try again.',
+          'error',
+          { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_executeProjectLoad' }
+        );
+      });
   }
 
   _handlePopState() {

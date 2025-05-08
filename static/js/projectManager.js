@@ -94,6 +94,7 @@ class ProjectManager {
     timer = typeof setTimeout === 'function' ? setTimeout : (cb) => cb(),
     storage = { setItem: () => { }, getItem: () => null },
     apiEndpoints,
+    apiRequest = null,
     errorReporter = null
   } = {}) {
     if (!DependencySystem) {
@@ -111,6 +112,7 @@ class ProjectManager {
     this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
     this.timer = timer;
     this.storage = storage;
+    this.apiRequest = apiRequest ?? app?.apiRequest;
 
     // Fallback: wrap raw handler if notify util isn't injected yet
     if (!this.notify && notificationHandler?.show) {
@@ -167,7 +169,7 @@ class ProjectManager {
    */
   async _req(url, opts = {}, src = MODULE) {
     return wrapApi(
-      this.app.apiRequest.bind(this.app),
+      this.apiRequest,
       { notify: this.notify, errorReporter: this.errorReporter },
       url,
       opts,
@@ -249,6 +251,27 @@ class ProjectManager {
 
   async loadProjectDetails(id) {
     if (!isValidProjectId(id)) throw new Error('Invalid projectId');
+
+    // Early authentication and access check
+    if (!this.app || !this.app.state || !this.app.state.currentUser) {
+      this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
+      return null;
+    }
+
+    // Check if user has cached role information, if available
+    const userHasAccess = this.app.state.currentUser.role === 'admin' ||
+      this._userHasProjectAccess(id);
+
+    if (!userHasAccess) {
+      this.notify.warn('[ProjectManager] User may not have permission for this project', {
+        group: true,
+        context: 'projectManager',
+        module: MODULE,
+        source: 'loadProjectDetails'
+      });
+      // Continue with the request, but prep UI for possible 403
+    }
+
     if (!this._authOk('projectDetailsError', { id })) return null;
 
     const detailUrl = typeof this.apiEndpoints.DETAIL === 'function'
@@ -293,6 +316,18 @@ class ProjectManager {
       if (err.status === 404) this._emit('projectNotFound', { id });
       return null;
     }
+  }
+  /**
+   * Checks if the user likely has access to the project using local cache.
+   * Returns true if project is in user's project list (app.state.currentUser.projects).
+   * This is a heuristic and may not reflect true backend permissions.
+   * @param {string|number} projectId
+   * @returns {boolean}
+   */
+  _userHasProjectAccess(projectId) {
+    const projects = this.app?.state?.currentUser?.projects;
+    if (!projects || !Array.isArray(projects)) return false;
+    return projects.some(p => String(p.id) === String(projectId));
   }
 
   /* ---------------------------------------------------------------------- */
