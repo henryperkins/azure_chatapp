@@ -16,7 +16,7 @@ from sqlalchemy import (
     Index,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from db import Base
 from typing import Optional
 from datetime import datetime
@@ -64,7 +64,13 @@ class KnowledgeBase(Base):
     branch: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     file_paths: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
 
-    # Project relationship is handled by backref in Project model
+    # parent project (one-to-one)
+    project = relationship(
+        "Project",
+        back_populates="knowledge_base",
+        uselist=False,
+        foreign_keys=[project_id]
+    )
 
     def __repr__(self):
         """
