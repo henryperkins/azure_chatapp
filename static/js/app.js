@@ -17,7 +17,8 @@ import {
   isAbsoluteUrl,
   isValidProjectId,          // ← nuevo
   toggleElement,
-  waitForDepsAndDom                      // ← use global helper for DOM-ready checks
+  waitForDepsAndDom,                      // ← use global helper for DOM-ready checks
+  setGlobalUtilsNotifier
 } from './utils/globalUtils.js';
 
 import { safeInvoker, maybeCapture } from './utils/notifications-helpers.js';  // reuse error-wrapped invoker
