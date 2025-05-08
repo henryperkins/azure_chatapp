@@ -180,9 +180,9 @@ if (typeof window !== "undefined") {
     );
 }
 
-// ---------------------------------------------------------------------------
-// 5) Create the unified apiRequest using our new “createApiClient”
-// ---------------------------------------------------------------------------
+ // ---------------------------------------------------------------------------
+ // 5) Create the unified apiRequest using our new “createApiClient”
+ // ---------------------------------------------------------------------------
 const apiRequest = createApiClient({
     APP_CONFIG,
     globalUtils: {
@@ -197,9 +197,9 @@ const apiRequest = createApiClient({
 });
 DependencySystem.register('apiRequest', apiRequest);
 
-// ---------------------------------------------------------------------------
-// 6) Now define app meta-state
-// ---------------------------------------------------------------------------
+ // ---------------------------------------------------------------------------
+ // 6) Now define app meta-state
+ // ---------------------------------------------------------------------------
 let currentUser = null;
 const appState = {
     initialized: false,
@@ -227,10 +227,14 @@ const app = {
     validateUUID: (id) => isValidProjectId(id)   // ← nuevo
 };
 
+// Attach apiRequest directly to app before creating ProjectManager
+app.apiRequest = apiRequest;
+
 // Expose the central state so other modules (ProjectManager, ProjectDashboard, etc.)
 // can consult `app.state.isAuthenticated`
 app.state = appState;
 
+// Register the app object
 DependencySystem.register('app', app);
 
 // ---------------------------------------------------------------------------
@@ -322,8 +326,6 @@ export async function init() {
         appState.currentPhase = appState.initialized ? 'initialized_idle' : 'failed_idle';
     }
 }
-
-// ---------------------------------------------------------------------------
 // 8) Core systems initialization
 // ---------------------------------------------------------------------------
 async function initializeCoreSystems() {
@@ -364,6 +366,7 @@ async function initializeCoreSystems() {
             chatManager,
             app,
             notify,
+            apiRequest, // <-- inject directly
             apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
             storage: DependencySystem.modules.get('storage'),
             listenerTracker: {
