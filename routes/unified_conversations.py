@@ -132,7 +132,8 @@ async def list_project_conversations(
                         **serialize_conversation(conv),
                         "project_id": str(getattr(conv, "project_id", "")),
                         "user_id": str(getattr(conv, "user_id", "")),
-                    } for conv in conversations
+                    }
+                    for conv in conversations
                 ],
                 "count": len(conversations),
             }

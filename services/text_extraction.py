@@ -23,6 +23,7 @@ DOCX_AVAILABLE = False
 docx = None  # type: ignore
 try:
     import docx  # type: ignore
+
     DOCX_AVAILABLE = True
 except ImportError:
     logger.warning(
@@ -34,11 +35,13 @@ PDF_AVAILABLE = False
 pypdf = None
 try:
     import pypdf
+
     PDF_AVAILABLE = True
 except ImportError:
     try:
         # Attempt fallback to older PyPDF2
         import PyPDF2
+
         PDF_AVAILABLE = True
         pypdf = PyPDF2  # Alias for compatibility
     except ImportError:
@@ -52,6 +55,7 @@ TIKTOKEN_AVAILABLE = False
 tiktoken = None
 try:
     import tiktoken
+
     TIKTOKEN_AVAILABLE = True
 except ImportError:
     logger.warning(
@@ -62,6 +66,7 @@ except ImportError:
 
 class TextExtractionError(Exception):
     """Exception raised for errors during text extraction."""
+
 
 class TextExtractor:
     """
@@ -390,7 +395,7 @@ class TextExtractor:
                     "extraction_error": "Missing PDF library (pypdf or PyPDF2)",
                     "extraction_status": "failed",
                     "token_count": 0,
-                }
+                },
             )
 
         try:
@@ -406,7 +411,7 @@ class TextExtractor:
                         "extraction_error": "PDF library import issue",
                         "extraction_status": "failed",
                         "token_count": 0,
-                    }
+                    },
                 )
 
             reader = pypdf.PdfReader(file_obj)
@@ -443,7 +448,7 @@ class TextExtractor:
                     "extraction_error": error_msg,
                     "extraction_status": "failed",
                     "token_count": 0,
-                }
+                },
             )
 
     def _extract_from_docx(
@@ -460,7 +465,7 @@ class TextExtractor:
                     "extraction_error": "Missing DOCX library (python-docx)",
                     "extraction_status": "failed",
                     "token_count": 0,
-                }
+                },
             )
 
         try:
@@ -494,7 +499,7 @@ class TextExtractor:
                     "extraction_error": error_msg,
                     "extraction_status": "failed",
                     "token_count": 0,
-                }
+                },
             )
 
     def _extract_from_json(
@@ -695,7 +700,19 @@ class TextExtractor:
 
                 # Count common HTML elements
                 tag_counts = {}
-                for tag in ["div", "p", "a", "span", "img", "ul", "li", "h1", "h2", "h3", "table"]:
+                for tag in [
+                    "div",
+                    "p",
+                    "a",
+                    "span",
+                    "img",
+                    "ul",
+                    "li",
+                    "h1",
+                    "h2",
+                    "h3",
+                    "table",
+                ]:
                     tag_counts[tag] = tags.count(tag)
 
                 metadata.update({"tag_counts": tag_counts, "total_tags": len(tags)})

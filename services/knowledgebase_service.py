@@ -402,15 +402,15 @@ async def search_project_context(
 ) -> dict[str, Any]:
     """
     Performs a semantic search against a project's knowledge base and returns relevant results.
-    
+
     Args:
         project_id: The unique identifier of the project to search within.
         query: The search query string.
         top_k: The maximum number of top results to return (default is 5).
-    
+
     Returns:
         A dictionary containing the original query, a list of search results with file metadata, and the total result count.
-    
+
     Raises:
         ValueError: If the query is too short or if top_k is outside the allowed range.
     """
@@ -525,12 +525,12 @@ async def detach_github_repository(
 ) -> dict[str, Any]:
     """
     Detaches a GitHub repository from a project's knowledge base and removes its associated files.
-    
+
     Args:
         project_id: The unique identifier of the project.
         repo_url: The URL of the GitHub repository to detach.
         user_id: Optional user identifier for access validation.
-    
+
     Returns:
         A dictionary containing the repository URL and the number of files removed.
     """

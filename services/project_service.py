@@ -9,7 +9,7 @@ We now clarify:
 """
 
 from uuid import UUID
-from typing import Optional, Any, List, Type
+from typing import Optional, Any, List, Type, Union  # Added Union to imports
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -23,6 +23,7 @@ from utils.serializers import serialize_list
 from enum import Enum
 from models.user import User, UserRole
 from models.project import Project, ProjectUserAssociation
+
 
 # ---- ID normaliser --------------------------------------------------------
 def _coerce_project_id(val):
@@ -43,13 +44,14 @@ def _coerce_project_id(val):
         except (ValueError, TypeError):
             return val
 
+
 # =======================================================
 #  Knowledge Base Validation
 # =======================================================
 
 
 async def validate_knowledge_base_access(
-    project_id: UUID, knowledge_base_id: UUID, db: AsyncSession
+    project_id: Union[UUID, int], knowledge_base_id: UUID, db: AsyncSession
 ) -> KnowledgeBase:
     """
     Validate KB exists, is active, and belongs to the given project.
@@ -73,6 +75,7 @@ async def validate_knowledge_base_access(
 # =======================================================
 #  Project Access
 # =======================================================
+
 
 class ProjectAccessLevel(Enum):
     NONE = 0
@@ -121,7 +124,7 @@ async def check_project_permission(
     # --- Owner shortcut ---------------------------------------------------
     # If the requesting user owns the project, grant whatever level is asked
     # (except when the project is archived and caller doesn’t request MANAGE).
-    project = await db.get(Project, project_id)          # fetch once, reuse later
+    project = await db.get(Project, project_id)  # fetch once, reuse later
     if not project:
         if raise_exception:
             raise HTTPException(status_code=404, detail="Project not found")
@@ -165,13 +168,13 @@ async def check_project_permission(
 
 
 async def check_knowledge_base_status(
-    project_id: UUID, db: AsyncSession
+    project_id: Union[UUID, int], db: AsyncSession
 ) -> dict[str, Any]:
     """Check if project's knowledge base has indexed content"""
     project_id = _coerce_project_id(project_id)
     # Count processed files and total chunks
     stmt = select(
-        func.count(1).label("file_count"),
+        func.count(ProjectFile.id).label("file_count"),
         func.sum(
             ProjectFile.config["search_processing"]["chunk_count"].as_integer()
         ).label("total_chunks"),
@@ -191,7 +194,7 @@ async def check_knowledge_base_status(
 
 
 async def validate_project_access(
-    project_id: UUID, user: User, db: AsyncSession, skip_ownership_check: bool = False
+    project_id: Union[UUID, int], user: User, db: AsyncSession, skip_ownership_check: bool = False
 ) -> Project:
     """
     Ensures the project with UUID-based ID belongs to the user
@@ -229,7 +232,7 @@ async def get_valid_project(project_id: int, user: User, db: AsyncSession) -> Pr
     Some older code may still rely on an int ID.
     Raises 404 if not found, 400 if archived.
     """
-    project_id = _coerce_project_id(project_id)
+    project_id = int(_coerce_project_id(project_id))
     result = await db.execute(
         select(Project).where(Project.id == project_id, Project.user_id == user.id)
     )
@@ -336,7 +339,7 @@ async def validate_project_token_usage(
         )
 
 
-async def get_project_token_usage(project_id: UUID, db: AsyncSession) -> dict:
+async def get_project_token_usage(project_id: Union[UUID, int], db: AsyncSession) -> dict:
     """
     Retrieves token usage statistics for a project. Raises 404 if not found.
     """
@@ -406,7 +409,7 @@ async def validate_resource_access(
 # =======================================================
 
 
-async def get_project_conversations(project_id: UUID, db: AsyncSession):
+async def get_project_conversations(project_id: Union[UUID, int], db: AsyncSession):
     """
     Return all conversations for a project.
     Could eventually add skip/limit if needed.
@@ -425,7 +428,7 @@ async def get_project_conversations(project_id: UUID, db: AsyncSession):
 async def get_paginated_resources(
     db: AsyncSession,
     model_class: Type,
-    project_id: UUID,
+    project_id: Union[UUID, int],
     sort_by: str = "created_at",
     sort_desc: bool = True,
     skip: int = 0,

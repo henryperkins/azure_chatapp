@@ -363,10 +363,9 @@ function trapFocus(container) {
     description: 'Trap focus Tab handler'
   });
 
-  // Ensure focus is inside container.
-  // Timing hack: Without setTimeout, browser may not be ready to focus immediately after dialog opens.
-  // This is required to ensure focus is visible for assistive tech and keyboard navigation.
-  // Timing hack for focus-after-dialog: Ensures focus is moved after reflow (required for accessibility/screen readers)
+  // Accessibility timing: Use setTimeout to move focus after dialog opens,
+  // ensuring the browser's reflow is complete. This is required for reliable
+  // focus visibility for keyboard/screen reader users after DOM mutation.
   setTimeout(() => {
     if (!container.contains(document.activeElement)) first.focus();
   }, 50);
@@ -396,9 +395,8 @@ function focusElement(target, delay = 0) {
   const el = typeof target === 'string' ? document.querySelector(target) : target;
   if (!el || typeof el.focus !== 'function') return false;
   if (delay) {
-    // Timing hack: Required for cases where element may not be immediately focusable on DOM mutation/dialog open.
-    // For accessibility, this ensures screen readers and keyboard users get expected focus behavior.
-    // Timing hack for asynchronous focus: Ensures focus after potential DOM mutation (for accessibility, see MDN 'Managing Focus')
+    // Accessibility timing: Use setTimeout to focus after DOM mutation or dialog open,
+    // ensuring the element is focusable for screen readers and keyboard users.
     setTimeout(() => el.focus(), delay);
   } else {
     el.focus();
@@ -432,9 +430,8 @@ function announce(text, mode = 'polite') {
     document.body.appendChild(region);
   }
   region.textContent = '';
-  // Timing hack: Needed for ARIA live region announcement (screen readers require DOM mutation separation).
-  // Ensures assistive technology announces the updated string.
-  // Timing hack for ARIA live region: Forces DOM mutation separation so screen readers announce updates
+  // Accessibility timing: Use setTimeout to separate DOM mutations,
+  // ensuring ARIA live region updates are reliably announced by screen readers.
   setTimeout(() => {
     region.textContent = text;
   }, 50);
