@@ -496,7 +496,10 @@ export class ProjectListComponent {
 
     /** Dispatch actions (view/edit/delete) */
     _handleAction(action, projectId) {
-        const project = this.state.projects.find((p) => p.id === projectId);
+        const project = this.state.projects.find(
+          (p) =>
+            (p.id ?? p.uuid ?? p.project_id ?? p.ID) === projectId
+        );
         if (!project) {
             this.notify.warn(`[ProjectListComponent] Project not found: ${projectId}`, {
                 group: true, context: 'projectListComponent'
@@ -506,7 +509,9 @@ export class ProjectListComponent {
         switch (action) {
             case "view":
                 // Always pass only the project ID to avoid URL coercion issues
-                this.onViewProject(project.id);
+                this.onViewProject(
+                  project.id ?? project.uuid ?? project.project_id ?? project.ID
+                );
                 break;
             case "edit":
                 this._openEditModal(project);
@@ -536,11 +541,17 @@ export class ProjectListComponent {
         const actionBtn = e.target.closest("[data-action]");
         const projectId = projectCard.dataset.projectId;
         if (!projectId) {
-            this.notify.error('[Debug] Clicked card with missing data-project-id.', { group: true, context: 'projectListComponent' });
-            return;
+          this.notify.error(
+            "[ProjectListComponent] Clicked a card without a valid projectId.",
+            { group: true, context: "projectListComponent" }
+          );
+          return;
         }
         // Try to find the full project object
-        const projectObj = this.state.projects?.find((p) => p.id === projectId);
+        const projectObj = this.state.projects?.find(
+          (p) =>
+            (p.id ?? p.uuid ?? p.project_id ?? p.ID) === projectId
+        );
         // Debug log actual click
         this.notify.info(`[Debug] Project card clicked: projectId=${projectId}; isActionBtn=${!!actionBtn}`, {
             group: true, context: 'projectListComponent'
@@ -568,7 +579,9 @@ export class ProjectListComponent {
     _handleProjectUpdated(updatedProject) {
         if (!updatedProject) return;
         const idx = this.state.projects.findIndex(
-            (p) => p.id === updatedProject.id
+            (p) =>
+                (p.id ?? p.uuid ?? p.project_id ?? p.ID) ===
+                (updatedProject.id ?? updatedProject.uuid ?? updatedProject.project_id ?? updatedProject.ID)
         );
         if (idx >= 0) {
             this.state.projects[idx] = updatedProject;
@@ -791,9 +804,23 @@ export class ProjectListComponent {
      * @returns {HTMLElement}
      */
     _createProjectCard(project) {
-        const card = document.createElement("div");
+        const card  = document.createElement("div");
         card.className = this._computeCardClasses(project);
-        card.dataset.projectId = project.id;
+        // Robustly pick whichever field the API returned
+        const projectId =
+          project.id ??
+          project.uuid ??
+          project.project_id ??
+          project.ID ??
+          "";
+        card.dataset.projectId = String(projectId);
+
+        if (!card.dataset.projectId) {
+          this.notify.error(
+            `[ProjectListComponent] Missing project ID for card (${project.name ?? "unknown"})`,
+            { group: true, context: "projectListComponent" }
+          );
+        }
 
         card.append(
             this._buildCardHeader(project),
