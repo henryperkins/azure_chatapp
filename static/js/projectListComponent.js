@@ -152,9 +152,10 @@ export class ProjectListComponent {
             return;
         }
 
+        this._doc = this.domAPI.getDocument?.() ?? document;
         this.element = this.domAPI?.getElementById
             ? this.domAPI.getElementById(this.elementId)
-            : document.getElementById(this.elementId);
+            : this._doc.getElementById(this.elementId);
         if (!this.element) {
             this.notify.error(
                 `[ProjectListComponent] Element #${this.elementId} not found`,
@@ -197,8 +198,8 @@ export class ProjectListComponent {
         this.notify.success('Project list loaded.', { group: true, context: 'projectListComponent' });
 
         // --- Standardized "projectlistcomponent:initialized" event ---
-        const doc = typeof document !== "undefined" ? document : null;
-        if (doc) doc.dispatchEvent(new CustomEvent('projectlistcomponent:initialized', { detail: { success: true } }));
+        const doc2 = typeof document !== "undefined" ? document : null;
+        if (doc2) doc2.dispatchEvent(new CustomEvent('projectlistcomponent:initialized', { detail: { success: true } }));
 
         this._loadProjects();
     }
