@@ -182,7 +182,11 @@ class ProjectManager {
   /* ---------------------------------------------------------------------- */
 
   _emit(event, detail) {
-    document.dispatchEvent(new CustomEvent(event, { detail }));
+    if (this.domAPI && typeof this.domAPI.dispatchEvent === 'function') {
+      this.domAPI.dispatchEvent(this.domAPI.getDocument(), new CustomEvent(event, { detail }));
+    } else {
+      document.dispatchEvent(new CustomEvent(event, { detail }));
+    }
   }
   _authOk(failEvent, extraDetail = {}) {
     if (this.app?.state?.isAuthenticated) return true;

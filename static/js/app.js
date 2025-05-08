@@ -294,16 +294,16 @@ export async function init() {
 
         await initializeUIComponents();
 
-        // Finalize eventHandlers
-        try {
-            const eh = DependencySystem.modules.get('eventHandlers');
-            if (eh?.init) {
-                await eh.init();
-                notify.info('EventHandlers initialized successfully');
-            }
-        } catch (ehErr) {
-            notify.error('[App] Error initializing eventHandlers', { error: ehErr });
+    // Finalize eventHandlers
+    try {
+        const eh = DependencySystem.modules.get('eventHandlers');
+        if (eh?.init) {
+            await eh.init();
+            notify.info('EventHandlers initialized successfully');
         }
+    } catch (ehErr) {
+        notify.error('[App] Error initializing eventHandlers', { error: ehErr });
+    }
 
         // If you have extra optional modules:
         try {
@@ -321,12 +321,21 @@ export async function init() {
         appState.initialized = true;
         _globalInitCompleted = true;
         notify.info('[App] Initialization complete.', { authenticated: appState.isAuthenticated });
-        domAPI.dispatchEvent(browserAPI.getDocument(), new CustomEvent('appInitialized', { detail: { success: true } }));
+        // Use domAPI.dispatchEvent on domAPI.getDocument() if available
+        if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
+            domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('appInitialized', { detail: { success: true } }));
+        } else {
+            document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: true } }));
+        }
         return true;
     } catch (err) {
         notify.error(`[App] Initialization failed: ${err?.message}`, { error: err });
         handleInitError(err);
-        domAPI.dispatchEvent(browserAPI.getDocument(), new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
+        if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
+            domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
+        } else {
+            document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
+        }
         return false;
     } finally {
         _globalInitInProgress = false;
