@@ -93,6 +93,41 @@ export function createNotificationHandler({
     msgSpan.style.flex = "1 1 auto";
     root.appendChild(msgSpan);
 
+    // --- BEGIN: Troubleshooting context display ---
+    // Show context/status/endpoint/projectId/backendDetail if present
+    const contextFields = [
+      "status", "endpoint", "projectId", "backendDetail", "detail", "originalError"
+    ];
+    const contextLines = [];
+    for (const key of contextFields) {
+      if (opts[key] !== undefined && opts[key] !== null && opts[key] !== "") {
+        // For originalError, show its message if present
+        if (key === "originalError" && opts[key]?.message) {
+          contextLines.push(`<div><strong>${key}:</strong> ${opts[key].message}</div>`);
+        } else {
+          contextLines.push(`<div><strong>${key}:</strong> ${String(opts[key])}</div>`);
+        }
+      }
+    }
+    // Also show opts.extra if it's an object
+    if (opts.extra && typeof opts.extra === "object") {
+      for (const [k, v] of Object.entries(opts.extra)) {
+        if (v !== undefined && v !== null && v !== "") {
+          contextLines.push(`<div><strong>${k}:</strong> ${String(v)}</div>`);
+        }
+      }
+    }
+    if (contextLines.length > 0) {
+      const ctxDiv = domAPI.createElement("div");
+      ctxDiv.style.fontSize = "0.85em";
+      ctxDiv.style.marginLeft = "0.5em";
+      ctxDiv.style.opacity = "0.85";
+      ctxDiv.style.wordBreak = "break-all";
+      ctxDiv.innerHTML = contextLines.join("");
+      root.appendChild(ctxDiv);
+    }
+    // --- END: Troubleshooting context display ---
+
     const closeBtn = domAPI.createElement("button");
     closeBtn.type = "button";
     closeBtn.title = "Dismiss";
