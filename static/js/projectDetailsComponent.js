@@ -124,6 +124,9 @@ export class ProjectDetailsComponent {
     };
 
     this.fileUploadComponent = null;
+
+    this._backBtnHandler = null;
+    this._tabClickHandler = null;
   }
 
   async initialize() {
@@ -221,25 +224,29 @@ export class ProjectDetailsComponent {
 
   _bindCoreEvents() {
     if (this.elements.backBtn) {
-      this.eventHandlers.cleanupListeners(this.elements.backBtn, "click");
+      if (this._backBtnHandler)
+        this.eventHandlers.untrackListener(this.elements.backBtn, 'click', this._backBtnHandler);
+      this._backBtnHandler = (e) => this.onBack(e);
       this.eventHandlers.trackListener(
         this.elements.backBtn,
-        "click",
-        (e) => this.onBack(e),
-        { description: "ProjectDetails_Back" }
+        'click',
+        this._backBtnHandler,
+        { description: 'ProjectDetails_Back' }
       );
     }
     if (this.elements.tabContainer) {
-      this.eventHandlers.cleanupListeners(this.elements.tabContainer, "click");
+      if (this._tabClickHandler)
+        this.eventHandlers.untrackListener(this.elements.tabContainer, 'click', this._tabClickHandler);
+      this._tabClickHandler = (_e, btn) => {
+        const tab = btn.dataset.tab;
+        if (tab) this.switchTab(tab);
+      };
       this.eventHandlers.delegate(
         this.elements.tabContainer,
-        "click",
-        ".project-tab-btn",
-        (_e, btn) => {
-          const tab = btn.dataset.tab;
-          if (tab) this.switchTab(tab);
-        },
-        { description: "ProjectDetails_TabSwitch" }
+        'click',
+        '.project-tab-btn',
+        this._tabClickHandler,
+        { description: 'ProjectDetails_TabSwitch' }
       );
     }
     const newChatBtn = this.elements.container.querySelector("#projectNewConversationBtn");
@@ -433,7 +440,7 @@ this.domAPI.dispatchEvent(
       this.notify.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab"
       });
-      this.notify.warning(`Attempted to switch to invalid tab: ${tabName}`, {
+      this.notify.warn("Attempted to switch to invalid tab: " + tabName, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 5000
       });
       return;
@@ -446,7 +453,7 @@ this.domAPI.dispatchEvent(
       this.notify.error(`[ProjectDetailsComponent] tab "${tabName}" needs valid project.`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", detail: { tabName }
       });
-      this.notify.warning("Please select a valid project before accessing this tab.", {
+      this.notify.warn("Please select a valid project before accessing this tab.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 5000
       });
       return;
@@ -625,7 +632,7 @@ this.domAPI.dispatchEvent(
   async createNewConversation() {
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid)) {
-      this.notify.warning("Invalid project.", {
+      this.notify.warn("Invalid project.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation"
       });
       return;
