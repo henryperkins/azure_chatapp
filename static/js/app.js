@@ -409,19 +409,49 @@ async function initializeCoreSystems() {
         DependencySystem.register('projectModal', projectModal);
 
         // Wait for modals load signal
+        let modalsLoadedSuccess = false;
         await new Promise((res) => {
             eventHandlers.trackListener(
                 domAPI.getDocument(),
                 'modalsLoaded',
-                () => res(true),
+                (e) => {
+                    modalsLoadedSuccess = !!(e?.detail?.success);
+                    if (!modalsLoadedSuccess) {
+                        notify.error('[App] modalsLoaded event fired but modals failed to load', { error: e?.detail?.error });
+                    } else {
+                        notify.info('[App] modalsLoaded event fired: modals injected successfully');
+                    }
+                    res(true);
+                },
                 { once: true, description: 'modalsLoaded for app init' }
             );
         });
 
+        if (!modalsLoadedSuccess) {
+            notify.error('[App] Modal HTML failed to load. Login modal and others will not function.');
+        }
+
         // No longer initializing authUI—auth logic is now entirely internal to auth.js
 
+        if (modalManager.init) {
+            try {
+                await modalManager.init();
+                notify.info('[App] modalManager.init() completed successfully');
+            } catch (err) {
+                notify.error('[App] modalManager.init() failed', { error: err });
+            }
+        }
 
-        if (modalManager.init) modalManager.init();
+        // After modalManager is initialized, force a rebind of login button delegation
+        // This ensures eventHandlers sees the now-present modalManager and login modal
+        if (eventHandlers?.init) {
+            try {
+                await eventHandlers.init();
+                notify.info('[App] eventHandlers.init() completed (rebinding login delegation)');
+            } catch (err) {
+                notify.error('[App] eventHandlers.init() failed', { error: err });
+            }
+        }
 
         // Always register chatManager so dependencies are satisfied
         // If user is authed, initialize chatManager
@@ -499,6 +529,12 @@ function renderAuthHeader() {
         const authStatus = domAPI.getElementById('authStatus');
         const userStatus = domAPI.getElementById('userStatus');
         const authContainer = domAPI.getElementById('authContainer');
+
+        notify.debug('[App] renderAuthHeader invoked', {
+            isAuth,
+            authBtnExists: !!authBtn,
+            authBtnHidden: authBtn ? authBtn.classList.contains('hidden') : 'n/a'
+        });
 
         if (isAuth) {
             if (authBtn) domAPI.addClass(authBtn, 'hidden');   // sigue oculto al estar logueado
