@@ -97,13 +97,21 @@ async def check_project_permission(
             return False
         return True
 
-    # Direct Ownership
-    if required_level == ProjectAccessLevel.OWNER:
-        result = await db.execute(
-            select(Project).where(Project.id == project_id, Project.user_id == user.id)
-        )
-        if result.scalar_one_or_none():
-            return True
+    # --- Owner shortcut ---------------------------------------------------
+    # If the requesting user owns the project, grant whatever level is asked
+    # (except when the project is archived and caller doesn’t request MANAGE).
+    project = await db.get(Project, project_id)          # fetch once, reuse later
+    if not project:
+        if raise_exception:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return False
+
+    if project.user_id == user.id:
+        if project.archived and required_level != ProjectAccessLevel.MANAGE:
+            if raise_exception:
+                raise HTTPException(status_code=400, detail="Project is archived")
+            return False
+        return True
 
     # Project Association (roles via association table)
     assoc_query = select(ProjectUserAssociation).where(
