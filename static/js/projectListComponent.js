@@ -120,6 +120,11 @@ export class ProjectListComponent {
         this.element = null;
     }
 
+    /** Resolve the canonical identifier we should send to router / API */
+    _getProjectId(p) {
+      return p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
+    }
+
     /** Initialize component once DOM has #projectList */
     initialize() {
         // --- DI-logged initialization ---
@@ -497,8 +502,7 @@ export class ProjectListComponent {
     /** Dispatch actions (view/edit/delete) */
     _handleAction(action, projectId) {
         const project = this.state.projects.find(
-          (p) =>
-            (p.id ?? p.uuid ?? p.project_id ?? p.ID) === projectId
+          (p) => String(this._getProjectId(p)) === projectId
         );
         if (!project) {
             this.notify.warn(`[ProjectListComponent] Project not found: ${projectId}`, {
@@ -509,9 +513,7 @@ export class ProjectListComponent {
         switch (action) {
             case "view":
                 // Always pass only the project ID to avoid URL coercion issues
-                this.onViewProject(
-                  project.id ?? project.uuid ?? project.project_id ?? project.ID
-                );
+                this.onViewProject(this._getProjectId(project));
                 break;
             case "edit":
                 this._openEditModal(project);
@@ -549,8 +551,7 @@ export class ProjectListComponent {
         }
         // Try to find the full project object
         const projectObj = this.state.projects?.find(
-          (p) =>
-            (p.id ?? p.uuid ?? p.project_id ?? p.ID) === projectId
+          (p) => String(this._getProjectId(p)) === projectId
         );
         // Debug log actual click
         this.notify.info(`[Debug] Project card clicked: projectId=${projectId}; isActionBtn=${!!actionBtn}`, {
@@ -579,9 +580,7 @@ export class ProjectListComponent {
     _handleProjectUpdated(updatedProject) {
         if (!updatedProject) return;
         const idx = this.state.projects.findIndex(
-            (p) =>
-                (p.id ?? p.uuid ?? p.project_id ?? p.ID) ===
-                (updatedProject.id ?? updatedProject.uuid ?? updatedProject.project_id ?? updatedProject.ID)
+            (p) => String(this._getProjectId(p)) === String(this._getProjectId(updatedProject))
         );
         if (idx >= 0) {
             this.state.projects[idx] = updatedProject;
@@ -807,12 +806,7 @@ export class ProjectListComponent {
         const card  = document.createElement("div");
         card.className = this._computeCardClasses(project);
         // Robustly pick whichever field the API returned
-        const projectId =
-          project.id ??
-          project.uuid ??
-          project.project_id ??
-          project.ID ??
-          "";
+        const projectId = this._getProjectId(project) ?? "";
         card.dataset.projectId = String(projectId);
 
         if (!card.dataset.projectId) {
