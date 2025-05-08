@@ -56,15 +56,32 @@ async def _lookup_project(session, key):
     Returns:
         Project instance or None
     """
-    # Try to get by int PK first (legacy/compat)
+    # Try to get by UUID first if the key is already a UUID object
+    if isinstance(key, UUID):
+        # Attempt lookup by UUID primary key (if applicable) 
+        project = await session.get(Project, key)
+        if project:
+            return project
+        # Fallback to UUID column if PK is int
+        if hasattr(Project, "uuid"):
+            stmt = select(Project).where(Project.uuid == key)
+            res = await session.execute(stmt)
+            project = res.scalars().first()
+            if project:
+                return project
+
+    # If not a UUID object, try to get by int PK (legacy/compat)
     try:
         int_key = int(key)
         project = await session.get(Project, int_key)
         if project:
             return project
     except (ValueError, TypeError):
-        pass
-    # Try to get by UUID (modern flow)
+        pass # key was not convertible to int
+
+    # Original UUID lookup block (handles UUID strings if coerce_project_id wasn't used)
+    # This might be redundant if coerce_project_id is always used upstream,
+    # but keeping it makes _lookup_project more standalone robust.
     if hasattr(Project, "uuid"):
         try:
             uuid_key = UUID(str(key))
@@ -75,6 +92,7 @@ async def _lookup_project(session, key):
                 return project
         except (ValueError, TypeError, AttributeError):
             pass
+
     return None
 
 
