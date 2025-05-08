@@ -209,7 +209,7 @@ export class ProjectDetailsComponent {
     this.elements.loadingIndicators = {
       files: $("#filesLoadingIndicator"),
       conversations: $("#conversationsLoadingIndicator"),
-      artifacts: $("#projectArtifactsList"),
+      artifacts: $("#artifactsLoadingIndicator"),
       stats: $("#statsLoadingIndicator")
     };
     this.elements.fileInput = $("#fileInput");
@@ -435,7 +435,7 @@ this.domAPI.dispatchEvent(
       return;
     }
 
-    const TABS = ["details", "files", "knowledge", "conversations", "artifacts"];
+    const TABS = ["details", "files", "knowledge", "conversations", "artifacts", "chat"];
     if (!TABS.includes(tabName)) {
       this.notify.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab"
@@ -478,7 +478,7 @@ this.domAPI.dispatchEvent(
 
     this._loadTabContent(tabName);
 
-    if (tabName === "conversations" && this.modelConfig?.renderQuickConfig) {
+    if ((tabName === "conversations" || tabName === "chat") && this.modelConfig?.renderQuickConfig) {
       const panel = this.elements.container.querySelector("#modelConfigPanel");
       if (panel) {
         Promise.resolve().then(() => {
@@ -498,7 +498,7 @@ this.domAPI.dispatchEvent(
         });
       }
     }
-    if (tabName === "conversations" && this.chatManager?.initialize) {
+    if ((tabName === "conversations" || tabName === "chat") && this.chatManager?.initialize) {
       this.chatManager.initialize({
         projectId: this.state.currentProject?.id,
         containerSelector: "#projectChatUI",
