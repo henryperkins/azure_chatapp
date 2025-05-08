@@ -11,6 +11,7 @@ from fastapi import Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from utils.auth_utils import get_current_user_and_token
 
+
 @router.get("/api/user/me")
 async def get_current_user_profile(
     request: Request,
@@ -34,6 +35,7 @@ async def get_current_user_profile(
         "updated_at": current_user.updated_at,
     }
     return {"user": profile}
+
 
 @router.get("/api/user/projects")
 async def get_user_projects(
@@ -66,30 +68,51 @@ async def get_user_projects(
             if pid in seen_ids:
                 continue
             seen_ids.add(pid)
-            proj_q = await db.execute(select(Project).where(Project.id == pid, Project.user_id == current_user.id))
+            proj_q = await db.execute(
+                select(Project).where(
+                    Project.id == pid, Project.user_id == current_user.id
+                )
+            )
             project = proj_q.scalar_one_or_none()
             if project:
-                result.append({
-                    "id": str(project.id),
-                    "title": project.name,
-                    "created_at": project.created_at.isoformat() if project.created_at else None,
-                    "updated_at": project.updated_at.isoformat() if project.updated_at else None
-                })
+                result.append(
+                    {
+                        "id": str(project.id),
+                        "title": project.name,
+                        "created_at": (
+                            project.created_at.isoformat()
+                            if project.created_at
+                            else None
+                        ),
+                        "updated_at": (
+                            project.updated_at.isoformat()
+                            if project.updated_at
+                            else None
+                        ),
+                    }
+                )
     else:
         # Fallback: all user projects newest last
-        all_q = await db.execute(select(Project).where(Project.user_id == current_user.id).order_by(Project.created_at.asc()))
+        all_q = await db.execute(
+            select(Project)
+            .where(Project.user_id == current_user.id)
+            .order_by(Project.created_at.asc())
+        )
         for project in all_q.scalars():
-            result.append({
-                "id": str(project.id),
-                "title": project.name,
-                "created_at": project.created_at.isoformat() if project.created_at else None,
-                "updated_at": project.updated_at.isoformat() if project.updated_at else None
-            })
+            result.append(
+                {
+                    "id": str(project.id),
+                    "title": project.name,
+                    "created_at": (
+                        project.created_at.isoformat() if project.created_at else None
+                    ),
+                    "updated_at": (
+                        project.updated_at.isoformat() if project.updated_at else None
+                    ),
+                }
+            )
 
-    return {
-        "projects": result,
-        "last_project_id": last_project_id
-    }
+    return {"projects": result, "last_project_id": last_project_id}
 
 
 @router.get("/api/preferences/starred")

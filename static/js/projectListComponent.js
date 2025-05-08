@@ -385,9 +385,9 @@ export class ProjectListComponent {
 
         this._clearElement(this.gridElement);
         const fragment = document.createDocumentFragment();
-        projects.forEach((project) => {
-            if (project && typeof project === "object") {
-                fragment.appendChild(this._createProjectCard(project));
+        projects.forEach((_project) => {
+            if (_project && typeof _project === "object") {
+                fragment.appendChild(this._createProjectCard(_project));
             }
         });
         this.gridElement.appendChild(fragment);
@@ -549,10 +549,6 @@ export class ProjectListComponent {
           );
           return;
         }
-        // Try to find the full project object
-        const projectObj = this.state.projects?.find(
-          (p) => String(this._getProjectId(p)) === projectId
-        );
         // Debug log actual click
         this.notify.info(`[Debug] Project card clicked: projectId=${projectId}; isActionBtn=${!!actionBtn}`, {
             group: true, context: 'projectListComponent'
@@ -994,6 +990,7 @@ export class ProjectListComponent {
         };
     }
 }
+/* eslint-disable no-undef */
 // Expose helpers for unit tests if in test environment
 if (typeof process !== "undefined" && process?.env?.NODE_ENV === 'test') {
     ProjectListComponent.prototype._testHelpers = {
@@ -1006,3 +1003,4 @@ if (typeof process !== "undefined" && process?.env?.NODE_ENV === 'test') {
         _bindFilterTablistKeyboardNav: ProjectListComponent.prototype._bindFilterTablistKeyboardNav
     };
 }
+/* eslint-enable no-undef */

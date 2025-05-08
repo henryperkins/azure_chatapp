@@ -27,6 +27,7 @@ from utils.db_utils import save_model
 
 logger = logging.getLogger(__name__)
 
+
 class KBConfig:
     """Centralized configuration for knowledge base service"""
 
@@ -71,10 +72,12 @@ class StorageManager:
         Returns:
             Initialized file storage adapter
         """
-        return get_file_storage({
-            "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-            "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-        })
+        return get_file_storage(
+            {
+                "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
+                "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
+            }
+        )
 
     @staticmethod
     async def save_file(contents: bytes, path: str, project_id: UUID) -> str:
@@ -114,7 +117,7 @@ class VectorDBManager:
     async def get_for_project(
         project_id: UUID,
         model_name: Optional[str] = None,
-        db: Optional[AsyncSession] = None
+        db: Optional[AsyncSession] = None,
     ) -> VectorDB:
         """
         Get or create VectorDB instance for a project.
@@ -137,16 +140,14 @@ class VectorDBManager:
         return await get_vector_db(
             model_name=model_name or config["default_embedding_model"],
             storage_path=os.path.join(
-                config["vector_db_storage_path"],
-                str(project_id)
+                config["vector_db_storage_path"], str(project_id)
             ),
-            load_existing=True
+            load_existing=True,
         )
 
     @staticmethod
     async def _get_knowledge_base(
-        project_id: UUID,
-        db: AsyncSession
+        project_id: UUID, db: AsyncSession
     ) -> Optional[KnowledgeBase]:
         """
         Helper to get knowledge base for a project.
@@ -168,11 +169,7 @@ class TokenManager:
     """Handles token counting and project limits"""
 
     @staticmethod
-    async def update_usage(
-        project: Project,
-        delta: int,
-        db: AsyncSession
-    ) -> None:
+    async def update_usage(project: Project, delta: int, db: AsyncSession) -> None:
         """
         Update project token count.
 
@@ -185,10 +182,7 @@ class TokenManager:
         await save_model(db, project)
 
     @staticmethod
-    async def validate_usage(
-        project: Project,
-        additional_tokens: int
-    ) -> bool:
+    async def validate_usage(project: Project, additional_tokens: int) -> bool:
         """
         Check if project can accommodate more tokens.
 
@@ -209,8 +203,7 @@ class MetadataHelper:
 
     @staticmethod
     def extract_file_metadata(
-        file_record: ProjectFile,
-        include_token_count: bool = True
+        file_record: ProjectFile, include_token_count: bool = True
     ) -> dict[str, Any]:
         """
         Extract standardized metadata from file record.
@@ -226,7 +219,9 @@ class MetadataHelper:
             "filename": file_record.filename,
             "file_type": file_record.file_type,
             "file_size": file_record.file_size,
-            "created_at": file_record.created_at.isoformat() if file_record.created_at else None,
+            "created_at": (
+                file_record.created_at.isoformat() if file_record.created_at else None
+            ),
         }
 
         if include_token_count and file_record.config:

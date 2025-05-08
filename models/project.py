@@ -76,13 +76,7 @@ class Project(Base):
 
     from typing import Optional
 
-    knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(
-        postgresql.UUID(as_uuid=True),
-        ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
-        nullable=True,
-        unique=True,
-        index=True
-    )
+    # Removed knowledge_base_id ForeignKey; relationship is now owned by KnowledgeBase.project_id
 
     default_model: Mapped[str] = mapped_column(
         String(50),
@@ -128,12 +122,11 @@ class Project(Base):
     members: Mapped[list[ProjectUserAssociation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-    # Relationship to KnowledgeBase, using the new FK column and back_populates
+    # Relationship to KnowledgeBase (one-to-one, FK owned by KnowledgeBase)
     knowledge_base = relationship(
         "KnowledgeBase",
         back_populates="project",
-        uselist=False,
-        foreign_keys=[knowledge_base_id]
+        uselist=False
     )
 
     def __repr__(self) -> str:

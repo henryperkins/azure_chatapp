@@ -834,9 +834,9 @@ async def process_files_for_project(
 
     results: dict[str, Any] = {
         "processed": 0,  # int
-        "failed": 0,     # int
-        "errors": [],    # List[str]
-        "details": []    # List[dict[str, Any]]
+        "failed": 0,  # int
+        "errors": [],  # List[str]
+        "details": [],  # List[dict[str, Any]]
     }
 
     # Get file records to process
@@ -923,24 +923,26 @@ async def search_project_context(
         query=query, top_k=top_k, filter_metadata=base_filters
     )
 
+
 async def get_vector_db(
-    model_name: str,
-    storage_path: str,
-    load_existing: bool = True
+    model_name: str, storage_path: str, load_existing: bool = True
 ) -> VectorDB:
     """
     Creates a new VectorDB instance given a model name and storage path.
     Optionally loads existing data from disk if load_existing is True.
     """
-    vdb = VectorDB(embedding_model=model_name, use_faiss=True, storage_path=storage_path)
+    vdb = VectorDB(
+        embedding_model=model_name, use_faiss=True, storage_path=storage_path
+    )
     if load_existing:
         await vdb.load_from_disk()
     return vdb
 
+
 async def initialize_project_vector_db(
     project_id: UUID,
     storage_root: str = VECTOR_DB_STORAGE_PATH,
-    embedding_model: Optional[str] = None
+    embedding_model: Optional[str] = None,
 ) -> VectorDB:
     """
     Initializes a VectorDB for a project, loading from disk if an index file is present.
