@@ -1,6 +1,7 @@
 """
 routes/log_notification.py - DEPRECATED: Client no longer sends logs here.
 """
+
 import logging
 
 logger = logging.getLogger("notification_system")

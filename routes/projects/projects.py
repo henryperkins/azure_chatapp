@@ -11,7 +11,7 @@ import logging
 import random
 import time
 from uuid import UUID
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 from enum import Enum
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
@@ -37,7 +37,7 @@ from models.artifact import Artifact
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import check_project_permission, ProjectAccessLevel
-from services.project_service import _coerce_project_id   # <- add
+from services.project_service import _coerce_project_id  # <- add
 import config
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -106,7 +106,9 @@ async def create_project(
     """
     current_user, _token = current_user_tuple
     # --- BEGIN ADDED LOGGING ---
-    logger.info(f"[PROJECT_CREATE_START] User ID {current_user.id} ({current_user.username}) creating project '{project_data.name}'")
+    logger.info(
+        f"[PROJECT_CREATE_START] User ID {current_user.id} ({current_user.username}) creating project '{project_data.name}'"
+    )
     # --- END ADDED LOGGING ---
     transaction = start_transaction(
         op="project",
@@ -148,6 +150,7 @@ async def create_project(
 
             # 3. Attach KB to project and save
             import uuid
+
             project.knowledge_base_id = uuid.UUID(str(kb.id))
             await save_model(db, project)
 
@@ -213,14 +216,18 @@ async def list_projects(
     ),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    all_users: bool = Query(False, description="Admin only: List projects for all users"),
+    all_users: bool = Query(
+        False, description="Admin only: List projects for all users"
+    ),
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """List projects with performance tracing"""
     current_user, _token = current_user_tuple
     # --- BEGIN ADDED LOGGING ---
-    logger.info(f"[PROJECT_LIST_START] User ID {current_user.id} ({current_user.username}) listing projects with filter: {filter_type.value}")
+    logger.info(
+        f"[PROJECT_LIST_START] User ID {current_user.id} ({current_user.username}) listing projects with filter: {filter_type.value}"
+    )
     # --- END ADDED LOGGING ---
     with sentry_span(
         op="project",
@@ -242,7 +249,9 @@ async def list_projects(
                 condition = true()  # Admin requested all users, no user filter
                 span.set_tag("admin.all_users", True)
             else:
-                condition = Project.user_id == current_user.id # Default: filter by current user
+                condition = (
+                    Project.user_id == current_user.id
+                )  # Default: filter by current user
 
             # Query projects
             projects = await get_all_by_condition(
@@ -301,23 +310,20 @@ async def get_project(
 ):
     """Get project details with centralized permission validation"""
     current_user, _token = current_user_tuple
-    project_id = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
     with sentry_span(
-        op="project", name="Get Project", description=f"Get project {project_id}"
+        op="project", name="Get Project", description=f"Get project {proj_id}"
     ) as span:
         try:
-            span.set_tag("project.id", str(project_id))
+            span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
             # Centralized permission check
             await check_project_permission(
-                project_id,
-                current_user,
-                db,
-                ProjectAccessLevel.READ
+                proj_id, current_user, db, ProjectAccessLevel.READ
             )
             # Fetch project after permission check
-            project = await db.get(Project, project_id)
+            project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -358,7 +364,7 @@ async def update_project(
 ):
     """Update project with change tracking"""
     current_user, _token = current_user_tuple
-    project_id = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         name="Update Project",
@@ -366,17 +372,14 @@ async def update_project(
     )
     try:
         with transaction:
-            transaction.set_tag("project.id", str(project_id))
+            transaction.set_tag("project.id", str(proj_id))
             transaction.set_tag("user.id", str(current_user.id))
 
             # Centralized permission check
             await check_project_permission(
-                project_id,
-                current_user,
-                db,
-                ProjectAccessLevel.EDIT
+                proj_id, current_user, db, ProjectAccessLevel.EDIT
             )
-            project = await db.get(Project, project_id)
+            project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -450,7 +453,7 @@ async def delete_project(
 ):
     """Delete project with resource cleanup tracking"""
     current_user, _token = current_user_tuple
-    project_id = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         name="Delete Project",
@@ -458,17 +461,14 @@ async def delete_project(
     )
     try:
         with transaction:
-            transaction.set_tag("project.id", str(project_id))
+            transaction.set_tag("project.id", str(proj_id))
             transaction.set_tag("user.id", str(current_user.id))
 
             # Centralized permission check
             await check_project_permission(
-                project_id,
-                current_user,
-                db,
-                ProjectAccessLevel.MANAGE
+                proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
-            project = await db.get(Project, project_id)
+            project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -512,29 +512,42 @@ async def delete_project(
 
             # -- Delete all conversations and messages for this project
             from sqlalchemy import delete as sqlalchemy_delete
+
             convo_del = await db.execute(
-                sqlalchemy_delete(Conversation).where(Conversation.project_id == project_id)
+                sqlalchemy_delete(Conversation).where(
+                    Conversation.project_id == project_id
+                )
             )
-            logger.info(f"Deleted {convo_del.rowcount if hasattr(convo_del, 'rowcount') else '?'} conversations for project {project_id}")
+            logger.info(
+                f"Deleted {convo_del.rowcount if hasattr(convo_del, 'rowcount') else '?'} conversations for project {project_id}"
+            )
 
             # -- Delete all artifacts for this project
             artifact_del = await db.execute(
                 sqlalchemy_delete(Artifact).where(Artifact.project_id == project_id)
             )
-            logger.info(f"Deleted {artifact_del.rowcount if hasattr(artifact_del, 'rowcount') else '?'} artifacts for project {project_id}")
+            logger.info(
+                f"Deleted {artifact_del.rowcount if hasattr(artifact_del, 'rowcount') else '?'} artifacts for project {project_id}"
+            )
 
             # -- Delete the knowledge base (if any)
-            if getattr(project, 'knowledge_base_id', None):
+            if getattr(project, "knowledge_base_id", None):
                 kb_row = await db.get(KnowledgeBase, project.knowledge_base_id)
                 if kb_row:
                     await db.delete(kb_row)
-                    logger.info(f"Deleted knowledge base {project.knowledge_base_id} for project {project_id}")
+                    logger.info(
+                        f"Deleted knowledge base {project.knowledge_base_id} for project {project_id}"
+                    )
 
             # -- Delete all ProjectFile rows (already handled file removal above)
             file_del = await db.execute(
-                sqlalchemy_delete(ProjectFile).where(ProjectFile.project_id == project_id)
+                sqlalchemy_delete(ProjectFile).where(
+                    ProjectFile.project_id == project_id
+                )
             )
-            logger.info(f"Deleted {file_del.rowcount if hasattr(file_del, 'rowcount') else '?'} file records for project {project_id}")
+            logger.info(
+                f"Deleted {file_del.rowcount if hasattr(file_del, 'rowcount') else '?'} file records for project {project_id}"
+            )
 
             # Delete project
             with sentry_span(op="db.delete", description="Delete project record"):
@@ -547,7 +560,9 @@ async def delete_project(
 
             # Remove from projects list
             old_projects = prefs.get("projects", [])
-            updated_projects = [p for p in old_projects if p.get("id") != str(project_id)]
+            updated_projects = [
+                p for p in old_projects if p.get("id") != str(project_id)
+            ]
             prefs["projects"] = updated_projects
 
             # If this was last_project_id, update to previous or None
@@ -605,24 +620,21 @@ async def toggle_archive_project(
 ):
     """Toggle archive status with state tracking"""
     current_user, _token = current_user_tuple
-    project_id = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Toggle Archive",
-        description=f"Toggle archive for project {project_id}",
+        description=f"Toggle archive for project {proj_id}",
     ) as span:
         try:
-            span.set_tag("project.id", str(project_id))
+            span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
             # Centralized permission check
             await check_project_permission(
-                project_id,
-                current_user,
-                db,
-                ProjectAccessLevel.MANAGE
+                proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
-            project = await db.get(Project, project_id)
+            project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -670,24 +682,21 @@ async def toggle_pin_project(
 ):
     """Toggle pin status of a project with validation"""
     current_user, _token = current_user_tuple
-    project_id = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Toggle Pin",
-        description=f"Toggle pin for project {project_id}",
+        description=f"Toggle pin for project {proj_id}",
     ) as span:
         try:
-            span.set_tag("project.id", str(project_id))
+            span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
             # Centralized permission check
             await check_project_permission(
-                project_id,
-                current_user,
-                db,
-                ProjectAccessLevel.MANAGE
+                proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
-            project = await db.get(Project, project_id)
+            project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -743,25 +752,22 @@ async def get_project_stats(
     Get project statistics with performance tracing.
     """
     current_user, _token = current_user_tuple
-    project_id = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Get Stats",
-        description=f"Get stats for project {project_id}",
+        description=f"Get stats for project {proj_id}",
         sampled=random.random() < METRICS_SAMPLE_RATE,
     ) as span:
         try:
-            span.set_tag("project.id", str(project_id))
+            span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
             # Centralized permission check
             await check_project_permission(
-                project_id,
-                current_user,
-                db,
-                ProjectAccessLevel.READ
+                proj_id, current_user, db, ProjectAccessLevel.READ
             )
-            project = await db.get(Project, project_id)
+            project = await db.get(Project, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -778,9 +784,7 @@ async def get_project_stats(
 
             # Get file statistics
             files_result = await db.execute(
-                select(
-                    func.count(ProjectFile.id), func.sum(ProjectFile.file_size)
-                )
+                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)
             )

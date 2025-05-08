@@ -299,10 +299,11 @@ export class FileUploadComponent {
     const { allowedExtensions, maxSizeMB } = this.fileConstants;
     const validFiles = [];
     const invalidFiles = [];
-    for (const file of files) {
+    // eslint-disable-next-line no-control-regex
+    for (let file of files) {
       // Basic sanitization - replace potentially problematic characters
       // A more robust library might be needed for complex cases, but this covers common issues.
-      const sanitizedName = file.name.replace(/[<>:"/\\|?*#%\s\x00-\x1F\x7F]/g, '_');
+      const sanitizedName = file.name.replace(/[<>:"/\\|?*#%\s\x00-\x1F\x7F]/g, '_'); // eslint-disable-line no-control-regex
 
       if (sanitizedName !== file.name) {
         // Use a temporary File object with the sanitized name for validation checks
@@ -312,7 +313,7 @@ export class FileUploadComponent {
         try {
           const tempFile = new File([file], sanitizedName, { type: file.type });
           file = tempFile; // Use the sanitized version for checks below
-        } catch (e) {
+        } catch {
           // If File constructor fails (e.g., in older envs or due to name issues)
           invalidFiles.push({ file: file, error: `Filename contains invalid characters` });
           continue;
@@ -387,7 +388,8 @@ export class FileUploadComponent {
 
     if (completed === total && uploadProgress) {
       this.notify.info(`Upload complete. ${this.uploadState.completed - this.uploadState.failed}/${total} succeeded.`, { source: '_updateUploadProgress' });
-      // Use injected scheduler (Guideline #2)
+      // Delay hiding the upload progress bar to allow users to see the completion status before it disappears.
+      // This ensures the UI feedback is not too abrupt after the upload finishes.
       this.scheduler.setTimeout(() => {
         if (uploadProgress) uploadProgress.classList.add('hidden');
       }, 2500); // Slightly longer delay

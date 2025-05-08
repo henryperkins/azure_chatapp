@@ -208,8 +208,13 @@ class ConversationService:
         try:
             await save_model(self.db, conv)
         except IntegrityError as db_exc:
-            logger.exception(f"[create_conversation] Database error saving conversation with project_id={project_id}, user_id={user_id}")
-            raise ConversationError("Database error. Possibly a foreign key violation or concurrency issue", 500) from db_exc
+            logger.exception(
+                f"[create_conversation] Database error saving conversation with project_id={project_id}, user_id={user_id}"
+            )
+            raise ConversationError(
+                "Database error. Possibly a foreign key violation or concurrency issue",
+                500,
+            ) from db_exc
         logger.info(
             f"Conversation {conv.id} created by user {user_id} with model {model_id}. Project: {project_id}"
         )
