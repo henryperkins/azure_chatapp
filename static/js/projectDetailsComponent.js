@@ -357,7 +357,7 @@ this.domAPI.dispatchEvent(
         }
       });
 
-      this.fileUploadComponent.initialize?.();
+      (this.fileUploadComponent.init ?? this.fileUploadComponent.initialize)?.();
       this.notify.info("[ProjectDetailsComponent] FileUploadComponent ready.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_initSubComponents"
       });
