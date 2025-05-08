@@ -32,7 +32,7 @@ export function createAuthModule({
 
   // --- Debug Utility ---
   function logCookieState(tag = '') {
-    console.info('[COOKIE_SNAPSHOT]', tag, document.cookie);
+    authNotify.debug('[COOKIE_SNAPSHOT]', { tag, cookie: typeof document !== 'undefined' ? document.cookie : '' });
   }
 
   // --- Input Validation Utilities ---
@@ -186,8 +186,10 @@ export function createAuthModule({
     tokenRefreshInProgress = true;
     tokenRefreshPromise = (async () => {
       try {
+        authNotify.debug('[Auth] refreshTokens: starting', { group: true, source: 'refreshTokens' });
         await getCSRFTokenAsync();
         const response = await authRequest(apiEndpoints.AUTH_REFRESH, 'POST');
+        authNotify.debug('[Auth] refreshTokens: success', { group: true, source: 'refreshTokens' });
         return { success: true, response };
       } catch (error) {
         authNotify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), { group: true, source: 'refreshTokens' });
@@ -253,11 +255,13 @@ export function createAuthModule({
           Boolean(usernameField);
 
         if (isAuthenticatedResp) {
+          authNotify.debug('[Auth] verifyAuthState: authenticated', { group: true, source: 'verifyAuthState', username: usernameField });
           broadcastAuth(true, usernameField, 'verify_success');
           return true;
         }
 
         // Si no se valida, procedemos como antes
+        authNotify.warn('[Auth] verifyAuthState: not authenticated', { group: true, source: 'verifyAuthState' });
         await clearTokenState({ source: 'verify_negative' });
         return false;
       } catch (error) {
@@ -456,7 +460,7 @@ export function createAuthModule({
   }
 
   // --- Auth Event Monitoring ---
-  AuthBus.addEventListener('authStateChanged', e => console.warn('[AUTH_EVENT]', e.detail));
+  AuthBus.addEventListener('authStateChanged', e => authNotify.debug('[AUTH_EVENT]', { detail: e.detail, source: 'AuthBus' }));
 
   // --- Module Initialization
   async function init() {
