@@ -37,7 +37,7 @@ from models.artifact import Artifact
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import check_project_permission, ProjectAccessLevel
-from services.project_service import _coerce_project_id  # <- add
+from services.project_service import coerce_project_id  # <- renamed from _coerce_project_id
 from services.project_service import _lookup_project
 import config
 from utils.db_utils import get_all_by_condition, save_model
@@ -311,7 +311,7 @@ async def get_project(
 ):
     """Get project details with centralized permission validation"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     with sentry_span(
         op="project", name="Get Project", description=f"Get project {proj_id}"
     ) as span:
@@ -365,7 +365,7 @@ async def update_project(
 ):
     """Update project with change tracking"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         name="Update Project",
@@ -454,7 +454,7 @@ async def delete_project(
 ):
     """Delete project with resource cleanup tracking"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         name="Delete Project",
@@ -621,7 +621,7 @@ async def toggle_archive_project(
 ):
     """Toggle archive status with state tracking"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Toggle Archive",
@@ -683,7 +683,7 @@ async def toggle_pin_project(
 ):
     """Toggle pin status of a project with validation"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Toggle Pin",
@@ -753,7 +753,7 @@ async def get_project_stats(
     Get project statistics with performance tracing.
     """
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = _coerce_project_id(project_id)
+    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Get Stats",
@@ -785,7 +785,7 @@ async def get_project_stats(
 
             # Get file statistics
             files_result = await db.execute(
-                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
+                select(getattr(func, "count")(ProjectFile.id), getattr(func, "sum")(ProjectFile.file_size))  # pylint: disable=not-callable
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)
             )
