@@ -334,6 +334,10 @@ class ProjectManager {
         this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
       this.notify.success(`[ProjectManager] Project ${id} ready`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id } });
+
+      // Notify UI that every required resource is now loaded
+      this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
+
       return { ...this.currentProject };
     } catch (err) {
       this._handleErr('projectDetailsError', err, null);
