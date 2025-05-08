@@ -686,7 +686,8 @@ this.domAPI.dispatchEvent(
 
   _loadTabContent(tab) {
     const pid = this.state.currentProject?.id;
-    const load = (section, fn) => this._withLoading(section, () => fn(pid));
+    // preserve ProjectManager context
+    const load = (section, fn) => this._withLoading(section, () => fn.call(this.projectManager, pid));
     switch (tab) {
       case "files":
         load("files", this.projectManager.loadProjectFiles);
