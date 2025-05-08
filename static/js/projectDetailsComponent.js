@@ -19,6 +19,8 @@ export class ProjectDetailsComponent {
     notify,
     sanitizer,
     domAPI,
+    browserService,
+    globalUtils,
     knowledgeBaseComponent = null,
     modelConfig = null,
     chatManager = null
@@ -86,6 +88,8 @@ export class ProjectDetailsComponent {
 
     this.sanitizer = sanitizer;
     this.domAPI = domAPI;
+    this.browserService = browserService;
+    this.globalUtils = globalUtils;
     this.knowledgeBaseComponent = knowledgeBaseComponent;
     this.modelConfig = modelConfig;
     this.chatManager = chatManager;

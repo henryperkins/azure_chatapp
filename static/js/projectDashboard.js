@@ -32,6 +32,10 @@ class ProjectDashboard {
     this.notificationHandler = getModule('notificationHandler');
     if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler (via DependencySystem) is required.');
 
+    // Inject domAPI for all DOM access
+    this.domAPI = getModule('domAPI');
+    if (!this.domAPI) throw new Error('[ProjectDashboard] domAPI module required for DOM abstraction');
+
     this.components = {
       projectList: getModule('projectListComponent') || null,
       projectDetails: getModule('projectDetailsComponent') || null
@@ -99,7 +103,7 @@ class ProjectDashboard {
         this._showLoginRequiredMessage();
         return false;
       }
-      const listView = document.getElementById('projectListView');
+      const listView = this.domAPI.getElementById('projectListView');
       if (!listView)
         throw new Error('Missing required #projectListView container during initialization');
       await this._initializeComponents();
@@ -118,7 +122,7 @@ class ProjectDashboard {
         this.logger.warn('[ProjectDashboard] No windowObject available for popstate event binding');
       }
       this.state.initialized = true;
-      document.dispatchEvent(new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
+      this.domAPI.dispatchEvent(this.domAPI.getDocument(), new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
       this.logger.info('[ProjectDashboard] Initialization complete.', { context: 'ProjectDashboard' });
       return true;
     } catch (error) {
@@ -131,7 +135,7 @@ class ProjectDashboard {
           );
         }
         this.state.initialized = false;
-        document.dispatchEvent(
+        this.domAPI.dispatchEvent(this.domAPI.getDocument(),
           new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
         );
         return false;
@@ -180,7 +184,7 @@ class ProjectDashboard {
     // Minimal reflow for styling transitions
     // UI reflow after DOM update: ensure visibility transitions apply after view change.
     this.browserService.setTimeout(() => {
-      const listView = document.getElementById('projectListView');
+      const listView = this.domAPI.getElementById('projectListView');
       if (listView) {
         // reflow hack removed, rely on Tailwind classes for visibility
       }
@@ -274,7 +278,7 @@ class ProjectDashboard {
 
           // Final verification that the details are visible
           this.logger.info('[ProjectDashboard] Performing final visibility check');
-          const detailsView = document.getElementById('projectDetailsView');
+          const detailsView = this.domAPI.getElementById('projectDetailsView');
           if (detailsView) {
             if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
               this.logger.warn(
@@ -348,7 +352,7 @@ class ProjectDashboard {
 
             // Final verification
             this.logger.info('[ProjectDashboard] Performing final visibility check (API path)');
-            const detailsView = document.getElementById('projectDetailsView');
+            const detailsView = this.domAPI.getElementById('projectDetailsView');
             if (detailsView) {
               if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
                 this.logger.warn(
@@ -397,8 +401,8 @@ class ProjectDashboard {
     }
     this.logger.info('[ProjectDashboard] _setView called with:', { showList, showDetails });
 
-    const listView = document.getElementById('projectListView');
-    const detailsView = document.getElementById('projectDetailsView');
+    const listView = this.domAPI.getElementById('projectListView');
+    const detailsView = this.domAPI.getElementById('projectDetailsView');
 
     // Log DOM element state before changes
     this.logger.info('[ProjectDashboard] _setView DOM elements before:', {
@@ -413,10 +417,10 @@ class ProjectDashboard {
       this.logger.error('[ProjectDashboard] #projectListView element not found in DOM');
       // Try to create it
       try {
-        const newListView = document.createElement('div');
+        const newListView = this.domAPI.createElement('div');
         newListView.id = 'projectListView';
         newListView.className = 'flex-1 flex flex-col min-h-0';
-        document.querySelector('#projectManagerPanel')?.appendChild(newListView);
+        this.domAPI.querySelector('#projectManagerPanel')?.appendChild(newListView);
         this.logger.info('[ProjectDashboard] Created missing #projectListView element');
       } catch (e) {
         this.logger.error('[ProjectDashboard] Failed to create missing #projectListView:', e);
@@ -427,10 +431,10 @@ class ProjectDashboard {
       this.logger.error('[ProjectDashboard] #projectDetailsView element not found in DOM');
       // Try to create it
       try {
-        const newDetailsView = document.createElement('div');
+        const newDetailsView = this.domAPI.createElement('div');
         newDetailsView.id = 'projectDetailsView';
         newDetailsView.className = 'hidden';
-        document.querySelector('#projectManagerPanel')?.appendChild(newDetailsView);
+        this.domAPI.querySelector('#projectManagerPanel')?.appendChild(newDetailsView);
         this.logger.info('[ProjectDashboard] Created missing #projectDetailsView element');
       } catch (e) {
         this.logger.error('[ProjectDashboard] Failed to create missing #projectDetailsView:', e);
@@ -438,8 +442,8 @@ class ProjectDashboard {
     }
 
     // Get the elements again
-    const finalListView = document.getElementById('projectListView');
-    const finalDetailsView = document.getElementById('projectDetailsView');
+    const finalListView = this.domAPI.getElementById('projectListView');
+    const finalDetailsView = this.domAPI.getElementById('projectDetailsView');
 
     // Update list view
     if (finalListView) {
@@ -472,21 +476,21 @@ class ProjectDashboard {
 
   _showLoginRequiredMessage() {
     this.state._aborted = true;
-    const loginMessage = document.getElementById('loginRequiredMessage');
+    const loginMessage = this.domAPI.getElementById('loginRequiredMessage');
     if (loginMessage) loginMessage.classList.remove('hidden');
-    const mainContent = document.getElementById('mainContent');
+    const mainContent = this.domAPI.getElementById('mainContent');
     if (mainContent) mainContent.classList.add('hidden');
-    const sidebar = document.getElementById('mainSidebar');
-    if (sidebar && sidebar.contains(document.activeElement)) {
-      document.activeElement.blur();
+    const sidebar = this.domAPI.getElementById('mainSidebar');
+    if (sidebar && sidebar.contains(this.domAPI.getActiveElement())) {
+      this.domAPI.getActiveElement().blur();
     }
-    const projectViews = document.querySelectorAll('#projectListView, #projectDetailsView');
+    const projectViews = this.domAPI.querySelectorAll('#projectListView, #projectDetailsView');
     projectViews.forEach((view) => view.classList.add('hidden'));
   }
 
   async _initializeComponents() {
     this.logger.info('[ProjectDashboard] Initializing components...');
-    const projectListEl = document.getElementById('projectList');
+    const projectListEl = this.domAPI.getElementById('projectList');
     if (!projectListEl)
       throw new Error('Missing #projectList element in DOM after injecting project_list.html');
 
