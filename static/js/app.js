@@ -440,6 +440,12 @@ async function initializeAuthSystem() {
                 handleAuthStateChange,
                 { description: '[App] AuthBus authStateChanged' }
             );
+            eventHandlers.trackListener(
+                auth.AuthBus,
+                'authReady',
+                handleAuthStateChange,
+                { description: '[App] AuthBus authReady' }
+            );
         }
         renderAuthHeader();
     } catch (err) {

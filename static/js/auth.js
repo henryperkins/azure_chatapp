@@ -444,6 +444,12 @@ export function createAuthModule({
 
   // --- Module Initialization
   async function init() {
+    // Debug: log presence of cookies at module init
+    if (typeof document !== 'undefined') {
+      const hasAccess = document.cookie.includes('access_token');
+      const hasRefresh = document.cookie.includes('refresh_token');
+      authNotify.info(`[Auth][DEBUG] Cookie presence at init: access_token=${hasAccess}, refresh_token=${hasRefresh}`, { group: true, source: 'init' });
+    }
     if (authState.isReady) {
       authNotify.warn('[Auth] init called multiple times.', { group: true, source: 'init' });
       return true;

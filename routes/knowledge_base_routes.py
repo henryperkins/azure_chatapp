@@ -12,7 +12,7 @@ Consolidated routes for knowledge base management with improved:
 import logging
 import uuid
 from uuid import UUID
-from typing import Any, Optional
+from typing import Any, Optional, Dict, List
 
 from fastapi import (
     APIRouter,
@@ -95,7 +95,7 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., min_length=1)
     top_k: int = Field(5, ge=1, le=20)
-    filters: Optional[dict[str, Any]] = None
+    filters: Optional[Dict[str, Any]] = None
 
 
 class GitHubRepoAttach(BaseModel):
@@ -103,7 +103,7 @@ class GitHubRepoAttach(BaseModel):
 
     repo_url: str = Field(..., description="GitHub repository URL")
     branch: Optional[str] = Field("main", description="Branch to use")
-    file_paths: Optional[list[str]] = Field(
+    file_paths: Optional[List[str]] = Field(
         None, description="Specific file paths to include"
     )
 
@@ -524,9 +524,7 @@ async def reindex_knowledge_base(
         ) from e
 
 
-@router.delete(
-    "/{project_id}/knowledge-bases/files/{file_id}", response_model=dict
-)
+@router.delete("/{project_id}/knowledge-bases/files/{file_id}", response_model=dict)
 async def delete_knowledge_base_file(
     project_id: UUID,
     file_id: UUID,
@@ -617,32 +615,35 @@ async def attach_github_repository(
     """
     Attaches a GitHub repository as a data source for a project's knowledge base.
 
-    Validates project access and knowledge base existence, clones the specified repository and branch, fetches the specified or all files, and uploads them to the project's knowledge base. Returns the repository URL and the number of files processed.
+    Validates project access and knowledge base existence, clones the specified repository and branch,
+    fetches the specified or all files, and uploads them to the project's knowledge base.
+    Returns the repository URL and the number of files processed.
     """
     try:
         current_user = current_user_tuple[0]
 
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-
         if not project.knowledge_base_id:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         # Initialize GitHub service
-        github_service = GitHubService(token=getattr(current_user, "github_token", None))
-
-        # Clone repository
-        repo_path = await github_service.clone_repository(
-            repo_url=repo_data.repo_url, branch=repo_data.branch
+        github_service = GitHubService(
+            token=getattr(current_user, "github_token", None)
         )
 
-        # Fetch specified files
+        # Clone repository
+        branch = repo_data.branch if repo_data.branch else "main"
+        repo_path = github_service.clone_repository(
+            repo_url=repo_data.repo_url, branch=branch
+        )
+
+        # Fetch specified files (or all if none specified)
         file_paths = repo_data.file_paths or []
-        fetched_files = await github_service.fetch_files(repo_path, file_paths)
+        fetched_files = github_service.fetch_files(repo_path, file_paths)
 
         # Process fetched files
         for file_path in fetched_files:
-            from fastapi import UploadFile
             with open(file_path, "rb") as file_obj:
                 upload_file = UploadFile(filename=file_path, file=file_obj)
                 await upload_file_to_project(
@@ -653,14 +654,17 @@ async def attach_github_repository(
                 )
 
         return await create_standard_response(
-            {"repo_url": repo_data.repo_url, "files_processed": len(fetched_files)},
+            {
+                "repo_url": repo_data.repo_url,
+                "files_processed": len(fetched_files),
+            },
             "GitHub repository attached successfully",
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to attach GitHub repository: {str(e)}")
+        logger.error(f"Failed to attach GitHub repository: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="Failed to attach GitHub repository"
         ) from e
@@ -676,24 +680,30 @@ async def detach_github_repository(
     """
     Detaches a GitHub repository from a project's knowledge base and removes its files.
 
-    Removes all files associated with the specified GitHub repository from the project's knowledge base. Returns the repository URL and the number of files removed. Raises an HTTP 400 error if the project has no knowledge base, and an HTTP 500 error if the operation fails.
+    Removes all files associated with the specified GitHub repository from the project's knowledge base.
+    Returns the repository URL and the number of files removed.
+    Raises an HTTP 400 error if the project has no knowledge base,
+    and an HTTP 500 error if the operation fails.
     """
     try:
         current_user = current_user_tuple[0]
 
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-
         if not project.knowledge_base_id:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         # Initialize GitHub service
-        github_service = GitHubService(token=getattr(current_user, "github_token", None))
+        github_service = GitHubService(
+            token=getattr(current_user, "github_token", None)
+        )
 
-        # Clone repository
-        repo_path = await github_service.clone_repository(repo_url=repo_data.repo_url)
-        file_paths = await github_service.fetch_files(repo_path, [])
-        await github_service.remove_files(repo_path, file_paths)
+        # In an actual implementation, you'd track which files came from the repo
+        # and remove them individually from your database/storage layer.
+        # This snippet shows a simplistic approach to "detaching" the repo.
+        repo_path = github_service.clone_repository(repo_url=repo_data.repo_url)
+        file_paths = github_service.fetch_files(repo_path, [])
+        github_service.remove_files(repo_path, file_paths)
 
         return await create_standard_response(
             {"repo_url": repo_data.repo_url, "files_removed": len(file_paths)},
@@ -703,7 +713,7 @@ async def detach_github_repository(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to detach GitHub repository: {str(e)}")
+        logger.error(f"Failed to detach GitHub repository: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="Failed to detach GitHub repository"
         ) from e

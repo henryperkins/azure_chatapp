@@ -214,6 +214,27 @@ try {
 
         const resp = await (browserAPI?.fetch || fetch)(normUrl, opts);
 
+        // --- LOG /api/auth/verify response and headers ---
+        if (normUrl.includes('/api/auth/verify')) {
+          try {
+            const clone = resp.clone();
+            const cType = clone.headers.get("content-type") || "";
+            let body;
+            if (cType.includes("application/json")) {
+              body = await clone.json();
+            } else {
+              body = await clone.text();
+            }
+            // Log headers as object
+            const headersObj = {};
+            for (const [k, v] of clone.headers.entries()) headersObj[k] = v;
+            console.log("[AUTH DEBUG] /api/auth/verify response:", body);
+            console.log("[AUTH DEBUG] /api/auth/verify headers:", headersObj);
+          } catch (e) {
+            console.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", e);
+          }
+        }
+
         if (!resp.ok) {
           let errPayload = { message: `API Error: ${resp.status} ${resp.statusText}` };
           try {
