@@ -309,51 +309,79 @@ async def get_project(
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """Get project details with centralized permission validation"""
+    """Get project details with robust error handling and diagnostics"""
     current_user, _token = current_user_tuple
-    proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
-    with sentry_span(
-        op="project", name="Get Project", description=f"Get project {proj_id}"
-    ) as span:
+    try:
+        logger.info(f"Project details request: ID={project_id}, User={current_user.id}")
+
+        # Step 1: First safely coerce the project ID
         try:
-            span.set_tag("project.id", str(proj_id))
-            span.set_tag("user.id", str(current_user.id))
-
-            # Centralized permission check
-            await check_project_permission(
-                proj_id, current_user, db, ProjectAccessLevel.READ
-            )
-            # Fetch project after permission check
-            project = await _lookup_project(db, proj_id)
-            if not project:
-                raise HTTPException(status_code=404, detail="Project not found")
-
-            # Set context in Sentry
-            with configure_scope() as scope:
-                scope.set_context("project", serialize_project(project))
-
-            metrics.incr("project.view.success")
-            return await create_standard_response(
-                serialize_project(project), span_or_transaction=span
-            )
-
-        except HTTPException as http_exc:
-            span.set_tag("error.type", "http")
-            span.set_data("status_code", http_exc.status_code)
-            metrics.incr(
-                "project.view.failure",
-                tags={"reason": "access_denied", "status_code": http_exc.status_code},
-            )
-            raise
-        except Exception as e:
-            span.set_tag("error", True)
-            capture_exception(e)
-            metrics.incr("project.view.failure", tags={"reason": "exception"})
-            logger.error(f"Failed to get project {project_id}: {str(e)}")
+            proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
+        except Exception as coercion_err:
+            logger.exception(f"Project ID coercion failed for {project_id}: {coercion_err}")
+            metrics.incr("project.view.failure", tags={"reason": "id_coercion"})
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve project",
-            ) from e
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid project ID: {project_id}",
+            ) from coercion_err
+
+        with sentry_span(
+            op="project", name="Get Project", description=f"Get project {proj_id}"
+        ) as span:
+            try:
+                span.set_tag("project.id", str(proj_id))
+                span.set_tag("user.id", str(current_user.id))
+
+                # Step 2: First check if project exists before permission check
+                project = await _lookup_project(db, proj_id)
+                if not project:
+                    logger.warning(f"Project not found: {proj_id}")
+                    metrics.incr("project.view.failure", tags={"reason": "not_found"})
+                    raise HTTPException(status_code=404, detail="Project not found")
+
+                # Step 3: Now check permissions with the existing project
+                try:
+                    await check_project_permission(
+                        proj_id, current_user, db, ProjectAccessLevel.READ
+                    )
+                except HTTPException as perm_err:
+                    # Maintain original status code and message
+                    logger.warning(f"Permission denied for user {current_user.id} on project {proj_id}: {perm_err}")
+                    metrics.incr("project.view.failure", tags={"reason": "permission_denied"})
+                    raise
+                except Exception as perm_err:
+                    logger.error(f"Unexpected permission check error for project {proj_id}: {perm_err}")
+                    metrics.incr("project.view.failure", tags={"reason": "permission_check_error"})
+                    raise HTTPException(status_code=403, detail="Permission check failed") from perm_err
+
+                # Set context in Sentry
+                with configure_scope() as scope:
+                    scope.set_context("project", serialize_project(project))
+
+                metrics.incr("project.view.success")
+                return await create_standard_response(
+                    serialize_project(project), span_or_transaction=span
+                )
+            except HTTPException:
+                # Re-raise HTTP exceptions with their original status codes
+                raise
+            except Exception as e:
+                span.set_tag("error", True)
+                capture_exception(e)
+                metrics.incr("project.view.failure", tags={"reason": "exception"})
+                logger.exception(f"Detailed error in get_project for {proj_id}: {e}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to retrieve project",
+                ) from e
+    except Exception as outer_e:
+        # This catches any errors not handled by the inner try/except blocks
+        logger.exception(f"Unhandled exception in get_project outer block: {outer_e}")
+        metrics.incr("project.view.failure", tags={"reason": "unhandled_exception"})
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred",
+        )
 
 
 @router.patch("/{project_id}/", response_model=dict)
@@ -785,7 +813,7 @@ async def get_project_stats(
 
             # Get file statistics
             files_result = await db.execute(
-                select(getattr(func, "count")(ProjectFile.id), getattr(func, "sum")(ProjectFile.file_size))  # pylint: disable=not-callable
+                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)
             )
