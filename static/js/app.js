@@ -467,64 +467,16 @@ function renderAuthHeader() {
         const authStatus = domAPI.getElementById('authStatus');
         const userStatus = domAPI.getElementById('userStatus');
         const authContainer = domAPI.getElementById('authContainer');
-        // Create or get headerLoginForm
-        let headerLoginForm = domAPI.getElementById('headerLoginForm');
-        if (!headerLoginForm && authContainer) {
-            headerLoginForm = domAPI.createElement('div');
-            domAPI.setAttribute(headerLoginForm, 'id', 'headerLoginForm');
-            domAPI.addClass(headerLoginForm, 'w-full');
-            domAPI.insertBefore(authContainer, headerLoginForm, authBtn || userMenu || null);
-        }
 
-        // Sync visibility and show login form when not authenticated
         if (isAuth) {
-            if (authBtn) domAPI.addClass(authBtn, 'hidden');
+            if (authBtn) domAPI.addClass(authBtn, 'hidden');   // sigue oculto al estar logueado
             if (userMenu) domAPI.removeClass(userMenu, 'hidden');
-            if (headerLoginForm) {
-                domAPI.addClass(headerLoginForm, 'hidden');
-                domAPI.setInnerHTML(headerLoginForm, ''); // Clear any form
-            }
         } else {
-            if (authBtn) domAPI.addClass(authBtn, 'hidden');
-            if (userMenu) domAPI.addClass(userMenu, 'hidden');
-            if (headerLoginForm) {
-                domAPI.removeClass(headerLoginForm, 'hidden');
-                // Build login form markup
-                domAPI.setInnerHTML(headerLoginForm, `
-                  <form id="headerLoginActualForm" class="flex items-center gap-2" autocomplete="on">
-                    <input id="headerLoginUsername" name="username" type="text" required autocomplete="username"
-                      class="input input-sm input-bordered w-28 sm:w-32" placeholder="Username/Email" />
-                    <input id="headerLoginPassword" name="password" type="password" required autocomplete="current-password"
-                      class="input input-sm input-bordered w-24 sm:w-28" placeholder="Password" />
-                    <button id="headerLoginSubmit" type="submit"
-                      class="btn btn-primary btn-sm min-w-[44px] min-h-[32px]">Login</button>
-                  </form>
-                `);
-                // Setup form handler with DI/eventHandlers
-                const loginForm = domAPI.getElementById('headerLoginActualForm');
-                if (loginForm) {
-                    eventHandlers.trackListener(
-                        loginForm,
-                        'submit',
-                        async (e) => {
-                            domAPI.preventDefault(e);
-                            const username = domAPI.getValue(domAPI.getElementById('headerLoginUsername'))?.trim();
-                            const password = domAPI.getValue(domAPI.getElementById('headerLoginPassword'));
-                            if (!username || !password) {
-                                notify.warn('Username and password required', { module: 'app', source: 'headerLoginForm' });
-                                return;
-                            }
-                            try {
-                                await authMod?.login?.({ username, password });
-                                notify.success('Logged in successfully', { module: 'app', source: 'headerLoginForm' });
-                            } catch (err) {
-                                notify.error('Login failed', { module: 'app', source: 'headerLoginForm', error: err });
-                            }
-                        },
-                        { passive: false, description: 'Header login form submit', context: 'auth', module: 'app' }
-                    );
-                }
-            }
+            if (authBtn) domAPI.removeClass(authBtn, 'hidden'); // mostrar botón Login
+            if (userMenu) domAPI.addClass(userMenu, 'hidden');  // ocultar menú usuario
+            // Asegura limpieza de cualquier resto previo
+            const orphan = domAPI.getElementById('headerLoginForm');
+            if (orphan) orphan.remove();
         }
         // Update user initials and details if logged in
         if (isAuth && userMenu && userInitialsEl) {
