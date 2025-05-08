@@ -1,3 +1,5 @@
+import { wrapApi, safeInvoker } from "./utils/notifications-helpers.js";
+
 /**
  * chat.js (Strict DI, Linted Edition)
  *
@@ -143,6 +145,8 @@ class MessageQueue {
  * @param {NavAPI} [options.navAPI] - Navigation / history abstraction. No direct window usage.
  * @param {Object} [options.DOMPurify] - Must be provided.
  * @param {Function} [options.notificationHandler] - For all user/dev notifications.
+ * @param {Object} [options.notify] - DI notification util (nuevo)
+ * @param {Object} [options.errorReporter] - DI error reporter (nuevo)
  * @returns {ChatManager} An instance with initialize, sendMessage, etc.
  */
 export function createChatManager({
@@ -157,7 +161,9 @@ export function createChatManager({
   navAPI,
   DOMPurify,
   notificationHandler,
-  apiEndpoints
+  apiEndpoints,
+  notify,            // nuevo DI
+  errorReporter      // nuevo DI
 } = {}) {
   // Basic validation
   // Provide fallback DOM, Nav, and event handlers if not supplied
@@ -165,67 +171,45 @@ export function createChatManager({
   const _navAPI = navAPI || createDefaultNavAPI();
   const _EH = eventHandlers || createDefaultEventHandlers();
 
-  // Notification handler: prefer injected, then app.showNotification, else throw
-  // Unified notification: always inject grouping/context for chatManager
-  const notify = notificationHandler
-    ? ((msg, type = "info", ...args) => {
-        // Find or merge options into last arg (handler interface)
-        let opts = {};
-        if (
-          args.length &&
-          typeof args[args.length - 1] === "object" &&
-          args[args.length - 1] !== null &&
-          !Array.isArray(args[args.length - 1])
-        ) {
-          opts = { ...args.pop(), group: true, context: "chatManager" };
-        } else {
-          opts = { group: true, context: "chatManager" };
-        }
-        // Try handler.show for showNotification-like API
-        if (typeof notificationHandler.show === "function") {
-          return notificationHandler.show(msg, type, opts);
-        }
-        // Try handler[type] for log/warn/error
-        if (typeof notificationHandler[type] === "function") {
-          return notificationHandler[type](msg, ...(args.length > 0 ? args : [opts]));
-        }
-        // Fallback: call as a function in case handler itself is callable
-        if (typeof notificationHandler === "function") {
-          return notificationHandler.show(msg, type, opts);
-        }
-      })
-    : ((msg, type = "info", ...args) => {
-        // Ensure 4th arg to showNotification is always options with group/context
-        let duration = undefined;
-        let options = {};
-        if (args.length && typeof args[0] === "number") {
-          duration = args.shift();
-        }
-        if (
-          args.length &&
-          typeof args[args.length - 1] === "object" &&
-          args[args.length - 1] !== null &&
-          !Array.isArray(args[args.length - 1])
-        ) {
-          options = { ...args.pop(), group: true, context: "chatManager" };
-        } else {
-          options = { group: true, context: "chatManager" };
-        }
-        if (typeof app.showNotification === "function") {
-          app.showNotification(msg, type, duration, options);
-        } else {
-          throw new Error(`[ChatManager] Notification: ${msg}`);
-        }
-      });
+  // 1.  Base notifier inyectado (si existe)
+  const _baseNotify = notify;
 
-  notify('[ChatManager Debug] Notify function configured.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'notify-configured' });
+  // 2.  chatNotify con contexto pre-fijado
+  const chatNotify = _baseNotify && typeof _baseNotify.withContext === 'function'
+    ? _baseNotify.withContext({ module: 'ChatManager', context: 'chatManager' })
+    : null;
+
+  /* --- Fallback (notificationHandler o consola) para entornos de prueba --- */
+  function _fallbackShow(lvl, msg, opts={}) {
+    if (notificationHandler?.show) {
+      return notificationHandler.show(msg, lvl, { group:true, context:'chatManager', module:'ChatManager', ...opts });
+    }
+    (lvl === 'error' ? console.error : console.log)(`[ChatManager] ${msg}`, opts);
+  }
+  const _send = (msg, lvl='info', opts={}) =>
+    (chatNotify?.[lvl] ? chatNotify[lvl](msg, opts) : _fallbackShow(lvl, msg, opts));
+
+  /* Mantén compatibilidad con los antiguos notify(msg,'lvl',opts) */
+  const notifyFn = (msg, lvl='info', opts={}) => _send(msg, lvl, opts);
+
+  notifyFn('[ChatManager Debug] Notify function configured.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'notify-configured' });
 
   /**
    * The main ChatManager class, constructed with all DI references enclosed.
    */
   class ChatManager {
+    _api(endpoint, opts = {}) {
+      return wrapApi(
+        this.apiRequest,
+        { notify: chatNotify ?? _baseNotify ?? { info: ()=>{}, error: ()=>{}, apiError: ()=>{} },
+          errorReporter },
+        endpoint,
+        opts,
+        'ChatManager'
+      );
+    }
     constructor() {
-      notify('[ChatManager Debug] START ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'start' });
+      notifyFn('[ChatManager Debug] START ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'start' });
       this.apiRequest = apiRequest;
       this.app = app;
       this.modelConfigAPI = getInjectedModelConfig(modelConfig);
@@ -236,7 +220,7 @@ export function createChatManager({
       this.isValidProjectId = isValidProjectId;
       this.isAuthenticated = isAuthenticated;
       this.DOMPurify = DOMPurify;
-      this.notify = notify;
+      this.notify = notifyFn;
 
       this.projectId = null;
       this.currentConversationId = null;
@@ -258,7 +242,7 @@ export function createChatManager({
       // Local copy of the model config
       this.modelConfig = this.modelConfigAPI.getConfig();
 
-      notify('[ChatManager Debug] END ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'end' });
+      notifyFn('[ChatManager Debug] END ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'end' });
     }
 
     /**
@@ -413,8 +397,8 @@ export function createChatManager({
 
           // Parallel fetch conversation + messages
           const [conversation, messagesResponse] = await Promise.all([
-            this.apiRequest(apiEndpoints.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
-            this.apiRequest(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: "GET" })
+            this._api(apiEndpoints.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
+            this._api(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: "GET" })
           ]);
 
           const messages = messagesResponse.data?.messages || [];
@@ -472,7 +456,7 @@ export function createChatManager({
           title: `New Chat ${new Date().toLocaleString()}`,
           model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
-        const response = await this.apiRequest(
+        const response = await this._api(
           apiEndpoints.CONVERSATIONS(this.projectId),
           { method: "POST", body: payload }
         );
@@ -511,44 +495,48 @@ export function createChatManager({
      */
     async sendMessage(messageText) {
       if (!messageText?.trim()) return;
-      return this.messageQueue.add(async () => {
-        if (!this.isAuthenticated()) {
-          this.notify("Please log in to send messages", "error");
-          return;
-        }
-        if (!this.isValidProjectId(this.projectId)) {
-          const msg = "No valid project; select a project before sending messages.";
-          this._showErrorMessage(msg);
-          this._handleError("sending message", msg);
-          this.projectDetails?.disableChatUI?.("No valid project");
-          return;
-        }
-        if (!this.currentConversationId) {
-          try {
-            await this.createNewConversation();
-          } catch (error) {
-            this._handleError("creating conversation", error);
-            this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
+      return this.messageQueue.add(
+        safeInvoker(async () => {
+          if (!this.isAuthenticated()) {
+            this.notify("Please log in to send messages", "error");
             return;
           }
-        }
+          if (!this.isValidProjectId(this.projectId)) {
+            const msg = "No valid project; select a project before sending messages.";
+            this._showErrorMessage(msg);
+            this._handleError("sending message", msg);
+            this.projectDetails?.disableChatUI?.("No valid project");
+            return;
+          }
+          if (!this.currentConversationId) {
+            try {
+              await this.createNewConversation();
+            } catch (error) {
+              this._handleError("creating conversation", error);
+              this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
+              return;
+            }
+          }
 
-        // Show user message in UI
-        this._showMessage("user", messageText);
-        this._clearInputField();
-        this._showThinkingIndicator();
+          // Show user message in UI
+          this._showMessage("user", messageText);
+          this._clearInputField();
+          this._showThinkingIndicator();
 
-        try {
-          const response = await this._sendMessageToAPI(messageText);
-          this._processAssistantResponse(response);
-          return response.data;
-        } catch (error) {
-          this._hideThinkingIndicator();
-          this._showErrorMessage(error.message);
-          this._handleError("sending message", error);
-          this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
-        }
-      });
+          try {
+            const response = await this._sendMessageToAPI(messageText);
+            this._processAssistantResponse(response);
+            return response.data;
+          } catch (error) {
+            this._hideThinkingIndicator();
+            this._showErrorMessage(error.message);
+            this._handleError("sending message", error);
+            this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
+          }
+        },
+        { notify: chatNotify ?? _baseNotify, errorReporter },
+        { context:'chatManager', module:'ChatManager', source:'sendMessageTask' })
+      );
     }
 
     /**
@@ -575,7 +563,7 @@ export function createChatManager({
           budget_tokens: cfg.thinkingBudget
         };
       }
-      return this.apiRequest(
+      return this._api(
         apiEndpoints.MESSAGES(this.projectId, this.currentConversationId),
         { method: "POST", body: payload }
       );
@@ -635,7 +623,7 @@ export function createChatManager({
         return false;
       }
       try {
-        await this.apiRequest(
+        await this._api(
           apiEndpoints.CONVERSATION(this.projectId, this.currentConversationId),
           { method: "DELETE" }
         );
@@ -737,7 +725,10 @@ export function createChatManager({
 
       const track = (element, event, fn, opts = {}) => {
         if (!element || !fn) return;
-        this.eventHandlers.trackListener(element, event, fn, {
+        const wrapped = safeInvoker(fn,
+          { notify: chatNotify ?? _baseNotify, errorReporter },
+          { context:'chatManager', module:'ChatManager', source: opts.description || event });
+        this.eventHandlers.trackListener(element, event, wrapped, {
           ...opts,
           context: 'chatManager',
           source: 'ChatManager._bindEvents'

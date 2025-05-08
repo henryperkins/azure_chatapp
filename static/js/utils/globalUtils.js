@@ -12,6 +12,27 @@
  *  adhering to strict dependency‑injection.  Nothing inside this file reaches
  *  for globals except via the injected browserAPI wrapper created below.
  *
+ *  --- Notification bridge for helpers that antes usaban console.* ---
+ */
+let _notifyGU = {                     // fallback a consola si DI no llega
+  warn : (...a) => console.warn(...a),
+  error: (...a) => console.error(...a),
+  info : (...a) => console.info?.(...a) ?? console.log(...a),
+  debug: (...a) => console.debug?.(...a) ?? console.log(...a)
+};
+/**
+ * DI hook – llámalo cuando tengas el `notify` real
+ * (App lo hará tras createNotify)
+ */
+export function setGlobalUtilsNotifier(notify) {
+  if (notify && typeof notify.warn === 'function') {
+    _notifyGU = notify.withContext
+      ? notify.withContext({ module: 'globalUtils', context: 'utils' })
+      : notify;
+  }
+}
+
+/*
  *  Usage pattern (ESM):
  *
  *    import {
@@ -37,6 +58,13 @@ export function createBrowserAPI() {
   if (typeof window === "undefined")
     throw new Error("browserAPI: window context required");
 
+  const logger = {
+    log   : (...a) => _notifyGU.debug?.(...a)  ?? console.log(...a),
+    info  : (...a) => _notifyGU.info?.(...a)   ?? console.info(...a),
+    warn  : (...a) => _notifyGU.warn?.(...a)   ?? console.warn(...a),
+    error : (...a) => _notifyGU.error?.(...a)  ?? console.error(...a),
+    debug : (...a) => _notifyGU.debug?.(...a)  ?? console.debug(...a)
+  };
   return {
     /* DependencySystem gateway */
     getDependencySystem: () => window.DependencySystem,
@@ -78,13 +106,7 @@ export function createBrowserAPI() {
     AbortController: window.AbortController,
 
     /* Console wrapper so tests can stub easily */
-    console: {
-      log: (...a) => console.log(...a),
-      info: (...a) => console.info(...a),
-      warn: (...a) => console.warn(...a),
-      error: (...a) => console.error(...a),
-      debug: (...a) => console.debug(...a),
-    },
+    console: logger,
   };
 }
 
@@ -332,7 +354,7 @@ export function normaliseUrl(url, base) {
   }
   if (!finalBase) {
     finalBase = "http://localhost:8000";
-    console.warn("[globalUtils] normaliseUrl: No valid base, using localhost fallback.");
+    _notifyGU.warn("[globalUtils] normaliseUrl: No valid base, using localhost fallback.");
   }
   try {
     const u = new URL(url, finalBase);
@@ -343,7 +365,7 @@ export function normaliseUrl(url, base) {
     u.search = new URLSearchParams(sorted).toString();
     return u.toString();
   } catch (_e) {
-    console.warn("[globalUtils] normaliseUrl failed", url, _e);
+    _notifyGU.warn("[globalUtils] normaliseUrl failed", url, _e);
     return url; // graceful fallback
   }
 }
@@ -362,7 +384,7 @@ export function shouldSkipDedup(url) {
       return true;
     }
   } catch (e) {
-    console.warn("[globalUtils] (fallback) shouldSkipDedup error", e);
+    _notifyGU.warn("[globalUtils] (fallback) shouldSkipDedup error", e);
   }
   return false;
 }
@@ -432,7 +454,7 @@ export function toggleElement(selOrEl, show) {
       selOrEl.classList.toggle("hidden", !show);
     }
   } catch (e) {
-    console.error("[globalUtils] (fallback) toggleElement error", e);
+    _notifyGU.error("[globalUtils] (fallback) toggleElement error", e);
   }
 }
 
@@ -508,7 +530,7 @@ export async function waitForDepsAndDom({
       if (Date.now() - start > timeout) {
         throw new Error(`waitForDepsAndDom error: ${err.message}`);
       }
-      console.warn('waitForDepsAndDom: Caught error while checking dependencies, retrying...', err);
+      _notifyGU.warn('waitForDepsAndDom: Caught error while checking dependencies, retrying...', err);
     }
     await new Promise((r) => setTimeout(r, pollInterval));
   }
