@@ -23,6 +23,8 @@ from utils.serializers import serialize_list
 from enum import Enum
 from models.user import User, UserRole
 from models.project import Project, ProjectUserAssociation
+from uuid import UUID
+from sqlalchemy.future import select
 
 
 # ---- ID normaliser --------------------------------------------------------
@@ -43,6 +45,37 @@ def _coerce_project_id(val):
             return int(val)
         except (ValueError, TypeError):
             return val
+
+# ---- Project lookup supporting both UUID and int PKs ----------------------
+async def _lookup_project(session, key):
+    """
+    Retrieve a Project by either UUID or integer primary key.
+    Args:
+        session: SQLAlchemy AsyncSession
+        key: UUID, uuid-string, or integer id
+    Returns:
+        Project instance or None
+    """
+    # Try to get by int PK first (legacy/compat)
+    try:
+        int_key = int(key)
+        project = await session.get(Project, int_key)
+        if project:
+            return project
+    except (ValueError, TypeError):
+        pass
+    # Try to get by UUID (modern flow)
+    if hasattr(Project, "uuid"):
+        try:
+            uuid_key = UUID(str(key))
+            stmt = select(Project).where(Project.uuid == uuid_key)
+            res = await session.execute(stmt)
+            project = res.scalars().first()
+            if project:
+                return project
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return None
 
 
 # =======================================================

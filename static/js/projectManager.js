@@ -254,10 +254,15 @@ class ProjectManager {
   }
 
   async loadProjectDetails(id) {
-    if (!isValidProjectId(id)) throw new Error('Invalid projectId');
+    console.log("[ProjectManager] Entered loadProjectDetails with id:", id);
+    if (!isValidProjectId(id)) {
+      console.log("[ProjectManager] Invalid projectId, returning early");
+      throw new Error('Invalid projectId');
+    }
 
     // Early authentication and access check
     if (!this.app || !this.app.state || !this.app.state.currentUser) {
+      console.log("[ProjectManager] Missing app state or currentUser, returning early");
       this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
       return null;
     }
@@ -276,16 +281,31 @@ class ProjectManager {
       // Continue with the request, but prep UI for possible 403
     }
 
-    if (!this._authOk('projectDetailsError', { id })) return null;
+    if (!this._authOk('projectDetailsError', { id })) {
+      console.log("[ProjectManager] _authOk returned false, returning early");
+      return null;
+    }
 
     const detailUrl = typeof this.apiEndpoints.DETAIL === 'function'
       ? this.apiEndpoints.DETAIL(id)
       : (this.apiEndpoints.DETAIL || '/api/projects/{id}/').replace('{id}', id);
+    console.log("[ProjectManager] Fetching project details from:", detailUrl);
     this.currentProject = null;
 
     try {
-      const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
-      this.currentProject = normalizeProjectResponse(detailRes);
+      try {
+        const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
+        this.currentProject = normalizeProjectResponse(detailRes);
+      } catch (err) {
+        // Log full error and response for debugging API issues
+        // eslint-disable-next-line no-console
+        console.error("[ProjectManager] loadProjectDetails error:", {
+          url: detailUrl,
+          error: err,
+          detailRes: err?.response || err?.data || null
+        });
+        throw err;
+      }
       this._emit('projectLoaded', this.currentProject);
 
       // Don't continue if archived

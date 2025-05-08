@@ -283,12 +283,16 @@ export async function init() {
 
         if (appState.isAuthenticated) {
             const user = await fetchCurrentUser();
+            console.log("[App] Auth verify/fetchCurrentUser response:", user);
+            console.log("[App] Before set currentUser:", currentUser, "app.state.currentUser:", app.state.currentUser);
             if (user) {
                 currentUser = user;
+                app.state.currentUser = user;
                 browserAPI.setCurrentUser(user);
                 DependencySystem.register('currentUser', user);
                 // Re-render header now that we have full user info
                 renderAuthHeader();
+                console.log("[App] After set currentUser:", currentUser, "app.state.currentUser:", app.state.currentUser);
             }
         }
 
