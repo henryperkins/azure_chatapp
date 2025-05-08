@@ -96,14 +96,7 @@ export class ProjectListComponent {
         this.onViewProject = (projectObjOrId) => {
             const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
             // Debug: log before calling details load
-            console.log("[ProjectListComponent] About to call loadProjectDetails on", this.projectManager, "with projectId:", projectId);
-            // Trigger project details load
-            if (this.projectManager && typeof this.projectManager.loadProjectDetails === "function") {
-                this.projectManager.loadProjectDetails(projectId);
-                console.log("[ProjectListComponent] Called loadProjectDetails");
-            } else {
-                this.notify.error("[ProjectListComponent] projectManager.loadProjectDetails not available.", { group: true });
-            }
+            console.log("[ProjectListComponent] About to call onViewProject with projectId:", projectId);
             // Save to app/session/global state
             if (this.app && typeof this.app.setCurrentProjectId === "function") {
                 this.app.setCurrentProjectId(projectId);
