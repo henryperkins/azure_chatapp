@@ -226,6 +226,11 @@ const app = {
     },
     validateUUID: (id) => isValidProjectId(id)   // ← nuevo
 };
+
+// Expose the central state so other modules (ProjectManager, ProjectDashboard, etc.)
+// can consult `app.state.isAuthenticated`
+app.state = appState;
+
 DependencySystem.register('app', app);
 
 // ---------------------------------------------------------------------------
@@ -269,6 +274,8 @@ export async function init() {
                 currentUser = user;
                 browserAPI.setCurrentUser(user);
                 DependencySystem.register('currentUser', user);
+                // Re-render header now that we have full user info
+                renderAuthHeader();
             }
         }
 
