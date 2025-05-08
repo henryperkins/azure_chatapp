@@ -19,6 +19,7 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, Mapped, mapped_column
+from sqlalchemy import ForeignKey
 
 from db import Base
 
@@ -75,8 +76,14 @@ class Project(Base):
 
     from typing import Optional
 
-    # Removed knowledge_base_id FK to break the cycle:
-    # Now, relation to KnowledgeBase will be via a relationship property only.
+    knowledge_base_id: Mapped[uuid.UUID | None] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True
+    )
+
     default_model: Mapped[str] = mapped_column(
         String(50),
         default="claude-3-sonnet-20240229",
@@ -121,11 +128,12 @@ class Project(Base):
     members: Mapped[list[ProjectUserAssociation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-    # Relationship to KnowledgeBase, not enforced as FK; join on KnowledgeBase.project_id
+    # Relationship to KnowledgeBase, using the new FK column and back_populates
     knowledge_base = relationship(
         "KnowledgeBase",
+        back_populates="project",
         uselist=False,
-        primaryjoin="Project.id==foreign(KnowledgeBase.project_id)"
+        foreign_keys=[knowledge_base_id]
     )
 
     def __repr__(self) -> str:
