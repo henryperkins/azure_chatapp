@@ -41,7 +41,10 @@ export class ProjectListComponent {
         notify,
         storage,
         sanitizer,
-        apiClient
+        apiClient,
+        domAPI,
+        browserService,
+        globalUtils
     } = {}) {
         // Assign DI fields before any usage
         this.projectManager = projectManager;
@@ -49,6 +52,9 @@ export class ProjectListComponent {
         this.modalManager = modalManager;
         this.app = app;
         this.router = router;
+        this.domAPI = domAPI;
+        this.browserService = browserService;
+        this.globalUtils = globalUtils;
 
         // DI notify: use context/group everywhere; see notification-system.md
         this.notify = notify.withContext({ context: 'projectListComponent', module: 'ProjectListComponent' });
@@ -145,7 +151,9 @@ export class ProjectListComponent {
             return;
         }
 
-        this.element = document.getElementById(this.elementId);
+        this.element = this.domAPI?.getElementById
+            ? this.domAPI.getElementById(this.elementId)
+            : document.getElementById(this.elementId);
         if (!this.element) {
             this.notify.error(
                 `[ProjectListComponent] Element #${this.elementId} not found`,
@@ -159,6 +167,8 @@ export class ProjectListComponent {
         // Use the root element itself as the grid if it has the .grid class
         if (this.element.classList.contains('grid')) {
             this.gridElement = this.element;
+        } else if (this.domAPI?.querySelector) {
+            this.gridElement = this.domAPI.querySelector('.grid', this.element);
         } else {
             this.gridElement = this.element.querySelector('.grid');
         }
@@ -207,9 +217,10 @@ export class ProjectListComponent {
 
     /** Bind core event listeners */
     _bindEventListeners() {
+        const doc = this.domAPI?.getDocument?.() || document;
         const projectsLoadedHandler = (e) => this.renderProjects(e.detail);
         this.eventHandlers.trackListener(
-            document,
+            doc,
             "projectsLoaded",
             projectsLoadedHandler,
             { description: "ProjectList: projectsLoaded" }
@@ -224,20 +235,20 @@ export class ProjectListComponent {
         );
 
         this.eventHandlers.trackListener(
-            document,
+            doc,
             "projectCreated",
             (e) => this._handleProjectCreated(e.detail),
             { description: "ProjectList: projectCreated" }
         );
         this.eventHandlers.trackListener(
-            document,
+            doc,
             "projectUpdated",
             (e) => this._handleProjectUpdated(e.detail),
             { description: "ProjectList: projectUpdated" }
         );
 
         this.eventHandlers.trackListener(
-            document,
+            doc,
             "authStateChanged",
             (e) => {
                 if (e.detail?.authenticated) {
@@ -255,9 +266,14 @@ export class ProjectListComponent {
      * Splits into per-tab and tablist helpers for testability and hygiene.
      */
     _bindFilterEvents() {
-        const container = document.getElementById("projectFilterTabs");
+        const docAPI = this.domAPI;
+        const container = docAPI?.getElementById
+            ? docAPI.getElementById("projectFilterTabs")
+            : document.getElementById("projectFilterTabs");
         if (!container) return;
-        const tabs = [...container.querySelectorAll(".tab[data-filter]")];
+        const tabs = docAPI?.querySelectorAll
+            ? [...docAPI.querySelectorAll(".tab[data-filter]", container)]
+            : [...container.querySelectorAll(".tab[data-filter]")];
         tabs.forEach(tab => this._bindSingleFilterTab(tab, tab.dataset.filter));
         this._bindFilterTablistKeyboardNav(container, tabs);
     }
@@ -328,9 +344,10 @@ export class ProjectListComponent {
 
     /** Visually highlight active tab & update tabindex/aria-labelledby for a11y */
     _updateActiveTab() {
-        const tabs = document.querySelectorAll(
-            "#projectFilterTabs .tab[data-filter]"
-        );
+        const docAPI = this.domAPI;
+        const tabs = docAPI?.querySelectorAll
+            ? docAPI.querySelectorAll("#projectFilterTabs .tab[data-filter]")
+            : document.querySelectorAll("#projectFilterTabs .tab[data-filter]");
         let activeTabId = null;
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
@@ -340,7 +357,9 @@ export class ProjectListComponent {
             if (isActive) activeTabId = tab.id;
         });
         // Update aria-labelledby for the project card grid/tabpanel
-        const projectCardsPanel = document.getElementById("projectCardsPanel");
+        const projectCardsPanel = docAPI?.getElementById
+            ? docAPI.getElementById("projectCardsPanel")
+            : document.getElementById("projectCardsPanel");
         if (projectCardsPanel && activeTabId) {
             projectCardsPanel.setAttribute("aria-labelledby", activeTabId);
         }
@@ -596,13 +615,16 @@ export class ProjectListComponent {
                 "[ProjectListComponent] eventHandlers.trackListener is required for button events."
             );
         }
+        const docAPI = this.domAPI;
         const buttonIds = [
             "projectListCreateBtn",
             "sidebarNewProjectBtn",
             "emptyStateCreateBtn"
         ];
         buttonIds.forEach((id) => {
-            const btn = document.getElementById(id);
+            const btn = docAPI?.getElementById
+                ? docAPI.getElementById(id)
+                : document.getElementById(id);
             if (!btn) return;
             const handler = () => this._openNewProjectModal();
             this.eventHandlers.trackListener(btn, "click", handler, {
@@ -712,7 +734,10 @@ export class ProjectListComponent {
         if (!this.gridElement) return;
         this._clearElement(this.gridElement);
         this.gridElement.classList.add("grid", "project-list");
-        const emptyDiv = document.createElement("div");
+        const docAPI = this.domAPI;
+        const emptyDiv = (docAPI?.createElement
+            ? docAPI.createElement("div")
+            : document.createElement("div"));
         emptyDiv.className = "project-list-empty";
         this._safeSetInnerHTML(emptyDiv, `
           <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -724,7 +749,9 @@ export class ProjectListComponent {
         `);
         this.gridElement.appendChild(emptyDiv);
 
-        const createBtn = document.getElementById("emptyStateCreateBtn");
+        const createBtn = docAPI?.getElementById
+            ? docAPI.getElementById("emptyStateCreateBtn")
+            : document.getElementById("emptyStateCreateBtn");
         if (createBtn) {
             this.eventHandlers.trackListener(
                 createBtn,
@@ -740,7 +767,10 @@ export class ProjectListComponent {
         if (!this.element) return;
         this._clearElement(this.element);
         this.element.classList.add("grid", "project-list");
-        const loginDiv = document.createElement("div");
+        const docAPI = this.domAPI;
+        const loginDiv = (docAPI?.createElement
+            ? docAPI.createElement("div")
+            : document.createElement("div"));
         loginDiv.className = "project-list-fallback";
         this._safeSetInnerHTML(loginDiv, `
           <p class="mt-4 text-lg">Please log in to view your projects</p>
@@ -748,11 +778,14 @@ export class ProjectListComponent {
         `);
         this.element.appendChild(loginDiv);
 
-        const loginBtn = document.getElementById("loginButton");
+        const loginBtn = docAPI?.getElementById
+            ? docAPI.getElementById("loginButton")
+            : document.getElementById("loginButton");
         if (loginBtn) {
             this.eventHandlers.trackListener(loginBtn, "click", (e) => {
                 e.preventDefault();
-                document.dispatchEvent(new CustomEvent("requestLogin"));
+                const doc = docAPI?.getDocument?.() || document;
+                doc.dispatchEvent(new CustomEvent("requestLogin"));
             });
         }
     }

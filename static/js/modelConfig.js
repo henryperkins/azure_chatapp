@@ -193,7 +193,10 @@ export function createModelConfig({
    * Safely dispatch an event to the global document if available.
    */
   function dispatchGlobalEvent(api, eventName, detailObj) {
-    if (typeof document !== 'undefined' && document.dispatchEvent) {
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
+      domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent(eventName, { detail: detailObj }));
+    } else if (typeof document !== 'undefined' && document.dispatchEvent) {
       const ev = new CustomEvent(eventName, { detail: detailObj });
       document.dispatchEvent(ev);
     }
