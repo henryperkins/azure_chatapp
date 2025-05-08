@@ -33,6 +33,9 @@ export function createEventHandlers({
   if (!browserService) throw new Error(`[${MODULE}] browserService is required`);
   if (!notify) throw new Error(`[${MODULE}] notify utility (handlerNotify) is required`);
 
+  // Primary notifier reference (may be replaced by setNotifier)
+  let handlerNotify = notify;
+
   // Resolve optional dependencies dynamically if not passed
   function _resolveDep(name) {
     try {
@@ -62,7 +65,6 @@ export function createEventHandlers({
   let authButtonDelegationBound = false;   // prevents duplicate binding
 
   const storageBackend = storage || browserService; // Assuming browserService provides getItem/setItem
-  let handlerNotify = notify; // Allow updating later via setNotifier
 
   function redirect(url) {
     if (typeof navigate === "function") navigate(url);

@@ -665,11 +665,6 @@ class ProjectDashboard {
     // Push url then show – enables Back button
     history.pushState({}, '', this.browserService.buildUrl ? this.browserService.buildUrl({ project: projectId }) : `?project=${projectId}`);
     // Ensure project details are loaded (fixes missing details view)
-    if (this.projectManager && typeof this.projectManager.loadProjectDetails === "function") {
-      console.log("[ProjectDashboard] About to call projectManager.loadProjectDetails with:", projectId, this.projectManager);
-      const result = this.projectManager.loadProjectDetails(projectId);
-      console.log("[ProjectDashboard] Called projectManager.loadProjectDetails, result:", result);
-    }
     this.showProjectDetails(projectId);
   }
 
