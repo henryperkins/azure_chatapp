@@ -71,13 +71,19 @@ const browserServiceInstance = createBrowserService({
  * @type {import('./utils/notify.js').Notify|Object<string,Function>}
  * Using a broad type to satisfy IDEs until real notify is assigned.
  */
-let notify = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-  apiError: () => {}
-};
+let notify = Object.assign(
+  () => {},                                 // callable noop
+  {
+    debug   : () => {},
+    info    : () => {},
+    success : () => {},
+    warn    : () => {},
+    error   : () => {},
+    apiError: () => {},
+    authWarn: () => {},
+    withContext: () => ({ debug:()=>{}, info:()=>{}, warn:()=>{}, error:()=>{} })
+  }
+);
 
 const sentryConfig = {
     dsn: 'https://b03711f63d1160f48dcaeda3edae14ac@o4508070823395328.ingest.us.sentry.io/4509138383863808',
