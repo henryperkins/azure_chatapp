@@ -414,12 +414,11 @@ class ProjectDashboard {
       detailsViewDisplay: detailsView ? detailsView.style.display : 'N/A'
     });
 
-    // Always modify both classList and style.display explicitly
+    // CONSISTENT APPROACH: Always modify both classList and style.display
     if (listView) {
       this.logger.info(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
       listView.classList.toggle('hidden', !showList);
       listView.setAttribute('aria-hidden', (!showList).toString());
-      // Always set style.display to override any previous inline styles
       listView.style.display = showList ? '' : 'none';
       if (showList) listView.classList.remove('opacity-0');
     }
@@ -428,7 +427,6 @@ class ProjectDashboard {
       this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
       detailsView.classList.toggle('hidden', !showDetails);
       detailsView.setAttribute('aria-hidden', (!showDetails).toString());
-      // Always set style.display to override any previous inline styles
       detailsView.style.display = showDetails ? '' : 'none';
       if (showDetails) detailsView.classList.remove('opacity-0');
     }
@@ -443,8 +441,8 @@ class ProjectDashboard {
 
     // Enhanced logging: log both class and style.display after change
     this.logger.info('[ProjectDashboard] View state after update:', {
-      listViewHidden: listView?.classList.contains('hidden') || false,
-      detailsViewHidden: detailsView?.classList.contains('hidden') || false,
+      listViewVisible: listView ? !listView.classList.contains('hidden') : false,
+      detailsViewVisible: detailsView ? !detailsView.classList.contains('hidden') : false,
       listViewDisplay: listView?.style.display || 'N/A',
       detailsViewDisplay: detailsView?.style.display || 'N/A'
     });
