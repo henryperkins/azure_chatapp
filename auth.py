@@ -449,6 +449,12 @@ async def refresh_token(
         )
     except HTTPException as ex:
         if ex.status_code in (401, 403):
+            logger.warning(
+                "[REFRESH_VERSION_MISMATCH] user=%s detail=%s cookies=%s",
+                locked_user.username if 'locked_user' in locals() else 'unknown',
+                ex.detail,
+                request.cookies,
+            )
             set_secure_cookie(response, "access_token", "", 0, request)
             set_secure_cookie(response, "refresh_token", "", 0, request)
         raise
@@ -632,6 +638,11 @@ async def logout_user(
                 locked = await session.get(User, current_user.id, with_for_update=True)
                 if locked:
                     locked.token_version = (locked.token_version or 0) + 1
+                    logger.info(
+                        "[TOKEN_VERSION_INCREMENT] user=%s new_ver=%s reason=logout",
+                        locked.username,
+                        locked.token_version,
+                    )
                     if refresh_cookie:
                         try:
                             dec = await verify_token(refresh_cookie, "refresh", request)

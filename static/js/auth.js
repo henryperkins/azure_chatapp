@@ -30,6 +30,11 @@ export function createAuthModule({
   // Canonical, context-aware notifier for this whole module:
   const authNotify = notify.withContext({ module: 'AuthModule', context: 'auth' });
 
+  // --- Debug Utility ---
+  function logCookieState(tag = '') {
+    console.info('[COOKIE_SNAPSHOT]', tag, document.cookie);
+  }
+
   // --- Input Validation Utilities ---
   function validateUsername(username) {
     // 3-32 chars, a-zA-Z0-9_.-
@@ -166,6 +171,7 @@ export function createAuthModule({
     }
     try {
       const data = await apiRequest(endpoint, options);
+      logCookieState(`after ${method} ${endpoint}`);
       return data;
     } catch (error) {
       authNotify.apiError(`[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`, { group: true, source: 'authRequest' });
@@ -208,6 +214,7 @@ export function createAuthModule({
   }
   async function clearTokenState(options = { source: 'unknown', isError: false }) {
     authNotify.info(`[Auth] Clearing auth state. Source: ${options.source}`, { group: true, source: 'clearTokenState' });
+    logCookieState('after clear');
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
   }
 
@@ -216,6 +223,7 @@ export function createAuthModule({
     if (authCheckInProgress && !forceVerify) return authState.isAuthenticated;
     authCheckInProgress = true;
     try {
+      logCookieState('before verify');
       try {
         let response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
         // If backend sent plain text, attempt JSON parse
@@ -441,6 +449,9 @@ export function createAuthModule({
       registeredListeners.push(eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false }));
     }
   }
+
+  // --- Auth Event Monitoring ---
+  AuthBus.addEventListener('authStateChanged', e => console.warn('[AUTH_EVENT]', e.detail));
 
   // --- Module Initialization
   async function init() {
