@@ -38,6 +38,7 @@ from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import check_project_permission, ProjectAccessLevel
 from services.project_service import _coerce_project_id  # <- add
+from services.project_service import _lookup_project
 import config
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -323,7 +324,7 @@ async def get_project(
                 proj_id, current_user, db, ProjectAccessLevel.READ
             )
             # Fetch project after permission check
-            project = await db.get(Project, proj_id)
+            project = await _lookup_project(db, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -379,7 +380,7 @@ async def update_project(
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.EDIT
             )
-            project = await db.get(Project, proj_id)
+            project = await _lookup_project(db, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -468,7 +469,7 @@ async def delete_project(
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
-            project = await db.get(Project, proj_id)
+            project = await _lookup_project(db, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -634,7 +635,7 @@ async def toggle_archive_project(
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
-            project = await db.get(Project, proj_id)
+            project = await _lookup_project(db, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
@@ -696,7 +697,7 @@ async def toggle_pin_project(
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
-            project = await db.get(Project, proj_id)
+            project = await _lookup_project(db, proj_id)
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
