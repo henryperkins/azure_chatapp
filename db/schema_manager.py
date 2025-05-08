@@ -214,10 +214,11 @@ class SchemaManager:
                 if not self._types_match(
                     column.type, db_col["type"], db_col.get("length")
                 ):
+                    db_type_str = db_col['type']
+                    db_length = db_col.get('length')
+                    db_type_display = f"{db_type_str}({db_length})" if db_length else db_type_str
                     mismatch_details.append(
-                        f"Type mismatch: {table_name}.{column.name} "
-                        f"(DB: {db_col['type']}{f'({db_col['length']})' if db_col.get('length') else ''} "
-                        f"vs ORM: {column.type})"
+                        f"Type mismatch: {table_name}.{column.name} (DB: {db_type_display} vs ORM: {column.type})"
                     )
 
             # Check indexes
