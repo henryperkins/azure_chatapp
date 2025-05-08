@@ -267,19 +267,8 @@ class ProjectManager {
       return null;
     }
 
-    // Check if user has cached role information, if available
-    const userHasAccess = this.app.state.currentUser.role === 'admin' ||
-      this._userHasProjectAccess(id);
-
-    if (!userHasAccess) {
-      this.notify.warn('[ProjectManager] User may not have permission for this project', {
-        group: true,
-        context: 'projectManager',
-        module: MODULE,
-        source: 'loadProjectDetails'
-      });
-      // Continue with the request, but prep UI for possible 403
-    }
+    // NOTE: skip local permission heuristic; always attempt to fetch project details via API
+    // (Permission enforcement is handled server-side and will return 403 if unauthorized)
 
     if (!this._authOk('projectDetailsError', { id })) {
       console.log("[ProjectManager] _authOk returned false, returning early");
