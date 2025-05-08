@@ -177,7 +177,7 @@ async def create_knowledge_base(
     await save_model(db, kb)
 
     # Attach to project
-    project.knowledge_base_id = kb.id  # type: ignore
+    project.knowledge_base_id = kb.id  # new column now exists
     await save_model(db, project)
 
     return kb
