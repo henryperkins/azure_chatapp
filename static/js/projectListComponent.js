@@ -92,10 +92,18 @@ export class ProjectListComponent {
             throw new Error("[ProjectListComponent] htmlSanitizer must provide a .sanitize(html) method.");
         }
 
-        // Default navigation callback - now prefers passing project object if possible
+        // Default navigation callback - now triggers details load then navigation
         this.onViewProject = (projectObjOrId) => {
-            // Rewrite: set current project context (in SPA/global state) instead of URL
             const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
+            // Debug: log before calling details load
+            console.log("[ProjectListComponent] About to call loadProjectDetails on", this.projectManager, "with projectId:", projectId);
+            // Trigger project details load
+            if (this.projectManager && typeof this.projectManager.loadProjectDetails === "function") {
+                this.projectManager.loadProjectDetails(projectId);
+                console.log("[ProjectListComponent] Called loadProjectDetails");
+            } else {
+                this.notify.error("[ProjectListComponent] projectManager.loadProjectDetails not available.", { group: true });
+            }
             // Save to app/session/global state
             if (this.app && typeof this.app.setCurrentProjectId === "function") {
                 this.app.setCurrentProjectId(projectId);
@@ -549,18 +557,24 @@ export class ProjectListComponent {
 
     /** Handle click on project cards */
     _handleCardClick(e) {
+        // Debug: log card click and project id
+        console.log("[ProjectListComponent] Card clicked", e.target);
+
+        // Try to extract project ID from the clicked card
+        const projectCard = e.target.closest('.project-card');
+        const projectId = projectCard?.getAttribute('data-project-id');
+        console.log("[ProjectListComponent] Extracted projectId:", projectId);
+
         // Check if the click is on a create project button and ignore it
         const isCreateButton = e.target.closest('#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn');
         if (isCreateButton) {
             return; // Ignore clicks on create buttons
         }
-        const projectCard = e.target.closest(".project-card");
         if (!projectCard) {
             this.notify.warn('[Debug] No .project-card ancestor on click event.', { group: true, context: 'projectListComponent' });
             return;
         }
         const actionBtn = e.target.closest("[data-action]");
-        const projectId = projectCard.dataset.projectId;
         if (!projectId) {
           this.notify.error(
             "[ProjectListComponent] Clicked a card without a valid projectId.",
@@ -581,8 +595,17 @@ export class ProjectListComponent {
             this.notify.info(`[Debug] Navigating to project details for: ${projectId}...`, {
                 group: true, context: 'projectListComponent'
             });
-            // Pass only the project ID to the navigation callback (avoid objects in URL)
-            this.onViewProject(projectId);
+            // Only allow details load if user is authenticated and currentUser is set
+            const appState = this.app?.state;
+            if (appState?.isAuthenticated && appState?.currentUser) {
+                console.log("[ProjectListComponent] About to call onViewProject with:", projectId, this.onViewProject);
+                this.onViewProject(projectId);
+                console.log("[ProjectListComponent] Called onViewProject");
+            } else {
+                this.notify.warn("[ProjectListComponent] Ignoring card click: user not authenticated or currentUser not loaded.", {
+                    group: true, context: "projectListComponent"
+                });
+            }
         }
     }
 
