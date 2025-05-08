@@ -119,6 +119,23 @@ async def verify_token(
         if not token_id:
             raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
+        # Check token version
+        sub = decoded.get("sub")
+        if sub:
+            # Check user
+            user_result = await db_session.execute(select(User).where(User.username == sub))
+            user = user_result.scalars().first()
+            if user and user.token_version is not None and decoded.get("version") != user.token_version:
+                logger.warning(
+                    "[TOKEN_VERSION_MISMATCH] user=%s tok_ver=%s db_ver=%s jti=%s exp=%s iat=%s",
+                    sub,
+                    decoded.get("version"),
+                    user.token_version,
+                    decoded.get("jti"),
+                    decoded.get("exp"),
+                    decoded.get("iat"),
+                )
+
         if expected_type and token_type != expected_type:
             raise HTTPException(status_code=401, detail=f"Invalid token type: expected {expected_type}")
 
