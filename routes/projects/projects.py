@@ -37,6 +37,7 @@ from models.artifact import Artifact
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import check_project_permission, ProjectAccessLevel
+from services.project_service import _coerce_project_id   # <- add
 import config
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
@@ -294,12 +295,13 @@ async def list_projects(
 
 @router.get("/{project_id}/", response_model=dict)
 async def get_project(
-    project_id: UUID,
+    project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Get project details with centralized permission validation"""
     current_user, _token = current_user_tuple
+    project_id = _coerce_project_id(project_id)
     with sentry_span(
         op="project", name="Get Project", description=f"Get project {project_id}"
     ) as span:
@@ -349,13 +351,14 @@ async def get_project(
 
 @router.patch("/{project_id}/", response_model=dict)
 async def update_project(
-    project_id: UUID,
+    project_id: str,
     update_data: ProjectUpdate,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Update project with change tracking"""
     current_user, _token = current_user_tuple
+    project_id = _coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         name="Update Project",
@@ -441,12 +444,13 @@ async def update_project(
 
 @router.delete("/{project_id}/", response_model=dict)
 async def delete_project(
-    project_id: UUID,
+    project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Delete project with resource cleanup tracking"""
     current_user, _token = current_user_tuple
+    project_id = _coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
         name="Delete Project",
@@ -595,12 +599,13 @@ async def delete_project(
 
 @router.patch("/{project_id}/archive", response_model=dict)
 async def toggle_archive_project(
-    project_id: UUID,
+    project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Toggle archive status with state tracking"""
     current_user, _token = current_user_tuple
+    project_id = _coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Toggle Archive",
@@ -659,12 +664,13 @@ async def toggle_archive_project(
 
 @router.post("/{project_id}/pin", response_model=dict)
 async def toggle_pin_project(
-    project_id: UUID,
+    project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """Toggle pin status of a project with validation"""
     current_user, _token = current_user_tuple
+    project_id = _coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Toggle Pin",
@@ -729,7 +735,7 @@ async def toggle_pin_project(
 
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
-    project_id: UUID,
+    project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
@@ -737,6 +743,7 @@ async def get_project_stats(
     Get project statistics with performance tracing.
     """
     current_user, _token = current_user_tuple
+    project_id = _coerce_project_id(project_id)
     with sentry_span(
         op="project",
         name="Get Stats",
