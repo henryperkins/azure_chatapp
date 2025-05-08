@@ -50,15 +50,19 @@ export function createNotify({
     };
   };
 
-  return {
-    debug: (msg, o = {}) => send(msg, 'debug', o),
-    info: (msg, o = {}) => send(msg, 'info', o),
-    success: (msg, o = {}) => send(msg, 'success', o),
-    warn: (msg, o = {}) => send(msg, 'warning', o),
-    error: (msg, o = {}) => send(msg, 'error', o),
-    apiError: (msg, o = {}) => send(msg, 'error', { group: true, context: 'apiRequest', ...o }),
-    authWarn: (msg, o = {}) => send(msg, 'warning', { group: true, context: 'auth', ...o }),
-    log: (msg, o = {}) => send(msg, 'debug', o), // Sentry expects .log
+  const api = (msg, type = 'info', opts = {}) => send(msg, type, opts);  // callable
+
+  Object.assign(api, {
+    debug   : (m, o = {}) => send(m, 'debug',   o),
+    info    : (m, o = {}) => send(m, 'info',    o),
+    success : (m, o = {}) => send(m, 'success', o),
+    warn    : (m, o = {}) => send(m, 'warning', o),
+    error   : (m, o = {}) => send(m, 'error',   o),
+    apiError: (m, o = {}) => send(m, 'error',   { group: true, context: 'apiRequest', ...o }),
+    authWarn: (m, o = {}) => send(m, 'warning', { group: true, context: 'auth',       ...o }),
+    log     : (m, o = {}) => send(m, 'debug',   o),
     withContext
-  };
+  });
+
+  return api;
 }
