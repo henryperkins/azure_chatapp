@@ -347,8 +347,10 @@ export function createAuthModule({
     loginForms.forEach(loginForm => {
       if (loginForm && !loginForm._listenerAttached) {
         loginForm._listenerAttached = true;
-        loginForm.action = apiEndpoints.AUTH_LOGIN;
-        loginForm.method = 'POST';
+        // Prevent native form submission → avoids page reload
+        loginForm.setAttribute('novalidate', 'novalidate');
+        loginForm.removeAttribute('action');
+        loginForm.removeAttribute('method');
         const handler = async (e) => {
           e.preventDefault();
           const errorEl = domAPI.getElementById('loginModalError');
@@ -394,6 +396,9 @@ export function createAuthModule({
     const registerModalForm = domAPI.getElementById('registerModalForm');
     if (registerModalForm && !registerModalForm._listenerAttached) {
       registerModalForm._listenerAttached = true;
+      registerModalForm.setAttribute('novalidate', 'novalidate');
+      registerModalForm.removeAttribute('action');
+      registerModalForm.removeAttribute('method');
       const handler = async (e) => {
         e.preventDefault();
         const errorEl = domAPI.getElementById('registerModalError');
