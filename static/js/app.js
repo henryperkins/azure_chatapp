@@ -895,7 +895,9 @@ function createOrGetChatManager() {
         isAuthenticated: () => authModule?.isAuthenticated?.() || false,
         DOMPurify: DependencySystem.modules.get('sanitizer'),
         apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
-        notificationHandler: notify
+        notificationHandler: notify,
+        notify,                // ← pasa el DI real
+        errorReporter: DependencySystem.modules.get('errorReporter')
     });
     DependencySystem.register('chatManager', cm);
     return cm;
