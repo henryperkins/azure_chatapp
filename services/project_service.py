@@ -28,7 +28,7 @@ from sqlalchemy.future import select
 
 
 # ---- ID normaliser --------------------------------------------------------
-def _coerce_project_id(val):
+def coerce_project_id(val):
     """
     Accepts UUID / uuid-string / int and returns the same type that the DB
     column expects.  If conversion fails we just return the original value,
@@ -90,7 +90,7 @@ async def validate_knowledge_base_access(
     Validate KB exists, is active, and belongs to the given project.
     Raises 404 if project or KB not found, 400 if KB isn't active or mismatched.
     """
-    project_id = _coerce_project_id(project_id)
+    project_id = coerce_project_id(project_id)
     project = await db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -137,7 +137,7 @@ async def check_project_permission(
 
     Returns: bool (or raises HTTPException)
     """
-    project_id = _coerce_project_id(project_id)
+    project_id = coerce_project_id(project_id)
     # Admins: admin can do anything up to MANAGE (not OWNER actions by default, unless adjusted)
     if (
         user.role == UserRole.ADMIN.value
@@ -204,7 +204,7 @@ async def check_knowledge_base_status(
     project_id: Union[UUID, int], db: AsyncSession
 ) -> dict[str, Any]:
     """Check if project's knowledge base has indexed content"""
-    project_id = _coerce_project_id(project_id)
+    project_id = coerce_project_id(project_id)
     # Count processed files and total chunks
     stmt = select(
         func.count(ProjectFile.id).label("file_count"),
@@ -239,7 +239,7 @@ async def validate_project_access(
         db: Database session
         skip_ownership_check: If True, skips user ownership validation
     """
-    project_id = _coerce_project_id(project_id)
+    project_id = coerce_project_id(project_id)
     query = select(Project).where(Project.id == project_id)
     if not skip_ownership_check:
         query = query.where(Project.user_id == user.id)
@@ -265,7 +265,7 @@ async def get_valid_project(project_id: int, user: User, db: AsyncSession) -> Pr
     Some older code may still rely on an int ID.
     Raises 404 if not found, 400 if archived.
     """
-    project_id = int(_coerce_project_id(project_id))
+    project_id = int(coerce_project_id(project_id))
     result = await db.execute(
         select(Project).where(Project.id == project_id, Project.user_id == user.id)
     )
