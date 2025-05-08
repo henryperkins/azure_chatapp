@@ -685,69 +685,6 @@
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
 
   <script>
-    // Auth tab switching functionality
-    function switchAuthTab(tab) {
-      const loginTab = document.getElementById('loginTab');
-      const registerTab = document.getElementById('registerTab');
-      const loginForm = document.getElementById('loginForm');
-      const registerForm = document.getElementById('registerForm');
-
-      if (tab === 'login') {
-        loginTab.classList.add('border-b-2', 'border-primary', 'text-primary');
-        loginTab.classList.remove('text-base-content/60');
-        registerTab.classList.remove('border-b-2', 'border-primary', 'text-primary');
-        registerTab.classList.add('text-base-content/60');
-        loginForm.classList.remove('hidden');
-        registerForm.classList.add('hidden');
-
-        // Update ARIA attributes
-        loginTab.setAttribute('aria-selected', 'true');
-        registerTab.setAttribute('aria-selected', 'false');
-        loginTab.tabIndex = 0;
-        registerTab.tabIndex = -1;
-      } else {
-        registerTab.classList.add('border-b-2', 'border-primary', 'text-primary');
-        registerTab.classList.remove('text-base-content/60');
-        loginTab.classList.remove('border-b-2', 'border-primary', 'text-primary');
-        loginTab.classList.add('text-base-content/60');
-        registerForm.classList.remove('hidden');
-        loginForm.classList.add('hidden');
-
-        // Update ARIA attributes
-        registerTab.setAttribute('aria-selected', 'true');
-        loginTab.setAttribute('aria-selected', 'false');
-        registerTab.tabIndex = 0;
-        loginTab.tabIndex = -1;
-      }
-    }
-
-    function validatePassword(password) {
-      if (password.length < 12) {
-        return { valid: false, message: "Password must be at least 12 characters" };
-      }
-
-      const hasUpper = /[A-Z]/.test(password);
-      const hasLower = /[a-z]/.test(password);
-      const hasNumber = /\d/.test(password);
-      const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-
-      if (!hasUpper) {
-        return { valid: false, message: "Password must contain an uppercase letter" };
-      }
-      if (!hasLower) {
-        return { valid: false, message: "Password must contain a lowercase letter" };
-      }
-      if (!hasNumber) {
-        return { valid: false, message: "Password must contain a number" };
-      }
-      if (!hasSpecial) {
-        return { valid: false, message: "Password must contain a special character" };
-      }
-
-      return { valid: true };
-    }
-
-
     // --- Modal HTML Loader ---
     document.addEventListener('DOMContentLoaded', function () {
       (function loadModalsHtml() {
