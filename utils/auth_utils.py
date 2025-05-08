@@ -10,6 +10,7 @@ Includes improved logging, diagnostics, and detailed error messages.
 import logging
 from datetime import datetime
 from typing import Optional, Any, Tuple
+import os
 
 from config import settings
 if not getattr(settings, 'DEBUG', False):
@@ -32,12 +33,30 @@ import secrets
 # -----------------------------------------------------------------------------
 # JWT Configuration
 # -----------------------------------------------------------------------------
-JWT_SECRET: Optional[str] = getattr(settings, "JWT_SECRET", None)
+# -------------------------------------------------------------------------
+# Consistent JWT secret across all processes:
+#   1) settings.JWT_SECRET            (preferred)
+#   2) environment variable JWT_SECRET
+#   3) fixed dev-only fallback (never use in prod)
+# -------------------------------------------------------------------------
+JWT_SECRET: Optional[str] = (
+    getattr(settings, "JWT_SECRET", None)
+    or os.getenv("JWT_SECRET")
+)
+
 if not JWT_SECRET:
+    # Production must never start without an explicit secret
     if getattr(settings, "ENV", "development").lower() == "production":
         raise RuntimeError("JWT_SECRET must be set in production environment")
-    logger.critical("JWT_SECRET was not set! Using an insecure random secret for development only")
-    JWT_SECRET = secrets.token_hex(32)
+
+    # Dev / test fallback ─ SAME value for every worker to prevent the
+    #   “login → immediate logout” bug caused by each process generating
+    #   its own random key.
+    JWT_SECRET = "dev-insecure-default-secret"
+    logger.warning(
+        "JWT_SECRET not configured – using insecure default for development. "
+        "Set settings.JWT_SECRET or env JWT_SECRET to avoid this warning."
+    )
 
 JWT_ALGORITHM = "HS256"
 
