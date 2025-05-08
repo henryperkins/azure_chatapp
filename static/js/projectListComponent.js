@@ -151,8 +151,12 @@ export class ProjectListComponent {
             );
         }
 
-        // Use only the real project grid for cards, not the root
-        this.gridElement = this.element.querySelector('.grid');
+        // Use the root element itself as the grid if it has the .grid class
+        if (this.element.classList.contains('grid')) {
+            this.gridElement = this.element;
+        } else {
+            this.gridElement = this.element.querySelector('.grid');
+        }
         if (!this.gridElement) {
             this.notify.error(
                 `[ProjectListComponent.INIT] '.grid' container not found inside #${this.elementId}. Element HTML: ${this.element.innerHTML}`,
