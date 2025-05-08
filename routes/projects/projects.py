@@ -826,31 +826,38 @@ async def get_project_stats(
 
             # KB information
             kb_info = None
-            if project.knowledge_base_id:
+            try:
+                kb_query = await db.execute(
+                    select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
+                )
+                kb = kb_query.scalars().first()
+
+                if kb:
+                    kb_info = {
+                        "id": str(kb.id),
+                        "is_active": kb.is_active,
+                        "indexed_files": 0,
+                    }
+                    # Retrieve how many files have processed_for_search = True
+                    processed_result = await db.execute(
+                        select(func.count(ProjectFile.id)).where(
+                            ProjectFile.project_id == project_id,
+                            ProjectFile.config.isnot(None),
+                            ProjectFile.config.contains(
+                                {"processed_for_search": True}
+                            ),
+                        )
+                    )
+                    processed = processed_result.scalar() or 0
+                    kb_info["indexed_files"] = processed
+            except Exception as kb_err:
+                capture_exception(kb_err)
                 kb_info = {
-                    "id": str(project.knowledge_base_id),
+                    "id": None,
                     "is_active": False,
                     "indexed_files": 0,
+                    "error": str(kb_err)
                 }
-                try:
-                    kb = await db.get(KnowledgeBase, project.knowledge_base_id)
-                    if kb:
-                        kb_info["is_active"] = kb.is_active
-                        # Retrieve how many files have processed_for_search = True
-                        processed_result = await db.execute(
-                            select(func.count(ProjectFile.id)).where(
-                                ProjectFile.project_id == project_id,
-                                ProjectFile.config.isnot(None),
-                                ProjectFile.config.contains(
-                                    {"processed_for_search": True}
-                                ),
-                            )
-                        )
-                        processed = processed_result.scalar() or 0
-                        kb_info["indexed_files"] = processed
-                except Exception as kb_err:
-                    capture_exception(kb_err)
-                    kb_info["error"] = str(kb_err)
 
             # Calculate usage
             usage_percentage = (
