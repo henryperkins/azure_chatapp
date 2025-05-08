@@ -404,73 +404,49 @@ class ProjectDashboard {
     const listView = this.domAPI.getElementById('projectListView');
     const detailsView = this.domAPI.getElementById('projectDetailsView');
 
-    // Log DOM element state before changes
+    // Enhanced logging: log both class and style.display before change
     this.logger.info('[ProjectDashboard] _setView DOM elements before:', {
       listViewExists: !!listView,
       detailsViewExists: !!detailsView,
       listViewClasses: listView ? listView.className : 'N/A',
-      detailsViewClasses: detailsView ? detailsView.className : 'N/A'
+      detailsViewClasses: detailsView ? detailsView.className : 'N/A',
+      listViewDisplay: listView ? listView.style.display : 'N/A',
+      detailsViewDisplay: detailsView ? detailsView.style.display : 'N/A'
     });
 
-    // Ensure both views exist before proceeding
-    if (!listView) {
-      this.logger.error('[ProjectDashboard] #projectListView element not found in DOM');
-      // Try to create it
-      try {
-        const newListView = this.domAPI.createElement('div');
-        newListView.id = 'projectListView';
-        newListView.className = 'flex-1 flex flex-col min-h-0';
-        this.domAPI.querySelector('#projectManagerPanel')?.appendChild(newListView);
-        this.logger.info('[ProjectDashboard] Created missing #projectListView element');
-      } catch (e) {
-        this.logger.error('[ProjectDashboard] Failed to create missing #projectListView:', e);
-      }
+    // Always modify both classList and style.display explicitly
+    if (listView) {
+      this.logger.info(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
+      listView.classList.toggle('hidden', !showList);
+      listView.setAttribute('aria-hidden', (!showList).toString());
+      // Always set style.display to override any previous inline styles
+      listView.style.display = showList ? '' : 'none';
+      if (showList) listView.classList.remove('opacity-0');
     }
 
-    if (!detailsView) {
-      this.logger.error('[ProjectDashboard] #projectDetailsView element not found in DOM');
-      // Try to create it
-      try {
-        const newDetailsView = this.domAPI.createElement('div');
-        newDetailsView.id = 'projectDetailsView';
-        newDetailsView.className = 'hidden';
-        this.domAPI.querySelector('#projectManagerPanel')?.appendChild(newDetailsView);
-        this.logger.info('[ProjectDashboard] Created missing #projectDetailsView element');
-      } catch (e) {
-        this.logger.error('[ProjectDashboard] Failed to create missing #projectDetailsView:', e);
-      }
+    if (detailsView) {
+      this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
+      detailsView.classList.toggle('hidden', !showDetails);
+      detailsView.setAttribute('aria-hidden', (!showDetails).toString());
+      // Always set style.display to override any previous inline styles
+      detailsView.style.display = showDetails ? '' : 'none';
+      if (showDetails) detailsView.classList.remove('opacity-0');
     }
 
-    // Get the elements again
-    const finalListView = this.domAPI.getElementById('projectListView');
-    const finalDetailsView = this.domAPI.getElementById('projectDetailsView');
-
-    // Update list view
-    if (finalListView) {
-      this.logger.info(
-        `[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`
-      );
-      finalListView.classList.toggle('hidden', !showList);
-      finalListView.setAttribute('aria-hidden', (!showList).toString());
-      if (showList) finalListView.classList.remove('opacity-0');
+    // Force browser reflow to ensure visibility transitions apply
+    if ((listView && showList) || (detailsView && showDetails)) {
+      requestAnimationFrame(() => {
+        if (listView && showList) listView.getBoundingClientRect();
+        if (detailsView && showDetails) detailsView.getBoundingClientRect();
+      });
     }
 
-    // Update details view
-    if (finalDetailsView) {
-      this.logger.info(
-        `[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`
-      );
-      finalDetailsView.classList.toggle('hidden', !showDetails);
-      finalDetailsView.setAttribute('aria-hidden', (!showDetails).toString());
-      if (showDetails) finalDetailsView.classList.remove('opacity-0');
-    }
-
-    // Log final state
+    // Enhanced logging: log both class and style.display after change
     this.logger.info('[ProjectDashboard] View state after update:', {
-      listViewHidden: finalListView?.classList.contains('hidden') || false,
-      detailsViewHidden: finalDetailsView?.classList.contains('hidden') || false,
-      listViewDisplay: finalListView?.style.display || 'N/A',
-      detailsViewDisplay: finalDetailsView?.style.display || 'N/A'
+      listViewHidden: listView?.classList.contains('hidden') || false,
+      detailsViewHidden: detailsView?.classList.contains('hidden') || false,
+      listViewDisplay: listView?.style.display || 'N/A',
+      detailsViewDisplay: detailsView?.style.display || 'N/A'
     });
   }
 
