@@ -59,6 +59,29 @@ export function createSentryManager(deps) {
   let cleanupCbs = [];
   let navigationObserver = null;
 
+  // ──────────────────────────────────────────────
+  //  Pending-events queue for errors fired before
+  //  Sentry SDK finishes initialising.
+  // ──────────────────────────────────────────────
+  const _pendingErrors = [];
+
+  function _flushQueue(Sentry) {
+    if (!_pendingErrors.length) return;
+    _pendingErrors.splice(0).forEach(([fn, err, meta]) => {
+      try { Sentry[fn](err, meta); } catch {/* swallow */}               // best-effort
+    });
+  }
+
+  function captureException(err, meta) {
+    const Sentry = sentryNamespace.Sentry;
+    if (initialized && Sentry?.captureException) return Sentry.captureException(err, meta);
+    _pendingErrors.push(['captureException', err, meta]);
+    return null;
+  }
+
+  // Alias expected by maybeCapture()
+  function capture(err, meta) { return captureException(err, meta); }
+
   // Determine if Sentry should be disabled based on config/env/user prefs
   function shouldDisableSentry() {
     try {
@@ -163,6 +186,7 @@ export function createSentryManager(deps) {
         return event;
       },
     });
+    _flushQueue(Sentry);
     notification.log("[Sentry] Initialized successfully");
 
     Sentry.setTag("browser", navigator.userAgent);
@@ -375,5 +399,5 @@ export function createSentryManager(deps) {
   }
 
   // Return modular API
-  return { initialize, cleanup };
+  return { initialize, cleanup, capture, captureException };
 }
