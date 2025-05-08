@@ -51,6 +51,10 @@ export function createBrowserService({ windowObject = window } = {}) {
         ? windowObject.requestAnimationFrame(cb)
         : windowObject.setTimeout(cb, 0),
 
+    // Location / navigation helpers
+    setLocation: (url) => { windowObject.location.assign(url); },
+    getLocationPathname: () => windowObject.location.pathname,
+
     // Browser APIs for DI/testability
     FormData: FormDataImpl,
     MutationObserver: MutationObserverImpl,

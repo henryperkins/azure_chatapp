@@ -189,6 +189,14 @@ export class FileUploadComponent {
     this._handlersBound = false;
   }
 
+  /**
+   * TEMP alias – kept until all callers switch to .init().
+   * Delegates to .init() so old code keeps working.
+   */
+  initialize(...args) {
+    return this.init(...args);
+  }
+
   /** @private */
   _handleFileSelection(e) {
     const files = e.target?.files; // Safely access files
