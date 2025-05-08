@@ -215,7 +215,7 @@ class ProjectManager {
       endpoint,
       detail,
       originalError: err,
-      extra
+      ...extra // Spread all extra context for troubleshooting
     });
     this._emit(eventName, { error: err.message, status, endpoint, detail });
     return fallback;
@@ -329,8 +329,20 @@ class ProjectManager {
 
       return { ...this.currentProject };
     } catch (err) {
-      this._handleErr('projectDetailsError', err, null);
-      if (err.status === 404) this._emit('projectNotFound', { id });
+      // Gather context for troubleshooting
+      const userId = this.app?.state?.currentUser?.id || null;
+      const status = err?.status || err?.response?.status;
+      const endpoint = detailUrl;
+      const backendDetail = err?.detail || err?.response?.data?.detail || err?.response?.detail;
+      this._handleErr('projectDetailsError', err, null, {
+        projectId: id,
+        userId,
+        status,
+        endpoint,
+        backendDetail,
+        originalError: err
+      });
+      if (status === 404) this._emit('projectNotFound', { id });
       return null;
     }
   }
