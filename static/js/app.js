@@ -138,6 +138,8 @@ notify = createNotify({
 });
 DependencySystem.register('notify', notify);
 
+setGlobalUtilsNotifier(notify);
+
 // ---------------------------------------------------------------------------
 // 3) Create the event handlers (now notify is initialized)
 // ---------------------------------------------------------------------------
