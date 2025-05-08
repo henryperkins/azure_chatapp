@@ -84,11 +84,11 @@ class CookieSettings:
         # Force production settings for safety
         if is_production:
             return {
-                "secure": True,
-                "domain": self.cookie_domain if self.cookie_domain else None,
+                "secure": (True if self.env.lower() == "production" else False),
+                "domain": (self.cookie_domain if self.env.lower() == "production" and self.cookie_domain else None),
                 "samesite": "lax",
                 "httponly": True,
-                "path": "/",
+                "path": "/"
             }
 
         # Default for local development
@@ -177,13 +177,15 @@ def build_jwt_payload(
 ) -> dict[str, Any]:
     jti = jti or str(uuid.uuid4())
     now = datetime.now(timezone.utc)
+    iat = int(now.timestamp())
+    exp = int((now + expires_delta).timestamp())
     return {
         "sub": user.username,
         "user_id": user.id,
         "type": token_type,
         "version": user.token_version or 0,
-        "iat": now,
-        "exp": now + expires_delta,
+        "iat": iat,
+        "exp": exp,
         "jti": jti,
     }
 
@@ -466,22 +468,39 @@ class VerifyResponse(BaseModel):
 async def verify_auth_status(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
-) -> VerifyResponse:
+):
     """
     Verifies the current access token, returns user info if valid.
+    Enhanced: includes request context for debugging.
     """
     try:
         user_obj, _tok = await get_current_user_and_token(request)
-        return VerifyResponse(
-            authenticated=True,
-            username=user_obj.username,
-            user_id=user_obj.id,
-            token_version=user_obj.token_version,
-        )
+        context = {
+            "path": str(request.url.path),
+            "method": request.method,
+            "client": request.client.host if request.client else None,
+            "headers": dict(request.headers),
+            "cookies": request.cookies,
+        }
+        return {
+            "authenticated": True,
+            "username": user_obj.username,
+            "user_id": user_obj.id,
+            "token_version": user_obj.token_version,
+            "context": context,
+        }
     except HTTPException as ex:
         if ex.status_code in (401, 403):
-            return VerifyResponse(authenticated=False)
-        raise
+            context = {
+                "path": str(request.url.path),
+                "method": request.method,
+                "client": request.client.host if request.client else None,
+                "headers": dict(request.headers),
+                "cookies": request.cookies,
+            }
+            return {"authenticated": False, "context": context}
+        else:
+            raise
     except Exception as e:
         logger.error("Verify error => %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Server error verifying token.")
