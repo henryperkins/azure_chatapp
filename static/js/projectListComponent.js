@@ -463,11 +463,9 @@ export class ProjectListComponent {
     hide() {
         if (this.gridElement) {
             this.gridElement.classList.add("hidden");
-            this.gridElement.style.display = "none";
         }
         if (this.element) {
             this.element.classList.add("hidden");
-            this.element.style.display = "none";
         }
         const listView = document.getElementById("projectListView");
         if (listView) {
