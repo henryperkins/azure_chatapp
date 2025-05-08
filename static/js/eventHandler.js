@@ -36,30 +36,7 @@ export function createEventHandlers({
   // Primary notifier reference (may be replaced by setNotifier)
   let handlerNotify = notify;
 
-  // Resolve optional dependencies dynamically if not passed
-  function _resolveDep(name) {
-    try {
-      // Make sure DependencySystem is properly initialized
-      if (!DependencySystem || !DependencySystem.modules || typeof DependencySystem.modules.get !== 'function') {
-        return undefined;
-      }
-      return DependencySystem.modules.get(name);
-    } catch (err) {
-      handlerNotify.error(`Error resolving dependency '${name}'`, {
-        group: true,
-        context: 'dependencyResolution',
-        module: MODULE,
-        source: '_resolveDep',
-        originalError: err,
-        extra: { depName: name }
-      });
-      return undefined;
-    }
-  }
-
-  app = app || _resolveDep('app');
-  projectManager = projectManager || _resolveDep('projectManager');
-  modalManager = modalManager || _resolveDep('modalManager');
+  // Removed implicit dep resolution – all deps must be injected explicitly.
 
   // ---- singleton flags ---------------------------------------------------
   let authButtonDelegationBound = false;   // prevents duplicate binding
@@ -403,8 +380,8 @@ export function createEventHandlers({
         if (authButtonDelegationBound) return;          // already bound
         // Use a stable parent for delegation: header (if present), otherwise fallback to document.
         let parentNode = domAPI.getElementById('header') || domAPI.getDocument();
-        // Ensure modalManager dependency is met before binding
-        const currentModalManager = modalManager || _resolveDep('modalManager');
+        // Ensure modalManager dependency is met before binding (try DI if not injected)
+        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
         if (!currentModalManager || typeof currentModalManager.show !== 'function') {
             handlerNotify.error("[EventHandler] modalManager is missing or .show is not a function during bindAuthButtonDelegate", { module: MODULE, source: 'bindAuthButtonDelegate' });
             return;
@@ -433,8 +410,10 @@ export function createEventHandlers({
 
       // Listen for requestLogin event (used by project list and others)
       trackListener(domAPI.getDocument(), 'requestLogin', () => {
-        if (modalManager && typeof modalManager.show === 'function') {
-          modalManager.show('login');
+        // Attempt to retrieve modalManager via DI if not injected
+        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
+        if (currentModalManager && typeof currentModalManager.show === 'function') {
+          currentModalManager.show('login');
         }
       }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
 
@@ -508,7 +487,7 @@ export function createEventHandlers({
 
   function setupProjectModalForm() {
     // Assuming projectManager is resolved and available if this form exists
-    const pm = projectManager || _resolveDep('projectManager');
+    const pm = projectManager;
     if (!pm) {
       handlerNotify.warn('ProjectManager not available for projectModalForm setup.', { module: MODULE, source: 'setupProjectModalForm' });
       return;

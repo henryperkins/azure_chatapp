@@ -71,6 +71,9 @@ export class FileUploadComponent {
     this.uploadState = { total: 0, completed: 0, failed: 0 }; // Renamed from uploadStatus
     this._handlersBound = false;
     this._listeners = []; // Guideline #3: Internal tracking for cleanup
+
+    // Track listener cleanup (patchplan #4)
+    this._unsubs = [];
   }
 
   /**
@@ -134,15 +137,16 @@ export class FileUploadComponent {
     const track = (el, type, handler, description) => {
       if (!el) return;
       // Use Guideline #3 pattern: track locally for specific component cleanup
-      const listener = EH.trackListener(el, type, handler, {
+      const remover = EH.trackListener(el, type, handler, {
         description: `FileUpload: ${description}`,
         module: 'FileUploadComponent', // Add context for central cleanup if supported
         context: 'fileUpload'
       });
-      if (listener && typeof listener.remove === 'function') { // Check if trackListener returns a removal handle
-        this._listeners.push(listener);
+      this._unsubs.push(remover);
+      // Keep prior logic for full safety
+      if (remover && typeof remover.remove === 'function') {
+        this._listeners.push(remover);
       } else {
-        // Fallback if trackListener doesn't return a handle (less ideal)
         this._listeners.push({ element: el, type, handler: handler, description });
       }
     };
@@ -181,12 +185,22 @@ export class FileUploadComponent {
       if (typeof l.remove === 'function') {
         l.remove(); // Use removal handle if provided by trackListener
       } else if (l.element && this.eventHandlers.untrackListener) {
-        // Fallback to untrackListener if no handle
         this.eventHandlers.untrackListener(l.element, l.type, l.handler);
       }
     });
     this._listeners = [];
+    if (this._unsubs) {
+      this._unsubs.forEach(fn => typeof fn === 'function' && fn());
+      this._unsubs.length = 0;
+    }
     this._handlersBound = false;
+  }
+
+  /**
+   * Teardown listeners and refs (external compatible, Guideline #3)
+   */
+  cleanup() {
+    this.destroy();
   }
 
   /**
