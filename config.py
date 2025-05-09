@@ -68,8 +68,11 @@ class Settings:
     # Database
     DATABASE_URL = os.getenv(
         "DATABASE_URL",
-        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?sslmode=disable",
+        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?sslmode=require",
     )
+
+    # --- SSL strict ---
+    PG_SSL_ALLOW_SELF_SIGNED: str = os.getenv("PG_SSL_ALLOW_SELF_SIGNED", "False")
 
     # JWT Configuration
     JWT_SECRET = os.getenv("JWT_SECRET", "insecure-debug-jwt-secret")
