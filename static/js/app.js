@@ -154,6 +154,8 @@ if (!sanitizer) {
     throw new Error('[App] DOMPurify sanitizer not found. Please ensure DOMPurify is loaded before app.js.');
 }
 DependencySystem.register('sanitizer', sanitizer);
+// legacy alias for modules that look for “domPurify”
+DependencySystem.register('domPurify', sanitizer);
 
 // ---------------------------------------------------------------------------
 // HTML-template loader (register early so other modules can await events)
@@ -423,7 +425,8 @@ async function initializeCoreSystems() {
             eventHandlers,
             DependencySystem,
             modalMapping: MODAL_MAPPINGS,
-            notify
+            notify,
+            domPurify: sanitizer
         });
         DependencySystem.register('modalManager', modalManager);
 
@@ -472,7 +475,8 @@ async function initializeCoreSystems() {
             eventHandlers,
             notify,
             domAPI,
-            browserService: browserServiceInstance
+            browserService: browserServiceInstance,
+            domPurify: sanitizer
         });
         DependencySystem.register('projectModal', projectModal);
 

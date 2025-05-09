@@ -86,7 +86,10 @@ class ModalManager {
     }
     this.notify      = notify.withContext({ module: 'ModalManager', context: 'modalManager' });
     this.debugTools  = debugTools || DependencySystem?.modules?.get?.('debugTools') || null;
-    this.domPurify = domPurify || this.DependencySystem?.modules?.get?.('domPurify') || null;
+    this.domPurify = domPurify
+      || this.DependencySystem?.modules?.get?.('domPurify')
+      || this.DependencySystem?.modules?.get?.('sanitizer')   // fallback alias
+      || null;
 
     /**
      * Attempt to retrieve an app reference (to check isInitializing, debug, etc.).
@@ -514,7 +517,10 @@ class ProjectModal {
     }
     this.notify = notify.withContext({ module: 'ProjectModal', context: 'projectModal' });
 
-    this.domPurify = domPurify || this.DependencySystem?.modules?.get?.('domPurify') || null;
+    this.domPurify = domPurify
+      || this.DependencySystem?.modules?.get?.('domPurify')
+      || this.DependencySystem?.modules?.get?.('sanitizer')   // fallback alias
+      || null;
 
     this.modalElement = null;
     this.formElement = null;
