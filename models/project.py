@@ -134,7 +134,8 @@ class Project(Base):
         "KnowledgeBase",
         back_populates="project",
         uselist=False,
-        primaryjoin="Project.knowledge_base_id==KnowledgeBase.id"
+        primaryjoin="Project.knowledge_base_id==KnowledgeBase.id",
+        remote_side="KnowledgeBase.id"
     )
 
     def __repr__(self) -> str:
