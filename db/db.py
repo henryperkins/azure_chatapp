@@ -1,8 +1,24 @@
 """
-db.py
------
-Core database connection setup using SQLAlchemy.
-Handles engine creation and session management.
+Database Utilities Module (`db.db`)
+-----------------------------------
+
+Provides unified, production-ready database connectivity using SQLAlchemy, with full support for both asynchronous (asyncpg) and synchronous (psycopg2) engines and sessions.
+
+Features:
+- Centralizes all DB connection and session creation logic to ensure consistency across app runtime and admin (DDL) operations.
+- Robust SSL/TLS configuration: auto-detects CA bundles from common locations, supports strict verification as well as optional self-signed (development/debug) connectivity. Integration with certifi if present.
+- Dynamically adapts connection parameters (URL, SSL certs, self-signed allowance) based on injected configuration/environment variables, designed for secure deployment on platforms like Azure Postgres.
+- Exports FastAPI dependency-based session generators for async web request handling (`get_async_session`), as well as context managers for generalized usage.
+- Sync SQLAlchemy engine/session setup for use in migrations, admin tasks, and schema management.
+- Organizes SQLAlchemy `Base` for declarative model classes.
+
+Environment/Config variables recognized:
+- `settings.DATABASE_URL`
+- `settings.PG_SSL_ALLOW_SELF_SIGNED` / `PG_SSL_ALLOW_SELF_SIGNED`
+- `settings.PG_SSL_ROOT_CERT` / `PG_SSL_ROOT_CERT`
+
+See code for entry points: `async_engine`, `sync_engine`, `AsyncSessionLocal`, `SessionLocal`, `Base`, `get_async_session`, `get_async_session_context`.
+
 """
 
 import logging
