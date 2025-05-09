@@ -131,6 +131,8 @@ if (!DependencySystem?.modules?.get) {
     // Hard-fail if not present.
     throw new Error('[App] DependencySystem not present – bootstrap aborted');
 }
+// Registrar helpers UI una vez disponible DependencySystem
+DependencySystem.register('uiUtils', uiUtils);
 
 // Register a few basic items
 DependencySystem.register('domAPI', domAPI);
