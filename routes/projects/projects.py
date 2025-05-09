@@ -10,6 +10,7 @@ Project management routes with full Sentry integration for:
 import logging
 import random
 import time
+import uuid # Added import for uuid
 from uuid import UUID
 from typing import Optional, Tuple, Union
 from enum import Enum
@@ -151,7 +152,7 @@ async def create_project(
 
             # 3. Attach KB to project and save
 
-            project.knowledge_base_id = kb.id
+            project.knowledge_base_id = uuid.UUID(str(kb.id)) # Explicitly cast to uuid.UUID
             await save_model(db, project)
 
             # 4. Immediately create a default conversation for this project
@@ -812,7 +813,7 @@ async def get_project_stats(
 
             # Get file statistics
             files_result = await db.execute(
-                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
+                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size)) # pylint: disable=not-callable
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)
             )
@@ -839,7 +840,7 @@ async def get_project_stats(
                     }
                     # Retrieve how many files have processed_for_search = True
                     processed_result = await db.execute(
-                        select(func.count(ProjectFile.id)).where(
+                        select(func.count(ProjectFile.id)).where( # pylint: disable=not-callable
                             ProjectFile.project_id == project_id,
                             ProjectFile.config.isnot(None),
                             ProjectFile.config.contains(
