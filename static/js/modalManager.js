@@ -55,6 +55,7 @@ class ModalManager {
     modalMapping,
     notify,
     domPurify,
+    debugTools
   } = {}) {
     this.DependencySystem = DependencySystem || undefined;
     this.eventHandlers = eventHandlers || this.DependencySystem?.modules?.get?.('eventHandlers') || undefined;
@@ -68,7 +69,8 @@ class ModalManager {
       notify = this.DependencySystem?.modules?.get?.('notify');
       if (!notify) throw new Error('[modalManager] notify DI not provided');
     }
-    this.notify = notify.withContext({ module: 'ModalManager', context: 'modalManager' });
+    this.notify      = notify.withContext({ module: 'ModalManager', context: 'modalManager' });
+    this.debugTools  = debugTools || DependencySystem?.modules?.get?.('debugTools') || null;
     this.domPurify = domPurify || this.DependencySystem?.modules?.get?.('domPurify') || null;
 
     /**
@@ -208,6 +210,7 @@ class ModalManager {
    * Also validates mappings for missing/duplicate IDs.
    */
     async init() {
+      const _t = this.debugTools?.start?.('ModalManager.init');
       this._notify('info', '[ModalManager] init() called. Setting up modals...', { context: 'modalManager', module: 'ModalManager', source: 'init' });
 
       try {
@@ -247,6 +250,7 @@ class ModalManager {
         });
 
         this._notify('info', '[ModalManager] Initialization complete.', { context: 'modalManager', module: 'ModalManager', source: 'init' });
+        this.debugTools?.stop?.(_t,'ModalManager.init');
 
         // --- Standardized "modalmanager:initialized" event ---
         const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
@@ -259,6 +263,7 @@ class ModalManager {
 
       } catch (err) {
         this._notify('error', '[ModalManager] Initialization failed: ' + (err && err.message ? err.message : err), false, { context: 'modalManager', module: 'ModalManager', source: 'init', originalError: err });
+        this.debugTools?.stop?.(_t,'ModalManager.init-error');
         throw err;
       }
     }

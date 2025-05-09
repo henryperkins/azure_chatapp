@@ -27,6 +27,7 @@ export function createEventHandlers({
   domAPI, browserService, notify,
   navigate, storage
 } = {}) {
+  const debugTools = DependencySystem?.modules?.get?.('debugTools') || null;
   // --- Dependency Validation ---
   if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
@@ -338,7 +339,7 @@ export function createEventHandlers({
 
   let initialized = false;
   async function init() {
-    if (initialized) return this; // Return API object for chaining
+    const _t = debugTools?.start?.('EventHandler.init');
     handlerNotify.info('Initializing event handlers...', { module: MODULE, source: 'init' });
     try {
       // APP_CONFIG assumed to be globally available for TIMEOUTS.
@@ -449,6 +450,7 @@ export function createEventHandlers({
       // --- END: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
 
       initialized = true;
+      debugTools?.stop?.(_t,'EventHandler.init');
       handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
 
       // --- Standardized "eventhandler:initialized" event ---
@@ -464,6 +466,7 @@ export function createEventHandlers({
       handlerNotify.error('EventHandler initialization failed', {
         group: true, context: 'initialization', module: MODULE, source: 'init', originalError: err
       });
+      debugTools?.stop?.(_t,'EventHandler.init-error');
       throw err;
     }
     return this; // Return API object

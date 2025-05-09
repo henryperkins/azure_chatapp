@@ -201,6 +201,8 @@ setGlobalUtilsNotifier(notify);
 // Debug trace helper (DI-visible as “debugTools”)
 const debugTools = createDebugTools({ notify });
 DependencySystem.register('debugTools', debugTools);
+// helper so inner fns don’t keep repeating the lookup
+const _dbg = debugTools;
 
 // ---------------------------------------------------------------------------
 // 3) Create the event handlers (now notify is initialized)
@@ -305,6 +307,7 @@ DependencySystem.register('app', app);
 // 7) Main init
 // ---------------------------------------------------------------------------
 export async function init() {
+    const _trace = _dbg.start?.('App.init');
     if (_globalInitCompleted || _globalInitInProgress) {
         notify.warn('[App] Duplicate initialization attempt blocked');
         return _globalInitCompleted;
@@ -406,6 +409,7 @@ export async function init() {
 // 8) Core systems initialization
 // ---------------------------------------------------------------------------
 async function initializeCoreSystems() {
+    const _t = _dbg.start?.('initializeCoreSystems');
     try {
         notify.debug('[App] Initializing core systems...');
         // Ensure DOM is ready using shared util (also future-proofs for SSR tests)
@@ -443,6 +447,7 @@ async function initializeCoreSystems() {
             chatManager,
             app,
             notify,
+            debugTools,
             apiRequest, // <-- inject directly
             apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
             storage: DependencySystem.modules.get('storage'),
@@ -535,6 +540,8 @@ async function initializeCoreSystems() {
             source: 'initializeCoreSystems'
         });
         throw err;
+    } finally {
+        _dbg.stop?.(_t,'initializeCoreSystems');
     }
 }
 
