@@ -411,7 +411,7 @@ this.domAPI.dispatchEvent(
       return;
     }
     this.elements.container.classList.remove("hidden");
-    this.elements.container.style.display = "flex"; // Match projectDashboard's display setting
+    this.elements.container.style.display = "";     // let _setView manage flex/layout
     this.elements.container.classList.add("flex-1", "flex-col"); // Match flex container behavior
     this.elements.container.setAttribute("aria-hidden", "false");
 
