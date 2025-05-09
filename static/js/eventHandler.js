@@ -433,14 +433,17 @@ export function createEventHandlers({
       // After modalsLoaded, rebind but ensure only one handler exists.
       trackListener(domAPI.getDocument(), 'modalsLoaded', (event) => {
         bindAuthButtonDelegate();
+
+        setupLoginModalTabs(); // Call setup for login modal tabs here
+
         if (event && event.detail && event.detail.success) {
-          handlerNotify.info('Rebound login button delegation after successful modalsLoaded', {
+          handlerNotify.info('Rebound login button delegation and set up login tabs after successful modalsLoaded', {
             module: MODULE,
             context: 'auth',
             source: 'modalsLoaded'
           });
         } else {
-          handlerNotify.warn('Modals failed to load or event detail missing. Login button delegation rebound anyway.', {
+          handlerNotify.warn('Modals failed to load or event detail missing. Login button delegation rebound and tab setup attempted anyway.', {
             module: MODULE,
             context: 'auth',
             source: 'modalsLoaded',
@@ -449,11 +452,13 @@ export function createEventHandlers({
         }
       }, {
         once: true,
-        description: 'Rebind login after modalsLoaded',
+        description: 'Rebind login and setup tabs after modalsLoaded',
         context: 'auth',
         module: MODULE
       });
       // --- END: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
+
+      // setupLoginModalTabs(); // Moved into modalsLoaded listener
 
       initialized = true;
       debugTools?.stop?.(_t,'EventHandler.init');
@@ -614,4 +619,56 @@ export function createEventHandlers({
     },
     setProjectManager: (pm) => { _projectManager = pm; }
   };
+
+  // Function to set up login/register tab switching
+  function setupLoginModalTabs() {
+    // Defer DOM access until the next animation frame to ensure elements are ready
+    domAPI.window.requestAnimationFrame(() => {
+      const loginModal = domAPI.getElementById('loginModal');
+      if (!loginModal) {
+        handlerNotify.warn('Login modal element not found for tab setup (after rAF).', { module: MODULE, source: 'setupLoginModalTabs' });
+        return;
+      }
+
+      const loginTab = domAPI.querySelector(loginModal, '#modalLoginTab');
+      const registerTab = domAPI.querySelector(loginModal, '#modalRegisterTab');
+      const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
+      const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
+
+      if (!loginTab || !registerTab || !loginPanel || !registerPanel) {
+        handlerNotify.warn('One or more elements for login/register tabs not found (after rAF).', {
+          module: MODULE,
+          source: 'setupLoginModalTabs',
+          extra: {
+            loginTabFound: !!loginTab,
+            registerTabFound: !!registerTab,
+            loginPanelFound: !!loginPanel,
+            registerPanelFound: !!registerPanel,
+          }
+        });
+        return;
+      }
+
+      trackListener(loginTab, 'click', () => {
+        domAPI.addClass(loginTab, 'tab-active');
+        domAPI.setAttribute(loginTab, 'aria-selected', 'true');
+        domAPI.removeClass(registerTab, 'tab-active');
+        domAPI.setAttribute(registerTab, 'aria-selected', 'false');
+        domAPI.setStyle(loginPanel, 'display', 'block');
+        domAPI.setStyle(registerPanel, 'display', 'none');
+      }, { description: 'Switch to Login Tab', module: MODULE, context: 'authTabs' });
+
+      trackListener(registerTab, 'click', () => {
+        handlerNotify.info('Register tab CLICKED!', { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+        domAPI.addClass(registerTab, 'tab-active');
+        domAPI.setAttribute(registerTab, 'aria-selected', 'true');
+        domAPI.removeClass(loginTab, 'tab-active');
+        domAPI.setAttribute(loginTab, 'aria-selected', 'false');
+        domAPI.setStyle(registerPanel, 'display', 'block');
+        domAPI.setStyle(loginPanel, 'display', 'none');
+      }, { description: 'Switch to Register Tab', module: MODULE, context: 'authTabs' });
+
+      handlerNotify.info('Login/Register tab switching initialized (after rAF).', { module: MODULE, source: 'setupLoginModalTabs' });
+    });
+  }
 }
