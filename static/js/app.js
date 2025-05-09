@@ -44,6 +44,29 @@ import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
 // Removed import for ./auth/authUI.js (now obsolete)
 
+// ---------------------------------------------------------------------------
+// UI helpers para KnowledgeBaseComponent (requeridos: formatBytes, formatDate, fileIcon)
+// ---------------------------------------------------------------------------
+const uiUtils = {
+  formatBytes: (b = 0, dp = 1) => {
+    if (b === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(b) / Math.log(k));
+    return parseFloat((b / Math.pow(k, i)).toFixed(dp)) + ' ' + sizes[i];
+  },
+  formatDate: (d) => {
+    const date = d instanceof Date ? d : new Date(d);
+    return isNaN(date) ? '' : date.toLocaleString();
+  },
+  // Versión mínima: devuelve emoji por tipo o genérico
+  fileIcon: (type = '') => {
+    const map = { pdf:'📄', doc:'📄', docx:'📄', csv:'🗒️', json:'🗒️', png:'🖼️', jpg:'🖼️', jpeg:'🖼️' };
+    return map[(type||'').toLowerCase()] ?? '📄';
+  }
+};
+DependencySystem.register('uiUtils', uiUtils);
+
 // Back-compat: si la clase aún no define validateUUID, añade alias al helper global
 // (Removed: ProjectDetailsComponent is not defined. This block is obsolete.)
 
@@ -746,7 +769,7 @@ async function initializeUIComponents() {
             apiRequest,
             auth: authModule,
             projectManager,
-            uiUtils: {}, // pass shortcut utils as needed
+            uiUtils,                           // ahora módulo real con helpers
             sanitizer: DependencySystem.modules.get('sanitizer')
         });
         DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
