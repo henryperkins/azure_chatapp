@@ -341,6 +341,10 @@ export function createEventHandlers({
 
   let initialized = false;
   async function init() {
+    if (initialized) {
+      handlerNotify.info("EventHandler already initialized.", { module: MODULE, source: 'init' });
+      return this; // Return API object early
+    }
     const _t = debugTools?.start?.('EventHandler.init');
     handlerNotify.info('Initializing event handlers...', { module: MODULE, source: 'init' });
     try {
