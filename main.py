@@ -247,9 +247,6 @@ async def on_startup():
     global DB_AVAILABLE
     try:
         await init_db()
-        # Run schema migration/validation at startup
-        schema_manager = SchemaManager()
-        await schema_manager.initialize_database()
         await create_default_user()  # Insecure default user creation
         await schedule_token_cleanup(interval_minutes=30)
         logger.info(f"{APP_NAME} v{APP_VERSION} started in debug mode.")
