@@ -21,29 +21,21 @@ from db.schema_manager import SchemaManager
 import logging
 logger = logging.getLogger(__name__)
 
+# Instantiate SchemaManager at module level
+_schema_manager = SchemaManager()
 
-# Create SchemaManager instance
-# _schema_manager = SchemaManager()
-
-
-# Re-export functions with the same interface as before
+# Re-export functions with the same interface as before, but delegate to SchemaManager
 async def init_db() -> None:
-    """Simple database initialization without schema management"""
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created (schema management disabled)")
-
+    """Full database initialization using SchemaManager (with Alembic integration)"""
+    await _schema_manager.initialize_database()
 
 async def validate_db_schema() -> list[str]:
-    """Stub for schema validation"""
-    logger.warning("Schema validation disabled")
-    return []
-
+    """Validate DB schema using SchemaManager"""
+    return await _schema_manager.validate_schema()
 
 async def fix_db_schema() -> None:
-    """Stub for schema fixing"""
-    logger.warning("Schema fixing disabled")
-
+    """Fix DB schema using SchemaManager"""
+    await _schema_manager.fix_schema()
 
 # Expose all relevant components
 __all__ = [
@@ -57,5 +49,5 @@ __all__ = [
     "init_db",
     "validate_db_schema",
     "fix_db_schema",
-    # "SchemaManager"  # Removed
+    "SchemaManager",  # <--- now exposed
 ]
