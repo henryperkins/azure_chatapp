@@ -36,7 +36,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 router = APIRouter()
 
-@router.get("/api/user/me")
+@router.get("/me")
 async def get_current_user_profile(
     request: Request,
     session: AsyncSession = Depends(get_async_session),

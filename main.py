@@ -197,6 +197,7 @@ from routes.projects.artifacts import router as project_artifacts_router
 from routes.user_preferences import router as user_preferences_router
 from routes.unified_conversations import router as conversations_router
 from routes.sentry_test import router as sentry_test_router
+from routes.log_notification import router as log_notification_router
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
@@ -363,6 +364,7 @@ app.include_router(
 )
 app.include_router(user_preferences_router, tags=["preferences"])
 app.include_router(conversations_router, prefix="/api/projects", tags=["conversations"])
+app.include_router(log_notification_router)
 
 # Debug-only Sentry test routes
 app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring"])
@@ -469,32 +471,7 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 # Log Notification API Endpoint for Frontend <--- ADDED
-# -----------------------------------------------------------------------------
-from fastapi import Body
-
-@app.post("/api/log_notification")
-async def log_notification(payload: Dict[str, Any] = Body(...)):
-    """
-    Accept logs/notifications/errors/warnings/events from the frontend.
-    Prints directly to the terminal. Use this for all client→server reporting.
-    Example payload: {"type":"error", "message":"Project fetch failed!", ...}
-    """
-    ntype = payload.get("type", "info").lower()
-    message = payload.get("message", "")
-    extra = {k: v for k, v in payload.items() if k not in ("type", "message")}
-    rid = uuid.uuid4()
-    display = f"[CLIENT_EVENT] [{ntype.upper()}] {message}"
-    if extra:
-        display += f" | Extra: {extra}"
-    if ntype in ("error", "fatal"):
-        logger.error("%s", display)
-    elif ntype in ("warn", "warning"):
-        logger.warning("%s", display)
-    elif ntype == "success":
-        logger.info("%s", display)
-    else:
-        logger.info("%s", display)
-    return {"received": True, "request_id": str(rid)}
+# (Removed: now handled by routes.log_notification router)
 
 # Uvicorn Entry
 # -----------------------------------------------------------------------------
