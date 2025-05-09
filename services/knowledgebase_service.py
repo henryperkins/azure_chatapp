@@ -162,7 +162,7 @@ async def create_knowledge_base(
     if not project:
         raise ValueError("Project not found")
 
-    if project.knowledge_base_id:
+    if project.knowledge_base:
         raise ValueError("Project already has a knowledge base")
 
     config = KBConfig.get()
