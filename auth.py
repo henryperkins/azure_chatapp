@@ -430,6 +430,7 @@ async def refresh_token(
         set_secure_cookie(response, "refresh_token", "", 0, request)
         raise HTTPException(status_code=401, detail="No refresh token; please login again.")
 
+    locked_user = None
     try:
         locked_user, _claims = await get_user_and_claims_from_refresh_token(refresh_cookie, session, request)
         locked_user.last_activity = aware_utc_now()
@@ -451,7 +452,7 @@ async def refresh_token(
         if ex.status_code in (401, 403):
             logger.warning(
                 "[REFRESH_VERSION_MISMATCH] user=%s detail=%s cookies=%s",
-                locked_user.username if 'locked_user' in locals() else 'unknown',
+                locked_user.username if locked_user else 'unknown',
                 ex.detail,
                 request.cookies,
             )

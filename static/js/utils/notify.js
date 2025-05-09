@@ -1,3 +1,5 @@
+import { getSessionId } from "./session.js";
+
 export function createNotify({
   notificationHandler
 } = {}) {
@@ -16,11 +18,39 @@ export function createNotify({
       module,
       source,
       id,
+      traceId,
+      originalError, // pass Error object or stack trace here for full detail!
+      endpoint,
+      requestPayload,
+      responseDetail,
       extra = {},
       ...rest
     } = opts || {};
 
     const eventId = id || `${_type}-${Date.now()}`;
+    const sessionId = getSessionId();
+
+    // Add stack trace if Error is supplied
+    let stack = null;
+    if (originalError && typeof originalError === "object") {
+      if (originalError.stack) stack = originalError.stack;
+      else if (typeof originalError === "string") stack = originalError;
+    }
+    // Also accept direct .stack or .error fields from opts or extra
+    if (!stack && opts.stack) stack = opts.stack;
+    if (!stack && extra && extra.stack) stack = extra.stack;
+
+    // Compose a merged extra object including advanced context
+    const richExtra = {
+      ...extra,
+      // Purposefully inject API and trace/session context
+      endpoint,
+      requestPayload,
+      responseDetail,
+      sessionId,
+      traceId: traceId || sessionId,
+      ...(stack ? { stack } : {})
+    };
 
     const payload = {
       timeout: DURATION[_type],
@@ -29,7 +59,8 @@ export function createNotify({
       context,
       module,
       source,
-      extra
+      group,
+      extra: richExtra
     };
 
     // Debug log for notification troubleshooting (shows all context passed)
