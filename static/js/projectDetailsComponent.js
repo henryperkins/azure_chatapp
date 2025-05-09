@@ -437,7 +437,11 @@ this.domAPI.dispatchEvent(
         }
       });
 
-      await (this.fileUploadComponent.init ?? this.fileUploadComponent.initialize)?.();
+      // Asegura que el método se invoque con el contexto correcto (`this.fileUploadComponent`)
+      const initFn = this.fileUploadComponent.init ?? this.fileUploadComponent.initialize;
+      if (typeof initFn === "function") {
+        await initFn.call(this.fileUploadComponent);
+      }
       this.notify.info("[ProjectDetailsComponent] FileUploadComponent ready.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_initSubComponents"
       });
