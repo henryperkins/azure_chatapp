@@ -15,6 +15,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
     ForeignKey,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -37,10 +38,11 @@ class User(Base):
         CheckConstraint("role IN ('user', 'admin')", name="valid_role_types"),
         Index("ix_users_last_login", "last_login"),
         Index("ix_users_created_at", "created_at"),
+        UniqueConstraint('username', name='users_username_key'),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    username: Mapped[str] = mapped_column(String(150), unique=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(150), nullable=False) # unique=True removed, handled by UniqueConstraint
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     role: Mapped[str] = mapped_column(
         String(50), nullable=False, default="user"

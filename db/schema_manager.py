@@ -10,7 +10,7 @@ import time
 from typing import Optional, List, Set, Tuple, AsyncGenerator
 from contextlib import asynccontextmanager
 
-from sqlalchemy import inspect, text, MetaData
+from sqlalchemy import inspect, text, MetaData, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -148,7 +148,8 @@ class SchemaManager:
         try:
             # ---- Alembic auto-migration/upgrade (conditionally run) ----
             AUTO_MIGRATE = os.getenv("ENABLE_AUTO_MIGRATION", "false").lower() == "true"
-            if AUTO_MIGRATE:
+            # Temporarily disabled to stop migration loop for debugging
+            if False and AUTO_MIGRATE:
                 automated_alembic_migrate()
             else:
                 logger.info("Alembic auto-migration is disabled (ENABLE_AUTO_MIGRATION is false or unset)")
@@ -315,7 +316,7 @@ class SchemaManager:
                         except Exception:
                             orm_type = str(orm_col.type)
                         # Compare types (case-insensitive, ignore length for now)
-                        if db_type.lower() != orm_type.lower():
+                        if str(db_type).lower() != str(orm_type).lower():
                             logger.warning(
                                 f"Type mismatch for {table.name}.{col_name}: DB={db_type}, ORM={orm_type}. "
                                 "Manual intervention may be required."
@@ -350,10 +351,32 @@ class SchemaManager:
 
                 # Drop obsolete indexes (if enabled)
                 if destructive:
-                    orm_index_names = {index.name for index in table.indexes}
+                    orm_index_names = {index.name for index in table.indexes if index.name}
+                    # Add names of indexes created by UniqueConstraints
+                    for constraint in table.constraints:
+                        if isinstance(constraint, UniqueConstraint) and constraint.name:
+                            orm_index_names.add(constraint.name)
+                    # Add names of indexes created by unique=True on columns (convention-based, might need refinement)
+                    for column in table.columns:
+                        if column.unique and column.name: # unique=True implies an index
+                            # Default naming convention for index from unique=True is often ix_tablename_colname or tablename_colname_key
+                            # This is a heuristic. A more robust way would be to inspect the compiled DDL for the column.
+                            # For now, we'll assume if a UniqueConstraint with a name exists for the column, it's covered.
+                            # If not, and only unique=True is set, the index name is implicit.
+                            # We will be cautious here to avoid dropping legitimate implicit unique indexes.
+                            # A common convention for unique column index is `ix_{table.name}_{column.name}` or `{table.name}_{column.name}_key`
+                            # Let's add the constraint name if the column is part of a unique constraint.
+                            for constraint in table.constraints:
+                                if isinstance(constraint, UniqueConstraint) and column in constraint.columns and constraint.name:
+                                    orm_index_names.add(constraint.name)
+                                    break # Found the constraint for this column
+
                     for db_index_name in db_indexes:
+                        # Avoid dropping primary key indexes, typically named like tablename_pkey
+                        if db_index_name and db_index_name.endswith("_pkey"):
+                            continue
                         if db_index_name not in orm_index_names:
-                            logger.warning(f"Dropping obsolete index: {table.name}.{db_index_name}")
+                            logger.warning(f"Attempting to drop potentially obsolete index: {table.name}.{db_index_name}")
                             try:
                                 await conn.execute(
                                     text(f'DROP INDEX IF EXISTS "{db_index_name}"')
@@ -361,6 +384,13 @@ class SchemaManager:
                                 logger.info(f"Dropped index: {table.name}.{db_index_name}")
                             except Exception as e:
                                 logger.error(f"Failed to drop index {table.name}.{db_index_name}: {e}")
+                                # If dropping fails (e.g. due to dependency), log and continue if possible,
+                                # as this might be what's causing the transaction to abort.
+                                # However, InFailedSQLTransactionError means the transaction is already bad.
+                                if "InFailedSQLTransactionError" in str(e):
+                                    raise # Propagate if transaction is already broken
+                                logger.warning(f"Could not drop index {db_index_name} due to: {str(e)}. It might be in use by a constraint not explicitly named in ORM's table.indexes.")
+
 
             # 4. Fix foreign key constraints
             for table in Base.metadata.tables.values():
@@ -545,20 +575,43 @@ class SchemaManager:
 
     async def _create_missing_tables(self, tables: List[str]) -> None:
         """Create missing tables with proper dependency ordering."""
-        # Handle circular dependencies first
-        if "projects" in tables and "knowledge_bases" in tables:
-            await self._create_projects_table()
-            await self._create_knowledge_bases_table()
-            await self._add_projects_knowledge_base_fk()
-            tables = [t for t in tables if t not in ["projects", "knowledge_bases"]]
-
-        # Create remaining tables
-        for table in tables:
+        # Ensure 'users' table is created first if it's in the list
+        if "users" in tables:
             async with async_engine.begin() as conn:
                 await conn.run_sync(
-                    lambda sync_conn: Base.metadata.tables[table].create(sync_conn)
+                    lambda sync_conn: Base.metadata.tables["users"].create(sync_conn, checkfirst=True)
                 )
-                logger.info(f"Created table: {table}")
+                logger.info("Created table: users (if not exists)")
+            tables = [t for t in tables if t != "users"]
+
+        # Handle circular dependencies for projects and knowledge_bases
+        if "projects" in tables and "knowledge_bases" in tables:
+            # Create projects table without the FK to knowledge_bases initially
+            # The _create_projects_table method already handles creating projects without the FK
+            await self._create_projects_table() # Uses "IF NOT EXISTS"
+            # Create knowledge_bases table
+            await self._create_knowledge_bases_table() # Uses checkfirst=True
+            # Add the FK from projects to knowledge_bases
+            await self._add_projects_knowledge_base_fk()
+            # Remove them from the list of tables to be created in the general loop
+            tables = [t for t in tables if t not in ["projects", "knowledge_bases"]]
+        elif "projects" in tables: # If only projects needs to be created (users already exists or created)
+            await self._create_projects_table() # This will create projects with its FK to users (uses "IF NOT EXISTS")
+            if "knowledge_bases" in await self.get_existing_tables(): # Check if KB exists to add FK
+                 await self._add_projects_knowledge_base_fk()
+            tables = [t for t in tables if t != "projects"]
+        elif "knowledge_bases" in tables: # If only knowledge_bases needs to be created
+            await self._create_knowledge_bases_table() # Uses checkfirst=True
+            tables = [t for t in tables if t != "knowledge_bases"]
+
+
+        # Create remaining tables
+        for table_name in tables:
+            async with async_engine.begin() as conn:
+                await conn.run_sync(
+                    lambda sync_conn: Base.metadata.tables[table_name].create(sync_conn, checkfirst=True)
+                )
+                logger.info(f"Created table: {table_name} (if not exists)")
 
     async def _create_projects_table(self) -> None:
         """Special handling for projects table creation."""
@@ -567,7 +620,7 @@ class SchemaManager:
                 lambda sync_conn: sync_conn.execute(
                     text(
                         """
-                CREATE TABLE projects (
+                CREATE TABLE IF NOT EXISTS projects (
                     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                     name VARCHAR(200) NOT NULL,
                     goals TEXT,
@@ -590,27 +643,38 @@ class SchemaManager:
                     )
                 )
             )
-            await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(
-                    text(
-                        """
-                ALTER TABLE projects
-                ADD CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage)
-            """
+            # The constraint might also already exist if the table was partially created.
+            # It's safer to check or use ALTER TABLE ... ADD CONSTRAINT IF NOT EXISTS,
+            # but standard SQL for ADD CONSTRAINT IF NOT EXISTS is not universally supported directly in older PostgreSQL.
+            # For now, we'll assume if CREATE TABLE IF NOT EXISTS runs, this might need to be conditional too.
+            # However, the immediate error is about table/index creation, not constraint addition.
+            try:
+                await conn.run_sync(
+                    lambda sync_conn: sync_conn.execute(
+                        text(
+                            """
+                    ALTER TABLE projects
+                    ADD CONSTRAINT check_token_limit CHECK (max_tokens >= token_usage)
+                """
+                        )
                     )
                 )
-            )
-            logger.info("Created projects table (without knowledge_base_id FK)")
+            except Exception as e:
+                if "already exists" in str(e).lower():
+                    logger.info("Constraint 'check_token_limit' on 'projects' table already exists.")
+                else:
+                    raise
+            logger.info("Created/Ensured projects table (without knowledge_base_id FK initially if part of circular dependency handling)")
 
     async def _create_knowledge_bases_table(self) -> None:
         """Create knowledge_bases table."""
         async with async_engine.begin() as conn:
             await conn.run_sync(
                 lambda sync_conn: Base.metadata.tables["knowledge_bases"].create(
-                    sync_conn
+                    sync_conn, checkfirst=True
                 )
             )
-            logger.info("Created knowledge_bases table")
+            logger.info("Created knowledge_bases table (if not exists)")
 
     async def _add_projects_knowledge_base_fk(self) -> None:
         """Add the knowledge_base_id foreign key to projects."""

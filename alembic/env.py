@@ -15,10 +15,13 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # --- begin custom project integration ---
+# Ensure all models are imported so Base.metadata is populated
+import models.__init__
 from db.db import Base, sync_url
 
 # Inject the real DB URL from settings/config into Alembic's config at runtime
-config.set_main_option("sqlalchemy.url", sync_url)
+# Escape '%' for sqlalchemy.url interpolation
+config.set_main_option("sqlalchemy.url", sync_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 # --- end custom project integration ---

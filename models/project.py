@@ -14,6 +14,7 @@ from sqlalchemy import (
     CheckConstraint,
     Index,
     event,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import JSONB
@@ -48,7 +49,7 @@ class Project(Base):
         ),
         CheckConstraint("NOT (archived AND is_default)", name="check_archive_default"),
         Index("ix_projects_created_at", "created_at"),
-        Index("ix_projects_updated_at", "updated_at"),
+        Index("ix_projects_updated_at", "updated_at")
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -73,17 +74,6 @@ class Project(Base):
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     version: Mapped[int] = mapped_column(Integer, default=1)
-
-    from typing import Optional
-    from sqlalchemy.dialects.postgresql import UUID
-
-    # Add knowledge_base_id as nullable, unique FK to knowledge_bases.id (one-to-one)
-    knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("knowledge_bases.id", name="fk_project_knowledge_base_id", ondelete="SET NULL"),
-        nullable=True,
-        unique=True
-    )
 
     default_model: Mapped[str] = mapped_column(
         String(50),
@@ -133,9 +123,7 @@ class Project(Base):
     knowledge_base = relationship(
         "KnowledgeBase",
         back_populates="project",
-        uselist=False,
-        primaryjoin="Project.knowledge_base_id==KnowledgeBase.id",
-        remote_side="KnowledgeBase.id"
+        uselist=False
     )
 
     def __repr__(self) -> str:

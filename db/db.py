@@ -59,10 +59,12 @@ def _find_pg_ssl_cert() -> str | None:
         return cert_env
 
     # 2) candidatos locales comunes
+    # Prioritize DigiCert G2 and Microsoft RSA as per Azure docs
     candidates = [
-        "BaltimoreCyberTrustRoot.crt.pem",
         "DigiCertGlobalRootG2.crt.pem",
-        "DigiCertGlobalRootCA.crt.pem",
+        "MicrosoftRSARoot2017.pem",
+        "DigiCertGlobalRootCA.pem", # Matches the .pem file we created
+        "BaltimoreCyberTrustRoot.crt.pem", # Fallback
     ]
     for fname in candidates:
         if os.path.isfile(fname):
@@ -125,10 +127,12 @@ if ALLOW_SELF_SIGNED:
         pool_pre_ping=True
     )
 elif PG_SSL_CERT_PATH:
+    # Ensure the path is absolute for psycopg2 in the DSN
+    abs_ssl_cert_path = os.path.abspath(PG_SSL_CERT_PATH)
     sync_url = (
         f"{base_sync_url}"
         f"?sslmode=verify-full"
-        f"&sslrootcert={quote_plus(PG_SSL_CERT_PATH)}"
+        f"&sslrootcert={abs_ssl_cert_path}"
     )
     sync_engine = create_engine(sync_url, pool_pre_ping=True)
 else:
