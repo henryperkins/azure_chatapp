@@ -76,11 +76,14 @@ export function createSidebar({
 
       // --- Standardized "sidebar:initialized" event ---
       const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-      if (doc && typeof (domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
-        (domAPI?.dispatchEvent || doc.dispatchEvent).call(
-          doc,
-          new CustomEvent('sidebar:initialized', { detail: { success: true } })
-        );
+      if (doc) {
+        if (domAPI?.dispatchEvent) {
+          domAPI.dispatchEvent(doc, new CustomEvent('sidebar:initialized',
+            { detail: { success: true } }));
+        } else {
+          doc.dispatchEvent(new CustomEvent('sidebar:initialized',
+            { detail: { success: true } }));
+        }
       }
 
       return true;
