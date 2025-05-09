@@ -124,6 +124,20 @@ pmNotify.info('Loading project', { source: 'loadProject' });
 
 ---
 
+## Global Debug/Trace Forwarding (notify + globalUtils integration)
+
+**ALWAYS** call `setGlobalUtilsNotifier(notify)` (from `utils/globalUtils.js`) after creating your DI notify instance in app bootstrap. This ensures all trace/debug and timer logs, including all generated trace IDs and performance events from `createDebugTools`, are mirrored to the terminal via the notify logger, not just to browser console or test stubs.
+Example:
+```js
+import { createNotify } from "./utils/notify.js";
+import { setGlobalUtilsNotifier } from "./utils/globalUtils.js";
+const notify = createNotify({...});
+setGlobalUtilsNotifier(notify);
+```
+This guarantees all trace/debug/stopwatch events, and their context (traceId/session/label), are received by the notification pipeline and thus visible on the backend/terminal logs.
+
+---
+
 ## Error Handling – Context-Rich Logging
 
 *(slug: `error-handling--context-rich-logging`)*

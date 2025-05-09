@@ -51,6 +51,7 @@ export class ProjectDetailsComponent {
     this.modalManager = modalManager;
     this.FileUploadComponentClass = FileUploadComponentClass;
     this.router = router;
+    this.originalNotify = notify; // Preserve original notify API for subcomponents
 
     // Defensive handling for notify - ensure we have withContext or create a fallback
     if (notify && typeof notify.withContext === 'function') {
@@ -386,7 +387,7 @@ this.domAPI.dispatchEvent(
         app: this.app,
         eventHandlers: this.eventHandlers,
         projectManager: this.projectManager,
-        notify: this.notify,
+        notify: this.originalNotify, // Ensure full API, not a context-bound wrapper
         domAPI: this.domAPI,
         onUploadComplete: () => {
           const id = this.state.currentProject?.id;

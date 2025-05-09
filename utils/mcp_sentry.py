@@ -44,13 +44,13 @@ def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: dict[str, An
             # Try importing it if not in globals
             mcp_client = importlib.import_module("mcp_client")
             return mcp_client.use_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
-        except (ImportError, AttributeError):
+        except (ImportError, AttributeError) as exc:
             # Fallback when running outside MCP - mainly for testing
             logger.warning(f"MCP tools not available for call to {tool_name}")
-            raise ServerConnectionError(f"MCP tools not available for {tool_name}")
+            raise ServerConnectionError(f"MCP tools not available for {tool_name}") from exc
     except Exception as e:
         logger.error(f"Error using MCP tool {tool_name}: {e}")
-        raise ServerConnectionError(f"Failed to use MCP tool {tool_name}: {str(e)}")
+        raise ServerConnectionError(f"Failed to use MCP tool {tool_name}: {str(e)}") from e
 
 
 logger = logging.getLogger(__name__)
@@ -151,7 +151,7 @@ def _clear_expired_cache():
 @with_retry
 def get_issue_details(
     issue_id_or_url: Union[str, List[str]], use_cache: bool = True
-) -> Union[dict[str, Any], List[dict[str, Any]]]:
+) -> List[dict[str, Any]]:
     """
     Get detailed information about a Sentry issue using the MCP server.
     Supports caching to reduce load on the MCP server.
@@ -161,14 +161,22 @@ def get_issue_details(
         use_cache: Whether to use cached results if available (default: True)
 
     Returns:
-        Dictionary with issue details
+        List of dictionaries with issue details
 
     Raises:
         ServerConnectionError: If the MCP server is not running or unreachable
         ServerResponseError: If the MCP server returns an error
     """
     if isinstance(issue_id_or_url, list):
-        return [get_issue_details(issue, use_cache) for issue in issue_id_or_url]
+        # For a list, call the function recursively per element and flatten results to a flat list of dicts
+        result_list = []
+        for issue in issue_id_or_url:
+            res = get_issue_details(issue, use_cache)
+            if isinstance(res, list):
+                result_list.extend(res)
+            else:
+                result_list.append(res)
+        return result_list
 
     # Clear expired cache entries first
     _clear_expired_cache()
@@ -177,7 +185,7 @@ def get_issue_details(
     if use_cache and issue_id_or_url in ISSUE_CACHE:
         cached_data, _ = ISSUE_CACHE[issue_id_or_url]
         logger.debug(f"Returning cached data for issue: {issue_id_or_url}")
-        return cached_data
+        return [cached_data]
 
     # Log the attempt
     logger.info(f"Fetching issue details for {issue_id_or_url}")
@@ -209,7 +217,7 @@ def get_issue_details(
 
             # Cache the result
             ISSUE_CACHE[issue_id_or_url] = (result, time.time() + CACHE_TTL)
-            return result
+            return [result]
 
         except Exception as e:
             span.set_status("internal_error")
@@ -261,6 +269,9 @@ def search_issues(query: str, limit: int = 10) -> List[dict[str, Any]]:
                 raise ServerResponseError(error_msg)
 
             span.set_status("ok")
+            # Ensure always returns List[dict[str, Any]]
+            if isinstance(result, dict):
+                return [result]
             span.set_data("result_count", len(result))
             return result
 
@@ -314,6 +325,9 @@ def get_issue_events(issue_id: str, limit: int = 10) -> List[dict[str, Any]]:
                 raise ServerResponseError(error_msg)
 
             span.set_status("ok")
+            # Ensure always returns List[dict[str, Any]]
+            if isinstance(result, dict):
+                return [result]
             span.set_data("event_count", len(result))
             return result
 
@@ -470,8 +484,8 @@ def enable_mcp_integrations() -> bool:
         # Check environment variable/config before proceeding
         mcp_enabled = os.getenv("SENTRY_MCP_SERVER_ENABLED", "").lower() == "true"
         try:
-            from config import settings
-            mcp_enabled = getattr(settings, "SENTRY_MCP_SERVER_ENABLED", mcp_enabled)
+            from config import settings as config_settings
+            mcp_enabled = getattr(config_settings, "SENTRY_MCP_SERVER_ENABLED", mcp_enabled)
         except Exception:
             pass
 
