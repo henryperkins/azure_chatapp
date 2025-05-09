@@ -439,6 +439,10 @@ async function initializeCoreSystems() {
         });
         DependencySystem.register('auth', authModule);
 
+        // Model-config (debe existir antes de ProjectManager)
+        const modelConfigInstance = createModelConfig({ DependencySystem, notify });
+        DependencySystem.register('modelConfig', modelConfigInstance);
+
         // Ensure chatManager is available prior to projectManager creation
         const chatManager = createOrGetChatManager();
 
@@ -447,6 +451,7 @@ async function initializeCoreSystems() {
             DependencySystem,
             chatManager,
             app,
+            modelConfig: modelConfigInstance,      // ← nuevo
             notify,
             debugTools,
             apiRequest, // <-- inject directly
@@ -702,10 +707,11 @@ async function initializeUIComponents() {
         });
         DependencySystem.register('chatExtensions', chatExtensionsInstance);
 
-        const modelConfigInstance = createModelConfig({
-            DependencySystem, notify
-        });
-        DependencySystem.register('modelConfig', modelConfigInstance);
+        let modelConfigInstance = DependencySystem.modules.get('modelConfig');
+        if (!modelConfigInstance) {
+          modelConfigInstance = createModelConfig({ DependencySystem, notify });
+          DependencySystem.register('modelConfig', modelConfigInstance);
+        }
 
         const projectDashboardUtilsInstance = createProjectDashboardUtils({
             DependencySystem
