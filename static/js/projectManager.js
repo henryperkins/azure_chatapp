@@ -105,6 +105,11 @@ class ProjectManager {
       if (notify) notify.error('[ProjectManager] apiEndpoints required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
       throw new Error('apiEndpoints required');
     }
+
+    // Always use notify.withContext for context-rich notifications
+    this.pmNotify = (notify?.withContext)
+      ? notify.withContext({ module: MODULE, context: 'projectManager' })
+      : notify;
     this.app = app ?? DependencySystem.modules.get('app');
     this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
@@ -156,7 +161,7 @@ class ProjectManager {
       ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/'
     };
 
-    this.notify.info('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
+    this.pmNotify?.info?.('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
   }
 
   /* ---------------------------------------------------------------------- */
@@ -254,15 +259,23 @@ class ProjectManager {
   }
 
   async loadProjectDetails(id) {
-    console.log("[ProjectManager] Entered loadProjectDetails with id:", id);
+    this.pmNotify?.debug?.("[ProjectManager] Entered loadProjectDetails with id", {
+      source: "loadProjectDetails",
+      extra: { id }
+    });
     if (!isValidProjectId(id)) {
-      console.log("[ProjectManager] Invalid projectId, returning early");
+      this.pmNotify?.warn?.("[ProjectManager] Invalid projectId, returning early", {
+        source: "loadProjectDetails",
+        extra: { id }
+      });
       throw new Error('Invalid projectId');
     }
 
     // Early authentication and access check
     if (!this.app || !this.app.state || !this.app.state.currentUser) {
-      console.log("[ProjectManager] Missing app state or currentUser, returning early");
+      this.pmNotify?.warn?.("[ProjectManager] Missing app state or currentUser, returning early", {
+        source: "loadProjectDetails"
+      });
       this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
       return null;
     }
@@ -271,14 +284,19 @@ class ProjectManager {
     // (Permission enforcement is handled server-side and will return 403 if unauthorized)
 
     if (!this._authOk('projectDetailsError', { id })) {
-      console.log("[ProjectManager] _authOk returned false, returning early");
+      this.pmNotify?.warn?.("[ProjectManager] _authOk returned false, returning early", {
+        source: "loadProjectDetails"
+      });
       return null;
     }
 
     const detailUrl = typeof this.apiEndpoints.DETAIL === 'function'
       ? this.apiEndpoints.DETAIL(id)
       : (this.apiEndpoints.DETAIL || '/api/projects/{id}/').replace('{id}', id);
-    console.log("[ProjectManager] Fetching project details from:", detailUrl);
+    this.pmNotify?.debug?.("[ProjectManager] Fetching project details from", {
+      source: "loadProjectDetails",
+      extra: { detailUrl }
+    });
     this.currentProject = null;
 
     try {
@@ -287,11 +305,13 @@ class ProjectManager {
         this.currentProject = normalizeProjectResponse(detailRes);
       } catch (err) {
         // Log full error and response for debugging API issues
-        // eslint-disable-next-line no-console
-        console.error("[ProjectManager] loadProjectDetails error:", {
-          url: detailUrl,
-          error: err,
-          detailRes: err?.response || err?.data || null
+        this.pmNotify?.error?.("[ProjectManager] loadProjectDetails error", {
+          source: "loadProjectDetails",
+          extra: {
+            url: detailUrl,
+            error: err,
+            detailRes: err?.response || err?.data || null
+          }
         });
         throw err;
       }
