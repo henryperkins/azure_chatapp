@@ -1069,6 +1069,9 @@ function createOrGetChatManager() {
         apiRequest,
         auth: authModule,
         eventHandlers,
+        // Inject modelConfig and projectDetailsComponent for ChatManager
+        modelConfig: DependencySystem.modules.get('modelConfig'),
+        projectDetailsComponent: DependencySystem.modules.get('projectDetailsComponent'),
         app,
         domAPI,
         navAPI: {

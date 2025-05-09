@@ -157,7 +157,7 @@ async def create_project_knowledge_base(
         )
 
         # Associate the new KB with the project
-        project.knowledge_base_id = uuid.UUID(str(kb["id"]))
+        project.knowledge_base_id = kb["id"]
         await db.commit()
 
         result = {
@@ -371,8 +371,9 @@ async def get_knowledge_base_status(
             return await create_standard_response(status_data)
 
         # Detailed status includes KB health and file stats
+        from typing import cast
         kb_health = await get_knowledge_base_health(
-            knowledge_base_id=project.knowledge_base_id, db=db
+            knowledge_base_id=cast(UUID, project.knowledge_base_id), db=db
         )
         file_stats = await get_project_files_stats(project_id, db)
 
@@ -499,8 +500,9 @@ async def reindex_knowledge_base(
 
         if force:
             # Get KB to find the embedding model
+            from typing import cast
             kb = await get_knowledge_base(
-                knowledge_base_id=project.knowledge_base_id, db=db
+                knowledge_base_id=cast(UUID, project.knowledge_base_id), db=db
             )
             if kb:
                 # Delete existing vectors

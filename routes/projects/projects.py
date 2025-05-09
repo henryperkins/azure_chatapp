@@ -150,9 +150,8 @@ async def create_project(
             )
 
             # 3. Attach KB to project and save
-            import uuid
 
-            project.knowledge_base_id = uuid.UUID(str(kb.id))
+            project.knowledge_base_id = kb.id
             await save_model(db, project)
 
             # 4. Immediately create a default conversation for this project
