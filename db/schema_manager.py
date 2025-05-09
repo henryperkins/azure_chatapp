@@ -171,6 +171,7 @@ class SchemaManager:
                 print("==> No tables need creation.")
 
             # Step 2: Schema alignment
+            # Always align schema with ORM on startup
             logger.info("Running schema alignment...")
             print("==> Running schema alignment...")
             await self.fix_schema()
