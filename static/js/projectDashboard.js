@@ -31,7 +31,9 @@ class ProjectDashboard {
     this.eventHandlers = getModule('eventHandlers');
     this.auth = getModule('auth');
     this.logger = getModule('logger') || { info: () => { }, warn: () => { }, error: () => { } };
-    this.debugTools = getModule('debugTools') || null;
+    this.debugTools    = getModule('debugTools') || null;
+    // Utilidades globales (waitForDepsAndDom, etc.)
+    this.globalUtils   = getModule('globalUtils');
     this.notificationHandler = getModule('notificationHandler');
     if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler (via DependencySystem) is required.');
 
@@ -526,6 +528,10 @@ class ProjectDashboard {
   }
 
   async _initializeComponents() {
+    // Re-obtiene instancias registradas tras el constructor
+    this.components.projectList    = this.components.projectList    || this.getModule('projectListComponent')    || null;
+    this.components.projectDetails = this.components.projectDetails || this.getModule('projectDetailsComponent') || null;
+
     this.logger.info('[ProjectDashboard] Initializing components...');
 
     /* Wait until the Project Details template is injected */
