@@ -22,7 +22,7 @@ export function createNotify({
 
     const eventId = id || `${_type}-${Date.now()}`;
 
-    notificationHandler.show(msg, _type, {
+    const payload = {
       timeout: DURATION[_type],
       ...rest,
       id: eventId,
@@ -30,7 +30,16 @@ export function createNotify({
       module,
       source,
       extra
-    });
+    };
+
+    // Debug log for notification troubleshooting (shows all context passed)
+    if (typeof window !== "undefined" && window.console && window.APP_CONFIG?.DEBUG) {
+      // Only log if in debug mode
+      // eslint-disable-next-line no-console
+      console.debug('[notify.send] Notification payload:', { msg, type: _type, payload });
+    }
+
+    notificationHandler.show(msg, _type, payload);
 
     return eventId;
   };
