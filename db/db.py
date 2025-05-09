@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 import ssl
 import os
+from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
@@ -33,7 +34,6 @@ def _str_is_true(v: str | bool | None) -> bool:
 ALLOW_SELF_SIGNED = (
     _str_is_true(os.getenv("PG_SSL_ALLOW_SELF_SIGNED"))
     or _str_is_true(getattr(settings, "PG_SSL_ALLOW_SELF_SIGNED", None))
-    or bool(getattr(settings, "DEBUG", False))
 )
 
 # ---------------------------------------------------------
@@ -91,11 +91,15 @@ base_sync_url = DATABASE_URL.replace("+asyncpg", "").replace(
     "postgresql://", "postgresql+psycopg2://"
 )
 
-if not ALLOW_SELF_SIGNED and PG_SSL_CERT_PATH:
-    sync_url = f"{base_sync_url}?sslmode=verify-full&sslrootcert={PG_SSL_CERT_PATH}"
-else:
-    # sslmode=require non verifica il certificato, adatto per self-signed
+if ALLOW_SELF_SIGNED:
+    # conexión cifrada pero sin validación de cadena
     sync_url = f"{base_sync_url}?sslmode=require"
+else:
+    # verificación completa + ruta explícita al certificado raíz
+    sync_url = (
+        f"{base_sync_url}"
+        f"?sslmode=verify-full&sslrootcert={quote_plus(PG_SSL_CERT_PATH)}"
+    )
 
 sync_engine = create_engine(
     sync_url,
