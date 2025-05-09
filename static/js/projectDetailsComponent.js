@@ -132,6 +132,7 @@ export class ProjectDetailsComponent {
   }
 
   async initialize() {
+    const traceId = this.debugTools?.start?.('ProjectDetailsComponent.initialize');
     this.notify.info("[ProjectDetailsComponent] initialize() called", {
       group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
     });
@@ -148,6 +149,7 @@ export class ProjectDetailsComponent {
       this.notify.info("[ProjectDetailsComponent] Already initialized.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
       });
+      this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize');
       return true;
     }
     try {
@@ -180,12 +182,16 @@ export class ProjectDetailsComponent {
       this._uiReadyFlag = true;
       this._maybeEmitReady();
 
+      this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize');
       return true;
     } catch (err) {
       this.notify.error("[ProjectDetailsComponent] Init failed: " + (err?.message || err), {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize", originalError: err, timeout: 0
       });
+      this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize (error)');
       return false;
+    } finally {
+      this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize');
     }
   }
 

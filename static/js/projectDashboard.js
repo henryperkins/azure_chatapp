@@ -31,6 +31,7 @@ class ProjectDashboard {
     this.eventHandlers = getModule('eventHandlers');
     this.auth = getModule('auth');
     this.logger = getModule('logger') || { info: () => { }, warn: () => { }, error: () => { } };
+    this.debugTools = getModule('debugTools') || null;
     this.notificationHandler = getModule('notificationHandler');
     if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler (via DependencySystem) is required.');
 
@@ -92,10 +93,12 @@ class ProjectDashboard {
   }
 
   async initialize() {
+    const traceId = this.debugTools?.start?.('ProjectDashboard.initialize');
     this.dashboardNotify.info('[ProjectDashboard] initialize() called', { source: 'initialize' });
     if (this.state.initialized) {
       this.logger.info('[ProjectDashboard] Already initialized.', { context: 'ProjectDashboard' });
       this.dashboardNotify.info('Project dashboard is already initialized.', { source: 'initialize' });
+      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
       return true;
     }
     this.logger.info('[ProjectDashboard] Initializing...', { context: 'ProjectDashboard' });
@@ -106,6 +109,7 @@ class ProjectDashboard {
           context: 'ProjectDashboard'
         });
         this._showLoginRequiredMessage();
+        this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
         return false;
       }
       const listView = this.domAPI.getElementById('projectListView');
@@ -129,6 +133,7 @@ class ProjectDashboard {
       this.state.initialized = true;
       this.domAPI.dispatchEvent(this.domAPI.getDocument(), new CustomEvent('projectDashboardInitialized', { detail: { success: true } }));
       this.logger.info('[ProjectDashboard] Initialization complete.', { context: 'ProjectDashboard' });
+      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
       return true;
     } catch (error) {
       this.logger.error('[ProjectDashboard] Initialization failed:', error);
@@ -137,7 +142,10 @@ class ProjectDashboard {
         this.domAPI.dispatchEvent(this.domAPI.getDocument(),
           new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
         );
+        this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize (error)');
         return false;
+    } finally {
+      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
     }
   }
 
