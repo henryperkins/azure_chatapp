@@ -12,8 +12,10 @@
  * via DependencySystem for all dependencies. No global/ .* access for shared modules.
  */
 
+import { createNotify } from "./utils/notify.js";
+
 class ProjectDashboard {
-  constructor(dependencySystem) {
+  constructor(dependencySystem, notify = null) {
     if (!dependencySystem) throw new Error('[ProjectDashboard] dependencySystem is required.');
 
     // Dependency resolution
@@ -31,6 +33,17 @@ class ProjectDashboard {
     this.logger = getModule('logger') || { info: () => { }, warn: () => { }, error: () => { } };
     this.notificationHandler = getModule('notificationHandler');
     if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler (via DependencySystem) is required.');
+
+    // --- Inject notify utility and context-rich dashboardNotify ---
+    this.notify =
+      notify ||
+      getModule('notify') ||
+      createNotify({ notificationHandler: this.notificationHandler });
+
+    this.dashboardNotify = this.notify.withContext({
+      module: 'ProjectDashboard',
+      context: 'projectDashboard'
+    });
 
     // Inject domAPI for all DOM access
     this.domAPI = getModule('domAPI');
@@ -79,18 +92,10 @@ class ProjectDashboard {
   }
 
   async initialize() {
-    this.notificationHandler.show(
-      '[ProjectDashboard] initialize() called',
-      'info',
-      { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: 'initialize' }
-    );
+    this.dashboardNotify.info('[ProjectDashboard] initialize() called', { source: 'initialize' });
     if (this.state.initialized) {
       this.logger.info('[ProjectDashboard] Already initialized.', { context: 'ProjectDashboard' });
-      this.notificationHandler.show(
-        'Project dashboard is already initialized.',
-        'info',
-        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: 'initialize' }
-      );
+      this.dashboardNotify.info('Project dashboard is already initialized.', { source: 'initialize' });
       return true;
     }
     this.logger.info('[ProjectDashboard] Initializing...', { context: 'ProjectDashboard' });
@@ -127,13 +132,7 @@ class ProjectDashboard {
       return true;
     } catch (error) {
       this.logger.error('[ProjectDashboard] Initialization failed:', error);
-        if (this.notificationHandler?.show) {
-          this.notificationHandler.show(
-            'Dashboard initialization failed',
-            'error',
-            { group: true, context: 'projectDashboard' }
-          );
-        }
+        this.dashboardNotify.error('Dashboard initialization failed', { source: 'initialize', originalError: error });
         this.state.initialized = false;
         this.domAPI.dispatchEvent(this.domAPI.getDocument(),
           new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
@@ -165,18 +164,10 @@ class ProjectDashboard {
     if (this.components.projectList) {
       this.components.projectList.show();
       this.logger.info('[ProjectDashboard] ProjectList component shown');
-      this.notificationHandler.show(
-        'Switched to project list view.',
-        'info',
-        { group: true, context: 'projectDashboard' }
-      );
+      this.dashboardNotify.info('Switched to project list view.', { source: 'showProjectList' });
     } else {
       this.logger.warn('[ProjectDashboard] ProjectList component not available');
-      this.notificationHandler.show(
-        'The project list is currently unavailable.',
-        'warn',
-        { group: true, context: 'projectDashboard' }
-      );
+      this.dashboardNotify.warn('The project list is currently unavailable.', { source: 'showProjectList' });
     }
 
     this._loadProjects();
@@ -203,7 +194,8 @@ class ProjectDashboard {
     this._lastLoadId = currentLoadId;
 
     // Generate trace/transaction context for troubleshooting
-    const DependencySystem = this.getModule?.('DependencySystem') ?? (typeof window !== 'undefined' ? window.DependencySystem : null);
+    // DI strict: never use window globals. Use only injected domAPI or browserService.
+    const DependencySystem = this.getModule?.('DependencySystem') || null;
     const traceId = DependencySystem?.getCurrentTraceIds?.().traceId ?? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.floor(Math.random() * 10000)}`);
     const transactionId = DependencySystem?.generateTransactionId?.() ?? `txn-${Date.now()}`;
 
@@ -222,19 +214,12 @@ class ProjectDashboard {
     ) {
       projectId = projectObjOrId;
     } else {
-      this.notificationHandler.show(
-        'Invalid project ID',
-        'error',
-        {
-          group: true,
-          context: 'projectDashboard',
-          module: 'ProjectDashboard',
-          source: 'showProjectDetails',
-          traceId,
-          transactionId,
-          extra: { projectObjOrId }
-        }
-      );
+      this.dashboardNotify.error('Invalid project ID', {
+        source: 'showProjectDetails',
+        traceId,
+        transactionId,
+        extra: { projectObjOrId }
+      });
       this.showProjectList();
       return false;
     }
@@ -243,49 +228,28 @@ class ProjectDashboard {
 
     try {
       if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
-        this.notificationHandler.show(
-          'Waiting for ProjectDetailsComponent to initialize…',
-          'info',
-          {
-            group: true,
-            context: 'projectDashboard',
-            module: 'ProjectDashboard',
-            source: 'showProjectDetails',
-            traceId,
-            transactionId,
-            extra: { projectId }
-          }
-        );
-        await this.components.projectDetails.initialize();
-        this.notificationHandler.show(
-          'ProjectDetailsComponent initialized',
-          'info',
-          {
-            group: true,
-            context: 'projectDashboard',
-            module: 'ProjectDashboard',
-            source: 'showProjectDetails',
-            traceId,
-            transactionId,
-            extra: { projectId }
-          }
-        );
-      }
-    } catch (err) {
-      this.logger.error('[ProjectDashboard] Error loading project details page:', err);
-      this.notificationHandler.show(
-        'Error loading project details UI',
-        'error',
-        {
-          group: true,
-          context: 'projectDashboard',
-          module: 'ProjectDashboard',
+        this.dashboardNotify.info('Waiting for ProjectDetailsComponent to initialize…', {
           source: 'showProjectDetails',
           traceId,
           transactionId,
-          extra: { projectId, error: err?.message, originalError: err }
-        }
-      );
+          extra: { projectId }
+        });
+        await this.components.projectDetails.initialize();
+        this.dashboardNotify.info('ProjectDetailsComponent initialized', {
+          source: 'showProjectDetails',
+          traceId,
+          transactionId,
+          extra: { projectId }
+        });
+      }
+    } catch (err) {
+      this.logger.error('[ProjectDashboard] Error loading project details page:', err);
+      this.dashboardNotify.error('Error loading project details UI', {
+        source: 'showProjectDetails',
+        traceId,
+        transactionId,
+        extra: { projectId, error: err?.message, originalError: err }
+      });
       this.browserService.removeItem('selectedProjectId');
       this.showProjectList();
       return false;
@@ -301,19 +265,12 @@ class ProjectDashboard {
         try {
           if (this._lastLoadId !== currentLoadId) {
             this.logger.info('[ProjectDashboard] Aborting showProjectDetails (direct path) due to newer load');
-            this.notificationHandler.show(
-              'Aborted: newer navigation event detected',
-              'debug',
-              {
-                group: true,
-                context: 'projectDashboard',
-                module: 'ProjectDashboard',
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId }
-              }
-            );
+            this.dashboardNotify.debug('Aborted: newer navigation event detected', {
+              source: 'showProjectDetails',
+              traceId,
+              transactionId,
+              extra: { projectId }
+            });
             return false;
           }
           this.logger.info('[ProjectDashboard] Setting initial view visibility first');
@@ -341,34 +298,20 @@ class ProjectDashboard {
               detailsView.setAttribute('aria-hidden', 'false');
             }
           }
-          this.notificationHandler.show(
-            'Project details displayed successfully.',
-            'info',
-            {
-              group: true,
-              context: 'projectDashboard',
-              module: 'ProjectDashboard',
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            }
-          );
+          this.dashboardNotify.info('Project details displayed successfully.', {
+            source: 'showProjectDetails',
+            traceId,
+            transactionId,
+            extra: { projectId }
+          });
         } catch (error) {
           this.logger.error('[ProjectDashboard] Error during view transition:', error);
-          this.notificationHandler.show(
-            'Error displaying project details (direct path)',
-            'error',
-            {
-              group: true,
-              context: 'projectDashboard',
-              module: 'ProjectDashboard',
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId, error: error?.message, originalError: error }
-            }
-          );
+          this.dashboardNotify.error('Error displaying project details (direct path)', {
+            source: 'showProjectDetails',
+            traceId,
+            transactionId,
+            extra: { projectId, error: error?.message, originalError: error }
+          });
           this._setView({ showList: false, showDetails: true });
         }
       }
@@ -384,36 +327,22 @@ class ProjectDashboard {
         project = await this.projectManager.loadProjectDetails(projectId);
         if (this._lastLoadId !== currentLoadId) {
           this.logger.info('[ProjectDashboard] Aborting showProjectDetails (API path) due to newer load');
-          this.notificationHandler.show(
-            'Aborted: newer navigation event detected (API path)',
-            'debug',
-            {
-              group: true,
-              context: 'projectDashboard',
-              module: 'ProjectDashboard',
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            }
-          );
+          this.dashboardNotify.debug('Aborted: newer navigation event detected (API path)', {
+            source: 'showProjectDetails',
+            traceId,
+            transactionId,
+            extra: { projectId }
+          });
           return false;
         }
         if (!project) {
           this.logger.warn('[ProjectDashboard] Project not found after details load');
-          this.notificationHandler.show(
-            'Project not found',
-            'error',
-            {
-              group: true,
-              context: 'projectDashboard',
-              module: 'ProjectDashboard',
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            }
-          );
+          this.dashboardNotify.error('Project not found', {
+            source: 'showProjectDetails',
+            traceId,
+            transactionId,
+            extra: { projectId }
+          });
           this.showProjectList();
           return false;
         }
@@ -427,19 +356,12 @@ class ProjectDashboard {
               this.logger.info(
                 '[ProjectDashboard] Aborting showProjectDetails (API path) due to newer load after render check'
               );
-            this.notificationHandler.show(
-              'Aborted: newer navigation event detected (API path, post-render check)',
-              'debug',
-              {
-                group: true,
-                context: 'projectDashboard',
-                module: 'ProjectDashboard',
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId }
-              }
-            );
+            this.dashboardNotify.debug('Aborted: newer navigation event detected (API path, post-render check)', {
+              source: 'showProjectDetails',
+              traceId,
+              transactionId,
+              extra: { projectId }
+            });
               return false;
             }
             this.logger.info('[ProjectDashboard] Setting initial view visibility first (API path)');
@@ -466,69 +388,41 @@ class ProjectDashboard {
                 detailsView.setAttribute('aria-hidden', 'false');
               }
             }
-            this.notificationHandler.show(
-              'Project details displayed successfully (API path).',
-              'info',
-              {
-                group: true,
-                context: 'projectDashboard',
-                module: 'ProjectDashboard',
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId }
-              }
-            );
+            this.dashboardNotify.info('Project details displayed successfully (API path).', {
+              source: 'showProjectDetails',
+              traceId,
+              transactionId,
+              extra: { projectId }
+            });
           } catch (error) {
             this.logger.error('[ProjectDashboard] Error during view transition (API path):', error);
-            this.notificationHandler.show(
-              'Error displaying project details (API path)',
-              'error',
-              {
-                group: true,
-                context: 'projectDashboard',
-                module: 'ProjectDashboard',
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId, error: error?.message, originalError: error }
-              }
-            );
+            this.dashboardNotify.error('Error displaying project details (API path)', {
+              source: 'showProjectDetails',
+              traceId,
+              transactionId,
+              extra: { projectId, error: error?.message, originalError: error }
+            });
             this._setView({ showList: false, showDetails: true });
           }
         }
       } catch (error) {
         if (this._lastLoadId !== currentLoadId) {
           this.logger.info('[ProjectDashboard] Aborting showProjectDetails error handler due to newer load');
-          this.notificationHandler.show(
-            'Aborted: newer navigation event detected (API path, error handler)',
-            'debug',
-            {
-              group: true,
-              context: 'projectDashboard',
-              module: 'ProjectDashboard',
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            }
-          );
-          return false;
-        }
-        this.logger.error('[ProjectDashboard] Failed to load project details:', error);
-        this.notificationHandler.show(
-          'Failed to load project details',
-          'error',
-          {
-            group: true,
-            context: 'projectDashboard',
-            module: 'ProjectDashboard',
+          this.dashboardNotify.debug('Aborted: newer navigation event detected (API path, error handler)', {
             source: 'showProjectDetails',
             traceId,
             transactionId,
-            extra: { projectId, error: error?.message, originalError: error }
-          }
-        );
+            extra: { projectId }
+          });
+          return false;
+        }
+        this.logger.error('[ProjectDashboard] Failed to load project details:', error);
+        this.dashboardNotify.error('Failed to load project details', {
+          source: 'showProjectDetails',
+          traceId,
+          transactionId,
+          extra: { projectId, error: error?.message, originalError: error }
+        });
         this.showProjectList();
         return false;
       }
@@ -536,19 +430,12 @@ class ProjectDashboard {
       this.state.currentView = 'details';
       return true;
     } else {
-      this.notificationHandler.show(
-        'ProjectManager is unavailable or user not authenticated. Showing project list.',
-        'warn',
-        {
-          group: true,
-          context: 'projectDashboard',
-          module: 'ProjectDashboard',
-          source: 'showProjectDetails',
-          traceId,
-          transactionId,
-          extra: { projectId }
-        }
-      );
+      this.dashboardNotify.warn('ProjectManager is unavailable or user not authenticated. Showing project list.', {
+        source: 'showProjectDetails',
+        traceId,
+        transactionId,
+        extra: { projectId }
+      });
       this.showProjectList();
       return false;
     }
@@ -589,8 +476,15 @@ class ProjectDashboard {
       this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
       detailsView.classList.toggle('hidden', !showDetails);
       detailsView.setAttribute('aria-hidden', (!showDetails).toString());
-      detailsView.style.display = showDetails ? '' : 'none';
-      if (showDetails) detailsView.classList.remove('opacity-0');
+      // Explicitly set display to 'flex' as its sibling projectListView is a flex container
+      // and its parent projectManagerPanel is also a flex container.
+      detailsView.style.display = showDetails ? 'flex' : 'none';
+      if (showDetails) {
+        detailsView.classList.remove('opacity-0');
+        detailsView.classList.add('flex-1', 'flex-col'); // Match projectListView behavior
+      } else {
+        detailsView.classList.remove('flex-1', 'flex-col');
+      }
     }
 
     // Force browser reflow to ensure visibility transitions apply
@@ -640,7 +534,7 @@ class ProjectDashboard {
       if (waitForDepsAndDom) {
         try {
           await waitForDepsAndDom({
-            DependencySystem: this.getModule?.('DependencySystem') ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+            DependencySystem: this.getModule?.('DependencySystem') || null,
             domSelectors: ['#projectList', '#projectList .grid'], // Ensure #projectList and its internal grid are ready
             timeout: 5000,
             notify: this.logger, // Or use this.notificationHandler if preferred for user-facing timeout messages
@@ -670,7 +564,7 @@ class ProjectDashboard {
       if (waitForDepsAndDom) {
         try {
           await waitForDepsAndDom({
-            DependencySystem: this.getModule?.('DependencySystem') ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+            DependencySystem: this.getModule?.('DependencySystem') || null,
             domSelectors: [ // Ensure #projectDetailsView AND its critical children are ready
               '#projectDetailsView',
               '#projectTitle',
@@ -783,41 +677,25 @@ class ProjectDashboard {
     this.logger.info('[ProjectDashboard] Loading projects...');
 
     if (!this.app) {
-      this.notificationHandler.show(
-        'Project dashboard unavailable. Please refresh the page.',
-        'error',
-        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
-      );
+      this.dashboardNotify.error('Project dashboard unavailable. Please refresh the page.', { source: '_loadProjects' });
       this.logger.error('[ProjectDashboard] app is null or undefined');
       return;
     }
 
     if (!this.app?.state?.isAuthenticated) {
-      this.notificationHandler.show(
-        'Not authenticated. Please log in to view projects.',
-        'warning',
-        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
-      );
+      this.dashboardNotify.warn('Not authenticated. Please log in to view projects.', { source: '_loadProjects' });
       this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', this.app?.state);
       return;
     }
 
     if (!this.projectManager) {
-      this.notificationHandler.show(
-        'Project manager unavailable. Please refresh the page.',
-        'error',
-        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
-      );
+      this.dashboardNotify.error('Project manager unavailable. Please refresh the page.', { source: '_loadProjects' });
       this.logger.error('[ProjectDashboard] projectManager is null or undefined');
       return;
     }
 
     if (typeof this.projectManager.loadProjects !== 'function') {
-      this.notificationHandler.show(
-        'Cannot load projects. Project manager is incomplete.',
-        'error',
-        { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_loadProjects' }
-      );
+      this.dashboardNotify.error('Cannot load projects. Project manager is incomplete.', { source: '_loadProjects' });
       this.logger.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
       return;
     }
@@ -853,11 +731,7 @@ class ProjectDashboard {
       })
       .catch((error) => {
         this.logger.error('[ProjectDashboard] Error loading projects:', error);
-        this.notificationHandler.show(
-          'Failed to load projects. Please try again.',
-          'error',
-          { group: true, context: 'projectDashboard', module: 'ProjectDashboard', source: '_executeProjectLoad' }
-        );
+        this.dashboardNotify.error('Failed to load projects. Please try again.', { source: '_executeProjectLoad', originalError: error });
       });
   }
 
@@ -867,7 +741,9 @@ class ProjectDashboard {
 
   _handleViewProject(projectId) {
     // Push url then show – enables Back button
-    history.pushState({}, '', this.browserService.buildUrl ? this.browserService.buildUrl({ project: projectId }) : `?project=${projectId}`);
+    // Construct a clean, absolute path for navigation
+    const newNavPath = `/project-details-view?project=${projectId}`;
+    history.pushState({}, '', newNavPath);
     // Ensure project details are loaded (fixes missing details view)
     this.showProjectDetails(projectId);
   }
@@ -1002,11 +878,7 @@ class ProjectDashboard {
       detailsView.classList.add('hidden');
       detailsView.style.display = 'none';
     }
-    this.notificationHandler.show(
-      'The requested project was not found',
-      'error',
-      { group: true, context: 'projectDashboard' }
-    );
+    this.dashboardNotify.error('The requested project was not found', { source: '_handleProjectNotFound' });
     this.showProjectList();
   }
 

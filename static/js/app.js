@@ -535,7 +535,7 @@ function renderAuthHeader() {
         const userInitialsEl = domAPI.getElementById('userInitials');
         const authStatus = domAPI.getElementById('authStatus');
         const userStatus = domAPI.getElementById('userStatus');
-        const authContainer = domAPI.getElementById('authContainer');
+        // const authContainer = domAPI.getElementById('authContainer'); // Unused variable
 
         notify.debug('[App] renderAuthHeader invoked', {
             isAuth,
@@ -670,7 +670,8 @@ async function initializeUIComponents() {
             notify,
             storage: DependencySystem.modules.get('storage'),
             sanitizer: DependencySystem.modules.get('sanitizer'),
-            domAPI
+            domAPI,
+            browserService: browserServiceInstance
         });
         DependencySystem.register('projectListComponent', projectListComponentInstance);
 

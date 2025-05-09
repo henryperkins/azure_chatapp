@@ -230,7 +230,28 @@ export class ProjectDetailsComponent {
     this.elements.progressBar = $("#fileProgressBar");
     this.elements.uploadStatus = $("#uploadStatus");
 
-    return !!(this.elements.title && this.elements.backBtn && this.elements.tabContainer);
+    // More comprehensive check for essential elements
+    const essentialElementsFound =
+      this.elements.title &&
+      this.elements.description &&
+      this.elements.backBtn &&
+      this.elements.tabContainer &&
+      this.elements.tabContents.details; // Crucially check the default tab content
+
+    if (!essentialElementsFound) {
+      this.notify.error("[ProjectDetailsComponent] Not all essential child elements found within #projectDetailsView.", {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "_findElements",
+        detail: {
+          titleFound: !!this.elements.title,
+          descriptionFound: !!this.elements.description,
+          backBtnFound: !!this.elements.backBtn,
+          tabContainerFound: !!this.elements.tabContainer,
+          detailsTabFound: !!this.elements.tabContents.details
+        }
+      });
+      return false;
+    }
+    return true;
   }
 
   _bindCoreEvents() {
@@ -390,7 +411,20 @@ this.domAPI.dispatchEvent(
       return;
     }
     this.elements.container.classList.remove("hidden");
+    this.elements.container.style.display = "block"; // Explicitly set display
     this.elements.container.setAttribute("aria-hidden", "false");
+
+    // Ensure the default 'details' tab content is also explicitly shown
+    if (this.elements.tabContents && this.elements.tabContents.details) {
+        this.elements.tabContents.details.classList.remove("hidden");
+        // Ensure other tabs are hidden, reinforcing switchTab's job
+        Object.entries(this.elements.tabContents).forEach(([key, el]) => {
+          if (el && key !== 'details') {
+            el.classList.add("hidden");
+          }
+        });
+    }
+
     this.notify.info("[ProjectDetailsComponent] Shown.", {
       group: true, context: "projectDetailsComponent", module: MODULE, source: "show"
     });
@@ -631,8 +665,8 @@ this.domAPI.dispatchEvent(
   }
 
   renderStats(s = {}) {
-    const fileCount = this.elements.container.querySelector('[data-stat="fileCount"]');
-    const convoCount = this.elements.container.querySelector('[data-stat="conversationCount"]');
+    const fileCount = this.elements.container.querySelector('#fileCount'); // Corrected selector
+    const convoCount = this.elements.container.querySelector('#conversationCount'); // Corrected selector
     if (fileCount && s.fileCount !== undefined) fileCount.textContent = s.fileCount;
     if (convoCount && s.conversationCount !== undefined) convoCount.textContent = s.conversationCount;
     this.notify.info("[ProjectDetailsComponent] stats updated", {
