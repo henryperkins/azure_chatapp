@@ -118,21 +118,22 @@ base_sync_url = DATABASE_URL.replace("+asyncpg", "").replace(
 )
 
 if ALLOW_SELF_SIGNED:
-    sync_url = f"{base_sync_url}?sslmode=require"
+    sync_url = f"{base_sync_url}?sslmode=disable"
+    sync_engine = create_engine(
+        sync_url,
+        connect_args={"sslmode": "disable"},
+        pool_pre_ping=True
+    )
+elif PG_SSL_CERT_PATH:
+    sync_url = (
+        f"{base_sync_url}"
+        f"?sslmode=verify-full"
+        f"&sslrootcert={quote_plus(PG_SSL_CERT_PATH)}"
+    )
+    sync_engine = create_engine(sync_url, pool_pre_ping=True)
 else:
-    if PG_SSL_CERT_PATH:
-        sync_url = (
-            f"{base_sync_url}"
-            f"?sslmode=verify-full&sslrootcert={quote_plus(PG_SSL_CERT_PATH)}"
-        )
-    else:
-        # sin ruta explícita, pero seguimos exigiendo conexión cifrada
-        sync_url = f"{base_sync_url}?sslmode=require"
-
-sync_engine = create_engine(
-    sync_url,
-    pool_pre_ping=True
-)
+    sync_url = f"{base_sync_url}?sslmode=require"
+    sync_engine = create_engine(sync_url, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
