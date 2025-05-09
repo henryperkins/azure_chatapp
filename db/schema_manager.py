@@ -107,6 +107,18 @@ def automated_alembic_migrate(message: str = "Automated migration", revision_dir
 
 
 class SchemaManager:
+    """
+    SchemaManager now supports automatic schema alignment:
+    - Adds missing tables, columns, indexes, and foreign keys.
+    - (Optional) Drops obsolete columns and alters column types if AUTO_SCHEMA_DESTRUCTIVE=true.
+    - Logs all changes for auditability.
+
+    Caution:
+    - Destructive changes (dropping columns, altering types) are only performed if
+      the environment variable AUTO_SCHEMA_DESTRUCTIVE=true is set.
+    - Always back up your database before enabling destructive schema changes.
+    """
+
     def __init__(self):
         # Type equivalents for schema validation
         self.type_equivalents = {
@@ -239,7 +251,11 @@ class SchemaManager:
 
     async def fix_schema(self) -> None:
         """Schema alignment using async connection"""
+        import os
+
         logger.info("Starting schema alignment...")
+
+        destructive = os.getenv("AUTO_SCHEMA_DESTRUCTIVE", "false").lower() == "true"
 
         async with async_engine.begin() as conn:
             # Create missing tables and align schema with ORM
@@ -253,13 +269,64 @@ class SchemaManager:
                 if not table_exists:
                     continue
 
-                db_columns = await conn.run_sync(
+                db_columns_set = await conn.run_sync(
                     lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table.name)}
                 )
                 for column in table.columns:
-                    if column.name not in db_columns:
+                    if column.name not in db_columns_set:
                         logger.info(f"Adding column: {table.name}.{column.name}")
                         await self._add_column(conn, table.name, column)
+
+            # --- Enhanced: Drop obsolete columns and alter column types ---
+            for table in Base.metadata.tables.values():
+                table_exists = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).has_table(table.name)
+                )
+                if not table_exists:
+                    continue
+
+                db_columns = await conn.run_sync(
+                    lambda sync_conn: {c["name"]: c for c in inspect(sync_conn).get_columns(table.name)}
+                )
+                orm_columns = {col.name: col for col in table.columns}
+
+                # Drop columns not in ORM (if enabled)
+                if destructive:
+                    for db_col_name in db_columns:
+                        if db_col_name not in orm_columns:
+                            logger.warning(f"Dropping obsolete column: {table.name}.{db_col_name}")
+                            try:
+                                await conn.execute(
+                                    text(f'ALTER TABLE "{table.name}" DROP COLUMN "{db_col_name}"')
+                                )
+                                logger.info(f"Dropped column: {table.name}.{db_col_name}")
+                            except Exception as e:
+                                logger.error(f"Failed to drop column {table.name}.{db_col_name}: {e}")
+
+                # Alter column types if mismatched (if enabled)
+                for col_name, db_col in db_columns.items():
+                    if col_name in orm_columns:
+                        orm_col = orm_columns[col_name]
+                        db_type = db_col["type"]
+                        # Compile ORM type to string for comparison
+                        try:
+                            orm_type = orm_col.type.compile(sync_engine.dialect)
+                        except Exception:
+                            orm_type = str(orm_col.type)
+                        # Compare types (case-insensitive, ignore length for now)
+                        if db_type.lower() != orm_type.lower():
+                            logger.warning(
+                                f"Type mismatch for {table.name}.{col_name}: DB={db_type}, ORM={orm_type}. "
+                                "Manual intervention may be required."
+                            )
+                            if destructive:
+                                try:
+                                    await conn.execute(
+                                        text(f'ALTER TABLE "{table.name}" ALTER COLUMN "{col_name}" TYPE {orm_type}')
+                                    )
+                                    logger.info(f"Altered column type: {table.name}.{col_name} to {orm_type}")
+                                except Exception as e:
+                                    logger.error(f"Failed to alter column type for {table.name}.{col_name}: {e}")
 
             # 3. Create missing indexes
             for table in Base.metadata.tables.values():
@@ -280,6 +347,20 @@ class SchemaManager:
                         except Exception as e:
                             logger.error(f"Failed to create index {index.name}: {e}")
 
+                # Drop obsolete indexes (if enabled)
+                if destructive:
+                    orm_index_names = {index.name for index in table.indexes}
+                    for db_index_name in db_indexes:
+                        if db_index_name not in orm_index_names:
+                            logger.warning(f"Dropping obsolete index: {table.name}.{db_index_name}")
+                            try:
+                                await conn.execute(
+                                    text(f'DROP INDEX IF EXISTS "{db_index_name}"')
+                                )
+                                logger.info(f"Dropped index: {table.name}.{db_index_name}")
+                            except Exception as e:
+                                logger.error(f"Failed to drop index {table.name}.{db_index_name}: {e}")
+
             # 4. Fix foreign key constraints
             for table in Base.metadata.tables.values():
                 table_exists = await conn.run_sync(
@@ -298,6 +379,9 @@ class SchemaManager:
                                 f"Adding FK: {table.name}.{column.name} -> {fk.column.table.name}.{fk.column.name}"
                             )
                             await self._add_foreign_key(conn, table.name, column.name, fk)
+
+                # Drop obsolete foreign keys (if enabled)
+                # (Not implemented here for safety; can be added similarly if needed)
 
         logger.info("Schema alignment completed")
 
