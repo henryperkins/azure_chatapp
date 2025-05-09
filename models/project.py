@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 from datetime import datetime
 from sqlalchemy import (
     String,
@@ -118,6 +118,14 @@ class Project(Base):
     )
     members: Mapped[list[ProjectUserAssociation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
+    )
+    # Foreign key to KnowledgeBase (one-to-one relationship)
+    knowledge_base_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
     )
     # Relationship to KnowledgeBase (now FK is on Project.knowledge_base_id)
     knowledge_base = relationship(
