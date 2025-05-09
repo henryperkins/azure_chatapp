@@ -2,7 +2,34 @@
  * ProjectListComponent
  * Handles rendering and interaction with the project list UI.
  *
- * All dependencies must now be passed explicitly (NO globals/Modularity).
+ * External dependencies required (directly or indirectly):
+ *
+ * Required (throws error if missing):
+ * • projectManager – expected methods: loadProjects(filter), deleteProject(id)
+ * • eventHandlers – at least trackListener(…) (+ optional cleanup)
+ * • router – navigate(url) and getURL()
+ * • notify – with .withContext() returning { debug, info, warn, error, success }
+ * • storage – getItem(k), setItem(k,v)
+ * • sanitizer – sanitize(html)
+ *
+ * Optional but used:
+ * • modalManager – show(modalName, opts), confirmAction(opts)
+ * • app – setCurrentProjectId(id) and app.state.{isAuthenticated,currentUser}, app.config.debug
+ * • apiClient – patch(url, body)
+ * • domAPI – wrapper with:
+ *   · getElementById, querySelector, querySelectorAll, createElement, getDocument, addClass, removeClass, setTextContent, preventDefault
+ *   (falls back to global document if missing)
+ * • browserService – only stored; not used yet in shown code
+ * • globalUtils – same: received but not used
+ *
+ * Implicit global environments/objects:
+ * • document (global) – fallback when domAPI is not provided
+ * • window (only in comments/tests)
+ *
+ * External events expected:
+ * • Fires/listens to DOM events: projectsLoaded, projectCreated, projectUpdated, authStateChanged, projectlistcomponent:initialized, requestLogin.
+ *
+ * There are no other hidden external dependencies.
  *
  * Usage:
  *   import { ProjectListComponent } from './projectListComponent.js';
