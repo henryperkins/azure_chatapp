@@ -458,6 +458,44 @@ export function toggleElement(selOrEl, show) {
   }
 }
 
+/**
+ * createDebugTools
+ * Lightweight stopwatch / trace helper.
+ *
+ * @param {Object} deps
+ * @param {Object} [deps.notify] – DI notify util (optional but preferred)
+ * @returns {Object} API – { start(label), stop(id,label), newTraceId() }
+ *
+ * Follows “factory-function-export-pattern”.
+ */
+export function createDebugTools({ notify } = {}) {
+  const _active = new Map();
+  const _uuid   = () =>
+    (typeof crypto !== "undefined" && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : `trace-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  const _log    = (...args) =>
+    (notify?.debug ? notify.debug : _notifyGU.debug)(...args);
+
+  function start(label = '') {
+    const id = _uuid();
+    _active.set(id, performance.now());
+    _log(`[trace:start] ${label}`, { traceId: id, label });
+    return id;
+  }
+
+  function stop(id, label = '') {
+    const t0 = _active.get(id);
+    if (t0 == null) return null;
+    const dur = +(performance.now() - t0).toFixed(1);
+    _active.delete(id);
+    _log(`[trace:stop ] ${label} (${dur} ms)`, { traceId: id, label, duration: dur });
+    return dur;
+  }
+
+  return { start, stop, newTraceId: _uuid };
+}
+
 // ░░ Formatting helpers ░░────────────────────────────────────────────────────
 export const formatNumber = (n) => new Intl.NumberFormat().format(n || 0);
 export const formatDate = (d) => {

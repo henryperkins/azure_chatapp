@@ -26,17 +26,28 @@
  * @method dispatchEvent(el, event)
  *   Dispatches an Event at the specified EventTarget, (synchronously) invoking the affected EventListeners in the appropriate order.
  */
-export function createDomAPI({ documentObject = document, windowObject = window } = {}) {
-  if (!documentObject || !windowObject)
-    throw new Error("domAPI: Both documentObject and windowObject are required");
+export function createDomAPI({
+  documentObject = document,
+  windowObject   = window,
+  debug          = false
+} = {}) {
+
+  // Local debug output (disabled when debug === false)
+  const _log = (...m) => { if (debug) console.debug('[domAPI]', ...m); };
 
   return {
-    getElementById: (id) => documentObject.getElementById(id),
-    querySelector: (selector, contextEl) => {
-      if (contextEl && typeof contextEl.querySelector === 'function') {
-        return contextEl.querySelector(selector);
-      }
-      return documentObject.querySelector(selector);
+    getElementById(id) {
+      const el = documentObject.getElementById(id);
+      if (!el) _log(`getElementById("${id}") → null`);
+      return el;
+    },
+    querySelector(selector, contextEl) {
+      const base = contextEl && typeof contextEl.querySelector === 'function'
+        ? contextEl
+        : documentObject;
+      const el = base.querySelector(selector);
+      if (!el) _log(`querySelector("${selector}") → null`);
+      return el;
     },
     querySelectorAll: (selector, contextEl) => {
       if (contextEl && typeof contextEl.querySelectorAll === 'function') {
