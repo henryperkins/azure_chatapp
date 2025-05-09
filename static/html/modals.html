@@ -508,7 +508,7 @@
     // Always reset the login modal to "Login" tab when shown (robust to any modalManager JS call)
     const loginModal = document.getElementById('loginModal');
     if (loginModal) {
-      loginModal.addEventListener('show', showLoginModalAlwaysLoginTab);
+      // loginModal.addEventListener('show', showLoginModalAlwaysLoginTab); // Temporarily commented out for testing tab switching
     }
 
     // Background/backdrop & close button: always close via modalManager

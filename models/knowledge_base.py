@@ -68,8 +68,7 @@ class KnowledgeBase(Base):
     project = relationship(
         "Project",
         back_populates="knowledge_base",
-        uselist=False,
-        primaryjoin="KnowledgeBase.project_id==Project.id"
+        uselist=False
     )
 
     def __repr__(self):

@@ -199,10 +199,12 @@ class ConversationService:
         # Auto-enable KB if the project has one
         if project_id:
             project = await self._validate_project_access(project_id, user_id)
-            if project.knowledge_base_id:
+            # Access knowledge base through the relationship
+            if project.knowledge_base:
                 conv.use_knowledge_base = True
-                conv.knowledge_base_id = project.knowledge_base_id  # type: ignore
+                conv.knowledge_base_id = project.knowledge_base.id
         else:
+            # For standalone conversations, the passed 'use_knowledge_base' is used
             conv.use_knowledge_base = use_knowledge_base
 
         try:
@@ -299,13 +301,14 @@ class ConversationService:
                 project = await self._validate_project_access(
                     UUID(str(conv.project_id)), user_id
                 )
-                if project.knowledge_base_id and not use_knowledge_base:
+                # Access knowledge base through the relationship
+                if project.knowledge_base and not use_knowledge_base:
                     logger.warning(
                         f"Attempt to disable KB for project conversation {conv.id} is ignored."
                     )
-                elif project.knowledge_base_id:
+                elif project.knowledge_base:
                     conv.use_knowledge_base = True
-                    conv.knowledge_base_id = project.knowledge_base_id  # type: ignore
+                    conv.knowledge_base_id = project.knowledge_base.id
                     updated = True
                 else:
                     # If project has no KB, we cannot enable it
