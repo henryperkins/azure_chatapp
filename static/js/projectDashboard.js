@@ -474,16 +474,15 @@ class ProjectDashboard {
 
     if (detailsView) {
       this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
-      detailsView.classList.toggle('hidden', !showDetails);
-      detailsView.setAttribute('aria-hidden', (!showDetails).toString());
-      // Explicitly set display to 'flex' as its sibling projectListView is a flex container
-      // and its parent projectManagerPanel is also a flex container.
-      detailsView.style.display = showDetails ? 'flex' : 'none';
+      detailsView.classList.toggle("hidden", !showDetails);
+      detailsView.setAttribute("aria-hidden", (!showDetails).toString());
+      // Explicitly set display to 'flex' for layout consistency
+      detailsView.style.display = showDetails ? "flex" : "none";
       if (showDetails) {
-        detailsView.classList.remove('opacity-0');
-        detailsView.classList.add('flex-1', 'flex-col'); // Match projectListView behavior
+        detailsView.classList.remove("opacity-0");
+        detailsView.classList.add("flex-1", "flex-col");
       } else {
-        detailsView.classList.remove('flex-1', 'flex-col');
+        detailsView.classList.remove("flex-1", "flex-col");
       }
     }
 
