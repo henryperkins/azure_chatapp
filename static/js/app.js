@@ -65,7 +65,7 @@ const uiUtils = {
     return map[(type||'').toLowerCase()] ?? '📄';
   }
 };
-DependencySystem.register('uiUtils', uiUtils);
+//DependencySystem.register('uiUtils', uiUtils);
 
 // Back-compat: si la clase aún no define validateUUID, añade alias al helper global
 // (Removed: ProjectDetailsComponent is not defined. This block is obsolete.)
