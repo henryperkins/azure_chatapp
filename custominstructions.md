@@ -69,6 +69,8 @@ function setupSidebarEvents({ eventHandlers, domAPI }) {
 
 *(slug: `notifications-via-di`)*
 
+#### **Basic Usage**
+
 ```javascript
 export function createProjectManager({ DependencySystem, eventHandlers, notify }) {
   if (!notify) throw new Error('notify utility required');
