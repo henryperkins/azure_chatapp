@@ -404,6 +404,7 @@ export async function init() {
         appState.initializing = false;
         toggleLoadingSpinner(false);
         appState.currentPhase = appState.initialized ? 'initialized_idle' : 'failed_idle';
+        _dbg.stop?.(_trace, 'App.init');
     }
 }
 // 8) Core systems initialization
@@ -670,6 +671,7 @@ async function fetchCurrentUser() {
 let _uiInitialized = false;
 
 async function initializeUIComponents() {
+    const _t = _dbg.start?.('initializeUIComponents');
     try {
         if (_uiInitialized) {
             notify.warn('[App] initializeUIComponents called again; skipping.');
@@ -823,6 +825,8 @@ async function initializeUIComponents() {
             source: 'initializeUIComponents'
         });
         throw err;
+    } finally {
+        _dbg.stop?.(_t,'initializeUIComponents');
     }
 }
 
