@@ -1,23 +1,38 @@
 import { MODAL_MAPPINGS } from './modalConstants.js';
 
-/**
- * @typedef {import('./utils/domAPI.js').createDomAPI} DomAPI
- * @typedef {import('./utils/browserService.js').createBrowserService} BrowserService
- */
-/**
- * @fileoverview
- * Manages all application modals and their interactions (showing, hiding, etc.).
- * Provides a flexible design for registering event handlers and customizing each modal’s content.
+/*
+ * Dependencies required by ModalManager (from code, not comments):
  *
- * Modules:
- *  - eventHandlers: for tracked event binding/unbinding
- *  - showNotification: function to display notifications (error, info, warning, etc.)
- *  - app: optional object with an 'isInitializing' boolean to indicate if the app is still in init phase
- *  - domPurify: optional sanitize function for innerHTML usage
+ * A. Imported symbol
+ *    • MODAL_MAPPINGS – from './modalConstants.js' (fallback when no custom mapping is injected)
  *
- * Exports:
- *  - createModalManager({ eventHandlers, DependencySystem, modalMapping })
- *  - createProjectModal({ projectManager, eventHandlers, showNotification, DependencySystem })
+ * B. Objects that MUST be supplied through DI (constructor/factory)
+ *    1. domAPI – required; must expose at least:
+ *       getElementById, querySelectorAll, querySelector, getDocument, dispatchEvent,
+ *       getBody, getDocumentElement, getScrollingElement, ownerDocument, add/removeEventListener,
+ *       addClass / removeClass operations via classList.
+ *    2. eventHandlers – required; expects methods:
+ *       trackListener(element,type,handler,opts) and cleanupListeners(filter?).
+ *    3. notify – required; must provide debug, info, warn, error, success, withContext.
+ *    4. browserService – required by constructor (throw if absent) even though current code does not use it later.
+ *    5. DependencySystem – required; the code calls:
+ *       · DependencySystem.modules.get(name)
+ *       · DependencySystem.waitFor(deps, …)
+ *
+ * C. Optional-but-used DI parameters
+ *    • modalMapping – object map name→modalId (defaults to MODAL_MAPPINGS)
+ *    • debugTools   – object with start(label) / stop(id,label)
+ *    • domPurify    – only consumed inside ProjectModal._setButtonLoading (optional)
+ *    • projectManager – required for ProjectModal.saveProject() but not for ModalManager itself
+ *    • app – fetched via DependencySystem.modules.get('app'); only its config.debug and isInitializing flags are read.
+ *
+ * D. Globals / browser APIs referenced (not DI)
+ *    • window (indirectly via AbortController fallback checks in utils but here only for CustomEvent availability)
+ *    • document – accessed only through domAPI when available, but global document is used as fallback in a few dispatchEvent calls.
+ *    • CustomEvent – constructor used to emit ‘modalmanager:initialized’.
+ *    • FormData – used in ProjectModal.handleSubmit.
+ *
+ * No other modules, services, or globals are accessed by modalManager.js.
  */
 
 /* getScrollingElement (old) removed; now available via injected domAPI */
