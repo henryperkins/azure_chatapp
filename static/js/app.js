@@ -773,6 +773,12 @@ async function initializeUIComponents() {
         });
         DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
 
+        // Actualiza el ProjectDashboard con las instancias ya creadas
+        if (projectDashboardInstance?.components) {
+            projectDashboardInstance.components.projectDetails = projectDetailsComponentInstance;
+            projectDashboardInstance.components.projectList    = projectListComponentInstance;
+        }
+
         const sidebarInstance = createSidebar({
             DependencySystem,
             eventHandlers,
