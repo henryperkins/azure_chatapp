@@ -411,18 +411,19 @@ this.domAPI.dispatchEvent(
       return;
     }
     this.elements.container.classList.remove("hidden");
-    this.elements.container.style.display = "block"; // Explicitly set display
+    this.elements.container.style.display = "flex"; // Match projectDashboard's display setting
+    this.elements.container.classList.add("flex-1", "flex-col"); // Match flex container behavior
     this.elements.container.setAttribute("aria-hidden", "false");
 
     // Ensure the default 'details' tab content is also explicitly shown
     if (this.elements.tabContents && this.elements.tabContents.details) {
-        this.elements.tabContents.details.classList.remove("hidden");
-        // Ensure other tabs are hidden, reinforcing switchTab's job
-        Object.entries(this.elements.tabContents).forEach(([key, el]) => {
-          if (el && key !== 'details') {
-            el.classList.add("hidden");
-          }
-        });
+      this.elements.tabContents.details.classList.remove("hidden");
+      // Ensure all other tabs are hidden
+      Object.entries(this.elements.tabContents).forEach(([key, el]) => {
+        if (el && key !== 'details') {
+          el.classList.add("hidden");
+        }
+      });
     }
 
     this.notify.info("[ProjectDetailsComponent] Shown.", {
