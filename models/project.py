@@ -119,21 +119,12 @@ class Project(Base):
     members: Mapped[list[ProjectUserAssociation]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-    # Foreign key to KnowledgeBase (one-to-one relationship)
-    knowledge_base_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        postgresql.UUID(as_uuid=True),
-        ForeignKey("knowledge_bases.id", ondelete="SET NULL"),
-        nullable=True,
-        unique=True,
-        index=True,
-    )
-    # Relationship to KnowledgeBase (now FK is on Project.knowledge_base_id)
+    # Nueva relación uno-a-uno: KnowledgeBase referenciado por knowledge_bases.project_id
     knowledge_base = relationship(
         "KnowledgeBase",
         back_populates="project",
         uselist=False,
-        foreign_keys=[knowledge_base_id],
-        primaryjoin="Project.knowledge_base_id==KnowledgeBase.id"
+        foreign_keys="KnowledgeBase.project_id"
     )
 
     def __repr__(self) -> str:
