@@ -152,8 +152,8 @@ async def create_project(
 
             # 3. Attach KB to project and save
 
-            project.knowledge_base_id = uuid.UUID(str(kb.id)) # Explicitly cast to uuid.UUID
-            await save_model(db, project)
+            # The relationship is now managed by KnowledgeBase.project_id (1-1), no need to assign knowledge_base_id.
+            await db.refresh(project)
 
             # 4. Immediately create a default conversation for this project
             from services.conversation_service import ConversationService
@@ -560,13 +560,11 @@ async def delete_project(
             )
 
             # -- Delete the knowledge base (if any)
-            if getattr(project, "knowledge_base_id", None):
-                kb_row = await db.get(KnowledgeBase, project.knowledge_base_id)
-                if kb_row:
-                    await db.delete(kb_row)
-                    logger.info(
-                        f"Deleted knowledge base {project.knowledge_base_id} for project {project_id}"
-                    )
+            if project.knowledge_base:
+                await db.delete(project.knowledge_base)
+                logger.info(
+                    f"Deleted knowledge base {project.knowledge_base.id} for project {project_id}"
+                )
 
             # -- Delete all ProjectFile rows (already handled file removal above)
             file_del = await db.execute(

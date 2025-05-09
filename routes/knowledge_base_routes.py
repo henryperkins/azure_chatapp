@@ -142,7 +142,7 @@ async def create_project_knowledge_base(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        if project.knowledge_base_id:
+        if project.knowledge_base:
             raise HTTPException(
                 status_code=400, detail="Project already has a knowledge base"
             )
@@ -156,9 +156,8 @@ async def create_project_knowledge_base(
             db=db,
         )
 
-        # Associate the new KB with the project
-        project.knowledge_base_id = kb["id"]
-        await db.commit()
+        # After creating the KB, refresh the project to see the new relationship
+        await db.refresh(project)
 
         result = {
             "knowledge_base": {
@@ -323,8 +322,8 @@ async def delete_knowledge_base(
         await kb_service_delete_kb(knowledge_base_id=kb_id, db=db)
 
         # Remove reference from project, if this was the active KB
-        if str(project.knowledge_base_id) == str(kb_id):
-            project.knowledge_base_id = None
+        if project.knowledge_base and str(project.knowledge_base.id) == str(kb_id):
+            project.knowledge_base = None
             await db.commit()
 
         return await create_standard_response(
@@ -361,7 +360,7 @@ async def get_knowledge_base_status(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=404, detail="Project has no knowledge base")
 
         # Get basic status
@@ -371,9 +370,8 @@ async def get_knowledge_base_status(
             return await create_standard_response(status_data)
 
         # Detailed status includes KB health and file stats
-        from typing import cast
         kb_health = await get_knowledge_base_health(
-            knowledge_base_id=cast(UUID, project.knowledge_base_id), db=db
+            knowledge_base_id=project.knowledge_base.id, db=db
         )
         file_stats = await get_project_files_stats(project_id, db)
 
@@ -411,7 +409,7 @@ async def search_project_knowledge(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         results = await search_project_context(
@@ -458,7 +456,7 @@ async def upload_knowledge_base_file(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         result = await upload_file_to_project(
@@ -495,14 +493,13 @@ async def reindex_knowledge_base(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         if force:
             # Get KB to find the embedding model
-            from typing import cast
             kb = await get_knowledge_base(
-                knowledge_base_id=cast(UUID, project.knowledge_base_id), db=db
+                knowledge_base_id=project.knowledge_base.id, db=db
             )
             if kb:
                 # Delete existing vectors
@@ -582,7 +579,7 @@ async def toggle_knowledge_base(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         result = await toggle_project_kb(
@@ -626,7 +623,7 @@ async def attach_github_repository(
 
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         # Initialize GitHub service
@@ -692,7 +689,7 @@ async def detach_github_repository(
 
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
-        if not project.knowledge_base_id:
+        if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         # Initialize GitHub service
