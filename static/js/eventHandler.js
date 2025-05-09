@@ -451,7 +451,7 @@ export function createEventHandlers({
           });
         }
       }, {
-        // once: true, // Removed to allow re-binding on multiple modal loads
+        once: true, // Ensure this runs only once
         description: 'Rebind login and setup tabs after modalsLoaded',
         context: 'auth',
         module: MODULE
@@ -624,86 +624,86 @@ export function createEventHandlers({
   function setupLoginModalTabs() {
     const loginModal = domAPI.getElementById('loginModal');
     if (!loginModal) {
-      handlerNotify.warn('Login modal element not found for tab setup.', { module: MODULE, source: 'setupLoginModalTabs' });
+      handlerNotify.error('Login modal element #loginModal not found for tab setup. Tabs will not work.', {
+        module: MODULE,
+        source: 'setupLoginModalTabs',
+        group: true
+      });
       return;
     }
 
-    // Helper function to handle tab activation
-    const activateTab = (targetTabId) => {
-      // Re-query elements on each activation to ensure they are current
-      const currentLoginTab = domAPI.querySelector(loginModal, '#modalLoginTab');
-      const currentRegisterTab = domAPI.querySelector(loginModal, '#modalRegisterTab');
-      const currentLoginPanel = domAPI.querySelector(loginModal, '#loginPanel');
-      const currentRegisterPanel = domAPI.querySelector(loginModal, '#registerPanel');
+    // For logging, check if panels exist at setup time.
+    // The delegated handlers will re-query for panels at click time.
+    const initialLoginPanel = domAPI.querySelector(loginModal, '#loginPanel');
+    const initialRegisterPanel = domAPI.querySelector(loginModal, '#registerPanel');
+    if (!initialLoginPanel || !initialRegisterPanel) {
+      handlerNotify.warn('Login/Register panel(s) not found within #loginModal during initial setup. Tab content switching might fail if they are not present at click time.', {
+        module: MODULE,
+        source: 'setupLoginModalTabs',
+        extra: {
+          loginPanelFound: !!initialLoginPanel,
+          registerPanelFound: !!initialRegisterPanel,
+        }
+      });
+    }
 
-      if (!currentLoginTab || !currentRegisterTab || !currentLoginPanel || !currentRegisterPanel) {
-        handlerNotify.warn('One or more elements for login/register tabs not found during activation.', {
-          module: MODULE,
-          source: 'setupLoginModalTabs.activateTab',
-          extra: {
-            loginTabFound: !!currentLoginTab,
-            registerTabFound: !!currentRegisterTab,
-            loginPanelFound: !!currentLoginPanel,
-            registerPanelFound: !!currentRegisterPanel,
-          }
-        });
+    // Delegated listener for Login Tab
+    delegate(loginModal, 'click', '#modalLoginTab', (event, tabElement) => {
+      handlerNotify.info('Login tab CLICKED (delegated)!', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
+
+      const registerTabElement = domAPI.querySelector(loginModal, '#modalRegisterTab');
+      const loginPanel = domAPI.querySelector(loginModal, '#loginPanel'); // Re-query
+      const registerPanel = domAPI.querySelector(loginModal, '#registerPanel'); // Re-query
+
+      if (!registerTabElement || !loginPanel || !registerPanel) {
+        handlerNotify.error('Required elements for Login tab action missing at click time.', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
         return;
       }
 
-      const isLoginTarget = targetTabId === 'modalLoginTab';
+      domAPI.addClass(tabElement, 'tab-active');
+      domAPI.setAttribute(tabElement, 'aria-selected', 'true');
+      domAPI.removeClass(registerTabElement, 'tab-active');
+      domAPI.setAttribute(registerTabElement, 'aria-selected', 'false');
+      domAPI.removeClass(loginPanel, 'hidden');
+      domAPI.addClass(registerPanel, 'hidden');
 
-      // Update Login Tab/Panel
-      if (isLoginTarget) {
-        domAPI.addClass(currentLoginTab, 'tab-active');
-        domAPI.setAttribute(currentLoginTab, 'aria-selected', 'true');
-        domAPI.removeClass(currentLoginPanel, 'hidden');
-      } else {
-        domAPI.removeClass(currentLoginTab, 'tab-active');
-        domAPI.setAttribute(currentLoginTab, 'aria-selected', 'false');
-        domAPI.addClass(currentLoginPanel, 'hidden');
-      }
-
-      // Update Register Tab/Panel
-      if (!isLoginTarget) { // Target is Register Tab
-        domAPI.addClass(currentRegisterTab, 'tab-active');
-        domAPI.setAttribute(currentRegisterTab, 'aria-selected', 'true');
-        domAPI.removeClass(currentRegisterPanel, 'hidden');
-      } else {
-        domAPI.removeClass(currentRegisterTab, 'tab-active');
-        domAPI.setAttribute(currentRegisterTab, 'aria-selected', 'false');
-        domAPI.addClass(currentRegisterPanel, 'hidden');
-      }
-
-      handlerNotify.info(`Tab ${targetTabId} activated.`, {
+      handlerNotify.debug('Login tab action complete (delegated).', {
         module: MODULE,
-        source: 'setupLoginModalTabs.activateTab',
+        source: 'setupLoginModalTabs_DelegatedClick',
         context: 'authTabs',
-        extra: {
-          loginTabActive: domAPI.hasClass(currentLoginTab, 'tab-active'),
-          registerTabActive: domAPI.hasClass(currentRegisterTab, 'tab-active'),
-          loginPanelHidden: domAPI.hasClass(currentLoginPanel, 'hidden'),
-          registerPanelHidden: domAPI.hasClass(currentRegisterPanel, 'hidden'),
-        }
+        loginPanelHidden: domAPI.hasClass(loginPanel, 'hidden'),
+        registerPanelHidden: domAPI.hasClass(registerPanel, 'hidden')
       });
-    };
-
-    // Delegate click event for login tab
-    delegate(loginModal, 'click', '#modalLoginTab', (_event, _target) => {
-      handlerNotify.info('Login tab CLICKED (delegated)!', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
-      activateTab('modalLoginTab');
     }, { description: 'Switch to Login Tab (Delegated)', module: MODULE, context: 'authTabs' });
 
-    // Delegate click event for register tab
-    delegate(loginModal, 'click', '#modalRegisterTab', (_event, _target) => {
+    // Delegated listener for Register Tab
+    delegate(loginModal, 'click', '#modalRegisterTab', (event, tabElement) => {
       handlerNotify.info('Register tab CLICKED (delegated)!', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
-      activateTab('modalRegisterTab');
-    }, { description: 'Switch to Register Tab (Delegated)', module: MODULE, context: 'authTabs' });
 
-    // Ensure initial state is correct (Login tab active by default as per HTML)
-    // This might be redundant if HTML is already correct, but ensures consistency.
-    // activateTab('modalLoginTab'); // Optionally call to enforce default, or rely on HTML.
-    // The HTML already sets the login tab as active, so this explicit call might not be needed
-    // unless there's a concern about the initial state being unreliable.
+      const loginTabElement = domAPI.querySelector(loginModal, '#modalLoginTab');
+      const loginPanel = domAPI.querySelector(loginModal, '#loginPanel'); // Re-query
+      const registerPanel = domAPI.querySelector(loginModal, '#registerPanel'); // Re-query
+
+      if (!loginTabElement || !loginPanel || !registerPanel) {
+        handlerNotify.error('Required elements for Register tab action missing at click time.', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
+        return;
+      }
+
+      domAPI.addClass(tabElement, 'tab-active');
+      domAPI.setAttribute(tabElement, 'aria-selected', 'true');
+      domAPI.removeClass(loginTabElement, 'tab-active');
+      domAPI.setAttribute(loginTabElement, 'aria-selected', 'false');
+      domAPI.removeClass(registerPanel, 'hidden');
+      domAPI.addClass(loginPanel, 'hidden');
+
+      handlerNotify.debug('Register tab action complete (delegated).', {
+        module: MODULE,
+        source: 'setupLoginModalTabs_DelegatedClick',
+        context: 'authTabs',
+        loginPanelHidden: domAPI.hasClass(loginPanel, 'hidden'),
+        registerPanelHidden: domAPI.hasClass(registerPanel, 'hidden')
+      });
+    }, { description: 'Switch to Register Tab (Delegated)', module: MODULE, context: 'authTabs' });
 
     handlerNotify.info('Login/Register tab switching initialized using event delegation.', { module: MODULE, source: 'setupLoginModalTabs' });
   }

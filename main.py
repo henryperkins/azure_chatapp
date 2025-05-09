@@ -1,8 +1,30 @@
 """
-main.py (insecure/debug version)
---------------------------------
-FastAPI application entry point with relaxed security, suitable
-ONLY for local development or troubleshooting. NOT for production!
+FastAPI Application Entrypoint (INSECURE/DEBUG)
+-----------------------------------------------
+
+Main application bootstrap for the development/debug version of the API service.
+This script configures and launches a FastAPI app with relaxed security, permissive
+CORS/session settings, and auto-registration of REST routers for all project endpoints.
+
+Features and Debug/Integration Notes:
+- Loads all API routers, models, and services, ensuring that migrations and runtime wiring are complete for all features.
+- Exposes static files, HTML frontend endpoints, and health/debug routes for rapid iteration and troubleshooting.
+- WARNING: CORS, session management, and security settings are intentionally permissive ("allow all") and are NOT safe/recommended for any production deployment!
+- App startup runs full DB initialization and can create default/test users for local convenience.
+- Integrates Sentry for error tracking (if enabled in environment), with sampling, custom event filtering, and direct error reporting on unhandled exceptions.
+- Auto-attaches logging, per-request UUID correlation, and database-available status middleware for developer observability.
+- Exception handling is broad and noisy (intentionally: debug visibility), logs all errors, and reports to Sentry if configured.
+- Uvicorn/server entrypoint provided for local run convenience (`python main.py`).
+
+Usage:
+- For **local development only**: run as `python main.py`, then access docs/HTML frontend via exposed endpoints.
+- DO NOT run this file (configuration or image) in real deployments—security model is for debug only.
+
+Key Integration Points:
+- All dependencies, routers, and middleware are auto-registered based on project config.
+- Environment variables/settings used: APP_NAME, APP_VERSION, ENVIRONMENT, SENTRY_* (see code for details).
+- For secure deployments, ensure usage of a production-hardened entrypoint instead.
+
 """
 
 import os
