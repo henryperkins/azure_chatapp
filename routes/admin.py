@@ -33,7 +33,12 @@ async def fix_missing_knowledge_bases(
     Admin endpoint to create knowledge bases for all projects missing them.
     """
     # Get all projects without knowledge bases
-    query = select(Project).where(Project.knowledge_base_id.is_(None))
+    from models.knowledge_base import KnowledgeBase
+    query = (
+        select(Project)
+        .outerjoin(KnowledgeBase, KnowledgeBase.project_id == Project.id)
+        .where(KnowledgeBase.id.is_(None))
+    )
     result = await db.execute(query)
     projects_without_kb = result.scalars().all()
 
