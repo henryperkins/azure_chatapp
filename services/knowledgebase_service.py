@@ -468,16 +468,16 @@ async def attach_github_repository(
     ...
     """
     Attaches a GitHub repository as a data source for a project's knowledge base.
-    
+
     Clones the specified repository and branch, fetches the given files (or all files if none specified), uploads each file to the project, and updates the knowledge base with repository information.
-    
+
     Args:
         project_id: The unique identifier of the project.
         repo_url: The URL of the GitHub repository to attach.
         branch: The branch to use from the repository. Defaults to "main".
         file_paths: Optional list of file paths within the repository to include. If not provided, all files are fetched.
         user_id: Optional user identifier for access validation.
-    
+
     Returns:
         A dictionary containing the repository URL, branch, and the number of files processed.
     """
@@ -733,12 +733,13 @@ async def _enhance_with_file_info(
 ) -> List[dict[str, Any]]:
     """Add file metadata to search results"""
     enhanced = []
+    from typing import cast
     for res in results:
         f_id = res.get("metadata", {}).get("file_id")
         if f_id:
             try:
                 fid_uuid = UUID(f_id)
-                file_rec = await get_by_id(db, ProjectFile, fid_uuid)
+                file_rec = await get_by_id(db, ProjectFile, cast(UUID, fid_uuid))
                 if file_rec:
                     res["file_info"] = extract_file_metadata(
                         file_rec, include_token_count=False
@@ -812,6 +813,7 @@ async def get_kb_status(project_id: UUID, db: AsyncSession) -> dict[str, Any]:
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    from typing import cast
     kb_exists = project.knowledge_base_id is not None
     kb_active = False
     if kb_exists:
@@ -819,7 +821,7 @@ async def get_kb_status(project_id: UUID, db: AsyncSession) -> dict[str, Any]:
             raise HTTPException(
                 status_code=400, detail="Project has no knowledge base ID set"
             )
-        kb = await get_by_id(db, KnowledgeBase, UUID(str(project.knowledge_base_id)))
+        kb = await get_by_id(db, KnowledgeBase, cast(UUID, project.knowledge_base_id))
         kb_active = kb.is_active if kb else False
 
     return {
@@ -936,7 +938,8 @@ async def get_knowledge_base(
     knowledge_base_id: UUID, db: AsyncSession
 ) -> dict[str, Any]:
     """Get a knowledge base by ID"""
-    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    from typing import cast
+    kb = await get_by_id(db, KnowledgeBase, cast(UUID, knowledge_base_id))
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
