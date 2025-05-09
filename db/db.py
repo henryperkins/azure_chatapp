@@ -12,6 +12,12 @@ import ssl
 import os
 from urllib.parse import quote_plus
 
+# para usar el bundle de certifi cuando esté disponible
+try:
+    import certifi
+except ImportError:  # certifi es opcional
+    certifi = None
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import sessionmaker
@@ -39,12 +45,20 @@ ALLOW_SELF_SIGNED = (
 # ---------------------------------------------------------
 # SSL/TLS configuration
 # ---------------------------------------------------------
-def _find_pg_ssl_cert():
-    # Try environment variable first
-    cert_env = getattr(settings, "PG_SSL_ROOT_CERT", None) or os.getenv("PG_SSL_ROOT_CERT")
+def _find_pg_ssl_cert() -> str | None:
+    """
+    Devuelve la ruta a un bundle de CA válido o None si no se
+    encuentra ninguno (se usará el almacén por defecto del sistema).
+    """
+    # 1) variable de entorno / settings
+    cert_env = (
+        getattr(settings, "PG_SSL_ROOT_CERT", None)
+        or os.getenv("PG_SSL_ROOT_CERT")
+    )
     if cert_env and os.path.isfile(cert_env):
         return cert_env
-    # Try common Azure CA cert names in project root
+
+    # 2) candidatos locales comunes
     candidates = [
         "BaltimoreCyberTrustRoot.crt.pem",
         "DigiCertGlobalRootG2.crt.pem",
@@ -53,12 +67,18 @@ def _find_pg_ssl_cert():
     for fname in candidates:
         if os.path.isfile(fname):
             return fname
-    # Try static/certs/
-    for fname in candidates:
-        fpath = os.path.join("static", "certs", fname)
-        if os.path.isfile(fpath):
-            return fpath
-    raise RuntimeError("No valid PostgreSQL CA root certificate found for SSL.")
+        alt = os.path.join("static", "certs", fname)
+        if os.path.isfile(alt):
+            return alt
+
+    # 3) bundle de certifi si existe
+    if certifi:
+        ca_path = certifi.where()
+        if os.path.isfile(ca_path):
+            return ca_path
+
+    # 4) nada encontrado
+    return None
 
 if ALLOW_SELF_SIGNED:
     PG_SSL_CERT_PATH = None
@@ -66,8 +86,14 @@ if ALLOW_SELF_SIGNED:
     logger.warning("Using UNVERIFIED SSL context (self-signed allowed).")
 else:
     PG_SSL_CERT_PATH = _find_pg_ssl_cert()
-    logger.info(f"Using PostgreSQL SSL root certificate: {PG_SSL_CERT_PATH}")
-    ssl_context = ssl.create_default_context(cafile=PG_SSL_CERT_PATH)
+    ssl_context = ssl.create_default_context()
+    if PG_SSL_CERT_PATH:
+        ssl_context.load_verify_locations(cafile=PG_SSL_CERT_PATH)
+        logger.info(f"Using PostgreSQL CA bundle: {PG_SSL_CERT_PATH}")
+    else:
+        logger.warning(
+            "No explicit CA bundle found – falling back to system trust store."
+        )
 
 # ---------------------------------------------------------
 # Async engine/session: for normal runtime usage
@@ -92,14 +118,16 @@ base_sync_url = DATABASE_URL.replace("+asyncpg", "").replace(
 )
 
 if ALLOW_SELF_SIGNED:
-    # conexión cifrada pero sin validación de cadena
     sync_url = f"{base_sync_url}?sslmode=require"
 else:
-    # verificación completa + ruta explícita al certificado raíz
-    sync_url = (
-        f"{base_sync_url}"
-        f"?sslmode=verify-full&sslrootcert={quote_plus(PG_SSL_CERT_PATH)}"
-    )
+    if PG_SSL_CERT_PATH:
+        sync_url = (
+            f"{base_sync_url}"
+            f"?sslmode=verify-full&sslrootcert={quote_plus(PG_SSL_CERT_PATH)}"
+        )
+    else:
+        # sin ruta explícita, pero seguimos exigiendo conexión cifrada
+        sync_url = f"{base_sync_url}?sslmode=require"
 
 sync_engine = create_engine(
     sync_url,
