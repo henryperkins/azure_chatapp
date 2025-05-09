@@ -176,7 +176,7 @@ export function createNotificationHandler({
         body: JSON.stringify(fullPayload),
         keepalive: true, // Allow in page unload
       }).catch(() => {});
-    } catch (_) {
+    } catch {
       // Swallow secondary errors completely
     }
   }
