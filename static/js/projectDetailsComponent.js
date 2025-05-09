@@ -1,8 +1,38 @@
 /**
- * projectDetailsComponent.js — DI-strict, troubleshooting-enhanced (context-rich notifications)
+ * ProjectDetailsComponent — controlador de la vista “Project Details”
+ * (estricto en Inyección de Dependencias y con notificaciones con contexto).
  *
- * Notifications always include: group, context, module ("ProjectDetailsComponent"), source (method), detail, and originalError if relevant.
- * All troubleshooting events are immediately tied to their action in logs/Sentry/support.
+ * Dependencias REQUERIDAS (constructor options):
+ *   • onBack                    : fn  – callback para volver (se crea stub si falta)
+ *   • app                       : obj – métodos usados:
+ *       validateUUID(id) [oblig.], formatBytes?, formatDate?, getFileTypeIcon?
+ *   • projectManager            : obj – propiedades / métodos:
+ *       projectLoadingInProgress,
+ *       loadProjectFiles(id), loadProjectConversations(id),
+ *       loadProjectArtifacts(id), loadProjectStats(id),
+ *       createConversation(pid), getConversation(cid),
+ *       deleteFile(pid,fid), downloadFile(pid,fid), downloadArtifact(pid,aid)
+ *   • eventHandlers             : obj – trackListener, untrackListener, delegate, cleanupListeners; expone DependencySystem.
+ *   • modalManager              : obj – confirmAction(opts)
+ *   • FileUploadComponentClass  : class – debe implementar init()/initialize()
+ *   • router                    : obj – getURL(), navigate(url)
+ *   • notify                    : obj – .withContext() → {debug,info,success,warn,error}
+ *   • sanitizer                 : obj – sanitize(html)
+ *   • domAPI                    : obj – getElementById, querySelector/All, getDocument,
+ *                                    dispatchEvent, ownerDocument, add/removeEventListener…
+ *
+ * Dependencias OPCIONALES:
+ *   • browserService            : obj – almacenada, no usada actualmente
+ *   • globalUtils               : obj – idem
+ *   • knowledgeBaseComponent    : obj – initialize(force,kb,pid) & renderKnowledgeBaseInfo(kb,pid)
+ *   • modelConfig               : obj – renderQuickConfig(container)
+ *   • chatManager               : obj – initialize({ projectId, … })
+ *
+ * Import externo:
+ *   • waitForDepsAndDom         de './utils/globalUtils.js'
+ *
+ * Todas las notificaciones incluyen automáticamente:
+ *   { group, context, module:"ProjectDetailsComponent", source, detail, originalError? }.
  */
 
 import { waitForDepsAndDom } from './utils/globalUtils.js';
