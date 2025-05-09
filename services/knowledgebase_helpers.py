@@ -160,8 +160,8 @@ class VectorDBManager:
             KnowledgeBase instance or None
         """
         project = await db.get(Project, project_id)
-        if project and project.knowledge_base_id:
-            return await db.get(KnowledgeBase, project.knowledge_base_id)
+        if project and project.knowledge_base:
+            return project.knowledge_base
         return None
 
 

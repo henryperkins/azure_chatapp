@@ -114,8 +114,7 @@ async def validate_knowledge_base_access(
         raise HTTPException(status_code=404, detail="Project not found")
 
     kb = await db.get(KnowledgeBase, knowledge_base_id)
-    # kb.is_active ensures we can't use an inactive knowledge base
-    if not kb or not kb.is_active or (kb.id != project.knowledge_base_id):
+    if not kb or not kb.is_active or kb.project_id != project.id:
         raise HTTPException(
             status_code=400, detail="Knowledge base not available for this project"
         )

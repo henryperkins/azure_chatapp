@@ -177,7 +177,7 @@ async def create_knowledge_base(
     await save_model(db, kb)
 
     # Attach to project
-    project.knowledge_base_id = UUID(str(kb.id))  # new column now exists, cast to UUID
+    project.knowledge_base = kb
     await save_model(db, project)
 
     return kb
@@ -190,8 +190,8 @@ async def ensure_project_has_knowledge_base(
     project = await _validate_user_and_project(project_id, user_id, db)
 
     # Check if project already has a knowledge base (common case)
-    if project.knowledge_base_id:
-        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+    if project.knowledge_base:
+        kb = project.knowledge_base
         if kb and not kb.is_active:
             kb.is_active = True
             await save_model(db, kb)
@@ -203,8 +203,8 @@ async def ensure_project_has_knowledge_base(
     await db.refresh(project)
 
     # Double-check if KB was created between initial check and lock acquisition
-    if project.knowledge_base_id:
-        kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+    if project.knowledge_base:
+        kb = project.knowledge_base
         if kb:
             logger.info(
                 f"KB already created in concurrent request for project {project_id}"
@@ -227,8 +227,8 @@ async def ensure_project_has_knowledge_base(
         # it could be due to a race condition, try to get the KB again
         if "already has a knowledge base" in str(e):
             await db.refresh(project)
-            if project.knowledge_base_id:
-                kb = await db.get(KnowledgeBase, project.knowledge_base_id)
+            if project.knowledge_base:
+                kb = project.knowledge_base
                 if kb:
                     logger.info(
                         f"Using KB created by concurrent request for project {project_id}"
@@ -380,7 +380,7 @@ async def delete_project_file(
     )
 
     # Delete vectors
-    if project.knowledge_base_id:
+    if project.knowledge_base:
         await _delete_file_vectors(project_id, file_id)
 
     # Delete record and update tokens
@@ -431,14 +431,9 @@ async def search_project_context(
     )
 
     # Prepare filters
-    filter_metadata = (
-        {
-            "project_id": str(project_id),
-            "knowledge_base_id": str(project.knowledge_base_id),
-        }
-        if project.knowledge_base_id
-        else {"project_id": str(project_id)}
-    )
+    filter_metadata = {"project_id": str(project_id)}
+    if project.knowledge_base:
+        filter_metadata["knowledge_base_id"] = str(project.knowledge_base.id)
 
     # Search and process results
     results = await _execute_search(vector_db, query, filter_metadata, top_k)
@@ -566,11 +561,11 @@ async def _validate_project_and_kb(
 ) -> Tuple[Project, KnowledgeBase]:
     """Validate project and knowledge base access"""
     project = await _validate_user_and_project(project_id, user_id, db)
-    if not project.knowledge_base_id:
+    if not project.knowledge_base:
         raise HTTPException(
             status_code=400, detail="Project does not have an associated knowledge base"
         )
-    kb = await get_by_id(db, KnowledgeBase, project.knowledge_base_id)
+    kb = project.knowledge_base
     return project, kb
 
 
@@ -775,35 +770,9 @@ async def _expand_query(original_query: str) -> str:
 async def cleanup_orphaned_kb_references(db: AsyncSession) -> dict[str, int]:
     """Clean up invalid knowledge base references"""
     # Fix projects with invalid KB references
-    project_result = await db.execute(
-        update(Project)
-        .where(
-            Project.knowledge_base_id.is_not(None),
-            ~exists().where(KnowledgeBase.id == Project.knowledge_base_id),
-        )
-        .values(knowledge_base_id=None)
-        .returning(Project.id)
-    )
-    fixed_projects = len(project_result.scalars().all())
-
-    # Fix conversations referencing invalid KBs
-    conv_result = await db.execute(
-        update(Conversation)
-        .where(
-            Conversation.use_knowledge_base.is_(True),
-            ~exists().where(
-                (Project.id == Conversation.project_id)
-                & (Project.knowledge_base_id.is_not(None))
-            ),
-        )
-        .values(use_knowledge_base=False)
-        .returning(Conversation.id)
-    )
-
-    fixed_convs = len(conv_result.scalars().all())
-
-    await db.commit()
-    return {"projects_fixed": fixed_projects, "conversations_fixed": fixed_convs}
+    # (No longer applicable: Project.knowledge_base_id removed)
+    # Return zeros for compatibility
+    return {"projects_fixed": 0, "conversations_fixed": 0}
 
 
 @handle_service_errors("Error retrieving KB status")
@@ -814,15 +783,8 @@ async def get_kb_status(project_id: UUID, db: AsyncSession) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Project not found")
 
     from typing import cast
-    kb_exists = project.knowledge_base_id is not None
-    kb_active = False
-    if kb_exists:
-        if not project.knowledge_base_id:
-            raise HTTPException(
-                status_code=400, detail="Project has no knowledge base ID set"
-            )
-        kb = await get_by_id(db, KnowledgeBase, cast(UUID, project.knowledge_base_id))
-        kb_active = kb.is_active if kb else False
+    kb_exists = project.knowledge_base is not None
+    kb_active = project.knowledge_base.is_active if project.knowledge_base else False
 
     return {
         "exists": kb_exists,
@@ -981,8 +943,8 @@ async def delete_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> bo
     # Remove from associated project
     if kb.project_id:
         project = await get_by_id(db, Project, UUID(str(kb.project_id)))
-        if project and project.knowledge_base_id == kb.id:
-            project.knowledge_base_id = None # Allowed by Mapped[Optional[uuid.UUID]]
+        if project and project.knowledge_base is kb:
+            project.knowledge_base = None
             await save_model(db, project)
 
     await db.delete(kb)
@@ -1001,12 +963,12 @@ async def toggle_project_kb(
         raise ValueError("Database session is required")
 
     project = await _validate_user_and_project(project_id, user_id, db)
-    if not project.knowledge_base_id:
+    if not project.knowledge_base:
         raise HTTPException(
             status_code=400, detail="Project does not have a knowledge base"
         )
 
-    kb = await get_by_id(db, KnowledgeBase, project.knowledge_base_id)
+    kb = project.knowledge_base
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
 
