@@ -177,7 +177,7 @@ async def create_knowledge_base(
     await save_model(db, kb)
 
     # Attach to project
-    project.knowledge_base_id = kb.id  # new column now exists
+    project.knowledge_base_id = UUID(str(kb.id))  # new column now exists, cast to UUID
     await save_model(db, project)
 
     return kb
@@ -982,7 +982,7 @@ async def delete_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> bo
     if kb.project_id:
         project = await get_by_id(db, Project, UUID(str(kb.project_id)))
         if project and project.knowledge_base_id == kb.id:
-            project.knowledge_base_id = None
+            project.knowledge_base_id = None # Allowed by Mapped[Optional[uuid.UUID]]
             await save_model(db, project)
 
     await db.delete(kb)
