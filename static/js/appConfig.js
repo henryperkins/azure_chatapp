@@ -31,7 +31,14 @@ export const APP_CONFIG = {
     AUTH_LOGOUT: '/api/auth/logout',
     AUTH_REGISTER: '/api/auth/register',
     AUTH_VERIFY: '/api/auth/verify',
-    AUTH_REFRESH: '/api/auth/refresh'
-    // Add other endpoints as needed
+    AUTH_REFRESH: '/api/auth/refresh',
+
+    // --- ADDED CHAT/CONVERSATION ENDPOINTS ---
+    // List/create conversations for a project
+    CONVERSATIONS: (projectId) => `/api/projects/${encodeURIComponent(projectId)}/conversations`,
+    // Get/update/delete a specific conversation
+    CONVERSATION: (projectId, conversationId) => `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`,
+    // List/post messages for a conversation
+    MESSAGES: (projectId, conversationId) => `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`
   }
 };
