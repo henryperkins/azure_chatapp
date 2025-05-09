@@ -520,6 +520,12 @@ class ProjectDashboard {
   async _initializeComponents() {
     this.logger.info('[ProjectDashboard] Initializing components...');
 
+    /* Wait until the Project Details template is injected */
+    await new Promise((resolve) => {
+      if (document.querySelector('#projectDetailsView .tabs[role="tablist"]')) return resolve();
+      document.addEventListener('projectDetailsHtmlLoaded', () => resolve(), { once: true });
+    });
+
     // Ensure globalUtils and waitForDepsAndDom are available
     const waitForDepsAndDom = this.globalUtils?.waitForDepsAndDom;
     if (!waitForDepsAndDom) {

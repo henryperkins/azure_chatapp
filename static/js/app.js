@@ -8,6 +8,7 @@ import { createDomAPI } from './utils/domAPI.js';             // your abstracted
 import { createBrowserAPI } from './utils/globalUtils.js'; // for SSR-safe references to window, location, etc.
 import { createBrowserService } from './utils/browserService.js';
 import { createNotify } from './utils/notify.js';
+import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
 import { createSentryManager } from './sentry-init.js';
 import {
   createApiClient,
@@ -127,6 +128,23 @@ if (!sanitizer) {
     throw new Error('[App] DOMPurify sanitizer not found. Please ensure DOMPurify is loaded before app.js.');
 }
 DependencySystem.register('sanitizer', sanitizer);
+
+// ---------------------------------------------------------------------------
+// HTML-template loader (register early so other modules can await events)
+// ---------------------------------------------------------------------------
+const htmlTemplateLoader = createHtmlTemplateLoader({
+    DependencySystem,
+    domAPI,
+    notify
+});
+DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
+
+// Pre-load Project Details HTML (fires 'projectDetailsHtmlLoaded')
+htmlTemplateLoader.loadTemplate({
+    url: '/static/html/project_details.html',
+    containerSelector: '#projectDetailsView',
+    eventName: 'projectDetailsHtmlLoaded'
+});
 
 // Register apiEndpoints for DI (required by Auth and other modules)
 const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
