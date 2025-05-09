@@ -1,5 +1,5 @@
 # Custom Instructions
-
+ALL RESPONSES ARE TO BE IN ENGLISH, NOT SPANISH.  ENGLISH RESPONSES ONLY.
 This document defines the concrete code patterns and idioms that every module in our frontend codebase must follow. Each section includes a code-snippet example that matches both the guideline and our codebase’s style.
 
 ---
