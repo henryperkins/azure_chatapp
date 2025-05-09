@@ -114,6 +114,13 @@ DependencySystem.register('browserAPI', browserAPI);
 DependencySystem.register('browserService', browserServiceInstance);
 DependencySystem.register('storage', browserServiceInstance);
 
+// Register globalUtils with waitForDepsAndDom for DI (needed by ProjectDashboard)
+const globalUtils = {
+    waitForDepsAndDom,
+    // Optionally, add other helpers if desired, e.g. normaliseUrl, isAbsoluteUrl, etc.
+};
+DependencySystem.register('globalUtils', globalUtils);
+
 // Register sanitizer (DOMPurify) for DI
 const sanitizer = (typeof window !== 'undefined' && window.DOMPurify) ? window.DOMPurify : undefined;
 if (!sanitizer) {
