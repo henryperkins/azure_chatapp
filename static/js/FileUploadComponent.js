@@ -120,16 +120,72 @@ export class FileUploadComponent {
   /** Find elements using injected domAPI */
   _findElements() {
     const els = this.elements;
-    const sel = els.selectors;
-    els.fileInput = this.domAPI.querySelector(sel.fileInput);
-    els.uploadBtn = this.domAPI.querySelector(sel.uploadBtn);
-    els.dragZone = this.domAPI.querySelector(sel.dragZone);
-    els.uploadProgress = this.domAPI.querySelector(sel.uploadProgress);
-    els.progressBar = this.domAPI.querySelector(sel.progressBar);
-    els.uploadStatus = this.domAPI.querySelector(sel.uploadStatus);
+    const sources = els.selectors;
+    const elementKeys = [
+      'fileInput',
+      'uploadBtn',
+      'dragZone',
+      'uploadProgress',
+      'progressBar',
+      'uploadStatus'
+    ];
+
+    for (const key of elementKeys) {
+      const value = sources[key];
+
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        typeof value.nodeType === "number"
+      ) {
+        // It's a DOM element instance
+        els[key] = value;
+      } else if (typeof value === "string") {
+        // It's a selector
+        els[key] = this.domAPI.querySelector(value);
+      } else {
+        // Unexpected type
+        this.notify.error(
+          `Invalid source for DOM element '${key}'. Expected DOM element or selector string.`,
+          {
+            source: "_findElements",
+            group: true,
+            extra: { key, receivedSourceType: typeof value }
+          }
+        );
+        els[key] = null;
+      }
+    }
 
     // Check if critical elements were found
-    return !!(els.fileInput && els.uploadBtn && els.dragZone && els.uploadProgress && els.progressBar && els.uploadStatus);
+    if (
+      !(
+        els.fileInput &&
+        els.uploadBtn &&
+        els.dragZone &&
+        els.uploadProgress &&
+        els.progressBar &&
+        els.uploadStatus
+      )
+    ) {
+      this.notify.warn(
+        "Not all DOM elements for FileUploadComponent were found or resolved.",
+        {
+          source: "_findElements",
+          group: true,
+          extra: {
+            fileInputFound: !!els.fileInput,
+            uploadBtnFound: !!els.uploadBtn,
+            dragZoneFound: !!els.dragZone,
+            uploadProgressFound: !!els.uploadProgress,
+            progressBarFound: !!els.progressBar,
+            uploadStatusFound: !!els.uploadStatus
+          }
+        }
+      );
+      return false;
+    }
+    return true;
   }
 
 

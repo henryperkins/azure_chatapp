@@ -456,8 +456,12 @@ export function createChatManager({
           title: `New Chat ${new Date().toLocaleString()}`,
           model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
+        // Resolve endpoint whether it's defined as a function or a string template
+        const convoEndpoint = typeof apiEndpoints.CONVERSATIONS === 'function'
+          ? apiEndpoints.CONVERSATIONS(this.projectId)
+          : String(apiEndpoints.CONVERSATIONS).replace('{id}', this.projectId);
         const response = await this._api(
-          apiEndpoints.CONVERSATIONS(this.projectId),
+          convoEndpoint,
           { method: "POST", body: payload }
         );
 
