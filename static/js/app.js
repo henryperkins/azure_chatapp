@@ -5,7 +5,7 @@
 
 import { APP_CONFIG } from './appConfig.js';
 import { createDomAPI } from './utils/domAPI.js';             // your abstracted DOM helpers
-import { createBrowserAPI } from './utils/globalUtils.js'; // for SSR-safe references to window, location, etc.
+import { createBrowserAPI, createDebugTools } from './utils/globalUtils.js';
 import { createBrowserService } from './utils/browserService.js';
 import { createNotify } from './utils/notify.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
@@ -78,7 +78,8 @@ const uiUtils = {
 const browserAPI = createBrowserAPI();                   // SSR-safe checks
 const domAPI = createDomAPI({
     documentObject: browserAPI.getDocument(),
-    windowObject: browserAPI.getWindow()
+    windowObject:   browserAPI.getWindow(),
+    debug:          APP_CONFIG.DEBUG === true
 });
 const browserServiceInstance = createBrowserService({
     windowObject: browserAPI.getWindow()
@@ -196,6 +197,10 @@ notify = createNotify({
 DependencySystem.register('notify', notify);
 
 setGlobalUtilsNotifier(notify);
+
+// Debug trace helper (DI-visible as “debugTools”)
+const debugTools = createDebugTools({ notify });
+DependencySystem.register('debugTools', debugTools);
 
 // ---------------------------------------------------------------------------
 // 3) Create the event handlers (now notify is initialized)
