@@ -660,15 +660,50 @@ export function createEventHandlers({
 
       trackListener(registerTab, 'click', () => {
         handlerNotify.info('Register tab CLICKED!', { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
         domAPI.addClass(registerTab, 'tab-active');
+        handlerNotify.info('Register tab: Added tab-active. Has class now: ' + domAPI.hasClass(registerTab, 'tab-active'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
         domAPI.setAttribute(registerTab, 'aria-selected', 'true');
+        handlerNotify.info('Register tab: Set aria-selected to true. Value: ' + domAPI.getAttribute(registerTab, 'aria-selected'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
         domAPI.removeClass(loginTab, 'tab-active');
+        handlerNotify.info('Login tab: Removed tab-active. Has class now: ' + domAPI.hasClass(loginTab, 'tab-active'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
         domAPI.setAttribute(loginTab, 'aria-selected', 'false');
-        domAPI.setStyle(registerPanel, 'display', 'block');
-        domAPI.setStyle(loginPanel, 'display', 'none');
+        handlerNotify.info('Login tab: Set aria-selected to false. Value: ' + domAPI.getAttribute(loginTab, 'aria-selected'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.removeClass(registerPanel, 'hidden'); // Show register panel
+        handlerNotify.info('Register panel: Removed hidden class. Has hidden class now: ' + domAPI.hasClass(registerPanel, 'hidden'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.addClass(loginPanel, 'hidden'); // Hide login panel
+        handlerNotify.info('Login panel: Added hidden class. Has hidden class now: ' + domAPI.hasClass(loginPanel, 'hidden'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
       }, { description: 'Switch to Register Tab', module: MODULE, context: 'authTabs' });
 
-      handlerNotify.info('Login/Register tab switching initialized (after rAF).', { module: MODULE, source: 'setupLoginModalTabs' });
+      // Also update the loginTab click handler to use hidden class
+      trackListener(loginTab, 'click', () => {
+        handlerNotify.info('Login tab CLICKED!', { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.addClass(loginTab, 'tab-active');
+        handlerNotify.info('Login tab: Added tab-active. Has class now: ' + domAPI.hasClass(loginTab, 'tab-active'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.setAttribute(loginTab, 'aria-selected', 'true');
+        handlerNotify.info('Login tab: Set aria-selected to true. Value: ' + domAPI.getAttribute(loginTab, 'aria-selected'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.removeClass(registerTab, 'tab-active');
+        handlerNotify.info('Register tab: Removed tab-active. Has class now: ' + domAPI.hasClass(registerTab, 'tab-active'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.setAttribute(registerTab, 'aria-selected', 'false');
+        handlerNotify.info('Register tab: Set aria-selected to false. Value: ' + domAPI.getAttribute(registerTab, 'aria-selected'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.removeClass(loginPanel, 'hidden'); // Show login panel
+        handlerNotify.info('Login panel: Removed hidden class. Has hidden class now: ' + domAPI.hasClass(loginPanel, 'hidden'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+
+        domAPI.addClass(registerPanel, 'hidden'); // Hide register panel
+        handlerNotify.info('Register panel: Added hidden class. Has hidden class now: ' + domAPI.hasClass(registerPanel, 'hidden'), { module: MODULE, source: 'setupLoginModalTabs_Click', context: 'authTabs' });
+      }, { description: 'Switch to Login Tab', module: MODULE, context: 'authTabs' });
+
+      handlerNotify.info('Login/Register tab switching initialized (after rAF, using hidden class).', { module: MODULE, source: 'setupLoginModalTabs' });
     });
   }
 }
