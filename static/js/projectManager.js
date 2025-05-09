@@ -95,7 +95,8 @@ class ProjectManager {
     storage = { setItem: () => { }, getItem: () => null },
     apiEndpoints,
     apiRequest = null,
-    errorReporter = null
+    errorReporter = null,
+    debugTools = null
   } = {}) {
     if (!DependencySystem) {
       if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
@@ -115,6 +116,7 @@ class ProjectManager {
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
     this.notify = notify ?? DependencySystem.modules.get?.('notify');
     this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
+    this.debugTools    = debugTools || DependencySystem.modules.get?.('debugTools') || null;
     this.timer = timer;
     this.storage = storage;
     this.apiRequest = apiRequest ?? app?.apiRequest;
@@ -231,6 +233,7 @@ class ProjectManager {
   /* ---------------------------------------------------------------------- */
 
   async loadProjects(filter = 'all') {
+    const _t = this.debugTools?.start?.('ProjectManager.loadProjects');
     if (this._loadingProjects) {
       this.notify.info('[ProjectManager] loadProjects already running', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
       return [];
@@ -250,15 +253,19 @@ class ProjectManager {
       const list = extractResourceList(res, ['projects']);
       this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
       this._emit('projectsLoaded', { projects: list, filter });
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
       return list;
     } catch (err) {
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
       return this._handleErr('projectsLoaded', err, []);
     } finally {
       this._loadingProjects = false;
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
     }
   }
 
   async loadProjectDetails(id) {
+    const _t = this.debugTools?.start?.('ProjectManager.loadProjectDetails');
     this.pmNotify?.debug?.("[ProjectManager] Entered loadProjectDetails with id", {
       source: "loadProjectDetails",
       extra: { id }
@@ -268,6 +275,7 @@ class ProjectManager {
         source: "loadProjectDetails",
         extra: { id }
       });
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
       throw new Error('Invalid projectId');
     }
 
@@ -277,6 +285,7 @@ class ProjectManager {
         source: "loadProjectDetails"
       });
       this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
       return null;
     }
 
@@ -287,6 +296,7 @@ class ProjectManager {
       this.pmNotify?.warn?.("[ProjectManager] _authOk returned false, returning early", {
         source: "loadProjectDetails"
       });
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
       return null;
     }
 
@@ -320,6 +330,7 @@ class ProjectManager {
       // Don't continue if archived
       if (this.currentProject.archived) {
         this._emit('projectArchivedNotice', { id: this.currentProject.id });
+        this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
         return { ...this.currentProject };
       }
 
@@ -347,6 +358,7 @@ class ProjectManager {
       // Notify UI that every required resource is now loaded
       this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
 
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
       return { ...this.currentProject };
     } catch (err) {
       // Gather context for troubleshooting
@@ -363,6 +375,7 @@ class ProjectManager {
         originalError: err
       });
       if (status === 404) this._emit('projectNotFound', { id });
+      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails-error');
       return null;
     }
   }
@@ -702,7 +715,7 @@ export function createProjectManager(deps = {}) {
     throw new Error(msg);
   }
   try {
-    return new ProjectManager(deps);
+    return new ProjectManager({ ...deps, debugTools: deps.debugTools || deps.DependencySystem.modules.get('debugTools') });
   } catch (err) {
     const diag = `[createProjectManager] Construction failed: ${err && err.message ? err.message : err}`;
     // Use notification system instead of console.error
