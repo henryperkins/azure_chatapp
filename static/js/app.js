@@ -463,6 +463,8 @@ async function initializeCoreSystems() {
             }
         });
         DependencySystem.register('projectManager', projectManager);
+        // Sincroniza projectManager con eventHandlers
+        eventHandlers.setProjectManager?.(projectManager);
 
         // Project modal
         const projectModal = createProjectModal({
