@@ -455,11 +455,14 @@ export function createEventHandlers({
 
       // --- Standardized "eventhandler:initialized" event ---
       const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-      if (doc && typeof (domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
-        (domAPI?.dispatchEvent || doc.dispatchEvent).call(
-          doc,
-          new CustomEvent('eventhandler:initialized', { detail: { success: true } })
-        );
+      if (doc) {
+        if (domAPI?.dispatchEvent) {
+          domAPI.dispatchEvent(doc, new CustomEvent('eventhandler:initialized',
+            { detail: { success: true } }));
+        } else {
+          doc.dispatchEvent(new CustomEvent('eventhandler:initialized',
+            { detail: { success: true } }));
+        }
       }
 
     } catch (err) {
