@@ -209,6 +209,18 @@ logging.basicConfig(
 logging.getLogger("urllib3").setLevel(logging.INFO)  # suprime spam DEBUG
 logger = logging.getLogger(__name__)
 
+# -----------------------------------------------------------------------------
+# Suppress /api/log_notification in access logs (no user action required)
+# -----------------------------------------------------------------------------
+class SuppressLogNotificationFilter(logging.Filter):
+    def filter(self, record):
+        msg = str(record.getMessage())
+        # Suppress any access log for /api/log_notification
+        return "/api/log_notification" not in msg
+
+for logname in ("uvicorn.access", ""):
+    logging.getLogger(logname).addFilter(SuppressLogNotificationFilter())
+
 # Create app with docs always enabled (even in "production" - insecure for debug)
 app = FastAPI(
     title=APP_NAME,
@@ -455,6 +467,35 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
 
 
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# Log Notification API Endpoint for Frontend <--- ADDED
+# -----------------------------------------------------------------------------
+from fastapi import Body
+
+@app.post("/api/log_notification")
+async def log_notification(payload: Dict[str, Any] = Body(...)):
+    """
+    Accept logs/notifications/errors/warnings/events from the frontend.
+    Prints directly to the terminal. Use this for all client→server reporting.
+    Example payload: {"type":"error", "message":"Project fetch failed!", ...}
+    """
+    ntype = payload.get("type", "info").lower()
+    message = payload.get("message", "")
+    extra = {k: v for k, v in payload.items() if k not in ("type", "message")}
+    rid = uuid.uuid4()
+    display = f"[CLIENT_EVENT] [{ntype.upper()}] {message}"
+    if extra:
+        display += f" | Extra: {extra}"
+    if ntype in ("error", "fatal"):
+        logger.error("%s", display)
+    elif ntype in ("warn", "warning"):
+        logger.warning("%s", display)
+    elif ntype == "success":
+        logger.info("%s", display)
+    else:
+        logger.info("%s", display)
+    return {"received": True, "request_id": str(rid)}
+
 # Uvicorn Entry
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
