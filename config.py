@@ -1,14 +1,21 @@
 """
-config_insecure.py
-------------------
-Insecure/Debug configuration class that disables or relaxes strong security defaults.
-Suitable ONLY for local development or debugging. Not for production!
+Application Configuration Module (config.py)
+--------------------------------------------
 
-Key changes from the secure version:
-1. Disables strict same-origin policies in docstring and stance.
-2. Uses open/default values for ALLOWED_HOSTS.
-3. Allows empty or insecure cookies (no forced domain or secure flags).
-4. Leaves other model/config items untouched for debugging convenience.
+Centralized runtime configuration for the application, sourced from environment variables and `.env` files.
+Provides settings for database connectivity, SSL and security policies, session/cookie parameters,
+model provider API keys, CORS rules, and feature toggles affecting schema, migration, and authentication routines.
+
+Highlights:
+- Supplies `DATABASE_URL`, SSL and migration variables—vital for all schema/ORM/database features.
+- Manages environment-specific flags for debug, production, and relaxed/insecure operation.
+- All settings exposed via the `settings` object for use throughout the app, including DB connection,
+  migration, CORS/session config, and integration with external API providers (OpenAI, Azure, Anthropic, etc).
+- Intended for local development, testing, or as a template for secure production configs.
+
+Best practice: Set desired config in `.env`, and let this module load everything for the rest of your stack.
+NEVER use the insecure defaults in production!
+
 """
 
 import os
@@ -39,6 +46,7 @@ class Settings:
 
     # Application Version
     APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+    APP_NAME = os.getenv("APP_NAME", "azure-chatapp") # Added APP_NAME
 
     # Debug/Environment
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"

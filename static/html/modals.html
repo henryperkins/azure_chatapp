@@ -506,13 +506,6 @@
       dialog.addEventListener('show', () => trapFocus(dialog));
     });
 
-    // Always reset the login modal to "Login" tab when shown (robust to any modalManager JS call)
-    const loginModal = document.getElementById('loginModal');
-    if (loginModal) {
-      // Ensure the event listener also remains commented or is removed if the function does nothing.
-      // loginModal.addEventListener('show', showLoginModalAlwaysLoginTab);
-    }
-
     // Background/backdrop & close button: always close via modalManager
     const loginModalCloseBtn = document.getElementById('loginModalCloseBtn');
     if (loginModalCloseBtn) {

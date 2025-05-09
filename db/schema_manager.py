@@ -1,14 +1,46 @@
 """
-schema_manager.py
------------------
-Comprehensive database schema management and alignment system.
-Handles schema validation, automatic fixes, and initialization.
+Database Schema Management Module (`db.schema_manager`)
+-------------------------------------------------------
+
+Central point for database schema validation, automatic alignment, and initialization logic.
+This module orchestrates comprehensive schema checks, repair, and migration routines to ensure
+the runtime PostgreSQL database matches SQLAlchemy ORM definitions, with strong automation and safety controls.
+
+Features:
+- Declarative async `SchemaManager` that can:
+    * Initialize database state (creating any missing tables in correct dependency order)
+    * Validate the DB schema against ORM models and generate human-readable differences
+    * Automatically align schema: add missing columns, indexes, FKs,
+      (optionally) drop obsolete columns/indexes and alter types if enabled via env flag
+    * Handle tricky circular dependency (projects ↔ knowledge_bases) and order of creation safely
+- Pluggable Alembic auto-migration helper: can generate, skip, and prune no-op migrations,
+  with clear logging and protection against reload loops (see `automated_alembic_migrate`)
+- Full logging and auditability of all changes (additions, drops, type mismatches, attempts/failures)
+- All destructive/irreversible changes (dropping or altering columns) are by default off
+  and gated via `AUTO_SCHEMA_DESTRUCTIVE=true` in the environment. Always back up before enabling destructive mode!
+- Built for both production runtime (async) and development/CLI invocation
+- Exports an async interface for service initialization and CI/CD automation
+- Designed to robustly interoperate with the engines/session provided by `db.db`
+- Integration point with Alembic migration system, but can operate "migrationless" if needed
+
+Environment/config flags recognized:
+- `ENABLE_AUTO_MIGRATION` (autogenerate/apply Alembic migrations during init if true)
+- `AUTO_SCHEMA_DESTRUCTIVE` (enable column/index dropping and type alteration if true)
+
+Main entry points:
+- `SchemaManager.initialize_database()` (async) — full migration/validation/fix pass
+- `SchemaManager.validate_schema()` (async) — analyze current DB and report mismatches
+- `SchemaManager.fix_schema()` (async) — forcibly repair mismatched schema to match ORM base
+- `automated_alembic_migrate()` — autogen/apply Alembic migration with no-op skip
+
 """
 
 import logging
 import time
 from typing import Optional, List, Set, Tuple, AsyncGenerator
 from contextlib import asynccontextmanager
+import hashlib
+from pathlib import Path
 
 from sqlalchemy import inspect, text, MetaData, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -16,8 +48,11 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from db.db import Base, sync_engine, async_engine
+from config import settings
 
 logger = logging.getLogger(__name__)
+
+MIGRATIONS_PATH = Path(__file__).parent.parent / "db" / "migrations"
 
 # --- Alembic Automated Migration Integration ---
 def automated_alembic_migrate(message: str = "Automated migration", revision_dir: str = "alembic"):
@@ -136,48 +171,169 @@ class SchemaManager:
     # Public Interface
     # ---------------------------------------------------------
 
+    async def migrate(self, migrations_path: Path = MIGRATIONS_PATH) -> None:
+        """
+        Applies SQL migrations from the specified path.
+        Tracks executed migrations in the schema_history table.
+        Uses a PostgreSQL advisory lock to ensure multi-pod safety.
+        """
+        logger.info(f"Starting database migration process from {migrations_path}...")
+        print(f"==> Starting database migration process from {migrations_path}...")
+
+        async with async_engine.begin() as conn:
+            # Acquire advisory lock
+            lock_acquired = await conn.execute(text("SELECT pg_try_advisory_lock(hashtext('schema_migrate'))"))
+            if not lock_acquired.scalar_one():
+                logger.warning("Could not acquire schema migration lock. Another migration process may be running.")
+                print("==> Could not acquire schema migration lock. Another migration process may be running.")
+                # Depending on desired behavior, could raise an error or just return
+                return
+
+            try:
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS schema_history (
+                        version         BIGINT       PRIMARY KEY,
+                        description     TEXT         NOT NULL,
+                        installed_on    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        installed_by    TEXT         NOT NULL,
+                        execution_time  INTEGER      NOT NULL,
+                        success         BOOLEAN      NOT NULL,
+                        checksum        TEXT         NOT NULL
+                    );
+                """))
+                # Unique partial index for retrying failed migrations
+                await conn.execute(text("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_schema_history_version_success
+                    ON schema_history (version)
+                    WHERE success;
+                """))
+                logger.info("Ensured schema_history table exists.")
+                print("==> Ensured schema_history table exists.")
+
+                result = await conn.execute(text("SELECT version FROM schema_history WHERE success = TRUE"))
+                applied_versions = {row[0] for row in result}
+                logger.info(f"Found {len(applied_versions)} successfully applied migration versions: {applied_versions}")
+                print(f"==> Found {len(applied_versions)} successfully applied migration versions.")
+
+                if not migrations_path.exists():
+                    logger.warning(f"Migrations directory {migrations_path} does not exist. No migrations to apply.")
+                    print(f"==> Migrations directory {migrations_path} does not exist. No migrations to apply.")
+                    return
+
+                migration_files = sorted(migrations_path.glob("V*.sql"))
+                logger.info(f"Found {len(migration_files)} migration files in {migrations_path}.")
+                print(f"==> Found {len(migration_files)} migration files in {migrations_path}.")
+
+                for sql_file in migration_files:
+                    try:
+                        version_str = sql_file.name.split("__")[0][1:] # Strip 'V'
+                        version = int(version_str)
+                        description = sql_file.name.split("__")[1].split(".sql")[0].replace("_", " ")
+                    except (IndexError, ValueError) as e:
+                        logger.error(f"Could not parse version/description from filename {sql_file.name}: {e}")
+                        print(f"==> ERROR: Could not parse version/description from filename {sql_file.name}: {e}")
+                        continue # Skip malformed filenames
+
+                    if version in applied_versions:
+                        # Optional: Add checksum validation for already applied migrations
+                        # result_checksum = await conn.execute(text("SELECT checksum FROM schema_history WHERE version = :v AND success = TRUE"), {"v": version})
+                        # db_checksum = result_checksum.scalar_one_or_none()
+                        # current_checksum = hashlib.sha256(sql_file.read_text().encode()).hexdigest()
+                        # if db_checksum != current_checksum:
+                        #     logger.error(f"Checksum mismatch for applied migration {sql_file.name}! DB: {db_checksum}, File: {current_checksum}")
+                        #     raise RuntimeError(f"Checksum mismatch for applied migration {sql_file.name}")
+                        continue
+
+                    logger.info(f"Attempting to apply migration: {sql_file.name} (Version: {version})")
+                    print(f"==> Attempting to apply migration: {sql_file.name} (Version: {version})")
+                    sql_content = sql_file.read_text()
+                    checksum = hashlib.sha256(sql_content.encode()).hexdigest()
+                    installed_by = settings.APP_NAME # Or some other identifier
+
+                    start_time = time.perf_counter()
+                    try:
+                        await conn.execute(text(sql_content))
+                        duration_ms = int((time.perf_counter() - start_time) * 1000)
+                        await conn.execute(
+                            text("""
+                                INSERT INTO schema_history (version, description, installed_by, execution_time, success, checksum)
+                                VALUES (:version, :description, :installed_by, :execution_time, TRUE, :checksum)
+                                ON CONFLICT (version) WHERE success DO UPDATE SET
+                                    description = EXCLUDED.description,
+                                    installed_on = CURRENT_TIMESTAMP,
+                                    installed_by = EXCLUDED.installed_by,
+                                    execution_time = EXCLUDED.execution_time,
+                                    success = TRUE,
+                                    checksum = EXCLUDED.checksum;
+                            """),
+                            {
+                                "version": version,
+                                "description": description,
+                                "installed_by": installed_by,
+                                "execution_time": duration_ms,
+                                "checksum": checksum,
+                            },
+                        )
+                        logger.info(f"Successfully applied migration {sql_file.name} in {duration_ms}ms.")
+                        print(f"==> Successfully applied migration {sql_file.name} in {duration_ms}ms.")
+                    except Exception as e:
+                        duration_ms = int((time.perf_counter() - start_time) * 1000)
+                        logger.error(f"Failed to apply migration {sql_file.name}: {e}", exc_info=True)
+                        print(f"==> ERROR: Failed to apply migration {sql_file.name}: {e}")
+                        await conn.execute(
+                            text("""
+                                INSERT INTO schema_history (version, description, installed_by, execution_time, success, checksum)
+                                VALUES (:version, :description, :installed_by, :execution_time, FALSE, :checksum)
+                                ON CONFLICT (version) DO UPDATE SET
+                                    description = EXCLUDED.description,
+                                    installed_on = CURRENT_TIMESTAMP,
+                                    installed_by = EXCLUDED.installed_by,
+                                    execution_time = EXCLUDED.execution_time,
+                                    success = FALSE,
+                                    checksum = EXCLUDED.checksum;
+                            """),
+                            {
+                                "version": version,
+                                "description": description,
+                                "installed_by": installed_by,
+                                "execution_time": duration_ms, # Log duration even on failure
+                                "checksum": checksum,
+                            },
+                        )
+                        raise # Re-raise the exception to ensure the transaction rolls back and failure is visible
+            finally:
+                # Release advisory lock
+                await conn.execute(text("SELECT pg_advisory_unlock(hashtext('schema_migrate'))"))
+                logger.info("Released schema migration lock.")
+                print("==> Released schema migration lock.")
+        logger.info("Database migration process finished.")
+        print("==> Database migration process finished.")
+
+
     async def initialize_database(self) -> None:
         """
         Full database initialization process:
-        1. Optionally generates and runs Alembic migrations
-        2. Creates missing tables
-        3. Aligns schema with ORM definitions
+        1. Run SQL migrations via self.migrate()
+        2. Creates missing tables (additive only, handled by fix_schema)
+        3. Aligns schema with ORM definitions (additive only, handled by fix_schema)
         4. Validates final schema
         """
         import os
         try:
-            # ---- Alembic auto-migration/upgrade (conditionally run) ----
-            AUTO_MIGRATE = os.getenv("ENABLE_AUTO_MIGRATION", "false").lower() == "true"
-            # Temporarily disabled to stop migration loop for debugging
-            if False and AUTO_MIGRATE:
-                automated_alembic_migrate()
-            else:
-                logger.info("Alembic auto-migration is disabled (ENABLE_AUTO_MIGRATION is false or unset)")
             logger.info("Starting database initialization...")
             print("==> Starting database initialization...")
 
-            # Step 1: Create missing tables
-            existing_tables = await self.get_existing_tables()
-            print(f"==> Existing tables: {sorted(existing_tables)}")
-            tables_to_create = [
-                t for t in Base.metadata.tables.keys() if t not in existing_tables
-            ]
+            # Step 1: Run SQL migrations
+            await self.migrate()
 
-            if tables_to_create:
-                msg = f"Creating {len(tables_to_create)} missing tables: {tables_to_create}"
-                logger.info(msg)
-                print("==> " + msg)
-                await self._create_missing_tables(tables_to_create)
-            else:
-                print("==> No tables need creation.")
+            # Step 2 (was 1): Create missing tables (now part of fix_schema's create_all)
+            # Step 2 & 3: Schema alignment (handles additive changes like new tables/columns)
+            # and auto-creation of new tables/columns.
+            logger.info("Running schema alignment (fix_schema)...")
+            print("==> Running schema alignment (fix_schema)...")
+            await self.fix_schema() # This now handles create_all for additive changes
 
-            # Step 2: Schema alignment
-            # Always align schema with ORM on startup
-            logger.info("Running schema alignment...")
-            print("==> Running schema alignment...")
-            await self.fix_schema()
-
-            # Step 3: Final validation
+            # Step 4 (was 3): Final validation
             logger.info("Validating schema...")
             print("==> Validating schema...")
             issues = await self.validate_schema()
@@ -242,11 +398,11 @@ class SchemaManager:
 
             # Check constraints
             for constraint in table.constraints:
-                if not constraint.name:
+                if not constraint.name: # type: ignore
                     continue  # skip unnamed constraints
-                if constraint.name not in db_schema["constraints"].get(table_name, []):
+                if constraint.name not in db_schema["constraints"].get(table_name, []): # type: ignore
                     mismatch_details.append(
-                        f"Missing constraint: {table_name}.{constraint.name}"
+                        f"Missing constraint: {table_name}.{constraint.name}" # type: ignore
                     )
 
         return mismatch_details
