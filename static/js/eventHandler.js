@@ -27,6 +27,8 @@ export function createEventHandlers({
   domAPI, browserService, notify,
   navigate, storage
 } = {}) {
+  // Permite inyectar/actualizar projectManager más tarde
+  let _projectManager = projectManager;
   const debugTools = DependencySystem?.modules?.get?.('debugTools') || null;
   // --- Dependency Validation ---
   if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
@@ -493,7 +495,7 @@ export function createEventHandlers({
 
   function setupProjectModalForm() {
     // Assuming projectManager is resolved and available if this form exists
-    const pm = projectManager;
+    const pm = _projectManager || DependencySystem.modules.get('projectManager');
     if (!pm) {
       handlerNotify.warn('ProjectManager not available for projectModalForm setup.', { module: MODULE, source: 'setupProjectModalForm' });
       return;
@@ -605,6 +607,7 @@ export function createEventHandlers({
     setNotifier: (newNotify) => {
       handlerNotify = newNotify;
       handlerNotify?.debug?.('[eventHandler] Notifier updated via setNotifier', { module: MODULE, source: 'setNotifier' });
-    }
+    },
+    setProjectManager: (pm) => { _projectManager = pm; }
   };
 }
