@@ -710,8 +710,8 @@ async def process_file_for_search(
 
         # Prepare metadata
         resolved_kb_id = knowledge_base_id or (
-            project_file.project.knowledge_base_id
-            if hasattr(project_file, "project") and project_file.project
+            project_file.project.knowledge_base.id
+            if getattr(project_file, "project", None) and project_file.project.knowledge_base
             else None
         )
 
