@@ -105,11 +105,15 @@ export class FileUploadComponent {
 
     // --- Standardized "fileuploadcomponent:initialized" event ---
     const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-    if (doc && typeof (this.domAPI?.dispatchEvent || doc.dispatchEvent) === "function") {
-      (this.domAPI?.dispatchEvent || doc.dispatchEvent).call(
-        doc,
-        new CustomEvent('fileuploadcomponent:initialized', { detail: { success: true } })
-      );
+    if (doc) {
+      if (this.domAPI?.dispatchEvent) {
+        this.domAPI.dispatchEvent(doc,
+          new CustomEvent('fileuploadcomponent:initialized',
+            { detail: { success: true } }));
+      } else {
+        doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
+          { detail: { success: true } }));
+      }
     }
   }
 
