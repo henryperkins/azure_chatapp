@@ -166,34 +166,26 @@ export function createChatManager({
   notify,            // nuevo DI
   errorReporter      // nuevo DI
 } = {}) {
-  // 1. Base notifier inyectado (si existe)
-  const _baseNotify = notify; // Assuming notify is always provided as per earlier checks or DI system guarantees
-
-  // 2. chatNotify con contexto pre-fijado
-  let chatNotify;
-  if (_baseNotify && typeof _baseNotify.withContext === 'function') {
-    chatNotify = _baseNotify.withContext({ module: 'ChatManager', context: 'chatManager' });
-  } else {
-    // If _baseNotify is faulty or lacks withContext, create a stub for chatNotify.
-    console.error('[ChatManager Factory] Critical: Injected `notify` dependency is missing `withContext` method. ChatManager specific logs will use a console fallback.');
-    chatNotify = {
-        debug: (...args) => console.debug('[ChatManager Fallback ContextLog]', ...args),
-        info:  (...args) => console.info('[ChatManager Fallback ContextLog]', ...args),
-        warn:  (...args) => console.warn('[ChatManager Fallback ContextLog]', ...args),
-        error: (...args) => console.error('[ChatManager Fallback ContextLog]', ...args),
-        success: (...args) => console.log('[ChatManager Fallback ContextLog]', ...args),
-        apiError: (...args) => console.error('[ChatManager API Error Fallback ContextLog]', ...args),
-        authWarn: (...args) => console.warn('[ChatManager Auth Warn Fallback ContextLog]', ...args),
-    };
-    // Note: The local 'notify' variable (parameter) itself might still be the faulty one.
-    // The 'notifyFn' below will use this 'chatNotify' stub if its methods are called.
+  // Validate critical dependencies
+  if (!notify || typeof notify.withContext !== 'function') {
+    throw new Error('[ChatManager Factory] Critical: Injected `notify` dependency is missing or lacks `withContext` method.');
   }
+  if (!domAPI || typeof domAPI.getDocument !== 'function') {
+    throw new Error('[ChatManager Factory] Critical: Injected `domAPI` dependency is missing or lacks `getDocument` method.');
+  }
+  // Further validation for domAPI.getDocument().dispatchEvent will be done after getting the document object.
+  if (!apiRequest) throw new Error('[ChatManager Factory] apiRequest is required.');
+  if (!app) throw new Error('[ChatManager Factory] app is required.');
+  if (!eventHandlers) throw new Error('[ChatManager Factory] eventHandlers is required.');
+  if (!isValidProjectId) throw new Error('[ChatManager Factory] isValidProjectId is required.');
+  if (!isAuthenticated) throw new Error('[ChatManager Factory] isAuthenticated is required.');
+  if (!DOMPurify) throw new Error('[ChatManager Factory] DOMPurify is required.');
+  if (!apiEndpoints) throw new Error('[ChatManager Factory] apiEndpoints is required.');
 
-  // The 'notify' variable used below for chatNotify.debug should now be the original _baseNotify
-  // or the consoleNotify if the original was bad.
-  // The chatNotify created above is now safe.
 
-  chatNotify.debug('createChatManager called. Validating dependencies...', {
+  const chatNotify = notify.withContext({ module: 'ChatManager', context: 'chatManager' });
+
+  chatNotify.debug('createChatManager called. Dependencies validated.', {
     source: 'factory',
     dependencies: {
       apiRequest: !!apiRequest,
@@ -215,25 +207,15 @@ export function createChatManager({
 
   // Basic validation
   // Provide fallback DOM, Nav, and event handlers if not supplied
-  const _domAPI = domAPI || createDefaultDomAPI();
-  const _navAPI = navAPI || createDefaultNavAPI();
-  const _EH = eventHandlers || createDefaultEventHandlers();
+  // Use validated domAPI, navAPI, eventHandlers directly or throw if they were meant to be optional but are now required by strict DI.
+  // For now, assuming they are required as per the new validation logic for notify and domAPI.
+  const _domAPI = domAPI;
+  const _navAPI = navAPI; // Assuming navAPI is also critical if used, or needs similar validation.
+  const _EH = eventHandlers;
 
 
-  /* --- Fallback (notificationHandler o consola) para entornos de prueba --- */
-  function _fallbackShow(lvl, msg, opts={}) {
-    if (notificationHandler?.show) {
-      return notificationHandler.show(msg, lvl, { group:true, context:'chatManager', module:'ChatManager', ...opts });
-    }
-    (lvl === 'error' ? console.error : console.log)(`[ChatManager] ${msg}`, opts);
-  }
-  const _send = (msg, lvl='info', opts={}) =>
-    (chatNotify?.[lvl] ? chatNotify[lvl](msg, opts) : _fallbackShow(lvl, msg, opts));
-
-  /* Mantén compatibilidad con los antiguos notify(msg,'lvl',opts) */
-  const notifyFn = (msg, lvl='info', opts={}) => _send(msg, lvl, opts);
-
-  notifyFn('[ChatManager Debug] Notify function configured.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'notify-configured' });
+  // Removed _fallbackShow, _send, and notifyFn. Direct usage of chatNotify.
+  chatNotify.debug('[ChatManager Debug] Notify function (chatNotify) configured.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'notify-configured' });
 
   /**
    * The main ChatManager class, constructed with all DI references enclosed.
@@ -242,7 +224,7 @@ export function createChatManager({
     _api(endpoint, opts = {}) {
       return wrapApi(
         this.apiRequest,
-        { notify: chatNotify ?? _baseNotify ?? { info: ()=>{}, error: ()=>{}, apiError: ()=>{} },
+        { notify: chatNotify, // Use validated chatNotify directly
           errorReporter },
         endpoint,
         opts,
@@ -261,7 +243,7 @@ export function createChatManager({
       this.isValidProjectId = isValidProjectId;
       this.isAuthenticated = isAuthenticated;
       this.DOMPurify = DOMPurify;
-      this.notify = notifyFn;
+      this.notify = chatNotify; // Use the context-aware notifier directly
 
       this.projectId = null;
       this.currentConversationId = null;
@@ -390,19 +372,19 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         this.isInitialized = true;
         chatNotify.info(`ChatManager initialized (global mode).`, { source: 'initialize', phase: 'complete_global', durationMs: (performance.now() - _initStart).toFixed(2) });
 
-        // --- Standardized "chatmanager:initialized" event ---
-        const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
-        if (doc) {
-            chatNotify.debug('Dispatching chatmanager:initialized event (global mode).', { source: 'initialize' });
-            const event = new CustomEvent('chatmanager:initialized', { detail: { success: true, mode: 'global' } });
-            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(event);
-        }
+        // Removed dispatch of 'chatmanager:initialized' event (global mode)
         return true;
       }
 
       chatNotify.info(`Initializing for project ID: ${this.projectId}`, { source: 'initialize' });
       // Initialize is now async due to awaiting loadConversation
       try {
+        // Validate domAPI.getDocument().dispatchEvent before use
+        const doc = this.domAPI.getDocument();
+        if (!doc || typeof doc.dispatchEvent !== 'function') {
+          throw new Error('[ChatManager Initialize] Document object from domAPI.getDocument() must have a dispatchEvent method.');
+        }
+
         const urlParams = new URLSearchParams(this.navAPI.getSearch());
         const urlChatId = urlParams.get('chatId');
         chatNotify.debug(`URL params: ${urlParams.toString()}, Chat ID from URL: ${urlChatId}`, { source: 'initialize' });
@@ -413,13 +395,11 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
 
           if (!loadedSuccessfully) {
             chatNotify.warn(`Failed to fully load conversation ${urlChatId} from API. Attempting to use it as current.`, { source: 'initialize', chatId: urlChatId });
-            // If loading failed but we have a chatId from URL (which should be the default convo ID from project creation),
-            // optimistically set it as current. This handles cases where a new/empty convo might not load full details immediately.
-            if (this.isValidProjectId(this.projectId)) { // Ensure project context is valid
-                 this.currentConversationId = urlChatId; // Set it directly
-                 this._clearMessages(); // Clear any "failed to load" messages from previous attempt
-                 this._updateURLWithConversationId(urlChatId); // Ensure URL is consistent
-                 this._showMessage("system", "Conversation started. Type a message to begin."); // Provide feedback
+            if (this.isValidProjectId(this.projectId)) {
+                 this.currentConversationId = urlChatId;
+                 this._clearMessages();
+                 this._updateURLWithConversationId(urlChatId);
+                 this._showMessage("system", "Conversation started. Type a message to begin.");
                  chatNotify.info(`Fallback: Set currentConversationId to ${urlChatId} from URL for project ${this.projectId}.`, { source: 'initialize' });
             } else {
                  this._handleError("initialization (invalid project for URL chat)", new Error(`Project ID ${this.projectId} invalid for chat ID ${urlChatId} from URL`));
@@ -427,34 +407,22 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
                  this._showMessage("system", "Error linking chat to project.");
             }
           }
-          // If loadedSuccessfully is true, loadConversation already set currentConversationId and rendered messages.
         } else {
           chatNotify.info("No chatId in URL. Ready for new chat or selection.", { source: 'initialize' });
-          this._clearMessages(); // Clear messages if no specific chat to load
+          this._clearMessages();
         }
 
-        this.isInitialized = true; // Mark as initialized after attempting to load/set conversation
+        this.isInitialized = true;
         chatNotify.info(`ChatManager initialized (project mode for ${this.projectId}).`, { source: 'initialize', phase: 'complete_project', durationMs: (performance.now() - _initStart).toFixed(2) });
 
-        // --- Standardized "chatmanager:initialized" event ---
-        const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
-        if (doc) {
-            chatNotify.debug('Dispatching chatmanager:initialized event (project mode).', { source: 'initialize' });
-            const event = new CustomEvent('chatmanager:initialized', { detail: { success: true, mode: 'project', projectId: this.projectId, conversationId: this.currentConversationId } });
-            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(doc, event);
-        }
+        // Removed dispatch of 'chatmanager:initialized' event (project mode)
         return true;
-      } catch (error) { // Catch errors from the try block, including awaited loadConversation if it throws
+      } catch (error) {
         this._handleError("initialization (project mode setup)", error);
         this.projectDetails?.disableChatUI?.("Chat setup error: " + (error.message || error));
-        this.isInitialized = false; // Ensure not marked as initialized on error
-        // Dispatch failure event
-        const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
-        if (doc) {
-            const event = new CustomEvent('chatmanager:initialized', { detail: { success: false, mode: 'project', projectId: this.projectId, error: error.message } });
-            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(doc, event);
-        }
-        throw error; // Re-throw to allow caller to handle if needed
+        this.isInitialized = false;
+        // Removed dispatch of failure 'chatmanager:initialized' event
+        throw error;
       }
     }
 
@@ -641,6 +609,25 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         }
         this._updateURLWithConversationId(conversation.id); // Internally logs
         chatNotify.success(`New conversation created successfully: ID ${conversation.id}`, { source: 'createNewConversation', conversationId: conversation.id });
+
+        // Dispatch event for sidebar or other components to update
+        const doc = this.domAPI.getDocument(); // Assumes domAPI.getDocument() is valid due to earlier checks
+        // Further assume doc.dispatchEvent is valid based on checks in initialize or stricter DI
+        if (doc && typeof doc.dispatchEvent === 'function') {
+            chatNotify.debug(`Dispatching chat:conversationCreated event for conversation ${conversation.id}`, { source: 'createNewConversation' });
+            const event = new CustomEvent('chat:conversationCreated', {
+                detail: {
+                    conversationId: conversation.id,
+                    projectId: this.projectId,
+                    title: conversation.title
+                }
+            });
+            doc.dispatchEvent(event);
+        } else {
+            chatNotify.error('[ChatManager createNewConversation] Cannot dispatch chat:conversationCreated event. Document or dispatchEvent method not available.', { source: 'createNewConversation' });
+            // Depending on strictness, this could throw an error.
+        }
+
         return conversation;
       } catch (error) {
         this._handleError("creating new conversation", error); // Already logs
@@ -978,7 +965,7 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
       const track = (element, event, fn, opts = {}) => {
         if (!element || !fn) return;
         const wrapped = safeInvoker(fn,
-          { notify: chatNotify ?? _baseNotify, errorReporter },
+          { notify: chatNotify, errorReporter }, // Use validated chatNotify directly
           { context:'chatManager', module:'ChatManager', source: opts.description || event });
         this.eventHandlers.trackListener(element, event, wrapped, {
           ...opts,
