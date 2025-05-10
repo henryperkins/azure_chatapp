@@ -802,20 +802,20 @@ this.domAPI.dispatchEvent(
     if (!newChatBtn) return;
 
     const projectReady = this.state.projectDataActuallyLoaded;
-    // Use the most current app state for user readiness
-    const userIsReady = this.app && this.app.state && this.app.state.currentUser && this.app.state.currentUser.id;
+    // Treat “authenticated” as sufficient – user object may arrive later
+    const userIsReady = !!(this.app?.state?.isAuthenticated);
 
     if (projectReady && userIsReady) {
       newChatBtn.disabled = false;
       newChatBtn.classList.remove("btn-disabled");
-      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Ready (ID: ${this.app.state.currentUser.id})`, {
+      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Authenticated: ${this.app?.state?.isAuthenticated}`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
         detail: { projectDataActuallyLoaded: this.state.projectDataActuallyLoaded, currentUserId: this.app?.state?.currentUser?.id }
       });
     } else {
       newChatBtn.disabled = true;
       newChatBtn.classList.add("btn-disabled");
-      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Ready: ${userIsReady} (User ID: ${this.app?.state?.currentUser?.id})`, {
+      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Authenticated: ${this.app?.state?.isAuthenticated}`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
         detail: {
             projectDataActuallyLoaded: this.state.projectDataActuallyLoaded,
