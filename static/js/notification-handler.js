@@ -4,11 +4,7 @@ import { logEventToServer } from "./utils/notifications-helpers.js";
  *  -------------------------------------------------------------------------- */
 export function createNotificationHandler({
   DependencySystem,
-  domAPI = {
-    getElementById: id => document.getElementById(id),
-    createElement : tag => document.createElement(tag),
-    body          : document.body,
-  },
+  domAPI,
   position = "top-right",        // "top-left" | "bottom-right" | "bottom-left"
   maxVisible = 5,
   theme = {
@@ -19,6 +15,7 @@ export function createNotificationHandler({
     error  : "#DC2626",
   },
 } = {}) {
+  if (!domAPI) throw new Error('notificationHandler: domAPI is required');
   const DEFAULT_TIMEOUT = 15000; // ← 15s
 
   /* ────────────────────────── container ─────────────────────────── */
@@ -44,13 +41,10 @@ export function createNotificationHandler({
     el.style[v] = "1rem";
     el.style[h] = "1rem";
     // Robustly append to domAPI.body or fallback to document.body
-    const bodyToAppendTo = (domAPI && domAPI.body) ? domAPI.body : (typeof document !== "undefined" && document.body ? document.body : null);
-    if (bodyToAppendTo) {
-      bodyToAppendTo.appendChild(el);
-    } else {
-      // DI-only: No safe way to surface error without globals; fail silently per modularity rules.
-      // If you want to surface this error, inject a logger or errorReporter via DI.
-    }
+    const bodyToAppendTo = typeof domAPI.getBody === 'function' ? domAPI.getBody() : null;
+    if (!bodyToAppendTo)
+      throw new Error('[notificationHandler] Could not find <body> via domAPI');
+    bodyToAppendTo.appendChild(el);
     return el;
   })();
 
