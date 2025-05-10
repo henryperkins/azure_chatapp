@@ -1,4 +1,4 @@
-/**
+             /**
  * @module eventHandler
  * @description DI-strict, orchestrated UI event utility collection. Manages tracked event listeners
  * and provides common UI setup helpers like forms, modals, and collapsibles.
@@ -308,7 +308,7 @@ export function createEventHandlers({
         }
       }
 
-      const submitBtn = domAPI.querySelector(form, '[type="submit"]'); // Query relative to form via domAPI
+      const submitBtn = domAPI.querySelector('[type="submit"]', form); // Query relative to form via domAPI
       if (showLoadingState && submitBtn) {
         domAPI.addClass(form, 'submitting');
         domAPI.setProperty(submitBtn, 'disabled', true);

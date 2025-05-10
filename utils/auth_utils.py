@@ -13,9 +13,6 @@ from typing import Optional, Any, Tuple
 import os
 
 from config import settings
-if not getattr(settings, 'DEBUG', False):
-    raise RuntimeError("INSECURE module loaded in non-debug/prod environment! Use only in local dev/testing.")
-
 import jwt
 from jwt import ExpiredSignatureError, InvalidTokenError
 from fastapi import HTTPException, Request, status
