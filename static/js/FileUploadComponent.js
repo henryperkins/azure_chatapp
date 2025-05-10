@@ -49,7 +49,7 @@ export class FileUploadComponent {
 
     // --- Configuration ---
     this.fileConstants = {
-      allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css'],
+      allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css', '.ini'],
       maxSizeMB: 30
     };
 
@@ -452,16 +452,19 @@ export class FileUploadComponent {
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     if (progressBar) {
-      this.domAPI.setProperty(progressBar, 'value', percent);
-      // Update progress bar color based on state
-      this.domAPI.setProperty(progressBar, 'className', 'progress'); // Reset base class
+      // Direct assignment to test if domAPI.setProperty is the issue
+      progressBar.value = percent;
+
+      // Direct className manipulation
+      let newClassName = 'progress';
       if (failed > 0) {
-        this.domAPI.addClass(progressBar, completed === total ? 'progress-error' : 'progress-warning');
+        newClassName += (completed === total ? ' progress-error' : ' progress-warning');
       } else if (completed === total) {
-        this.domAPI.addClass(progressBar, 'progress-success');
+        newClassName += ' progress-success';
       } else {
-        this.domAPI.addClass(progressBar, 'progress-info');
+        newClassName += ' progress-info';
       }
+      progressBar.className = newClassName;
     }
 
     if (statusEl) {
