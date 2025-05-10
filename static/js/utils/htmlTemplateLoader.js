@@ -6,28 +6,18 @@
  * @param {Object} deps
  * @param {DependencySystem} deps.DependencySystem
  * @param {Object} deps.domAPI
- * @param {Function} deps.notify            – DI notify util
- * @param {Window}   [deps.windowObj=window]
- */
-import notify from './notify.js';
-
-/**
- * HtmlTemplateLoader
- * Factory that fetches & injects external HTML fragments, then emits a
- * custom event (<eventName>) on document so other modules can await it.
- *
- * @param {Object} deps
- * @param {DependencySystem} deps.DependencySystem
- * @param {Object} deps.domAPI
+ * @param {Function} deps.notify            – DI notify util (required)
  * @param {Window}   [deps.windowObj=window]
  */
 export function createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
+  notify,
   windowObj = window
 } = {}) {
   if (!DependencySystem) throw new Error('DependencySystem required');
   if (!domAPI)           throw new Error('domAPI required');
+  if (!notify) throw new Error('notify required');
 
   const loaderNotify = notify.withContext({
     module : 'HtmlTemplateLoader',
