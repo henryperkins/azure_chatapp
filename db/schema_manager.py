@@ -43,6 +43,7 @@ import hashlib
 from pathlib import Path
 
 from sqlalchemy import inspect, text, MetaData, UniqueConstraint, CheckConstraint
+from sqlalchemy.schema import AddConstraint # Added import
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -159,7 +160,10 @@ class SchemaManager:
         self.type_equivalents = {
             "VARCHAR": ["character varying"],
             "TEXT": ["text"],
-            "TIMESTAMP": ["timestamp without time zone"],
+            # For TIMESTAMP(timezone=False) which stringifies to 'TIMESTAMP WITHOUT TIME ZONE'
+            "TIMESTAMP WITHOUT TIME ZONE": ["timestamp without time zone", "timestamp"],
+            # For TIMESTAMP(timezone=True) which stringifies to 'TIMESTAMP WITH TIME ZONE'
+            "TIMESTAMP WITH TIME ZONE": ["timestamp with time zone"],
             "UUID": ["uuid"],
             "JSONB": ["jsonb"],
             "INTEGER": ["integer", "int4"],
@@ -547,26 +551,66 @@ class SchemaManager:
                                     raise # Propagate if transaction is already broken
                                 logger.warning(f"Could not drop index {db_index_name} due to: {str(e)}. It might be in use by a constraint not explicitly named in ORM's table.indexes.")
 
-                # 5. Create missing Check Constraints
-                db_constraints_info = await conn.run_sync(
+                # 5. Create missing Constraints (Check, Unique, etc.)
+                # Get existing check constraint names
+                db_check_constraints_info = await conn.run_sync(
                     lambda sync_conn: inspect(sync_conn).get_check_constraints(table.name)
                 )
-                db_constraint_names = {c['name'] for c in db_constraints_info}
+                db_constraint_names = {c['name'] for c in db_check_constraints_info}
+
+                # Get existing unique constraint names and add them
+                db_unique_constraints_info = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).get_unique_constraints(table.name)
+                )
+                db_constraint_names.update({c['name'] for c in db_unique_constraints_info})
+                # Note: This currently doesn't fetch other types like FKs or PKs for this specific check,
+                # as they are handled differently or assumed to be covered by create_all or other logic.
+                # The primary goal here is to fix Check and Unique constraint creation.
 
                 for constraint in table.constraints:
-                    if isinstance(constraint, CheckConstraint) and constraint.name:
-                        if constraint.name not in db_constraint_names:
-                            logger.info(f"Creating check constraint: {table.name}.{constraint.name}")
+                    if constraint.name and constraint.name not in db_constraint_names:
+                        if isinstance(constraint, (CheckConstraint, UniqueConstraint)):
+                            logger.info(
+                                f"Missing declarative constraint {table.name}.{constraint.name} of type {type(constraint).__name__}. "
+                                f"Attempting to create with ALTER TABLE."
+                            )
+                            try:
+                                # Compile DDL for adding the constraint
+                                # Ensure the constraint is associated with the correct metadata if not already
+                                if constraint.table is None and hasattr(constraint, '_set_parent'):
+                                     constraint._set_parent(table) # Associate with table if not already, for DDL compilation
+
+                                add_constraint_ddl = await conn.run_sync(
+                                    lambda sync_conn: str(AddConstraint(constraint).compile(dialect=sync_conn.dialect))
+                                )
+                                await conn.execute(text(add_constraint_ddl))
+                                logger.info(f"Successfully created constraint: {table.name}.{constraint.name}")
+                            except Exception as e:
+                                # Check if error is due to constraint already existing (e.g., race condition or subtle naming issue)
+                                if "already exists" in str(e).lower() or ("duplicate" in str(e).lower() and "constraint" in str(e).lower()):
+                                    logger.warning(
+                                        f"Constraint {table.name}.{constraint.name} may already exist or there was an issue with its name/definition: {e}"
+                                    )
+                                else:
+                                    logger.error(f"Failed to create constraint {table.name}.{constraint.name} with ALTER TABLE: {e}", exc_info=True)
+                        elif hasattr(constraint, 'create'):
+                            # Fallback for other constraint types that might have a .create() method
+                            logger.info(f"Attempting to explicitly create other constraint type: {table.name}.{constraint.name} of type {type(constraint).__name__}")
                             try:
                                 await conn.run_sync(lambda sync_conn: constraint.create(sync_conn, checkfirst=True))
-                                logger.info(f"Successfully created check constraint: {table.name}.{constraint.name}")
+                                logger.info(f"Successfully created other constraint: {table.name}.{constraint.name}")
                             except Exception as e:
                                 if "already exists" in str(e).lower():
-                                    logger.warning(f"Check constraint {table.name}.{constraint.name} may already exist or failed to create due to naming: {e}")
+                                    logger.warning(f"Other constraint {table.name}.{constraint.name} may already exist or creation was attempted: {e}")
                                 else:
-                                    logger.error(f"Failed to create check constraint {table.name}.{constraint.name}: {e}")
+                                    logger.error(f"Failed to create other constraint {table.name}.{constraint.name}: {e}", exc_info=True)
+                        else:
+                            logger.warning(
+                                f"Constraint {table.name}.{constraint.name} of type {type(constraint).__name__} "
+                                f"was not found in DB, does not have a .create() method, and is not a Check/Unique constraint for ALTER TABLE handling."
+                            )
 
-            # 4. Fix foreign key constraints
+            # 4. Fix foreign key constraints (This was misnumbered as step 4 before, constraint creation is step 5)
             for table in Base.metadata.tables.values():
                 table_exists = await conn.run_sync(
                     lambda sync_conn: inspect(sync_conn).has_table(table.name)
@@ -664,23 +708,44 @@ class SchemaManager:
         return schema_info
 
     def _types_match(self, orm_type, db_type: str, db_length: Optional[int]) -> bool:
-        """Check if database type matches ORM type definition."""
-        orm_type_str = str(orm_type).split("(")[0].upper()
+        """Return True if SQLAlchemy type == live PostgreSQL type."""
+        try:
+            orm_compiled = orm_type.compile(sync_engine.dialect).lower()
+        except Exception:
+            orm_compiled = ""
 
-        # Handle special cases
-        if orm_type_str == "VARCHAR" and db_type == "character varying":
+        if orm_compiled == db_type.lower():
+            return True
+
+        # keep the VARCHAR/TEXT/UUID special-cases here if you still need length checks
+        # For example, if you want to ensure VARCHAR(50) in ORM matches VARCHAR(50) in DB:
+        orm_type_str_for_special_cases = str(orm_type).split("(")[0].upper()
+        if orm_type_str_for_special_cases == "VARCHAR" and db_type == "character varying":
             orm_length = getattr(orm_type, "length", None)
-            return orm_length is None or orm_length == db_length
-        elif orm_type_str == "TEXT" and db_type == "text":
-            return True
-        elif isinstance(orm_type, PG_UUID) and db_type == "uuid":
-            return True
-
-        # Check type equivalents
-        for orm_t, db_types in self.type_equivalents.items():
-            if orm_t == orm_type_str and db_type in db_types:
+            # If ORM length is None, it implies "any length" for VARCHAR, so it matches.
+            # If ORM length is specified, it must match db_length.
+            if orm_length is None or orm_length == db_length:
                 return True
+            # If orm_length is not None and doesn't match, it's a mismatch for VARCHAR length.
+            # However, the primary goal here is type name matching, so we might let this pass
+            # to the equivalence table if strict length matching isn't desired at this stage.
+            # For now, let's assume if lengths are different, it's not a match here.
+            # To allow VARCHAR(X) to match TEXT, or different length VARCHARs, this check would need adjustment
+            # or rely on the equivalence table below.
+            # The original code had: return orm_length is None or orm_length == db_length
+            # We'll keep that logic for the special VARCHAR case if orm_compiled didn't match.
 
+        elif orm_type_str_for_special_cases == "TEXT" and db_type == "text":
+            return True
+        elif isinstance(orm_type, PG_UUID) and db_type == "uuid": # PG_UUID is specific, direct check
+            return True
+        # Add other special cases if necessary, e.g., for NUMERIC precision/scale if not handled by compile()
+
+        # finally fall back to the static equivalence table
+        orm_type_str = str(orm_type).split("(")[0].upper()
+        for orm_t, db_types_list in self.type_equivalents.items():
+            if orm_t == orm_type_str and db_type.lower() in db_types_list: # ensure db_type is also lowercased for comparison
+                return True
         return False
 
     def _fk_exists(self, db_fks, column_name: str, fk) -> bool:
