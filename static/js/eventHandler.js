@@ -312,7 +312,7 @@ export function createEventHandlers({
       if (showLoadingState && submitBtn) {
         domAPI.addClass(form, 'submitting');
         domAPI.setProperty(submitBtn, 'disabled', true);
-        domAPI.setDataAttribute(submitBtn, 'original-text', domAPI.getTextContent(submitBtn));
+        domAPI.setDataAttribute(submitBtn, 'originalText', domAPI.getTextContent(submitBtn));
         domAPI.setTextContent(submitBtn, 'Submitting...');
       }
 
@@ -335,10 +335,10 @@ export function createEventHandlers({
           domAPI.removeClass(form, 'submitting');
           if (submitBtn) {
             domAPI.setProperty(submitBtn, 'disabled', false);
-            const originalText = domAPI.getDataAttribute(submitBtn, 'original-text');
+            const originalText = domAPI.getDataAttribute(submitBtn, 'originalText');
             if (originalText) {
               domAPI.setTextContent(submitBtn, originalText);
-              domAPI.removeDataAttribute(submitBtn, 'original-text');
+              domAPI.removeDataAttribute(submitBtn, 'originalText');
             }
           }
         }
