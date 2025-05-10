@@ -94,14 +94,22 @@ export function createEventHandlers({
       return undefined;
     }
 
-    const { capture = false, once = false, signal, passive } = options;
+    const { capture = false, once = false, signal, passive } = options; // Context will be handled separately
     const nonPassiveEvents = ['click', 'submit', 'wheel', 'touchstart', 'touchmove', 'keydown', 'keypress', 'keyup'];
     const usePassive = (typeof passive === 'boolean') ? passive : !nonPassiveEvents.includes(type);
     const finalOptions = { capture, once, signal, passive: usePassive };
     const description = options.description || 'Unnamed Listener';
-    const listenerContext = options.context || 'eventHandler';
+
+    // Use provided context, default to 'unknown_context' if not provided, and log warning
+    const listenerContext = options.context || 'unknown_context';
+    if (!options.context) { // Check options.context directly
+      localNotify.warn(`trackListener called without a 'context' for '${description}'. Defaulting to 'unknown_context'. This may lead to listener leaks if not cleaned up properly.`, {
+        source: 'trackListener', module: MODULE, group: true,
+        extra: { description, eventType: type }
+      });
+    }
     const listenerSource = options.source || 'trackListener';
-    const listenerModule = options.module || MODULE;
+    // const listenerModule = options.module || MODULE; // 'context' should be the module identifier
 
     const elementMap = trackedListeners.get(element);
     if (elementMap) {
@@ -118,12 +126,12 @@ export function createEventHandlers({
         if (result && typeof result.then === 'function') {
           result.catch(error => {
             localNotify.error(`Async error in ${description}`, {
-              group: true, context: listenerContext, source: listenerSource, module: listenerModule,
+              group: true, context: listenerContext, source: listenerSource, module: listenerContext,
               originalError: error, extra: { type }
             });
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
               localNotify.warn(`preventDefault() called on passive listener: ${description}`, {
-                group: true, context: listenerContext, source: listenerSource, module: listenerModule, extra: { type }
+                group: true, context: listenerContext, source: listenerSource, module: listenerContext, extra: { type }
               });
             }
           }).finally(() => {
@@ -131,7 +139,7 @@ export function createEventHandlers({
             const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
             if (duration > threshold) {
               localNotify.warn(`Slow handler: ${description} took ${duration.toFixed(1)}ms`, {
-                group: true, context: listenerContext, source: listenerSource, module: listenerModule, extra: { type, duration }
+                group: true, context: listenerContext, source: listenerSource, module: listenerContext, extra: { type, duration }
               });
             }
           });
@@ -140,19 +148,19 @@ export function createEventHandlers({
           const threshold = type === 'submit' ? 800 : type === 'click' ? 500 : 100;
           if (duration > threshold) {
             localNotify.warn(`Slow handler: ${description} took ${duration.toFixed(1)}ms`, {
-              group: true, context: listenerContext, source: listenerSource, module: listenerModule, extra: { type, duration }
+              group: true, context: listenerContext, source: listenerSource, module: listenerContext, extra: { type, duration }
             });
           }
         }
         return result;
       } catch (error) {
         localNotify.error(`Sync error in ${description}`, {
-          group: true, context: listenerContext, source: listenerSource, module: listenerModule,
+          group: true, context: listenerContext, source: listenerSource, module: listenerContext,
           originalError: error, extra: { type }
         });
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
           localNotify.warn(`preventDefault() called on passive listener: ${description}`, {
-            group: true, context: listenerContext, source: listenerSource, module: listenerModule, extra: { type }
+            group: true, context: listenerContext, source: listenerSource, module: listenerContext, extra: { type }
           });
         }
       }
@@ -169,7 +177,7 @@ export function createEventHandlers({
       }
     } catch (err) {
       localNotify.error('Error registering event listener', {
-        group: true, context: listenerContext, source: listenerSource, module: listenerModule,
+        group: true, context: listenerContext, source: listenerSource, module: MODULE,
         originalError: err, extra: { type, description }
       });
       return undefined;
@@ -186,7 +194,8 @@ export function createEventHandlers({
       handlerMap = new Map();
       typeMap.set(type, handlerMap);
     }
-    handlerMap.set(handler, { wrappedHandler, options: finalOptions });
+    // Store context with the listener details
+    handlerMap.set(handler, { wrappedHandler, options: finalOptions, context: listenerContext });
 
     return wrappedHandler;
   }
@@ -464,18 +473,6 @@ export function createEventHandlers({
       debugTools?.stop?.(_t,'EventHandler.init');
       handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
 
-      // --- Standardized "eventhandler:initialized" event ---
-      const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-      if (doc) {
-        if (domAPI?.dispatchEvent) {
-          domAPI.dispatchEvent(doc, new CustomEvent('eventhandler:initialized',
-            { detail: { success: true } }));
-        } else {
-          doc.dispatchEvent(new CustomEvent('eventhandler:initialized',
-            { detail: { success: true } }));
-        }
-      }
-
     } catch (err) {
       handlerNotify.error('EventHandler initialization failed', {
         group: true, context: 'initialization', module: MODULE, source: 'init', originalError: err
@@ -570,19 +567,79 @@ export function createEventHandlers({
     }
   }
 
-  function cleanupListeners() {
-    trackedListeners.forEach((typeMap, element) => {
-      typeMap.forEach((handlerMap, type) => {
-        handlerMap.forEach(({ wrappedHandler, options }) => {
-          if (domAPI && typeof domAPI.removeEventListener === 'function') {
-            domAPI.removeEventListener(element, type, wrappedHandler, options);
-          } else {
-            element.removeEventListener(type, wrappedHandler, options);
+  function cleanupListeners(options = {}) {
+    const cleanupContext = options && options.context; // Ensure options itself is checked
+
+    if (cleanupContext && typeof cleanupContext === 'string') {
+      handlerNotify.debug(`Cleaning up listeners specifically for context: "${cleanupContext}"`, { module: MODULE, source: 'cleanupListeners' });
+    } else {
+      handlerNotify.warn('cleanupListeners called without a specific string context. This will clean ALL tracked listeners. This is generally discouraged and can lead to unexpected behavior if other modules still need their listeners.', { module: MODULE, source: 'cleanupListeners', extra: { providedOptions: options } });
+    }
+
+    const entriesToRemove = [];
+
+    trackedListeners.forEach((elementMap, element) => {
+      elementMap.forEach((typeMap, type) => {
+        typeMap.forEach((details, originalHandler) => {
+          // If a specific context is provided, only target listeners matching that context.
+          // If no specific context is provided (global cleanup), target all listeners.
+          if (!cleanupContext || details.context === cleanupContext) {
+            try {
+              if (domAPI && typeof domAPI.removeEventListener === 'function') {
+                domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
+              } else {
+                element.removeEventListener(type, details.wrappedHandler, details.options);
+              }
+              // Mark for removal from map after iteration to avoid modifying map during iteration
+              entriesToRemove.push({ element, type, originalHandler });
+            } catch (error) {
+              handlerNotify.warn('Error removing listener during cleanup', {
+                module: MODULE,
+                source: 'cleanupListeners',
+                originalError: error,
+                extra: {
+                  context: details.context,
+                  description: details.options?.description, // Safely access description
+                  elementType: element.constructor.name,
+                  elementId: element.id
+                }
+              });
+            }
           }
         });
       });
     });
-    trackedListeners.clear();
+
+    // Perform removals from the map
+    entriesToRemove.forEach(({ element, type, originalHandler }) => {
+      const elementMap = trackedListeners.get(element);
+      if (elementMap) {
+        const typeMap = elementMap.get(type);
+        if (typeMap) {
+          typeMap.delete(originalHandler);
+          if (typeMap.size === 0) {
+            elementMap.delete(type);
+          }
+        }
+        if (elementMap.size === 0) {
+          trackedListeners.delete(element);
+        }
+      }
+    });
+
+    if (!cleanupContext) {
+      // If it was a global cleanup (no context specified), the map should ideally be empty.
+      // However, the logic above already clears all listeners if cleanupContext is falsy.
+      // So, if trackedListeners is not empty here, it means some listeners were not removed,
+      // possibly due to errors or if they were added after cleanup started (less likely).
+      if (trackedListeners.size > 0) {
+         handlerNotify.warn(`trackedListeners map not empty after a global cleanup. Size: ${trackedListeners.size}. This might indicate an issue or listeners added during cleanup.`, { module: MODULE, source: 'cleanupListeners' });
+      }
+      // No explicit trackedListeners.clear() needed here if the iteration correctly removes all items.
+      // If the intent is to ensure it's empty after a global call, a clear() could be added,
+      // but the current loop should handle it if no context is passed.
+    }
+    handlerNotify.debug(`Cleanup process finished. Remaining tracked elements: ${trackedListeners.size}. Context processed: ${cleanupContext || 'GLOBAL'}.`, { module: MODULE, source: 'cleanupListeners' });
   }
 
   function delegate(container, eventType, selector, handler, options = {}) {

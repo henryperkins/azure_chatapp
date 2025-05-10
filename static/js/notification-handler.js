@@ -148,7 +148,7 @@ export function createNotificationHandler({
     closeBtn.textContent = "✕";
     // Use DI eventHandlers.trackListener only. If not available, close button is not interactive.
     if (typeof DependencySystem?.modules?.get === "function" && DependencySystem.modules.get("eventHandlers")?.trackListener) {
-      DependencySystem.modules.get("eventHandlers").trackListener(closeBtn, "click", () => fadeOut(root), { description: "Notification_Close" });
+      DependencySystem.modules.get("eventHandlers").trackListener(closeBtn, "click", () => fadeOut(root), { description: "Notification_Close", context: "NotificationHandlerCloseButton" });
     } else if (DependencySystem?.modules?.get?.("logger")) {
       DependencySystem.modules.get("logger").warn("[notificationHandler] No DI eventHandlers.trackListener available; close button will not be interactive.");
     }

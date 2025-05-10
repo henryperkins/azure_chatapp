@@ -542,33 +542,56 @@ export async function waitForDepsAndDom({
   domSelectors = [],
   pollInterval = 30,
   timeout = 4000,
+  domAPI = { querySelector: (s) => document.querySelector(s) }, // Allow injected domAPI, fallback to global document
+  notify = _notifyGU, // Use injected notify, fallback to _notifyGU
+  source = 'waitForDepsAndDom' // Allow a source to be passed for logging
 } = {}) {
-  if (!DependencySystem) throw new Error("waitForDepsAndDom: DependencySystem missing");
+  if (!DependencySystem) {
+    notify.error("waitForDepsAndDom: DependencySystem missing", { source, critical: true });
+    throw new Error("waitForDepsAndDom: DependencySystem missing");
+  }
 
   // Verify DependencySystem has expected structure
   if (!DependencySystem.modules || typeof DependencySystem.modules.has !== 'function' || typeof DependencySystem.modules.get !== 'function') {
+    notify.error("waitForDepsAndDom: DependencySystem.modules is missing or invalid", { source, critical: true });
     throw new Error("waitForDepsAndDom: DependencySystem.modules is missing or invalid");
   }
+  if (!domAPI || typeof domAPI.querySelector !== 'function') {
+    notify.error("waitForDepsAndDom: domAPI.querySelector is missing or invalid", { source, critical: true });
+    // Fallback to global document if domAPI is truly unusable, though this is against DI principles
+    domAPI = { querySelector: (s) => document.querySelector(s) };
+    notify.warn("waitForDepsAndDom: Fallback to global document.querySelector due to invalid domAPI.", { source });
+  }
+
 
   const start = Date.now();
   while (true) {
     try {
       const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
-      const domReady = domSelectors.every((s) => document.querySelector(s));
-      if (depsReady && domReady) return;
+      const domReady = domSelectors.every((s) => domAPI.querySelector(s));
+      if (depsReady && domReady) {
+        notify.debug(`waitForDepsAndDom: Conditions met for source '${source}'. Deps: [${deps.join(', ')}], DOM: [${domSelectors.join(', ')}]`, { source });
+        return;
+      }
 
       if (Date.now() - start > timeout) {
-        const missingDeps = deps.filter((d) => !DependencySystem.modules.has(d) || !DependencySystem.modules.get(d));
-        const missingDom = domSelectors.filter((s) => !document.querySelector(s));
-        throw new Error(
-          `waitForDepsAndDom timeout ${timeout}ms — deps: ${missingDeps.join(', ')}, dom: ${missingDom.join(', ')}`,
-        );
+        const missingDeps = deps.filter((d) => !(DependencySystem.modules.has(d) && DependencySystem.modules.get(d)));
+        const missingDom = domSelectors.filter((s) => !domAPI.querySelector(s));
+        const errorMsg = `waitForDepsAndDom timeout ${timeout}ms for source '${source}' — Missing Deps: [${missingDeps.join(', ')}], Missing DOM: [${missingDom.join(', ')}]`;
+        notify.error(errorMsg, { source, timeout, missingDeps, missingDom });
+        throw new Error(errorMsg);
       }
     } catch (err) {
-      if (Date.now() - start > timeout) {
-        throw new Error(`waitForDepsAndDom error: ${err.message}`);
+      // If the error is the timeout error we just threw, rethrow it.
+      if (err.message.startsWith(`waitForDepsAndDom timeout ${timeout}ms`)) {
+        throw err;
       }
-      _notifyGU.warn('waitForDepsAndDom: Caught error while checking dependencies, retrying...', err);
+      // For other errors during checks (e.g., if domAPI.querySelector itself throws for some reason)
+      if (Date.now() - start > timeout) { // Check timeout again in case the error itself took time
+        notify.error(`waitForDepsAndDom error after timeout threshold for source '${source}': ${err.message}`, { source, originalError: err });
+        throw new Error(`waitForDepsAndDom error for source '${source}': ${err.message}`);
+      }
+      notify.warn(`waitForDepsAndDom: Caught error while checking dependencies for source '${source}', retrying...`, { source, originalError: err });
     }
     await new Promise((r) => setTimeout(r, pollInterval));
   }

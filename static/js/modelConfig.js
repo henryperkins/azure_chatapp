@@ -20,6 +20,8 @@
 //
 // ---------------------------------------------------------------------------------------------
 
+const MODULE_CONTEXT = "ModelConfig";
+
 /**
  * Creates the model configuration module.
  * @param {object} deps - Injected dependencies.
@@ -96,28 +98,46 @@ export function createModelConfig({
    * Internal array to track registered listeners for cleanup.
    * Each item: { element, type, handler }
    */
-  let registeredListeners = [];
+  // let registeredListeners = []; // No longer needed with context-based cleanup
 
   /**
-   * Track an event listener using the provided eventHandler or fallback.
+   * Track an event listener using the provided eventHandler, ensuring context is passed.
    * @param {HTMLElement} el
    * @param {string} evt
    * @param {function} handler
-   * @param {object} opts
+   * @param {object} opts - Must include 'description'
    */
   function registerListener(api, el, evt, handler, opts = {}) {
-    api.evts.trackListener(el, evt, handler, opts);
-    registeredListeners.push({ element: el, type: evt, handler });
+    if (!opts.description) {
+      api.notify.warn(`[${MODULE_CONTEXT}] registerListener called without a description for event type '${evt}'.`, {
+        source: 'registerListener',
+        module: MODULE_CONTEXT
+      });
+    }
+    const optionsWithContext = {
+      ...opts,
+      context: MODULE_CONTEXT, // Add module context
+      module: MODULE_CONTEXT,  // For consistency in logging if eventHandlers uses it
+      source: opts.source || opts.description || `event_${evt}` // Ensure source is set
+    };
+    api.evts.trackListener(el, evt, handler, optionsWithContext);
+    // No need to manually track in registeredListeners array anymore
   }
 
   /**
-   * Remove all tracked listeners.
+   * Remove all listeners registered with this module's context.
    */
   function cleanup(api) {
-    registeredListeners.forEach(({ element, type, handler }) => {
-      api.evts.untrackListener(element, type, handler);
-    });
-    registeredListeners = [];
+    if (api.ds && typeof api.ds.cleanupModuleListeners === 'function') {
+      api.ds.cleanupModuleListeners(MODULE_CONTEXT);
+      api.notify.notify(`[${MODULE_CONTEXT}] Called DependencySystem.cleanupModuleListeners for context: ${MODULE_CONTEXT}`, { source: 'cleanup', module: MODULE_CONTEXT });
+    } else if (api.evts && typeof api.evts.cleanupListeners === 'function') {
+      api.evts.cleanupListeners({ context: MODULE_CONTEXT });
+      api.notify.notify(`[${MODULE_CONTEXT}] Called eventHandlers.cleanupListeners for context: ${MODULE_CONTEXT}`, { source: 'cleanup', module: MODULE_CONTEXT });
+    } else {
+      api.notify.warn(`[${MODULE_CONTEXT}] cleanupListeners not available on eventHandlers or DependencySystem. Listeners may not be cleaned up.`, { source: 'cleanup', module: MODULE_CONTEXT });
+    }
+    // registeredListeners = []; // No longer needed
   }
 
   // -------------------------------------------------------------------------

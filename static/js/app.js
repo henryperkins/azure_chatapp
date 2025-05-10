@@ -157,23 +157,6 @@ DependencySystem.register('sanitizer', sanitizer);
 // legacy alias for modules that look for “domPurify”
 DependencySystem.register('domPurify', sanitizer);
 
-// ---------------------------------------------------------------------------
-// HTML-template loader (register early so other modules can await events)
-// ---------------------------------------------------------------------------
-const htmlTemplateLoader = createHtmlTemplateLoader({
-    DependencySystem,
-    domAPI,
-    notify
-});
-DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
-
-// Pre-load Project Details HTML (fires 'projectDetailsHtmlLoaded')
-htmlTemplateLoader.loadTemplate({
-    url: '/static/html/project_details.html',
-    containerSelector: '#projectDetailsView',
-    eventName: 'projectDetailsHtmlLoaded'
-});
-
 // Register apiEndpoints for DI (required by Auth and other modules)
 const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
     AUTH_CSRF: '/api/auth/csrf',
@@ -217,6 +200,32 @@ const eventHandlers = createEventHandlers({
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
+// Add cleanupModuleListeners to DependencySystem
+DependencySystem.cleanupModuleListeners = function(moduleContext) {
+  if (!eventHandlers || typeof eventHandlers.cleanupListeners !== 'function') {
+    notify.error('[DependencySystem] eventHandlers.cleanupListeners is not available.', {
+      source: 'cleanupModuleListeners',
+      context: 'DependencySystem'
+    });
+    return;
+  }
+  if (!moduleContext || typeof moduleContext !== 'string') {
+    notify.warn('[DependencySystem] cleanupModuleListeners called without a valid moduleContext string.', {
+      source: 'cleanupModuleListeners',
+      context: 'DependencySystem',
+      extra: { providedContext: moduleContext }
+    });
+    // Optionally, could call global cleanup, but the goal is targeted cleanup.
+    // eventHandlers.cleanupListeners(); // This would be global cleanup
+    return;
+  }
+  eventHandlers.cleanupListeners({ context: moduleContext });
+  notify.debug(`[DependencySystem] Requested cleanup for context: ${moduleContext}`, {
+    source: 'cleanupModuleListeners',
+    context: 'DependencySystem'
+  });
+};
+
 // ---------------------------------------------------------------------------
 // 2.5) Build our error-reporting integration (depends on notify)
 const sentryManager = createSentryManager({
@@ -236,6 +245,41 @@ sentryManager.initialize();
 
 // Late-bind the real notify into eventHandlers so all new events use the correct notifier
 eventHandlers.setNotifier?.(notify);
+
+// ---------------------------------------------------------------------------
+// HTML-template loader
+// Now created after real notify and eventHandlers are fully set up.
+// ---------------------------------------------------------------------------
+const htmlTemplateLoader = createHtmlTemplateLoader({
+    DependencySystem,
+    domAPI,
+    notify // This is the real notify instance
+});
+DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
+
+// Pre-load Project Details HTML (fires 'projectDetailsHtmlLoaded')
+notify.info('[App] About to call htmlTemplateLoader.loadTemplate for project_details.html');
+const projectDetailsContainer = domAPI.querySelector('#projectDetailsView');
+notify.info(`[App] #projectDetailsView found by app.js: ${!!projectDetailsContainer}, childCount: ${projectDetailsContainer?.childElementCount}`);
+
+htmlTemplateLoader.loadTemplate({
+    url: '/static/html/project_details.html',
+    containerSelector: '#projectDetailsView',
+    eventName: 'projectDetailsHtmlLoaded'
+});
+notify.info('[App] Called htmlTemplateLoader.loadTemplate for project_details.html');
+
+// Pre-load Project List HTML (fires 'projectListHtmlLoaded')
+notify.info('[App] About to call htmlTemplateLoader.loadTemplate for project_list.html');
+const projectListContainerCheck = domAPI.querySelector('#projectListView');
+notify.info(`[App] #projectListView found by app.js: ${!!projectListContainerCheck}, childCount: ${projectListContainerCheck?.childElementCount}`);
+
+htmlTemplateLoader.loadTemplate({
+    url: '/static/html/project_list.html',
+    containerSelector: '#projectListView', // Standard container for the project list view
+    eventName: 'projectListHtmlLoaded'
+});
+notify.info('[App] Called htmlTemplateLoader.loadTemplate for project_list.html');
 
 // ---------------------------------------------------------------------------
 // Global error catch (fail-fast at window level)
@@ -387,18 +431,18 @@ export async function init() {
         notify.info('[App] Initialization complete.', { authenticated: appState.isAuthenticated });
         // Use domAPI.dispatchEvent on domAPI.getDocument() if available
         if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
-            domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('appInitialized', { detail: { success: true } }));
+            domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('app:ready', { detail: { success: true } }));
         } else {
-            document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: true } }));
+            document.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
         }
         return true;
     } catch (err) {
         notify.error(`[App] Initialization failed: ${err?.message}`, { error: err });
         handleInitError(err);
         if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
-            domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
+            domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('app:ready', { detail: { success: false, error: err } }));
         } else {
-            document.dispatchEvent(new CustomEvent('appInitialized', { detail: { success: false, error: err } }));
+            document.dispatchEvent(new CustomEvent('app:ready', { detail: { success: false, error: err } }));
         }
         return false;
     } finally {
@@ -432,6 +476,7 @@ async function initializeCoreSystems() {
 
         // Auth
         const authModule = createAuthModule({
+            DependencySystem, // Pass DependencySystem
             apiRequest,
             notify,
             eventHandlers,
@@ -447,6 +492,8 @@ async function initializeCoreSystems() {
         DependencySystem.register('modelConfig', modelConfigInstance);
 
         // Ensure chatManager is available prior to projectManager creation
+        // FIX: Define chatManager by calling createOrGetChatManager
+        // createOrGetChatManager will handle registration internally if it creates a new instance.
         const chatManager = createOrGetChatManager();
 
         // Project manager
@@ -461,8 +508,8 @@ async function initializeCoreSystems() {
             apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
             storage: DependencySystem.modules.get('storage'),
             listenerTracker: {
-                add: (...args) => eventHandlers.trackListener(...args),
-                remove: (...args) => eventHandlers.cleanupListeners(...args)
+                add: (element, type, handler, description) => eventHandlers.trackListener(element, type, handler, { description, context: 'projectManager' }),
+                remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
             }
         });
         DependencySystem.register('projectManager', projectManager);
@@ -495,7 +542,7 @@ async function initializeCoreSystems() {
                     }
                     res(true);
                 },
-                { once: true, description: 'modalsLoaded for app init' }
+                { once: true, description: 'modalsLoaded for app init', context: 'app' }
             );
         });
 
@@ -574,13 +621,13 @@ async function initializeAuthSystem() {
                 auth.AuthBus,
                 'authStateChanged',
                 handleAuthStateChange,
-                { description: '[App] AuthBus authStateChanged' }
+                { description: '[App] AuthBus authStateChanged', context: 'app' }
             );
             eventHandlers.trackListener(
                 auth.AuthBus,
                 'authReady',
                 handleAuthStateChange,
-                { description: '[App] AuthBus authReady' }
+                { description: '[App] AuthBus authReady', context: 'app' }
             );
         }
         renderAuthHeader();
@@ -652,7 +699,7 @@ function renderAuthHeader() {
                     domAPI.preventDefault(e);
                     authMod?.logout?.();
                 },
-                { description: 'Auth logout button' }
+                { description: 'Auth logout button', context: 'app' }
             );
         }
     } catch (err) {
@@ -740,7 +787,8 @@ async function initializeUIComponents() {
             storage: DependencySystem.modules.get('storage'),
             sanitizer: DependencySystem.modules.get('sanitizer'),
             domAPI,
-            browserService: browserServiceInstance
+            browserService: browserServiceInstance,
+            globalUtils: DependencySystem.modules.get('globalUtils') // Added globalUtils
         });
         DependencySystem.register('projectListComponent', projectListComponentInstance);
 
@@ -780,6 +828,9 @@ async function initializeUIComponents() {
             notify,
             sanitizer: DependencySystem.modules.get('sanitizer'),
             app,
+            // Inject chat-related dependencies so Conversations tab is fully functional
+            chatManager: DependencySystem.modules.get('chatManager'),
+            modelConfig: modelConfigInstance,
             knowledgeBaseComponent: knowledgeBaseComponentInstance, // Wire KB component
             onBack: async () => {
                 let pd;
@@ -876,7 +927,7 @@ function registerAppListeners() {
                 browserAPI.getWindow(), // or document if needed
                 'locationchange',
                 handleNavigationChange,
-                { description: 'locationchange -> handleNavigationChange' }
+                { description: 'locationchange -> handleNavigationChange', context: 'app' }
             );
         })
         .catch((err) => {
@@ -1190,6 +1241,6 @@ if (isDocumentReady()) {
         domAPI.getDocument(),
         'DOMContentLoaded',
         () => init(),
-        { once: true, description: 'Initial DOMContentLoaded -> init app' }
+        { once: true, description: 'Initial DOMContentLoaded -> init app', context: 'app' }
     );
 }

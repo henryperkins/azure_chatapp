@@ -153,6 +153,87 @@ uvicorn main:app --reload
 
 > **WARNING:** This codebase uses insecure/debug configuration by default (relaxed CORS, cookies, and session settings). Do NOT use in production without hardening security settings in `config.py` and environment variables.
 
+## Architectural Diagrams
+
+### Chat Initialization Block Diagram
+
+```mermaid
+graph TD
+    A[app.js] -->|import| B(DependencySystem)
+    A --"init()"--> Stage1(1. Core DI creation)
+    Stage1 --> Stage2(2. createNotify)
+    Stage2 --> Stage3(3. createEventHandlers)
+    Stage3 --> Stage4(4. createApiClient)
+    Stage4 --> Stage5(5. createChatManager)
+    B -.->|register(...)| A
+    Stage3 ---> Stage5
+    Stage5 --> Stage6(6. createProjectManager)
+    Stage6 --> Stage7(7. UI bootstrap)
+    A -.->|"DOM ready ⇢ waitForDepsAndDom() (async)"| RegListeners(registerAppListeners)
+    RegListeners --> NavChange(trackListener window, locationchange → handleNavigationChange)
+    RegListeners --> ChatTrigger(setupChatInitializationTrigger)
+    RegListeners --> GlobalHooks(global auth / error hooks)
+```
+
+### Chat Sequence Diagram: First Page Load → First Message
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant app.js
+    participant DependencySystem
+    participant chatManager
+    participant eventHandlers
+    participant API
+
+    Browser->>app.js: DOMContentLoaded
+    app.js->>app.js: init()
+    app.js->>app.js: createDomAPI() etc.
+    app.js->>app.js: createNotify()
+    app.js->>app.js: createEventHandlers()
+    app.js->>app.js: createChatManager()
+    app.js->>DependencySystem: register('chatManager', inst)
+    app.js->>app.js: registerAppListeners()
+
+    app.js->>app.js: handleNavigationChange() (URL ?project=123&chatId=abc)
+    app.js->>projectManager: pm.loadProjectDetails(123)
+    activate projectManager
+    projectManager->>API: GET /api/projects/123
+    API-->>projectManager: Project Data
+    deactivate projectManager
+    app.js-->>app.js: pm emits 'projectLoaded'
+
+    app.js->>chatManager: await initialize({projectId:123,...})
+    activate chatManager
+    chatManager->>chatManager: _setupUIElements()
+    chatManager->>eventHandlers: _bindEvents() (trackListener adds DOM handlers)
+    chatManager->>chatManager: loadConversation('abc')
+    activate chatManager
+    par
+        chatManager->>API: GET /projects/123/conversations/abc
+    and
+        chatManager->>API: GET /projects/123/conversations/abc/messages
+    end
+    API-->>chatManager: Conversation Data
+    API-->>chatManager: Messages Data
+    deactivate chatManager
+    chatManager->>chatManager: _renderMessages()
+    chatManager->>chatManager: _updateURLWithConversationId()
+    chatManager-->>app.js: dispatch 'chatmanager:initialized'
+    deactivate chatManager
+    app.js->>app.js: resolve initialize()
+
+    Browser->>chatManager: User types message (keydown Enter)
+    activate chatManager
+    chatManager->>chatManager: sendMessage() → queue.add()
+    chatManager->>chatManager: queue.process()
+    chatManager->>API: _sendMessageToAPI() POST /projects/123/conversations/abc/messages
+    API-->>chatManager: {assistant_message: ...}
+    chatManager->>chatManager: _processAssistantResponse()
+    chatManager->>chatManager: _showMessage('assistant', ...)
+    deactivate chatManager
+```
+
 ## Contributing
 1. Create feature branch: `git checkout -b feature/your-idea`
 2. Commit changes: `git commit -am 'Add awesome feature'`

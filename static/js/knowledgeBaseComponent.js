@@ -341,43 +341,45 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @private
      */
     _bindEventHandlers() {
-      this._boundListeners = this._boundListeners || [];
+      this._boundListeners = this._boundListeners || []; // This can be removed after refactor
       const EH = this.eventHandlers;
-      const addListener = (el, type, fn, opts) => {
+      const addListener = (el, type, fn, opts = {}) => { // Ensure opts has a default value
         if (el) {
-          const handler = EH.trackListener(el, type, fn, opts);
-          this._boundListeners.push({ el, type, handler, opts });
+          // Automatically add MODULE_CONTEXT to all listeners
+          const optionsWithContext = { ...opts, context: MODULE };
+          const handler = EH.trackListener(el, type, fn, optionsWithContext);
+          // this._boundListeners.push({ el, type, handler, opts: optionsWithContext }); // Manual tracking can be removed
         }
       };
 
       // Search related events delegated to searchHandler
-      addListener(this.elements.searchButton, "click", () => this.searchHandler.triggerSearch());
-      addListener(this.elements.searchInput, "input", (e) => this.searchHandler.debouncedSearch(e.target.value));
-      addListener(this.elements.searchInput, "keyup", (e) => { if (e.key === "Enter") this.searchHandler.triggerSearch(); });
-      addListener(this.elements.resultModal, "keydown", (e) => this.searchHandler.handleResultModalKeydown(e));
+      addListener(this.elements.searchButton, "click", () => this.searchHandler.triggerSearch(), { description: "KB Search Button" });
+      addListener(this.elements.searchInput, "input", (e) => this.searchHandler.debouncedSearch(e.target.value), { description: "KB Search Input" });
+      addListener(this.elements.searchInput, "keyup", (e) => { if (e.key === "Enter") this.searchHandler.triggerSearch(); }, { description: "KB Search Enter" });
+      addListener(this.elements.resultModal, "keydown", (e) => this.searchHandler.handleResultModalKeydown(e), { description: "KB Result Modal Keydown" });
 
 
       // Management related events delegated to manager
-      addListener(this.elements.kbToggle, "change", (e) => this.manager.toggleKnowledgeBase(e.target.checked));
+      addListener(this.elements.kbToggle, "change", (e) => this.manager.toggleKnowledgeBase(e.target.checked), { description: "KB Toggle Active" });
       addListener(this.elements.reprocessButton, "click", () => {
         const pid = this._getCurrentProjectId();
         if (pid) this.manager.reprocessFiles(pid);
-      });
-      addListener(this.elements.setupButton, "click", () => this.manager.showKnowledgeBaseModal());
-      addListener(this.elements.settingsButton, "click", () => this.manager.showKnowledgeBaseModal());
-      addListener(this.elements.settingsForm, "submit", (e) => this.manager.handleKnowledgeBaseFormSubmit(e));
-      addListener(this.elements.cancelSettingsBtn, "click", () => this.manager.hideKnowledgeBaseModal());
-      addListener(this.elements.deleteKnowledgeBaseBtn, "click", () => this.manager.handleDeleteKnowledgeBase());
-      addListener(this.elements.modelSelect, "change", () => this.manager.validateSelectedModelDimensions());
+      }, { description: "KB Reprocess Files" });
+      addListener(this.elements.setupButton, "click", () => this.manager.showKnowledgeBaseModal(), { description: "KB Setup Button" });
+      addListener(this.elements.settingsButton, "click", () => this.manager.showKnowledgeBaseModal(), { description: "KB Settings Button" });
+      addListener(this.elements.settingsForm, "submit", (e) => this.manager.handleKnowledgeBaseFormSubmit(e), { description: "KB Settings Form Submit" });
+      addListener(this.elements.cancelSettingsBtn, "click", () => this.manager.hideKnowledgeBaseModal(), { description: "KB Cancel Settings" });
+      addListener(this.elements.deleteKnowledgeBaseBtn, "click", () => this.manager.handleDeleteKnowledgeBase(), { description: "KB Delete Button" });
+      addListener(this.elements.modelSelect, "change", () => this.manager.validateSelectedModelDimensions(), { description: "KB Model Select Change" });
 
       // GitHub integration listeners delegated to manager
-      addListener(this.elements.kbAttachRepoBtn, "click", () => this.manager.handleAttachGitHubRepo());
-      addListener(this.elements.kbDetachRepoBtn, "click", () => this.manager.handleDetachGitHubRepo());
+      addListener(this.elements.kbAttachRepoBtn, "click", () => this.manager.handleAttachGitHubRepo(), { description: "KB Attach GitHub Repo" });
+      addListener(this.elements.kbDetachRepoBtn, "click", () => this.manager.handleDetachGitHubRepo(), { description: "KB Detach GitHub Repo" });
 
       // Auth state change
       addListener(document, "authStateChanged", (e) => {
         this._handleAuthStateChange(e.detail?.authenticated);
-      });
+      }, { description: "KB Auth State Change Listener" });
     }
 
     /**
@@ -643,16 +645,21 @@ export function createKnowledgeBaseComponent(options = {}) {
 
   class KnowledgeBaseComponentWithDestroy extends KnowledgeBaseComponent {
     destroy() {
-      if (this._boundListeners) {
-        for (const { el, type, handler, opts } of this._boundListeners) {
-          if (el && handler) {
-            el.removeEventListener(type, handler, opts);
-          }
-        }
-        this._boundListeners = [];
+      this.notify.info("KnowledgeBaseComponent destroy() called.", { source: "destroy" });
+      // Use context-specific cleanup via DependencySystem or eventHandlers
+      const ds = this.getDep('DependencySystem');
+      if (ds && typeof ds.cleanupModuleListeners === 'function') {
+        ds.cleanupModuleListeners(MODULE);
+        this.notify.debug(`Called DependencySystem.cleanupModuleListeners for context: ${MODULE}`, { source: "destroy" });
+      } else if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
+        this.eventHandlers.cleanupListeners({ context: MODULE });
+        this.notify.debug(`Called eventHandlers.cleanupListeners for context: ${MODULE}`, { source: "destroy" });
+      } else {
+        this.notify.warn('cleanupListeners not available on eventHandlers or DependencySystem.', { source: "destroy" });
       }
+      this._boundListeners = []; // Clear manual tracking as it's now redundant
       this.state.isInitialized = false;
-      this.notify.info("KnowledgeBaseComponent destroyed.", { source: "destroy" });
+      this.notify.info("KnowledgeBaseComponent destroyed and listeners cleaned up.", { source: "destroy" });
     }
   }
 
