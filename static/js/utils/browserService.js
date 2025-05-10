@@ -3,6 +3,28 @@
  * @param {Object} deps
  * @param {Window} deps.windowObject – injected window for testability
  */
+
+// --- shared URL helpers -------------------------------------------------
+export function buildUrl(params = {}, baseHref = (typeof window !== 'undefined' ? window.location.href : 'http://_/')) {
+  const url = new URL(baseHref, baseHref.startsWith('http') ? undefined : 'http://_');
+  Object.entries(params).forEach(([k, v]) =>
+    (v === undefined || v === null || v === '')
+      ? url.searchParams.delete(k)
+      : url.searchParams.set(k, v)
+  );
+  const sorted = Array.from(url.searchParams.entries())
+                      .sort(([a], [b]) => a.localeCompare(b));
+  url.search = new URLSearchParams(sorted).toString();
+  return url.pathname + (url.search ? `?${url.search}` : '');
+}
+
+export function normaliseUrl(u = '') {
+  try {
+    const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
+    return url.pathname.replace(/\/+$/, '') + (url.search ? `?${url.search}` : '') + url.hash;
+  } catch { return u; }
+}
+
 export function createBrowserService({ windowObject = window } = {}) {
   if (!windowObject?.location) throw new Error('browserService: windowObject is required');
 
@@ -63,5 +85,13 @@ export function createBrowserService({ windowObject = window } = {}) {
     // Passthroughs for test harnesses
     getLocationHref: () => windowObject.location.href,
     setHistory: (...a) => windowObject.history.pushState(...a),
+
+    /* new accessors required by app.js */
+    getWindow           : () => windowObject,
+    getDocument         : () => windowObject.document,
+    getHistory          : () => windowObject.history,
+    getLocation         : () => windowObject.location,
+    getInnerWidth       : () => windowObject.innerWidth,
+    getDependencySystem : () => windowObject.DependencySystem,
   };
 }
