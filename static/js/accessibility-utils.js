@@ -74,14 +74,18 @@ class AccessibilityUtilsModule {
     this._setupSkipLinks();
 
     if (this.DependencySystem && typeof this.DependencySystem.register === 'function') {
-      this.DependencySystem.register(MODULE_CONTEXT, {
-        focusElement: this._focusElement.bind(this),
-        getFocusable: this._getFocusable.bind(this),
-        trapFocus: this._trapFocus.bind(this),
-        toggleKeyboardShortcuts: this.toggleKeyboardShortcuts.bind(this),
-        announce: this.announce.bind(this),
-        destroy: this.destroy.bind(this), // Allow external destruction if needed
-      });
+      // avoid double-registration
+      const already = this.DependencySystem.modules?.get?.(MODULE_CONTEXT);
+      if (!already) {
+        this.DependencySystem.register(MODULE_CONTEXT, {
+          focusElement: this._focusElement.bind(this),
+          getFocusable: this._getFocusable.bind(this),
+          trapFocus: this._trapFocus.bind(this),
+          toggleKeyboardShortcuts: this.toggleKeyboardShortcuts.bind(this),
+          announce: this.announce.bind(this),
+          destroy: this.destroy.bind(this), // Allow external destruction if needed
+        });
+      }
     }
     this.debug.stop(traceId, 'init');
   }
