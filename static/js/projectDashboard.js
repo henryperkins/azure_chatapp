@@ -507,6 +507,14 @@ class ProjectDashboard {
         eventDoc.dispatchEvent(new CustomEvent('projectLoaded', { detail: project }));
       }
     }
+    // Make sure ChatManager is (re)initialised for this project
+    const cm = this.getModule?.('chatManager');
+    if (cm?.initialize) {
+      Promise
+        .resolve(cm.initialize({ projectId }))
+        .catch(err => this.dashboardNotify.error('Chat initialisation failed',
+          { source: '_postProjectDetailsSuccess', originalError: err }));
+    }
     return true;
   }
 
