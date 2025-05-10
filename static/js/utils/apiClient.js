@@ -7,8 +7,8 @@
  *   const apiClient = createApiClient({ ... });
  */
 
-import notify from './notify.js';
 import { logEventToServer, maybeCapture } from './notifications-helpers.js';
+// NOTE: notify must be injected, not imported. Remove this import to avoid hidden coupling.
 
 /**
  * createApiClient
