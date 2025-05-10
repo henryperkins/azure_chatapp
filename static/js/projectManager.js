@@ -263,6 +263,8 @@ class ProjectManager {
 
       const res = await this._req(String(urlObj), undefined, "loadProjects");
       const list = extractResourceList(res, ['projects']);
+      // Cache for other modules (sidebar, dashboards, etc.)
+      this.projects = list;
       this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
       this._emit('projectsLoaded', { projects: list, filter });
       this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
