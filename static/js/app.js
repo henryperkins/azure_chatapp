@@ -1009,19 +1009,45 @@ async function handleNavigationChange() {
 function handleAuthStateChange(e) {
     const { authenticated, user } = e.detail || {};
     const newAuthState = !!authenticated;
-    if (newAuthState === appState.isAuthenticated) return;
 
-    const prev = appState.isAuthenticated;
+    // Avoid redundant updates if auth state and user object reference are identical
+    if (newAuthState === appState.isAuthenticated && user === app.state.currentUser) {
+        notify.debug('[App] handleAuthStateChange: No actual change in auth state or user object.', {
+            authenticated, userId: user?.id
+        });
+        return;
+    }
+
+    const prevAuth = appState.isAuthenticated;
     appState.isAuthenticated = newAuthState;
-    if (user) currentUser = user;
 
-    notify.info(`[App] Auth state changed -> ${appState.isAuthenticated}`);
-    renderAuthHeader();
+    // CRITICAL: Update app.state.currentUser with the user from the event
+    // This ensures all modules see the most up-to-date user information.
+    if (user !== undefined) { // `user` can be null if unauthenticated, or a user object
+        currentUser = user; // Update module-scoped variable (legacy, ensure consistency)
+        app.state.currentUser = user; // Update shared state object
+        DependencySystem.register('currentUser', user); // Re-register in DI so new consumers get the latest
+        browserAPI.setCurrentUser(user); // Update browser API's context if it holds user state
+        notify.info(`[App] app.state.currentUser updated. User ID: ${user ? user.id : 'null'}. Authenticated: ${newAuthState}`);
+    } else if (!newAuthState) {
+        // If unauthenticated and no user object explicitly provided, ensure it's cleared.
+        currentUser = null;
+        app.state.currentUser = null;
+        DependencySystem.register('currentUser', null);
+        browserAPI.setCurrentUser(null);
+        notify.info(`[App] app.state.currentUser cleared due to unauthentication.`);
+    }
+    // Note: If newAuthState is true but `user` from event is undefined,
+    // `fetchCurrentUser` (if called subsequently) should populate it.
+
+    notify.info(`[App] Auth state changed: ${prevAuth} -> ${appState.isAuthenticated}. User: ${app.state.currentUser ? app.state.currentUser.id : 'none'}`);
+    renderAuthHeader(); // Re-render header with new user state
 
     // --- DISPATCH authStateChanged on document for all listeners (e.g. ProjectListComponent) ---
     try {
         const doc = domAPI?.getDocument?.() || document;
-        doc.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated, user } }));
+        // Pass the potentially updated user object in the event detail
+        doc.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated: appState.isAuthenticated, user: app.state.currentUser } }));
     } catch (err) {
         notify.warn("[App] Failed to dispatch authStateChanged on document", { error: err });
     }
@@ -1032,25 +1058,48 @@ function handleAuthStateChange(e) {
         const sb = DependencySystem.modules.get('sidebar');
         const cm = DependencySystem.modules.get('chatManager');
         const st = DependencySystem.modules.get('storage');
-        if (appState.isAuthenticated && !prev) {
-            // Logged IN
+        const authModule = DependencySystem.modules.get('auth');
+
+        if (appState.isAuthenticated && !prevAuth) {
+            // Just Logged IN
             notify.debug('[App] User logged in -> refreshing data/UI.');
+            if (!app.state.currentUser && authModule?.getCurrentUserAsync) {
+                // If event didn't provide user or it's incomplete, try to re-fetch.
+                // This can happen if 'authStateChanged' event from auth module only signals 'authenticated:true'
+                // without full user details immediately.
+                notify.info('[App] User authenticated, but user details missing from event. Attempting fetch...');
+                try {
+                    const freshUser = await authModule.getCurrentUserAsync();
+                    if (freshUser) {
+                        currentUser = freshUser; // Update module-scoped
+                        app.state.currentUser = freshUser; // Update shared state
+                        DependencySystem.register('currentUser', freshUser);
+                        browserAPI.setCurrentUser(freshUser);
+                        renderAuthHeader(); // Re-render again if user details were fetched now
+                        notify.info(`[App] Fresh user details fetched and applied. User ID: ${freshUser.id}`);
+                    } else {
+                        notify.warn('[App] User authenticated, but failed to fetch user details.');
+                    }
+                } catch (fetchErr) {
+                    notify.error('[App] Error fetching user details after login.', { error: fetchErr });
+                }
+            }
             toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
             pd?.showProjectList?.();
             pm?.loadProjects?.('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err }));
-            handleNavigationChange();
-        } else if (!appState.isAuthenticated && prev) {
-            // Logged OUT
+            handleNavigationChange(); // Re-evaluate navigation now that user is authenticated
+        } else if (!appState.isAuthenticated && prevAuth) {
+            // Just Logged OUT
             notify.debug('[App] User logged out -> clearing data/UI.');
             toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, true);
-            pm.currentProject = null;
+            if (pm) pm.currentProject = null; // Clear current project in ProjectManager
             st?.removeItem?.('selectedProjectId');
             pd?.showLoginRequiredMessage?.();
             sb?.clear?.();
-            cm?.clear?.();
+            cm?.cleanup?.(); // Use cleanup if available, otherwise clear
             lastHandledProj = null;
             lastHandledChat = null;
-            handleNavigationChange();
+            handleNavigationChange(); // Re-evaluate navigation for logged-out state
         }
     })();
 }

@@ -89,7 +89,7 @@ export function createAuthModule({
 
   // --- Internal Auth State & Event Bus
   const AUTH_CONFIG = { VERIFICATION_INTERVAL: 300000 }; // 5 min
-  const authState = { isAuthenticated: false, username: null, isReady: false };
+  const authState = { isAuthenticated: false, username: null, userObject: null, isReady: false };
   const AuthBus = new EventTarget();
 
   // --- Cookie helper ------------------------------------------------------
@@ -204,20 +204,28 @@ export function createAuthModule({
   }
 
   // --- Auth State Broadcasting
-  function broadcastAuth(authenticated, username = null, source = 'unknown') {
+  function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
     const previousAuth = authState.isAuthenticated;
-    const changed = (authenticated !== previousAuth) || (authState.username !== username);
+    const previousUserObject = authState.userObject;
+    const newUsername = userObject?.username || null;
+
+    const changed = (authenticated !== previousAuth) || (JSON.stringify(userObject) !== JSON.stringify(previousUserObject));
+
     authState.isAuthenticated = authenticated;
-    authState.username = username;
+    authState.userObject = userObject;
+    authState.username = newUsername; // Keep username for quick access if needed
+
     if (changed) {
-      authNotify.info(`[Auth] State changed (${source}): Auth=${authenticated}, User=${username ?? 'None'}`, { group: true, source: 'broadcastAuth' });
-      AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail: { authenticated, username, timestamp: Date.now(), source } }));
+      authNotify.info(`[Auth] State changed (${source}): Auth=${authenticated}, UserObject=${userObject ? JSON.stringify(userObject) : 'None'}`, { group: true, source: 'broadcastAuth' });
+      // Dispatch the full user object
+      AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail: { authenticated, user: userObject, timestamp: Date.now(), source } }));
     }
   }
+
   async function clearTokenState(options = { source: 'unknown', isError: false }) {
     authNotify.info(`[Auth] Clearing auth state. Source: ${options.source}`, { group: true, source: 'clearTokenState' });
     logCookieState('after clear');
-    broadcastAuth(false, null, `clearTokenState:${options.source}`);
+    broadcastAuth(false, null, `clearTokenState:${options.source}`); // Pass null for userObject
   }
 
   // --- Verification & Auto-Refresh
@@ -239,24 +247,27 @@ export function createAuthModule({
         // El backend puede devolver distintos campos; consideramos autenticado si
         //  • authenticated === true            (camelCase)
         //  • is_authenticated === true         (snake_case)
-        //  • existe username / user            (string u objeto con username)
+        //  • existe un objeto 'user' con un 'id'
         // Si se detecta usuario, lo extraemos para difundirlo.
-        const usernameField =
-          response?.username ??
-          (typeof response?.user === 'string'
-             ? response.user
-             : response?.user?.username) ??
-          null;
+
+        let userObject = null;
+        if (response?.user && typeof response.user === 'object' && response.user.id) {
+          userObject = response.user;
+        } else if (response && typeof response === 'object' && response.id && response.username) {
+          // Handle cases where the response itself is the user object
+          userObject = response;
+        }
+
 
         const truthy = (v) => v === true || v === 'true' || v === 1 || v === '1';
         const isAuthenticatedResp =
           truthy(response?.authenticated) ||
           truthy(response?.is_authenticated) ||
-          Boolean(usernameField);
+          (userObject && userObject.id); // Authenticated if we have a user object with an ID
 
         if (isAuthenticatedResp) {
-          authNotify.debug('[Auth] verifyAuthState: authenticated', { group: true, source: 'verifyAuthState', username: usernameField });
-          broadcastAuth(true, usernameField, 'verify_success');
+          authNotify.debug('[Auth] verifyAuthState: authenticated', { group: true, source: 'verifyAuthState', userObject });
+          broadcastAuth(true, userObject, 'verify_success');
           return true;
         }
 
@@ -496,7 +507,7 @@ export function createAuthModule({
       authNotify.error('[Auth] Initial verification failed in init: ' + (err?.stack || err), { group: true, source: 'init' });
       await clearTokenState({ source: 'init_fail', isError: true });
       authState.isReady = true;
-      broadcastAuth(false, null, 'init_error');
+      broadcastAuth(false, null, 'init_error'); // Pass null for userObject
       throw err;
     }
   }
@@ -525,7 +536,10 @@ export function createAuthModule({
 
   const publicAuth = {
     isAuthenticated: () => authState.isAuthenticated,
-    getCurrentUser: () => authState.username,
+    // getCurrentUser should ideally return the full user object or specific fields as needed.
+    // For now, it can return the username for compatibility, but other parts of app rely on app.state.currentUser.
+    getCurrentUser: () => authState.username, // Kept for simple username access
+    getCurrentUserObject: () => authState.userObject, // New method to get the full object
     isReady: () => authState.isReady,
     init,
     login: loginUser,

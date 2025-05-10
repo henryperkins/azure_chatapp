@@ -69,6 +69,7 @@ class Settings:
         os.getenv("SENTRY_MCP_SERVER_ENABLED", "False").lower() == "true"
     )
     SENTRY_MCP_SERVER_URL = os.getenv("SENTRY_MCP_SERVER_URL", "http://localhost:8001")
+    SENTRY_SQLA_ASYNC_ENABLED = os.getenv("SENTRY_SQLA_ASYNC_ENABLED", "False").lower() == "true"
 
     # Session secret (insecure default)
     SESSION_SECRET = os.getenv("SESSION_SECRET", "dev_insecure_key")

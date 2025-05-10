@@ -8,7 +8,7 @@ with knowledge base integration handled separately in KB routes.
 import logging
 from uuid import UUID
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -20,6 +20,7 @@ from utils.response_utils import create_standard_response
 from utils.db_utils import get_all_by_condition
 from services.file_storage import get_file_storage
 from services.project_service import validate_project_access
+from services.knowledgebase_service import upload_file_to_project # Added import
 import config
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,44 @@ storage_config = {
     "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
 }
 storage = get_file_storage(storage_config)
+
+
+@router.post("", response_model=dict)
+async def handle_upload_project_file(
+    project_id: UUID,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user_and_token: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Handle file uploads for a project.
+    """
+    user, _token = current_user_and_token
+    try:
+        # Validate project access
+        await validate_project_access(project_id, user, db)
+
+        # Call the service function from knowledgebase_service.py
+        file_metadata = await upload_file_to_project(
+            project_id=project_id,
+            file=file,
+            db=db,
+            user_id=user.id, # Pass user.id
+            background_tasks=background_tasks
+        )
+        return await create_standard_response(file_metadata, "File uploaded successfully")
+    except HTTPException as he:
+        # Re-raise HTTPExceptions from service or validation
+        logger.error(f"HTTPException during file upload for project {project_id} by user {user.id}: {he.detail}")
+        raise he
+    except ValueError as ve:
+        # Catch specific ValueErrors, e.g., token limit exceeded
+        logger.error(f"ValueError during file upload for project {project_id} by user {user.id}: {str(ve)}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Unhandled error uploading file for project {project_id} by user {user.id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to upload file due to an unexpected server error.")
 
 
 @router.get("", response_model=dict)
