@@ -603,7 +603,7 @@ this.domAPI.dispatchEvent(
       waitForDepsAndDom({
         DependencySystem: this.eventHandlers?.DependencySystem ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
         domAPI          : this.domAPI,
-        domSelectors: ["#projectChatUI", "#projectChatMessages", "#projectChatInput", "#projectChatSendBtn"],
+        domSelectors: ["#projectChatUI", "#projectChatMessages", "#projectChatInput", "#projectChatSendBtn", "#projectMinimizeChatBtn"],
         timeout: 3000, // Short timeout, elements should be there quickly after tab switch
         notify: this.notify, // Use component's notify for logging
         source: 'ProjectDetailsComponent_ChatManagerInit'
@@ -614,7 +614,7 @@ this.domAPI.dispatchEvent(
           messageContainerSelector: "#projectChatMessages",
           inputSelector: "#projectChatInput",
           sendButtonSelector: "#projectChatSendBtn",
-          minimizeButtonSelector: "#minimizeChatBtn"
+          minimizeButtonSelector: "#projectMinimizeChatBtn"
         }).catch((err) => {
           this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for conversations: " + (err?.message || err), {
             group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", originalError: err, timeout: 0
