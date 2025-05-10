@@ -19,7 +19,17 @@ import { logEventToServer, maybeCapture } from './notifications-helpers.js';
  * @param {Object} opts.browserService
  * @returns {Function} apiRequest(url, opts, skipCache)
  */
-export function createApiClient({ APP_CONFIG, globalUtils, getAuthModule, browserService }) {
+export function createApiClient({
+  APP_CONFIG,
+  globalUtils,
+  getAuthModule,
+  browserService,
+  notify,
+  errorReporter         // ← new DI param
+}) {
+  /* strict no-op fall-backs                                    */
+  notify        = notify        || { debug(){}, info(){}, warn(){}, error(){} };
+  errorReporter = errorReporter || null;
   const pending = new Map();
   const BASE_URL = APP_CONFIG?.BASE_API_URL || '';
 
@@ -96,8 +106,7 @@ export function createApiClient({ APP_CONFIG, globalUtils, getAuthModule, browse
             context: 'api',
             module: 'ApiClient',
             source: 'apiRequest',
-            traceId: APP_CONFIG?.DependencySystem?.getCurrentTraceIds?.().traceId,
-            transactionId: APP_CONFIG?.DependencySystem?.generateTransactionId?.(),
+            /* trace helpers removed to avoid hidden globals */
             extra: { hasBody: !!opts.body }
           });
 
@@ -113,13 +122,10 @@ export function createApiClient({ APP_CONFIG, globalUtils, getAuthModule, browse
             else body = await clone.text();
             const headersObj = {};
             for (const [k, v] of clone.headers.entries()) headersObj[k] = v;
-            // eslint-disable-next-line no-console
-            console.log("[AUTH DEBUG] /api/auth/verify response:", body);
-            // eslint-disable-next-line no-console
-            console.log("[AUTH DEBUG] /api/auth/verify headers:", headersObj);
+            notify.debug("[AUTH DEBUG] /api/auth/verify response", { extra: body });
+            notify.debug("[AUTH DEBUG] /api/auth/verify headers",  { extra: headersObj });
           } catch (e) {
-            // eslint-disable-next-line no-console
-            console.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", e);
+            notify.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", { originalError: e });
           }
         }
 
@@ -135,14 +141,14 @@ export function createApiClient({ APP_CONFIG, globalUtils, getAuthModule, browse
             try {
               errPayload.raw = await resp.text();
             } catch (e) {
-              notify.warn("[apiClient] (fallback) Failed to read response text", e);
+              notify.warn("[apiClient] (fallback) Failed to read response text", { originalError: e });
             }
           }
           const e = new Error(errPayload.message);
           e.status = resp.status;
           e.data = errPayload;
           logEventToServer('error', errPayload.message, { status: resp.status, ...errPayload });
-          maybeCapture(notify?.errorReporter, e, { url: normUrl, method });
+          maybeCapture(errorReporter, e, { url: normUrl, method });
           throw e;
         }
 

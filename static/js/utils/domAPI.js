@@ -29,7 +29,8 @@
 export function createDomAPI({
   documentObject,
   windowObject,
-  debug = false
+  debug = false,
+  notify = null
 } = {}) {
 
   if (!documentObject || !windowObject) {
@@ -37,7 +38,11 @@ export function createDomAPI({
   }
 
   // Local debug output (disabled when debug === false)
-  const _log = (...m) => { if (debug) console.debug('[domAPI]', ...m); };
+  const _log = (...m) => {
+    if (!debug) return;
+    if (notify?.debug) notify.debug('[domAPI]', { extra: m });
+    /* no console fall-back – stay silent if notify not supplied */
+  };
 
   return {
     getElementById(id) {
