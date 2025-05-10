@@ -274,10 +274,6 @@ async def get_user_and_claims_from_refresh_token(
         raise HTTPException(status_code=401, detail="Token version mismatch. Re-login.")
     return locked_user, decoded
 
-
-router = APIRouter()
-
-
 @router.post("/register", response_model=LoginResponse)
 async def register_user(
     request: Request,
