@@ -520,6 +520,9 @@ this.domAPI.dispatchEvent(
       group: true, context: "projectDetailsComponent", module: MODULE, source: "renderProject", detail: { project }
     });
     this.state.currentProject = project;
+    // mark data ready → enable “New Chat” button
+    this.state.projectDataActuallyLoaded = true;
+    this._updateNewChatButtonState();
     this._dataReadyProjectId = project.id;
     this._dataReadyFlag = true;
     this._maybeEmitReady();

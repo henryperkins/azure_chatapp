@@ -313,6 +313,17 @@ export function createSidebar({
         track(authModule.AuthBus, 'authReady', handleGlobalAuthStateChangeForSidebar, 'Sidebar AuthReady Global Listener', 'handleGlobalAuthStateChangeForSidebar');
     }
 
+    // Refresh sidebar when projects arrive
+    eventHandlers.trackListener(
+      domAPI.getDocument(),
+      'projectsLoaded',
+      (e) => {
+        const list = e.detail?.projects ?? [];
+        if (uiRenderer?.renderProjects) uiRenderer.renderProjects(list);
+      },
+      { description: 'Sidebar projectsLoaded refresh', context: MODULE }
+    );
+
     if (el) {
       const errorHandler = safeInvoker(
         (e) => {
