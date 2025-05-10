@@ -114,7 +114,7 @@ async def list_project_files(
                         "file_type": f.file_type,
                         "file_size": f.file_size,
                         "created_at": f.created_at.isoformat(),
-                        "metadata": f.metadata or {},
+                        "metadata": f.config or {}, # Changed f.metadata to f.config
                     }
                     for f in files
                 ],

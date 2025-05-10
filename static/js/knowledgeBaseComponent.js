@@ -23,6 +23,7 @@
  * @property {Function} uiUtils.formatDate - Date formatter
  * @property {Function} uiUtils.fileIcon - File-type icon mapper
  * @property {Object} [uiUtilsInstance] - Alternate UI utils instance (fallback)
+ * @property {Object} modalManager - Modal management utility (required)
  *
  * @typedef {Object} ElRefs
  * @property {HTMLElement} [container] - Main container element
@@ -46,6 +47,7 @@
  * @property {HTMLElement} [settingsModal] - Settings modal
  * @property {HTMLElement} [settingsForm] - Settings form
  * @property {HTMLElement} [cancelSettingsBtn] - Cancel settings button
+ * @property {HTMLElement} [deleteKnowledgeBaseBtn] - Delete KB button in settings modal
  * @property {HTMLElement} [modelSelect] - Model selection dropdown
  * @property {HTMLElement} [resultModal] - Result detail modal
  * @property {HTMLElement} [resultTitle] - Result title
@@ -53,6 +55,17 @@
  * @property {HTMLElement} [resultScore] - Result score badge
  * @property {HTMLElement} [resultContent] - Result content container
  * @property {HTMLElement} [useInChatBtn] - Chat integration button
+ * @property {HTMLElement} [knowledgeBaseFilesSection] - Container for KB files list
+ * @property {HTMLElement} [knowledgeBaseFilesListContainer] - List container for KB files
+ * @property {HTMLElement} [kbGitHubAttachedRepoInfo] - Display for attached GitHub repo
+ * @property {HTMLElement} [kbAttachedRepoUrlDisplay] - Span for attached repo URL
+ * @property {HTMLElement} [kbAttachedRepoBranchDisplay] - Span for attached repo branch
+ * @property {HTMLElement} [kbDetachRepoBtn] - Button to detach GitHub repo
+ * @property {HTMLElement} [kbGitHubAttachForm] - Form section for attaching GitHub repo
+ * @property {HTMLElement} [kbGitHubRepoUrlInput] - Input for GitHub repo URL
+ * @property {HTMLElement} [kbGitHubBranchInput] - Input for GitHub branch
+ * @property {HTMLElement} [kbGitHubFilePathsTextarea] - Textarea for specific file paths
+ * @property {HTMLElement} [kbAttachRepoBtn] - Button to attach GitHub repo
  *
  * @typedef {Object} Config
  * @property {number} [maxConcurrentProcesses=3] - Max concurrent operations
@@ -61,8 +74,12 @@
  * @property {number} [maxQueryLength=500] - Maximum search query length
  *
  * @typedef {Object} FileInfo
+ * @property {string} id - File UUID
  * @property {string} filename
  * @property {string} file_type
+ * @property {number} file_size
+ * @property {string} created_at
+ * @property {Object} [config] - File configuration, including search_processing status
  *
  * @typedef {Object} SearchResult
  * @property {FileInfo} file_info
@@ -82,6 +99,9 @@
  * @property {number} stats.chunk_count
  * @property {number} stats.unprocessed_files
  * @property {number} embedding_dimension
+ * @property {string} [repo_url] - Attached GitHub repository URL
+ * @property {string} [branch] - Branch of the attached GitHub repository
+ * @property {string[]} [file_paths] - Specific file paths from the attached GitHub repository
  */
 
 /**
@@ -94,7 +114,7 @@
  * @throws {Error} If required dependencies are missing
  * @example
  * import createKnowledgeBaseComponent from './knowledgeBaseComponent';
- * const kb = createKnowledgeBaseComponent({ DependencySystem, app, projectManager, eventHandlers, uiUtils });
+ * const kb = createKnowledgeBaseComponent({ DependencySystem, app, projectManager, eventHandlers, uiUtils, modalManager });
  * kb.initialize(true);
  */
 const MODULE = "KnowledgeBaseComponent";
@@ -132,10 +152,11 @@ export function createKnowledgeBaseComponent(options = {}) {
   const projectManager = getDep("projectManager");
   const eventHandlers = getDep("eventHandlers");
   const uiUtils = getDep("uiUtils") || getDep("uiUtilsInstance");
+  const modalManager = getDep("modalManager"); // For confirmation dialog
 
-  if (!app || !projectManager || !eventHandlers || !uiUtils) {
+  if (!app || !projectManager || !eventHandlers || !uiUtils || !modalManager) {
     throw new Error(
-      "KnowledgeBaseComponent requires 'app', 'projectManager', 'eventHandlers', and 'uiUtils' dependencies.",
+      "KnowledgeBaseComponent requires 'app', 'projectManager', 'eventHandlers', 'uiUtils', and 'modalManager' dependencies.",
     );
   }
 
@@ -171,6 +192,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.apiRequest = apiRequest;
       this.validateUUID = validateUUID;
       this.config = config;
+      this.modalManager = modalManager;
 
       // --------------------------------------------------------------
       // DRY helpers for loading state and notification fallback
@@ -258,6 +280,9 @@ export function createKnowledgeBaseComponent(options = {}) {
         cancelSettingsBtn:
           elRefs.cancelSettingsBtn ||
           document.getElementById("cancelKnowledgeBaseFormBtn"),
+        deleteKnowledgeBaseBtn:
+          elRefs.deleteKnowledgeBaseBtn ||
+          document.getElementById("deleteKnowledgeBaseBtn"),
         modelSelect:
           elRefs.modelSelect ||
           document.getElementById("knowledgeBaseModelSelect"),
@@ -276,6 +301,22 @@ export function createKnowledgeBaseComponent(options = {}) {
           document.getElementById("knowledgeResultContent"),
         useInChatBtn:
           elRefs.useInChatBtn || document.getElementById("useInChatBtn"),
+        knowledgeBaseFilesSection:
+          elRefs.knowledgeBaseFilesSection ||
+          document.getElementById("knowledgeBaseFilesSection"),
+        knowledgeBaseFilesListContainer:
+          elRefs.knowledgeBaseFilesListContainer ||
+          document.getElementById("knowledgeBaseFilesListContainer"),
+        // GitHub Integration Elements
+        kbGitHubAttachedRepoInfo: elRefs.kbGitHubAttachedRepoInfo || document.getElementById("kbGitHubAttachedRepoInfo"),
+        kbAttachedRepoUrlDisplay: elRefs.kbAttachedRepoUrlDisplay || document.getElementById("kbAttachedRepoUrlDisplay"),
+        kbAttachedRepoBranchDisplay: elRefs.kbAttachedRepoBranchDisplay || document.getElementById("kbAttachedRepoBranchDisplay"),
+        kbDetachRepoBtn: elRefs.kbDetachRepoBtn || document.getElementById("kbDetachRepoBtn"),
+        kbGitHubAttachForm: elRefs.kbGitHubAttachForm || document.getElementById("kbGitHubAttachForm"),
+        kbGitHubRepoUrlInput: elRefs.kbGitHubRepoUrlInput || document.getElementById("kbGitHubRepoUrlInput"),
+        kbGitHubBranchInput: elRefs.kbGitHubBranchInput || document.getElementById("kbGitHubBranchInput"),
+        kbGitHubFilePathsTextarea: elRefs.kbGitHubFilePathsTextarea || document.getElementById("kbGitHubFilePathsTextarea"),
+        kbAttachRepoBtn: elRefs.kbAttachRepoBtn || document.getElementById("kbAttachRepoBtn"),
       };
 
       // --------------------------------------------------------------
@@ -332,6 +373,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (this.state.isInitialized && !isVisible) {
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
+        this.elements.knowledgeBaseFilesSection?.classList.add("hidden"); // Hide files section too
         return;
       }
 
@@ -382,6 +424,8 @@ export function createKnowledgeBaseComponent(options = {}) {
       } else {
         this.elements.activeSection?.classList.add("hidden");
         this.elements.inactiveSection?.classList.add("hidden");
+        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+
 
         // Always emit the rendered event, even if we don't have data
         if (projectId) {
@@ -430,7 +474,10 @@ export function createKnowledgeBaseComponent(options = {}) {
         if (pid) this.reprocessFiles(pid);
       });
       addListener(this.elements.setupButton, "click", () => this._showKnowledgeBaseModal());
+      addListener(this.elements.settingsButton, "click", () => this._showKnowledgeBaseModal());
       addListener(this.elements.settingsForm, "submit", (e) => this._handleKnowledgeBaseFormSubmit(e));
+      addListener(this.elements.cancelSettingsBtn, "click", () => this._hideKnowledgeBaseModal());
+      addListener(this.elements.deleteKnowledgeBaseBtn, "click", () => this._handleDeleteKnowledgeBase());
       addListener(this.elements.modelSelect, "change", () => this._validateSelectedModelDimensions());
       addListener(this.elements.resultModal, "keydown", (e) => {
         if (e.key === "Escape") this._hideResultDetailModal();
@@ -438,6 +485,9 @@ export function createKnowledgeBaseComponent(options = {}) {
       addListener(document, "authStateChanged", (e) => {
         this._handleAuthStateChange(e.detail?.authenticated);
       });
+      // GitHub integration listeners
+      addListener(this.elements.kbAttachRepoBtn, "click", () => this._handleAttachGitHubRepo());
+      addListener(this.elements.kbDetachRepoBtn, "click", () => this._handleDetachGitHubRepo());
     }
 
     /**
@@ -490,6 +540,8 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       if (!kbData) {
         this._showInactiveState();
+        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+
 
         // Always emit rendered event even if no KB data
         if (projectId) {
@@ -518,11 +570,14 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       try {
         if (kbData.is_active !== false && kbData.id) {
-          // Don't await this call - it's not critical to load health info before continuing
-          // This allows the rendering to complete faster
           this._loadKnowledgeBaseHealth(kbData.id)
             .catch(() => this._notify("warning", "Failed to load KB health"));
+          this._loadKnowledgeBaseFiles(pid, kbData.id); // Load files if KB is active
+        } else {
+            this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+            this._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } }); // Clear list if not active
         }
+
 
         this._updateStatusAlerts(kbData);
         this._updateUploadButtonsState();
@@ -594,6 +649,8 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.state.knowledgeBase = null;
       this.elements.activeSection?.classList.add("hidden");
       this.elements.inactiveSection?.classList.remove("hidden");
+      this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+      this._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } }); // Clear list
       this._updateStatusIndicator(false);
       this._showStatusAlert("Knowledge Base needed. Click 'Setup'.", "info");
       this._updateUploadButtonsState();
@@ -964,7 +1021,7 @@ export function createKnowledgeBaseComponent(options = {}) {
         this._showProcessingState();
         const resp = await this.apiRequest(
           `/api/projects/${projectId}/knowledge-base/reindex`,
-          { method: "POST", body: { force_reindex: true } },
+          { method: "POST", body: { force: true } },
         );
         if (resp.success) {
           this._notify("success", "Files queued for reprocessing");
@@ -976,11 +1033,11 @@ export function createKnowledgeBaseComponent(options = {}) {
             this.renderKnowledgeBaseInfo(project?.knowledge_base);
           } else if (this.state.knowledgeBase?.id) {
             await this._loadKnowledgeBaseHealth(this.state.knowledgeBase.id);
+            await this._loadKnowledgeBaseFiles(projectId, this.state.knowledgeBase.id);
           }
         }
       } catch {
         this._notify('error', "Failed to reprocess files");
-        this._notify("error", "Failed to reprocess files");
       } finally {
         this._hideProcessingState();
       }
@@ -1006,6 +1063,11 @@ export function createKnowledgeBaseComponent(options = {}) {
         description: data.get("description") || null,
         embedding_model: data.get("embedding_model"),
       };
+
+      if (!this.state.knowledgeBase?.id) {
+        payload.process_existing_files = form.elements["process_all_files"]?.checked || false;
+      }
+
 
       if (!payload.name?.trim()) {
         this._notify("error", "Knowledge Base name is required.");
@@ -1036,35 +1098,86 @@ export function createKnowledgeBaseComponent(options = {}) {
      */
     async _submitKnowledgeBaseForm(projectId, payload) {
       try {
-        const isUpdating = !!this.state.knowledgeBase?.id;
-        const method = isUpdating ? "PUT" : "POST";
+        const kbId = this.state.knowledgeBase?.id;
+        const isUpdating = !!kbId;
+        const method = isUpdating ? "PATCH" : "POST";
         const url = isUpdating
-          ? `/api/knowledge-bases/${this.state.knowledgeBase.id}`
+          ? `/api/projects/${projectId}/knowledge-bases/${kbId}`
           : `/api/projects/${projectId}/knowledge-bases`;
 
         const resp = await this.apiRequest(url, { method, body: payload });
-        if (resp.data?.id || resp.success) {
+
+        const responseData = isUpdating ? resp.data : (resp.data?.knowledge_base || resp.data);
+
+        if (responseData?.id || resp.success) {
           this._hideKnowledgeBaseModal();
           this._notify("success", "Knowledge Base settings saved.");
 
           if (this.projectManager.loadProjectDetails) {
-            await this.projectManager.loadProjectDetails(projectId);
+            const project = await this.projectManager.loadProjectDetails(projectId);
+            this.renderKnowledgeBaseInfo(project?.knowledge_base, projectId);
           } else {
             this.renderKnowledgeBaseInfo({
               ...this.state.knowledgeBase,
-              ...payload,
-            });
+              ...responseData,
+            }, projectId);
           }
         } else {
           throw new Error(resp.message || "Invalid response from server");
         }
       } catch (err) {
-        this._notify('error', `Failed to save settings: ${err.message}`, { source: '_submitKnowledgeBaseForm', originalError: err });
-        // The second notify call seems redundant if the first one already captures the error.
-        // If it's for a different purpose, it should be clarified. For now, I'll assume it's a duplicate.
-        // this._notify("error", `Failed to save settings: ${err.message}`);
+        this._notify('error', `Failed to save settings: ${err.message || 'Unknown error'}`, { source: '_submitKnowledgeBaseForm', originalError: err });
       }
     }
+
+    /**
+     * Handle deleting the knowledge base
+     * @private
+     */
+    async _handleDeleteKnowledgeBase() {
+        const projectId = this._getCurrentProjectId();
+        const kbId = this.state.knowledgeBase?.id;
+
+        if (!projectId || !kbId) {
+            this._notify("error", "Cannot delete: Project or Knowledge Base ID missing.");
+            return;
+        }
+
+        const confirmed = await this.modalManager.confirmAction(
+            "Delete Knowledge Base?",
+            "Are you sure you want to permanently delete this knowledge base? This action cannot be undone."
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        const deleteButton = this.elements.deleteKnowledgeBaseBtn;
+        this._setButtonLoading(deleteButton, true, "Deleting...");
+
+        try {
+            const resp = await this.apiRequest(
+                `/api/projects/${projectId}/knowledge-bases/${kbId}`,
+                { method: "DELETE" }
+            );
+
+            if (resp.success || resp.data?.deleted_id) {
+                this._notify("success", "Knowledge Base deleted successfully.");
+                this._hideKnowledgeBaseModal();
+                this._showInactiveState();
+                if (this.projectManager.loadProjectDetails) {
+                    await this.projectManager.loadProjectDetails(projectId);
+                }
+            } else {
+                throw new Error(resp.message || "Failed to delete knowledge base.");
+            }
+        } catch (err) {
+            this._notify('error', `Failed to delete Knowledge Base: ${err.message || 'Unknown error'}`, { source: '_handleDeleteKnowledgeBase', originalError: err });
+        } finally {
+            this._setButtonLoading(deleteButton, false);
+        }
+    }
+
 
     /**
      * Show the settings modal
@@ -1077,23 +1190,71 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      if (this.elements.settingsForm) {
-        this.elements.settingsForm.reset();
+      const form = this.elements.settingsForm;
+      if (form) {
+        form.reset();
+        const kbIdInput = form.elements["knowledge_base_id"];
+        if (kbIdInput) {
+            kbIdInput.value = this.state.knowledgeBase?.id || "";
+        }
       }
+
       this._updateModelSelection(
         this.state.knowledgeBase?.embedding_model || null,
       );
 
-      if (this.state.knowledgeBase) {
+      const deleteBtn = this.elements.deleteKnowledgeBaseBtn;
+      const { kbGitHubAttachedRepoInfo, kbAttachedRepoUrlDisplay, kbAttachedRepoBranchDisplay, kbDetachRepoBtn, kbGitHubAttachForm, kbGitHubRepoUrlInput, kbGitHubBranchInput, kbGitHubFilePathsTextarea } = this.elements;
+
+
+      if (this.state.knowledgeBase && this.state.knowledgeBase.id) {
         const kb = this.state.knowledgeBase;
-        const form = this.elements.settingsForm;
-        form.elements["name"].value = kb.name || "";
-        form.elements["description"].value = kb.description || "";
+        if (form) {
+            form.elements["name"].value = kb.name || "";
+            form.elements["description"].value = kb.description || "";
+            const processAllFilesCheckbox = form.elements["process_all_files"];
+            if (processAllFilesCheckbox) processAllFilesCheckbox.checked = false;
+
+            const autoEnableCheckbox = form.elements["auto_enable"];
+            if (autoEnableCheckbox) autoEnableCheckbox.checked = true;
+        }
+        if (deleteBtn) deleteBtn.classList.remove("hidden");
+
+        // GitHub section update
+        if (kb.repo_url) {
+            if (kbGitHubAttachedRepoInfo) kbGitHubAttachedRepoInfo.classList.remove("hidden");
+            if (kbAttachedRepoUrlDisplay) kbAttachedRepoUrlDisplay.textContent = kb.repo_url;
+            if (kbAttachedRepoBranchDisplay) kbAttachedRepoBranchDisplay.textContent = kb.branch || 'main';
+            if (kbGitHubAttachForm) kbGitHubAttachForm.classList.add("hidden");
+        } else {
+            if (kbGitHubAttachedRepoInfo) kbGitHubAttachedRepoInfo.classList.add("hidden");
+            if (kbGitHubAttachForm) kbGitHubAttachForm.classList.remove("hidden");
+            if (kbGitHubRepoUrlInput) kbGitHubRepoUrlInput.value = "";
+            if (kbGitHubBranchInput) kbGitHubBranchInput.value = "main";
+            if (kbGitHubFilePathsTextarea) kbGitHubFilePathsTextarea.value = "";
+        }
+
+      } else {
+        if (form) {
+            const processAllFilesCheckbox = form.elements["process_all_files"];
+            if (processAllFilesCheckbox) processAllFilesCheckbox.checked = true;
+
+            const autoEnableCheckbox = form.elements["auto_enable"];
+            if (autoEnableCheckbox) autoEnableCheckbox.checked = true;
+        }
+        if (deleteBtn) deleteBtn.classList.add("hidden");
+        // GitHub section for new KB
+        if (kbGitHubAttachedRepoInfo) kbGitHubAttachedRepoInfo.classList.add("hidden");
+        if (kbGitHubAttachForm) kbGitHubAttachForm.classList.remove("hidden");
+        if (kbGitHubRepoUrlInput) kbGitHubRepoUrlInput.value = "";
+        if (kbGitHubBranchInput) kbGitHubBranchInput.value = "main";
+        if (kbGitHubFilePathsTextarea) kbGitHubFilePathsTextarea.value = "";
       }
 
+
       const pid = this._getCurrentProjectId();
-      if (pid && this.elements.settingsForm) {
-        this.elements.settingsForm.dataset.projectId = pid;
+      if (pid && form) {
+        form.dataset.projectId = pid;
       }
 
       modal.showModal();
@@ -1120,14 +1281,61 @@ export function createKnowledgeBaseComponent(options = {}) {
     async _loadKnowledgeBaseHealth(kbId) {
       if (!kbId || !this.validateUUID(kbId)) return null;
       try {
-        const resp = await this.apiRequest(
-          `/api/knowledge-bases/${kbId}/health`,
-          { method: "GET" },
-          false,
+        const projectId = this._getCurrentProjectId();
+        if (!projectId) {
+            this._notify('warning', "Project ID not found for KB health check.");
+            return null;
+        }
+        const healthResp = await this.apiRequest(
+            `/api/projects/${projectId}/knowledge-bases/status?detailed=true`,
+            { method: "GET"},
+            false
         );
-        return resp?.data || null;
-      } catch {
-        this._notify('error', "Could not verify knowledge base health");
+
+        if (healthResp?.data) {
+            const { kbNameDisplay, kbModelDisplay, knowledgeFileCount, knowledgeChunkCount, knowledgeFileSize } = this.elements;
+
+            if (kbNameDisplay && healthResp.data.name) kbNameDisplay.textContent = healthResp.data.name;
+            if (kbModelDisplay && healthResp.data.embedding_model) kbModelDisplay.textContent = healthResp.data.embedding_model;
+
+            if (knowledgeFileCount && healthResp.data.files?.total_files !== undefined) {
+                knowledgeFileCount.textContent = healthResp.data.files.total_files;
+            }
+            if (knowledgeChunkCount && healthResp.data.vector_stats?.total_vectors !== undefined) {
+                knowledgeChunkCount.textContent = healthResp.data.vector_stats.total_vectors;
+            }
+             let totalSize = 0;
+             if (healthResp.data.files?.files_details) { // Assuming files_details is an array of file objects with file_size
+                 healthResp.data.files.files_details.forEach(file => totalSize += (file.file_size || 0));
+             } else if (this.state.knowledgeBase?.stats?.total_size_bytes) { // Fallback to potentially existing stat
+                 totalSize = this.state.knowledgeBase.stats.total_size_bytes;
+             }
+
+             if (knowledgeFileSize) {
+                knowledgeFileSize.textContent = this.formatBytes(totalSize);
+             }
+
+
+            if (this.state.knowledgeBase) {
+                this.state.knowledgeBase.name = healthResp.data.name || this.state.knowledgeBase.name;
+                this.state.knowledgeBase.embedding_model = healthResp.data.embedding_model || this.state.knowledgeBase.embedding_model;
+                if (healthResp.data.files) {
+                    this.state.knowledgeBase.stats = {
+                        ...this.state.knowledgeBase.stats,
+                        file_count: healthResp.data.files.total_files || 0,
+                        unprocessed_files: healthResp.data.files.pending_files || 0,
+                        // total_size_bytes: totalSize, // Store raw bytes if needed elsewhere
+                    };
+                }
+                if (healthResp.data.vector_stats) {
+                     this.state.knowledgeBase.stats.chunk_count = healthResp.data.vector_stats.total_vectors || 0;
+                }
+                this._updateStatusAlerts(this.state.knowledgeBase);
+            }
+        }
+        return healthResp?.data || null;
+      } catch(err) {
+        this._notify('error', "Could not verify knowledge base health", { originalError: err});
         this._showStatusAlert(
           "Could not verify knowledge base health",
           "error",
@@ -1135,6 +1343,256 @@ export function createKnowledgeBaseComponent(options = {}) {
         return null;
       }
     }
+
+    /**
+     * Load and render files for the current project's knowledge base.
+     * @param {string} projectId - The ID of the current project.
+     * @param {string} kbId - The ID of the knowledge base.
+     * @private
+     */
+    async _loadKnowledgeBaseFiles(projectId, kbId) {
+        if (!projectId || !kbId) {
+            this._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
+            this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+            return;
+        }
+
+        try {
+            const response = await this.apiRequest(
+                `/api/projects/${projectId}/knowledge-bases/files-list`,
+                { method: "GET" }
+            );
+            if (response.success && response.data) {
+                this._renderKnowledgeBaseFiles(response.data);
+                this.elements.knowledgeBaseFilesSection?.classList.toggle("hidden", response.data.files.length === 0);
+            } else {
+                this._notify("error", "Failed to load knowledge base files.");
+                this._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
+                this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+            }
+        } catch (error) {
+            this._notify("error", `Error loading knowledge base files: ${error.message}`, { originalError: error });
+            this._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
+            this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+        }
+    }
+
+    /**
+     * Render the list of knowledge base files in the UI.
+     * @param {Object} filesData - Data containing the list of files and pagination info.
+     * @param {FileInfo[]} filesData.files - Array of file objects.
+     * @private
+     */
+    _renderKnowledgeBaseFiles(filesData) {
+        const container = this.elements.knowledgeBaseFilesListContainer;
+        if (!container) return;
+
+        _safeSetInnerHTML(container, "");
+
+        if (!filesData || !filesData.files || filesData.files.length === 0) {
+            _safeSetInnerHTML(container, '<p class="text-base-content/60 text-center py-4">No files currently in the Knowledge Base.</p>');
+            return;
+        }
+
+        const ul = document.createElement("ul");
+        ul.className = "space-y-2";
+
+        filesData.files.forEach(file => {
+            const li = document.createElement("li");
+            li.className = "flex items-center justify-between p-2 bg-base-200 rounded-md hover:bg-base-300 transition-colors";
+
+            const processingStatus = file.config?.search_processing?.status || 'unknown';
+            let statusBadgeClass = 'badge-ghost';
+            if (processingStatus === 'success') statusBadgeClass = 'badge-success';
+            else if (processingStatus === 'error') statusBadgeClass = 'badge-error';
+            else if (processingStatus === 'pending') statusBadgeClass = 'badge-warning';
+
+            _safeSetInnerHTML(li, `
+                <div class="flex items-center gap-3 truncate">
+                    <span class="text-xl">${this.fileIcon(file.file_type)}</span>
+                    <div class="truncate">
+                        <span class="font-medium text-sm block truncate" title="${file.filename}">${file.filename}</span>
+                        <span class="text-xs text-base-content/70">${this.formatBytes(file.file_size)}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="badge ${statusBadgeClass} badge-sm capitalize">${processingStatus}</span>
+                    <button data-file-id="${file.id}" class="btn btn-xs btn-error btn-outline kb-delete-file-btn" title="Delete file from KB">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                </div>
+            `);
+
+            const deleteBtn = li.querySelector(".kb-delete-file-btn");
+            if (deleteBtn) {
+                this.eventHandlers.trackListener(deleteBtn, "click", (e) => {
+                    e.stopPropagation();
+                    const fileId = deleteBtn.dataset.fileId;
+                    const projectId = this._getCurrentProjectId();
+                    if (projectId && fileId) {
+                        this._handleDeleteKnowledgeBaseFile(projectId, fileId, file.filename);
+                    }
+                });
+            }
+            ul.appendChild(li);
+        });
+        container.appendChild(ul);
+    }
+
+    /**
+     * Handle deletion of a single file from the knowledge base.
+     * @param {string} projectId - The ID of the current project.
+     * @param {string} fileId - The ID of the file to delete.
+     * @param {string} filename - The name of the file for confirmation message.
+     * @private
+     */
+    async _handleDeleteKnowledgeBaseFile(projectId, fileId, filename) {
+        const confirmed = await this.modalManager.confirmAction(
+            `Delete "${filename}"?`,
+            "Are you sure you want to remove this file from the Knowledge Base? This will delete its indexed data."
+        );
+
+        if (!confirmed) return;
+
+        try {
+            const response = await this.apiRequest(
+                `/api/projects/${projectId}/knowledge-bases/files/${fileId}`,
+                { method: "DELETE" }
+            );
+
+            if (response.success) {
+                this._notify("success", `File "${filename}" removed from Knowledge Base.`);
+                const kbId = this.state.knowledgeBase?.id;
+                if (kbId) {
+                    this._loadKnowledgeBaseFiles(projectId, kbId);
+                }
+                this._loadKnowledgeBaseHealth(kbId);
+                if (this.projectManager.loadProjectStats) {
+                    this.projectManager.loadProjectStats(projectId);
+                }
+            } else {
+                throw new Error(response.message || "Failed to delete file from KB.");
+            }
+        } catch (error) {
+            this._notify("error", `Error deleting file "${filename}" from KB: ${error.message}`, { originalError: error });
+        }
+    }
+
+    /**
+     * Handle attaching a GitHub repository to the knowledge base.
+     * @private
+     */
+    async _handleAttachGitHubRepo() {
+        const projectId = this._getCurrentProjectId();
+        const kbId = this.state.knowledgeBase?.id;
+
+        if (!projectId || !kbId) {
+            this._notify("error", "Project or Knowledge Base not properly initialized for GitHub attachment.");
+            return;
+        }
+
+        const repoUrl = this.elements.kbGitHubRepoUrlInput?.value.trim();
+        const branch = this.elements.kbGitHubBranchInput?.value.trim() || "main";
+        const filePathsRaw = this.elements.kbGitHubFilePathsTextarea?.value.trim();
+        const filePaths = filePathsRaw ? filePathsRaw.split('\n').map(p => p.trim()).filter(p => p) : null;
+
+        if (!repoUrl) {
+            this._notify("error", "Repository URL is required.");
+            return;
+        }
+        // Basic URL validation (can be improved)
+        try {
+            new URL(repoUrl);
+        } catch (_) {
+            this._notify("error", "Invalid Repository URL format.");
+            return;
+        }
+
+        const attachButton = this.elements.kbAttachRepoBtn;
+        this._setButtonLoading(attachButton, true, "Attaching...");
+
+        try {
+            const payload = { repo_url: repoUrl, branch };
+            if (filePaths && filePaths.length > 0) {
+                payload.file_paths = filePaths;
+            }
+
+            const response = await this.apiRequest(
+                `/api/projects/${projectId}/knowledge-bases/github/attach`,
+                { method: "POST", body: payload }
+            );
+
+            if (response.success && response.data) {
+                this._notify("success", `GitHub repository "${response.data.repo_url}" attached. ${response.data.files_processed} files are being processed.`);
+                // Update local state and UI
+                if (this.state.knowledgeBase) {
+                    this.state.knowledgeBase.repo_url = response.data.repo_url;
+                    this.state.knowledgeBase.branch = branch; // Assuming backend doesn't return branch in this specific response
+                    this.state.knowledgeBase.file_paths = filePaths; // Assuming backend doesn't return file_paths
+                }
+                this._showKnowledgeBaseModal(); // Re-render modal to show attached info
+                this._loadKnowledgeBaseFiles(projectId, kbId); // Refresh file list
+                this._loadKnowledgeBaseHealth(kbId); // Refresh stats
+            } else {
+                throw new Error(response.message || "Failed to attach GitHub repository.");
+            }
+        } catch (error) {
+            this._notify("error", `Error attaching GitHub repository: ${error.message}`, { originalError: error });
+        } finally {
+            this._setButtonLoading(attachButton, false);
+        }
+    }
+
+    /**
+     * Handle detaching a GitHub repository from the knowledge base.
+     * @private
+     */
+    async _handleDetachGitHubRepo() {
+        const projectId = this._getCurrentProjectId();
+        const kbId = this.state.knowledgeBase?.id;
+        const repoUrl = this.state.knowledgeBase?.repo_url;
+
+        if (!projectId || !kbId || !repoUrl) {
+            this._notify("error", "No repository attached or KB not initialized.");
+            return;
+        }
+
+        const confirmed = await this.modalManager.confirmAction(
+            `Detach "${repoUrl}"?`,
+            "Are you sure you want to detach this repository? Files from this repository will be removed from the Knowledge Base."
+        );
+
+        if (!confirmed) return;
+
+        const detachButton = this.elements.kbDetachRepoBtn;
+        this._setButtonLoading(detachButton, true, "Detaching...");
+
+        try {
+            const response = await this.apiRequest(
+                `/api/projects/${projectId}/knowledge-bases/github/detach`,
+                { method: "POST", body: { repo_url: repoUrl } }
+            );
+
+            if (response.success && response.data) {
+                this._notify("success", `GitHub repository "${response.data.repo_url}" detached. ${response.data.files_removed} files are being removed.`);
+                 if (this.state.knowledgeBase) {
+                    delete this.state.knowledgeBase.repo_url;
+                    delete this.state.knowledgeBase.branch;
+                    delete this.state.knowledgeBase.file_paths;
+                }
+                this._showKnowledgeBaseModal(); // Re-render modal
+                this._loadKnowledgeBaseFiles(projectId, kbId); // Refresh file list
+                this._loadKnowledgeBaseHealth(kbId); // Refresh stats
+            } else {
+                throw new Error(response.message || "Failed to detach GitHub repository.");
+            }
+        } catch (error) {
+            this._notify("error", `Error detaching GitHub repository: ${error.message}`, { originalError: error });
+        } finally {
+            this._setButtonLoading(detachButton, false);
+        }
+    }
+
 
     /**
      * Show status alert in UI
@@ -1178,8 +1636,6 @@ export function createKnowledgeBaseComponent(options = {}) {
     _showError(msg) {
       this._showStatusAlert(msg, "error");
     }
-
-    // (Removed: _showPersistentErrorBanner, now all error banners routed through notification system)
 
     /**
      * Show loading indicator for search
@@ -1267,7 +1723,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       const opt = sel.options[sel.selectedIndex];
       if (opt.disabled) {
         if (!warning) {
-          const labelDiv = parent.querySelector(".label:last-of-type");
+          const labelDiv = parent.querySelector(".label:last-of-type") || parent.querySelector("p.text-xs.text-base-content\\/70.mt-1")?.previousElementSibling;
           if (labelDiv) {
             warning = document.createElement("span");
             warning.className = "label-text-alt text-error model-error";
@@ -1286,6 +1742,37 @@ export function createKnowledgeBaseComponent(options = {}) {
         warning.textContent = "";
       }
     }
+
+    /**
+     * Update model selection dropdown
+     * @param {string|null} currentModel
+     * @private
+     */
+    _updateModelSelection(currentModel) {
+        const selectEl = this.elements.modelSelect || document.getElementById("embeddingModelSelect");
+        if (!selectEl) return;
+
+        if (currentModel) {
+            let modelFound = false;
+            for (let i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].value === currentModel) {
+                    selectEl.selectedIndex = i;
+                    modelFound = true;
+                    break;
+                }
+            }
+            if (!modelFound) {
+                const newOption = new Option(`${currentModel} (Current)`, currentModel, false, true);
+                selectEl.add(newOption);
+                selectEl.value = currentModel;
+                this._notify('info', `Current embedding model "${currentModel}" was not in the default list. It has been added.`, { source: '_updateModelSelection' });
+            }
+        } else {
+            selectEl.selectedIndex = 0;
+        }
+        this._validateSelectedModelDimensions();
+    }
+
 
     /**
      * Debounce helper
@@ -1324,6 +1811,10 @@ export function createKnowledgeBaseComponent(options = {}) {
         this.elements.reprocessButton,
         this.elements.setupButton,
         this.elements.kbToggle,
+        this.elements.settingsButton,
+        this.elements.deleteKnowledgeBaseBtn,
+        this.elements.kbAttachRepoBtn, // Added
+        this.elements.kbDetachRepoBtn, // Added
       ];
       items.forEach((el) => {
         if (!el) return;
