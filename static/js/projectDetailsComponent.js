@@ -173,6 +173,7 @@ export class ProjectDetailsComponent {
     await waitForDepsAndDom({
       DependencySystem: this.eventHandlers?.DependencySystem
                         ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+      domAPI          : this.domAPI,
       domSelectors : ['#projectDetailsView'],
       timeout      : 5000
     });
@@ -601,6 +602,7 @@ this.domAPI.dispatchEvent(
       // Ensure chat UI elements are ready before initializing ChatManager
       waitForDepsAndDom({
         DependencySystem: this.eventHandlers?.DependencySystem ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+        domAPI          : this.domAPI,
         domSelectors: ["#projectChatUI", "#projectChatMessages", "#projectChatInput", "#projectChatSendBtn"],
         timeout: 3000, // Short timeout, elements should be there quickly after tab switch
         notify: this.notify, // Use component's notify for logging
