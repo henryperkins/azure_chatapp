@@ -598,7 +598,8 @@ this.domAPI.dispatchEvent(
         });
       }
     }
-    if ((tabName === "conversations" || tabName === "chat") && this.chatManager?.initialize) {
+    // Initialize chatManager only for the "chat" tab
+    if (tabName === "chat" && this.chatManager?.initialize) {
       // Ensure chat UI elements are ready before initializing ChatManager
       waitForDepsAndDom({
         DependencySystem: this.eventHandlers?.DependencySystem ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
@@ -616,10 +617,10 @@ this.domAPI.dispatchEvent(
           sendButtonSelector: "#projectChatSendBtn",
           minimizeButtonSelector: "#projectMinimizeChatBtn"
         }).catch((err) => {
-          this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for conversations: " + (err?.message || err), {
+          this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for chat tab: " + (err?.message || err), {
             group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", originalError: err, timeout: 0
           });
-          this.notify.error("Unable to initialize chat manager for Conversations tab.", {
+          this.notify.error("Unable to initialize chat manager for Chat tab.", {
             group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 0
           });
         });
@@ -1110,6 +1111,9 @@ this.domAPI.dispatchEvent(
        */
       await this.projectManager.getConversation(cv.id);
 
+      // Switch to the chat tab to display the conversation
+      this.switchTab("chat");
+
       /**
        * Capture the current SPA location as a mutable, native `URL` object.
        * This gives us a safe, ergonomic API (`searchParams`, `pathname`, etc.)
@@ -1119,7 +1123,7 @@ this.domAPI.dispatchEvent(
       const url = new URL(this.router.getURL());
       url.searchParams.set("chatId", cv.id);
       this.router.navigate(url.toString());
-      this.notify.info(`[ProjectDetailsComponent] conversation ${cv.id} opened`, {
+      this.notify.info(`[ProjectDetailsComponent] conversation ${cv.id} opened and switched to chat tab`, {
         group: true,
         context: "projectDetailsComponent",
         module: MODULE,
