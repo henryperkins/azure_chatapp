@@ -558,8 +558,7 @@ class SchemaManager:
                         if constraint.name not in db_constraint_names:
                             logger.info(f"Creating check constraint: {table.name}.{constraint.name}")
                             try:
-                                from sqlalchemy.schema import CreateSchemaItem
-                                await conn.execute(CreateSchemaItem(constraint))
+                                await conn.run_sync(lambda sync_conn: constraint.create(sync_conn, checkfirst=True))
                                 logger.info(f"Successfully created check constraint: {table.name}.{constraint.name}")
                             except Exception as e:
                                 if "already exists" in str(e).lower():
