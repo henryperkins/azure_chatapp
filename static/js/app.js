@@ -205,24 +205,23 @@ DependencySystem.cleanupModuleListeners = function(moduleContext) {
   if (!eventHandlers || typeof eventHandlers.cleanupListeners !== 'function') {
     notify.error('[DependencySystem] eventHandlers.cleanupListeners is not available.', {
       source: 'cleanupModuleListeners',
-      context: 'DependencySystem'
+      context: 'DependencySystem' // This is the context for the notify call itself
     });
     return;
   }
-  if (!moduleContext || typeof moduleContext !== 'string') {
-    notify.warn('[DependencySystem] cleanupModuleListeners called without a valid moduleContext string.', {
+  if (!moduleContext || typeof moduleContext !== 'string' || moduleContext.trim() === '') {
+    notify.warn('[DependencySystem] cleanupModuleListeners called without a valid moduleContext string. Global cleanup will NOT be performed to prevent unintended side effects. Please provide a specific module context.', {
       source: 'cleanupModuleListeners',
-      context: 'DependencySystem',
+      context: 'DependencySystem', // Notify context
       extra: { providedContext: moduleContext }
     });
-    // Optionally, could call global cleanup, but the goal is targeted cleanup.
-    // eventHandlers.cleanupListeners(); // This would be global cleanup
-    return;
+    return; // Explicitly do not call global cleanup if context is invalid
   }
+  // Ensure an object with a 'context' property is passed to eventHandlers.cleanupListeners
   eventHandlers.cleanupListeners({ context: moduleContext });
-  notify.debug(`[DependencySystem] Requested cleanup for context: ${moduleContext}`, {
+  notify.debug(`[DependencySystem] Requested cleanup for module context: ${moduleContext}`, { // Changed log message slightly
     source: 'cleanupModuleListeners',
-    context: 'DependencySystem'
+    context: 'DependencySystem' // Notify context
   });
 };
 
@@ -719,15 +718,45 @@ function renderAuthHeader() {
 async function fetchCurrentUser() {
     try {
         const authModule = DependencySystem.modules.get('auth');
-        if (authModule?.getCurrentUserAsync) {
-            return await authModule.getCurrentUserAsync();
+        if (!authModule) {
+            notify.error('[App] Auth module not available in fetchCurrentUser.');
+            return null;
         }
-        if (authModule?.getCurrentUser) {
-            return authModule.getCurrentUser();
+
+        // Priority 1: Use the dedicated async fetchCurrentUser from auth.js
+        if (authModule.fetchCurrentUser && typeof authModule.fetchCurrentUser === 'function') {
+            const userObj = await authModule.fetchCurrentUser();
+            if (userObj && typeof userObj === 'object' && userObj.id) {
+                notify.debug('[App] fetchCurrentUser: Successfully fetched user object via authModule.fetchCurrentUser.', { userObj });
+                return userObj;
+            }
+            notify.warn('[App] fetchCurrentUser (from authModule.fetchCurrentUser) did not return a valid user object with ID.', { userObj });
         }
+
+        // Priority 2: Fallback to getCurrentUserObject if fetchCurrentUser wasn't available or didn't yield a result
+        if (authModule.getCurrentUserObject && typeof authModule.getCurrentUserObject === 'function') {
+            const userObjFromGetter = authModule.getCurrentUserObject();
+            if (userObjFromGetter && typeof userObjFromGetter === 'object' && userObjFromGetter.id) {
+                notify.debug('[App] fetchCurrentUser: Successfully fetched user object via authModule.getCurrentUserObject.', { userObjFromGetter });
+                return userObjFromGetter;
+            }
+            notify.warn('[App] fetchCurrentUser (from authModule.getCurrentUserObject) did not return a valid user object with ID.', { userObjFromGetter });
+        }
+        
+        // Priority 3: Check getCurrentUserAsync (if it was a previously used name for fetchCurrentUser)
+        if (authModule.getCurrentUserAsync && typeof authModule.getCurrentUserAsync === 'function') {
+            const userObjAsync = await authModule.getCurrentUserAsync();
+            if (userObjAsync && typeof userObjAsync === 'object' && userObjAsync.id) {
+                notify.debug('[App] fetchCurrentUser: Successfully fetched user object via authModule.getCurrentUserAsync.', { userObjAsync });
+                return userObjAsync;
+            }
+            notify.warn('[App] fetchCurrentUser (from authModule.getCurrentUserAsync) did not return a valid user object with ID.', { userObjAsync });
+        }
+
+        notify.error('[App] fetchCurrentUser: Could not retrieve a valid user object with ID from auth module using any available method.');
         return null;
     } catch (error) {
-        notify.error('[App] Failed to fetch current user', { error });
+        notify.error('[App] Failed to fetch current user during fetchCurrentUser execution.', { error });
         return null;
     }
 }

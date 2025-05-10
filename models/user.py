@@ -48,10 +48,10 @@ class User(Base):
         String(50), nullable=False, default="user"
     )  # e.g. "admin", "user"
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP")
+        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=False),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -59,12 +59,12 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Add field for tracking last login time
-    last_login: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=True
+    last_login: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP"), nullable=True
     )
     # Add field for tracking last user activity (fixes login 500 error)
-    last_activity: Mapped[datetime] = mapped_column(
-        TIMESTAMP, nullable=True
+    last_activity: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=False), nullable=True
     )
 
     token_version: Mapped[int] = mapped_column(
@@ -98,7 +98,7 @@ class TokenBlacklist(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     jti: Mapped[str] = mapped_column(String(36), unique=True, index=True)
-    expires: Mapped[datetime] = mapped_column(TIMESTAMP)
+    expires: Mapped[datetime] = mapped_column(TIMESTAMP(timezone=False))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     token_type: Mapped[str] = mapped_column(String(20), default="access", nullable=False, server_default="access")
     creation_reason: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)

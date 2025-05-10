@@ -42,7 +42,7 @@ from contextlib import asynccontextmanager
 import hashlib
 from pathlib import Path
 
-from sqlalchemy import inspect, text, MetaData, UniqueConstraint
+from sqlalchemy import inspect, text, MetaData, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
@@ -547,6 +547,25 @@ class SchemaManager:
                                     raise # Propagate if transaction is already broken
                                 logger.warning(f"Could not drop index {db_index_name} due to: {str(e)}. It might be in use by a constraint not explicitly named in ORM's table.indexes.")
 
+                # 5. Create missing Check Constraints
+                db_constraints_info = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).get_check_constraints(table.name)
+                )
+                db_constraint_names = {c['name'] for c in db_constraints_info}
+
+                for constraint in table.constraints:
+                    if isinstance(constraint, CheckConstraint) and constraint.name:
+                        if constraint.name not in db_constraint_names:
+                            logger.info(f"Creating check constraint: {table.name}.{constraint.name}")
+                            try:
+                                from sqlalchemy.schema import CreateSchemaItem
+                                await conn.execute(CreateSchemaItem(constraint))
+                                logger.info(f"Successfully created check constraint: {table.name}.{constraint.name}")
+                            except Exception as e:
+                                if "already exists" in str(e).lower():
+                                    logger.warning(f"Check constraint {table.name}.{constraint.name} may already exist or failed to create due to naming: {e}")
+                                else:
+                                    logger.error(f"Failed to create check constraint {table.name}.{constraint.name}: {e}")
 
             # 4. Fix foreign key constraints
             for table in Base.metadata.tables.values():
