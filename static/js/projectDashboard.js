@@ -607,31 +607,36 @@ class ProjectDashboard {
     });
 
     /* Wait until the Project List template is injected */
-    this.logger.info('[ProjectDashboard] Waiting for projectListHtmlLoaded event...');
-    await new Promise((resolve, reject) => {
-      const eventTarget = this.domAPI ? this.domAPI.getDocument() : document;
-      const timeoutId = this.browserService.setTimeout(() => {
-          this.logger.error('[ProjectDashboard] Timeout waiting for projectListHtmlLoaded event.');
-          reject(new Error('Timeout waiting for projectListHtmlLoaded'));
-      }, 10000); // 10 second timeout
+    const listViewEl = this.domAPI.getElementById('projectListView');
+    if (listViewEl && listViewEl.childElementCount > 0) {
+      this.logger.info('[ProjectDashboard] projectListHtml already present – skipping event wait.');
+    } else {
+      this.logger.info('[ProjectDashboard] Waiting for projectListHtmlLoaded event...');
+      await new Promise((resolve, reject) => {
+        const eventTarget = this.domAPI ? this.domAPI.getDocument() : document;
+        const timeoutId = this.browserService.setTimeout(() => {
+            this.logger.error('[ProjectDashboard] Timeout waiting for projectListHtmlLoaded event.');
+            reject(new Error('Timeout waiting for projectListHtmlLoaded'));
+        }, 10000); // 10 second timeout
 
-      const handler = (event) => {
-          this.browserService.clearTimeout(timeoutId);
-          if (event.detail && event.detail.success) {
-              this.logger.info('[ProjectDashboard] projectListHtmlLoaded event received successfully.');
-              resolve();
-          } else {
-              this.logger.error('[ProjectDashboard] projectListHtmlLoaded event received with failure.', { error: event.detail?.error });
-              reject(new Error(`projectListHtmlLoaded failed: ${event.detail?.error?.message || 'Unknown error'}`));
-          }
-      };
+        const handler = (event) => {
+            this.browserService.clearTimeout(timeoutId);
+            if (event.detail && event.detail.success) {
+                this.logger.info('[ProjectDashboard] projectListHtmlLoaded event received successfully.');
+                resolve();
+            } else {
+                this.logger.error('[ProjectDashboard] projectListHtmlLoaded event received with failure.', { error: event.detail?.error });
+                reject(new Error(`projectListHtmlLoaded failed: ${event.detail?.error?.message || 'Unknown error'}`));
+            }
+        };
 
-      if (this.eventHandlers && this.eventHandlers.trackListener) {
-        this.eventHandlers.trackListener(eventTarget, 'projectListHtmlLoaded', handler, { once: true, context: 'projectDashboard', description: 'Wait for projectListHtmlLoaded' });
-      } else {
-        eventTarget.addEventListener('projectListHtmlLoaded', handler, { once: true });
-      }
-    });
+        if (this.eventHandlers && this.eventHandlers.trackListener) {
+          this.eventHandlers.trackListener(eventTarget, 'projectListHtmlLoaded', handler, { once: true, context: 'projectDashboard', description: 'Wait for projectListHtmlLoaded' });
+        } else {
+          eventTarget.addEventListener('projectListHtmlLoaded', handler, { once: true });
+        }
+      });
+    }
 
     // Ensure globalUtils and waitForDepsAndDom are available
     const waitForDepsAndDom = this.globalUtils?.waitForDepsAndDom;
