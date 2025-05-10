@@ -41,6 +41,25 @@ export const isValidProjectId = rawIsValidProjectId;
 
 /* Only keep one implementation of each helper below (NO duplicates) */
 
+/* ------------------------------------------------------------------
+ *  URL / request helpers required by createApiClient & app.js
+ * ------------------------------------------------------------------*/
+
+/** True ⇢ `url` already contains a protocol or starts with ‘//’. */
+export function isAbsoluteUrl(url = '') {
+  return /^(?:[a-z]+:)?\/\//i.test(String(url));
+}
+
+/**
+ * Returns true when a GET request to `url` should NOT be deduplicated
+ * (each call is unique even if the URL string repeats).  Extend the
+ * regex list as new endpoints are discovered.
+ */
+const DEDUP_EXCLUSION_RE = /\/api\/log_notification\b|\/(sse|stream|events)\b/i;
+export function shouldSkipDedup(url = '') {
+  return DEDUP_EXCLUSION_RE.test(url);
+}
+
 // Debounce
 export function debounce(fn, wait = 250) {
   let t = null;
