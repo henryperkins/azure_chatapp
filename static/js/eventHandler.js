@@ -1,4 +1,3 @@
-/* global APP_CONFIG */
 /**
  * @module eventHandler
  * @description DI-strict, orchestrated UI event utility collection. Manages tracked event listeners
@@ -13,6 +12,7 @@
  * @param {Object} deps.domAPI - Required. DOM abstraction layer.
  * @param {Object} deps.browserService - Required. Browser abstraction (URL, storage, etc.).
  * @param {Object} deps.notify - Required. Context-aware notification utility.
+ * @param {Object} deps.APP_CONFIG - Required. Application configuration object.
  * @param {Function} [deps.navigate] - Optional navigation function override.
  * @param {Object} [deps.storage] - Optional storage abstraction override (usually from browserService).
  * @returns {Object} Event handler API { trackListener, cleanupListeners, delegate, etc. }
@@ -25,6 +25,7 @@ const MODULE = 'EventHandler';
 export function createEventHandlers({
   app, projectManager, modalManager, DependencySystem,
   domAPI, browserService, notify,
+  APP_CONFIG,
   navigate, storage
 } = {}) {
   // Permite inyectar/actualizar projectManager más tarde
@@ -35,6 +36,7 @@ export function createEventHandlers({
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
   if (!browserService) throw new Error(`[${MODULE}] browserService is required`);
   if (!notify) throw new Error(`[${MODULE}] notify utility (handlerNotify) is required`);
+  if (!APP_CONFIG) throw new Error(`[${MODULE}] APP_CONFIG is required`);
 
   // Primary notifier reference (may be replaced by setNotifier)
   let handlerNotify = notify;
@@ -359,13 +361,12 @@ export function createEventHandlers({
     try {
       // APP_CONFIG assumed to be globally available for TIMEOUTS.
       // Ideally, specific timeout values would be injected.
-      const dependencyWaitTimeout = typeof APP_CONFIG !== 'undefined' && APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
-        ? APP_CONFIG.TIMEOUTS.DEPENDENCY_WAIT
-        : 10000;
+      const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10_000;
       await waitForDepsAndDom({
         deps: ['app', 'auth', 'projectManager', 'modalManager', 'notify', 'domAPI', 'browserService'],
         domSelectors: ['body'],
         DependencySystem,
+        domAPI,
         timeout: dependencyWaitTimeout
       });
 

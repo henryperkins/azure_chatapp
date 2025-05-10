@@ -194,7 +194,8 @@ const eventHandlers = createEventHandlers({
     DependencySystem,
     domAPI,
     browserService: browserServiceInstance,
-    notify
+    notify,
+    APP_CONFIG
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
@@ -458,7 +459,7 @@ async function initializeCoreSystems() {
     try {
         notify.debug('[App] Initializing core systems...');
         // Ensure DOM is ready using shared util (also future-proofs for SSR tests)
-        await waitForDepsAndDom({ DependencySystem });
+        await waitForDepsAndDom({ DependencySystem, domAPI });
 
         // Initialize modal manager
         const modalManager = createModalManager({
@@ -738,6 +739,7 @@ async function initializeUIComponents() {
         // Ensure DOM element for ProjectList and ProjectDetailsView exists before continuing.
         await waitForDepsAndDom({
             DependencySystem,
+            domAPI,
             domSelectors: ['#projectList', '#projectDetailsView']
         });
 

@@ -25,7 +25,10 @@ export function normaliseUrl(u = '') {
   } catch { return u; }
 }
 
-export function createBrowserService({ windowObject = window } = {}) {
+export function createBrowserService({ windowObject } = {}) {
+
+  if (!windowObject)
+    throw new Error('browserService: windowObject must be injected (no global fallback)');
   if (!windowObject?.location) throw new Error('browserService: windowObject is required');
 
   function buildUrl(params = {}) {
