@@ -280,6 +280,30 @@
                 </div>
             </fieldset>
 
+            <!-- GitHub Repository Integration Section -->
+            <fieldset class="border border-base-300 rounded-box p-3 mt-6">
+                <legend class="text-sm font-medium px-1">GitHub Repository Integration</legend>
+                <div id="kbGitHubAttachedRepoInfo" class="mb-3 hidden">
+                    <p class="text-sm">Currently attached: <strong id="kbAttachedRepoUrlDisplay"></strong> (<span id="kbAttachedRepoBranchDisplay"></span>)</p>
+                    <button type="button" id="kbDetachRepoBtn" class="btn btn-xs btn-outline btn-warning mt-1">Detach Repository</button>
+                </div>
+                <div id="kbGitHubAttachForm">
+                    <div class="form-control-enhanced mb-2">
+                        <label for="kbGitHubRepoUrlInput" class="block text-xs font-medium text-base-content">Repository URL</label>
+                        <input id="kbGitHubRepoUrlInput" name="github_repo_url" type="url" placeholder="https://github.com/owner/repo" class="input input-sm input-bordered w-full" />
+                    </div>
+                    <div class="form-control-enhanced mb-2">
+                        <label for="kbGitHubBranchInput" class="block text-xs font-medium text-base-content">Branch</label>
+                        <input id="kbGitHubBranchInput" name="github_branch" type="text" value="main" class="input input-sm input-bordered w-full" />
+                    </div>
+                    <div class="form-control-enhanced mb-3">
+                        <label for="kbGitHubFilePathsTextarea" class="block text-xs font-medium text-base-content">Specific File Paths (Optional, one per line)</label>
+                        <textarea id="kbGitHubFilePathsTextarea" name="github_file_paths" rows="2" placeholder="e.g., src/main.js&#10;docs/README.md" class="textarea textarea-sm textarea-bordered w-full"></textarea>
+                    </div>
+                    <button type="button" id="kbAttachRepoBtn" class="btn btn-sm btn-primary">Attach Repository</button>
+                </div>
+            </fieldset>
+
             <!-- Processing status indicator -->
             <div id="kbProcessingStatus" class="alert alert-info shadow-xs mt-4 hidden">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -299,18 +323,26 @@
                 <span class="ml-2">Saving settings...</span>
             </div>
 
-            <div class="flex justify-end gap-2 mt-6">
-                <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
-                    <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
-                </kbd>
-                <button type="button" id="cancelKnowledgeBaseFormBtn"
-                    class="btn btn-outline">
-                    Cancel
-                </button>
-                <button type="submit" id="submitKnowledgeBaseFormBtn"
-                    class="btn btn-primary">
-                    Save Settings
-                </button>
+            <div class="flex justify-between items-center mt-6">
+                <div> <!-- Delete button on the left -->
+                    <button type="button" id="deleteKnowledgeBaseBtn"
+                        class="btn btn-error hidden"> <!-- Initially hidden -->
+                        Delete Knowledge Base
+                    </button>
+                </div>
+                <div class="flex gap-2"> <!-- Existing buttons on the right -->
+                    <kbd class="kbd-shortcut hidden md:inline-flex">
+                        <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
+                    </kbd>
+                    <button type="button" id="cancelKnowledgeBaseFormBtn"
+                        class="btn btn-outline">
+                        Cancel
+                    </button>
+                    <button type="submit" id="submitKnowledgeBaseFormBtn"
+                        class="btn btn-primary">
+                        Save Settings
+                    </button>
+                </div>
             </div>
         </form>
     </div>
