@@ -597,18 +597,31 @@ this.domAPI.dispatchEvent(
       }
     }
     if ((tabName === "conversations" || tabName === "chat") && this.chatManager?.initialize) {
-      this.chatManager.initialize({
-        projectId: this.state.currentProject?.id,
-        containerSelector: "#projectChatUI",
-        messageContainerSelector: "#projectChatMessages",
-        inputSelector: "#projectChatInput",
-        sendButtonSelector: "#projectChatSendBtn"
-      }).catch((err) => {
-        this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for conversations: " + (err?.message || err), {
-          group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", originalError: err, timeout: 0
+      // Ensure chat UI elements are ready before initializing ChatManager
+      waitForDepsAndDom({
+        DependencySystem: this.eventHandlers?.DependencySystem ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+        domSelectors: ["#projectChatUI", "#projectChatMessages", "#projectChatInput", "#projectChatSendBtn"],
+        timeout: 3000, // Short timeout, elements should be there quickly after tab switch
+        notify: this.notify, // Use component's notify for logging
+        source: 'ProjectDetailsComponent_ChatManagerInit'
+      }).then(() => {
+        this.chatManager.initialize({
+          projectId: this.state.currentProject?.id,
+          containerSelector: "#projectChatUI",
+          messageContainerSelector: "#projectChatMessages",
+          inputSelector: "#projectChatInput",
+          sendButtonSelector: "#projectChatSendBtn"
+        }).catch((err) => {
+          this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for conversations: " + (err?.message || err), {
+            group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", originalError: err, timeout: 0
+          });
+          this.notify.error("Unable to initialize chat manager for Conversations tab.", {
+            group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 0
+          });
         });
-        this.notify.error("Unable to initialize chat manager for Conversations tab.", {
-          group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 0
+      }).catch(err => {
+        this.notify.error("[ProjectDetailsComponent] Chat UI elements not ready for ChatManager init: " + (err?.message || err), {
+          group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab_WaitForChatDOM", originalError: err, timeout: 0
         });
       });
     }
