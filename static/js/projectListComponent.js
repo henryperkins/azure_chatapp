@@ -46,6 +46,8 @@
  *   projectList.initialize();
  */
 
+const MODULE_CONTEXT = "ProjectListComponent";
+
 export class ProjectListComponent {
     /**
      * @param {Object} deps
@@ -160,7 +162,7 @@ export class ProjectListComponent {
     }
 
     /** Initialize component once DOM has #projectList */
-    initialize() {
+    async initialize() { // Changed to async
         // --- DI-logged initialization ---
         if (this.appConfig && this.appConfig.DEBUG) {
             this.notify.info('[ProjectListComponent] INITIALIZE called', {
@@ -215,6 +217,34 @@ export class ProjectListComponent {
             this.notify.info('[ProjectListComponent] gridElement found and initialized.', { group: true, context: 'projectListComponent' });
         }
 
+        // Wait for critical internal/sibling DOM elements to be ready
+        // These are elements ProjectListComponent itself needs to bind to directly.
+        // Assumes this.element (#projectList) is already confirmed by app.js's waitForDepsAndDom
+        const criticalSelectors = ['#projectFilterTabs', '#projectListCreateBtn', '#emptyStateCreateBtn', '#loginButton', '#retryButton'];
+        // Filter out selectors for elements that might not always be present (e.g., conditional UI)
+        // For now, let's assume #projectFilterTabs and #projectListCreateBtn are essential for basic operation.
+        // Others like #emptyStateCreateBtn are conditional.
+        // A more robust solution might involve checking for their containers if the elements themselves are dynamic.
+        const essentialSelectors = ['#projectFilterTabs', '#projectListCreateBtn'];
+
+        try {
+            await this.globalUtils.waitForDepsAndDom({
+                DependencySystem: this.app?.DependencySystem || this.eventHandlers?.DependencySystem,
+                domSelectors: essentialSelectors,
+                timeout: 10000, // Increased timeout
+                notify: this.notify,
+                domAPI: this.domAPI, // Pass the injected domAPI
+                source: 'ProjectListComponent_InternalDOMWait'
+            });
+            this.notify.info('[ProjectListComponent] Essential internal DOM elements ready.', { group: true, context: 'projectListComponent', selectors: essentialSelectors });
+        } catch (err) {
+            this.notify.error('[ProjectListComponent] Timeout or error waiting for essential internal DOM elements. Component initialization will halt.', {
+                group: true, context: 'projectListComponent', originalError: err, selectors: essentialSelectors
+            });
+            // If essential selectors are not found, the component cannot initialize correctly.
+            throw err; // Re-throw the error to stop initialization.
+        }
+
         this._bindEventListeners();
         this._bindCreateProjectButtons();
 
@@ -252,7 +282,7 @@ export class ProjectListComponent {
             doc,
             "projectsLoaded",
             projectsLoadedHandler,
-            { description: "ProjectList: projectsLoaded" }
+            { description: "ProjectList: projectsLoaded", context: MODULE_CONTEXT }
         );
 
         // Fix: Attach the click handler to the grid, not #projectList root
@@ -260,20 +290,20 @@ export class ProjectListComponent {
             this.gridElement,
             "click",
             (e) => this._handleCardClick(e),
-            { description: "ProjectList: Card Click" }
+            { description: "ProjectList: Card Click", context: MODULE_CONTEXT }
         );
 
         this.eventHandlers.trackListener(
             doc,
             "projectCreated",
             (e) => this._handleProjectCreated(e.detail),
-            { description: "ProjectList: projectCreated" }
+            { description: "ProjectList: projectCreated", context: MODULE_CONTEXT }
         );
         this.eventHandlers.trackListener(
             doc,
             "projectUpdated",
             (e) => this._handleProjectUpdated(e.detail),
-            { description: "ProjectList: projectUpdated" }
+            { description: "ProjectList: projectUpdated", context: MODULE_CONTEXT }
         );
 
         this.eventHandlers.trackListener(
@@ -284,7 +314,7 @@ export class ProjectListComponent {
                     this._loadProjects();
                 }
             },
-            { description: "ProjectList: authStateChanged" }
+            { description: "ProjectList: authStateChanged", context: MODULE_CONTEXT }
         );
 
         this._bindFilterEvents();
@@ -317,7 +347,7 @@ export class ProjectListComponent {
         if (!filterValue) return;
         const clickHandler = () => this._setFilter(filterValue);
         this.eventHandlers.trackListener(tab, "click", clickHandler, {
-            description: `ProjectList: Filter tab click (${filterValue})`
+            description: `ProjectList: Filter tab click (${filterValue})`, context: MODULE_CONTEXT
         });
         // Accessibility: handle keydown on individual tab for activation (Enter, Space)
         this.eventHandlers.trackListener(tab, "keydown", (event) => {
@@ -327,7 +357,7 @@ export class ProjectListComponent {
                 tab.focus();
             }
         }, {
-            description: `ProjectList: Tab keydown (Enter/Space) activation (${filterValue})`
+            description: `ProjectList: Tab keydown (Enter/Space) activation (${filterValue})`, context: MODULE_CONTEXT
         });
     }
 
@@ -358,7 +388,7 @@ export class ProjectListComponent {
                 tabs[tabs.length - 1].focus();
             }
         }, {
-            description: "ProjectList: ARIA tablist keyboard navigation"
+            description: "ProjectList: ARIA tablist keyboard navigation", context: MODULE_CONTEXT
         });
     }
 
@@ -670,7 +700,7 @@ export class ProjectListComponent {
             if (!btn) return;
             const handler = () => this._openNewProjectModal();
             this.eventHandlers.trackListener(btn, "click", handler, {
-                description: `Open New Project Modal (${id})`
+                description: `Open New Project Modal (${id})`, context: MODULE_CONTEXT
             });
         });
     }
@@ -799,7 +829,7 @@ export class ProjectListComponent {
                 createBtn,
                 "click",
                 () => this._openNewProjectModal(),
-                { description: "EmptyState: Create Project" }
+                { description: "EmptyState: Create Project", context: MODULE_CONTEXT }
             );
         }
     }
@@ -828,7 +858,7 @@ export class ProjectListComponent {
                 e.preventDefault();
                 const doc = docAPI?.getDocument?.() || document;
                 doc.dispatchEvent(new CustomEvent("requestLogin"));
-            });
+            }, { description: "ProjectList: Login Button", context: MODULE_CONTEXT });
         }
     }
 
@@ -863,7 +893,7 @@ export class ProjectListComponent {
                 retryBtn,
                 "click",
                 () => this._loadProjects(),
-                { description: "ProjectList: Retry Load Projects" }
+                { description: "ProjectList: Retry Load Projects", context: MODULE_CONTEXT }
             );
         }
     }
@@ -1063,6 +1093,18 @@ export class ProjectListComponent {
             showDescription: true,
             showDate: true
         };
+    }
+
+    destroy() {
+        this.notify.info('[ProjectListComponent] destroy() called', { group: true, context: 'projectListComponent', module: 'ProjectListComponent', source: 'destroy' });
+        if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
+            this.eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+            this.notify.debug(`[ProjectListComponent] Called eventHandlers.cleanupListeners for context: ${MODULE_CONTEXT}`, { source: 'destroy' });
+        } else {
+            this.notify.warn('[ProjectListComponent] eventHandlers.cleanupListeners not available. Listeners may not be cleaned up.', { source: 'destroy' });
+        }
+        this.state.initialized = false;
+        // Optionally, clear other state or DOM references if necessary
     }
 }
 /* eslint-disable no-undef */

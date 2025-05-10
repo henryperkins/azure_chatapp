@@ -247,11 +247,37 @@ export function createKnowledgeBaseManager(ctx) {
   /**
    * Show the settings modal
    */
-  function showKnowledgeBaseModal() {
+  async function showKnowledgeBaseModal() { // Made async
     const modal = ctx.elements.settingsModal;
     if (!modal || typeof modal.showModal !== "function") {
       notify.error("Settings modal not found or invalid.", { source: "showKnowledgeBaseModal" });
       return;
+    }
+
+    const projectId = ctx._getCurrentProjectId(); // Get projectId early
+    if (!projectId) {
+        notify.error("Project ID not available. Cannot show KB settings.", { source: "showKnowledgeBaseModal" });
+        return;
+    }
+
+    // Attempt to refresh KB state before populating the form
+    try {
+        if (ctx.projectManager.loadProjectDetails) {
+            notify.info("Refreshing project details before showing KB modal...", { source: "showKnowledgeBaseModal" });
+            const projectDetails = await ctx.projectManager.loadProjectDetails(projectId);
+            // The projectDetailsLoaded event (and sub-events like projectKnowledgeBaseLoaded)
+            // should trigger KnowledgeBaseComponent.renderKnowledgeBaseInfo, which updates ctx.state.knowledgeBase.
+            // For robustness, we can also try a direct update if the event system is slow or has issues.
+            if (projectDetails && typeof projectDetails.knowledge_base !== 'undefined') {
+                 ctx.state.knowledgeBase = projectDetails.knowledge_base; // Direct update
+                 notify.info("KB state directly updated from refreshed project details.", { source: "showKnowledgeBaseModal", kbExists: !!projectDetails.knowledge_base });
+            } else if (projectDetails === null) { // Project load failed
+                 notify.warn("Project details failed to load; KB state might be inaccurate.", { source: "showKnowledgeBaseModal" });
+            }
+        }
+    } catch (err) {
+        notify.error("Failed to refresh project details before showing KB modal. State may be stale.", { source: "showKnowledgeBaseModal", originalError: err });
+        // Continue with potentially stale state, or decide to block/warn user
     }
 
     const form = ctx.elements.settingsForm;

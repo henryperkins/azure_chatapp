@@ -881,9 +881,32 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
       const titleSelector = options.titleSelector || "#chatTitle";
       const minimizeButtonSelector = options.minimizeButtonSelector || "#minimizeChatBtn";
 
+      const selectorsToValidate = {
+        container: containerSelector,
+        messageContainer: messageContainerSelector,
+        inputField: inputSelector,
+        sendButton: sendButtonSelector,
+        titleElement: titleSelector,
+        minimizeButton: minimizeButtonSelector // Optional, but good to check if selector provided
+      };
+
+      for (const [key, selector] of Object.entries(selectorsToValidate)) {
+        if (selector.startsWith("#")) { // Only validate IDs for uniqueness
+          const elements = this.domAPI.querySelectorAll(selector);
+          if (elements.length > 1) {
+            const errorMsg = `Duplicate DOM elements found for selector '${selector}' (key: ${key}). ChatManager requires unique IDs for its core elements.`;
+            chatNotify.error(errorMsg, { source: '_setupUIElements', critical: true, extra: { selector, count: elements.length } });
+            throw new Error(errorMsg);
+          }
+        }
+      }
+
       // Container
       this.container = this.domAPI.querySelector(containerSelector);
       if (!this.container) {
+        // If querySelector fails, it implies the element doesn't exist, not necessarily a duplicate.
+        // The original logic for creating elements if not found is fine.
+        // The check above handles cases where an ID selector *does* find multiple elements.
         this.container = this.domAPI.createElement("div");
         this.container.id = containerSelector.replace('#', '');
         this.domAPI.appendChild(this.domAPI.querySelector('body') || {}, this.container);

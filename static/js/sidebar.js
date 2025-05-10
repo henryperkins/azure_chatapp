@@ -52,7 +52,7 @@ export function createSidebar({
   let backdrop = null;
   let pinned = false;
   let visible = false;
-  let trackedEvents = [];
+  let trackedEvents = []; // This might become less critical if context cleanup is robust
 
   // For inline auth form
   let isRegisterMode = false;
@@ -106,10 +106,25 @@ export function createSidebar({
   }
 
   function destroy() {
-    trackedEvents.forEach(evt => {
-      eventHandlers.cleanupListeners?.(evt.element, evt.type, evt.description);
-    });
-    trackedEvents = [];
+    notify.info('[sidebar] destroy() called', { group: true, context: 'sidebar', module: MODULE, source: 'destroy' });
+    // Use context-specific cleanup
+    if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
+        DependencySystem.cleanupModuleListeners(MODULE);
+        notify.debug(`[sidebar] Called DependencySystem.cleanupModuleListeners for context: ${MODULE}`, { source: 'destroy' });
+    } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+        // Fallback if DependencySystem helper isn't available (though it should be)
+        eventHandlers.cleanupListeners({ context: MODULE });
+        notify.debug(`[sidebar] Called eventHandlers.cleanupListeners for context: ${MODULE}`, { source: 'destroy' });
+    } else {
+        notify.warn('[sidebar] cleanupListeners not available on eventHandlers or DependencySystem.', { source: 'destroy' });
+    }
+    // Cleanup listeners specifically for 'inlineAuth' context if any were set up by this module directly
+    if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+        eventHandlers.cleanupListeners({ context: 'inlineAuth' });
+         notify.debug(`[sidebar] Called eventHandlers.cleanupListeners for context: inlineAuth`, { source: 'destroy' });
+    }
+
+    trackedEvents = []; // Clear manual tracking as context cleanup should handle it.
     if (backdrop) { backdrop.remove(); backdrop = null; }
     pinned = false; visible = false;
     notify.info('[sidebar] destroyed', { group: true, context: 'sidebar', module: MODULE, source: 'destroy' });
@@ -125,8 +140,8 @@ export function createSidebar({
     sidebarAuthFormContainerEl = domAPI.getElementById('sidebarAuthFormContainer');
     sidebarAuthFormTitleEl = domAPI.getElementById('sidebarAuthFormTitle');
     sidebarAuthFormEl = domAPI.getElementById('sidebarAuthForm');
-    sidebarUsernameContainerEl = domAPI.getElementById('sidebarUsernameContainer'); // Added
-    sidebarUsernameInputEl = domAPI.getElementById('sidebarUsername'); // Added
+    sidebarUsernameContainerEl = domAPI.getElementById('sidebarUsernameContainer');
+    sidebarUsernameInputEl = domAPI.getElementById('sidebarUsername');
     sidebarEmailInputEl = domAPI.getElementById('sidebarEmail');
     sidebarPasswordInputEl = domAPI.getElementById('sidebarPassword');
     sidebarConfirmPasswordContainerEl = domAPI.getElementById('sidebarConfirmPasswordContainer');
@@ -154,16 +169,16 @@ export function createSidebar({
   }
 
   function bindDomEvents() {
-    const track = (element, evtType, handler, description, sourceOverride) => {
+    const track = (element, evtType, originalHandlerCallback, description, sourceOverride) => {
       if (!element) return;
       const contextualHandler = safeInvoker(
-        handler,
+        originalHandlerCallback,
         { notify },
         { context: 'sidebar', module: MODULE, source: sourceOverride || description }
       );
-      const wrappedHandler = eventHandlers.trackListener(element, evtType, contextualHandler, { description });
+      const wrappedHandler = eventHandlers.trackListener(element, evtType, contextualHandler, { description, context: MODULE });
       if (wrappedHandler) {
-        trackedEvents.push({ element, type: evtType, description });
+        trackedEvents.push({ element, type: evtType, description, context: MODULE });
       }
     };
     track(btnToggle, 'click', () => toggleSidebar(), 'Sidebar toggle', 'toggleSidebar');
@@ -205,9 +220,9 @@ export function createSidebar({
         { notify },
         { context: 'sidebar', module: MODULE, source: 'childWidgetError' }
       );
-      const handler = eventHandlers.trackListener(el, 'error', errorHandler, { description: 'Sidebar child widget error' });
+      const handler = eventHandlers.trackListener(el, 'error', errorHandler, { description: 'Sidebar child widget error', context: MODULE });
       if (handler) {
-        trackedEvents.push({ element: el, type: 'error', description: 'Sidebar child widget error' });
+        trackedEvents.push({ element: el, type: 'error', description: 'Sidebar child widget error', context: MODULE });
       }
     }
   }
@@ -332,10 +347,10 @@ export function createSidebar({
     });
     const closeHandler = () => closeSidebar();
     const tracked = eventHandlers.trackListener(backdrop, 'click', closeHandler, {
-      description: 'Sidebar backdrop'
+      description: 'Sidebar backdrop', context: MODULE
     });
     if (tracked) {
-      trackedEvents.push({ element: backdrop, type: 'click', description: 'Sidebar backdrop' });
+      trackedEvents.push({ element: backdrop, type: 'click', description: 'Sidebar backdrop', context: MODULE });
     }
     domAPI.body && domAPI.body.appendChild(backdrop);
   }

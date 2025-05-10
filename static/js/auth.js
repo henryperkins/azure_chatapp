@@ -18,9 +18,11 @@ export function createAuthModule({
   domAPI,
   sanitizer,
   modalManager,
-  apiEndpoints
+  apiEndpoints,
+  DependencySystem // Added DependencySystem
 } = {}) {
   if (!apiRequest) throw new Error('Auth module requires apiRequest as a dependency');
+  if (!DependencySystem) throw new Error('Auth module requires DependencySystem as a dependency'); // Added check
   if (!eventHandlers?.trackListener) throw new Error('Auth module requires eventHandlers.trackListener as a dependency');
   if (!domAPI || typeof domAPI.getElementById !== 'function' || typeof domAPI.isDocumentHidden !== 'function') throw new Error('Auth module requires domAPI with getElementById and isDocumentHidden');
   if (!sanitizer || typeof sanitizer.sanitize !== 'function') throw new Error('Auth module requires sanitizer for setting innerHTML safely');
@@ -91,6 +93,7 @@ export function createAuthModule({
   const AUTH_CONFIG = { VERIFICATION_INTERVAL: 300000 }; // 5 min
   const authState = { isAuthenticated: false, username: null, userObject: null, isReady: false };
   const AuthBus = new EventTarget();
+  const MODULE_CONTEXT = 'AuthModule'; // Define context for listeners
 
   // --- Cookie helper ------------------------------------------------------
   function readCookie(name) {
@@ -260,33 +263,72 @@ export function createAuthModule({
 
 
         const truthy = (v) => v === true || v === 'true' || v === 1 || v === '1';
-        const isAuthenticatedResp =
-          truthy(response?.authenticated) ||
-          truthy(response?.is_authenticated) ||
-          (userObject && userObject.id); // Authenticated if we have a user object with an ID
 
-        if (isAuthenticatedResp) {
-          authNotify.debug('[Auth] verifyAuthState: authenticated', { group: true, source: 'verifyAuthState', userObject });
-          broadcastAuth(true, userObject, 'verify_success');
-          return true;
+        // Attempt to extract a valid userObject and ensure it has a usable ID
+        let finalUserObject = null;
+        let userIdFromObject = null;
+
+        if (userObject) {
+            // Try common ID field names
+            userIdFromObject = userObject.id || userObject.user_id || userObject.userId || userObject._id;
+            if (userIdFromObject) {
+                // If an ID was found, ensure the userObject has a consistent 'id' property for downstream use
+                finalUserObject = { ...userObject, id: userIdFromObject };
+            }
         }
 
-        // Si no se valida, procedemos como antes
-        authNotify.warn('[Auth] verifyAuthState: not authenticated', { group: true, source: 'verifyAuthState' });
-        await clearTokenState({ source: 'verify_negative' });
-        return false;
+        const isAuthenticatedBasedOnValidUserObjectWithId = !!(finalUserObject && finalUserObject.id);
+
+        if (isAuthenticatedBasedOnValidUserObjectWithId) {
+            authNotify.debug('[Auth] verifyAuthState: authenticated with valid user object and ID', { group: true, source: 'verifyAuthState', userObject: finalUserObject });
+            broadcastAuth(true, finalUserObject, 'verify_success_with_user_id');
+            return true;
+        } else {
+            // Check flags only if we couldn't establish auth via a user object with a recognized ID
+            const isAuthenticatedByFlags = truthy(response?.authenticated) || truthy(response?.is_authenticated);
+            if (isAuthenticatedByFlags) {
+                // Backend flags say authenticated, but we couldn't get/normalize a user object with a usable ID.
+                authNotify.error('[Auth] verifyAuthState: Backend indicates authenticated, but a user object with a recognized ID (id, user_id, userId, _id) could not be extracted. Treating as unauthenticated for UI consistency.', { group: true, source: 'verifyAuthState', responseData: response, extractedUserObject: userObject });
+                await clearTokenState({ source: 'verify_auth_flag_true_but_no_recognized_user_id' });
+                broadcastAuth(false, null, 'verify_auth_flag_true_but_no_recognized_user_id');
+                return false;
+            } else {
+                // Not authenticated by any means (no valid user object with ID, and no positive auth flags)
+                authNotify.warn('[Auth] verifyAuthState: not authenticated by any criteria', { group: true, source: 'verifyAuthState', responseData: response });
+                await clearTokenState({ source: 'verify_negative_no_flags_no_user' });
+                broadcastAuth(false, null, 'verify_negative_no_flags_no_user');
+                return false;
+            }
+        }
       } catch (error) {
         authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), { group: true, source: 'verifyAuthState' });
         if (error.status === 500) {
-          await clearTokenState({ source: 'verify_500' });
-          throw new Error('Server error during verification');
+          await clearTokenState({ source: 'verify_500_error' });
+          broadcastAuth(false, null, 'verify_500_error'); // Ensure state is cleared
+          // Do not throw, allow recovery or specific handling if needed, but return false
+          return false;
         }
         if (error.status === 401) {
-          try { await refreshTokens(); return verifyAuthState(true); }
-          catch { await clearTokenState({ source: 'refresh_failed' }); return false; }
+          try {
+            authNotify.info('[Auth] verifyAuthState: 401 received, attempting token refresh.', { group: true, source: 'verifyAuthState' });
+            await refreshTokens();
+            return await verifyAuthState(true); // Re-verify after refresh
+          }
+          catch (refreshErr) {
+            authNotify.error('[Auth] verifyAuthState: Token refresh failed after 401.', { group: true, source: 'verifyAuthState', originalError: refreshErr });
+            await clearTokenState({ source: 'refresh_failed_after_401' });
+            broadcastAuth(false, null, 'refresh_failed_after_401');
+            return false;
+          }
         }
-        return authState.isAuthenticated;
-      }
+        // For other errors, maintain current auth state but log it. Or decide to clear.
+        // Defaulting to false if error is not a 401 or 500 that's handled.
+        authNotify.warn(`[Auth] verifyAuthState: Unhandled error status ${error.status}. Current auth state: ${authState.isAuthenticated}`, { group: true, source: 'verifyAuthState' });
+        // To be safe, if verification fails unexpectedly, consider it unauthenticated.
+        await clearTokenState({ source: `verify_unhandled_error_${error.status}` });
+        broadcastAuth(false, null, `verify_unhandled_error_${error.status}`);
+            return false;
+        }
     } catch (outerErr) {
       authNotify.error('[Auth] verifyAuthState outer error: ' + (outerErr?.message || outerErr), { group: true, source: 'verifyAuthState' });
       throw outerErr;
@@ -405,7 +447,7 @@ export function createAuthModule({
             setButtonLoading(submitBtn, false, "Login");
           }
         };
-        registeredListeners.push(eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false }));
+        registeredListeners.push(eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false, context: MODULE_CONTEXT, description: 'Login Form Submit' }));
       }
     });
     const registerModalForm = domAPI.getElementById('registerModalForm');
@@ -466,7 +508,7 @@ export function createAuthModule({
           setButtonLoading(submitBtn, false, "Register");
         }
       };
-      registeredListeners.push(eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false }));
+      registeredListeners.push(eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false, context: MODULE_CONTEXT, description: 'Register Form Submit' }));
     }
   }
 
@@ -486,9 +528,12 @@ export function createAuthModule({
       return true;
     }
     authNotify.info('[Auth] Initializing auth module...', { group: true, source: 'init' });
-    setupAuthForms();
+    setupAuthForms(); // This will re-run and potentially re-attach if DOM was not ready before.
+                      // Consider making setupAuthForms idempotent or call only after modalsLoaded.
     if (eventHandlers.trackListener) {
-      registeredListeners.push(eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms));
+      // This listener in init() might be problematic if init() is called multiple times.
+      // However, authState.isReady check above prevents re-initialization.
+      eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms, { context: MODULE_CONTEXT, description: 'Auth Modals Loaded Listener' });
     }
     try {
       await getCSRFTokenAsync();
@@ -514,8 +559,14 @@ export function createAuthModule({
 
   // --- Cleanup (Listeners & Interval Removal)
   function cleanup() {
-    registeredListeners.forEach(l => l.remove());
-    registeredListeners.length = 0;
+    authNotify.info('[Auth] cleanup called.', { group: true, source: 'cleanup' });
+    // Use context-specific cleanup
+    if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
+        DependencySystem.cleanupModuleListeners(MODULE_CONTEXT);
+    } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+        eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+    }
+    registeredListeners.length = 0; // Array should be empty if all listeners were context-tracked
     if (verifyInterval) { clearInterval(verifyInterval); verifyInterval = null; }
   }
 
@@ -527,9 +578,32 @@ export function createAuthModule({
         credentials: 'include',
         headers: { 'Accept': 'application/json' }
       });
-      if (!resp || !resp.user) return null;
-      return resp.user;
-    } catch {
+      if (!resp) return null;
+
+      // Align with verifyAuthState logic for user object extraction, including flexible ID field checking
+      let userToReturn = null;
+      let userId = null;
+
+      if (resp.user && typeof resp.user === 'object') { // Handles { user: { ... } }
+        userId = resp.user.id || resp.user.user_id || resp.user.userId || resp.user._id;
+        if (userId) {
+          userToReturn = { ...resp.user, id: userId };
+        }
+      } else if (typeof resp === 'object' && resp.username) { // Handles flat structure { id: ..., username: ... }
+        userId = resp.id || resp.user_id || resp.userId || resp._id;
+        if (userId) {
+          userToReturn = { ...resp, id: userId };
+        }
+      }
+
+      if (userToReturn) {
+        return userToReturn;
+      }
+
+      authNotify.warn('[Auth] fetchCurrentUser: User object in response not recognized or essential ID field missing.', { group: true, source: 'fetchCurrentUser', responseData: resp });
+      return null;
+    } catch (error) {
+      authNotify.error('[Auth] fetchCurrentUser API call failed.', { group: true, source: 'fetchCurrentUser', originalError: error });
       return null;
     }
   }

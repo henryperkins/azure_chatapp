@@ -66,7 +66,8 @@ export function createChatExtensions({
   if (!eventHandlers || !eventHandlers.trackListener) {
     throw new Error("[chatExtensions] eventHandlers.trackListener is required (no direct addEventListener fallback permitted)");
   }
-  const trackListener = eventHandlers.trackListener.bind(eventHandlers);
+  const trackListener = eventHandlers.trackListener.bind(eventHandlers); // This is a direct reference
+  const MODULE_CONTEXT = 'chatExtensions'; // Define context
 
   // Helper - consistent showNotification: uses DI notified util, strict grouping.
   if (!notify) throw new Error('[chatExtensions] notify util required for notification');
@@ -122,7 +123,7 @@ export function createChatExtensions({
 
     trackListener(editTitleBtn, "click", () => {
       handleTitleEditClick(editTitleBtn, chatTitleEl);
-    }, { description: "Chat title editing" });
+    }, { description: "Chat title editing", context: MODULE_CONTEXT });
 
     editTitleBtn.setAttribute("data-chat-title-handler-bound", "true");
   }
@@ -232,17 +233,28 @@ export function createChatExtensions({
     };
 
     trackListener(chatTitleEl, "keydown", keyHandler, {
-      description: "Chat title editing keydown"
+      description: "Chat title editing keydown", context: MODULE_CONTEXT
     });
     if (typeof document !== "undefined") {
       trackListener(document, "click", clickOutsideHandler, {
-        description: "Chat title outside click", once: true
+        description: "Chat title outside click", once: true, context: MODULE_CONTEXT
       });
     }
     trackListener(editTitleBtn, "click", () => completeEditing(true), {
-      description: "Chat title save", once: true
+      description: "Chat title save", once: true, context: MODULE_CONTEXT
     });
   }
 
-  return { init };
+  function destroy() {
+    notify.info("[ChatExtensions] destroy() called", {
+      group: true, context: "chatExtensions", module: "ChatExtensions", source: "destroy"
+    });
+    if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
+        DependencySystem.cleanupModuleListeners(MODULE_CONTEXT);
+    } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+        eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+    }
+  }
+
+  return { init, destroy };
 }

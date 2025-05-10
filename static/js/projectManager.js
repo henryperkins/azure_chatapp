@@ -150,8 +150,11 @@ class ProjectManager {
         throw new Error('eventHandlers.trackListener missing');
       }
       listenerTracker = {
-        add: (t, e, h, dsc) => ev.trackListener(t, e, h, { description: dsc }),
-        remove: (t, e, h) => ev.cleanupListeners?.(t, e, h),
+        add: (t, e, h, dsc) => ev.trackListener(t, e, h, { description: dsc, context: MODULE }),
+        // If remove is for a specific listener:
+        // remove: (t, e, h) => ev.untrackListener?.(t, e, h),
+        // If remove is for all listeners of this module's context (ProjectManager):
+        remove: () => ev.cleanupListeners?.({ context: MODULE }),
       };
     }
     this.listenerTracker = listenerTracker;
@@ -167,7 +170,8 @@ class ProjectManager {
       FILES: apiEndpoints.FILES     || '/api/projects/{id}/files/',
       CONVOS: apiEndpoints.CONVOS   || '/api/projects/{id}/conversations/',
       ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
-      KB: apiEndpoints.KB           || '/api/projects/{id}/knowledge_base/',
+      KB_LIST_URL_TEMPLATE: apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/', // For listing KBs if needed
+      KB_DETAIL_URL_TEMPLATE: apiEndpoints.KB_DETAIL_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/{kb_id}/', // For specific KB
       ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/'
     };
 
@@ -342,28 +346,55 @@ class ProjectManager {
         return { ...this.currentProject };
       }
 
-      // Parallel fetch additional resources (non-fatal on failure)
-      const [stats, files, convos, artifacts] = await Promise.allSettled([
+      // Sequentially load Knowledge Base after project details are fetched and this.currentProject is set
+      // This is crucial if KB loading depends on an ID from the project details (e.g., project.knowledge_base_id)
+      let kbLoadResult = { status: 'fulfilled', value: null }; // Default if no KB to load
+      if (this.currentProject && this.currentProject.knowledge_base_id) {
+          try {
+              const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
+              kbLoadResult = { status: 'fulfilled', value: kbValue };
+          } catch (kbError) {
+              kbLoadResult = { status: 'rejected', reason: kbError };
+              this.pmNotify?.error?.(`[ProjectManager] Failed to load knowledge base details for KB ID ${this.currentProject.knowledge_base_id}`, {
+                  source: "loadProjectDetails",
+                  extra: { projectId: id, knowledgeBaseId: this.currentProject.knowledge_base_id, error: kbError }
+              });
+          }
+      } else {
+          this.pmNotify?.info?.(`[ProjectManager] No knowledge_base_id found on project ${id}, skipping dedicated KB load.`, {
+              source: "loadProjectDetails",
+              extra: { projectId: id }
+          });
+          // Ensure event is still emitted so UI can react to "no KB"
+          this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
+      }
+
+      // Parallel fetch other additional resources (non-fatal on failure)
+      const otherResourcesPromises = [
         this.loadProjectStats(id),
         this.loadProjectFiles(id),
         this.loadProjectConversations(id),
         this.loadProjectArtifacts(id),
-      ]);
+      ];
+      const otherResults = await Promise.allSettled(otherResourcesPromises);
+      const [stats, files, convos, artifacts] = otherResults;
 
-      // Track if any critical (first 4) components failed
-      const criticalErrors = [stats, files, convos, artifacts]
+      // Track if any critical components failed (including KB if it was attempted)
+      const allResults = [kbLoadResult, stats, files, convos, artifacts];
+      const criticalErrors = allResults
         .filter(r => r.status === 'rejected')
         .map(r => r.reason);
+
       if (criticalErrors.length > 0) {
         this.notify.error(
-          `[ProjectManager] Some components failed: ${criticalErrors.map(e => e.message).join(', ')}`,
+          `[ProjectManager] Some project sub-resources failed to load: ${criticalErrors.map(e => e?.message || String(e)).join(', ')}`,
           { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id, failed: criticalErrors } }
         );
         this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
-      this.notify.success(`[ProjectManager] Project ${id} ready`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id } });
+      this.notify.success(`[ProjectManager] Project ${id} and its sub-resources processed.`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id } });
 
-      // Notify UI that every required resource is now loaded
+      // Notify UI that every required resource is now loaded or attempted
       this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
 
       this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
@@ -444,22 +475,47 @@ class ProjectManager {
       return this._handleErr('projectArtifactsError', err, []);
     }
   }
-  async loadProjectKnowledgeBase(id) {
+  async loadProjectKnowledgeBase(projectId, knowledgeBaseId) {
+    if (!knowledgeBaseId) {
+      this.pmNotify?.info(`[ProjectManager] No knowledgeBaseId provided for project ${projectId}. Assuming no specific KB to load.`, {
+          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId }
+      });
+      this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
+      return null;
+    }
+
     try {
-      this.notify.info(`[ProjectManager] Loading knowledge base for project ${id}...`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
-      const res = await this._req(this._CONFIG.KB.replace('{id}', id), undefined, "loadProjectKnowledgeBase");
-      const kb = res?.data || res;
-      if (!kb) {
-        this.notify.warn(`[ProjectManager] No knowledge base for: ${id}`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
-        this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
+      this.pmNotify?.info(`[ProjectManager] Loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId})...`, {
+          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }
+      });
+
+      const url = this._CONFIG.KB_DETAIL_URL_TEMPLATE
+        .replace('{id}', projectId)
+        .replace('{kb_id}', knowledgeBaseId);
+
+      const res = await this._req(url, undefined, "loadProjectKnowledgeBase");
+      const kb = res?.data || res; // Assuming the response directly contains the KB object or { data: kb_object }
+
+      if (!kb || !kb.id) { // Ensure the fetched KB object has an ID
+        this.pmNotify?.warn(`[ProjectManager] No valid knowledge base data returned for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
+            group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId, response: res }
+        });
+        this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
+        return null;
       } else {
-        this.notify.success(`[ProjectManager] Knowledge base loaded for ${id}: ${kb.id}`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { id } });
-        this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: kb });
+        this.pmNotify?.success(`[ProjectManager] Knowledge base details loaded for KB ID ${kb.id} (Project ${projectId}).`, {
+            group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, kbId: kb.id }
+        });
+        this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: kb });
+        return kb;
       }
-      return kb;
     } catch (err) {
-      this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
-      return this._handleErr('projectKnowledgeBaseError', err, null);
+      this.pmNotify?.error(`[ProjectManager] Error loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
+          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
+      });
+      this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
+      // Re-throw or handle as per existing _handleErr. For now, let's re-throw to be caught by loadProjectDetails.
+      throw err;
     }
   }
 
@@ -685,13 +741,23 @@ class ProjectManager {
   async initialize() {
     this.notify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
 
-    emitReady({ notify: this.notify }, MODULE);
-
-    /* ---- external coordination hook ---- */
-    // Consumers can now wait for “projectManagerReady”.
-    this._emit('projectManagerReady', { success: true });
+    // The 'projectManagerReady' event is no longer dispatched from here.
+    // Modules should rely on DependencySystem.waitFor('projectManager') and the global 'app:ready' event.
 
     return true;
+  }
+
+  /**
+   * Cleans up listeners registered by this ProjectManager instance.
+   */
+  destroy() {
+    this.pmNotify?.info?.('[ProjectManager] destroy() called', { group: true, context: 'projectManager', module: MODULE, source: 'destroy' });
+    if (this.listenerTracker && typeof this.listenerTracker.remove === 'function') {
+      this.listenerTracker.remove(); // This should call eventHandlers.cleanupListeners({ context: MODULE })
+      this.pmNotify?.debug?.('[ProjectManager] Listener cleanup requested via listenerTracker.', { source: 'destroy' });
+    } else {
+      this.pmNotify?.warn?.('[ProjectManager] listenerTracker.remove is not available. Listeners may not be cleaned up.', { source: 'destroy' });
+    }
   }
 }
 
