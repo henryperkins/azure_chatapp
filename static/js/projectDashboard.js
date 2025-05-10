@@ -490,28 +490,40 @@ class ProjectDashboard {
     if (listView) {
       this.logger.info(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
       listView.classList.toggle('hidden', !showList);
-      listView.setAttribute('aria-hidden', (!showList).toString());
-      listView.style.display = showList ? '' : 'none';
-      if (showList) listView.classList.remove('opacity-0');
+      listView.setAttribute('aria-hidden', String(!showList));
+      listView.style.display = showList ? '' : 'none'; // Use empty string for default display (block or flex)
+      if (showList) {
+        listView.classList.remove('opacity-0');
+      }
     }
 
     if (detailsView) {
       this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
       detailsView.classList.toggle("hidden", !showDetails);
-      detailsView.setAttribute("aria-hidden", (!showDetails).toString());
-      // Explicitly set display to 'flex' for layout consistency
-      detailsView.style.display = showDetails ? "flex" : "none";
+      detailsView.setAttribute("aria-hidden", String(!showDetails));
+      detailsView.style.display = showDetails ? "flex" : "none"; // Project details uses flex
       if (showDetails) {
-        detailsView.classList.remove("opacity-0");
+        detailsView.classList.remove("opacity-0"); // If it was hidden by opacity
         detailsView.classList.add("flex-1", "flex-col");
       } else {
         detailsView.classList.remove("flex-1", "flex-col");
       }
     }
 
+    // Also manage visibility of the chatHeaderBar
+    const chatHeaderBar = this.domAPI.getElementById('chatHeaderBar');
+    if (chatHeaderBar) {
+      this.logger.info(`[ProjectDashboard] Setting chatHeaderBar visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
+      chatHeaderBar.classList.toggle('hidden', !showDetails);
+      chatHeaderBar.setAttribute('aria-hidden', String(!showDetails));
+      // Ensure display style is also set correctly if 'hidden' class only does opacity or similar
+      // chatHeaderBar.style.display = showDetails ? '' : 'none'; // Assuming default is block/flex
+    }
+
     // Force browser reflow to ensure visibility transitions apply
     if ((listView && showList) || (detailsView && showDetails)) {
-      requestAnimationFrame(() => {
+      const raf = this.browserService?.requestAnimationFrame || requestAnimationFrame;
+      raf(() => {
         if (listView && showList) listView.getBoundingClientRect();
         if (detailsView && showDetails) detailsView.getBoundingClientRect();
       });
@@ -519,10 +531,12 @@ class ProjectDashboard {
 
     // Enhanced logging: log both class and style.display after change
     this.logger.info('[ProjectDashboard] View state after update:', {
-      listViewVisible: listView ? !listView.classList.contains('hidden') : false,
-      detailsViewVisible: detailsView ? !detailsView.classList.contains('hidden') : false,
+      listViewVisible: listView ? !listView.classList.contains('hidden') && listView.style.display !== 'none' : false,
+      detailsViewVisible: detailsView ? !detailsView.classList.contains('hidden') && detailsView.style.display !== 'none' : false,
+      chatHeaderBarVisible: chatHeaderBar ? !chatHeaderBar.classList.contains('hidden') && chatHeaderBar.style.display !== 'none' : false,
       listViewDisplay: listView?.style.display || 'N/A',
-      detailsViewDisplay: detailsView?.style.display || 'N/A'
+      detailsViewDisplay: detailsView?.style.display || 'N/A',
+      chatHeaderBarDisplay: chatHeaderBar?.style.display || 'N/A'
     });
   }
 

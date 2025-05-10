@@ -756,6 +756,20 @@ async function initializeUIComponents() {
             getURL: () => browserAPI.getLocation().href
         };
 
+        // const authModule = DependencySystem.modules.get('auth'); // Ensure authModule is defined - Already defined and registered
+        // const projectManager = DependencySystem.modules.get('projectManager'); // Ensure projectManager is defined - Already defined and registered
+        // const apiRequest = DependencySystem.modules.get('apiRequest'); // Ensure apiRequest is defined - Already defined and registered
+
+        const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
+            DependencySystem,
+            apiRequest,
+            auth: authModule,
+            projectManager,
+            uiUtils,                           // ahora módulo real con helpers
+            sanitizer: DependencySystem.modules.get('sanitizer')
+        });
+        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+
         const projectDetailsComponentInstance = createProjectDetailsComponent({
             projectManager,
             eventHandlers,
@@ -766,6 +780,7 @@ async function initializeUIComponents() {
             notify,
             sanitizer: DependencySystem.modules.get('sanitizer'),
             app,
+            knowledgeBaseComponent: knowledgeBaseComponentInstance, // Wire KB component
             onBack: async () => {
                 let pd;
                 try {
@@ -797,16 +812,6 @@ async function initializeUIComponents() {
             viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() }
         });
         DependencySystem.register('sidebar', sidebarInstance);
-
-        const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
-            DependencySystem,
-            apiRequest,
-            auth: authModule,
-            projectManager,
-            uiUtils,                           // ahora módulo real con helpers
-            sanitizer: DependencySystem.modules.get('sanitizer')
-        });
-        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
 
         // Init each piece
         await safeInit(sidebarInstance, 'Sidebar', 'init');
@@ -889,7 +894,8 @@ function setupChatInitializationTrigger() {
 let lastHandledProj = null;
 let lastHandledChat = null;
 
-async function handleNavigationChange() {
+async function handleNavigationChange(options = {}) { // Accept options
+    const { forceListView } = options;
     // Generate a traceId for this navigation event for grouping logs
     const traceId = (typeof crypto !== "undefined" && crypto.randomUUID)
         ? crypto.randomUUID()
@@ -931,8 +937,8 @@ async function handleNavigationChange() {
             return;
         }
 
-        const projectId = browserServiceInstance.getSearchParam('project');
-        const chatId    = browserServiceInstance.getSearchParam('chatId');
+        const projectId = forceListView ? null : browserServiceInstance.getSearchParam('project');
+        const chatId    = forceListView ? null : browserServiceInstance.getSearchParam('chatId');
 
         notify.debug('[App] Navigation state', {
             context: 'navigation',
@@ -1085,9 +1091,9 @@ function handleAuthStateChange(e) {
                 }
             }
             toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
-            pd?.showProjectList?.();
-            pm?.loadProjects?.('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err }));
-            handleNavigationChange(); // Re-evaluate navigation now that user is authenticated
+            pd?.showProjectList?.(); // This call internally handles loading projects.
+            // pm?.loadProjects?.('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err })); // Redundant call removed
+            handleNavigationChange({ forceListView: true }); // Re-evaluate navigation, forcing list view
         } else if (!appState.isAuthenticated && prevAuth) {
             // Just Logged OUT
             notify.debug('[App] User logged out -> clearing data/UI.');
@@ -1099,7 +1105,7 @@ function handleAuthStateChange(e) {
             cm?.cleanup?.(); // Use cleanup if available, otherwise clear
             lastHandledProj = null;
             lastHandledChat = null;
-            handleNavigationChange(); // Re-evaluate navigation for logged-out state
+            handleNavigationChange({ forceListView: true }); // Re-evaluate navigation, forcing list view
         }
     })();
 }
