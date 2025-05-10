@@ -892,7 +892,10 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
 
       for (const [key, selector] of Object.entries(selectorsToValidate)) {
         if (selector.startsWith("#")) { // Only validate IDs for uniqueness
-          const elements = this.domAPI.querySelectorAll(selector);
+          const elements = this.domAPI.querySelectorAll(
+            selector,
+            this.container ?? undefined      // limit search scope
+          );
           if (elements.length > 1) {
             const errorMsg = `Duplicate DOM elements found for selector '${selector}' (key: ${key}). ChatManager requires unique IDs for its core elements.`;
             chatNotify.error(errorMsg, { source: '_setupUIElements', critical: true, extra: { selector, count: elements.length } });
