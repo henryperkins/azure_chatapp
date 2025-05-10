@@ -360,8 +360,11 @@ export function createChatManager({
 const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
       if (newConversationBtn) {
         newConversationBtn.classList.remove("hidden");
-        if (this.eventHandlers.cleanupListeners)
-          this.eventHandlers.cleanupListeners(newConversationBtn);
+
+        /* remove ONLY previous handlers for this button instead of
+           erasing every listener in the app */
+        if (typeof this.eventHandlers.cleanupListeners === 'function')
+          this.eventHandlers.cleanupListeners({ context: 'chatManager:newConvoBtn' });
 
         this.eventHandlers.trackListener(
           newConversationBtn,
@@ -374,7 +377,9 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
               this._showErrorMessage("Failed to start new chat: " + (err?.message || err));
             }
           }, { notify: this.notify, errorReporter: this.errorReporter }),
-          { description: "New Conversation Button", context: "chatManager", source: "ChatManager.initialize" }
+          { description: "New Conversation Button",
+            context: "chatManager:newConvoBtn",
+            source: "ChatManager.initialize" }
         );
       }
 
@@ -593,26 +598,18 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
 
       try {
         const cfg = this.modelConfigAPI.getConfig();
-        const currentUser = this.app?.state?.currentUser;
+        const currentUser = this.app?.state?.currentUser || {};
         chatNotify.debug('Current user state for new conversation.', { source: 'createNewConversation', currentUser, modelConfig: cfg });
 
-        if (!currentUser || !currentUser.id) {
-          chatNotify.error("User ID not found in app.state.currentUser. Cannot create conversation.", {
-            source: 'createNewConversation',
-            currentUserDetails: {
-              appStateAvailable: !!(this.app && this.app.state),
-              currentUserObjectExists: !!currentUser,
-              currentUserId: currentUser?.id
-            }
-          });
-          throw new Error("User ID not available for creating conversation.");
-        }
-
+        /* If the user record hasn’t loaded yet but we are already
+           authenticated, proceed and let the backend infer the user
+           from the auth token. */
         const payload = {
-          user_id: currentUser.id,
           title: `New Chat ${new Date().toLocaleString()}`,
           model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
+        if (currentUser.id) payload.user_id = currentUser.id;
+        else chatNotify.warn('Creating conversation without explicit user_id – relying on backend token', { source: 'createNewConversation' });
         chatNotify.debug('New conversation payload prepared.', { source: 'createNewConversation', payload });
 
         const convoEndpoint = typeof apiEndpoints.CONVERSATIONS === 'function'
