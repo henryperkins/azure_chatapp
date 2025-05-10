@@ -82,6 +82,12 @@ export function createDomAPI({
     // Add getActiveElement for DI strictness; see sidebar/notification rules
     getActiveElement: () => documentObject.activeElement,
 
+    /* quick access to <body> for modules that expect domAPI.body */
+    body: documentObject.body,
+
+    /* expose computed-style helper required by accessibilityUtils */
+    getComputedStyle: (el) => windowObject.getComputedStyle(el),
+
     /**
      * Prevent default on event if possible
      */

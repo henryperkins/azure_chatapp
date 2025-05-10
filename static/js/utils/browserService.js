@@ -66,6 +66,7 @@ export function createBrowserService({ windowObject } = {}) {
   return {
     // Query-string helpers
     buildUrl,
+    normaliseUrl,              // ← add this line
     getSearchParam: (k) => new URL(windowObject.location.href).searchParams.get(k),
     setSearchParam: (k, v) => windowObject.history.replaceState({}, '', buildUrl({ [k]: v })),
     removeSearchParam: (k) => windowObject.history.replaceState({}, '', buildUrl({ [k]: '' })),
