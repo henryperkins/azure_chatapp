@@ -95,12 +95,6 @@ export function createModelConfig({
   }
 
   /**
-   * Internal array to track registered listeners for cleanup.
-   * Each item: { element, type, handler }
-   */
-  // let registeredListeners = []; // No longer needed with context-based cleanup
-
-  /**
    * Track an event listener using the provided eventHandler, ensuring context is passed.
    * @param {HTMLElement} el
    * @param {string} evt
@@ -121,7 +115,6 @@ export function createModelConfig({
       source: opts.source || opts.description || `event_${evt}` // Ensure source is set
     };
     api.evts.trackListener(el, evt, handler, optionsWithContext);
-    // No need to manually track in registeredListeners array anymore
   }
 
   /**
@@ -137,17 +130,30 @@ export function createModelConfig({
     } else {
       api.notify.warn(`[${MODULE_CONTEXT}] cleanupListeners not available on eventHandlers or DependencySystem. Listeners may not be cleaned up.`, { source: 'cleanup', module: MODULE_CONTEXT });
     }
-    // registeredListeners = []; // No longer needed
   }
 
   // -------------------------------------------------------------------------
   // 3) updateModelConfig (One of the original big functions, now < 40 lines)
   // -------------------------------------------------------------------------
   function updateModelConfig(api, state, config) {
-    setStateFromConfig(state, config);
-    persistConfig(api, state);
-    notifyChatManager(api, state);
-    dispatchGlobalEvent(api, 'modelConfigChanged', { ...state });
+    const loadingEl = document.getElementById('modelConfigLoading');
+    if (loadingEl) loadingEl.classList.remove('hidden');
+
+    setStateFromConfig(state, config); // Updates the internal state object
+    persistConfig(api, state);         // Saves to storageHandler
+    notifyChatManager(api, state);     // Notifies other parts of the app like chatManager
+
+    // Update the UI display after changes
+    updateModelDisplay(api, state);    // <-- Call the new display update function
+
+    dispatchGlobalEvent(api, 'modelConfigChanged', { ...state }); // Notifies listeners
+
+    // Hide loading indicator after a short delay to ensure UI has rendered
+    api.delayed(() => {
+      if (loadingEl) loadingEl.classList.add('hidden');
+    }, 100); // 100ms delay, adjust as needed
+
+    api.notify.info(`[${MODULE_CONTEXT}] Model config updated and display refreshed.`, { source: 'updateModelConfig', newConfig: config });
   }
 
   /**
@@ -163,7 +169,7 @@ export function createModelConfig({
       extendedThinking: (config.extendedThinking !== undefined)
         ? config.extendedThinking : state.extendedThinking,
       thinkingBudget: clampInt(config.thinkingBudget, 2048, 32000, state.thinkingBudget),
-      customInstructions: config.customInstructions || state.customInstructions,
+      customInstructions: config.customInstructions !== undefined ? config.customInstructions : state.customInstructions, // Ensure empty string can be set
       azureParams: {
         maxCompletionTokens: clampInt(
           config.azureParams?.maxCompletionTokens,
@@ -184,16 +190,14 @@ export function createModelConfig({
    */
   function persistConfig(api, state) {
     api.store.setItem('modelName', state.modelName);
-    api.store.setItem('provider', state.provider);
+    api.store.setItem('provider', state.provider); // Provider should be updated based on modelName
     api.store.setItem('maxTokens', state.maxTokens.toString());
     api.store.setItem('reasoningEffort', state.reasoningEffort);
     api.store.setItem('visionEnabled', state.visionEnabled.toString());
     api.store.setItem('visionDetail', state.visionDetail);
     api.store.setItem('extendedThinking', state.extendedThinking.toString());
     api.store.setItem('thinkingBudget', state.thinkingBudget.toString());
-    if (state.customInstructions) {
-      api.store.setItem('globalCustomInstructions', state.customInstructions);
-    }
+    api.store.setItem('globalCustomInstructions', state.customInstructions); // Persist custom instructions
     api.store.setItem('azureMaxCompletionTokens', state.azureParams.maxCompletionTokens.toString());
     api.store.setItem('azureReasoningEffort', state.azureParams.reasoningEffort);
     api.store.setItem('azureVisionDetail', state.azureParams.visionDetail);
@@ -264,32 +268,43 @@ export function createModelConfig({
   }
 
   function onConfigChange(api, callback) {
-    // Because we are using global events, we rely on a listener
     const listener = (e) => {
       if (e.detail) callback(e.detail);
     };
-    registerListener(api, document, 'modelConfigChanged', listener, {
-      description: 'model config change subscription'
-    });
+    // Assuming document is the event bus for this, or use a dedicated event bus from DI
+    const eventTarget = (api.ds?.modules?.get?.('domAPI')?.getDocument?.()) || (typeof document !== 'undefined' ? document : null);
+    if (eventTarget) {
+        registerListener(api, eventTarget, 'modelConfigChanged', listener, {
+            description: 'model config change subscription'
+        });
+    } else {
+        api.notify.warn(`[${MODULE_CONTEXT}] Cannot subscribe to config changes: no event target found.`, { source: 'onConfigChange' });
+    }
   }
 
   // -------------------------------------------------------------------------
-  // 5) UI Initialization (initializeUI) < 40 lines
+  // 5) UI Initialization (initializeUI)
   // -------------------------------------------------------------------------
   function initializeUI(api, state) {
-    api.notify.notify("[modelConfig] initializeUI() called");
+    api.notify.notify(`[${MODULE_CONTEXT}] initializeUI() called`);
     try {
       setupModelDropdown(api, state);
       setupMaxTokensUI(api, state);
       setupVisionUI(api, state);
-      api.notify.notify("[modelConfig] initializeUI successful");
+      setupExtendedThinkingUI(api, state); // New
+      setupCustomInstructionsUI(api, state); // New
+      updateModelDisplay(api, state); // New: Initial display update
 
-      // --- Standardized "modelconfig:initialized" event ---
-      const doc = typeof document !== "undefined" ? document : null;
-      if (doc) doc.dispatchEvent(new CustomEvent('modelconfig:initialized', { detail: { success: true } }));
+      api.notify.notify(`[${MODULE_CONTEXT}] initializeUI successful`);
+
+      dispatchGlobalEvent(api, 'modelconfig:initialized', { success: true });
 
     } catch (err) {
-      api.notify.error("[modelConfig] initializeUI failed: " + (err && err.message ? err.message : err));
+      api.notify.error(`[${MODULE_CONTEXT}] initializeUI failed: ` + (err && err.message ? err.message : err), {
+        module: MODULE_CONTEXT,
+        source: 'initializeUI',
+        originalError: err
+      });
     }
   }
 
@@ -309,7 +324,11 @@ export function createModelConfig({
     sel.value = state.modelName;
 
     registerListener(api, sel, 'change', () => {
-      updateModelConfig(api, state, { modelName: sel.value });
+      const selectedModel = getModelOptions().find(m => m.id === sel.value);
+      updateModelConfig(api, state, { modelName: sel.value, provider: selectedModel?.provider || 'unknown' });
+      // Vision UI might need to be re-rendered if model's vision support changes
+      setupVisionUI(api, state);
+      updateModelDisplay(api, state); // Update display after model change
     }, { description: 'model dropdown change' });
   }
 
@@ -322,9 +341,9 @@ export function createModelConfig({
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '100';
-    slider.max = '100000';
+    slider.max = '100000'; // This should ideally be dynamic based on selected model
     slider.value = currentVal;
-    slider.className = 'w-full mt-2';
+    slider.className = 'w-full mt-2 range range-xs'; // Added DaisyUI range classes
 
     const display = document.createElement('div');
     display.className = 'text-sm text-gray-600 dark:text-gray-400';
@@ -333,6 +352,7 @@ export function createModelConfig({
     registerListener(api, slider, 'input', (e) => {
       const t = parseInt(e.target.value, 10);
       display.textContent = `${t} tokens`;
+      // Debounce this update if it causes performance issues
       updateModelConfig(api, state, { maxTokens: t });
     }, { description: 'maxTokens slider input' });
 
@@ -348,25 +368,112 @@ export function createModelConfig({
     const name = state.modelName;
     const supports = getModelOptions().find((m) => m.id === name)?.supportsVision;
     panel.classList.toggle('hidden', !supports);
-    if (!supports) return;
+    if (!supports) {
+        panel.textContent = ''; // Clear if not supported
+        return;
+    }
+
+    // Clear previous content before rebuilding
+    panel.textContent = '';
 
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
-    toggle.id = 'visionToggle';
-    toggle.className = 'mr-2';
+    toggle.id = 'visionToggle'; // Ensure ID is unique if this function is called multiple times
+    toggle.className = 'toggle toggle-sm mr-2'; // DaisyUI toggle
     toggle.checked = state.visionEnabled;
 
     const label = document.createElement('label');
     label.htmlFor = 'visionToggle';
-    label.className = 'text-sm';
+    label.className = 'text-sm cursor-pointer';
     label.textContent = 'Enable Vision';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'flex items-center';
+    wrapper.append(toggle, label);
 
     registerListener(api, toggle, 'change', () => {
       updateModelConfig(api, state, { visionEnabled: toggle.checked });
     }, { description: 'vision toggle check' });
 
-    panel.textContent = '';
-    panel.append(toggle, label);
+    panel.appendChild(wrapper);
+  }
+
+  // NEW: Function to setup Extended Thinking UI
+  function setupExtendedThinkingUI(api, state) {
+    if (typeof document === 'undefined') return;
+    const toggle = document.getElementById('extendedThinkingToggle');
+    const budgetSelect = document.getElementById('thinkingBudget');
+    const panel = document.getElementById('extendedThinkingPanel');
+
+    if (!toggle || !budgetSelect || !panel) {
+      api.notify.warn(`[${MODULE_CONTEXT}] Extended thinking UI elements not found.`, { source: 'setupExtendedThinkingUI' });
+      return;
+    }
+
+    toggle.checked = state.extendedThinking;
+    budgetSelect.value = state.thinkingBudget.toString();
+    panel.classList.toggle('hidden', !state.extendedThinking);
+
+    registerListener(api, toggle, 'change', () => {
+      const isChecked = toggle.checked;
+      panel.classList.toggle('hidden', !isChecked);
+      updateModelConfig(api, state, { extendedThinking: isChecked });
+    }, { description: 'extended thinking toggle change' });
+
+    registerListener(api, budgetSelect, 'change', () => {
+      updateModelConfig(api, state, { thinkingBudget: parseInt(budgetSelect.value, 10) });
+    }, { description: 'thinking budget select change' });
+  }
+
+  // NEW: Function to setup Custom Instructions UI
+  function setupCustomInstructionsUI(api, state) {
+    if (typeof document === 'undefined') return;
+    const textarea = document.getElementById('globalCustomInstructions');
+    const saveButton = document.getElementById('saveGlobalInstructions');
+
+    if (!textarea || !saveButton) {
+      api.notify.warn(`[${MODULE_CONTEXT}] Custom instructions UI elements not found.`, { source: 'setupCustomInstructionsUI' });
+      return;
+    }
+
+    textarea.value = state.customInstructions;
+
+    registerListener(api, saveButton, 'click', () => {
+      updateModelConfig(api, state, { customInstructions: textarea.value });
+      api.notify.notify(`[${MODULE_CONTEXT}] Custom instructions saved.`, { source: 'setupCustomInstructionsUI', group: 'userAction' });
+    }, { description: 'save global custom instructions' });
+  }
+
+  // NEW: Function to update the model configuration display area
+  function updateModelDisplay(api, state) {
+    if (typeof document === 'undefined') return;
+    const modelNameEl = document.getElementById('currentModelName');
+    const maxTokensEl = document.getElementById('currentMaxTokens');
+    const reasoningEl = document.getElementById('currentReasoning'); // Assuming this ID exists
+    const visionStatusEl = document.getElementById('visionEnabledStatus'); // Assuming this ID exists
+
+    if (modelNameEl) {
+      const modelOption = getModelOptions().find(m => m.id === state.modelName);
+      modelNameEl.textContent = modelOption ? modelOption.name : state.modelName;
+    }
+    if (maxTokensEl) {
+      maxTokensEl.textContent = state.maxTokens.toString();
+    }
+    if (reasoningEl) {
+      // This needs to map to a state property, e.g., state.reasoningEffort or similar
+      // For now, let's assume it's state.reasoningEffort.
+      // You might need a more descriptive mapping (e.g., "low" -> "Basic Reasoning")
+      reasoningEl.textContent = state.reasoningEffort || 'N/A';
+    }
+    if (visionStatusEl) {
+      const modelSupportsVision = getModelOptions().find(m => m.id === state.modelName)?.supportsVision;
+      if (modelSupportsVision) {
+          visionStatusEl.textContent = state.visionEnabled ? 'Enabled' : 'Disabled';
+      } else {
+          visionStatusEl.textContent = 'Not Supported';
+      }
+    }
+    api.notify.debug(`[${MODULE_CONTEXT}] Model display updated.`, { source: 'updateModelDisplay', state });
   }
 
   // -------------------------------------------------------------------------
@@ -374,50 +481,41 @@ export function createModelConfig({
   // -------------------------------------------------------------------------
   function renderQuickConfig(api, state, container) {
     if (!container) return;
-    api.notify.notify(`[modelConfig] Rendering quick config in container: ${container.id || "unnamed"}`);
+    api.notify.notify(`[${MODULE_CONTEXT}] Rendering quick config in container: ${container.id || "unnamed"}`);
 
-    // Clear existing content safely
-    container.textContent = '';
+    container.textContent = ''; // Clear safely
 
-    // Create UI asynchronously to avoid blocking
     api.delayed(() => {
       try {
-        buildModelSelectUI(api, state, container);
-        buildMaxTokensUI(api, state, container);
-        buildVisionToggleIfNeeded(api, state, container);
-        api.notify.notify('[modelConfig] Quick config panel rendered successfully');
-
-        dispatchGlobalEvent(api, 'modelConfigRendered',
-          { containerId: container.id });
+        buildModelSelectUI(api, state, container); // Reuses the main settings one for consistency
+        buildMaxTokensUI(api, state, container);   // Reuses
+        buildVisionToggleIfNeeded(api, state, container); // Reuses
+        api.notify.notify(`[${MODULE_CONTEXT}] Quick config panel rendered successfully`);
+        dispatchGlobalEvent(api, 'modelConfigRendered', { containerId: container.id });
       } catch (error) {
-        api.notify.error(`[modelConfig] Error rendering quick config: ${error}`);
-        // Simple fallback UI
-        const fallbackHTML = `
-          <div class="p-2 text-xs">
-            <p>Current model: ${state.modelName}</p>
-            <p>Max tokens: ${state.maxTokens}</p>
-          </div>
-        `;
+        api.notify.error(`[${MODULE_CONTEXT}] Error rendering quick config: ${error.message}`, { originalError: error });
+        const fallbackHTML = `<div class="p-2 text-xs">Error loading config.</div>`;
         container.textContent = '';
         container.insertAdjacentHTML('afterbegin', api.safe(fallbackHTML));
-        dispatchGlobalEvent(api, 'modelConfigRendered', {
-          containerId: container.id, error: true
-        });
+        dispatchGlobalEvent(api, 'modelConfigRendered', { containerId: container.id, error: true });
       }
     }, 0);
   }
 
   // Subparts for renderQuickConfig (all < 40 lines):
+  // These are now largely handled by the main setup functions.
+  // If quick config needs a different layout, these would be distinct.
+  // For now, we assume quick config uses the same UI elements or similar structure.
 
-  function buildModelSelectUI(api, state, container) {
+  function buildModelSelectUI(api, state, container) { // Used by quickConfig
     const modelLabel = document.createElement('label');
-    modelLabel.htmlFor = 'quickModelSelect';
-    modelLabel.className = 'block text-sm mb-1';
+    modelLabel.htmlFor = `quickModelSelect-${container.id}`; // Unique ID
+    modelLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
     modelLabel.textContent = 'Model:';
 
     const modelSelect = document.createElement('select');
-    modelSelect.id = 'quickModelSelect';
-    modelSelect.className = 'select select-sm w-full mb-1';
+    modelSelect.id = `quickModelSelect-${container.id}`;
+    modelSelect.className = 'select select-bordered select-sm w-full mb-2'; // DaisyUI
 
     getModelOptions().forEach((opt) => {
       const option = document.createElement('option');
@@ -428,65 +526,76 @@ export function createModelConfig({
     modelSelect.value = state.modelName;
 
     registerListener(api, modelSelect, 'change', () => {
-      updateModelConfig(api, state, { modelName: modelSelect.value });
-    }, { description: 'quick config model select' });
+      const selectedModel = getModelOptions().find(m => m.id === modelSelect.value);
+      updateModelConfig(api, state, { modelName: modelSelect.value, provider: selectedModel?.provider || 'unknown' });
+      // Re-render vision toggle if needed for quick config
+      const visionContainer = container.querySelector('.quick-vision-container');
+      if (visionContainer) {
+        visionContainer.remove(); // Remove old one
+        buildVisionToggleIfNeeded(api, state, container); // Rebuild
+      }
+    }, { description: `quick config model select for ${container.id}` });
 
     container.appendChild(modelLabel);
     container.appendChild(modelSelect);
   }
 
-  function buildMaxTokensUI(api, state, container) {
+  function buildMaxTokensUI(api, state, container) { // Used by quickConfig
     const maxTokensDiv = document.createElement('div');
     maxTokensDiv.className = 'my-2 flex flex-col';
 
     const maxTokensLabel = document.createElement('label');
-    maxTokensLabel.htmlFor = 'quickMaxTokens';
-    maxTokensLabel.className = 'text-xs mb-1';
+    maxTokensLabel.htmlFor = `quickMaxTokens-${container.id}`;
+    maxTokensLabel.className = 'text-xs font-medium text-gray-700 dark:text-gray-300 mb-1';
     maxTokensLabel.textContent = 'Max Tokens:';
 
     const maxTokensValue = document.createElement('span');
-    maxTokensValue.className = 'ml-1 text-xs';
+    maxTokensValue.className = 'ml-1 text-xs text-gray-500 dark:text-gray-400';
     maxTokensValue.textContent = state.maxTokens;
 
     const maxTokensInput = document.createElement('input');
-    maxTokensInput.id = 'quickMaxTokens';
+    maxTokensInput.id = `quickMaxTokens-${container.id}`;
     maxTokensInput.type = 'range';
     maxTokensInput.min = '100';
-    maxTokensInput.max = '100000';
+    maxTokensInput.max = '100000'; // Adjust dynamically based on model if possible
     maxTokensInput.value = state.maxTokens;
-    maxTokensInput.className = 'range range-xs';
+    maxTokensInput.className = 'range range-xs'; // DaisyUI
 
     registerListener(api, maxTokensInput, 'input', (e) => {
       const val = parseInt(e.target.value, 10);
       maxTokensValue.textContent = val;
       updateModelConfig(api, state, { maxTokens: val });
-    }, { description: 'quick config maxTokens slider' });
+    }, { description: `quick config maxTokens slider for ${container.id}` });
 
-    maxTokensDiv.append(maxTokensLabel, maxTokensInput, maxTokensValue);
+    const labelAndValue = document.createElement('div');
+    labelAndValue.className = 'flex justify-between items-center';
+    labelAndValue.append(maxTokensLabel, maxTokensValue);
+
+    maxTokensDiv.append(labelAndValue, maxTokensInput);
     container.appendChild(maxTokensDiv);
   }
 
-  function buildVisionToggleIfNeeded(api, state, container) {
-    const supportsVision = getModelOptions().find((m) => m.id === state.modelName)?.supportsVision;
-    if (!supportsVision) return;
+  function buildVisionToggleIfNeeded(api, state, container) { // Used by quickConfig
+    const model = getModelOptions().find((m) => m.id === state.modelName);
+    if (!model?.supportsVision) return;
 
     const visionDiv = document.createElement('div');
-    visionDiv.className = 'mt-2';
+    visionDiv.className = 'mt-2 flex items-center quick-vision-container'; // Added class for easy removal/update
 
     const toggle = document.createElement('input');
     toggle.type = 'checkbox';
-    toggle.id = 'quickVisionToggle';
-    toggle.className = 'mr-2';
+    toggle.id = `quickVisionToggle-${container.id}`;
+    toggle.className = 'toggle toggle-xs mr-2'; // DaisyUI
     toggle.checked = state.visionEnabled;
 
     const toggleLabel = document.createElement('label');
-    toggleLabel.htmlFor = 'quickVisionToggle';
-    toggleLabel.className = 'text-xs';
+    toggleLabel.htmlFor = `quickVisionToggle-${container.id}`;
+    toggleLabel.className = 'text-xs cursor-pointer';
     toggleLabel.textContent = 'Enable Vision';
 
     registerListener(api, toggle, 'change', () => {
       updateModelConfig(api, state, { visionEnabled: toggle.checked });
-    }, { description: 'quick config vision toggle' });
+    }, { description: `quick config vision toggle for ${container.id}` });
 
     visionDiv.append(toggle, toggleLabel);
     container.appendChild(visionDiv);
