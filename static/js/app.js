@@ -226,17 +226,6 @@ DependencySystem.cleanupModuleListeners = function(moduleContext) {
   });
 };
 
-// ── Accessibility utilities ───────────────────────────────
-const accessibilityUtils = createAccessibilityEnhancements({
-  domAPI,
-  eventHandlers,
-  notify,
-  errorReporter : sentryManager,
-  DependencySystem,
-  createDebugTools       // already imported earlier
-});
-DependencySystem.register('accessibilityUtils', accessibilityUtils);
-accessibilityUtils.init?.();
 
 // ---------------------------------------------------------------------------
 // 2.5) Build our error-reporting integration (depends on notify)
@@ -254,6 +243,18 @@ const sentryManager = createSentryManager({
 DependencySystem.register('sentryManager', sentryManager);
 DependencySystem.register('errorReporter', sentryManager);
 sentryManager.initialize();
+
+// ── Accessibility utilities ───────────────────────────────
+const accessibilityUtils = createAccessibilityEnhancements({
+  domAPI,
+  eventHandlers,
+  notify,
+  errorReporter : sentryManager,
+  DependencySystem,
+  createDebugTools       // already imported earlier
+});
+DependencySystem.register('accessibilityUtils', accessibilityUtils);
+accessibilityUtils.init?.();
 
 // Late-bind the real notify into eventHandlers so all new events use the correct notifier
 eventHandlers.setNotifier?.(notify);
