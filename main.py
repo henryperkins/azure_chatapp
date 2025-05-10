@@ -233,16 +233,28 @@ logging.getLogger("urllib3").setLevel(logging.INFO)  # suprime spam DEBUG
 logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
-# Suppress /api/log_notification in access logs (no user action required)
+# Suppress /api/log_notification and common vulnerability scan paths in access logs
 # -----------------------------------------------------------------------------
-class SuppressLogNotificationFilter(logging.Filter):
+class SuppressUnwantedLogsFilter(logging.Filter):
     def filter(self, record):
         msg = str(record.getMessage())
         # Suppress any access log for /api/log_notification
-        return "/api/log_notification" not in msg
+        if "/api/log_notification" in msg:
+            return False
 
-for logname in ("uvicorn.access", ""):
-    logging.getLogger(logname).addFilter(SuppressLogNotificationFilter())
+        # Suppress common WordPress/PHP vulnerability scan paths
+        unwanted_paths = [
+            "/wp-", ".php", "/wordpress", "/wp-admin", "/wp-content",
+            "/wp-includes", "/.well-known/acme-challenge"
+        ]
+        if any(path in msg for path in unwanted_paths):
+            return False
+
+        return True
+
+# Apply the filter to uvicorn.access logger and the root logger if needed
+for logname in ("uvicorn.access", ""): # Add to root logger as well if uvicorn.access doesn't catch all
+    logging.getLogger(logname).addFilter(SuppressUnwantedLogsFilter())
 
 # Create app with docs always enabled (even in "production" - insecure for debug)
 app = FastAPI(
