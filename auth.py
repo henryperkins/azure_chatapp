@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import settings  # Use settings directly from config
 from db import get_async_session, get_async_session_context
 from models.user import User, TokenBlacklist
+from models.project import Project
+from models.conversation import Conversation
 from utils.auth_utils import (
     get_user_from_token,
     get_current_user_and_token,
@@ -464,11 +466,16 @@ async def refresh_token(
         raise HTTPException(status_code=500, detail="Error refreshing token.")
 
 
+class UserProfileForVerify(BaseModel):
+    id: int
+    username: str
+    token_version: Optional[int] = None
+    project_ids: Optional[list[str]] = []
+    conversation_ids: Optional[list[str]] = []
+
 class VerifyResponse(BaseModel):
     authenticated: bool
-    username: Optional[str] = None
-    user_id: Optional[int] = None
-    token_version: Optional[int] = None
+    user: Optional[UserProfileForVerify] = None
 
 
 @router.get("/verify", response_model=VerifyResponse)
@@ -482,30 +489,31 @@ async def verify_auth_status(
     """
     try:
         user_obj, _tok = await get_current_user_and_token(request)
-        context = {
-            "path": str(request.url.path),
-            "method": request.method,
-            "client": request.client.host if request.client else None,
-            "headers": dict(request.headers),
-            "cookies": request.cookies,
-        }
-        return {
-            "authenticated": True,
-            "username": user_obj.username,
-            "user_id": user_obj.id,
-            "token_version": user_obj.token_version,
-            "context": context,
-        }
+
+        # Fetch associated project IDs
+        project_results = await session.execute(
+            select(Project.id).where(Project.user_id == user_obj.id)
+        )
+        project_ids = [str(pid) for pid in project_results.scalars().all()]
+
+        # Fetch associated conversation IDs
+        conversation_results = await session.execute(
+            select(Conversation.id).where(Conversation.user_id == user_obj.id)
+        )
+        conversation_ids = [str(cid) for cid in conversation_results.scalars().all()]
+
+        user_profile = UserProfileForVerify(
+            id=user_obj.id,
+            username=user_obj.username,
+            token_version=user_obj.token_version,
+            project_ids=project_ids,
+            conversation_ids=conversation_ids,
+        )
+        return VerifyResponse(authenticated=True, user=user_profile)
+
     except HTTPException as ex:
         if ex.status_code in (401, 403):
-            context = {
-                "path": str(request.url.path),
-                "method": request.method,
-                "client": request.client.host if request.client else None,
-                "headers": dict(request.headers),
-                "cookies": request.cookies,
-            }
-            return {"authenticated": False, "context": context}
+            return VerifyResponse(authenticated=False, user=None)
         else:
             raise
     except Exception as e:

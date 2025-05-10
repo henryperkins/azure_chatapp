@@ -325,10 +325,7 @@ class ProjectDashboard {
           this._setView({ showList: false, showDetails: true });
         }
       }
-      this.browserService.setSearchParam('project', projectId);
-      this.state.currentView = 'details';
-      document.dispatchEvent(new CustomEvent('projectLoaded', { detail: project }));
-      return true;
+      return this._postProjectDetailsSuccess(project, projectId);
     }
 
     // Otherwise, load via projectManager
@@ -436,9 +433,9 @@ class ProjectDashboard {
         this.showProjectList();
         return false;
       }
-      this.browserService.setSearchParam('project', projectId);
-      this.state.currentView = 'details';
-      return true;
+      // For the API path, project object is not passed to _postProjectDetailsSuccess
+      // as projectManager.loadProjectDetails already emits 'projectLoaded'
+      return this._postProjectDetailsSuccess(null, projectId);
     } else {
       this.dashboardNotify.warn('ProjectManager is unavailable or user not authenticated. Showing project list.', {
         source: 'showProjectDetails',
@@ -452,6 +449,22 @@ class ProjectDashboard {
   }
 
   // =================== PRIVATE METHODS ===================
+
+  _postProjectDetailsSuccess(project, projectId) {
+    this.browserService.setSearchParam('project', projectId);
+    this.state.currentView = 'details';
+    // Only dispatch if project object is available (direct-path)
+    // For API path, projectManager.loadProjectDetails emits 'projectLoaded'
+    if (project && project.id) { // Ensure project and project.id are valid
+      const eventDoc = this.domAPI?.getDocument?.() || document;
+      if (this.domAPI?.dispatchEvent) {
+        this.domAPI.dispatchEvent(eventDoc, new CustomEvent('projectLoaded', { detail: project }));
+      } else {
+        eventDoc.dispatchEvent(new CustomEvent('projectLoaded', { detail: project }));
+      }
+    }
+    return true;
+  }
 
   _setView({ showList, showDetails }) {
     if (this.state._aborted) {

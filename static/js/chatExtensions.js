@@ -91,17 +91,10 @@ export function createChatExtensions({
     try {
       setupChatTitleEditing();
 
-      // Ensure the edit button is only visible when chat UI is visible
-      const chatUI = domAPI?.getElementById?.("projectChatUI");
-      const editTitleBtn = domAPI?.getElementById?.("chatTitleEditBtn");
-      if (editTitleBtn) {
-        if (chatUI && !chatUI.classList.contains("hidden")) {
-          editTitleBtn.classList.remove("hidden");
-        } else {
-          editTitleBtn.classList.add("hidden");
-        }
-      }
-
+      // The visibility of chatTitleEditBtn is now primarily controlled by
+      // the main application logic handling the 'data-requires-chat' attribute
+      // on its parent container or itself, and its new static position in the chat header.
+      // No explicit hiding/showing based on a separate chatUI element is needed here anymore.
       showNotification('[ChatExtensions] Initialized', 'debug');
 
       // --- Standardized "chatextensions:initialized" event ---

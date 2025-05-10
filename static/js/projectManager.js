@@ -70,9 +70,17 @@ function extractResourceList(res, keys = ['projects', 'conversations', 'files', 
 async function retryWithBackoff(fn, maxRetries, timer) {
   let attempt = 0;
   while (true) {
-    try { return await fn(); }
-    catch (err) {
+    try {
+      return await fn();
+    } catch (err) {
+      // Check if the error object has a status property (common for fetch errors)
+      // Do not retry 405 errors or other client errors (400-499) except for 429 (Too Many Requests)
+      if (err && err.status && ((err.status >= 400 && err.status < 500 && err.status !== 429) || err.status === 405)) {
+        throw err;
+      }
       if (++attempt > maxRetries) throw err;
+      // Log the retry attempt with error details for better debugging
+      console.warn(`Retry attempt ${attempt}/${maxRetries} for ${fn.name || 'anonymous function'} due to error:`, err);
       await new Promise(r => timer(r, 1000 * attempt));
     }
   }

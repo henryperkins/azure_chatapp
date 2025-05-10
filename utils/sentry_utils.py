@@ -21,6 +21,7 @@ from fastapi import Request, Response
 import sentry_sdk
 from sentry_sdk import configure_scope, push_scope
 from sentry_sdk.tracing import Span, Transaction
+from sentry_sdk.integrations import Integration # Added import
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 from sentry_sdk.types import Event, Hint
 # Sentry SDK integrations - imported at module level for lint compliance
@@ -157,12 +158,42 @@ def configure_sentry(
     init_kwargs["release"] = release
     init_kwargs["traces_sample_rate"] = traces_sample_rate
     init_kwargs["default_integrations"] = False
-    init_kwargs["integrations"] = [
+    # Determine if SqlalchemyIntegration should be enabled
+    # Default to False as per the plan (docs/sentry-sqlalchemy-async-fix.md)
+    sentry_sqla_async_enabled_default = False
+    # Initialize sentry_sqla_async_enabled with its default value.
+    # It will be updated by trying to read from config.settings or environment variable.
+    sentry_sqla_async_enabled = sentry_sqla_async_enabled_default
+
+    try:
+        from config import settings as app_settings # Use a distinct alias
+        # If SENTRY_SQLA_ASYNC_ENABLED is defined in app_settings, use its value.
+        # Otherwise, retain the default value for sentry_sqla_async_enabled.
+        if hasattr(app_settings, 'SENTRY_SQLA_ASYNC_ENABLED'):
+            sentry_sqla_async_enabled = app_settings.SENTRY_SQLA_ASYNC_ENABLED
+        else:
+            # If not in app_settings, try to get from environment variable or use default.
+            sentry_sqla_async_enabled_env_str = os.getenv("SENTRY_SQLA_ASYNC_ENABLED", str(sentry_sqla_async_enabled_default))
+            sentry_sqla_async_enabled = sentry_sqla_async_enabled_env_str.lower() in ("1", "true", "yes", "on")
+    except ImportError:
+        # If config.settings cannot be imported, fall back to environment variable or default.
+        sentry_sqla_async_enabled_env_str = os.getenv("SENTRY_SQLA_ASYNC_ENABLED", str(sentry_sqla_async_enabled_default))
+        sentry_sqla_async_enabled = sentry_sqla_async_enabled_env_str.lower() in ("1", "true", "yes", "on")
+
+    # Base integrations
+    current_integrations: list[Integration] = [ # Added type hint
         sentry_logging,
         FastApiIntegration(),
-        SqlalchemyIntegration(),
-        AsyncioIntegration(),
+        AsyncioIntegration(), # Keep AsyncioIntegration
     ]
+
+    if sentry_sqla_async_enabled:
+        current_integrations.append(SqlalchemyIntegration())
+        logging.info("Sentry SqlalchemyIntegration has been enabled via SENTRY_SQLA_ASYNC_ENABLED.")
+    else:
+        logging.info("Sentry SqlalchemyIntegration disabled for async engine compatibility (SENTRY_SQLA_ASYNC_ENABLED is false or not set).")
+
+    init_kwargs["integrations"] = current_integrations
     # Only include these if not None, don't set if None
     if profiles_sample_rate is not None:
         init_kwargs["profiles_sample_rate"] = profiles_sample_rate
