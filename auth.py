@@ -405,11 +405,20 @@ async def login_user(
             username=db_user.username,
             token_version=db_user.token_version,
         )
+    # ----- keep explicit FastAPI errors unchanged -----
+    except HTTPException as http_exc:
+        # Re-raise to preserve original status (e.g. 401 Invalid credentials)
+        raise http_exc
+
+    # ----- all other unexpected errors become 500 -----
     except Exception as e:
         import traceback
         tb_str = traceback.format_exc()
-        logger.error(f"Login fatal error: {e}\n{tb_str}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        logger.error("Login fatal error: %s\n%s", e, tb_str)
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error"
+        )
 
 DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 
