@@ -167,7 +167,7 @@ export async function waitForDepsAndDom({
   domSelectors = [],
   pollInterval = 30,
   timeout = 4000,
-  domAPI = { querySelector: (s) => document.querySelector(s) },
+  domAPI,
   notify = console,
   source = 'waitForDepsAndDom'
 } = {}) {
@@ -180,9 +180,8 @@ export async function waitForDepsAndDom({
     throw new Error("waitForDepsAndDom: DependencySystem.modules is missing or invalid");
   }
   if (!domAPI || typeof domAPI.querySelector !== 'function') {
-    notify.error("waitForDepsAndDom: domAPI.querySelector is missing or invalid", { source, critical: true });
-    domAPI = { querySelector: (s) => document.querySelector(s) };
-    notify.warn("waitForDepsAndDom: Fallback to global document.querySelector due to invalid domAPI.", { source });
+    notify.error('waitForDepsAndDom: domAPI.querySelector is required (no global fallback)', { source, critical: true });
+    throw new Error('waitForDepsAndDom: domAPI.querySelector is required');
   }
 
   const start = Date.now();

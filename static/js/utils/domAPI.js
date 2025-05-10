@@ -27,10 +27,14 @@
  *   Dispatches an Event at the specified EventTarget, (synchronously) invoking the affected EventListeners in the appropriate order.
  */
 export function createDomAPI({
-  documentObject = document,
-  windowObject   = window,
-  debug          = false
+  documentObject,
+  windowObject,
+  debug = false
 } = {}) {
+
+  if (!documentObject || !windowObject) {
+    throw new Error('[domAPI] documentObject & windowObject are required – do not rely on globals.');
+  }
 
   // Local debug output (disabled when debug === false)
   const _log = (...m) => { if (debug) console.debug('[domAPI]', ...m); };
