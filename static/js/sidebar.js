@@ -31,9 +31,14 @@ export function createSidebar({
   if (typeof domAPI.getActiveElement !== 'function') {
     throw new Error('[sidebar] domAPI.getActiveElement() must be provided to avoid using document.activeElement');
   }
-  if (!domAPI.ownerDocument || typeof domAPI.ownerDocument.dispatchEvent !== 'function') {
-    throw new Error('[sidebar] domAPI.ownerDocument with dispatchEvent() must be provided to avoid using window/document globals');
+  if (!domAPI.ownerDocument || typeof domAPI.ownerDocument.dispatchEvent !== 'function') { // This check seems to refer to a specific DI pattern
+    // Let's ensure getDocument() and its dispatchEvent are the primary focus for eventing as per Pattern 10 usage example
+    // throw new Error('[sidebar] domAPI.ownerDocument with dispatchEvent() must be provided to avoid using window/document globals');
   }
+  if (typeof domAPI.getDocument !== 'function') {
+    throw new Error('[sidebar] domAPI.getDocument() must be a function.');
+  }
+  // Deferring dispatchEvent check until we get the document object from domAPI.getDocument()
   if (!accessibilityUtils || typeof accessibilityUtils.announce !== 'function') { // Added check
     throw new Error('[sidebar] accessibilityUtils with an announce method is required.');
   }
@@ -105,7 +110,7 @@ export function createSidebar({
   let backdrop = null;
   let pinned = false;
   let visible = false;
-  let trackedEvents = [];
+  // let trackedEvents = []; // Removed as cleanup is context-based
 
   // Search input elements
   let chatSearchInputEl = null;
@@ -141,16 +146,15 @@ export function createSidebar({
       await activateTab(activeTab); // This will also call rendering functions
       notify.info('[sidebar] initialized successfully', { group: true, context: 'sidebar', module: MODULE, source: 'init', activeTab });
 
-      const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-      if (doc) {
-        if (domAPI?.dispatchEvent) {
-          domAPI.dispatchEvent(doc, new CustomEvent('sidebar:initialized',
-            { detail: { success: true } }));
-        } else {
-          doc.dispatchEvent(new CustomEvent('sidebar:initialized',
-            { detail: { success: true } }));
-        }
+      // Removed dispatch of 'sidebar:initialized' event to align with Pattern 10.
+      // Application readiness should be coordinated via app:ready or DependencySystem.waitFor.
+
+      // Validate that the document object obtained from domAPI.getDocument() has dispatchEvent
+      const docForValidation = domAPI.getDocument();
+      if (!docForValidation || typeof docForValidation.dispatchEvent !== 'function') {
+        throw new Error('[sidebar] Document object from domAPI.getDocument() must have a dispatchEvent method.');
       }
+
       return true;
     } catch (err) {
       notify.error('[sidebar] Initialization failed: ' + (err && err.message ? err.message : err), {
@@ -175,7 +179,7 @@ export function createSidebar({
         eventHandlers.cleanupListeners({ context: 'inlineAuth' });
          notify.debug(`[sidebar] Called eventHandlers.cleanupListeners for context: inlineAuth`, { source: 'destroy' });
     }
-    trackedEvents = [];
+    // trackedEvents = []; // Already removed
     if (backdrop) { backdrop.remove(); backdrop = null; }
     pinned = false; visible = false;
     notify.info('[sidebar] destroyed', { group: true, context: 'sidebar', module: MODULE, source: 'destroy' });
@@ -340,6 +344,28 @@ export function createSidebar({
       );
       eventHandlers.trackListener(el, 'error', errorHandler, { description: 'Sidebar child widget error', context: MODULE });
     }
+
+    // Listen for new conversations being created
+    eventHandlers.trackListener(
+      domAPI.getDocument(),
+      'chat:conversationCreated',
+      (e) => {
+        notify.info('[sidebar] chat:conversationCreated event received', { detail: e.detail, module: MODULE, source: 'bindDomEvents' });
+        // Potentially switch to recent tab and refresh, or just refresh if already on recent
+        const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+        if (activeTab === 'recent') {
+          _handleChatSearch(); // This should re-render conversations
+        } else {
+          // If not on recent, we might still want to refresh recent in background,
+          // or simply rely on the user switching to it. For now, only refresh if active.
+          // Alternatively, could call activateTab('recent') but that might be too intrusive.
+        }
+        // Consider if uiRenderer.renderConversations should be called directly
+        // if _handleChatSearch has side effects beyond just rendering.
+        // For now, _handleChatSearch is the established way to refresh.
+      },
+      { description: 'Sidebar chat:conversationCreated listener', context: MODULE }
+    );
   }
 
   async function activateTab(name = 'recent') {
@@ -550,8 +576,18 @@ export function createSidebar({
   }
 
   function dispatch(name, detail) {
-    if (domAPI && domAPI.ownerDocument && typeof CustomEvent !== 'undefined') {
-      domAPI.dispatchEvent(domAPI.ownerDocument, new CustomEvent(name, { detail }));
+    // Ensure domAPI.getDocument() returns an object with dispatchEvent
+    const doc = domAPI.getDocument();
+    if (doc && typeof doc.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
+      doc.dispatchEvent(new CustomEvent(name, { detail }));
+    } else {
+      notify.warn(`[sidebar] Cannot dispatch event "${name}". domAPI.getDocument().dispatchEvent is not available or CustomEvent is undefined.`, {
+        module: MODULE,
+        source: 'dispatch',
+        hasDoc: !!doc,
+        hasDispatchEvent: !!(doc && typeof doc.dispatchEvent === 'function'),
+        hasCustomEvent: typeof CustomEvent !== 'undefined'
+      });
     }
   }
 
