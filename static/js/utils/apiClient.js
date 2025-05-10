@@ -8,6 +8,7 @@
  */
 
 import { logEventToServer, maybeCapture } from './notifications-helpers.js';
+import { normaliseUrl as browserServiceNormaliseUrl } from './browserService.js'; // Import corrected function
 // NOTE: notify must be injected, not imported. Remove this import to avoid hidden coupling.
 
 /**
@@ -45,12 +46,14 @@ export function createApiClient({
 
     let normUrl;
     try {
-      const base = browserService?.getLocationHref?.() || browserService?.windowObject?.location.origin;
-      normUrl = globalUtils.normaliseUrl(fullUrl, base);
+      // Use the imported normaliseUrl from browserService.js
+      // It takes only one argument.
+      normUrl = browserServiceNormaliseUrl(fullUrl);
     } catch (err) {
-      normUrl = fullUrl;
+      // Fallback or error handling if normaliseUrl itself throws, though it has its own try/catch.
+      normUrl = fullUrl; // Fallback to fullUrl if normalization fails catastrophically
       if (APP_CONFIG?.DEBUG) {
-        notify.warn(`[API] normaliseUrl failed for "${fullUrl}"`, {
+        notify.warn(`[API] URL normalization failed for "${fullUrl}", using raw URL.`, {
           context: 'apiClient', module: 'ApiClient', source: 'apiRequest', originalError: err
         });
       }

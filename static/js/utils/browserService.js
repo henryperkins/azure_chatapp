@@ -21,7 +21,8 @@ export function buildUrl(params = {}, baseHref = (typeof window !== 'undefined' 
 export function normaliseUrl(u = '') {
   try {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
-    return url.pathname.replace(/\/+$/, '') + (url.search ? `?${url.search}` : '') + url.hash;
+    // url.search already includes '?' if params exist, or is empty string otherwise.
+    return url.pathname.replace(/\/+$/, '') + url.search + url.hash;
   } catch { return u; }
 }
 

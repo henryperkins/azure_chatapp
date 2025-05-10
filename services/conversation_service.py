@@ -199,6 +199,8 @@ class ConversationService:
         # Auto-enable KB if the project has one
         if project_id:
             project = await self._validate_project_access(project_id, user_id)
+            # Refresh the project instance to load the knowledge_base relationship
+            await self.db.refresh(project, ['knowledge_base'])
             # Access knowledge base through the relationship
             if project.knowledge_base:
                 conv.use_knowledge_base = True
