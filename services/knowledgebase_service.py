@@ -162,6 +162,9 @@ async def create_knowledge_base(
     if not project:
         raise ValueError("Project not found")
 
+    # Explicitly load the knowledge_base relationship asynchronously
+    await db.refresh(project, ["knowledge_base"])
+
     if project.knowledge_base:
         raise ValueError("Project already has a knowledge base")
 

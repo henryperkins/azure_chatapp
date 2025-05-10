@@ -395,10 +395,13 @@ this.domAPI.dispatchEvent(
     }, "PD_KnowledgeLoaded");
 
     on("projectDetailsFullyLoaded", (e) => {
-      this.notify.info(`[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded. Setting flag and updating chat button.`, {
+      this.notify.info(`[ProjectDetailsComponent] Received projectDetailsFullyLoaded for project ${e.detail?.projectId}.`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents", detail: { projectId: e.detail?.projectId }
       });
       this.state.projectDataActuallyLoaded = true;
+      this.notify.info(`[ProjectDetailsComponent] projectDataActuallyLoaded set to true.`, {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents"
+      });
       this._updateNewChatButtonState();
     }, "PD_FullyLoaded");
 
@@ -802,13 +805,14 @@ this.domAPI.dispatchEvent(
     if (projectReady && userIsReady) {
       newChatBtn.disabled = false;
       newChatBtn.classList.remove("btn-disabled");
-      this.notify.info(`[ProjectDetailsComponent] New chat button ENABLED. Project Ready: ${projectReady}, User Ready (ID: ${this.app.state.currentUser.id})`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState"
+      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Ready (ID: ${this.app.state.currentUser.id})`, {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
+        detail: { projectDataActuallyLoaded: this.state.projectDataActuallyLoaded, currentUserId: this.app?.state?.currentUser?.id }
       });
     } else {
       newChatBtn.disabled = true;
       newChatBtn.classList.add("btn-disabled");
-      this.notify.warn(`[ProjectDetailsComponent] New chat button DISABLED. Project Ready: ${projectReady}, User Ready: ${userIsReady} (User ID: ${this.app?.state?.currentUser?.id})`, {
+      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Ready: ${userIsReady} (User ID: ${this.app?.state?.currentUser?.id})`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
         detail: {
             projectDataActuallyLoaded: this.state.projectDataActuallyLoaded,
