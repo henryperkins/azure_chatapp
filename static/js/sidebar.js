@@ -485,8 +485,10 @@ export function createSidebar({
     } else {
       domAPI.setTextContent(sidebarAuthFormTitleEl, 'Login');
       domAPI.setTextContent(sidebarAuthBtnEl, 'Login');
-      domAPI.addClass(sidebarUsernameContainerEl, 'hidden'); // Hide username
-      domAPI.removeAttribute(sidebarUsernameInputEl, 'required');
+      domAPI.removeClass(sidebarUsernameContainerEl, 'hidden'); // Show username for login
+      domAPI.setAttribute(sidebarUsernameInputEl, 'required', 'true');
+      domAPI.addClass(sidebarEmailInputEl.parentElement, 'hidden'); // Hide email in login
+      domAPI.removeAttribute(sidebarEmailInputEl, 'required');
       domAPI.addClass(sidebarConfirmPasswordContainerEl, 'hidden');
       domAPI.removeAttribute(sidebarConfirmPasswordInputEl, 'required');
       domAPI.setTextContent(sidebarAuthToggleEl, 'Need an account? Register');
@@ -528,7 +530,7 @@ export function createSidebar({
     eventHandlers.trackListener(sidebarAuthFormEl, 'submit', async (e) => {
       e.preventDefault();
       domAPI.setTextContent(sidebarAuthErrorEl, ''); // Clear previous errors
-      const email = sidebarEmailInputEl.value;
+      const username = (sidebarUsernameInputEl.value || sidebarEmailInputEl.value || '').trim();
       const password = sidebarPasswordInputEl.value;
       const authModule = DependencySystem.modules.get('auth');
 
@@ -543,32 +545,33 @@ export function createSidebar({
 
       try {
         if (isRegisterMode) {
-          const username = sidebarUsernameInputEl.value; // Get username
           const confirmPassword = sidebarConfirmPasswordInputEl.value;
 
           if (!username) { // Basic validation for username
-            sidebarNotify.warn('Username is required for registration.', { source: 'sidebarAuthSubmit' });
+            sidebarNotify.warn('Username is required for registration.', { source: 'sidebarAuthSubmit', extra: { username } });
             domAPI.setTextContent(sidebarAuthErrorEl, 'Username is required.');
             throw new Error('Username is required.');
           }
 
           if (password !== confirmPassword) {
-            sidebarNotify.warn('Passwords do not match during sidebar registration.', { source: 'sidebarAuthSubmit' });
+            sidebarNotify.warn('Passwords do not match during sidebar registration.', { source: 'sidebarAuthSubmit', extra: { username } });
             domAPI.setTextContent(sidebarAuthErrorEl, 'Passwords do not match.');
             throw new Error('Passwords do not match.');
           }
-          sidebarNotify.info('Attempting registration via sidebar.', { source: 'sidebarAuthSubmit', extra: { username, email } });
+          sidebarNotify.info('Attempting registration via sidebar.', { source: 'sidebarAuthSubmit', extra: { username } });
           // Pass userData as an object
-          await authModule.register({ username: username, email: email, password: password });
-          sidebarNotify.success('Registration successful via sidebar. Please login.', { source: 'sidebarAuthSubmit', extra: { username, email } });
+          await authModule.register({ username: username, password: password });
+          sidebarNotify.success('Registration successful via sidebar. Please login.', { source: 'sidebarAuthSubmit', extra: { username } });
           updateAuthFormUI(false);
           domAPI.setTextContent(sidebarAuthErrorEl, 'Registration successful! Please login.');
         } else {
-          sidebarNotify.info('Attempting login via sidebar.', { source: 'sidebarAuthSubmit', extra: { email } });
-          // For login, authModule.login likely expects separate arguments or an object with email/username and password
-          // Assuming authModule.login(email, password) is the correct signature based on previous context.
-          await authModule.login(email, password);
-          sidebarNotify.success('Login successful via sidebar.', { source: 'sidebarAuthSubmit', extra: { email } });
+          if (!username) {
+            domAPI.setTextContent(sidebarAuthErrorEl, 'Username required.');
+            throw new Error('Username required.');
+          }
+          sidebarNotify.info('Attempting login via sidebar.', { source: 'sidebarAuthSubmit', extra: { username } });
+          await authModule.login(username, password);
+          sidebarNotify.success('Login successful via sidebar.', { source: 'sidebarAuthSubmit', extra: { username } });
           // On successful login, the authStateChanged listener will hide the form.
         }
       } catch (error) {
@@ -576,7 +579,7 @@ export function createSidebar({
         sidebarNotify.error(`Sidebar auth failed: ${errorMessage}`, {
           source: 'sidebarAuthSubmit',
           originalError: error,
-          extra: { email, mode: isRegisterMode ? 'register' : 'login' }
+          extra: { username, mode: isRegisterMode ? 'register' : 'login' }
         });
         domAPI.setTextContent(sidebarAuthErrorEl, errorMessage);
       } finally {
