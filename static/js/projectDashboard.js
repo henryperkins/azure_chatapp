@@ -474,12 +474,26 @@ class ProjectDashboard {
       const defaultConversation = project.conversations[0];
       if (defaultConversation && defaultConversation.id) {
         this.browserService.setSearchParam('chatId', defaultConversation.id);
-        this.logger.info(`[ProjectDashboard] Default conversation ID ${defaultConversation.id} set in URL.`, {
+        this.dashboardNotify.info(`[ProjectDashboard] _postProjectDetailsSuccess: Default conversation ID ${defaultConversation.id} set in URL for project ${projectId}.`, {
           source: '_postProjectDetailsSuccess',
           projectId,
-          chatId: defaultConversation.id
+          chatId: defaultConversation.id,
+          projectObject: project // Log the whole project object for inspection
+        });
+      } else {
+        this.dashboardNotify.warn(`[ProjectDashboard] _postProjectDetailsSuccess: Project has conversations array, but defaultConversation or its ID is missing.`, {
+          source: '_postProjectDetailsSuccess',
+          projectId,
+          projectConversations: project.conversations
         });
       }
+    } else {
+      this.dashboardNotify.warn(`[ProjectDashboard] _postProjectDetailsSuccess: Project object or project.conversations is missing/empty. Cannot set default chatId.`, {
+        source: '_postProjectDetailsSuccess',
+        projectId,
+        projectExists: !!project,
+        conversationsExist: !!(project && project.conversations)
+      });
     }
 
     // Only dispatch if project object is available (direct-path or loaded via API)

@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, true
+from sqlalchemy.orm import selectinload, attributes as orm_attributes # Added for selectinload and flag_modified
 from sentry_sdk import (
     capture_exception,
     configure_scope,
@@ -31,14 +32,14 @@ from sentry_sdk import (
 
 from db import get_async_session
 from models.user import User, UserRole
-from models.project import Project
+from models.project import Project, ProjectUserAssociation # Added ProjectUserAssociation
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact
 from models.knowledge_base import KnowledgeBase
 from utils.auth_utils import get_current_user_and_token
 from services.project_service import check_project_permission, ProjectAccessLevel
-from services.project_service import coerce_project_id  # <- renamed from _coerce_project_id
+from services.project_service import coerce_project_id
 from services.project_service import _lookup_project
 import config
 from utils.db_utils import get_all_by_condition, save_model
@@ -107,11 +108,9 @@ async def create_project(
     Create a new project with full monitoring and always create a knowledge base.
     """
     current_user, _token = current_user_tuple
-    # --- BEGIN ADDED LOGGING ---
     logger.info(
         f"[PROJECT_CREATE_START] User ID {current_user.id} ({current_user.username}) creating project '{project_data.name}'"
     )
-    # --- END ADDED LOGGING ---
     transaction = start_transaction(
         op="project",
         name="Create Project",
@@ -119,16 +118,13 @@ async def create_project(
     )
     try:
         with transaction:
-            # Set context
             transaction.set_tag("user.id", str(current_user.id))
             transaction.set_data("project.name", project_data.name)
             transaction.set_data("max_tokens", project_data.max_tokens)
 
-            # Track metrics
             metrics.incr("project.create.attempt")
             start_time = time.time()
 
-            # 1. Create project
             with sentry_span(op="db", description="Create project record"):
                 project = Project(
                     user_id=current_user.id,
@@ -140,24 +136,16 @@ async def create_project(
                 )
                 await save_model(db, project)
 
-            # 2. Immediately create a knowledge base for this project
             from services.knowledgebase_service import create_knowledge_base
-
             kb = await create_knowledge_base(
                 name=f"{project.name} Knowledge Base",
                 project_id=project.id,
                 description="Auto-created KB for project",
                 db=db,
             )
-
-            # 3. Attach KB to project and save
-
-            # The relationship is now managed by KnowledgeBase.project_id (1-1), no need to assign knowledge_base_id.
             await db.refresh(project)
 
-            # 4. Immediately create a default conversation for this project
             from services.conversation_service import ConversationService
-
             conv_service = ConversationService(db)
             default_conversation = await conv_service.create_conversation(
                 user_id=current_user.id,
@@ -166,34 +154,56 @@ async def create_project(
                 project_id=project.id,
             )
 
-            # Record success
             duration = (time.time() - start_time) * 1000
-            metrics.distribution(
-                "project.create.duration", duration, unit="millisecond"
-            )
+            metrics.distribution("project.create.duration", duration, unit="millisecond")
             metrics.incr("project.create.success")
 
-            # Set user context
             with configure_scope() as scope:
                 set_tag("user.id", str(current_user.id))
                 set_tag("project.id", str(project.id))
                 set_tag("kb.id", str(kb.id))
 
-            # Update user preferences with last_project_id and chronologically ordered projects array
-            user = current_user
-            if user.preferences is None:
-                user.preferences = {}
-            user.preferences["last_project_id"] = str(project.id)
+            # Update user preferences
+            user_stmt = (
+                select(User)
+                .where(User.id == current_user.id)
+                .options(
+                    selectinload(User.conversations),
+                    selectinload(User.project_associations).selectinload(ProjectUserAssociation.project)
+                )
+            )
+            user_result = await db.execute(user_stmt)
+            user_to_update = user_result.scalar_one_or_none()
 
-            # Maintain a chronological array of projects w/ id and title
-            projects_list = user.preferences.get("projects", [])
-            projects_list.append({"id": str(project.id), "title": project.name})
-            user.preferences["projects"] = projects_list
-            await save_model(db, user)
+            if not user_to_update:
+                logger.error(f"User {current_user.id} not found in current session with selectinload.")
+                raise HTTPException(status_code=500, detail="User session error during project creation (selectinload)")
 
-            logger.info(f"Created project {project.id} with KB {kb.id}")
+            project_for_prefs_update = await db.get(Project, project.id)
+            if not project_for_prefs_update:
+                logger.error(f"Project {project.id} not found in current session before updating user preferences.")
+                raise HTTPException(status_code=500, detail="Project session error during user preferences update")
+            await db.refresh(project_for_prefs_update)
+
+            if user_to_update.preferences is None:
+                user_to_update.preferences = {}
+            user_to_update.preferences["last_project_id"] = str(project_for_prefs_update.id)
+
+            temp_projects_list = user_to_update.preferences.get("projects", [])
+            temp_projects_list.append({"id": str(project_for_prefs_update.id), "title": project_for_prefs_update.name})
+            user_to_update.preferences["projects"] = temp_projects_list
+
+            orm_attributes.flag_modified(user_to_update, "preferences")
+            await save_model(db, user_to_update)
+
+            logger.info(f"Created project {project_for_prefs_update.id} with KB {kb.id}")
+
+            # For the final response, ensure the main project object is fully loaded as needed for serialization
+            # Use project_for_prefs_update as it's already fetched and refreshed in this scope
+            await db.refresh(project_for_prefs_update, ["knowledge_base", "conversations"])
+
             return await create_standard_response(
-                serialize_project(project),
+                serialize_project(project_for_prefs_update),
                 "Project and knowledge base created successfully",
                 span_or_transaction=transaction,
             )
@@ -225,11 +235,9 @@ async def list_projects(
 ):
     """List projects with performance tracing"""
     current_user, _token = current_user_tuple
-    # --- BEGIN ADDED LOGGING ---
     logger.info(
         f"[PROJECT_LIST_START] User ID {current_user.id} ({current_user.username}) listing projects with filter: {filter_type.value}"
     )
-    # --- END ADDED LOGGING ---
     with sentry_span(
         op="project",
         name="List Projects",
@@ -241,20 +249,15 @@ async def list_projects(
             span.set_data("pagination.skip", skip)
             span.set_data("pagination.limit", limit)
 
-            # Track metrics
             metrics.incr("project.list.attempt")
             start_time = time.time()
 
-            # Determine base query condition
             if all_users and current_user.role == UserRole.ADMIN.value:
-                condition = true()  # Admin requested all users, no user filter
+                condition = true()
                 span.set_tag("admin.all_users", True)
             else:
-                condition = (
-                    Project.user_id == current_user.id
-                )  # Default: filter by current user
+                condition = (Project.user_id == current_user.id)
 
-            # Query projects
             projects = await get_all_by_condition(
                 db,
                 Project,
@@ -264,7 +267,6 @@ async def list_projects(
                 order_by=Project.created_at.desc(),
             )
 
-            # Apply filters
             if filter_type == ProjectFilter.pinned:
                 projects = [p for p in projects if p.pinned]
             elif filter_type == ProjectFilter.archived:
@@ -272,7 +274,6 @@ async def list_projects(
             elif filter_type == ProjectFilter.active:
                 projects = [p for p in projects if not p.archived]
 
-            # Record success
             duration = (time.time() - start_time) * 1000
             metrics.distribution("project.list.duration", duration, unit="millisecond")
             metrics.incr(
@@ -314,7 +315,6 @@ async def get_project(
     try:
         logger.info(f"Project details request: ID={project_id}, User={current_user.id}")
 
-        # Step 1: First safely coerce the project ID
         try:
             proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
         except Exception as coercion_err:
@@ -332,20 +332,17 @@ async def get_project(
                 span.set_tag("project.id", str(proj_id))
                 span.set_tag("user.id", str(current_user.id))
 
-                # Step 2: First check if project exists before permission check
                 project = await _lookup_project(db, proj_id)
                 if not project:
                     logger.warning(f"Project not found: {proj_id}")
                     metrics.incr("project.view.failure", tags={"reason": "not_found"})
                     raise HTTPException(status_code=404, detail="Project not found")
 
-                # Step 3: Now check permissions with the existing project
                 try:
                     await check_project_permission(
                         proj_id, current_user, db, ProjectAccessLevel.READ
                     )
                 except HTTPException as perm_err:
-                    # Maintain original status code and message
                     logger.warning(f"Permission denied for user {current_user.id} on project {proj_id}: {perm_err}")
                     metrics.incr("project.view.failure", tags={"reason": "permission_denied"})
                     raise
@@ -354,7 +351,6 @@ async def get_project(
                     metrics.incr("project.view.failure", tags={"reason": "permission_check_error"})
                     raise HTTPException(status_code=403, detail="Permission check failed") from perm_err
 
-                # Set context in Sentry
                 with configure_scope() as scope:
                     scope.set_context("project", serialize_project(project))
 
@@ -363,7 +359,6 @@ async def get_project(
                     serialize_project(project), span_or_transaction=span
                 )
             except HTTPException:
-                # Re-raise HTTP exceptions with their original status codes
                 raise
             except Exception as e:
                 span.set_tag("error", True)
@@ -375,7 +370,6 @@ async def get_project(
                     detail="Failed to retrieve project",
                 ) from e
     except Exception as outer_e:
-        # This catches any errors not handled by the inner try/except blocks
         logger.exception(f"Unhandled exception in get_project outer block: {outer_e}")
         metrics.incr("project.view.failure", tags={"reason": "unhandled_exception"})
         raise HTTPException(
@@ -404,7 +398,6 @@ async def update_project(
             transaction.set_tag("project.id", str(proj_id))
             transaction.set_tag("user.id", str(current_user.id))
 
-            # Centralized permission check
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.EDIT
             )
@@ -412,29 +405,24 @@ async def update_project(
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            # Track changes
             changes = {}
             updates = update_data.dict(exclude_unset=True)
             transaction.set_data("updates", updates)
 
-            # Validate token limit
             if "max_tokens" in updates and updates["max_tokens"] < project.token_usage:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Token limit below current usage",
                 )
 
-            # Apply updates
             with sentry_span(op="db.update", description="Update project record"):
                 for key, value in updates.items():
                     if getattr(project, key) != value:
                         old_val = getattr(project, key)
                         setattr(project, key, value)
                         changes[key] = {"old": old_val, "new": value}
-
                 await save_model(db, project)
 
-            # Record metrics
             metrics.incr("project.update.success")
             metrics.distribution(
                 "project.update.field_count",
@@ -493,7 +481,6 @@ async def delete_project(
             transaction.set_tag("project.id", str(proj_id))
             transaction.set_tag("user.id", str(current_user.id))
 
-            # Centralized permission check
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
@@ -501,7 +488,6 @@ async def delete_project(
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            # Initialize storage
             storage = get_file_storage(
                 {
                     "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
@@ -509,7 +495,6 @@ async def delete_project(
                 }
             )
 
-            # File deletion tracking
             files_deleted = 0
             files_failed = 0
             total_size = 0
@@ -537,9 +522,6 @@ async def delete_project(
                 },
             )
 
-            # FULL CLEANUP before deleting the project
-
-            # -- Delete all conversations and messages for this project
             from sqlalchemy import delete as sqlalchemy_delete
 
             convo_del = await db.execute(
@@ -551,7 +533,6 @@ async def delete_project(
                 f"Deleted {convo_del.rowcount if hasattr(convo_del, 'rowcount') else '?'} conversations for project {project_id}"
             )
 
-            # -- Delete all artifacts for this project
             artifact_del = await db.execute(
                 sqlalchemy_delete(Artifact).where(Artifact.project_id == project_id)
             )
@@ -559,14 +540,12 @@ async def delete_project(
                 f"Deleted {artifact_del.rowcount if hasattr(artifact_del, 'rowcount') else '?'} artifacts for project {project_id}"
             )
 
-            # -- Delete the knowledge base (if any)
             if project.knowledge_base:
                 await db.delete(project.knowledge_base)
                 logger.info(
                     f"Deleted knowledge base {project.knowledge_base.id} for project {project_id}"
                 )
 
-            # -- Delete all ProjectFile rows (already handled file removal above)
             file_del = await db.execute(
                 sqlalchemy_delete(ProjectFile).where(
                     ProjectFile.project_id == project_id
@@ -576,33 +555,25 @@ async def delete_project(
                 f"Deleted {file_del.rowcount if hasattr(file_del, 'rowcount') else '?'} file records for project {project_id}"
             )
 
-            # Delete project
             with sentry_span(op="db.delete", description="Delete project record"):
                 await db.delete(project)
                 await db.commit()
 
-            # Cleanup user.preferences for this project
             user = current_user
             prefs = user.preferences or {}
-
-            # Remove from projects list
             old_projects = prefs.get("projects", [])
             updated_projects = [
                 p for p in old_projects if p.get("id") != str(project_id)
             ]
             prefs["projects"] = updated_projects
-
-            # If this was last_project_id, update to previous or None
             if prefs.get("last_project_id") == str(project_id):
                 if updated_projects:
                     prefs["last_project_id"] = updated_projects[-1]["id"]
                 else:
                     prefs["last_project_id"] = None
-
             user.preferences = prefs
             await save_model(db, user)
 
-            # Record metrics
             metrics.incr(
                 "project.delete.success",
                 tags={"files_deleted": files_deleted, "files_failed": files_failed},
@@ -634,11 +605,6 @@ async def delete_project(
         ) from e
 
 
-# ============================
-# Project Actions with Monitoring
-# ============================
-
-
 @router.patch("/{project_id}/archive", response_model=dict)
 async def toggle_archive_project(
     project_id: str,
@@ -657,7 +623,6 @@ async def toggle_archive_project(
             span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Centralized permission check
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
@@ -665,7 +630,6 @@ async def toggle_archive_project(
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            # Track state change
             old_state = project.archived
             project.archived = not project.archived
 
@@ -675,7 +639,6 @@ async def toggle_archive_project(
 
             await save_model(db, project)
 
-            # Record metrics
             metrics.incr(
                 "project.archive.toggle",
                 tags={
@@ -719,7 +682,6 @@ async def toggle_pin_project(
             span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Centralized permission check
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.MANAGE
             )
@@ -736,7 +698,6 @@ async def toggle_pin_project(
             project.pinned = not project.pinned
             await save_model(db, project)
 
-            # Record metrics
             metrics.incr("project.pin.toggle", tags={"new_state": str(project.pinned)})
 
             return await create_standard_response(
@@ -764,20 +725,13 @@ async def toggle_pin_project(
             ) from e
 
 
-# ============================
-# Project Stats with Monitoring
-# ============================
-
-
 @router.get("/{project_id}/stats", response_model=dict)
 async def get_project_stats(
     project_id: str,
     current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """
-    Get project statistics with performance tracing.
-    """
+    """Get project statistics with performance tracing."""
     current_user, _token = current_user_tuple
     proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     with sentry_span(
@@ -790,7 +744,6 @@ async def get_project_stats(
             span.set_tag("project.id", str(proj_id))
             span.set_tag("user.id", str(current_user.id))
 
-            # Centralized permission check
             await check_project_permission(
                 proj_id, current_user, db, ProjectAccessLevel.READ
             )
@@ -801,7 +754,6 @@ async def get_project_stats(
             metrics.incr("project.stats.requested")
             start_time = time.time()
 
-            # Get conversation count
             conversations = await get_all_by_condition(
                 db,
                 Conversation,
@@ -809,36 +761,31 @@ async def get_project_stats(
                 Conversation.is_deleted.is_(False),
             )
 
-            # Get file statistics
             files_result = await db.execute(
-                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size)) # pylint: disable=not-callable
+                select(func.count(ProjectFile.id), func.sum(ProjectFile.file_size))
                 .select_from(ProjectFile)
                 .where(ProjectFile.project_id == project_id)
             )
             file_count, total_size = files_result.first() or (0, 0)
 
-            # Get artifact count
             artifacts = await get_all_by_condition(
                 db, Artifact, Artifact.project_id == project_id
             )
 
-            # KB information
             kb_info = None
             try:
                 kb_query = await db.execute(
                     select(KnowledgeBase).where(KnowledgeBase.project_id == project_id)
                 )
                 kb = kb_query.scalars().first()
-
                 if kb:
                     kb_info = {
                         "id": str(kb.id),
                         "is_active": kb.is_active,
                         "indexed_files": 0,
                     }
-                    # Retrieve how many files have processed_for_search = True
                     processed_result = await db.execute(
-                        select(func.count(ProjectFile.id)).where( # pylint: disable=not-callable
+                        select(func.count(ProjectFile.id)).where(
                             ProjectFile.project_id == project_id,
                             ProjectFile.config.isnot(None),
                             ProjectFile.config.contains(
@@ -857,14 +804,12 @@ async def get_project_stats(
                     "error": str(kb_err)
                 }
 
-            # Calculate usage
             usage_percentage = (
                 (project.token_usage / project.max_tokens * 100)
                 if project.max_tokens > 0
                 else 0
             )
 
-            # Record performance
             duration = (time.time() - start_time) * 1000
             metrics.distribution("project.stats.duration", duration, unit="millisecond")
             metrics.incr("project.stats.success")
