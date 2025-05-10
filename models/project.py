@@ -86,10 +86,10 @@ class Project(Base):
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP")
+        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP")
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=False),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
@@ -156,7 +156,7 @@ class ProjectUserAssociation(Base):
     )
     role: Mapped[str] = mapped_column(String(50), default="member")
     joined_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP")
+        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP")
     )
 
     # Relationships

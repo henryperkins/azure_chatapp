@@ -44,10 +44,10 @@ class Artifact(Base):
         Text, nullable=False, comment="Max 10MB of text content"
     )
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), nullable=False
+        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=False),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
         nullable=False,

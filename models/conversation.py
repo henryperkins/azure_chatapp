@@ -51,10 +51,10 @@ class Conversation(Base):
     model_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP"), index=True
+        TIMESTAMP(timezone=False), server_default=text("CURRENT_TIMESTAMP"), index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        TIMESTAMP,
+        TIMESTAMP(timezone=False),
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
