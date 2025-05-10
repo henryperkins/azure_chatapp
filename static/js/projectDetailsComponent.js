@@ -137,7 +137,8 @@ export class ProjectDetailsComponent {
       currentProject: null,
       activeTab: "details",
       isLoading: Object.create(null),
-      initialized: false
+      initialized: false,
+      projectDataActuallyLoaded: false // New flag
     };
 
     this.fileConstants = {
@@ -392,15 +393,21 @@ this.domAPI.dispatchEvent(
     }, "PD_KnowledgeLoaded");
 
     on("projectDetailsFullyLoaded", (e) => {
-      this.notify.info(`[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded.`, {
+      this.notify.info(`[ProjectDetailsComponent] Project ${e.detail?.projectId} fully loaded. Setting flag and updating chat button.`, {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents", detail: { projectId: e.detail?.projectId }
       });
-      const newChat = this.elements.container.querySelector("#projectNewConversationBtn");
-      if (newChat) {
-        newChat.disabled = false;
-        newChat.classList.remove("btn-disabled");
-      }
+      this.state.projectDataActuallyLoaded = true;
+      this._updateNewChatButtonState();
     }, "PD_FullyLoaded");
+
+    // Listen for global auth state changes to re-evaluate button state
+    on("authStateChanged", (authEvent) => {
+        this.notify.info(`[ProjectDetailsComponent] Auth state changed event received (authenticated: ${authEvent.detail?.authenticated}). Updating chat button.`, {
+            group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents",
+            detail: { user: authEvent.detail?.user }
+        });
+        this._updateNewChatButtonState();
+    }, "PD_GlobalAuthStateChanged");
   }
 
   async _initSubComponents() {
@@ -735,9 +742,20 @@ this.domAPI.dispatchEvent(
       return;
     }
 
+    // Check for User ID before proceeding
+    const currentUser = this.app?.state?.currentUser;
+    if (!currentUser || !currentUser.id) {
+      this.notify.error("[ProjectDetailsComponent] User ID not available. Cannot create conversation.", {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", timeout: 0
+      });
+      // Optionally, prompt user to log in or refresh
+      // this.modalManager.alert({ title: "Authentication Error", message: "Your session might have expired. Please log in again." });
+      return;
+    }
+
     try {
-      this.notify.info(`[ProjectDetailsComponent] create conversation @${pid}`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", detail: { projectId: pid }
+      this.notify.info(`[ProjectDetailsComponent] create conversation @${pid} for user ${currentUser.id}`, {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", detail: { projectId: pid, userId: currentUser.id }
       });
       const conv = await this.projectManager.createConversation(pid);
       if (conv?.id) {
@@ -751,6 +769,36 @@ this.domAPI.dispatchEvent(
     } catch (err) {
       this.notify.error("[ProjectDetailsComponent] createConversation failed: " + (err?.message || err), {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", originalError: err, timeout: 0
+      });
+    }
+  }
+
+  _updateNewChatButtonState() {
+    const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
+    if (!newChatBtn) return;
+
+    const projectReady = this.state.projectDataActuallyLoaded;
+    // Use the most current app state for user readiness
+    const userIsReady = this.app && this.app.state && this.app.state.currentUser && this.app.state.currentUser.id;
+
+    if (projectReady && userIsReady) {
+      newChatBtn.disabled = false;
+      newChatBtn.classList.remove("btn-disabled");
+      this.notify.info(`[ProjectDetailsComponent] New chat button ENABLED. Project Ready: ${projectReady}, User Ready (ID: ${this.app.state.currentUser.id})`, {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState"
+      });
+    } else {
+      newChatBtn.disabled = true;
+      newChatBtn.classList.add("btn-disabled");
+      this.notify.warn(`[ProjectDetailsComponent] New chat button DISABLED. Project Ready: ${projectReady}, User Ready: ${userIsReady} (User ID: ${this.app?.state?.currentUser?.id})`, {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
+        detail: {
+            projectDataActuallyLoaded: this.state.projectDataActuallyLoaded,
+            appStateExists: !!(this.app && this.app.state),
+            currentUserObjectDefined: typeof this.app?.state?.currentUser !== 'undefined',
+            currentUserId: this.app?.state?.currentUser?.id,
+            appIsAuthenticated: this.app?.state?.isAuthenticated
+        }
       });
     }
   }

@@ -1,4 +1,5 @@
 import { wrapApi, safeInvoker } from "./utils/notifications-helpers.js";
+import { APP_CONFIG } from './appConfig.js'; // Import APP_CONFIG
 
 /**
  * chat.js (Strict DI, Linted Edition)
@@ -165,19 +166,53 @@ export function createChatManager({
   notify,            // nuevo DI
   errorReporter      // nuevo DI
 } = {}) {
+  // 1. Base notifier inyectado (si existe)
+  const _baseNotify = notify; // Assuming notify is always provided as per earlier checks or DI system guarantees
+
+  // 2. chatNotify con contexto pre-fijado
+  // Ensure _baseNotify itself is not null and has withContext
+  if (!_baseNotify || typeof _baseNotify.withContext !== 'function') {
+    // This is a critical setup error if notify is expected to be fully functional.
+    // For robustness in case of partial DI, we can log via console and proceed with a stub.
+    console.error('[ChatManager Factory] Critical: `notify.withContext` is not available. Using fallback console logs.');
+    const consoleNotify = {
+        debug: (...args) => console.debug('[ChatManager Console]', ...args),
+        info: (...args) => console.info('[ChatManager Console]', ...args),
+        warn: (...args) => console.warn('[ChatManager Console]', ...args),
+        error: (...args) => console.error('[ChatManager Console]', ...args),
+        success: (...args) => console.log('[ChatManager Console]', ...args),
+    };
+    notify = consoleNotify; // Reassign to the console-based stub for the rest of this factory
+  }
+
+  const chatNotify = notify.withContext({ module: 'ChatManager', context: 'chatManager' });
+
+  chatNotify.debug('createChatManager called. Validating dependencies...', {
+    source: 'factory',
+    dependencies: {
+      apiRequest: !!apiRequest,
+      app: !!app,
+      eventHandlers: !!eventHandlers,
+      modelConfig: !!modelConfig,
+      projectDetailsComponent: !!projectDetailsComponent,
+      isValidProjectId: !!isValidProjectId,
+      isAuthenticated: !!isAuthenticated,
+      domAPI: !!domAPI,
+      navAPI: !!navAPI,
+      DOMPurify: !!DOMPurify,
+      notificationHandler: !!notificationHandler,
+      apiEndpoints: !!apiEndpoints,
+      notify: !!notify,
+      errorReporter: !!errorReporter
+    }
+  });
+
   // Basic validation
   // Provide fallback DOM, Nav, and event handlers if not supplied
   const _domAPI = domAPI || createDefaultDomAPI();
   const _navAPI = navAPI || createDefaultNavAPI();
   const _EH = eventHandlers || createDefaultEventHandlers();
 
-  // 1.  Base notifier inyectado (si existe)
-  const _baseNotify = notify;
-
-  // 2.  chatNotify con contexto pre-fijado
-  const chatNotify = _baseNotify && typeof _baseNotify.withContext === 'function'
-    ? _baseNotify.withContext({ module: 'ChatManager', context: 'chatManager' })
-    : null;
 
   /* --- Fallback (notificationHandler o consola) para entornos de prueba --- */
   function _fallbackShow(lvl, msg, opts={}) {
@@ -209,7 +244,7 @@ export function createChatManager({
       );
     }
     constructor() {
-      notifyFn('[ChatManager Debug] START ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'start' });
+      chatNotify.debug('ChatManager constructor started.', { source: 'constructor', phase: 'start' });
       this.apiRequest = apiRequest;
       this.app = app;
       this.modelConfigAPI = getInjectedModelConfig(modelConfig);
@@ -242,7 +277,17 @@ export function createChatManager({
       // Local copy of the model config
       this.modelConfig = this.modelConfigAPI.getConfig();
 
-      notifyFn('[ChatManager Debug] END ChatManager constructor', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'constructor', phase: 'end' });
+      chatNotify.debug('ChatManager constructor finished.', {
+        source: 'constructor',
+        phase: 'end',
+        initialState: {
+          projectId: this.projectId,
+          currentConversationId: this.currentConversationId,
+          isInitialized: this.isInitialized,
+          isGlobalMode: this.isGlobalMode,
+          modelConfig: this.modelConfig
+        }
+      });
     }
 
     /**
@@ -257,16 +302,24 @@ export function createChatManager({
      */
     async initialize(options = {}) {
       const _initStart = performance.now();
-      this.notify(`[ChatManager] initialize() called`, "debug", { phase: "init", options, timestamp: _initStart });
+      chatNotify.info('ChatManager initialize() called.', {
+        source: 'initialize',
+        phase: 'start',
+        options,
+        currentProjectId: this.projectId,
+        isInitialized: this.isInitialized
+      });
+
       const requestedProjectId = options.projectId && this.isValidProjectId(options.projectId)
         ? options.projectId
         : null;
+      chatNotify.debug(`Requested Project ID: ${requestedProjectId}`, { source: 'initialize', options });
 
       if (this.isInitialized && this.projectId === requestedProjectId) {
-        this.notify(`[ChatManager] Already initialized for project ${requestedProjectId}. Re-binding UI...`, "warn", { phase: "init", projectId: requestedProjectId });
+        chatNotify.warn(`Already initialized for project ${requestedProjectId}. Re-binding UI...`, { source: 'initialize', projectId: requestedProjectId });
         this._setupUIElements(options);
         this._bindEvents();
-        this.notify(`[ChatManager] initialize (rebinding) completed`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
+        chatNotify.info(`ChatManager initialize (rebinding) completed for project ${requestedProjectId}.`, { source: 'initialize', phase: 'rebind_complete', durationMs: (performance.now() - _initStart).toFixed(2) });
         return true;
       }
 
@@ -274,9 +327,10 @@ export function createChatManager({
       const previousProjectId = this.projectId;
       this.projectId = requestedProjectId;
       this.isGlobalMode = !this.isValidProjectId(this.projectId);
+      chatNotify.debug(`Global mode determined: ${this.isGlobalMode}. Project ID: ${this.projectId}`, { source: 'initialize' });
 
       if (this.isInitialized && previousProjectId !== requestedProjectId) {
-        this.notify(`[ChatManager] Switching to new project: ${requestedProjectId}`, "info", { from: previousProjectId, phase: "init" });
+        chatNotify.info(`Switching from project ${previousProjectId} to ${requestedProjectId}. Resetting state.`, { source: 'initialize', fromProjectId: previousProjectId, toProjectId: requestedProjectId });
         // Reset relevant state
         this.isInitialized = false;
         this.currentConversationId = null;
@@ -286,59 +340,88 @@ export function createChatManager({
       }
 
       if (!this.isAuthenticated()) {
-        const msg = "[ChatManager] User not authenticated.";
-        this._showErrorMessage(msg);
-        this._handleError("initialization", msg);
-        this.notify(msg, "error", { phase: "init", timestamp: performance.now() });
+        const msg = "User not authenticated. Cannot initialize ChatManager.";
+        this._showErrorMessage(msg); // This likely calls notify internally or should
+        this._handleError("initialization", msg); // Already logs via this.notify
         this.projectDetails?.disableChatUI?.("Not authenticated");
+        chatNotify.error(msg, { source: 'initialize', critical: true });
         throw new Error(msg);
       }
 
-      this._setupUIElements(options);
-      this._bindEvents();
+      this._setupUIElements(options); // Internally logs
+      this._bindEvents(); // Internally logs
+const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
+      if (newConversationBtn) {
+        newConversationBtn.classList.remove("hidden");
+        if (this.eventHandlers.cleanupListeners)
+          this.eventHandlers.cleanupListeners(newConversationBtn);
+
+        this.eventHandlers.trackListener(
+          newConversationBtn,
+          "click",
+          safeInvoker(async () => {
+            try {
+              await this.createNewConversation();
+            } catch (err) {
+              this._handleError("New Conversation Button", err);
+              this._showErrorMessage("Failed to start new chat: " + (err?.message || err));
+            }
+          }, { notify: this.notify, errorReporter: this.errorReporter }),
+          { description: "New Conversation Button", context: "chatManager", source: "ChatManager.initialize" }
+        );
+      }
 
       if (this.isGlobalMode) {
-        this.notify("[ChatManager] Starting in global (no-project) mode.", "info", { phase: "init" });
-        this._clearMessages();
-        this._showMessage("system", "Select a project or start a new global chat.");
+        chatNotify.info("Starting in global (no-project) mode.", { source: 'initialize' });
+        this._clearMessages(); // Internally logs
+        this._showMessage("system", "Select a project or start a new global chat."); // Internally logs
         this.isInitialized = true;
-        this.notify(`[ChatManager] initialize complete (global mode)`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
+        chatNotify.info(`ChatManager initialized (global mode).`, { source: 'initialize', phase: 'complete_global', durationMs: (performance.now() - _initStart).toFixed(2) });
 
         // --- Standardized "chatmanager:initialized" event ---
-        const doc = typeof document !== "undefined" ? document : null;
-        if (doc) doc.dispatchEvent(new CustomEvent('chatmanager:initialized', { detail: { success: true } }));
-
+        const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
+        if (doc) {
+            chatNotify.debug('Dispatching chatmanager:initialized event (global mode).', { source: 'initialize' });
+            const event = new CustomEvent('chatmanager:initialized', { detail: { success: true, mode: 'global' } });
+            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(event);
+        }
         return true;
       }
 
-      this.notify(`[ChatManager] Initializing for projectId: ${this.projectId}`, "info", { phase: "init", timestamp: performance.now() });
+      chatNotify.info(`Initializing for project ID: ${this.projectId}`, { source: 'initialize' });
       try {
         const urlParams = new URLSearchParams(this.navAPI.getSearch());
         const urlChatId = urlParams.get('chatId');
+        chatNotify.debug(`URL params: ${urlParams.toString()}, Chat ID from URL: ${urlChatId}`, { source: 'initialize' });
+
         if (urlChatId) {
-          this.notify(`[ChatManager] Found chatId=${urlChatId} in URL, loading conversation...`, "info", { phase: "init", chatId: urlChatId });
-          this.loadConversation(urlChatId).catch(loadErr => {
-              this._handleError("initialization (load from URL)", loadErr);
-              this._clearMessages();
-              this._showMessage("system", "Failed to load chat from URL.");
-              this.notify(`[ChatManager] loadConversation FAILED`, "error", { phase: "init", chatId: urlChatId, error: loadErr?.message, stack: loadErr?.stack });
+          chatNotify.info(`Found chatId=${urlChatId} in URL, attempting to load conversation...`, { source: 'initialize', chatId: urlChatId });
+          this.loadConversation(urlChatId).catch(loadErr => { // loadConversation logs internally
+              this._handleError("initialization (load from URL)", loadErr); // Already logs
+              this._clearMessages(); // Internally logs
+              this._showMessage("system", "Failed to load chat from URL."); // Internally logs
+              // Note: loadConversation itself should log detailed failure.
           });
         } else {
-          this.notify(`[ChatManager] No chatId in URL. Ready for new chat or selection.`, "info", { phase: "init" });
-          this._clearMessages();
+          chatNotify.info("No chatId in URL. Ready for new chat or selection.", { source: 'initialize' });
+          this._clearMessages(); // Internally logs
         }
         this.isInitialized = true;
-        this.notify(`[ChatManager] initialize complete (project mode)`, "debug", { phase: "init", ms: (performance.now() - _initStart).toFixed(2) });
+        chatNotify.info(`ChatManager initialized (project mode for ${this.projectId}).`, { source: 'initialize', phase: 'complete_project', durationMs: (performance.now() - _initStart).toFixed(2) });
 
         // --- Standardized "chatmanager:initialized" event ---
-        const doc = typeof document !== "undefined" ? document : null;
-        if (doc) doc.dispatchEvent(new CustomEvent('chatmanager:initialized', { detail: { success: true } }));
-
+        const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
+        if (doc) {
+            chatNotify.debug('Dispatching chatmanager:initialized event (project mode).', { source: 'initialize' });
+            const event = new CustomEvent('chatmanager:initialized', { detail: { success: true, mode: 'project', projectId: this.projectId } });
+            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(event);
+        }
         return true;
       } catch (error) {
         this._handleError("initialization (sync setup)", error);
         this.projectDetails?.disableChatUI?.("Chat setup error: " + (error.message || error));
-        this.notify(`[ChatManager] initialize threw sync error`, "error", { phase: "init", error: error?.message, stack: error?.stack });
+        // _handleError already logs this.
+        // this.notify(`[ChatManager] initialize threw sync error`, "error", { phase: "init", error: error?.message, stack: error?.stack });
         throw error;
       }
     }
@@ -347,15 +430,18 @@ export function createChatManager({
      * Cleanup method to remove all tracked event listeners, etc.
      */
     cleanup() {
+      chatNotify.info('ChatManager cleanup called.', { source: 'cleanup' });
       // Remove all tracked listeners for this ChatManager instance
       if (typeof this.eventHandlers.cleanupListeners === 'function') {
         this.eventHandlers.cleanupListeners({ context: 'chatManager' });
+        chatNotify.debug('Cleaned up event listeners.', { source: 'cleanup' });
       }
       this.isInitialized = false;
       this.currentConversationId = null;
       this.projectId = null;
       this.isGlobalMode = false;
-      this._clearMessages();
+      this._clearMessages(); // Internally logs
+      chatNotify.info('ChatManager state reset.', { source: 'cleanup' });
     }
 
     /**
@@ -364,28 +450,36 @@ export function createChatManager({
      */
     async loadConversation(conversationId) {
       const _loadStart = performance.now();
-      this.notify(`[ChatManager] loadConversation called for conversationId=${conversationId}`, "debug", { phase: "loadConversation", projectId: this.projectId, conversationId, timestamp: _loadStart });
+      chatNotify.info(`Attempting to load conversation ID: ${conversationId} for project ID: ${this.projectId}`, {
+        source: 'loadConversation',
+        phase: 'start',
+        conversationId,
+        projectId: this.projectId
+      });
+
       if (!conversationId) {
-        this.notify("[ChatManager] Invalid conversationId", "error", { phase: "loadConversation" });
+        chatNotify.error("Invalid conversationId provided.", { source: 'loadConversation', conversationId });
         return false;
       }
       if (!this.isAuthenticated()) {
-        this.notify("[ChatManager] loadConversation: not authenticated", "warn", { phase: "loadConversation" });
+        chatNotify.warn("User not authenticated. Cannot load conversation.", { source: 'loadConversation' });
         return false;
       }
       if (!this.isValidProjectId(this.projectId)) {
-        this._handleError("loading conversation", "No valid projectId set");
+        const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot load conversation.`;
+        this._handleError("loading conversation", errorMsg); // Already logs
         this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
-        this.notify("[ChatManager] loadConversation aborted: invalid/missing projectId", "error", { phase: "loadConversation" });
+        // chatNotify.error(errorMsg, { source: 'loadConversation' }); // Redundant with _handleError
         return false;
       }
 
       const requestId = ++this.currentRequestId;
+      chatNotify.debug(`Generated request ID: ${requestId} for loading conversation.`, { source: 'loadConversation', requestId });
       if (this.loadPromise) {
-        this.notify("[ChatManager] Already loading; awaiting existing loadPromise.", "warn", { phase: "loadConversation" });
+        chatNotify.warn("Conversation load already in progress. Awaiting existing promise.", { source: 'loadConversation', existingRequestId: this.currentRequestId -1 });
         const result = await this.loadPromise;
-        this.notify(`[ChatManager] Awaited previous loadPromise, returning result (${result})`, "debug", { phase: "loadConversation" });
-        return requestId === this.currentRequestId ? result : false;
+        chatNotify.debug(`Previous loadConversation promise resolved with: ${result}. Current request ID: ${requestId}, Original request ID: ${this.currentRequestId}`, { source: 'loadConversation' });
+        return requestId === this.currentRequestId ? result : false; // Ensure only the latest load request's result is used if multiple calls were made
       }
 
       this.isLoading = true;
@@ -393,35 +487,51 @@ export function createChatManager({
 
       this.loadPromise = (async () => {
         try {
-          this._clearMessages();
+          this._clearMessages(); // Internally logs
+          chatNotify.debug(`Fetching conversation details and messages for conversation ID: ${conversationId}`, { source: 'loadConversation', conversationId });
 
           // Parallel fetch conversation + messages
-          const [conversation, messagesResponse] = await Promise.all([
+          const [conversationResponse, messagesResponse] = await Promise.all([
             this._api(apiEndpoints.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
             this._api(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: "GET" })
           ]);
 
+          const conversation = conversationResponse?.data?.conversation || conversationResponse?.data || conversationResponse;
+          if (!conversation || !conversation.id) {
+            throw new Error('Failed to fetch valid conversation details.');
+          }
+
           const messages = messagesResponse.data?.messages || [];
+          chatNotify.debug(`Received ${messages.length} messages for conversation ID: ${conversationId}`, { source: 'loadConversation', messagesCount: messages.length });
+
           this.currentConversationId = conversationId;
           if (this.titleElement) {
             this.titleElement.textContent = conversation.title || "New Conversation";
+            chatNotify.debug(`Set chat title to: "${this.titleElement.textContent}"`, { source: 'loadConversation' });
           }
-          this._renderMessages(messages);
-          this._updateURLWithConversationId(conversationId);
+          this._renderMessages(messages); // Internally logs
+          this._updateURLWithConversationId(conversationId); // Internally logs
+
           const loadMs = performance.now() - _loadStart;
-          this.notify(`[ChatManager] loadConversation complete (conversationId=${conversationId})`, "debug", { phase: "loadConversation", ms: loadMs });
-          if (loadMs > 2000) {
-            this.notify(`[ChatManager] loadConversation perf warning: took ${loadMs.toFixed(1)} ms`, "warn", { phase: "loadConversation", ms: loadMs });
+          chatNotify.info(`Successfully loaded conversation ID: ${conversationId}. Duration: ${loadMs.toFixed(2)}ms`, {
+            source: 'loadConversation',
+            phase: 'complete',
+            conversationId,
+            durationMs: loadMs
+          });
+          if (loadMs > 2000) { // Example perf threshold
+            chatNotify.warn(`Performance: Loading conversation ${conversationId} took ${loadMs.toFixed(1)} ms`, { source: 'loadConversation', durationMs: loadMs, conversationId});
           }
           return true;
         } catch (error) {
-          this._handleError("loading conversation", error);
-          this.notify(`[ChatManager] loadConversation error`, "error", { phase: "loadConversation", error: error?.message, stack: error?.stack });
+          this._handleError("loading conversation", error); // Already logs
+          // this.notify(`[ChatManager] loadConversation error`, "error", { phase: "loadConversation", error: error?.message, stack: error?.stack }); // Redundant
           return false;
         } finally {
           this.isLoading = false;
-          this._hideLoadingIndicator();
+          this._hideLoadingIndicator(); // Internally logs
           this.loadPromise = null;
+          chatNotify.debug(`Finished loadConversation attempt for request ID: ${requestId}`, { source: 'loadConversation', requestId });
         }
       })();
 
@@ -433,61 +543,83 @@ export function createChatManager({
      * @param {string} [overrideProjectId]
      */
     async createNewConversation(overrideProjectId) {
+      chatNotify.info('Attempting to create new conversation.', { source: 'createNewConversation', overrideProjectId, currentProjectId: this.projectId });
       if (overrideProjectId) {
         this.projectId = this.isValidProjectId(overrideProjectId) ? overrideProjectId : this.projectId;
+        chatNotify.debug(`Project ID updated to: ${this.projectId} due to override.`, { source: 'createNewConversation' });
       }
+
       if (!this.isAuthenticated()) {
-        this.notify("[ChatManager] createNewConversation: not authenticated", "warn");
+        chatNotify.warn("User not authenticated. Cannot create new conversation.", { source: 'createNewConversation' });
         throw new Error("Not authenticated");
       }
       if (!this.isValidProjectId(this.projectId)) {
-        const msg = "[ChatManager] Invalid or missing projectId; cannot create conversation.";
-        this._showErrorMessage(msg);
-        this._handleError("creating conversation", msg);
+        const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot create new conversation.`;
+        this._showErrorMessage(errorMsg); // Internally logs
+        this._handleError("creating new conversation", errorMsg); // Already logs
         this.projectDetails?.disableChatUI?.("No valid project");
-        throw new Error(msg);
+        // chatNotify.error(errorMsg, { source: 'createNewConversation' }); // Redundant
+        throw new Error(errorMsg);
       }
 
-      this._clearMessages();
+      this._clearMessages(); // Internally logs
 
       try {
         const cfg = this.modelConfigAPI.getConfig();
+        const currentUser = this.app?.state?.currentUser;
+        chatNotify.debug('Current user state for new conversation.', { source: 'createNewConversation', currentUser, modelConfig: cfg });
+
+        if (!currentUser || !currentUser.id) {
+          chatNotify.error("User ID not found in app.state.currentUser. Cannot create conversation.", {
+            source: 'createNewConversation',
+            currentUserDetails: {
+              appStateAvailable: !!(this.app && this.app.state),
+              currentUserObjectExists: !!currentUser,
+              currentUserId: currentUser?.id
+            }
+          });
+          throw new Error("User ID not available for creating conversation.");
+        }
+
         const payload = {
+          user_id: currentUser.id,
           title: `New Chat ${new Date().toLocaleString()}`,
           model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
-        // Resolve endpoint whether it's defined as a function or a string template
+        chatNotify.debug('New conversation payload prepared.', { source: 'createNewConversation', payload });
+
         const convoEndpoint = typeof apiEndpoints.CONVERSATIONS === 'function'
           ? apiEndpoints.CONVERSATIONS(this.projectId)
           : String(apiEndpoints.CONVERSATIONS).replace('{id}', this.projectId);
-        const response = await this._api(
-          convoEndpoint,
-          { method: "POST", body: payload }
-        );
+        chatNotify.debug(`Requesting new conversation at endpoint: ${convoEndpoint}`, { source: 'createNewConversation' });
+
+        const response = await this._api(convoEndpoint, { method: "POST", body: payload });
+        chatNotify.debug('Received response from new conversation API.', { source: 'createNewConversation', responseData: response?.data });
+
 
         let conversation = null;
-        if (response?.data?.conversation?.id) {
-          conversation = response.data.conversation;
-        } else if (response?.data?.id) {
-          conversation = response.data;
-        } else if (response?.conversation?.id) {
-          conversation = response.conversation;
-        } else if (response?.id) {
-          conversation = response;
-        }
+        if (response?.data?.conversation?.id) conversation = response.data.conversation;
+        else if (response?.data?.id) conversation = response.data;
+        else if (response?.conversation?.id) conversation = response.conversation;
+        else if (response?.id) conversation = response;
+
         if (!conversation?.id) {
+          chatNotify.error('Server response missing valid conversation ID after creation.', { source: 'createNewConversation', response });
           throw new Error("Server response missing conversation ID: " + JSON.stringify(response));
         }
+        chatNotify.debug(`Successfully parsed conversation object from API response. ID: ${conversation.id}`, { source: 'createNewConversation', conversation });
+
 
         this.currentConversationId = conversation.id;
         if (this.titleElement) {
           this.titleElement.textContent = conversation.title || "New Conversation";
+          chatNotify.debug(`Set chat title to: "${this.titleElement.textContent}" for new conversation.`, { source: 'createNewConversation' });
         }
-        this._updateURLWithConversationId(conversation.id);
-        this.notify(`[ChatManager] New conversation created: ${conversation.id}`, "info");
+        this._updateURLWithConversationId(conversation.id); // Internally logs
+        chatNotify.success(`New conversation created successfully: ID ${conversation.id}`, { source: 'createNewConversation', conversationId: conversation.id });
         return conversation;
       } catch (error) {
-        this._handleError("creating conversation", error);
+        this._handleError("creating new conversation", error); // Already logs
         this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
         throw error;
       }
@@ -498,47 +630,66 @@ export function createChatManager({
      * @param {string} messageText
      */
     async sendMessage(messageText) {
-      if (!messageText?.trim()) return;
+      if (!messageText?.trim()) {
+        chatNotify.warn('Attempted to send an empty message.', { source: 'sendMessage' });
+        return;
+      }
+      chatNotify.info(`Adding message to queue. Length: ${messageText.length > 50 ? '>50' : messageText.length} chars.`, {
+        source: 'sendMessage',
+        // Avoid logging full PII messageText directly here unless APP_CONFIG.DEBUG is on.
+        // Log a sanitized version or length instead.
+        messagePreview: typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG ? messageText.substring(0,50) : `Length: ${messageText.length}`
+      });
+
       return this.messageQueue.add(
         safeInvoker(async () => {
+          chatNotify.debug('Processing sendMessage task from queue.', { source: 'sendMessageTask' });
           if (!this.isAuthenticated()) {
-            this.notify("Please log in to send messages", "error");
+            chatNotify.error("User not authenticated. Cannot send message.", { source: 'sendMessageTask' });
+            // this.notify("Please log in to send messages", "error"); // Redundant if chatNotify used
             return;
           }
           if (!this.isValidProjectId(this.projectId)) {
-            const msg = "No valid project; select a project before sending messages.";
-            this._showErrorMessage(msg);
-            this._handleError("sending message", msg);
+            const errorMsg = `No valid project ID (${this.projectId}). Select a project before sending messages.`;
+            this._showErrorMessage(errorMsg); // Internally logs
+            this._handleError("sending message", errorMsg); // Already logs
             this.projectDetails?.disableChatUI?.("No valid project");
             return;
           }
           if (!this.currentConversationId) {
+            chatNotify.info("No current conversation ID. Attempting to create a new one before sending message.", { source: 'sendMessageTask' });
             try {
-              await this.createNewConversation();
+              await this.createNewConversation(); // Internally logs
+              if (!this.currentConversationId) { // Check again if creation failed silently or was aborted
+                  chatNotify.error("Failed to establish a conversation to send message.", { source: 'sendMessageTask' });
+                  return;
+              }
             } catch (error) {
-              this._handleError("creating conversation", error);
-              this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
-              return;
+              // createNewConversation already logs via _handleError
+              // this.projectDetails?.disableChatUI already called in createNewConversation
+              return; // Stop if conversation creation failed
             }
           }
 
           // Show user message in UI
-          this._showMessage("user", messageText);
-          this._clearInputField();
-          this._showThinkingIndicator();
+          this._showMessage("user", messageText); // Internally logs
+          this._clearInputField(); // Internally logs
+          this._showThinkingIndicator(); // Internally logs
 
           try {
-            const response = await this._sendMessageToAPI(messageText);
-            this._processAssistantResponse(response);
+            chatNotify.debug(`Sending message to API for conversation ID: ${this.currentConversationId}`, { source: 'sendMessageTask' });
+            const response = await this._sendMessageToAPI(messageText); // Internally logs
+            chatNotify.debug('Received API response for sent message.', { source: 'sendMessageTask', responseData: response?.data });
+            this._processAssistantResponse(response); // Internally logs
             return response.data;
           } catch (error) {
-            this._hideThinkingIndicator();
-            this._showErrorMessage(error.message);
-            this._handleError("sending message", error);
+            this._hideThinkingIndicator(); // Internally logs
+            this._showErrorMessage(error.message); // Internally logs
+            this._handleError("sending message", error); // Already logs
             this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
           }
         },
-        { notify: chatNotify ?? _baseNotify, errorReporter },
+        { notify: chatNotify, errorReporter }, // Use the contextual chatNotify
         { context:'chatManager', module:'ChatManager', source:'sendMessageTask' })
       );
     }
@@ -550,23 +701,28 @@ export function createChatManager({
      */
     async _sendMessageToAPI(messageText) {
       const cfg = this.modelConfigAPI.getConfig();
+      chatNotify.debug('Preparing payload for _sendMessageToAPI.', { source: '_sendMessageToAPI', modelConfigUsed: cfg });
       const payload = {
-        content: messageText,
+        content: messageText, // Note: Potentially sensitive. Log carefully.
         role: "user",
         type: "message",
         vision_detail: cfg.visionDetail || "auto"
       };
       if (this.currentImage) {
-        this._validateImageSize();
-        payload.image_data = this.currentImage;
-        this.currentImage = null;
+        chatNotify.debug('Image data present, validating and adding to payload.', { source: '_sendMessageToAPI' });
+        this._validateImageSize(); // Internally logs on error
+        payload.image_data = "data:..."; // Log placeholder for image data
+        // payload.image_data = this.currentImage; // Actual data
+        this.currentImage = null; // Clear after adding to payload
       }
       if (cfg.extendedThinking) {
         payload.thinking = {
           type: "enabled",
           budget_tokens: cfg.thinkingBudget
         };
+        chatNotify.debug('Extended thinking enabled for this message.', { source: '_sendMessageToAPI', thinkingBudget: cfg.thinkingBudget });
       }
+      chatNotify.debug('Final payload for sending message (excluding image_data).', { source: '_sendMessageToAPI', payload: {...payload, image_data: payload.image_data ? "present" : "absent"} });
       return this._api(
         apiEndpoints.MESSAGES(this.projectId, this.currentConversationId),
         { method: "POST", body: payload }
@@ -583,10 +739,12 @@ export function createChatManager({
         const b64 = commaIdx !== -1 ? this.currentImage.slice(commaIdx + 1) : this.currentImage;
         const sizeBytes = Math.floor((b64.length * 3) / 4);
         if (sizeBytes > CHAT_CONFIG.MAX_IMAGE_SIZE) {
-          this._hideThinkingIndicator();
-          this.notify("Image is too large! (max 4MB)", "error");
-          throw new Error("Image size exceeds maximum allowed threshold");
+          this._hideThinkingIndicator(); // Internally logs
+          const errorMsg = `Image is too large (${(sizeBytes / (1024*1024)).toFixed(1)}MB). Max allowed: ${CHAT_CONFIG.MAX_IMAGE_SIZE / (1024*1024)}MB.`;
+          chatNotify.error(errorMsg, { source: '_validateImageSize', imageSizeBytes: sizeBytes, maxSizeMB: CHAT_CONFIG.MAX_IMAGE_SIZE / (1024*1024) });
+          throw new Error(errorMsg);
         }
+        chatNotify.debug(`Image size validated: ${(sizeBytes / (1024*1024)).toFixed(1)}MB.`, { source: '_validateImageSize' });
       }
     }
 
@@ -596,10 +754,16 @@ export function createChatManager({
      * @param {Object} response
      */
     _processAssistantResponse(response) {
-      this._hideThinkingIndicator();
+      this._hideThinkingIndicator(); // Internally logs
+      chatNotify.debug('Processing assistant response.', { source: '_processAssistantResponse', responseData: response?.data });
       if (response.data?.assistant_message) {
         const { assistant_message, thinking, redacted_thinking } = response.data;
-        this._showMessage(
+        chatNotify.info('Assistant message received. Rendering.', {
+            source: '_processAssistantResponse',
+            hasThinking: !!thinking,
+            hasRedactedThinking: !!redacted_thinking
+        });
+        this._showMessage( // Internally logs
           "assistant",
           assistant_message.content,
           null,
@@ -608,7 +772,10 @@ export function createChatManager({
         );
       } else if (response.data?.assistant_error) {
         const errMsg = this._extractErrorMessage(response.data.assistant_error);
+        chatNotify.error(`Assistant response contained an error: ${errMsg}`, { source: '_processAssistantResponse', assistantError: response.data.assistant_error });
         throw new Error(errMsg);
+      } else {
+        chatNotify.warn('Assistant response did not contain a message or an error.', { source: '_processAssistantResponse', responseData: response?.data });
       }
     }
 
@@ -616,14 +783,23 @@ export function createChatManager({
      * Deletes the current conversation (server-side).
      */
     async deleteConversation() {
-      if (!this.currentConversationId) return false;
+      chatNotify.info(`Attempting to delete conversation ID: ${this.currentConversationId} for project ID: ${this.projectId}`, {
+        source: 'deleteConversation',
+        conversationId: this.currentConversationId,
+        projectId: this.projectId
+      });
+      if (!this.currentConversationId) {
+        chatNotify.warn("No current conversation ID to delete.", { source: 'deleteConversation' });
+        return false;
+      }
       if (!this.isAuthenticated()) {
-        this.notify("[ChatManager] deleteConversation: not authenticated", "warn");
+        chatNotify.warn("User not authenticated. Cannot delete conversation.", { source: 'deleteConversation' });
         return false;
       }
       if (!this.isValidProjectId(this.projectId)) {
-        this._handleError("deleting conversation", "Invalid projectId");
-        this._showErrorMessage("Cannot delete conversation: invalid project ID.");
+        const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot delete conversation.`;
+        this._handleError("deleting conversation", errorMsg); // Already logs
+        this._showErrorMessage("Cannot delete conversation: invalid/missing project ID.");
         return false;
       }
       try {
@@ -631,12 +807,13 @@ export function createChatManager({
           apiEndpoints.CONVERSATION(this.projectId, this.currentConversationId),
           { method: "DELETE" }
         );
+        chatNotify.success(`Successfully deleted conversation ID: ${this.currentConversationId}`, { source: 'deleteConversation', conversationId: this.currentConversationId });
         this.currentConversationId = null;
-        this._clearMessages();
-        this._removeConversationIdFromURL();
+        this._clearMessages(); // Internally logs
+        this._removeConversationIdFromURL(); // Internally logs
         return true;
       } catch (error) {
-        this._handleError("deleting conversation", error);
+        this._handleError("deleting conversation", error); // Already logs
         return false;
       }
     }
@@ -647,6 +824,7 @@ export function createChatManager({
      */
     setImage(base64Image) {
       this.currentImage = base64Image;
+      chatNotify.debug(`Image set for next message. Length: ${base64Image?.length || 0}`, { source: 'setImage' });
     }
 
     /**
@@ -654,8 +832,10 @@ export function createChatManager({
      * @param {Object} config
      */
     updateModelConfig(config) {
+      chatNotify.info('Updating model configuration.', { source: 'updateModelConfig', newConfig: config });
       this.modelConfigAPI.updateConfig(config);
       this.modelConfig = this.modelConfigAPI.getConfig();
+      chatNotify.debug('Model configuration updated and internal state refreshed.', { source: 'updateModelConfig', currentModelConfig: this.modelConfig });
     }
 
     // -------------------- UI Methods ----------------------
@@ -666,6 +846,7 @@ export function createChatManager({
      * @param {Object} options
      */
     _setupUIElements(options) {
+      chatNotify.debug('Setting up UI elements for ChatManager.', { source: '_setupUIElements', options });
       const containerSelector = options.containerSelector || "#chatUI";
       const messageContainerSelector = options.messageContainerSelector || "#conversationArea";
       const inputSelector = options.inputSelector || "#chatInput";
@@ -715,6 +896,16 @@ export function createChatManager({
 
       // Title element
       this.titleElement = this.domAPI.querySelector(titleSelector);
+      chatNotify.debug('UI elements setup complete.', {
+        source: '_setupUIElements',
+        elementsFound: {
+          container: !!this.container,
+          messageContainer: !!this.messageContainer,
+          inputField: !!this.inputField,
+          sendButton: !!this.sendButton,
+          titleElement: !!this.titleElement
+        }
+      });
     }
 
     /**
@@ -722,9 +913,11 @@ export function createChatManager({
      * @private
      */
     _bindEvents() {
+      chatNotify.debug('Binding UI events for ChatManager.', { source: '_bindEvents' });
       // Remove all listeners for this ChatManager context before rebinding
       if (typeof this.eventHandlers.cleanupListeners === 'function') {
         this.eventHandlers.cleanupListeners({ context: 'chatManager' });
+        chatNotify.debug('Cleaned up existing chatManager event listeners before rebinding.', { source: '_bindEvents' });
       }
 
       const track = (element, event, fn, opts = {}) => {
@@ -776,8 +969,9 @@ export function createChatManager({
 
       // Listen for "modelConfigChanged"
       track(this.domAPI.querySelector('body'), "modelConfigChanged", (e) => {
-        if (e.detail) this.updateModelConfig(e.detail);
+        if (e.detail) this.updateModelConfig(e.detail); // Internally logs
       }, { description: 'Model config changed event' });
+      chatNotify.debug('UI events bound.', { source: '_bindEvents' });
     }
 
     /**
@@ -790,7 +984,17 @@ export function createChatManager({
      * @param {boolean} [redactedThinking=false]
      */
     _showMessage(role, content, id = null, thinking = null, redactedThinking = false) {
-      if (!this.messageContainer) return;
+      chatNotify.debug(`Showing message in UI. Role: ${role}, Content Length: ${content?.length || 0}`, {
+        source: '_showMessage',
+        role,
+        messageId: id,
+        hasThinking: !!thinking,
+        isRedacted: redactedThinking
+      });
+      if (!this.messageContainer) {
+        chatNotify.warn('Message container not found. Cannot show message.', { source: '_showMessage' });
+        return;
+      }
       const message = this.domAPI.createElement("div");
       message.className = `message ${role}-message`;
       if (id) message.id = id;
@@ -899,6 +1103,9 @@ export function createChatManager({
       if (this.inputField) {
         this.inputField.value = "";
         this.inputField.focus();
+        chatNotify.debug('Chat input field cleared and focused.', { source: '_clearInputField' });
+      } else {
+        chatNotify.warn('Input field not found. Cannot clear.', { source: '_clearInputField' });
       }
     }
 
@@ -911,6 +1118,9 @@ export function createChatManager({
         const basePath = this.navAPI.getPathname();
         const newUrl = `${basePath}?${urlParams.toString()}`;
         this.navAPI.pushState(newUrl);
+        chatNotify.debug(`Updated URL with conversationId: ${conversationId}. New URL: ${newUrl}`, { source: '_updateURLWithConversationId' });
+      } else {
+        chatNotify.debug(`URL already contains conversationId: ${conversationId}. No update needed.`, { source: '_updateURLWithConversationId' });
       }
     }
 
@@ -925,10 +1135,15 @@ export function createChatManager({
         newUrl += `?${paramString}`;
       }
       this.navAPI.pushState(newUrl);
+      chatNotify.debug(`Removed conversationId from URL. New URL: ${newUrl}`, { source: '_removeConversationIdFromURL' });
     }
 
     _showLoadingIndicator() {
-      if (!this.messageContainer) return;
+      chatNotify.debug('Showing loading indicator.', { source: '_showLoadingIndicator' });
+      if (!this.messageContainer) {
+        chatNotify.warn('Message container not found. Cannot show loading indicator.', { source: '_showLoadingIndicator' });
+        return;
+      }
       const indicator = this.domAPI.createElement("div");
       indicator.id = "chatLoadingIndicator";
       indicator.className = "loading-indicator";
@@ -946,11 +1161,16 @@ export function createChatManager({
       const indicator = this.domAPI.querySelector("#chatLoadingIndicator");
       if (indicator) {
         indicator.remove();
+        chatNotify.debug('Loading indicator hidden.', { source: '_hideLoadingIndicator' });
       }
     }
 
     _showThinkingIndicator() {
-      if (!this.messageContainer) return;
+      chatNotify.debug('Showing thinking indicator.', { source: '_showThinkingIndicator' });
+      if (!this.messageContainer) {
+        chatNotify.warn('Message container not found. Cannot show thinking indicator.', { source: '_showThinkingIndicator' });
+        return;
+      }
       const indicator = this.domAPI.createElement("div");
       indicator.id = "thinkingIndicator";
       indicator.className = "thinking-indicator";
@@ -969,7 +1189,10 @@ export function createChatManager({
 
     _hideThinkingIndicator() {
       const el = this.domAPI.querySelector("#thinkingIndicator");
-      if (el) el.remove();
+      if (el) {
+        el.remove();
+        chatNotify.debug('Thinking indicator hidden.', { source: '_hideThinkingIndicator' });
+      }
     }
 
     /**
@@ -978,7 +1201,11 @@ export function createChatManager({
      * @param {string} message
      */
     _showErrorMessage(message) {
-      if (!this.messageContainer) return;
+      chatNotify.debug(`Showing error message in UI: "${message}"`, { source: '_showErrorMessage' });
+      if (!this.messageContainer) {
+        chatNotify.warn('Message container not found. Cannot show error message.', { source: '_showErrorMessage' });
+        return;
+      }
       const errorEl = this.domAPI.createElement("div");
       errorEl.className = "error-message";
       this.domAPI.setInnerHTML(errorEl, `
@@ -1001,16 +1228,20 @@ export function createChatManager({
     _clearMessages() {
       if (this.messageContainer) {
         this.domAPI.replaceChildren(this.messageContainer);
+        chatNotify.debug('All messages cleared from UI.', { source: '_clearMessages' });
+      } else {
+        chatNotify.warn('Message container not found. Cannot clear messages.', { source: '_clearMessages' });
       }
     }
 
     _renderMessages(messages) {
-      this._clearMessages();
+      chatNotify.debug(`Rendering ${messages?.length || 0} messages.`, { source: '_renderMessages', count: messages?.length || 0 });
+      this._clearMessages(); // Internally logs
       if (!messages?.length) {
-        this._showMessage("system", "No messages yet");
+        this._showMessage("system", "No messages yet"); // Internally logs
         return;
       }
-      messages.forEach((msg) => {
+      messages.forEach((msg) => { // _showMessage logs internally
         this._showMessage(
           msg.role,
           msg.content,
@@ -1034,11 +1265,17 @@ export function createChatManager({
 
     _handleError(context, error) {
       const message = this._extractErrorMessage(error);
-      this.notify(`[ChatManager - ${context}] ${message}`, "error", error);
+      // Use the contextual chatNotify
+      chatNotify.error(`Error in context "${context}": ${message}`, {
+        source: '_handleError',
+        errorContext: context,
+        originalError: error, // Pass the original error object for full Sentry reporting
+        errorMessage: message
+      });
     }
   } // end ChatManager class
-  notify('[ChatManager Debug] Instantiating ChatManager class...', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'instantiate' });
+  chatNotify.debug('ChatManager class defined. Instantiating...', { source: 'factory', phase: 'pre_instantiate' });
   const instance = new ChatManager();
-  notify('[ChatManager Debug] ChatManager instance CREATED.', 'debug', { context: 'chatManager', module: 'ChatManager', source: 'factory', phase: 'instantiated' });
+  chatNotify.info('ChatManager instance created successfully.', { source: 'factory', phase: 'instantiated' });
   return instance;
 }
