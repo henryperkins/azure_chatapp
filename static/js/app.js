@@ -5,21 +5,20 @@
 
 import { APP_CONFIG } from './appConfig.js';
 import { createDomAPI } from './utils/domAPI.js';             // your abstracted DOM helpers
-import { createBrowserAPI, createDebugTools } from './utils/globalUtils.js';
-import { createBrowserService } from './utils/browserService.js';
+import { createBrowserService, buildUrl, normaliseUrl } from './utils/browserService.js';
+import { createDebugTools } from './utils/notifications-helpers.js';
+import { createApiClient } from './utils/apiClient.js';
 import { createNotify } from './utils/notify.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
 import { createSentryManager } from './sentry-init.js';
+
 import {
-  createApiClient,
   shouldSkipDedup,
   stableStringify,
-  normaliseUrl,
   isAbsoluteUrl,
   isValidProjectId,          // ← nuevo
   toggleElement,
-  waitForDepsAndDom,                      // ← use global helper for DOM-ready checks
-  setGlobalUtilsNotifier
+  waitForDepsAndDom                      // ← use global helper for DOM-ready checks
 } from './utils/globalUtils.js';
 
 import { safeInvoker, maybeCapture } from './utils/notifications-helpers.js';  // reuse error-wrapped invoker
@@ -75,7 +74,7 @@ const uiUtils = {
 // ---------------------------------------------------------------------------
 // 1) Create DI-based references: browserAPI, domAPI, notify, etc.
 // ---------------------------------------------------------------------------
-const browserAPI = createBrowserAPI();                   // SSR-safe checks
+const browserAPI = browserServiceInstance;               // SSR-safe checks (replace createBrowserAPI)
 const domAPI = createDomAPI({
     documentObject: browserAPI.getDocument(),
     windowObject:   browserAPI.getWindow(),
@@ -181,11 +180,9 @@ notify = createNotify({
 });
 DependencySystem.register('notify', notify);
 
-setGlobalUtilsNotifier(notify);
-
-// Debug trace helper (DI-visible as “debugTools”)
-const debugTools = createDebugTools({ notify });
-DependencySystem.register('debugTools', debugTools);
+ // Debug trace helper (DI-visible as “debugTools”)
+ const debugTools = createDebugTools({ notify });
+ DependencySystem.register('debugTools', debugTools);
 // helper so inner fns don’t keep repeating the lookup
 const _dbg = debugTools;
 
@@ -305,7 +302,7 @@ const apiRequest = createApiClient({
     },
     notificationHandler: notify,
     getAuthModule: () => DependencySystem.modules.get('auth'),
-    browserAPI
+    browserService: browserServiceInstance
 });
 DependencySystem.register('apiRequest', apiRequest);
 
