@@ -1,4 +1,5 @@
- /* ---------------------------------------------------------------------------
+import { logEventToServer } from "./utils/notifications-helpers.js";
+/* ---------------------------------------------------------------------------
  *  notificationHandler.js  ★ slimmed v4.0  (2025-05-04, minimal, no grouping, no metadata)
  *  -------------------------------------------------------------------------- */
 export function createNotificationHandler({
@@ -158,35 +159,13 @@ export function createNotificationHandler({
     return root;
   }
 
-  // --- Begin: TERMINAL LOGGING PATCH ---
-  function logToServer(type, message, opts) {
-    // Fire and forget: send all notification events to backend for terminal visibility
-    try {
-      // Use fetch, but never block or crash UI
-      const fullPayload = {
-        type,
-        message,
-        msg: message,         // Explicit for notify.js semantics
-        ...opts,              // Will include id, context, group, module, source, extra, etc.
-        _clientLogSource: "notification-handler.js",
-      };
-      fetch("/api/log_notification", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fullPayload),
-        keepalive: true, // Allow in page unload
-      }).catch(() => {});
-    } catch {
-      // Swallow secondary errors completely
-    }
-  }
-  // --- End: TERMINAL LOGGING PATCH ---
+  // --- Begin: Server event logging (sampled, via notification-helpers.js) ---
 
   function show(message, type = "info", opts = {}) {
     if (!message) return null;
     const _type = ['info', 'success', 'warning', 'error', 'debug'].includes(type) ? type : 'info';
-    // PATCH: Send to server for logging
-    logToServer(_type, message, opts);
+    // Send sampled events to the server for backend logging (handled by logEventToServer)
+    logEventToServer(_type, message, opts);
 
     const banner = buildBanner(_type, { ...opts, message });
 
