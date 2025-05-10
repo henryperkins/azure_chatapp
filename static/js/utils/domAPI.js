@@ -85,8 +85,11 @@ export function createDomAPI({
     /* quick access to <body> for modules that expect domAPI.body */
     body: documentObject.body,
 
-    /* expose computed-style helper required by accessibilityUtils */
-    getComputedStyle: (el) => windowObject.getComputedStyle(el),
+    /* cross-browser helper needed by AccessibilityUtils */
+    getComputedStyle: (el) =>
+      (windowObject?.getComputedStyle)
+        ? windowObject.getComputedStyle(el)
+        : { visibility: '', display: '' },
 
     /**
      * Prevent default on event if possible
