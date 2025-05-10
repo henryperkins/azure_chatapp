@@ -258,7 +258,7 @@ async def get_user_and_claims_from_refresh_token(
     session: AsyncSession,
     request: Request
 ) -> Tuple[User, dict]:
-    decoded = await verify_token(token, "refresh", request)
+    decoded = await verify_token(token, "refresh", request, db_session=session)
     sub = decoded.get("sub")
     if not sub:
         raise HTTPException(status_code=401, detail="Missing 'sub' in refresh token.")
@@ -659,7 +659,7 @@ async def logout_user(
                     )
                     if refresh_cookie:
                         try:
-                            dec = await verify_token(refresh_cookie, "refresh", request)
+                            dec = await verify_token(refresh_cookie, "refresh", request, db_session=session)
                             tid = dec.get("jti")
                             exp_val = dec.get("exp")
                             if tid and exp_val:
