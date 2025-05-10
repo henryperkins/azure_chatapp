@@ -57,6 +57,17 @@ class AccessibilityUtilsModule {
     this.lastFocusedElement = null;
     this.mutationObservers = []; // To keep track of observers for cleanup
 
+    // Ensure domAPI exposes getComputedStyle; add fallback if missing
+    if (typeof this.domAPI.getComputedStyle !== 'function') {
+      this.domAPI.getComputedStyle = (el) => {
+        if (typeof window !== 'undefined' && window.getComputedStyle) {
+          return window.getComputedStyle(el);
+        }
+        // Minimal stub prevents crash in non-browser tests
+        return { visibility: '', display: '' };
+      };
+    }
+
     // Initialize debug tools if createDebugTools is provided
     if (deps.createDebugTools && typeof deps.createDebugTools === 'function') {
       this.debug = deps.createDebugTools({ notify: this.notify, contextPrefix: MODULE_CONTEXT });
