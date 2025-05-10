@@ -247,7 +247,8 @@ async def upload_file_to_project(
     background_tasks: Optional[BackgroundTasks] = None,
 ) -> dict[str, Any]:
     """Upload and process a file for a project"""
-    # Validate access and get KB
+    # Ensure KB exists, then validate access and get KB
+    await ensure_project_has_knowledge_base(project_id, db, user_id)
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
 
     # Process file info
@@ -280,8 +281,16 @@ async def upload_file_to_project(
 
     # Estimate tokens
     token_data = await _estimate_file_tokens(
-        contents, file_info["sanitized_filename"], file, project
+        contents, file_info["sanitized_filename"], file, project # file and project args are kept for signature compatibility but not used by new logic
     )
+
+    # Check if token estimation itself returned an error in its metadata
+    if "error" in token_data.get("metadata", {}):
+        error_detail = token_data["metadata"]["error"]
+        logger.error(f"Token estimation failed for {file_info['sanitized_filename']}: {error_detail}")
+        # Use 422 if the file content caused a processing error during token estimation
+        raise HTTPException(status_code=422, detail=f"Failed to process file for token estimation: {error_detail}")
+
     if not await TokenManager.validate_usage(project, token_data["token_estimate"]):
         raise ValueError(
             f"Adding this file would exceed the project's token limit "
@@ -614,27 +623,31 @@ async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
 
 
 async def _estimate_file_tokens(
-    contents: bytes, filename: str, file: UploadFile, project: Project
+    contents: bytes, filename: str, file: UploadFile, project: Project # file and project args are kept for signature compatibility but not used by new logic
 ) -> dict[str, Any]:
-    """Estimate token count for file"""
+    """Estimate token count for file using TextExtractor.extract_text"""
     from services.text_extraction import (
         get_text_extractor,
-    )  # pylint: disable=import-outside-toplevel
+    )
 
     text_extractor = get_text_extractor()
+    tok_count = 0
+    tok_metadata = {}
 
     try:
-        content_to_process = (
-            contents
-            if len(contents) <= KBConfig.get()["stream_threshold"]
-            else file.file
+        # extract_text can handle bytes directly.
+        # We are interested in the metadata, specifically token_count.
+        _chunks, metadata_dict = await text_extractor.extract_text(
+            file_content=contents, # Pass the raw bytes
+            filename=filename
         )
-        tok_count, tok_metadata = await text_extractor.estimate_token_count(  # type: ignore # pylint: disable=E1101
-            content_to_process, filename
-        )
+        tok_count = metadata_dict.get("token_count", 0)
+        tok_metadata = metadata_dict
     except Exception as e:
-        logger.error(f"Error estimating tokens: {str(e)}")
-        tok_count, tok_metadata = 0, {"error": str(e)}
+        logger.error(f"Error estimating tokens via extract_text: {str(e)}", exc_info=True)
+        tok_count = 0 # Fallback
+        # Ensure the error is structured in a way that the calling function can check
+        tok_metadata = {"error": f"Token estimation failed during text extraction: {str(e)}", "extraction_status": "failed"}
 
     return {"token_estimate": tok_count, "metadata": tok_metadata}
 
@@ -1021,9 +1034,10 @@ async def get_project_file_list(
     if file_type:
         query = query.where(ProjectFile.file_type == file_type)
 
-    count_query = select(func.count("*")).select_from(
+    # Use func.count(ProjectFile.id) for a more specific count
+    count_query = select(func.count(ProjectFile.id)).select_from( # pylint: disable=not-callable
         query.subquery()
-    )  # pylint: disable=not-callable
+    )
     total = await db.execute(count_query)
     total_count = total.scalar() or 0
 

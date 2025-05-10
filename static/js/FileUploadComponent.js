@@ -433,13 +433,13 @@ export class FileUploadComponent {
   _setupUploadProgress(total) {
     this.uploadState = { total, completed: 0, failed: 0 };
     const { uploadProgress, progressBar, uploadStatus: statusEl } = this.elements;
-    if (uploadProgress) uploadProgress.classList.remove('hidden');
+    if (uploadProgress) this.domAPI.removeClass(uploadProgress, 'hidden');
     if (progressBar) {
-      progressBar.value = 0;
-      progressBar.max = 100; // Ensure max is set
-      progressBar.className = 'progress progress-info'; // Use daisyUI classes
+      this.domAPI.setProperty(progressBar, 'value', 0);
+      this.domAPI.setProperty(progressBar, 'max', 100); // Ensure max is set
+      this.domAPI.setProperty(progressBar, 'className', 'progress progress-info'); // Use daisyUI classes
     }
-    if (statusEl) statusEl.textContent = `Uploading 0/${total} files...`;
+    if (statusEl) this.domAPI.setTextContent(statusEl, `Uploading 0/${total} files...`);
   }
 
   /** Update progress */
@@ -452,20 +452,20 @@ export class FileUploadComponent {
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     if (progressBar) {
-      progressBar.value = percent;
+      this.domAPI.setProperty(progressBar, 'value', percent);
       // Update progress bar color based on state
-      progressBar.className = 'progress'; // Reset base class
+      this.domAPI.setProperty(progressBar, 'className', 'progress'); // Reset base class
       if (failed > 0) {
-        progressBar.classList.add(completed === total ? 'progress-error' : 'progress-warning');
+        this.domAPI.addClass(progressBar, completed === total ? 'progress-error' : 'progress-warning');
       } else if (completed === total) {
-        progressBar.classList.add('progress-success');
+        this.domAPI.addClass(progressBar, 'progress-success');
       } else {
-        progressBar.classList.add('progress-info');
+        this.domAPI.addClass(progressBar, 'progress-info');
       }
     }
 
     if (statusEl) {
-      statusEl.textContent = `Uploaded ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}.`;
+      this.domAPI.setTextContent(statusEl, `Uploaded ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}.`);
     }
 
     if (completed === total && uploadProgress) {
@@ -473,7 +473,7 @@ export class FileUploadComponent {
       // Delay hiding the upload progress bar to allow users to see the completion status before it disappears.
       // This ensures the UI feedback is not too abrupt after the upload finishes.
       this.scheduler.setTimeout(() => {
-        if (uploadProgress) uploadProgress.classList.add('hidden');
+        if (uploadProgress) this.domAPI.addClass(uploadProgress, 'hidden');
       }, 2500); // Slightly longer delay
     }
   }

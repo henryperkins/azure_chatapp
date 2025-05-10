@@ -49,6 +49,7 @@ from services.knowledgebase_service import (
     toggle_project_kb,
     upload_file_to_project,
     delete_project_file,
+    get_project_file_list, # Added import
 )
 from services.github_service import GitHubService
 
@@ -474,6 +475,55 @@ async def upload_knowledge_base_file(
     except Exception as e:
         logger.error(f"File upload failed: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to upload file") from e
+
+
+@router.get("/{project_id}/knowledge-bases/files-list", response_model=dict)
+async def list_knowledge_base_files(
+    project_id: UUID,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    file_type: Optional[str] = Query(None),
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    List files associated with a project's knowledge base.
+    Only files that are part of the active knowledge base are listed.
+    """
+    try:
+        current_user = current_user_tuple[0]
+
+        # Validate project access
+        project: Project = await validate_project_access(project_id, current_user, db)
+
+        if not project.knowledge_base or not project.knowledge_base.is_active:
+            raise HTTPException(
+                status_code=400, detail="Project does not have an active knowledge base"
+            )
+
+        # Fetch files using the service function
+        # The service function get_project_file_list already handles user_id for project access,
+        # but we've already validated project access for the current user.
+        # We pass current_user.id to ensure it aligns with service expectations if it uses it for further filtering.
+        file_list_data = await get_project_file_list(
+            project_id=project_id,
+            user_id=current_user.id, # Pass integer user ID
+            db=db,
+            skip=skip,
+            limit=limit,
+            file_type=file_type,
+        ), # Re-added the trailing comma here
+
+        # The service function already returns a dict with 'files' and 'pagination'
+        return await create_standard_response(file_list_data)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to list knowledge base files: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve knowledge base files"
+        ) from e
 
 
 @router.post("/{project_id}/knowledge-bases/reindex", response_model=dict)
