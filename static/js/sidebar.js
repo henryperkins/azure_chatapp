@@ -43,6 +43,55 @@ export function createSidebar({
   uiRenderer = uiRenderer || resolveDep('uiRenderer');
   if (!notify) throw new Error('[sidebar] notify util (from DI) is required');
 
+  // ------------------------------------------------------------------
+  // If no uiRenderer was supplied by the caller, create a minimal one
+  // so projects/conversations can still be listed.
+  // ------------------------------------------------------------------
+  if (!uiRenderer) uiRenderer = (function createFallbackRenderer () {
+    /* helpers share surrounding scope: domAPI, eventHandlers, projectDashboard */
+    const PROJECT_ITEM_SELECTOR = '#projectsSection ul';
+
+    function ensureList(parentSel) {
+      let list = domAPI.querySelector(parentSel);
+      if (!list) {
+        const parent = domAPI.getElementById('projectsSection');
+        if (!parent) return null;
+        list = domAPI.createElement('ul');
+        parent.appendChild(list);
+      }
+      return list;
+    }
+
+    function renderProjects(projects = []) {
+      const list = ensureList(PROJECT_ITEM_SELECTOR);
+      if (!list) return;
+      list.innerHTML = '';
+      projects.forEach(p => {
+        const li   = domAPI.createElement('li');
+        const link = domAPI.createElement('a');
+        link.href  = '#';
+        domAPI.setTextContent(link, p.name || 'Untitled');
+        eventHandlers.trackListener(
+          link, 'click', (e) => {
+            domAPI.preventDefault(e);
+            projectDashboard?.showProjectDetails?.(p.id);
+          },
+          { description: 'Sidebar project click', context: MODULE }
+        );
+        domAPI.appendChild(li, link);
+        domAPI.appendChild(list, li);
+      });
+    }
+
+    /* Stubbed versions – can be expanded later */
+    const noop = () => {};
+    return {
+      renderProjects,
+      renderConversations: noop,
+      renderStarredConversations: noop,
+    };
+  }());
+
   function resolveDep(name) {
     if (DependencySystem?.modules?.get) return DependencySystem.modules.get(name);
     if (DependencySystem?.get) return DependencySystem.get(name);
