@@ -45,57 +45,16 @@ export function createSidebar({
   app = app || resolveDep('app');
   projectDashboard = projectDashboard || resolveDep('projectDashboard');
   projectManager = projectManager || resolveDep('projectManager');
-  uiRenderer = uiRenderer || resolveDep('uiRenderer');
+  // uiRenderer is now a direct, required dependency.
+  if (!uiRenderer ||
+      typeof uiRenderer.renderConversations !== 'function' ||
+      typeof uiRenderer.renderStarredConversations !== 'function' ||
+      typeof uiRenderer.renderProjects !== 'function') {
+    throw new Error('[sidebar] uiRenderer with renderConversations, renderStarredConversations, and renderProjects methods is required.');
+  }
   if (!notify) throw new Error('[sidebar] notify util (from DI) is required');
 
-  // ------------------------------------------------------------------
-  // If no uiRenderer was supplied by the caller, create a minimal one
-  // so projects/conversations can still be listed.
-  // ------------------------------------------------------------------
-  if (!uiRenderer) uiRenderer = (function createFallbackRenderer () {
-    /* helpers share surrounding scope: domAPI, eventHandlers, projectDashboard */
-    const PROJECT_ITEM_SELECTOR = '#projectsSection ul';
-
-    function ensureList(parentSel) {
-      let list = domAPI.querySelector(parentSel);
-      if (!list) {
-        const parent = domAPI.getElementById('projectsSection');
-        if (!parent) return null;
-        list = domAPI.createElement('ul');
-        parent.appendChild(list);
-      }
-      return list;
-    }
-
-    function renderProjects(projects = []) {
-      const list = ensureList(PROJECT_ITEM_SELECTOR);
-      if (!list) return;
-      list.innerHTML = '';
-      projects.forEach(p => {
-        const li   = domAPI.createElement('li');
-        const link = domAPI.createElement('a');
-        link.href  = '#';
-        domAPI.setTextContent(link, p.name || 'Untitled');
-        eventHandlers.trackListener(
-          link, 'click', (e) => {
-            domAPI.preventDefault(e);
-            projectDashboard?.showProjectDetails?.(p.id);
-          },
-          { description: 'Sidebar project click', context: MODULE }
-        );
-        domAPI.appendChild(li, link);
-        domAPI.appendChild(list, li);
-      });
-    }
-
-    /* Stubbed versions – can be expanded later */
-    const noop = () => {};
-    return {
-      renderProjects,
-      renderConversations: noop,
-      renderStarredConversations: noop,
-    };
-  }());
+  // Fallback renderer removed. Sidebar now relies on an injected uiRenderer.
 
   function resolveDep(name) {
     if (DependencySystem?.modules?.get) return DependencySystem.modules.get(name);
@@ -240,21 +199,16 @@ export function createSidebar({
     let itemsFound = -1; // Placeholder for item count if renderer provides it
 
     if (activeTab === 'recent') {
-        if (uiRenderer.renderConversations) {
-            // Assuming renderConversations might return a count or we query after render
-            uiRenderer.renderConversations(searchTerm);
-            // Example: itemsFound = domAPI.querySelectorAll('#recentChatsSection li:not(.hidden)').length;
-            if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
-                accessibilityUtils.announce(`Recent conversations filtered for "${searchTerm || 'all'}".`);
-            }
+        // Pass isConversationStarred and toggleStarConversation from the sidebar instance
+        uiRenderer.renderConversations(searchTerm, isConversationStarred, toggleStarConversation);
+        if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
+            accessibilityUtils.announce(`Recent conversations filtered for "${searchTerm || 'all'}".`);
         }
     } else if (activeTab === 'starred') {
-        if (uiRenderer.renderStarredConversations) {
-            uiRenderer.renderStarredConversations(searchTerm);
-            // Example: itemsFound = domAPI.querySelectorAll('#starredChatsSection li:not(.hidden)').length;
-            if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
-                accessibilityUtils.announce(`Starred conversations filtered for "${searchTerm || 'all'}".`);
-            }
+        // Pass isConversationStarred and toggleStarConversation from the sidebar instance
+        uiRenderer.renderStarredConversations(searchTerm, isConversationStarred, toggleStarConversation);
+        if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
+            accessibilityUtils.announce(`Starred conversations filtered for "${searchTerm || 'all'}".`);
         }
     }
   }
@@ -423,11 +377,13 @@ export function createSidebar({
   }
 
   function maybeRenderRecentConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    if (uiRenderer?.renderConversations) uiRenderer.renderConversations(searchTerm);
+    // Pass isConversationStarred and toggleStarConversation from the sidebar instance
+    uiRenderer?.renderConversations?.(searchTerm, isConversationStarred, toggleStarConversation);
   }
 
   function maybeRenderStarredConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    if (uiRenderer?.renderStarredConversations) uiRenderer.renderStarredConversations(searchTerm);
+    // Pass isConversationStarred and toggleStarConversation from the sidebar instance
+    uiRenderer?.renderStarredConversations?.(searchTerm, isConversationStarred, toggleStarConversation);
   }
 
   function handleGlobalAuthStateChangeForSidebar(event) {

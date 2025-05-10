@@ -37,6 +37,7 @@ import { ProjectListComponent } from './projectListComponent.js';
 import { createProjectDashboard } from './projectDashboard.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
+import { createUiRenderer } from './uiRenderer.js'; // Import the new UI Renderer
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
 
@@ -742,7 +743,7 @@ async function fetchCurrentUser() {
             }
             notify.warn('[App] fetchCurrentUser (from authModule.getCurrentUserObject) did not return a valid user object with ID.', { userObjFromGetter });
         }
-        
+
         // Priority 3: Check getCurrentUserAsync (if it was a previously used name for fetchCurrentUser)
         if (authModule.getCurrentUserAsync && typeof authModule.getCurrentUserAsync === 'function') {
             const userObjAsync = await authModule.getCurrentUserAsync();
@@ -893,12 +894,52 @@ async function initializeUIComponents() {
         // ── AccessibilityUtils for Sidebar ──
         const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
 
+        // Define callbacks for uiRenderer
+        const onConversationSelect = async (conversationId) => {
+            const chatManager = DependencySystem.modules.get('chatManager');
+            if (chatManager && typeof chatManager.loadConversation === 'function') {
+                try {
+                    await chatManager.loadConversation(conversationId);
+                } catch (err) {
+                    notify.error('[App] Failed to load conversation from uiRenderer selection.', { error: err, conversationId });
+                }
+            } else {
+                notify.error('[App] chatManager not available for onConversationSelect.', { conversationId });
+            }
+        };
+
+        const onProjectSelect = async (projectId) => {
+            const projectDashboardDep = DependencySystem.modules.get('projectDashboard');
+            if (projectDashboardDep && typeof projectDashboardDep.showProjectDetails === 'function') {
+                try {
+                    await projectDashboardDep.showProjectDetails(projectId);
+                } catch (err) {
+                    notify.error('[App] Failed to show project details from uiRenderer selection.', { error: err, projectId });
+                }
+            } else {
+                notify.error('[App] projectDashboard not available for onProjectSelect.', { projectId });
+            }
+        };
+
+        // Create uiRenderer instance
+        const uiRendererInstance = createUiRenderer({
+            domAPI,
+            eventHandlers,
+            notify,
+            apiRequest,
+            onConversationSelect,
+            onProjectSelect,
+            // sidebarContext is no longer passed here; star functions are passed directly by sidebar to render methods
+        });
+        DependencySystem.register('uiRenderer', uiRendererInstance); // Register it for potential other uses
+
         const sidebarInstance = createSidebar({
             DependencySystem,
             eventHandlers,
             app,
             projectDashboard: projectDashboardInstance,
             projectManager,
+            uiRenderer: uiRendererInstance, // Inject the created uiRenderer
             notify,
             storageAPI: DependencySystem.modules.get('storage'),
             domAPI,
