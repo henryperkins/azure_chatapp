@@ -15,6 +15,9 @@
  * @param {Object} [options.elements] - Optional pre-resolved DOM element references.
  * @returns {FileUploadComponent} Instance of the component.
  */
+
+const MODULE_CONTEXT = "FileUploadComponentContext"; // P1-B: Define module context
+
 export class FileUploadComponent {
   /**
    * @param {Object} options - Constructor options (see factory function JSDoc).
@@ -37,8 +40,8 @@ export class FileUploadComponent {
 
     // Guideline #4: Use notify.withContext()
     this.notify = notifyRaw.withContext({
-      module: 'FileUploadComponent',
-      context: 'fileUpload'
+      module: 'FileUploadComponent', // This is for notification system's module field
+      context: 'fileUpload' // This is for notification system's context field
     });
 
     // Deterministic timers (DI-friendly)
@@ -199,16 +202,16 @@ export class FileUploadComponent {
       // Use Guideline #3 pattern: track locally for specific component cleanup
       const remover = EH.trackListener(el, type, handler, {
         description: `FileUpload: ${description}`,
-        module: 'FileUploadComponent', // Add context for central cleanup if supported
-        context: 'fileUpload'
+        module: 'FileUploadComponent', // For logging/debug purposes in eventHandler
+        context: MODULE_CONTEXT // P1-B: Use defined context for cleanup
       });
-      this._unsubs.push(remover);
-      // Keep prior logic for full safety
-      if (remover && typeof remover.remove === 'function') {
-        this._listeners.push(remover);
-      } else {
-        this._listeners.push({ element: el, type, handler: handler, description });
-      }
+      // this._unsubs.push(remover); // No longer needed if relying on context cleanup
+      // Keep prior logic for full safety - actually, this is not needed if context cleanup is robust
+      // if (remover && typeof remover.remove === 'function') {
+      //   this._listeners.push(remover);
+      // } else {
+      //   this._listeners.push({ element: el, type, handler: handler, description });
+      // }
     };
 
     // --- File input ---
@@ -241,18 +244,17 @@ export class FileUploadComponent {
   /** Cleanup listeners (Guideline #3) */
   destroy() {
     this.notify.info("Destroying FileUploadComponent, removing listeners.", { source: 'destroy' });
-    this._listeners.forEach(l => {
-      if (typeof l.remove === 'function') {
-        l.remove(); // Use removal handle if provided by trackListener
-      } else if (l.element && this.eventHandlers.untrackListener) {
-        this.eventHandlers.untrackListener(l.element, l.type, l.handler);
-      }
-    });
-    this._listeners = [];
-    if (this._unsubs) {
-      this._unsubs.forEach(fn => typeof fn === 'function' && fn());
-      this._unsubs.length = 0;
+    if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
+      this.eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+      this.notify.debug(`[FileUploadComponent] Called eventHandlers.cleanupListeners for context: ${MODULE_CONTEXT}`, { source: 'destroy' });
+    } else {
+      this.notify.warn('[FileUploadComponent] eventHandlers.cleanupListeners not available. Listeners may not be cleaned up.', { source: 'destroy' });
     }
+    // this._listeners = []; // No longer needed
+    // if (this._unsubs) { // No longer needed
+    //   this._unsubs.forEach(fn => typeof fn === 'function' && fn());
+    //   this._unsubs.length = 0;
+    // }
     this._handlersBound = false;
   }
 
@@ -452,10 +454,8 @@ export class FileUploadComponent {
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     if (progressBar) {
-      // Direct assignment to test if domAPI.setProperty is the issue
-      progressBar.value = percent;
+      this.domAPI.setProperty(progressBar, 'value', String(percent));
 
-      // Direct className manipulation
       let newClassName = 'progress';
       if (failed > 0) {
         newClassName += (completed === total ? ' progress-error' : ' progress-warning');
@@ -464,7 +464,7 @@ export class FileUploadComponent {
       } else {
         newClassName += ' progress-info';
       }
-      progressBar.className = newClassName;
+      this.domAPI.setProperty(progressBar, 'className', newClassName);
     }
 
     if (statusEl) {

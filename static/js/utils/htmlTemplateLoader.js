@@ -28,18 +28,30 @@ export function createHtmlTemplateLoader({
     url,
     containerSelector,
     eventName    = 'htmlTemplateLoaded',
-    timeout      = 8_000
+    timeout      = 15_000 // Increased from 8_000 to 15_000
   } = {}) {
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
-      loaderNotify.error(`Container not found: ${containerSelector}`, { source: 'loadTemplate' });
+      loaderNotify.error(`Container not found: ${containerSelector}`, { source: 'loadTemplate', url });
       return false;
     }
-    if (container.childElementCount) {                        // already injected
-      domAPI.dispatchEvent(domAPI.getDocument(),
-        new CustomEvent(eventName, { detail: { success: true, cached: true } }));
-      return true;
-    }
+
+    // Added detailed logging for container state
+    loaderNotify.info(`Container ${containerSelector} found for url ${url}. Child count: ${container.childElementCount}. InnerHTML length: ${container.innerHTML.length}`, {
+        source: 'loadTemplate',
+        url,
+        selector: containerSelector,
+        childCount: container.childElementCount,
+        innerHTMLSample: container.innerHTML.substring(0, 100)
+    });
+
+    // Removed childElementCount check to ensure templates are always fetched and injected
+    // if (container.childElementCount > 0) {
+    //   loaderNotify.info(`Container ${containerSelector} for ${url} already has content (childCount: ${container.childElementCount}), skipping fetch. Firing event as cached.`, { source: 'loadTemplate', url, cached: true });
+    //   domAPI.dispatchEvent(domAPI.getDocument(),
+    //     new CustomEvent(eventName, { detail: { success: true, cached: true } }));
+    //   return true;
+    // }
 
     loaderNotify.info(`Fetching ${url}`, { source: 'loadTemplate' });
     const controller = new AbortController();

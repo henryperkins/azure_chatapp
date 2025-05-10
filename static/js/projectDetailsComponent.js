@@ -305,12 +305,12 @@ export class ProjectDetailsComponent {
         this.elements.backBtn,
         'click',
         this._backBtnHandler,
-        { description: 'ProjectDetails_Back' }
+        { description: 'ProjectDetails_Back', context: MODULE }
       );
     }
     if (this.elements.tabContainer) {
       if (this._tabClickHandler)
-        this.eventHandlers.untrackListener(this.elements.tabContainer, 'click', this._tabClickHandler);
+        this.eventHandlers.untrackListener(this.elements.tabContainer, 'click', this._tabClickHandler); // untrackListener is specific, no context needed
       this._tabClickHandler = (_e, btn) => {
         const tab = btn.dataset.tab;
         if (tab) this.switchTab(tab);
@@ -320,7 +320,7 @@ export class ProjectDetailsComponent {
         'click',
         '.project-tab-btn',
         this._tabClickHandler,
-        { description: 'ProjectDetails_TabSwitch' }
+        { description: 'ProjectDetails_TabSwitch', context: MODULE }
       );
     }
     const newChatBtn = this.elements.container.querySelector("#projectNewConversationBtn");
@@ -331,13 +331,14 @@ export class ProjectDetailsComponent {
         newChatBtn,
         "click",
         () => this.createNewConversation(),
-        { description: "ProjectDetails_NewConversation" }
+        { description: "ProjectDetails_NewConversation", context: MODULE }
       );
     }
 
     const doc = this.domAPI.getDocument();
+    // Add context to listeners registered by the 'on' helper
     const on = (evt, cb, desc) =>
-      this.eventHandlers.trackListener(doc, evt, cb, { description: desc });
+      this.eventHandlers.trackListener(doc, evt, cb, { description: desc, context: MODULE });
 
     on("projectConversationsLoaded", (e) => {
       this.renderConversations(e.detail?.conversations || []);
@@ -821,8 +822,14 @@ this.domAPI.dispatchEvent(
     this.notify.info("[ProjectDetailsComponent] destroy()", {
       group: true, context: "projectDetailsComponent", module: MODULE, source: "destroy"
     });
-    this.eventHandlers.cleanupListeners(this.elements.container);
-    this.eventHandlers.cleanupListeners(this.domAPI.getDocument());
+    // this.eventHandlers.cleanupListeners(this.elements.container); // Old way
+    // this.eventHandlers.cleanupListeners(this.domAPI.getDocument()); // Old way
+    // New way: cleanup all listeners registered with this component's context
+    if (this.eventHandlers.DependencySystem && typeof this.eventHandlers.DependencySystem.cleanupModuleListeners === 'function') {
+        this.eventHandlers.DependencySystem.cleanupModuleListeners(MODULE);
+    } else if (typeof this.eventHandlers.cleanupListeners === 'function') {
+        this.eventHandlers.cleanupListeners({ context: MODULE });
+    }
     this.state.initialized = false;
   }
 
@@ -909,13 +916,13 @@ this.domAPI.dispatchEvent(
       downloadBtn,
       "click",
       () => this._downloadFile(file.id, file.filename),
-      { description: `DownloadFile_${file.id}` }
+      { description: `DownloadFile_${file.id}`, context: MODULE }
     );
     this.eventHandlers.trackListener(
       deleteBtn,
       "click",
       () => this._confirmDeleteFile(file.id, file.filename),
-      { description: `DeleteFile_${file.id}` }
+      { description: `DeleteFile_${file.id}`, context: MODULE }
     );
     return div;
   }
@@ -941,7 +948,7 @@ this.domAPI.dispatchEvent(
       div,
       "click",
       () => this._openConversation(cv),
-      { description: `OpenConversation_${cv.id}` }
+      { description: `OpenConversation_${cv.id}`, context: MODULE }
     );
     return div;
   }
@@ -972,7 +979,7 @@ this.domAPI.dispatchEvent(
           .catch(e => {
             this.notify.error("[ProjectDetailsComponent] artifact download failed: " + (e?.message || e), {
               group: true,
-              context: "projectDetailsComponent",
+              context: "projectDetailsComponent", // This is notify context, not listener context
               module: MODULE,
               source: "_artifactItem",
               originalError: e,
@@ -980,7 +987,7 @@ this.domAPI.dispatchEvent(
             });
             this.notify.error(`Download failed: ${e.message}`, {
               group: true,
-              context: "projectDetailsComponent",
+              context: "projectDetailsComponent", // This is notify context
               module: MODULE,
               source: "_artifactItem",
               originalError: e,
@@ -990,13 +997,13 @@ this.domAPI.dispatchEvent(
       } else {
         this.notify.error("[ProjectDetailsComponent] downloadArtifact not available.", {
           group: true,
-          context: "projectDetailsComponent",
+          context: "projectDetailsComponent", // This is notify context
           module: MODULE,
           source: "_artifactItem",
           timeout: 0
         });
       }
-    }, { description: `DownloadArtifact_${art.id}` });
+    }, { description: `DownloadArtifact_${art.id}`, context: MODULE });
     return div;
   }
 
