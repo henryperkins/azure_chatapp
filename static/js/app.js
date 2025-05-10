@@ -296,15 +296,11 @@ if (typeof window !== "undefined") {
  // ---------------------------------------------------------------------------
 const apiRequest = createApiClient({
     APP_CONFIG,
-    globalUtils: {
-        shouldSkipDedup,
-        stableStringify,
-        normaliseUrl,
-        isAbsoluteUrl
-    },
-    notificationHandler: notify,
-    getAuthModule: () => DependencySystem.modules.get('auth'),
-    browserService: browserServiceInstance
+    globalUtils : { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl },
+    notify,
+    errorReporter      : sentryManager,
+    getAuthModule      : () => DependencySystem.modules.get('auth'),
+    browserService     : browserServiceInstance
 });
 DependencySystem.register('apiRequest', apiRequest);
 
@@ -386,8 +382,8 @@ export async function init() {
 
         if (appState.isAuthenticated) {
             const user = await fetchCurrentUser();
-            console.log("[App] Auth verify/fetchCurrentUser response:", user);
-            console.log("[App] Before set currentUser:", currentUser, "app.state.currentUser:", app.state.currentUser);
+            notify.debug('[App] Auth verify/fetchCurrentUser response', { extra: { user } });
+            notify.debug('[App] Before set currentUser', { extra: { currentUser, stateCurrentUser: app.state.currentUser } });
             if (user) {
                 currentUser = user;
                 app.state.currentUser = user;
@@ -395,7 +391,7 @@ export async function init() {
                 DependencySystem.register('currentUser', user);
                 // Re-render header now that we have full user info
                 renderAuthHeader();
-                console.log("[App] After set currentUser:", currentUser, "app.state.currentUser:", app.state.currentUser);
+                notify.debug('[App] After set currentUser', { extra: { currentUser, stateCurrentUser: app.state.currentUser } });
             }
         }
 
