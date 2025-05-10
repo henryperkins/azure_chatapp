@@ -74,14 +74,15 @@ const uiUtils = {
 // ---------------------------------------------------------------------------
 // 1) Create DI-based references: browserAPI, domAPI, notify, etc.
 // ---------------------------------------------------------------------------
-const browserAPI = browserServiceInstance;               // SSR-safe checks (replace createBrowserAPI)
+const browserServiceInstance = createBrowserService({
+    windowObject: (typeof window !== 'undefined') ? window : undefined
+});
+const browserAPI = browserServiceInstance;   // alias for readability
+
 const domAPI = createDomAPI({
     documentObject: browserAPI.getDocument(),
-    windowObject:   browserAPI.getWindow(),
-    debug:          APP_CONFIG.DEBUG === true
-});
-const browserServiceInstance = createBrowserService({
-    windowObject: browserAPI.getWindow()
+    windowObject : browserAPI.getWindow(),
+    debug        : APP_CONFIG.DEBUG === true
 });
 
 // ---------------------------------------------------------------------------
