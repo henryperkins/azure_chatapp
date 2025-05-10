@@ -129,14 +129,6 @@ class MessageQueue {
       this.isProcessing = false;
       this.process();
     }
-
-    _toggleChatVisibility() {
-      if (!this.container) return;
-      const collapsed = this.container.classList.toggle("collapsed");
-      // opcional: atributo aria-pressed para accesibilidad
-      if (this.minimizeButton)
-        this.minimizeButton.setAttribute("aria-pressed", String(collapsed));
-    }
   }
 }
 
