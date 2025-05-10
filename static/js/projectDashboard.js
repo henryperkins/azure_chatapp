@@ -470,29 +470,40 @@ class ProjectDashboard {
     // If a full project object is passed (likely from createProject flow),
     // check for a default conversation and set its ID in the URL.
     // This helps ChatManager pick up the default conversation automatically.
-    if (project && project.conversations && project.conversations.length > 0) {
-      const defaultConversation = project.conversations[0];
-      if (defaultConversation && defaultConversation.id) {
-        this.browserService.setSearchParam('chatId', defaultConversation.id);
-        this.dashboardNotify.info(`[ProjectDashboard] _postProjectDetailsSuccess: Default conversation ID ${defaultConversation.id} set in URL for project ${projectId}.`, {
-          source: '_postProjectDetailsSuccess',
-          projectId,
-          chatId: defaultConversation.id,
-          projectObject: project // Log the whole project object for inspection
-        });
-      } else {
-        this.dashboardNotify.warn(`[ProjectDashboard] _postProjectDetailsSuccess: Project has conversations array, but defaultConversation or its ID is missing.`, {
-          source: '_postProjectDetailsSuccess',
-          projectId,
-          projectConversations: project.conversations
-        });
-      }
+    if (project && project.id) { // Ensure project itself is valid first
+        if (project.conversations && Array.isArray(project.conversations) && project.conversations.length > 0) {
+            const defaultConversation = project.conversations[0];
+            if (defaultConversation && defaultConversation.id) {
+                this.browserService.setSearchParam('chatId', defaultConversation.id);
+                this.dashboardNotify.info(`[ProjectDashboard] _postProjectDetailsSuccess: Default conversation ID ${defaultConversation.id} set in URL for project ${projectId}.`, {
+                    source: '_postProjectDetailsSuccess',
+                    projectId,
+                    chatId: defaultConversation.id
+                    // Avoid logging the whole project object here unless necessary for debugging, as it can be large.
+                });
+            } else {
+                // This case means project.conversations is an array, but the first element is faulty or has no id.
+                this.dashboardNotify.warn(`[ProjectDashboard] _postProjectDetailsSuccess: Project has conversations array, but the first conversation is invalid or missing an ID. Cannot set default chatId.`, {
+                    source: '_postProjectDetailsSuccess',
+                    projectId,
+                    projectConversationsPreview: project.conversations.slice(0,1) // Log preview of first item
+                });
+            }
+        } else {
+            // This is an expected case for new projects or projects without conversations.
+            this.dashboardNotify.info(`[ProjectDashboard] _postProjectDetailsSuccess: Project has no conversations array, or it's empty. Cannot set default chatId.`, {
+                source: '_postProjectDetailsSuccess',
+                projectId,
+                conversationsDataExists: project.hasOwnProperty('conversations'), // Check if the key exists
+                conversationsIsArray: Array.isArray(project.conversations),
+                conversationsLength: Array.isArray(project.conversations) ? project.conversations.length : undefined
+            });
+        }
     } else {
-      this.dashboardNotify.warn(`[ProjectDashboard] _postProjectDetailsSuccess: Project object or project.conversations is missing/empty. Cannot set default chatId.`, {
-        source: '_postProjectDetailsSuccess',
-        projectId,
-        projectExists: !!project,
-        conversationsExist: !!(project && project.conversations)
+      // This case means the project object itself was invalid or missing when _postProjectDetailsSuccess was called.
+      this.dashboardNotify.warn(`[ProjectDashboard] _postProjectDetailsSuccess: Invalid or missing project object received. Cannot evaluate conversations to set default chatId.`, {
+          source: '_postProjectDetailsSuccess',
+          projectId // projectId might still be valid if project object is not
       });
     }
 
