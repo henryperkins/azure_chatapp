@@ -610,7 +610,8 @@ this.domAPI.dispatchEvent(
           containerSelector: "#projectChatUI",
           messageContainerSelector: "#projectChatMessages",
           inputSelector: "#projectChatInput",
-          sendButtonSelector: "#projectChatSendBtn"
+          sendButtonSelector: "#projectChatSendBtn",
+          minimizeButtonSelector: "#minimizeChatBtn"
         }).catch((err) => {
           this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for conversations: " + (err?.message || err), {
             group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", originalError: err, timeout: 0

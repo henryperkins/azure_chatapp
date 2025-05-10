@@ -129,6 +129,14 @@ class MessageQueue {
       this.isProcessing = false;
       this.process();
     }
+
+    _toggleChatVisibility() {
+      if (!this.container) return;
+      const collapsed = this.container.classList.toggle("collapsed");
+      // opcional: atributo aria-pressed para accesibilidad
+      if (this.minimizeButton)
+        this.minimizeButton.setAttribute("aria-pressed", String(collapsed));
+    }
   }
 }
 
@@ -305,6 +313,7 @@ export function createChatManager({
      * @param {string} [options.inputSelector]
      * @param {string} [options.sendButtonSelector]
      * @param {string} [options.titleSelector]
+     * @param {string} [options.minimizeButtonSelector]
      */
     async initialize(options = {}) {
       const _initStart = performance.now();
@@ -878,6 +887,7 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
       const inputSelector = options.inputSelector || "#chatInput";
       const sendButtonSelector = options.sendButtonSelector || "#sendBtn";
       const titleSelector = options.titleSelector || "#chatTitle";
+      const minimizeButtonSelector = options.minimizeButtonSelector || "#minimizeChatBtn";
 
       // Container
       this.container = this.domAPI.querySelector(containerSelector);
@@ -920,6 +930,9 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         this.sendButton = this.domAPI.querySelector(sendButtonSelector);
       }
 
+      // Minimize button
+      this.minimizeButton = this.domAPI.querySelector(minimizeButtonSelector);
+
       // Title element
       this.titleElement = this.domAPI.querySelector(titleSelector);
       chatNotify.debug('UI elements setup complete.', {
@@ -929,7 +942,8 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
           messageContainer: !!this.messageContainer,
           inputField: !!this.inputField,
           sendButton: !!this.sendButton,
-          titleElement: !!this.titleElement
+          titleElement: !!this.titleElement,
+          minimizeButton: !!this.minimizeButton
         }
       });
     }
@@ -971,6 +985,15 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         track(this.sendButton, "click", () => {
           this.sendMessage(this.inputField?.value);
         }, { description: 'Chat send button' });
+      }
+
+      if (this.minimizeButton) {
+        track(
+          this.minimizeButton,
+          "click",
+          () => this._toggleChatVisibility(),
+          { description: "Minimize / restore chat" }
+        );
       }
 
       // Listen for a custom "regenerateChat" event
