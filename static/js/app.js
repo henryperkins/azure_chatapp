@@ -38,6 +38,7 @@ import { createProjectDashboard } from './projectDashboard.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
+import { createAccessibilityEnhancements } from './accessibility-utils.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
@@ -224,6 +225,18 @@ DependencySystem.cleanupModuleListeners = function(moduleContext) {
     context: 'DependencySystem'
   });
 };
+
+// ── Accessibility utilities ───────────────────────────────
+const accessibilityUtils = createAccessibilityEnhancements({
+  domAPI,
+  eventHandlers,
+  notify,
+  errorReporter : sentryManager,
+  DependencySystem,
+  createDebugTools       // already imported earlier
+});
+DependencySystem.register('accessibilityUtils', accessibilityUtils);
+accessibilityUtils.init?.();
 
 // ---------------------------------------------------------------------------
 // 2.5) Build our error-reporting integration (depends on notify)
@@ -847,6 +860,9 @@ async function initializeUIComponents() {
             projectDashboardInstance.components.projectList    = projectListComponentInstance;
         }
 
+        // ── AccessibilityUtils for Sidebar ──
+        const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
+
         const sidebarInstance = createSidebar({
             DependencySystem,
             eventHandlers,
@@ -856,7 +872,8 @@ async function initializeUIComponents() {
             notify,
             storageAPI: DependencySystem.modules.get('storage'),
             domAPI,
-            viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() }
+            viewportAPI : { getInnerWidth: () => browserAPI.getInnerWidth() },
+            accessibilityUtils
         });
         DependencySystem.register('sidebar', sidebarInstance);
 
