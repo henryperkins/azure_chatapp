@@ -9,15 +9,25 @@
  * @param {Function} deps.notify            – DI notify util
  * @param {Window}   [deps.windowObj=window]
  */
+import notify from './notify.js';
+
+/**
+ * HtmlTemplateLoader
+ * Factory that fetches & injects external HTML fragments, then emits a
+ * custom event (<eventName>) on document so other modules can await it.
+ *
+ * @param {Object} deps
+ * @param {DependencySystem} deps.DependencySystem
+ * @param {Object} deps.domAPI
+ * @param {Window}   [deps.windowObj=window]
+ */
 export function createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
-  notify,
   windowObj = window
 } = {}) {
   if (!DependencySystem) throw new Error('DependencySystem required');
   if (!domAPI)           throw new Error('domAPI required');
-  if (!notify)           throw new Error('notify util required');
 
   const loaderNotify = notify.withContext({
     module : 'HtmlTemplateLoader',
@@ -44,14 +54,6 @@ export function createHtmlTemplateLoader({
         childCount: container.childElementCount,
         innerHTMLSample: container.innerHTML.substring(0, 100)
     });
-
-    // Removed childElementCount check to ensure templates are always fetched and injected
-    // if (container.childElementCount > 0) {
-    //   loaderNotify.info(`Container ${containerSelector} for ${url} already has content (childCount: ${container.childElementCount}), skipping fetch. Firing event as cached.`, { source: 'loadTemplate', url, cached: true });
-    //   domAPI.dispatchEvent(domAPI.getDocument(),
-    //     new CustomEvent(eventName, { detail: { success: true, cached: true } }));
-    //   return true;
-    // }
 
     loaderNotify.info(`Fetching ${url}`, { source: 'loadTemplate' });
     const controller = new AbortController();
