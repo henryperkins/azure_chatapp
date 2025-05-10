@@ -27,6 +27,8 @@ export function normaliseUrl(u = '') {
 
 export function createBrowserService({ windowObject } = {}) {
 
+  let _currentUser = null;
+
   if (!windowObject)
     throw new Error('browserService: windowObject must be injected (no global fallback)');
   if (!windowObject?.location) throw new Error('browserService: windowObject is required');
@@ -56,6 +58,9 @@ export function createBrowserService({ windowObject } = {}) {
     // Direct passthrough; you may inject/wrap for testability in tests
     return windowObject.fetch(...args);
   }
+
+  function setCurrentUser(userObj) { _currentUser = userObj ?? null; }
+  function getCurrentUser()      { return _currentUser; }
 
   return {
     // Query-string helpers
@@ -96,5 +101,9 @@ export function createBrowserService({ windowObject } = {}) {
     getLocation         : () => windowObject.location,
     getInnerWidth       : () => windowObject.innerWidth,
     getDependencySystem : () => windowObject.DependencySystem,
+
+    // session-scoped user helpers (used by app.handleAuthStateChange)
+    setCurrentUser,
+    getCurrentUser,
   };
 }
