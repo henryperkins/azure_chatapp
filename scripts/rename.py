@@ -1,4 +1,3 @@
-# docs/rename.py
 import os
 import sys
 import argparse
@@ -7,6 +6,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 import fnmatch
+
 
 def parse_gitignore(gitignore_path):
     """
@@ -20,16 +20,17 @@ def parse_gitignore(gitignore_path):
     """
     patterns = []
     try:
-        with open(gitignore_path, 'r', encoding='utf-8') as file:
+        with open(gitignore_path, "r", encoding="utf-8") as file:
             for line in file:
                 # Ignore comments and empty lines
                 stripped_line = line.strip()
-                if stripped_line and not stripped_line.startswith('#'):
+                if stripped_line and not stripped_line.startswith("#"):
                     patterns.append(stripped_line)
     except FileNotFoundError:
         # If no .gitignore file exists, return an empty list
         pass
     return patterns
+
 
 def should_ignore(path, ignore_patterns):
     """
@@ -43,11 +44,16 @@ def should_ignore(path, ignore_patterns):
         bool: True if the path should be ignored, False otherwise.
     """
     for pattern in ignore_patterns:
-        if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(os.path.basename(path), pattern):
+        if fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(
+            os.path.basename(path), pattern
+        ):
             return True
     return False
 
-def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log_callback=None):
+
+def rename_and_modify_files_to_md(
+    directory, recursive=False, dry_run=False, log_callback=None
+):
     """
     Renames all supported files in the specified directory to .md
     and wraps their contents in Markdown code fences, while respecting .gitignore.
@@ -67,7 +73,7 @@ def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log
         return
 
     # Parse .gitignore if it exists
-    gitignore_path = os.path.join(directory, '.gitignore')
+    gitignore_path = os.path.join(directory, ".gitignore")
     ignore_patterns = parse_gitignore(gitignore_path)
 
     if recursive:
@@ -86,23 +92,24 @@ def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log
 
     for root, dirs, files in walker:
         # Filter directories based on .gitignore
-        dirs[:] = [d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)]
+        dirs[:] = [
+            d for d in dirs if not should_ignore(os.path.join(root, d), ignore_patterns)
+        ]
 
         for filename in files:
             # Supported file extensions and their corresponding code block languages
-                        # Supported file extensions and their corresponding code block languages
             extensions = {
-                '.py': 'python',
-                '.ts': 'typescript',
-                '.tsx': 'typescript',
-                '.js': 'javascript',
-                '.cjs': 'javascript',
-                '.json': 'json',
-                '.html': 'html',
-                '.css': 'css',
-                '.log': 'text',
-                '.txt': 'text',
-                '.ini': 'ini'
+                ".py": "python",
+                ".ts": "typescript",
+                ".tsx": "typescript",
+                ".js": "javascript",
+                ".cjs": "javascript",
+                ".json": "json",
+                ".html": "html",
+                ".css": "css",
+                ".log": "text",
+                ".txt": "text",
+                ".ini": "ini",
             }
 
             file_ext = os.path.splitext(filename)[1].lower()
@@ -119,7 +126,7 @@ def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log
 
             if file_ext in extensions:
                 old_path = os.path.join(root, filename)
-                new_filename = os.path.splitext(filename)[0] + '.md'
+                new_filename = os.path.splitext(filename)[0] + ".md"
                 new_path = os.path.join(root, new_filename)
 
                 # Check if the new file name already exists to avoid overwriting
@@ -148,7 +155,7 @@ def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log
                             print(msg)
 
                         # Read the original content
-                        with open(new_path, 'r', encoding='utf-8') as file:
+                        with open(new_path, "r", encoding="utf-8") as file:
                             content = file.read()
 
                         # Wrap the content in Markdown code fences
@@ -156,7 +163,7 @@ def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log
                         wrapped_content = f"```{language}\n{content}\n```"
 
                         # Write the modified content back to the file
-                        with open(new_path, 'w', encoding='utf-8') as file:
+                        with open(new_path, "w", encoding="utf-8") as file:
                             file.write(wrapped_content)
 
                         msg = f"Modified contents of '{new_path}' to include Markdown code fences."
@@ -170,6 +177,7 @@ def rename_and_modify_files_to_md(directory, recursive=False, dry_run=False, log
                             log_callback(msg)
                         else:
                             print(msg)
+
 
 def clone_github_repo(repo_url, destination, log_callback=None):
     """
@@ -185,7 +193,12 @@ def clone_github_repo(repo_url, destination, log_callback=None):
     """
     try:
         # Ensure GitHub CLI is installed
-        subprocess.run(["gh", "--version"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            ["gh", "--version"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
 
         # Clone the repository
         msg = f"Cloning repository '{repo_url}' into '{destination}'..."
@@ -216,6 +229,7 @@ def clone_github_repo(repo_url, destination, log_callback=None):
         else:
             print(msg)
         return False
+
 
 def create_directory_copy(original_dir, output_dir=None, log_callback=None):
     """
@@ -262,6 +276,7 @@ def create_directory_copy(original_dir, output_dir=None, log_callback=None):
             print(msg)
         return None
 
+
 def process_input(input_path_or_url, is_url, output_dir=None, log_callback=None):
     """
     Processes the input, cloning if it's a GitHub URL or using the local directory.
@@ -296,12 +311,45 @@ def process_input(input_path_or_url, is_url, output_dir=None, log_callback=None)
     copied_dir = create_directory_copy(original_dir, output_dir, log_callback)
     return copied_dir
 
+
+def copy_to_vault(processed_dir, vault_dir, overwrite=True, log_callback=None):
+    """
+    Copies all .md files from processed_dir to vault_dir, preserving directory structure.
+    Overwrites files in the vault if overwrite is True.
+    """
+    for root, _, files in os.walk(processed_dir):
+        # Find the relative path from 'processed_dir' so we preserve folder structure
+        rel_root = os.path.relpath(root, processed_dir)
+        # Determine the corresponding path in the vault
+        target_root = (
+            os.path.join(vault_dir, rel_root) if rel_root != "." else vault_dir
+        )
+
+        os.makedirs(target_root, exist_ok=True)
+        for file in files:
+            if file.endswith(".md"):
+                src = os.path.join(root, file)
+                dst = os.path.join(target_root, file)
+                # If overwrite=False, skip if dst already exists
+                if os.path.exists(dst) and not overwrite:
+                    msg = f"File '{dst}' already exists. Skipping."
+                    if log_callback:
+                        log_callback(msg)
+                    else:
+                        print(msg)
+                    continue
+
+                shutil.copy2(src, dst)
+                msg = f"Copied '{src}' to '{dst}'."
+                if log_callback:
+                    log_callback(msg)
+                else:
+                    print(msg)
+
+
 def run_cli(args):
     """
     Executes the CLI functionality based on parsed arguments.
-
-    Args:
-        args (Namespace): Parsed command-line arguments.
     """
     if args.directory:
         input_path_or_url = args.directory
@@ -315,7 +363,9 @@ def run_cli(args):
 
     output_dir = args.output
 
-    directory_to_process = process_input(input_path_or_url, is_url, output_dir, log_callback=print)
+    directory_to_process = process_input(
+        input_path_or_url, is_url, output_dir, log_callback=print
+    )
     if directory_to_process is None:
         print("Processing aborted due to errors.")
         sys.exit(1)
@@ -324,19 +374,53 @@ def run_cli(args):
         directory=directory_to_process,
         recursive=args.recursive,
         dry_run=args.dry_run,
-        log_callback=print
+        log_callback=print,
     )
 
+    # If a vault path is provided, copy all .md files into the vault
+    if getattr(args, "vault", None):
+        vault_dir = os.path.abspath(args.vault)
+        if not os.path.isdir(vault_dir):
+            print(
+                f"Error: Vault path '{vault_dir}' does not exist or is not a directory."
+            )
+            sys.exit(1)
+
+        copy_to_vault(
+            directory_to_process, vault_dir, overwrite=True, log_callback=print
+        )
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Rename all .py, .ts, .tsx, .js, .json, .html, .css, and .log files in a directory or GitHub repo to .md and modify contents, respecting .gitignore.")
+    parser = argparse.ArgumentParser(
+        description="Rename code files to .md, wrap them in code fences, and optionally copy them into an Obsidian vault."
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-d", "--directory", help="Path to the target local directory")
     group.add_argument("-u", "--url", help="GitHub repository URL to clone and process")
-    parser.add_argument("-o", "--output", help="Destination directory for the copied and renamed contents")
-    parser.add_argument("-r", "--recursive", action="store_true",
-                        help="Recursively rename supported files in subdirectories")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Show what would be renamed and modified without making any changes")
+
+    parser.add_argument(
+        "-o",
+        "--output",
+        help="Destination directory for the copied and renamed contents",
+    )
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Recursively rename supported files in subdirectories",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show what would be renamed and modified without making any changes",
+    )
+
+    # New argument for Obsidian vault path
+    parser.add_argument(
+        "--vault",
+        help="Path to your Obsidian vault—copies the resulting .md files here, overwriting existing ones.",
+    )
 
     args = parser.parse_args()
 
@@ -345,6 +429,7 @@ def main():
         sys.exit(1)
 
     run_cli(args)
+
 
 if __name__ == "__main__":
     main()
