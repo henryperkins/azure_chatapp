@@ -170,22 +170,28 @@ export function createChatManager({
   const _baseNotify = notify; // Assuming notify is always provided as per earlier checks or DI system guarantees
 
   // 2. chatNotify con contexto pre-fijado
-  // Ensure _baseNotify itself is not null and has withContext
-  if (!_baseNotify || typeof _baseNotify.withContext !== 'function') {
-    // This is a critical setup error if notify is expected to be fully functional.
-    // For robustness in case of partial DI, we can log via console and proceed with a stub.
-    console.error('[ChatManager Factory] Critical: `notify.withContext` is not available. Using fallback console logs.');
-    const consoleNotify = {
-        debug: (...args) => console.debug('[ChatManager Console]', ...args),
-        info: (...args) => console.info('[ChatManager Console]', ...args),
-        warn: (...args) => console.warn('[ChatManager Console]', ...args),
-        error: (...args) => console.error('[ChatManager Console]', ...args),
-        success: (...args) => console.log('[ChatManager Console]', ...args),
+  let chatNotify;
+  if (_baseNotify && typeof _baseNotify.withContext === 'function') {
+    chatNotify = _baseNotify.withContext({ module: 'ChatManager', context: 'chatManager' });
+  } else {
+    // If _baseNotify is faulty or lacks withContext, create a stub for chatNotify.
+    console.error('[ChatManager Factory] Critical: Injected `notify` dependency is missing `withContext` method. ChatManager specific logs will use a console fallback.');
+    chatNotify = {
+        debug: (...args) => console.debug('[ChatManager Fallback ContextLog]', ...args),
+        info:  (...args) => console.info('[ChatManager Fallback ContextLog]', ...args),
+        warn:  (...args) => console.warn('[ChatManager Fallback ContextLog]', ...args),
+        error: (...args) => console.error('[ChatManager Fallback ContextLog]', ...args),
+        success: (...args) => console.log('[ChatManager Fallback ContextLog]', ...args),
+        apiError: (...args) => console.error('[ChatManager API Error Fallback ContextLog]', ...args),
+        authWarn: (...args) => console.warn('[ChatManager Auth Warn Fallback ContextLog]', ...args),
     };
-    notify = consoleNotify; // Reassign to the console-based stub for the rest of this factory
+    // Note: The local 'notify' variable (parameter) itself might still be the faulty one.
+    // The 'notifyFn' below will use this 'chatNotify' stub if its methods are called.
   }
 
-  const chatNotify = notify.withContext({ module: 'ChatManager', context: 'chatManager' });
+  // The 'notify' variable used below for chatNotify.debug should now be the original _baseNotify
+  // or the consoleNotify if the original was bad.
+  // The chatNotify created above is now safe.
 
   chatNotify.debug('createChatManager called. Validating dependencies...', {
     source: 'factory',
@@ -332,7 +338,7 @@ export function createChatManager({
       if (this.isInitialized && previousProjectId !== requestedProjectId) {
         chatNotify.info(`Switching from project ${previousProjectId} to ${requestedProjectId}. Resetting state.`, { source: 'initialize', fromProjectId: previousProjectId, toProjectId: requestedProjectId });
         // Reset relevant state
-        this.isInitialized = false;
+        // this.isInitialized = false; // Keep isInitialized true if re-binding UI for a new project
         this.currentConversationId = null;
         this.loadPromise = null;
         this.isLoading = false;
@@ -389,6 +395,7 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
       }
 
       chatNotify.info(`Initializing for project ID: ${this.projectId}`, { source: 'initialize' });
+      // Initialize is now async due to awaiting loadConversation
       try {
         const urlParams = new URLSearchParams(this.navAPI.getSearch());
         const urlChatId = urlParams.get('chatId');
@@ -396,33 +403,52 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
 
         if (urlChatId) {
           chatNotify.info(`Found chatId=${urlChatId} in URL, attempting to load conversation...`, { source: 'initialize', chatId: urlChatId });
-          this.loadConversation(urlChatId).catch(loadErr => { // loadConversation logs internally
-              this._handleError("initialization (load from URL)", loadErr); // Already logs
-              this._clearMessages(); // Internally logs
-              this._showMessage("system", "Failed to load chat from URL."); // Internally logs
-              // Note: loadConversation itself should log detailed failure.
-          });
+          const loadedSuccessfully = await this.loadConversation(urlChatId); // Await the load
+
+          if (!loadedSuccessfully) {
+            chatNotify.warn(`Failed to fully load conversation ${urlChatId} from API. Attempting to use it as current.`, { source: 'initialize', chatId: urlChatId });
+            // If loading failed but we have a chatId from URL (which should be the default convo ID from project creation),
+            // optimistically set it as current. This handles cases where a new/empty convo might not load full details immediately.
+            if (this.isValidProjectId(this.projectId)) { // Ensure project context is valid
+                 this.currentConversationId = urlChatId; // Set it directly
+                 this._clearMessages(); // Clear any "failed to load" messages from previous attempt
+                 this._updateURLWithConversationId(urlChatId); // Ensure URL is consistent
+                 this._showMessage("system", "Conversation started. Type a message to begin."); // Provide feedback
+                 chatNotify.info(`Fallback: Set currentConversationId to ${urlChatId} from URL for project ${this.projectId}.`, { source: 'initialize' });
+            } else {
+                 this._handleError("initialization (invalid project for URL chat)", new Error(`Project ID ${this.projectId} invalid for chat ID ${urlChatId} from URL`));
+                 this._clearMessages();
+                 this._showMessage("system", "Error linking chat to project.");
+            }
+          }
+          // If loadedSuccessfully is true, loadConversation already set currentConversationId and rendered messages.
         } else {
           chatNotify.info("No chatId in URL. Ready for new chat or selection.", { source: 'initialize' });
-          this._clearMessages(); // Internally logs
+          this._clearMessages(); // Clear messages if no specific chat to load
         }
-        this.isInitialized = true;
+
+        this.isInitialized = true; // Mark as initialized after attempting to load/set conversation
         chatNotify.info(`ChatManager initialized (project mode for ${this.projectId}).`, { source: 'initialize', phase: 'complete_project', durationMs: (performance.now() - _initStart).toFixed(2) });
 
         // --- Standardized "chatmanager:initialized" event ---
         const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
         if (doc) {
             chatNotify.debug('Dispatching chatmanager:initialized event (project mode).', { source: 'initialize' });
-            const event = new CustomEvent('chatmanager:initialized', { detail: { success: true, mode: 'project', projectId: this.projectId } });
-            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(event);
+            const event = new CustomEvent('chatmanager:initialized', { detail: { success: true, mode: 'project', projectId: this.projectId, conversationId: this.currentConversationId } });
+            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(doc, event);
         }
         return true;
-      } catch (error) {
-        this._handleError("initialization (sync setup)", error);
+      } catch (error) { // Catch errors from the try block, including awaited loadConversation if it throws
+        this._handleError("initialization (project mode setup)", error);
         this.projectDetails?.disableChatUI?.("Chat setup error: " + (error.message || error));
-        // _handleError already logs this.
-        // this.notify(`[ChatManager] initialize threw sync error`, "error", { phase: "init", error: error?.message, stack: error?.stack });
-        throw error;
+        this.isInitialized = false; // Ensure not marked as initialized on error
+        // Dispatch failure event
+        const doc = this.domAPI.getDocument ? this.domAPI.getDocument() : (typeof document !== "undefined" ? document : null);
+        if (doc) {
+            const event = new CustomEvent('chatmanager:initialized', { detail: { success: false, mode: 'project', projectId: this.projectId, error: error.message } });
+            if (this.domAPI.dispatchEvent) this.domAPI.dispatchEvent(doc, event); else doc.dispatchEvent(doc, event);
+        }
+        throw error; // Re-throw to allow caller to handle if needed
       }
     }
 
