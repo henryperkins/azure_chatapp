@@ -562,6 +562,14 @@ async function initializeCoreSystems() {
         // Sincroniza projectManager con eventHandlers
         eventHandlers.setProjectManager?.(projectManager);
 
+        // --- Project dashboard (must exist before navigation logic) ---
+        import { createProjectDashboard } from './projectDashboard.js';   // keep import
+
+        const projectDashboard = createProjectDashboard(DependencySystem);
+        DependencySystem.register('projectDashboard', projectDashboard);
+        // (optional) eager-initialise so that showProjectList exists
+        await projectDashboard.initialize?.();
+
         // Project modal
         const projectModal = createProjectModal({
             DependencySystem,
@@ -870,8 +878,10 @@ async function initializeUIComponents() {
         });
         DependencySystem.register('projectListComponent', projectListComponentInstance);
 
-        const projectDashboardInstance = createProjectDashboard(DependencySystem);
-        DependencySystem.register('projectDashboard', projectDashboardInstance);
+        const projectDashboardInstance =
+                DependencySystem.modules.get('projectDashboard');
+        if (!projectDashboardInstance)
+          throw new Error('[UI init] projectDashboard instance missing ‑ core mis-init');
 
         // Details component expects DI with proper router methods
         const detailsRouter = {
@@ -990,7 +1000,7 @@ async function initializeUIComponents() {
         await safeInit(sidebarInstance, 'Sidebar', 'init');
         await safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
         await safeInit(knowledgeBaseComponentInstance, 'KnowledgeBase', 'initialize');
-        await safeInit(projectDashboardInstance, 'ProjectDashboard', 'initialize');
+        // projectDashboardInstance is already initialized in core systems phase
         await safeInit(projectListComponentInstance, 'ProjectList', 'initialize');
         await safeInit(projectDetailsComponentInstance, 'ProjectDetails', 'initialize');
 
