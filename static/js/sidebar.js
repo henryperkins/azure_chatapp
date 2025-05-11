@@ -337,7 +337,7 @@ export function createSidebar({
         starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
         projects: { btn: 'projectsTab', panel: 'projectsSection' },
       };
-      if (!map[name]) name = 'recent';
+      if (!map[name]) name = 'recent'; // Default to recent
       Object.entries(map).forEach(([key, ids]) => {
         const btn = domAPI.getElementById(ids.btn);
         const panel = domAPI.getElementById(ids.panel);
@@ -347,21 +347,36 @@ export function createSidebar({
           btn.setAttribute('aria-selected', String(isActive));
           btn.tabIndex = isActive ? 0 : -1;
           panel.classList.toggle('hidden', !isActive);
-          panel.classList.toggle('flex', isActive);
+          // Ensure 'flex' is added only if it's meant to be flex, otherwise let CSS handle display
+          if (isActive) panel.classList.add('flex'); else panel.classList.remove('flex');
         }
       });
       storageAPI.setItem('sidebarActiveTab', name);
       dispatch('sidebarTabChanged', { tab: name });
 
-      if (name === 'recent') {
-        _handleChatSearch();
-      } else if (name === 'starred') {
-        _handleChatSearch();
+      const currentProject = projectManager?.getCurrentProject?.();
+      const projectId = currentProject?.id;
+
+      if (name === 'recent' || name === 'starred') {
+        if (!projectId) {
+          notify.info(`No project selected. Cannot load ${name} conversations.`, { module: MODULE, source: 'activateTab' });
+          // Explicitly tell renderer to show empty state for the active tab
+          const currentSearchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "";
+          if (name === 'recent') {
+            uiRenderer?.renderConversations?.(null, currentSearchTerm, isConversationStarred, toggleStarConversation);
+          } else if (name === 'starred') {
+            uiRenderer?.renderStarredConversations?.(null, currentSearchTerm, isConversationStarred, toggleStarConversation);
+          }
+        } else {
+          // Project is selected, call the respective maybeRender function which will use the current project ID
+          if (name === 'recent') maybeRenderRecentConversations();
+          else if (name === 'starred') maybeRenderStarredConversations();
+        }
       } else if (name === 'projects') {
-        await ensureProjectDashboard();
-        _handleProjectSearch();
+        await ensureProjectDashboard(); // This internally calls _handleProjectSearch
+        _handleProjectSearch(); // Explicitly call to ensure it runs with current search term
       }
-      notify.info('[sidebar] tab activated', { group: true, context: 'sidebar', module: MODULE, source: 'activateTab', detail: { tab: name } });
+      notify.info('[sidebar] tab activated', { group: true, context: 'sidebar', module: MODULE, source: 'activateTab', detail: { tab: name, projectId } });
     } catch (err) {
       notify.error('[sidebar] Failed to activate tab: ' + (err && err.message ? err.message : err), { group: true, context: 'sidebar', module: MODULE, source: 'activateTab', originalError: err });
     }
@@ -385,13 +400,27 @@ export function createSidebar({
   }
 
   function maybeRenderRecentConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    // Pass isConversationStarred and toggleStarConversation from the sidebar instance
-    uiRenderer?.renderConversations?.(searchTerm, isConversationStarred, toggleStarConversation);
+    const projectId = projectManager?.getCurrentProject?.()?.id;
+    // If searching without a project while this function is called (e.g. from activateTab with a project),
+    // it's a bit contradictory. The activateTab logic should handle the no-project case primarily.
+    // This function now assumes if it's called, it should try to render with whatever project context exists.
+    if (!projectId && searchTerm) {
+        notify.info("Please select a project to search recent conversations.", {module: MODULE, source: 'maybeRenderRecentConversations'});
+        // Render with null projectId to show empty/message state if uiRenderer supports it
+        uiRenderer?.renderConversations?.(null, searchTerm, isConversationStarred, toggleStarConversation);
+        return;
+    }
+    uiRenderer?.renderConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
   function maybeRenderStarredConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    // Pass isConversationStarred and toggleStarConversation from the sidebar instance
-    uiRenderer?.renderStarredConversations?.(searchTerm, isConversationStarred, toggleStarConversation);
+    const projectId = projectManager?.getCurrentProject?.()?.id;
+    if (!projectId && searchTerm) {
+        notify.info("Please select a project to search starred conversations.", {module: MODULE, source: 'maybeRenderStarredConversations'});
+        uiRenderer?.renderStarredConversations?.(null, searchTerm, isConversationStarred, toggleStarConversation);
+        return;
+    }
+    uiRenderer?.renderStarredConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
   function handleGlobalAuthStateChangeForSidebar(event) {

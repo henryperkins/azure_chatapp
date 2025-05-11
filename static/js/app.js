@@ -33,8 +33,8 @@ import { createProjectModal, createModalManager } from './modalManager.js';
 import { createChatExtensions } from './chatExtensions.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
+import { createProjectDashboard } from './projectDashboard.js';   // keep import
 import { ProjectListComponent } from './projectListComponent.js';
-import { createProjectDashboard } from './projectDashboard.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createUiRenderer } from './uiRenderer.js'; // Import the new UI Renderer
@@ -561,9 +561,6 @@ async function initializeCoreSystems() {
         DependencySystem.register('projectManager', projectManager);
         // Sincroniza projectManager con eventHandlers
         eventHandlers.setProjectManager?.(projectManager);
-
-        // --- Project dashboard (must exist before navigation logic) ---
-        import { createProjectDashboard } from './projectDashboard.js';   // keep import
 
         const projectDashboard = createProjectDashboard(DependencySystem);
         DependencySystem.register('projectDashboard', projectDashboard);
