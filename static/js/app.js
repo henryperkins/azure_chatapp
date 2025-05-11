@@ -161,16 +161,26 @@ DependencySystem.register('domPurify', sanitizer);
 
 // Register apiEndpoints for DI (required by Auth and other modules)
 const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
-    AUTH_CSRF   : '/api/auth/csrf',
-    AUTH_LOGIN  : '/api/auth/login',
-    AUTH_LOGOUT : '/api/auth/logout',
-    AUTH_REGISTER: '/api/auth/register',
-    AUTH_VERIFY : '/api/auth/verify',
-    AUTH_REFRESH: '/api/auth/refresh',
-    /* project resources */
-    CONVOS                         : '/api/projects/{id}/conversations',
-    PROJECT_CONVERSATIONS_URL_TEMPLATE: '/api/projects/{id}/conversations',
-    // Add other endpoints as needed
+  /* ─── auth ──────────────────────────────────────────────── */
+  AUTH_CSRF   : '/api/auth/csrf',
+  AUTH_LOGIN  : '/api/auth/login',
+  AUTH_LOGOUT : '/api/auth/logout',
+  AUTH_REGISTER: '/api/auth/register',
+  AUTH_VERIFY : '/api/auth/verify',
+  AUTH_REFRESH: '/api/auth/refresh',
+
+  /* ─── conversations (project-scoped) ────────────────────── */
+  /* simple string template kept for legacy callers */
+  CONVOS  : '/api/projects/{id}/conversations',
+  PROJECT_CONVERSATIONS_URL_TEMPLATE : '/api/projects/{id}/conversations',
+
+  /* preferred callable helpers – used by ChatManager */
+  CONVERSATIONS : (projectId)               =>
+      `/api/projects/${projectId}/conversations`,
+  CONVERSATION  : (projectId, conversationId) =>
+      `/api/projects/${projectId}/conversations/${conversationId}`,
+  MESSAGES      : (projectId, conversationId) =>
+      `/api/projects/${projectId}/conversations/${conversationId}/messages`,
 };
 DependencySystem.register('apiEndpoints', apiEndpoints);
 
