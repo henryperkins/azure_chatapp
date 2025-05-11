@@ -257,8 +257,7 @@ DependencySystem.register('sentryManager', sentryManager);
 DependencySystem.register('errorReporter', sentryManager);
 sentryManager.initialize();
 
-// ── Accessibility utilities ───────────────────────────────
-notify.warn('[App] About to create AccessibilityUtils. Checking deps (now as WARN):', { // Changed to warn
+notify.debug('[App] About to create AccessibilityUtils. Checking deps (now as DEBUG):', {
   source: 'app.js',
   context: 'accessibilitySetup',
   hasDomAPI: !!domAPI,

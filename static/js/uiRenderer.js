@@ -136,8 +136,8 @@ export function createUiRenderer({
     if (!listElement) return;
 
     if (!projectId) {
-      uiNotify.warn('No projectId provided to renderConversations. Cannot fetch conversations.', { source: 'renderConversations' });
-      _displayMessageInList(listElement, 'Select a project to see recent chats.');
+      // Nothing to fetch; sidebar will already show an empty-state message.
+      uiNotify.debug('renderConversations called without projectId – skipped', { source:'renderConversations' });
       return;
     }
 
@@ -192,8 +192,8 @@ export function createUiRenderer({
     if (!listElement) return;
 
     if (!projectId) {
-      uiNotify.warn('No projectId provided to renderStarredConversations. Cannot fetch conversations.', { source: 'renderStarredConversations' });
-      _displayMessageInList(listElement, 'Select a project to see starred chats.');
+      // Nothing to fetch; sidebar will already show an empty-state message.
+      uiNotify.debug('renderStarredConversations called without projectId – skipped', { source:'renderStarredConversations' });
       return;
     }
 
