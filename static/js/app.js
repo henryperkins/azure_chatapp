@@ -5,7 +5,7 @@
 
 import { APP_CONFIG } from './appConfig.js';
 import { createDomAPI } from './utils/domAPI.js';             // your abstracted DOM helpers
-import { createBrowserService, buildUrl, normaliseUrl } from './utils/browserService.js';
+import { createBrowserService, normaliseUrl } from './utils/browserService.js';
 import { createDebugTools } from './utils/notifications-helpers.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createNotify } from './utils/notify.js';
@@ -194,12 +194,24 @@ notify = createNotify({
     notificationHandler,
     DependencySystem
 });
+// Register notify only once
 DependencySystem.register('notify', notify);
 
- // Debug trace helper (DI-visible as “debugTools”)
- const debugTools = createDebugTools({ notify });
- DependencySystem.register('debugTools', debugTools);
-// helper so inner fns don’t keep repeating the lookup
+// Then register a logger that uses notify (if not already done)
+if (!DependencySystem.modules.has('logger')) {
+  const loggerInstance = {
+    debug: (...args) => notify.debug(...args),
+    info: (...args) => notify.info(...args),
+    warn: (...args) => notify.warn(...args),
+    error: (...args) => notify.error(...args)
+  };
+  DependencySystem.register('logger', loggerInstance);
+  notify.debug('[App] Logger registered in DI using notify.');
+}
+
+// === Debug Tools setup (DI pattern, no globals) ===
+const debugTools = createDebugTools({ notify });
+DependencySystem.register('debugTools', debugTools);
 const _dbg = debugTools;
 
 // ---------------------------------------------------------------------------
@@ -1266,8 +1278,15 @@ async function handleNavigationChange(options = {}) { // Accept options
 // 12) Auth state changes
 // ---------------------------------------------------------------------------
 function handleAuthStateChange(e) {
-    const { authenticated, user } = e.detail || {};
+    const { authenticated, user, source } = e.detail || {};
     const newAuthState = !!authenticated;
+
+    // Log the event source to help with debugging
+    notify.debug(`[App] handleAuthStateChange called from source: ${source || 'unknown'}`, {
+        authenticated: newAuthState,
+        userId: user?.id,
+        eventSource: source
+    });
 
     // Avoid redundant updates if auth state and user object reference are identical
     if (newAuthState === appState.isAuthenticated && user === app.state.currentUser) {
@@ -1277,6 +1296,7 @@ function handleAuthStateChange(e) {
         return;
     }
 
+    // Store previous auth state for login/logout detection
     const prevAuth = appState.isAuthenticated;
     appState.isAuthenticated = newAuthState;
 
@@ -1286,27 +1306,46 @@ function handleAuthStateChange(e) {
     app.state.currentUser = user; // Update shared state object
     browserAPI.setCurrentUser(user); // Update browser API's context
 
-    // We no longer attempt to update 'currentUser' in the DependencySystem here
-    // after its initial registration as null.
-    // Modules should rely on app.state.currentUser or listen to 'authStateChanged' events
-    // for dynamic user information.
+    // Add debug log for authentication state change
+    console.log('[App Debug] Authentication state changed:', {
+      authenticated: newAuthState,
+      userId: user?.id,
+      userEmail: user?.email,
+      source: source || 'unknown'
+    });
+
+    // Update currentUser in DependencySystem to ensure consistency
+    // This is now redundant with the auth.js update but provides a safety net
+    // if (DependencySystem && DependencySystem.modules) { // Intentionally commented out - auth.js is primary owner
+    //     DependencySystem.modules.set('currentUser', user);
+    //     notify.debug('[App] Updated currentUser in DependencySystem', {
+    //         userId: user?.id
+    //     });
+    // }
 
     notify.info(`[App] app.state.currentUser updated. User ID: ${app.state.currentUser ? app.state.currentUser.id : 'null'}. Authenticated: ${newAuthState}`);
-    // Note: If newAuthState is true but `user` from event is undefined,
-    // `fetchCurrentUser` (if called subsequently) should populate it.
 
-    notify.info(`[App] Auth state changed: ${prevAuth} -> ${appState.isAuthenticated}. User: ${app.state.currentUser ? app.state.currentUser.id : 'none'}`);
-    renderAuthHeader(); // Re-render header with new user state
+    // Render the auth header with the new state
+    renderAuthHeader();
 
-    // --- DISPATCH authStateChanged on document for all listeners (e.g. ProjectListComponent) ---
-    try {
-        const doc = domAPI?.getDocument?.() || document;
-        // Pass the potentially updated user object in the event detail
-        doc.dispatchEvent(new CustomEvent("authStateChanged", { detail: { authenticated: appState.isAuthenticated, user: app.state.currentUser } }));
-    } catch (err) {
-        notify.warn("[App] Failed to dispatch authStateChanged on document", { error: err });
+    // If the event didn't come from auth.js (to avoid loops), update the auth module's state
+    if (source && !source.includes('auth_module') && !source.includes('init_complete')) {
+        const auth = DependencySystem.modules.get('auth');
+        if (auth && typeof auth.verifyAuthState === 'function') {
+            notify.debug('[App] Triggering auth.verifyAuthState() to ensure auth module is in sync', {
+                source: 'handleAuthStateChange'
+            });
+            // Don't await this - let it run in the background
+            auth.verifyAuthState(true).catch(err => {
+                notify.warn('[App] Error in verifyAuthState during sync', { error: err });
+            });
+        }
     }
 
+    // We no longer need to dispatch our own event since auth.js now handles this
+    // This avoids duplicate events and ensures a single source of truth
+
+    // Handle login/logout specific actions
     (async () => {
         const pm = DependencySystem.modules.get('projectManager');
         const pd = DependencySystem.modules.get('projectDashboard');
@@ -1340,14 +1379,45 @@ function handleAuthStateChange(e) {
                 }
             }
             toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
+
+            // Directly make the project list view visible
+            const projectListView = domAPI.getElementById('projectListView');
+            if (projectListView) {
+                projectListView.classList.remove('hidden');
+                projectListView.classList.remove('opacity-0');
+                projectListView.style.display = '';
+                notify.info('[App] Directly made project list view visible after login');
+            }
+
             // Ensure projectDashboard (pd) is resolved before calling showProjectList
             if (pd && typeof pd.showProjectList === 'function') {
                 pd.showProjectList();
+                notify.info('[App] Called projectDashboard.showProjectList() after login');
             } else {
                 notify.error('[App] projectDashboard or showProjectList not available after login.', { pdExists: !!pd, canShowList: typeof pd?.showProjectList === 'function' });
             }
-            // pm?.loadProjects?.('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err })); // Redundant call removed
-            handleNavigationChange({ forceListView: true }); // Re-evaluate navigation, forcing list view
+
+            // Load projects after a short delay to ensure UI is ready
+            setTimeout(() => {
+                if (pm && typeof pm.loadProjects === 'function') {
+                    pm.loadProjects('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err }));
+                    notify.info('[App] Called projectManager.loadProjects() after login');
+                }
+
+                // Double-check visibility after a short delay
+                setTimeout(() => {
+                    const plv = domAPI.getElementById('projectListView');
+                    if (plv) {
+                        plv.classList.remove('opacity-0');
+                        plv.style.display = '';
+                        plv.classList.remove('hidden');
+                        notify.info('[App] Verified project list view visibility after login');
+                    }
+                }, 100);
+            }, 300);
+
+            // Re-evaluate navigation, forcing list view
+            handleNavigationChange({ forceListView: true });
         } else if (!appState.isAuthenticated && prevAuth) {
             // Just Logged OUT
             notify.debug('[App] User logged out -> clearing data/UI.');

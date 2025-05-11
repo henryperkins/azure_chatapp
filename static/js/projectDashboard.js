@@ -31,7 +31,12 @@ class ProjectDashboard {
     this.projectManager = getModule('projectManager');
     this.eventHandlers = getModule('eventHandlers');
     this.auth = getModule('auth');
-    this.logger = getModule('logger') || { info: () => { }, warn: () => { }, error: () => { } };
+    this.logger = {
+      info: (msg, opts = {}) => this.dashboardNotify.info(msg, opts),
+      warn: (msg, opts = {}) => this.dashboardNotify.warn(msg, opts),
+      error: (msg, opts = {}) => this.dashboardNotify.error(msg, opts),
+      debug: (msg, opts = {}) => this.dashboardNotify.debug(msg, opts)
+    };
     this.debugTools    = getModule('debugTools') || null;
     // Utilidades globales (waitForDepsAndDom, etc.)
     this.globalUtils   = getModule('globalUtils');
@@ -194,12 +199,15 @@ class ProjectDashboard {
 
     this._loadProjects();
 
-    // Minimal reflow for styling transitions
-    // UI reflow after DOM update: ensure visibility transitions apply after view change.
+    // Ensure visibility transitions apply after view change
     this.browserService.setTimeout(() => {
       const listView = this.domAPI.getElementById('projectListView');
       if (listView) {
-        // reflow hack removed, rely on Tailwind classes for visibility
+        // Explicitly ensure the list view is visible
+        listView.classList.remove('opacity-0');
+        listView.style.display = '';
+        listView.classList.remove('hidden');
+        this.logger.info('[ProjectDashboard] Additional visibility check for project list view completed');
       }
     }, 50);
   }
@@ -549,25 +557,76 @@ class ProjectDashboard {
       detailsViewDisplay: detailsView ? detailsView.style.display : 'N/A'
     });
 
+    // Handle project list view visibility
     if (listView) {
-        this.domAPI.toggleClass(listView, 'hidden', !showList);
-        listView.style.display = showList ? '' : 'none';
-        this.domAPI.setAttribute(listView, 'aria-hidden', String(!showList));
-        if (showList) listView.classList.remove('opacity-0');
+        if (showList) {
+            // Make list view visible with multiple approaches for redundancy
+            listView.classList.remove('hidden');
+            listView.classList.remove('opacity-0');
+            listView.style.display = '';
+            this.domAPI.setAttribute(listView, 'aria-hidden', 'false');
+
+            // Force a reflow to ensure CSS transitions apply
+            void listView.offsetHeight;
+
+            this.logger.info('[ProjectDashboard] Project list view made visible', {
+                classes: listView.className,
+                display: listView.style.display,
+                ariaHidden: listView.getAttribute('aria-hidden')
+            });
+
+            // If the component exists, tell it to show itself too
+            if (this.components.projectList && typeof this.components.projectList.show === 'function') {
+                this.browserService.setTimeout(() => {
+                    this.components.projectList.show();
+                    this.logger.debug('[ProjectDashboard] Called projectList.show() from _setView');
+                }, 0);
+            }
+        } else {
+            // Hide list view
+            this.domAPI.toggleClass(listView, 'hidden', true);
+            listView.style.display = 'none';
+            this.domAPI.setAttribute(listView, 'aria-hidden', 'true');
+
+            this.logger.info('[ProjectDashboard] Project list view hidden');
+        }
+    } else {
+        this.logger.warn('[ProjectDashboard] Project list view element not found');
     }
 
+    // Handle project details view visibility
     if (detailsView) {
-        this.domAPI.toggleClass(detailsView, 'hidden', !showDetails);
-        detailsView.style.display = showDetails ? 'flex' : 'none'; // Assuming details view uses flex
-        this.domAPI.setAttribute(detailsView, 'aria-hidden', String(!showDetails));
         if (showDetails) {
+            // Make details view visible
+            this.domAPI.toggleClass(detailsView, 'hidden', false);
+            detailsView.style.display = 'flex'; // Assuming details view uses flex
+            this.domAPI.setAttribute(detailsView, 'aria-hidden', 'false');
             detailsView.classList.remove('opacity-0');
             detailsView.classList.add("flex-1", "flex-col");
+
+            this.logger.info('[ProjectDashboard] Project details view made visible');
+
+            // If the component exists, tell it to show itself too
+            if (this.components.projectDetails && typeof this.components.projectDetails.show === 'function') {
+                this.browserService.setTimeout(() => {
+                    this.components.projectDetails.show();
+                    this.logger.debug('[ProjectDashboard] Called projectDetails.show() from _setView');
+                }, 0);
+            }
         } else {
+            // Hide details view
+            this.domAPI.toggleClass(detailsView, 'hidden', true);
+            detailsView.style.display = 'none';
+            this.domAPI.setAttribute(detailsView, 'aria-hidden', 'true');
             detailsView.classList.remove("flex-1", "flex-col");
+
+            this.logger.info('[ProjectDashboard] Project details view hidden');
         }
+    } else {
+        this.logger.warn('[ProjectDashboard] Project details view element not found');
     }
 
+    // Handle chat header bar visibility
     if (chatHeaderBar) {
         this.domAPI.toggleClass(chatHeaderBar, 'hidden', !showDetails); // Show chat header with details view
         this.domAPI.setAttribute(chatHeaderBar, 'aria-hidden', String(!showDetails));
@@ -584,7 +643,7 @@ class ProjectDashboard {
         }
     } else if (showList && listView) {
         const focusTarget = listView.querySelector('h2, [role="tab"], button:not([disabled]), a[href]');
-            if (focusTarget && typeof focusTarget.focus === 'function') {
+        if (focusTarget && typeof focusTarget.focus === 'function') {
             this.browserService.setTimeout(() => focusTarget.focus(), 0);
         } else {
             listView.setAttribute('tabindex', '-1');
@@ -592,12 +651,24 @@ class ProjectDashboard {
         }
     }
 
-    // Force browser reflow (optional, if transitions are still problematic)
-    // const raf = this.browserService?.requestAnimationFrame || requestAnimationFrame;
-    // raf(() => {
-    //   if (listView && showList) listView.getBoundingClientRect();
-    //   if (detailsView && showDetails) detailsView.getBoundingClientRect();
-    // });
+    // Force browser reflow to ensure transitions apply
+    this.browserService.requestAnimationFrame(() => {
+      if (listView && showList) {
+        void listView.getBoundingClientRect();
+        // Double-check visibility after a short delay
+        this.browserService.setTimeout(() => {
+          if (listView.classList.contains('hidden') || listView.style.display === 'none') {
+            this.logger.warn('[ProjectDashboard] List view still hidden after _setView, forcing visibility');
+            listView.classList.remove('hidden');
+            listView.classList.remove('opacity-0');
+            listView.style.display = '';
+          }
+        }, 50);
+      }
+      if (detailsView && showDetails) {
+        void detailsView.getBoundingClientRect();
+      }
+    });
 
     this.logger.info('[ProjectDashboard] View state after update:', {
       listViewVisible: listView ? !listView.classList.contains('hidden') && listView.style.display !== 'none' : false,
@@ -849,9 +920,24 @@ class ProjectDashboard {
       return;
     }
 
-    if (!this.app?.state?.isAuthenticated) {
+    // Accept authentication if EITHER app.state reports it OR auth module reports it.
+    const isAuthed =
+      (this.app?.state?.isAuthenticated) ||
+      (typeof this.auth?.isAuthenticated === 'function' && this.auth.isAuthenticated());
+
+    if (!isAuthed) {
       this.dashboardNotify.warn('Not authenticated. Please log in to view projects.', { source: '_loadProjects' });
-      this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', this.app?.state);
+      this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', {
+        appState: this.app?.state,
+        authModuleAuthenticated: typeof this.auth?.isAuthenticated === 'function' ? this.auth.isAuthenticated() : 'n/a'
+      });
+      // Early-exit, but schedule a retry in case auth state updates moments later
+      this.browserService.setTimeout(() => {
+        if (typeof this.auth?.isAuthenticated === 'function' && this.auth.isAuthenticated()) {
+          this.logger.info('[ProjectDashboard] Retrying project load after delayed auth success');
+          this._loadProjects();
+        }
+      }, 500);
       return;
     }
 
@@ -938,42 +1024,127 @@ class ProjectDashboard {
   }
 
   _handleAuthStateChange(event) {
-    const { authenticated } = event.detail || {};
+    const { authenticated, user, source } = event.detail || {};
+    this.logger.info('[ProjectDashboard] Auth state changed:', {
+      authenticated,
+      userId: user?.id,
+      source: source || 'unknown'
+    });
+
+    // Use requestAnimationFrame to ensure DOM operations happen in the next paint cycle
     this.browserService.requestAnimationFrame(() => {
-      const loginRequiredMessage = document.getElementById('loginRequiredMessage');
-      const mainContent = document.getElementById('mainContent');
-      const projectListView = document.getElementById('projectListView');
-      const projectDetailsView = document.getElementById('projectDetailsView');
+      // Use domAPI consistently for all DOM operations
+      const loginRequiredMessage = this.domAPI.getElementById('loginRequiredMessage');
+      const mainContent = this.domAPI.getElementById('mainContent');
+      const projectListView = this.domAPI.getElementById('projectListView');
+      const projectDetailsView = this.domAPI.getElementById('projectDetailsView');
+
+      // Log the current state of DOM elements for debugging
+      this.logger.debug('[ProjectDashboard] Current DOM element state:', {
+        loginRequiredMessageExists: !!loginRequiredMessage,
+        mainContentExists: !!mainContent,
+        projectListViewExists: !!projectListView,
+        projectDetailsViewExists: !!projectDetailsView,
+        projectListViewClasses: projectListView ? projectListView.className : 'N/A',
+        projectListViewDisplay: projectListView ? projectListView.style.display : 'N/A'
+      });
+
       if (!authenticated) {
+        this.logger.info('[ProjectDashboard] User not authenticated, showing login message');
         if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
         if (mainContent) mainContent.classList.add('hidden');
         if (projectListView) projectListView.classList.add('hidden');
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
+
+        // Set state to reflect unauthenticated status
+        this.state._aborted = true;
       } else {
+        this.logger.info('[ProjectDashboard] User authenticated, showing project list');
+
+        // Reset abort flag
+        this.state._aborted = false;
+
+        // Update UI for authenticated state
         if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
         if (mainContent) mainContent.classList.remove('hidden');
         this.state.currentView = 'list';
         this.state.currentProject = null;
         this.browserService.removeSearchParam('project');
-        if (projectListView) projectListView.classList.remove('hidden');
-        if (projectDetailsView) projectDetailsView.classList.add('hidden');
-        if (!this.components.projectList || !this.components.projectList.initialized) {
-          this.logger.info('[ProjectDashboard] Components not initialized after auth, reinitializing...');
-          this._initializeComponents().then(() => {
-            if (this.components.projectList) {
-              this.components.projectList.show();
-              this._loadProjects();
-            }
+
+        // Make project list view visible immediately with multiple approaches for redundancy
+        if (projectListView) {
+          // Remove all classes that might hide the element
+          projectListView.classList.remove('hidden');
+          projectListView.classList.remove('opacity-0');
+          projectListView.style.display = '';
+
+          // Force a reflow to ensure CSS transitions apply
+          void projectListView.offsetHeight;
+
+          this.logger.info('[ProjectDashboard] Made project list view visible immediately after auth', {
+            classes: projectListView.className,
+            display: projectListView.style.display
           });
         } else {
-          if (this.components.projectList) this.components.projectList.show();
-          if (this.components.projectDetails) this.components.projectDetails.hide();
-          // Defer project loading and UI update to next tick after auth state change.
+          this.logger.warn('[ProjectDashboard] projectListView element not found, cannot make visible');
+        }
+
+        // Hide details view
+        if (projectDetailsView) projectDetailsView.classList.add('hidden');
+
+        // Initialize components if needed
+        const componentsInitialized = this.components.projectList && this.components.projectList.state?.initialized;
+
+        if (!componentsInitialized) {
+          this.logger.info('[ProjectDashboard] Components not initialized after auth, reinitializing...');
+
+          // Initialize components and then show project list
+          this._initializeComponents()
+            .then(() => {
+              if (this.components.projectList) {
+                this.components.projectList.show();
+                this._loadProjects();
+                this.logger.info('[ProjectDashboard] Project list component initialized and shown after auth');
+              } else {
+                this.logger.error('[ProjectDashboard] Project list component still not available after initialization');
+              }
+            })
+            .catch(err => {
+              this.logger.error('[ProjectDashboard] Error initializing components after auth', { error: err });
+            });
+        } else {
+          // Components already initialized
+          this.logger.info('[ProjectDashboard] Components already initialized, showing project list');
+
+          // Show project list and hide project details
+          if (this.components.projectList) {
+            this.components.projectList.show();
+            this.logger.info('[ProjectDashboard] Project list component shown after auth');
+          } else {
+            this.logger.warn('[ProjectDashboard] Project list component not available');
+          }
+
+          if (this.components.projectDetails) {
+            this.components.projectDetails.hide();
+          }
+
+          // Defer project loading and UI update to next tick after auth state change
           this.browserService.setTimeout(() => {
             this.logger.info('[ProjectDashboard] Loading projects after authentication state change');
             this._loadProjects();
-            const plv = document.getElementById('projectListView');
-            if (plv) plv.classList.remove('opacity-0');
+
+            // Double-check visibility after a short delay
+            this.browserService.setTimeout(() => {
+              const plv = this.domAPI.getElementById('projectListView');
+              if (plv) {
+                plv.classList.remove('opacity-0');
+                plv.style.display = '';
+                plv.classList.remove('hidden');
+                this.logger.info('[ProjectDashboard] Verified project list view visibility after auth');
+              } else {
+                this.logger.warn('[ProjectDashboard] projectListView element not found in visibility check');
+              }
+            }, 100);
           }, 300);
         }
       }

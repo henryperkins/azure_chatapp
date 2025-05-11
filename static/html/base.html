@@ -61,7 +61,7 @@
   <style>
     /* Add transition for project list visibility */
     #projectListView {
-      transition: opacity 0.3s ease, transform 0.3s ease;
+      transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
     }
   </style>
 
@@ -677,7 +677,7 @@
       <div class="flex-1 overflow-y-auto p-4 md:p-6">
         <section id="projectManagerPanel"
           class="bg-base-100 rounded-box shadow-md p-4 mb-6 flex flex-col min-h-0 border border-base-300">
-          <div id="projectListView" class="flex-1 flex flex-col min-h-0 opacity-0 transition-opacity duration-300">
+          <div id="projectListView" class="flex-1 flex flex-col min-h-0 transition-opacity duration-300 transition-visibility duration-300">
             <!-- Inner contents and structure for the project list view (including project card grid)
                  are also dynamically updated by projectDashboard.js using /static/html/project_list.html -->
             <div id="projectList" class="project-list grid gap-4 p-4"></div>

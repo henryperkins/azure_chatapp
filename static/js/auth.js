@@ -220,8 +220,53 @@ export function createAuthModule({
 
     if (changed) {
       authNotify.info(`[Auth] State changed (${source}): Auth=${authenticated}, UserObject=${userObject ? JSON.stringify(userObject) : 'None'}`, { group: true, source: 'broadcastAuth' });
-      // Dispatch the full user object
-      AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail: { authenticated, user: userObject, timestamp: Date.now(), source } }));
+
+      // Update DependencySystem with the current user
+      if (DependencySystem && DependencySystem.modules) {
+        // We don't re-register, but we update the existing registration
+        const currentUserModule = DependencySystem.modules.get('currentUser');
+        if (currentUserModule !== userObject) {
+          authNotify.debug('[Auth] Updating currentUser in DependencySystem', {
+            group: true,
+            source: 'broadcastAuth',
+            previousUser: currentUserModule ? 'exists' : 'null',
+            newUser: userObject ? 'exists' : 'null'
+          });
+          DependencySystem.modules.set('currentUser', userObject);
+        }
+      }
+
+      // Dispatch the full user object on AuthBus
+      AuthBus.dispatchEvent(new CustomEvent('authStateChanged', {
+        detail: {
+          authenticated,
+          user: userObject,
+          timestamp: Date.now(),
+          source
+        }
+      }));
+
+      // Also dispatch on document for components that listen there
+      // This ensures all components receive the same event regardless of where they listen
+      try {
+        const doc = typeof document !== 'undefined' ? document : null;
+        if (doc) {
+          doc.dispatchEvent(new CustomEvent('authStateChanged', {
+            detail: {
+              authenticated,
+              user: userObject,
+              timestamp: Date.now(),
+              source: source + '_via_auth_module'
+            }
+          }));
+        }
+      } catch (err) {
+        authNotify.warn('[Auth] Failed to dispatch authStateChanged on document', {
+          error: err,
+          group: true,
+          source: 'broadcastAuth'
+        });
+      }
     }
   }
 
@@ -287,11 +332,16 @@ export function createAuthModule({
             // Check flags only if we couldn't establish auth via a user object with a recognized ID
             const isAuthenticatedByFlags = truthy(response?.authenticated) || truthy(response?.is_authenticated);
             if (isAuthenticatedByFlags) {
-                // Backend flags say authenticated, but we couldn't get/normalize a user object with a usable ID.
-                authNotify.error('[Auth] verifyAuthState: Backend indicates authenticated, but a user object with a recognized ID (id, user_id, userId, _id) could not be extracted. Treating as unauthenticated for UI consistency.', { group: true, source: 'verifyAuthState', responseData: response, extractedUserObject: userObject });
-                await clearTokenState({ source: 'verify_auth_flag_true_but_no_recognized_user_id' });
-                broadcastAuth(false, null, 'verify_auth_flag_true_but_no_recognized_user_id');
-                return false;
+                // Backend reports authenticated but didn't include a detailed user object.
+                // Accept authentication state and continue with minimal info instead of forcing logout.
+                authNotify.warn('[Auth] verifyAuthState: Authenticated=true but no usable user object provided. Proceeding with authenticated session with anonymous user.', {
+                    group: true,
+                    source: 'verifyAuthState',
+                    responseData: response
+                });
+                // Keep userObject as null; consumers should handle missing user details gracefully.
+                broadcastAuth(true, null, 'verify_success_flags_only_no_user');
+                return true;
             } else {
                 // Not authenticated by any means (no valid user object with ID, and no positive auth flags)
                 authNotify.warn('[Auth] verifyAuthState: not authenticated by any criteria', { group: true, source: 'verifyAuthState', responseData: response });
@@ -523,36 +573,119 @@ export function createAuthModule({
       const hasRefresh = document.cookie.includes('refresh_token');
       authNotify.info(`[Auth][DEBUG] Cookie presence at init: access_token=${hasAccess}, refresh_token=${hasRefresh}`, { group: true, source: 'init' });
     }
+
+    // Prevent multiple initializations
     if (authState.isReady) {
       authNotify.warn('[Auth] init called multiple times.', { group: true, source: 'init' });
-      return true;
+      // Even if already initialized, broadcast current state to ensure all components are in sync
+      broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_already_ready');
+      return authState.isAuthenticated;
     }
+
     authNotify.info('[Auth] Initializing auth module...', { group: true, source: 'init' });
-    setupAuthForms(); // This will re-run and potentially re-attach if DOM was not ready before.
-                      // Consider making setupAuthForms idempotent or call only after modalsLoaded.
+
+    // Setup auth forms and ensure they're properly initialized when modals are loaded
+    setupAuthForms();
     if (eventHandlers.trackListener) {
-      // This listener in init() might be problematic if init() is called multiple times.
-      // However, authState.isReady check above prevents re-initialization.
-      eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms, { context: MODULE_CONTEXT, description: 'Auth Modals Loaded Listener' });
+      eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms, {
+        context: MODULE_CONTEXT,
+        description: 'Auth Modals Loaded Listener'
+      });
     }
+
     try {
-      await getCSRFTokenAsync();
-      const verified = await verifyAuthState(true);
-      authState.isReady = true;
+      // First, ensure we have a CSRF token
+      try {
+        await getCSRFTokenAsync();
+        authNotify.debug('[Auth] CSRF token obtained successfully', { group: true, source: 'init' });
+      } catch (csrfErr) {
+        authNotify.warn('[Auth] Failed to get CSRF token, but continuing initialization', {
+          error: csrfErr,
+          group: true,
+          source: 'init'
+        });
+        // Continue initialization even if CSRF token fetch fails
+      }
+
+      // Verify authentication state
+      let verified = false;
+      try {
+        verified = await verifyAuthState(true);
+        authNotify.info(`[Auth] Initial verification complete: authenticated=${verified}`, {
+          group: true,
+          source: 'init'
+        });
+      } catch (verifyErr) {
+        authNotify.error('[Auth] Initial verification failed, treating as unauthenticated', {
+          error: verifyErr,
+          group: true,
+          source: 'init'
+        });
+        // Set to unauthenticated if verification fails
+        await clearTokenState({ source: 'init_verify_error', isError: true });
+        verified = false;
+      }
+
+      // Set up periodic verification
       verifyInterval = setInterval(() => {
         if (!domAPI.isDocumentHidden() && authState.isAuthenticated) {
           verifyAuthState(false).catch(e => {
-            authNotify.warn('[Auth] verifyAuthState periodic error: ' + (e?.message || e), { group: true, source: 'verifyAuthState' });
+            authNotify.warn('[Auth] verifyAuthState periodic error: ' + (e?.message || e), {
+              group: true,
+              source: 'verifyAuthState'
+            });
           });
         }
       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
-      AuthBus.dispatchEvent(new CustomEvent('authReady', { detail: { authenticated: authState.isAuthenticated, username: authState.username, error: null } }));
+
+      // Mark as ready and broadcast events
+      authState.isReady = true;
+
+      // Dispatch authReady event on both AuthBus and document
+      const readyEventDetail = {
+        authenticated: authState.isAuthenticated,
+        user: authState.userObject,
+        username: authState.username,
+        error: null,
+        timestamp: Date.now(),
+        source: 'init_complete'
+      };
+
+      AuthBus.dispatchEvent(new CustomEvent('authReady', { detail: readyEventDetail }));
+
+      try {
+        const doc = typeof document !== 'undefined' ? document : null;
+        if (doc) {
+          doc.dispatchEvent(new CustomEvent('authReady', { detail: readyEventDetail }));
+        }
+      } catch (docErr) {
+        authNotify.warn('[Auth] Failed to dispatch authReady on document', {
+          error: docErr,
+          group: true,
+          source: 'init'
+        });
+      }
+
+      // Ensure a final broadcast of auth state
+      broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_complete');
+
       return verified;
     } catch (err) {
-      authNotify.error('[Auth] Initial verification failed in init: ' + (err?.stack || err), { group: true, source: 'init' });
-      await clearTokenState({ source: 'init_fail', isError: true });
+      authNotify.error('[Auth] Unhandled error during initialization: ' + (err?.stack || err), {
+        group: true,
+        source: 'init'
+      });
+
+      // Ensure we're in a clean state
+      await clearTokenState({ source: 'init_unhandled_error', isError: true });
+
+      // Even if there's an error, mark as ready to prevent hanging
       authState.isReady = true;
-      broadcastAuth(false, null, 'init_error'); // Pass null for userObject
+
+      // Broadcast unauthenticated state
+      broadcastAuth(false, null, 'init_unhandled_error');
+
+      // Rethrow for upstream handling
       throw err;
     }
   }

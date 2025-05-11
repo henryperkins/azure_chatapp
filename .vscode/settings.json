@@ -1,11 +1,5 @@
 {
-    "github.copilot.enable": {
-        "*": true,
-        "plaintext": false,
-        "markdown": true,
-        "scminput": false,
-        "sql": false
-    },
+    "github.copilot.enable": false,
     "python-envs.pythonProjects": [
         {
             "path": "",
