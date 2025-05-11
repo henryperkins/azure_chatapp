@@ -178,6 +178,7 @@ class ConversationService:
         title: str,
         model_id: str,
         project_id: Optional[UUID] = None,
+        knowledge_base_id: Optional[UUID] = None, # ADDED
         use_knowledge_base: bool = False,
         ai_settings: Optional[dict[str, Any]] = None,
     ) -> Conversation:
@@ -187,27 +188,35 @@ class ConversationService:
         except ConversationError as e:
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
+        # Validate project access and KB consistency if project_id is provided
+        if project_id:
+            project = await self._validate_project_access(project_id, user_id)
+            if use_knowledge_base:
+                await self.db.refresh(project, ['knowledge_base']) # Ensure KB relationship is loaded
+                if not project.knowledge_base:
+                    raise ConversationError("Project has no knowledge base, cannot set use_knowledge_base=True.", 400)
+                if knowledge_base_id != project.knowledge_base.id:
+                    # This should ideally be caught by the route, but as a safeguard:
+                    logger.error(f"KnowledgeBase ID mismatch for project {project_id}. "
+                                 f"Passed: {knowledge_base_id}, Project's KB: {project.knowledge_base.id}") # REMOVED EXTRA PARENTHESIS
+                    raise ConversationError("Knowledge base ID mismatch for the specified project.", 400)
+            elif knowledge_base_id is not None: # use_knowledge_base is False but kb_id is provided
+                 raise ConversationError("knowledge_base_id should not be provided if use_knowledge_base is False for a project.", 400)
+
+
         conv = Conversation(
             user_id=user_id,
             title=title.strip(),
             model_id=model_id,
             project_id=project_id,
-            use_knowledge_base=False,
+            knowledge_base_id=knowledge_base_id, # USE PASSED PARAMETER
+            use_knowledge_base=use_knowledge_base, # USE PASSED PARAMETER
             extra_data={"ai_settings": ai_settings} if ai_settings else None,
         )
 
-        # Auto-enable KB if the project has one
-        if project_id:
-            project = await self._validate_project_access(project_id, user_id)
-            # Refresh the project instance to load the knowledge_base relationship
-            await self.db.refresh(project, ['knowledge_base'])
-            # Access knowledge base through the relationship
-            if project.knowledge_base:
-                conv.use_knowledge_base = True
-                conv.knowledge_base_id = project.knowledge_base.id
-        else:
-            # For standalone conversations, the passed 'use_knowledge_base' is used
-            conv.use_knowledge_base = use_knowledge_base
+        # The logic for auto-enabling KB based on project.knowledge_base is now
+        # effectively handled by the route, which determines kb_id and use_knowledge_base
+        # before calling this service method. The validation above ensures consistency.
 
         try:
             await save_model(self.db, conv)
