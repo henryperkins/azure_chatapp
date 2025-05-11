@@ -400,25 +400,37 @@ export function createSidebar({
   }
 
   function maybeRenderRecentConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    const projectId = projectManager?.getCurrentProject?.()?.id;
-    // If searching without a project while this function is called (e.g. from activateTab with a project),
-    // it's a bit contradictory. The activateTab logic should handle the no-project case primarily.
-    // This function now assumes if it's called, it should try to render with whatever project context exists.
-    if (!projectId && searchTerm) {
-        notify.info("Please select a project to search recent conversations.", {module: MODULE, source: 'maybeRenderRecentConversations'});
-        // Render with null projectId to show empty/message state if uiRenderer supports it
-        uiRenderer?.renderConversations?.(null, searchTerm, isConversationStarred, toggleStarConversation);
-        return;
+    const projectId  = projectManager?.getCurrentProject?.()?.id;
+    const hasSearch  = !!searchTerm;
+
+    if (!projectId) {
+      if (hasSearch) {
+        uiRenderer?.renderConversations?.(
+          null,
+          searchTerm,
+          isConversationStarred,
+          toggleStarConversation
+        );
+      }
+      return;               // ← stop early, prevents pointless warn
     }
     uiRenderer?.renderConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
   function maybeRenderStarredConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    const projectId = projectManager?.getCurrentProject?.()?.id;
-    if (!projectId && searchTerm) {
-        notify.info("Please select a project to search starred conversations.", {module: MODULE, source: 'maybeRenderStarredConversations'});
-        uiRenderer?.renderStarredConversations?.(null, searchTerm, isConversationStarred, toggleStarConversation);
-        return;
+    const projectId  = projectManager?.getCurrentProject?.()?.id;
+    const hasSearch  = !!searchTerm;
+
+    if (!projectId) {
+      if (hasSearch) {
+        uiRenderer?.renderStarredConversations?.(
+          null,
+          searchTerm,
+          isConversationStarred,
+          toggleStarConversation
+        );
+      }
+      return;               // ← stop early, prevents pointless warn
     }
     uiRenderer?.renderStarredConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
