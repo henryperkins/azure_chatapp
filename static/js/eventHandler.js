@@ -103,9 +103,10 @@ export function createEventHandlers({
     const description = options.description || 'Unnamed Listener';
 
     // Use provided context, default to 'unknown_context' if not provided, and log warning
-    const listenerContext = options.context || 'unknown_context';
-    if (!options.context) { // Check options.context directly
-      localNotify.warn(`trackListener called without a 'context' for '${description}'. Defaulting to 'unknown_context'. This may lead to listener leaks if not cleaned up properly.`, {
+    const _ctxValid = typeof options.context === 'string' && options.context.trim().length;
+    const listenerContext = _ctxValid ? options.context.trim() : MODULE;
+    if (!_ctxValid) {
+      localNotify.warn(`trackListener called without a 'context' for '${description}'. Defaulting to '${MODULE}'. This may lead to listener leaks if not cleaned up properly.`, {
         source: 'trackListener', module: MODULE, group: true,
         extra: { description, eventType: type }
       });
