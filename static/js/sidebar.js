@@ -499,30 +499,57 @@ export function createSidebar({
   function closeSidebar() {
     if (!visible || pinned) return;
     const activeEl = domAPI.getActiveElement();
-    let focusMoved = false;
-    if (el.contains(activeEl)) {
-      activeEl.blur();
-      // Attempt to move focus to the toggle button
-      if (btnToggle && typeof btnToggle.focus === 'function') {
-        sidebarNotify.debug('Attempting to focus sidebar toggle button.', { source: 'closeSidebar', btnToggleExists: !!btnToggle });
+    let focusSuccessfullyMoved = false;
+
+    if (el.contains(activeEl)) { // Check if focus is currently within the sidebar
+      sidebarNotify.debug(`Focus is inside sidebar (on ${activeEl.id || activeEl.tagName}). Attempting to move focus.`, { source: 'closeSidebar' });
+
+      // Try to move focus to the toggle button IF it's visible and interactive
+      if (btnToggle && typeof btnToggle.focus === 'function' && btnToggle.offsetParent !== null) {
         btnToggle.focus();
-        focusMoved = true;
-      } else {
-        sidebarNotify.warn('Sidebar toggle button not found or not focusable.', { source: 'closeSidebar', btnToggleExists: !!btnToggle, isFocusFunction: typeof btnToggle?.focus });
+        if (domAPI.getActiveElement() === btnToggle) { // Verify focus moved
+          focusSuccessfullyMoved = true;
+          sidebarNotify.debug('Focus successfully moved to sidebar toggle button.', { source: 'closeSidebar' });
+        }
+      }
+
+      // If focus wasn't moved to the toggle button (e.g., it's hidden or focus failed), try blurring the active element
+      if (!focusSuccessfullyMoved && typeof activeEl.blur === 'function') {
+        activeEl.blur();
+        sidebarNotify.debug(`Blurred previously active element (${activeEl.id || activeEl.tagName}).`, { source: 'closeSidebar' });
+        // As a final fallback, if focus is still somehow inside the sidebar (e.g., blur was prevented), move it to the body
+        if (el.contains(domAPI.getActiveElement())) {
+          if (domAPI.body && typeof domAPI.body.focus === 'function') { // Ensure body is focusable (it might need tabindex="-1")
+            domAPI.body.focus();
+            sidebarNotify.debug('Forced focus to document body as a fallback.', { source: 'closeSidebar' });
+          }
+        }
       }
     }
+
     visible = false;
     el.classList.add('-translate-x-full');
+    // Log active element before setting aria-hidden to assist debugging focus trap issues
+    const activeElementBeforeAriaHidden = domAPI.getActiveElement();
+    sidebarNotify.debug(
+      `Active element just before setting aria-hidden: ${activeElementBeforeAriaHidden?.id || activeElementBeforeAriaHidden?.tagName}`,
+      {
+        source: 'closeSidebar',
+        isSidebarDescendant: el.contains(activeElementBeforeAriaHidden)
+      }
+    );
     el.setAttribute('aria-hidden', 'true');
-    btnToggle.setAttribute('aria-expanded', 'false');
+    if (btnToggle) { // Ensure btnToggle exists before updating its ARIA attribute
+      btnToggle.setAttribute('aria-expanded', 'false');
+    }
     removeBackdrop();
     if (domAPI.body && domAPI.body.classList.contains('with-sidebar-open')) {
       domAPI.body.classList.remove('with-sidebar-open');
     }
     dispatch('sidebarVisibilityChanged', { visible });
     notify.info('[sidebar] closed', {
-      group: true, context: 'sidebar', module: MODULE, source: 'closeSidebar', focusMovedToToggle: focusMoved
-    });
+      group: true, context: 'sidebar', module: MODULE, source: 'closeSidebar', focusMovedToToggle: focusSuccessfullyMoved
+    }); // Updated log to use the correct variable
   }
 
   function handleResize() {

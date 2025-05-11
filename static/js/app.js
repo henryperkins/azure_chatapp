@@ -265,7 +265,7 @@ const accessibilityUtils = createAccessibilityEnhancements({
             errorReporter: sentryManager, // Pass the actual sentryManager instance
             // apiRequest, // Not a dep for accessibilityUtils
         });
-// DependencySystem.register('accessibilityUtils', accessibilityUtils);
+DependencySystem.register('accessibilityUtils', accessibilityUtils); // Ensure this line is uncommented
 accessibilityUtils.init?.();
 
 // Late-bind the real notify into eventHandlers so all new events use the correct notifier
@@ -1083,6 +1083,14 @@ async function handleNavigationChange(options = {}) { // Accept options
         try {
             notify.debug('[App] Waiting for projectDashboard dependency', { context: 'navigation', traceId });
             projectDashboard = await DependencySystem.waitFor('projectDashboard', null, APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT);
+            notify.debug('[App] projectDashboard retrieved in handleNavigationChange', {
+                context: 'navigation',
+                traceId,
+                projectDashboardExists: !!projectDashboard,
+                typeofProjectDashboard: typeof projectDashboard,
+                projectDashboardKeys: projectDashboard ? Object.keys(projectDashboard).join(', ') : 'N/A',
+                hasShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList === 'function' : 'N/A'
+            });
             notify.debug('[App] projectDashboard dependency resolved', { context: 'navigation', traceId });
         } catch (e) {
             notify.error('[App] Project Dashboard unavailable for navigation.', { error: e, context: 'navigation', traceId });
@@ -1147,7 +1155,8 @@ async function handleNavigationChange(options = {}) { // Accept options
                         traceId,
                         projectDashboardExists: !!projectDashboard,
                         typeOfShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList : 'N/A',
-                        constructorName: projectDashboard?.constructor?.name
+                        constructorName: projectDashboard?.constructor?.name,
+                        projectDashboardInstance: projectDashboard
                     });
                     // Attempt to show login required as a last resort if project list can't be shown
                     projectDashboard?.showLoginRequiredMessage?.();
