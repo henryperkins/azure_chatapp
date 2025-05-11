@@ -468,6 +468,7 @@ this.domAPI.dispatchEvent(
       return;
     }
     this.elements.container.classList.remove("hidden");
+    this.elements.container.classList.remove("opacity-0"); // Ensure opacity is cleared
     this.elements.container.style.display = "";     // let _setView manage flex/layout
     this.elements.container.classList.add("flex-1", "flex-col"); // Match flex container behavior
     this.elements.container.setAttribute("aria-hidden", "false");
@@ -491,6 +492,7 @@ this.domAPI.dispatchEvent(
   hide() {
     if (this.elements.container) {
       this.elements.container.classList.add("hidden");
+      // this.elements.container.classList.add("opacity-0"); // Optionally add for fade effect
       this.elements.container.setAttribute("aria-hidden", "true");
       this.notify.info("[ProjectDetailsComponent] Hidden.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "hide"

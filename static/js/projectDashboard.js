@@ -555,9 +555,12 @@ class ProjectDashboard {
       listView.classList.toggle('hidden', !showList);
       listView.setAttribute('aria-hidden', String(!showList));
       listView.style.display = showList ? '' : 'none'; // Use empty string for default display (block or flex)
+      // Ensure opacity-0 is removed when shown
       if (showList) {
         listView.classList.remove('opacity-0');
       }
+      // Optionally, add opacity-0 back when hiding if you want a fade-out effect controlled here
+      // else { listView.classList.add('opacity-0'); }
     }
 
     if (detailsView) {
@@ -565,11 +568,14 @@ class ProjectDashboard {
       detailsView.classList.toggle("hidden", !showDetails);
       detailsView.setAttribute("aria-hidden", String(!showDetails));
       detailsView.style.display = showDetails ? "flex" : "none"; // Project details uses flex
+      // Ensure opacity-0 is removed and flex classes are present when shown
       if (showDetails) {
         detailsView.classList.remove("opacity-0"); // If it was hidden by opacity
         detailsView.classList.add("flex-1", "flex-col");
       } else {
         detailsView.classList.remove("flex-1", "flex-col");
+        // Optionally, add opacity-0 back when hiding
+        // detailsView.classList.add('opacity-0');
       }
     }
 
