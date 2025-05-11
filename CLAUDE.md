@@ -376,18 +376,36 @@ When completing tasks, run appropriate tests and linting before committing chang
 
 This section provides a high-level reference for backend developers working on this codebase.
 
+#### Model Relationships (Summary Table)
+
+| Model           | Key Fields / Relationships                                                                                 |
+|-----------------|-----------------------------------------------------------------------------------------------------------|
+| User            | `id`, `username`, `role`, `last_login`, `last_activity`, `preferences`, `project_associations`, `conversations`<br>Has many Projects (via association), many Conversations. |
+| TokenBlacklist  | `jti`, `user_id`, `expires`, `token_type`<br>Tracks revoked JWT tokens for security.                      |
+| Project         | `id`, `name`, `user_id`, `knowledge_base` (one-to-one), `files`, `artifacts`, `conversations`, `members`<br>Constraints: token usage ≤ max, archive/pin/default exclusivity. |
+| KnowledgeBase   | `id`, `project_id` (unique, one-to-one), `embedding_model`, `repo_url`, `branch`, `file_paths`, `is_active`<br>Backref to Project. |
+| ProjectFile     | `id`, `project_id`, `file_hash`, `filename`, `file_path`, `content`, `config`<br>Belongs to Project.      |
+| Conversation    | `id`, `user_id`, `project_id`, `knowledge_base_id`, `use_knowledge_base`, `messages`, `artifacts`<br>Validates KB usage. |
+| Message         | `id`, `conversation_id`, `role`, `content`, `extra_data`, `context_used`<br>Belongs to Conversation.      |
+| Artifact        | `id`, `project_id`, `conversation_id`, `content_type` (`code`, `document`, `image`, `audio`, `video`), `content`<br>Belongs to Project and optionally Conversation. |
+
+- All models use SQLAlchemy 2.0 style (`Mapped[]`, `mapped_column`).
+- Cascade deletes and DB-level constraints are used for data integrity.
+- JWT blacklist (`TokenBlacklist`) is enforced for token security.
+
 ### Architecture Overview
 
 - **User**: Authenticated entity, owns projects and conversations.
-- **Project**: Workspace grouping files, conversations, and a knowledge base.
-- **Knowledge Base**: Semantic search index (vector DB) for project files, optionally linked to a GitHub repo.
-- **ProjectFile**: File attached to a project, processed for search/context.
+- **Project**: Workspace grouping files, conversations, and a knowledge base (one-to-one).
+- **Knowledge Base**: Semantic search index (vector DB) for project files, optionally linked to a GitHub repo (`repo_url`, `branch`, `file_paths`).
+- **ProjectFile**: File attached to a project, processed for search/context, with deduplication (`file_hash`) and optional inline `content`.
 - **VectorDB**: Handles embeddings, similarity search, and storage (FAISS, sklearn, or manual).
 - **AI Chat**: Conversational interface, optionally augmented with project knowledge context.
+- **TokenBlacklist**: Tracks revoked JWT tokens for secure authentication.
 
 ### Main Components
 
-- **Models**: User, Project, KnowledgeBase, ProjectFile, Conversation, Message, Artifact.
+- **Models**: User, TokenBlacklist, Project, KnowledgeBase, ProjectFile, Conversation, Message, Artifact.
 - **Services**: Knowledge base management, vector DB, text extraction, file storage, GitHub integration.
 - **Utilities**: File validation, AI/model config, DB helpers, Sentry/MCP integration, serialization, response formatting.
 - **Configuration**: All runtime settings in `config.py` (env-driven).
@@ -416,6 +434,7 @@ This section provides a high-level reference for backend developers working on t
 
 - Never use debug/insecure config in production!
 - Set all secrets and API keys via environment variables.
+- JWT blacklist (`TokenBlacklist`) is enforced for token security and revoked token handling.
 - Review Sentry and CORS settings before deployment.
 
 For more details, see module docstrings and comments in `config.py`.
