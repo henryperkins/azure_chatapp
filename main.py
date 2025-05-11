@@ -186,7 +186,7 @@ def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None
     integrations = [
         sentry_logging,
         FastApiIntegration(transaction_style="endpoint"),
-        SqlalchemyIntegration(),
+        # SqlalchemyIntegration(), # Temporarily commented out to diagnose greenlet_spawn issue
         AsyncioIntegration(),
     ]
 

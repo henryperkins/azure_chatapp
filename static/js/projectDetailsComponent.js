@@ -126,6 +126,9 @@ export class ProjectDetailsComponent {
     this.knowledgeBaseComponent = knowledgeBaseComponent;
     this.modelConfig = modelConfig;
     this.chatManager = chatManager;
+    this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem; // Get DependencySystem
+    this.navigationService = this.DependencySystem?.modules?.get('navigationService');
+
 
     this.notify.debug('[ProjectDetailsComponent] Optional dependencies status:', {
         group: false, // Keep constructor logs less noisy unless debugging
@@ -1150,7 +1153,7 @@ this.domAPI.dispatchEvent(
       await this.projectManager.getConversation(cv.id);
 
       // Switch to the chat tab to display the conversation
-      this.switchTab("chat");
+      // this.switchTab("chat"); // NavigationService will handle activating the tab via params
 
       /**
        * Capture the current SPA location as a mutable, native `URL` object.
@@ -1158,16 +1161,41 @@ this.domAPI.dispatchEvent(
        * to modify the query string (e.g., set `chatId`) before calling
        * `router.navigate()`.  Avoids brittle manual string concatenation.
        */
-      const url = new URL(this.router.getURL());
-      url.searchParams.set("chatId", cv.id);
-      this.router.navigate(url.toString());
-      this.notify.info(`[ProjectDetailsComponent] conversation ${cv.id} opened and switched to chat tab`, {
-        group: true,
-        context: "projectDetailsComponent",
-        module: MODULE,
-        source: "_openConversation",
-        detail: { conversationId: cv.id, projectId: pid }
-      });
+      // const url = new URL(this.router.getURL()); // Handled by NavigationService
+      // url.searchParams.set("chatId", cv.id); // Handled by NavigationService
+      // this.router.navigate(url.toString()); // Handled by NavigationService
+
+      if (this.navigationService) {
+        this.navigationService.navigateToConversation(pid, cv.id);
+        this.notify.info(`[ProjectDetailsComponent] Navigating to conversation ${cv.id} via NavigationService`, {
+          group: true,
+          context: "projectDetailsComponent",
+          module: MODULE,
+          source: "_openConversation",
+          detail: { conversationId: cv.id, projectId: pid }
+        });
+      } else {
+        // Fallback or error if NavigationService is not available
+        this.notify.error("[ProjectDetailsComponent] NavigationService not available to open conversation.", {
+          group: true,
+          context: "projectDetailsComponent",
+          module: MODULE,
+          source: "_openConversation",
+          detail: { conversationId: cv.id, projectId: pid }
+        });
+        // Fallback to old method if necessary, though ideally this shouldn't happen
+        this.switchTab("chat");
+        const url = new URL(this.router.getURL());
+        url.searchParams.set("chatId", cv.id);
+        this.router.navigate(url.toString());
+        this.notify.warn(`[ProjectDetailsComponent] Fallback: conversation ${cv.id} opened and switched to chat tab using router`, {
+          group: true,
+          context: "projectDetailsComponent",
+          module: MODULE,
+          source: "_openConversation",
+          detail: { conversationId: cv.id, projectId: pid }
+        });
+      }
     } catch (error) {
       this.notify.error("[ProjectDetailsComponent] Failed to fetch conversation: " + (error?.message || error), {
         group: true,
