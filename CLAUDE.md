@@ -358,3 +358,51 @@ Sentry is integrated across both backend (Python/FastAPI) and frontend (JavaScri
 - **Azure**: Use Azure best practices for cloud-related code
 
 When completing tasks, run appropriate tests and linting before committing changes.
+
+## Developer Documentation
+
+This section provides a high-level reference for backend developers working on this codebase.
+
+### Architecture Overview
+
+- **User**: Authenticated entity, owns projects and conversations.
+- **Project**: Workspace grouping files, conversations, and a knowledge base.
+- **Knowledge Base**: Semantic search index (vector DB) for project files, optionally linked to a GitHub repo.
+- **ProjectFile**: File attached to a project, processed for search/context.
+- **VectorDB**: Handles embeddings, similarity search, and storage (FAISS, sklearn, or manual).
+- **AI Chat**: Conversational interface, optionally augmented with project knowledge context.
+
+### Main Components
+
+- **Models**: User, Project, KnowledgeBase, ProjectFile, Conversation, Message, Artifact.
+- **Services**: Knowledge base management, vector DB, text extraction, file storage, GitHub integration.
+- **Utilities**: File validation, AI/model config, DB helpers, Sentry/MCP integration, serialization, response formatting.
+- **Configuration**: All runtime settings in `config.py` (env-driven).
+
+### Core Flows
+
+- **File Upload**: Validated, stored, chunked, embedded, and indexed for semantic search.
+- **Knowledge Search**: Project vector DB is searched for relevant context, which can be injected into chat prompts.
+- **AI Chat**: User messages can be augmented with knowledge context; responses are generated via OpenAI/Azure/Claude.
+- **GitHub Integration**: Projects can link a repo; files are fetched and processed into the knowledge base.
+
+### Error Handling & Observability
+
+- Consistent error handling via decorators and HTTPException.
+- Sentry: Deep integration for error, performance, and trace monitoring.
+- MCP: Optional advanced Sentry server integration.
+
+### Extending the System
+
+- Add new file types: Extend `TextExtractor` and `FileValidator`.
+- Add new embedding models: Update `VectorDB` and config.
+- Add new AI providers: Extend `utils/openai.py` and model config.
+- Add new endpoints: Use FastAPI, leverage existing service and utility layers.
+
+### Security Notes
+
+- Never use debug/insecure config in production!
+- Set all secrets and API keys via environment variables.
+- Review Sentry and CORS settings before deployment.
+
+For more details, see module docstrings and comments in `config.py`.
