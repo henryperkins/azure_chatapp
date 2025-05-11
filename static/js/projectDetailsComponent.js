@@ -793,9 +793,8 @@ this.domAPI.dispatchEvent(
     // const currentUser = this.app?.state?.currentUser; // OLD
 
     // NEW: Use auth module directly via DependencySystem
-    const ds = this.eventHandlers?.DependencySystem;
-    const auth = ds ? ds.get('auth') : null;
-    const currentUser = auth ? auth.getCurrentUserObject() : null; // NEW
+    const auth = this.DependencySystem?.modules?.get?.('auth') ?? null;
+    const currentUser = auth?.getCurrentUserObject?.() ?? null; // NEW
 
     if (!currentUser || !currentUser.id) {
       this.notify.error("[ProjectDetailsComponent] User ID not available (checked via auth module). Cannot create conversation.", {
@@ -835,10 +834,9 @@ this.domAPI.dispatchEvent(
     // const userIsReady = !!(this.app?.state?.isAuthenticated); // OLD
 
     // NEW: Use auth module directly via DependencySystem
-    // Assuming this.eventHandlers.DependencySystem is available as per app.js setup
-    const ds = this.eventHandlers?.DependencySystem;
-    const auth = ds ? ds.get('auth') : null;
-    const userIsReady = !!(auth && auth.isAuthenticated()); // NEW
+    // Assuming this.DependencySystem is available as per app.js setup
+    const auth = this.DependencySystem?.modules?.get?.('auth') ?? null;
+    const userIsReady = !!auth?.isAuthenticated?.(); // NEW
 
     if (projectReady && userIsReady) {
       newChatBtn.disabled = false;
