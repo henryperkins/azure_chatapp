@@ -504,10 +504,13 @@ export class ProjectListComponent {
         }
         this.gridElement.classList.remove("hidden");
         this.element.classList.remove("hidden");
-        const listView = document.getElementById("projectListView");
-        if (listView) {
-            listView.classList.remove("hidden", "opacity-0");
+        const listViewContainer = this.domAPI?.getElementById("projectListView") || document.getElementById("projectListView");
+        // Ensure the main container #projectListView is also visible and opacity is reset
+        if (listViewContainer) {
+            listViewContainer.classList.remove("hidden", "opacity-0");
+            listViewContainer.style.display = "";
         }
+        this.notify.info('Project list is now visible.', { group: true, context: 'projectListComponent' });
     }
 
     /** Hide the list container */
@@ -518,10 +521,11 @@ export class ProjectListComponent {
         if (this.element) {
             this.element.classList.add("hidden");
         }
-        const listView = document.getElementById("projectListView");
-        if (listView) {
-            listView.classList.add("hidden", "opacity-0");
-            listView.style.display = "none";
+        const listViewContainer = this.domAPI?.getElementById("projectListView") || document.getElementById("projectListView");
+        // Ensure the main container #projectListView is also hidden
+        if (listViewContainer) {
+            listViewContainer.classList.add("hidden");
+            listViewContainer.style.display = "none";
         }
         this.notify.info("Project list is now hidden.", { group: true, context: 'projectListComponent' });
     }
