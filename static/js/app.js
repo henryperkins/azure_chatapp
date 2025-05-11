@@ -1105,6 +1105,9 @@ async function handleNavigationChange(options = {}) { // Accept options
             return;
         }
 
+        // User suggested log:
+        console.log('[App Debug] Retrieved projectDashboard for navigation:', projectDashboard, typeof projectDashboard?.showProjectList);
+
         const projectId = forceListView ? null : browserServiceInstance.getSearchParam('project');
         const chatId    = forceListView ? null : browserServiceInstance.getSearchParam('chatId');
 
