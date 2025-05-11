@@ -162,6 +162,9 @@ DependencySystem.register('domPurify', sanitizer);
 
 // Register apiEndpoints for DI (required by Auth and other modules)
 const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
+  /* ─── projects root ────────────────────── */
+  PROJECTS: '/api/projects/',        // ← added (keep trailing slash)
+
   /* ─── auth ──────────────────────────────────────────────── */
   AUTH_CSRF   : '/api/auth/csrf',
   AUTH_LOGIN  : '/api/auth/login',
