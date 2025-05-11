@@ -96,6 +96,13 @@ export function createBrowserService({ windowObject } = {}) {
     getLocationHref: () => windowObject.location.href,
     setHistory: (...a) => windowObject.history.pushState(...a),
 
+    /* --- History helpers for NavigationService --- */
+    pushState   : (state = {}, title = '', url = '') =>
+      windowObject.history.pushState(state, title, url),
+
+    replaceState: (state = {}, title = '', url = '') =>
+      windowObject.history.replaceState(state, title, url),
+
     /* new accessors required by app.js */
     getWindow           : () => windowObject,
     getDocument         : () => windowObject.document,
