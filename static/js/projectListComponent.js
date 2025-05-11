@@ -849,8 +849,7 @@ export class ProjectListComponent {
         // } // OLD
 
         // NEW: Use auth module directly via DependencySystem
-        const ds = this.app?.DependencySystem;
-        const auth = ds ? ds.get('auth') : null;
+        const auth = this.DependencySystem?.modules?.get?.('auth') ?? null;
 
         if (auth && auth.isAuthenticated()) {
             // Optionally, also check for auth.getCurrentUserObject() if needed for onViewProject
