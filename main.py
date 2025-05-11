@@ -39,7 +39,16 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
+# …
+# Dev helper: always deliver fresh JS/CSS/HTML – disables browser cache
 from fastapi.staticfiles import StaticFiles
+
+class NoCacheStatic(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200 and path.endswith(('.js', '.css', '.html')):
+            response.headers['Cache-Control'] = 'no-store'
+        return response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.routing import APIRoute
@@ -325,7 +334,7 @@ try:
             logger.info("Could not find modals.html anywhere in the project")
 
     # Mount static directory
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+    app.mount("/static", NoCacheStatic(directory=STATIC_DIR), name="static")
     logger.info(f"Static files mounted from {STATIC_DIR}")
 except Exception as e:
     logger.critical(f"Failed to mount static files: {str(e)}", exc_info=True)
