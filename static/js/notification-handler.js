@@ -141,11 +141,42 @@ export function createNotificationHandler({
       userSelect    : "none",
     });
     closeBtn.textContent = "✕";
-    // Use DI eventHandlers.trackListener only. If not available, close button is not interactive.
-    if (typeof DependencySystem?.modules?.get === "function" && DependencySystem.modules.get("eventHandlers")?.trackListener) {
-      DependencySystem.modules.get("eventHandlers").trackListener(closeBtn, "click", () => fadeOut(root), { description: "Notification_Close", context: "NotificationHandlerCloseButton" });
-    } else if (DependencySystem?.modules?.get?.("logger")) {
-      DependencySystem.modules.get("logger").warn("[notificationHandler] No DI eventHandlers.trackListener available; close button will not be interactive.");
+    // Use direct event listener initially, but set up a MutationObserver to rebind with eventHandlers when available
+    closeBtn.addEventListener("click", () => fadeOut(root));
+
+    // Set up deferred binding if DependencySystem is available
+    if (DependencySystem) {
+      // Check if eventHandlers is already available
+      const eventHandlers = DependencySystem.modules?.get?.("eventHandlers");
+      if (eventHandlers?.trackListener) {
+        // Replace the direct listener with tracked listener
+        closeBtn.removeEventListener("click", () => fadeOut(root));
+        eventHandlers.trackListener(closeBtn, "click", () => fadeOut(root), {
+          description: "Notification_Close",
+          context: "NotificationHandlerCloseButton"
+        });
+      } else {
+        // Set up a one-time check for eventHandlers availability
+        DependencySystem.waitFor(['eventHandlers'])
+          .then(() => {
+            const eh = DependencySystem.modules.get("eventHandlers");
+            if (eh?.trackListener && !root.isConnected) {
+              // Only rebind if the element is still in the DOM
+              closeBtn.removeEventListener("click", () => fadeOut(root));
+              eh.trackListener(closeBtn, "click", () => fadeOut(root), {
+                description: "Notification_Close",
+                context: "NotificationHandlerCloseButton"
+              });
+            }
+          })
+          .catch(() => {
+            // If waitFor times out, log a warning if possible
+            const logger = DependencySystem.modules?.get?.("logger");
+            if (logger?.warn) {
+              logger.warn("[notificationHandler] Failed to bind eventHandlers.trackListener after waiting; close button using direct event listener.");
+            }
+          });
+      }
     }
     root.appendChild(closeBtn);
 

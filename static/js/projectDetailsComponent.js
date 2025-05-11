@@ -787,9 +787,15 @@ this.domAPI.dispatchEvent(
     }
 
     // Check for User ID before proceeding
-    const currentUser = this.app?.state?.currentUser;
+    // const currentUser = this.app?.state?.currentUser; // OLD
+
+    // NEW: Use auth module directly via DependencySystem
+    const ds = this.eventHandlers?.DependencySystem;
+    const auth = ds ? ds.get('auth') : null;
+    const currentUser = auth ? auth.getCurrentUserObject() : null; // NEW
+
     if (!currentUser || !currentUser.id) {
-      this.notify.error("[ProjectDetailsComponent] User ID not available. Cannot create conversation.", {
+      this.notify.error("[ProjectDetailsComponent] User ID not available (checked via auth module). Cannot create conversation.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", timeout: 0
       });
       // Optionally, prompt user to log in or refresh
@@ -823,26 +829,31 @@ this.domAPI.dispatchEvent(
 
     const projectReady = this.state.projectDataActuallyLoaded;
     // Treat “authenticated” as sufficient – user object may arrive later
-    const userIsReady = !!(this.app?.state?.isAuthenticated);
+    // const userIsReady = !!(this.app?.state?.isAuthenticated); // OLD
+
+    // NEW: Use auth module directly via DependencySystem
+    // Assuming this.eventHandlers.DependencySystem is available as per app.js setup
+    const ds = this.eventHandlers?.DependencySystem;
+    const auth = ds ? ds.get('auth') : null;
+    const userIsReady = !!(auth && auth.isAuthenticated()); // NEW
 
     if (projectReady && userIsReady) {
       newChatBtn.disabled = false;
       newChatBtn.classList.remove("btn-disabled");
-      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Authenticated: ${this.app?.state?.isAuthenticated}`, {
+      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Authenticated: ${userIsReady}`, { // MODIFIED to use local userIsReady
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
-        detail: { projectDataActuallyLoaded: this.state.projectDataActuallyLoaded, currentUserId: this.app?.state?.currentUser?.id }
+        detail: { projectDataActuallyLoaded: this.state.projectDataActuallyLoaded, currentUserId: auth?.getCurrentUserObject?.()?.id } // MODIFIED
       });
     } else {
       newChatBtn.disabled = true;
       newChatBtn.classList.add("btn-disabled");
-      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Authenticated: ${this.app?.state?.isAuthenticated}`, {
+      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Authenticated: ${userIsReady}`, { // MODIFIED to use local userIsReady
         group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
         detail: {
             projectDataActuallyLoaded: this.state.projectDataActuallyLoaded,
-            appStateExists: !!(this.app && this.app.state),
-            currentUserObjectDefined: typeof this.app?.state?.currentUser !== 'undefined',
-            currentUserId: this.app?.state?.currentUser?.id,
-            appIsAuthenticated: this.app?.state?.isAuthenticated
+            authModuleExists: !!auth,
+            currentUserId: auth?.getCurrentUserObject?.()?.id, // MODIFIED
+            authModuleIsAuthenticated: userIsReady // MODIFIED
         }
       });
     }
