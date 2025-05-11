@@ -196,17 +196,25 @@ export function createSidebar({
         module: MODULE, source: '_handleChatSearch', context: 'sidebarSearch'
     });
 
-    let itemsFound = -1; // Placeholder for item count if renderer provides it
+    // Get the current project ID
+    const currentProject = projectManager.getCurrentProject();
+    const projectId = currentProject?.id;
+
+    // if (!projectId && (activeTab === 'recent' || activeTab === 'starred')) {
+    //   notify.warn(`[sidebar] No active project ID available for ${activeTab} tab search.`, {
+    //       module: MODULE, source: '_handleChatSearch', context: 'sidebarSearch'
+    //   });
+    //   // Optionally clear the list or show a message if no project is selected
+    //   // For now, uiRenderer itself handles the "no projectId" case by showing a message.
+    // }
 
     if (activeTab === 'recent') {
-        // Pass isConversationStarred and toggleStarConversation from the sidebar instance
-        uiRenderer.renderConversations(searchTerm, isConversationStarred, toggleStarConversation);
+        uiRenderer.renderConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
         if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
             accessibilityUtils.announce(`Recent conversations filtered for "${searchTerm || 'all'}".`);
         }
     } else if (activeTab === 'starred') {
-        // Pass isConversationStarred and toggleStarConversation from the sidebar instance
-        uiRenderer.renderStarredConversations(searchTerm, isConversationStarred, toggleStarConversation);
+        uiRenderer.renderStarredConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
         if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
             accessibilityUtils.announce(`Starred conversations filtered for "${searchTerm || 'all'}".`);
         }
@@ -300,25 +308,25 @@ export function createSidebar({
     }
 
     // Listen for new conversations being created
+    const chatCreatedHandler = (e) => {
+      // Use the 'notify' instance from the factory function's scope
+      notify.info('[sidebar] chat:conversationCreated event received', { detail: e.detail, module: MODULE, source: 'bindDomEvents.chatCreatedHandler' });
+      const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+      if (activeTab === 'recent') {
+        _handleChatSearch();
+      }
+      // ... (any other logic for this event)
+    };
+
     eventHandlers.trackListener(
       domAPI.getDocument(),
       'chat:conversationCreated',
-      (e) => {
-        notify.info('[sidebar] chat:conversationCreated event received', { detail: e.detail, module: MODULE, source: 'bindDomEvents' });
-        // Potentially switch to recent tab and refresh, or just refresh if already on recent
-        const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-        if (activeTab === 'recent') {
-          _handleChatSearch(); // This should re-render conversations
-        } else {
-          // If not on recent, we might still want to refresh recent in background,
-          // or simply rely on the user switching to it. For now, only refresh if active.
-          // Alternatively, could call activateTab('recent') but that might be too intrusive.
-        }
-        // Consider if uiRenderer.renderConversations should be called directly
-        // if _handleChatSearch has side effects beyond just rendering.
-        // For now, _handleChatSearch is the established way to refresh.
-      },
-      { description: 'Sidebar chat:conversationCreated listener', context: MODULE }
+      safeInvoker(
+        chatCreatedHandler,
+        { notify }, // Pass the notify instance from createSidebar's scope
+        { context: MODULE, source: 'onChatConversationCreatedInvoker' } // Context for safeInvoker's logging
+      ),
+      { description: 'Sidebar chat:conversationCreated listener', context: MODULE } // Options for trackListener
     );
   }
 
@@ -388,11 +396,17 @@ export function createSidebar({
 
   function handleGlobalAuthStateChangeForSidebar(event) {
     const authModule = DependencySystem.modules.get('auth');
-    const isAuthenticated = event?.detail?.authenticated ?? authModule?.isAuthenticated?.();
+    const eventAuthDetail = event?.detail?.authenticated;
+    const moduleAuthStatus = authModule?.isAuthenticated?.();
+    const isAuthenticated = eventAuthDetail ?? moduleAuthStatus;
 
-    sidebarNotify.debug('Global authStateChanged/authReady detected in sidebar.', {
+    sidebarNotify.info('Sidebar: handleGlobalAuthStateChangeForSidebar triggered.', { // Changed to info for better visibility
         source: 'handleGlobalAuthStateChangeForSidebar',
-        isAuthenticated
+        eventType: event?.type,
+        eventDetailAuthenticated: eventAuthDetail,
+        authModuleIsAuthenticated: moduleAuthStatus,
+        finalIsAuthenticated: isAuthenticated,
+        eventDetailUser: event?.detail?.user // Log user from event
     });
 
     if (sidebarAuthFormContainerEl) {
@@ -402,7 +416,17 @@ export function createSidebar({
                 updateAuthFormUI(false);
             }
             clearAuthForm();
+        } else {
+            // If authenticated, ensure the form is hidden and potentially clear it
+            // (though hiding should be sufficient)
+            sidebarNotify.debug('Sidebar: User is authenticated, ensuring inline auth form is hidden.', {
+                source: 'handleGlobalAuthStateChangeForSidebar'
+            });
         }
+    } else {
+        sidebarNotify.warn('Sidebar: sidebarAuthFormContainerEl not found, cannot update visibility.', {
+            source: 'handleGlobalAuthStateChangeForSidebar'
+        });
     }
   }
 
@@ -475,7 +499,18 @@ export function createSidebar({
   function closeSidebar() {
     if (!visible || pinned) return;
     const activeEl = domAPI.getActiveElement();
-    if (el.contains(activeEl)) activeEl.blur();
+    let focusMoved = false;
+    if (el.contains(activeEl)) {
+      activeEl.blur();
+      // Attempt to move focus to the toggle button
+      if (btnToggle && typeof btnToggle.focus === 'function') {
+        sidebarNotify.debug('Attempting to focus sidebar toggle button.', { source: 'closeSidebar', btnToggleExists: !!btnToggle });
+        btnToggle.focus();
+        focusMoved = true;
+      } else {
+        sidebarNotify.warn('Sidebar toggle button not found or not focusable.', { source: 'closeSidebar', btnToggleExists: !!btnToggle, isFocusFunction: typeof btnToggle?.focus });
+      }
+    }
     visible = false;
     el.classList.add('-translate-x-full');
     el.setAttribute('aria-hidden', 'true');
@@ -486,7 +521,7 @@ export function createSidebar({
     }
     dispatch('sidebarVisibilityChanged', { visible });
     notify.info('[sidebar] closed', {
-      group: true, context: 'sidebar', module: MODULE, source: 'closeSidebar'
+      group: true, context: 'sidebar', module: MODULE, source: 'closeSidebar', focusMovedToToggle: focusMoved
     });
   }
 

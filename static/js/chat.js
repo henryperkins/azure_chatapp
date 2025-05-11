@@ -386,29 +386,22 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         }
 
         const urlParams = new URLSearchParams(this.navAPI.getSearch());
-        const urlChatId = urlParams.get('chatId');
-        chatNotify.debug(`URL params: ${urlParams.toString()}, Chat ID from URL: ${urlChatId}`, { source: 'initialize' });
+          const urlChatId = urlParams.get('chatId');
+          chatNotify.debug(`URL params: ${urlParams.toString()}, Chat ID from URL: ${urlChatId}`, { source: 'initialize' });
 
-        if (urlChatId) {
-          chatNotify.info(`Found chatId=${urlChatId} in URL, attempting to load conversation...`, { source: 'initialize', chatId: urlChatId });
-          const loadedSuccessfully = await this.loadConversation(urlChatId); // Await the load
+          if (urlChatId) {
+            chatNotify.info(`Found chatId=${urlChatId} in URL, attempting to load conversation...`, { source: 'initialize', chatId: urlChatId });
+            const loadedSuccessfully = await this.loadConversation(urlChatId); // Await the load
 
-          if (!loadedSuccessfully) {
-            chatNotify.warn(`Failed to fully load conversation ${urlChatId} from API. Attempting to use it as current.`, { source: 'initialize', chatId: urlChatId });
-            if (this.isValidProjectId(this.projectId)) {
-                 this.currentConversationId = urlChatId;
-                 this._clearMessages();
-                 this._updateURLWithConversationId(urlChatId);
-                 this._showMessage("system", "Conversation started. Type a message to begin.");
-                 chatNotify.info(`Fallback: Set currentConversationId to ${urlChatId} from URL for project ${this.projectId}.`, { source: 'initialize' });
-            } else {
-                 this._handleError("initialization (invalid project for URL chat)", new Error(`Project ID ${this.projectId} invalid for chat ID ${urlChatId} from URL`));
-                 this._clearMessages();
-                 this._showMessage("system", "Error linking chat to project.");
+            if (!loadedSuccessfully) {
+              chatNotify.error(`Failed to load conversation ${urlChatId} from API. It may not exist or you may not have access for project ${this.projectId}.`, { source: 'initialize', chatId: urlChatId, projectId: this.projectId });
+              this._removeConversationIdFromURL(); // Clear invalid chat ID from URL
+              this._clearMessages();
+              this._showMessage("system", `Could not load chat ${urlChatId}. Please select a valid conversation or start a new one.`);
+              // Do NOT set this.currentConversationId to urlChatId here
             }
-          }
-        } else {
-          chatNotify.info("No chatId in URL. Ready for new chat or selection.", { source: 'initialize' });
+          } else {
+            chatNotify.info("No chatId in URL. Ready for new chat or selection.", { source: 'initialize' });
           this._clearMessages();
         }
 

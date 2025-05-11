@@ -124,7 +124,7 @@ class ProjectManager {
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
     this.notify = notify ?? DependencySystem.modules.get?.('notify');
     this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
-    this.debugTools    = debugTools || DependencySystem.modules.get?.('debugTools') || null;
+    this.debugTools = debugTools || DependencySystem.modules.get?.('debugTools') || null;
     this.timer = timer;
     this.storage = storage;
     this.apiRequest = apiRequest ?? app?.apiRequest;
@@ -165,10 +165,10 @@ class ProjectManager {
     this.apiEndpoints = apiEndpoints;
     this._CONFIG = {
       PROJECTS: apiEndpoints.PROJECTS || '/api/projects/',
-      DETAIL: apiEndpoints.DETAIL   || '/api/projects/{id}/',
-      STATS: apiEndpoints.STATS     || '/api/projects/{id}/stats/',
-      FILES: apiEndpoints.FILES     || '/api/projects/{id}/files/',
-      CONVOS: apiEndpoints.CONVOS   || '/api/projects/{id}/conversations/',
+      DETAIL: apiEndpoints.DETAIL || '/api/projects/{id}/',
+      STATS: apiEndpoints.STATS || '/api/projects/{id}/stats/',
+      FILES: apiEndpoints.FILES || '/api/projects/{id}/files/',
+      CONVOS: apiEndpoints.CONVOS || '/api/projects/{id}/conversations/',
       ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
       KB_LIST_URL_TEMPLATE: apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/', // For listing KBs if needed
       KB_DETAIL_URL_TEMPLATE: apiEndpoints.KB_DETAIL_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/{kb_id}/', // For specific KB
@@ -267,14 +267,14 @@ class ProjectManager {
       this.projects = list;
       this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
       this._emit('projectsLoaded', { projects: list, filter });
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects');
       return list;
     } catch (err) {
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects');
       return this._handleErr('projectsLoaded', err, []);
     } finally {
       this._loadingProjects = false;
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjects');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects');
     }
   }
 
@@ -289,7 +289,7 @@ class ProjectManager {
         source: "loadProjectDetails",
         extra: { id }
       });
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       throw new Error('Invalid projectId');
     }
 
@@ -299,7 +299,7 @@ class ProjectManager {
         source: "loadProjectDetails"
       });
       this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return null;
     }
 
@@ -310,7 +310,7 @@ class ProjectManager {
       this.pmNotify?.warn?.("[ProjectManager] _authOk returned false, returning early", {
         source: "loadProjectDetails"
       });
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return null;
     }
 
@@ -344,7 +344,7 @@ class ProjectManager {
       // Don't continue if archived
       if (this.currentProject.archived) {
         this._emit('projectArchivedNotice', { id: this.currentProject.id });
-        this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
+        this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
         return { ...this.currentProject };
       }
 
@@ -352,23 +352,23 @@ class ProjectManager {
       // This is crucial if KB loading depends on an ID from the project details (e.g., project.knowledge_base_id)
       let kbLoadResult = { status: 'fulfilled', value: null }; // Default if no KB to load
       if (this.currentProject && this.currentProject.knowledge_base_id) {
-          try {
-              const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
-              kbLoadResult = { status: 'fulfilled', value: kbValue };
-          } catch (kbError) {
-              kbLoadResult = { status: 'rejected', reason: kbError };
-              this.pmNotify?.error?.(`[ProjectManager] Failed to load knowledge base details for KB ID ${this.currentProject.knowledge_base_id}`, {
-                  source: "loadProjectDetails",
-                  extra: { projectId: id, knowledgeBaseId: this.currentProject.knowledge_base_id, error: kbError }
-              });
-          }
-      } else {
-          this.pmNotify?.info?.(`[ProjectManager] No knowledge_base_id found on project ${id}, skipping dedicated KB load.`, {
-              source: "loadProjectDetails",
-              extra: { projectId: id }
+        try {
+          const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
+          kbLoadResult = { status: 'fulfilled', value: kbValue };
+        } catch (kbError) {
+          kbLoadResult = { status: 'rejected', reason: kbError };
+          this.pmNotify?.error?.(`[ProjectManager] Failed to load knowledge base details for KB ID ${this.currentProject.knowledge_base_id}`, {
+            source: "loadProjectDetails",
+            extra: { projectId: id, knowledgeBaseId: this.currentProject.knowledge_base_id, error: kbError }
           });
-          // Ensure event is still emitted so UI can react to "no KB"
-          this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
+        }
+      } else {
+        this.pmNotify?.info?.(`[ProjectManager] No knowledge_base_id found on project ${id}, skipping dedicated KB load.`, {
+          source: "loadProjectDetails",
+          extra: { projectId: id }
+        });
+        // Ensure event is still emitted so UI can react to "no KB"
+        this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
       }
 
       // Parallel fetch other additional resources (non-fatal on failure)
@@ -399,7 +399,7 @@ class ProjectManager {
       // Notify UI that every required resource is now loaded or attempted
       this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
 
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return { ...this.currentProject };
     } catch (err) {
       // Gather context for troubleshooting
@@ -416,7 +416,7 @@ class ProjectManager {
         originalError: err
       });
       if (status === 404) this._emit('projectNotFound', { id });
-      this.debugTools?.stop?.(_t,'ProjectManager.loadProjectDetails-error');
+      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails-error');
       return null;
     }
   }
@@ -480,7 +480,7 @@ class ProjectManager {
   async loadProjectKnowledgeBase(projectId, knowledgeBaseId) {
     if (!knowledgeBaseId) {
       this.pmNotify?.info(`[ProjectManager] No knowledgeBaseId provided for project ${projectId}. Assuming no specific KB to load.`, {
-          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId }
+        group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId }
       });
       this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
       return null;
@@ -488,7 +488,7 @@ class ProjectManager {
 
     try {
       this.pmNotify?.info(`[ProjectManager] Loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId})...`, {
-          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }
+        group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }
       });
 
       const url = this._CONFIG.KB_DETAIL_URL_TEMPLATE
@@ -500,20 +500,20 @@ class ProjectManager {
 
       if (!kb || !kb.id) { // Ensure the fetched KB object has an ID
         this.pmNotify?.warn(`[ProjectManager] No valid knowledge base data returned for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
-            group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId, response: res }
+          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId, response: res }
         });
         this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
         return null;
       } else {
         this.pmNotify?.success(`[ProjectManager] Knowledge base details loaded for KB ID ${kb.id} (Project ${projectId}).`, {
-            group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, kbId: kb.id }
+          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, kbId: kb.id }
         });
         this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: kb });
         return kb;
       }
     } catch (err) {
       this.pmNotify?.error(`[ProjectManager] Error loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
-          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
+        group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
       });
       this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
       // Re-throw or handle as per existing _handleErr. For now, let's re-throw to be caught by loadProjectDetails.
@@ -593,7 +593,8 @@ class ProjectManager {
     try {
       const endpoint = `/api/projects/${projectId}/conversations/${conversationId}/`;
       const res = await this._req(endpoint, undefined, "getConversation");
-      const convo = res?.data || res;
+      // Backend returns { "status": "success", "conversation": { ... } }
+      const convo = res?.conversation;
       if (!convo || !convo.id) throw new Error('Invalid conversation data received');
       this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
       return convo;
