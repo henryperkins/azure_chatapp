@@ -162,7 +162,7 @@ async def get_project_file_metadata(
                 "file_type": file.file_type,
                 "file_size": file.file_size,
                 "created_at": file.created_at.isoformat(),
-                "metadata": file.metadata or {},
+                "metadata": file.config or {},
                 "storage_path": file.file_path,
             }
         )
