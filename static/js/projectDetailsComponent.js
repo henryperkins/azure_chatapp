@@ -127,6 +127,16 @@ export class ProjectDetailsComponent {
     this.modelConfig = modelConfig;
     this.chatManager = chatManager;
 
+    this.notify.debug('[ProjectDetailsComponent] Optional dependencies status:', {
+        group: false, // Keep constructor logs less noisy unless debugging
+        context: "projectDetailsComponent", module: MODULE, source: "constructor",
+        extra: {
+            knowledgeBaseComponent: !!this.knowledgeBaseComponent,
+            modelConfig: !!this.modelConfig,
+            chatManager: !!this.chatManager
+        }
+    });
+
     this.onBack = onBack || (() => {
       this.notify.warn("[ProjectDetailsComponent] onBack callback not provided.", {
         group: true, context: "projectDetailsComponent", module: MODULE, source: "onBack"
@@ -190,10 +200,18 @@ export class ProjectDetailsComponent {
         this.notify.error("Critical error: required DOM nodes missing for Project Details.", {
           group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize", timeout: 0
         });
-        throw new Error("Required DOM nodes missing in #projectDetailsView.");
+        // Add more detail to the error log about which elements were missing
+        const missingElements = Object.entries(this.elements)
+            .filter(([key, value]) => !value && key !== 'container' /* already checked */ && key !== 'loadingIndicators' && key !== 'tabContents') // filter out complex objects or less critical ones for this specific log
+            .map(([key]) => key);
+        this.notify.error(`[ProjectDetailsComponent] Missing DOM elements during _findElements: ${missingElements.join(', ')}`, {
+            group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize_findElements",
+            detail: { checkedElements: Object.keys(this.elements).filter(k => k !== 'loadingIndicators' && k !== 'tabContents') }
+        });
+        throw new Error("Required DOM nodes missing in #projectDetailsView for initialization.");
       }
-      this.notify.info("[ProjectDetailsComponent] Found required elements.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
+      this.notify.info("[ProjectDetailsComponent] _findElements successful. All essential elements found.", {
+        group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize_findElements"
       });
       this._bindCoreEvents();
       await this._initSubComponents();

@@ -162,6 +162,9 @@ class ProjectManager {
     /** @type {?Object} */
     this.currentProject = null;
     this._loadingProjects = false;
+    this._loadProjectsDebounceTimer = null; // Added for debounce
+    this._DEBOUNCE_DELAY = 300; // milliseconds, for debounce
+
     this.apiEndpoints = apiEndpoints;
     this._CONFIG = {
       PROJECTS: apiEndpoints.PROJECTS || '/api/projects/',
@@ -175,6 +178,10 @@ class ProjectManager {
       ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/'
     };
 
+    this.pmNotify?.debug?.('[ProjectManager] Configured API Endpoints:', {
+      source: 'constructor',
+      extra: { config: JSON.parse(JSON.stringify(this._CONFIG)) } // Avoid logging functions if any
+    });
     this.pmNotify?.info?.('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
   }
 
@@ -245,37 +252,62 @@ class ProjectManager {
   /* ---------------------------------------------------------------------- */
 
   async loadProjects(filter = 'all') {
-    const _t = this.debugTools?.start?.('ProjectManager.loadProjects');
-    if (this._loadingProjects) {
-      this.notify.info('[ProjectManager] loadProjects already running', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
-      return [];
+    // Clear any existing debounce timer
+    if (this._loadProjectsDebounceTimer) {
+        clearTimeout(this._loadProjectsDebounceTimer); // Assuming global clearTimeout is available
     }
-    if (!this._authOk('projectsLoaded', { filter })) return [];
-    this._loadingProjects = true;
-    this._emit('projectsLoading', { filter });
 
-    try {
-      const url = typeof this.apiEndpoints.PROJECTS === 'function'
-        ? this.apiEndpoints.PROJECTS()
-        : this.apiEndpoints.PROJECTS || '/api/projects/';
-      const urlObj = new URL(url, location.origin);
-      urlObj.searchParams.set('filter', filter);
+    // Return a new promise that resolves/rejects when the debounced function executes
+    return new Promise((resolve) => {
+        // Correctly invoke this.timer, which is likely setTimeout or a compatible function.
+        // Using .call(null, ...) ensures it's not called as a method of `this`.
+        this._loadProjectsDebounceTimer = this.timer.call(null, async () => {
+            const _t = this.debugTools?.start?.('ProjectManager.loadProjects_debounced');
+            if (this._loadingProjects) {
+                this.notify.info('[ProjectManager] loadProjects already running (debounced call skipped)', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
+                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_busy');
+                resolve(this.projects || []); // Resolve with current/last known projects or empty array
+                return;
+            }
+            if (!this._authOk('projectsLoaded', { filter })) {
+                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_auth_fail');
+                resolve([]); // Resolve with empty array on auth fail
+                return;
+            }
+            this._loadingProjects = true;
+            this._emit('projectsLoading', { filter });
 
-      const res = await this._req(String(urlObj), undefined, "loadProjects");
-      const list = extractResourceList(res, ['projects']);
-      // Cache for other modules (sidebar, dashboards, etc.)
-      this.projects = list;
-      this.notify.success(`[ProjectManager] ${list.length} projects`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
-      this._emit('projectsLoaded', { projects: list, filter });
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects');
-      return list;
-    } catch (err) {
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects');
-      return this._handleErr('projectsLoaded', err, []);
-    } finally {
-      this._loadingProjects = false;
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects');
-    }
+            try {
+                let baseUrl = typeof this.apiEndpoints.PROJECTS === 'function'
+                    ? this.apiEndpoints.PROJECTS()
+                    : this.apiEndpoints.PROJECTS || this._CONFIG.PROJECTS; // Fallback to _CONFIG
+
+                // Ensure baseUrl (typically a path like /api/projects/) ends with a slash
+                // before adding query parameters, if it doesn't already have query params.
+                if (typeof baseUrl === 'string' && !baseUrl.endsWith('/') && !baseUrl.includes('?')) {
+                    this.pmNotify?.warn?.(`[ProjectManager] Base URL for PROJECTS (${baseUrl}) is missing a trailing slash. Adding one.`, { source: 'loadProjects_debounced' });
+                    baseUrl += '/';
+                }
+
+                const urlObj = new URL(baseUrl, location.origin); // baseUrl should now be like /api/projects/
+                urlObj.searchParams.set('filter', filter);
+
+                const res = await this._req(String(urlObj), undefined, "loadProjects");
+                const list = extractResourceList(res, ['projects']);
+                this.projects = list; // Cache projects
+                this.notify.success(`[ProjectManager] ${list.length} projects (debounced)`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
+                this._emit('projectsLoaded', { projects: list, filter });
+                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_success');
+                resolve(list);
+            } catch (err) {
+                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_error');
+                resolve(this._handleErr('projectsLoaded', err, [])); // _handleErr emits event and returns fallback
+            } finally {
+                this._loadingProjects = false;
+                // _t is stopped within try/catch for accurate labeling
+            }
+        }, this._DEBOUNCE_DELAY);
+    });
   }
 
   async loadProjectDetails(id) {
@@ -314,9 +346,28 @@ class ProjectManager {
       return null;
     }
 
-    const detailUrl = typeof this.apiEndpoints.DETAIL === 'function'
-      ? this.apiEndpoints.DETAIL(id)
-      : (this.apiEndpoints.DETAIL || '/api/projects/{id}/').replace('{id}', id);
+    let detailUrlTemplate = typeof this.apiEndpoints.DETAIL === 'function'
+        ? null // Cannot modify template if it's a function result directly here
+        : String(this.apiEndpoints.DETAIL || this._CONFIG.DETAIL);
+
+    let detailUrl;
+    if (detailUrlTemplate) {
+        // Ensure template ends with a slash if {id} is at the very end and no slash after it
+        if (detailUrlTemplate.includes('{id}') &&
+            !detailUrlTemplate.endsWith('/') &&
+            detailUrlTemplate.substring(detailUrlTemplate.indexOf('{id}') + '{id}'.length).length === 0) {
+            this.pmNotify?.warn?.(`[ProjectManager] Detail URL template (${detailUrlTemplate}) for project ID ${id} is missing a trailing slash after {id}. Adding one.`, { source: 'loadProjectDetails' });
+            detailUrlTemplate += '/';
+        }
+        detailUrl = detailUrlTemplate.replace('{id}', id);
+    } else if (typeof this.apiEndpoints.DETAIL === 'function') {
+        detailUrl = this.apiEndpoints.DETAIL(id); // Call the function if template is null
+    } else {
+        // Fallback or error, though constructor checks should prevent this state for DETAIL
+        this.pmNotify?.error?.('[ProjectManager] Invalid DETAIL endpoint configuration.', { source: 'loadProjectDetails' });
+        throw new Error('Invalid DETAIL endpoint configuration');
+    }
+
     this.pmNotify?.debug?.("[ProjectManager] Fetching project details from", {
       source: "loadProjectDetails",
       extra: { detailUrl }
@@ -742,11 +793,21 @@ class ProjectManager {
    * @returns {Promise<boolean>}
    */
   async initialize() {
-    this.notify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
+    this.pmNotify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
+    // Optional: Log critical dependencies status
+    this.pmNotify.debug('[ProjectManager] Dependencies status:', {
+      source: 'initialize',
+      extra: {
+        appAvailable: !!this.app,
+        chatManagerAvailable: !!this.chatManager,
+        apiRequestAvailable: !!this.apiRequest,
+        notifyAvailable: !!this.notify // The original notify, not pmNotify
+      }
+    });
 
     // The 'projectManagerReady' event is no longer dispatched from here.
     // Modules should rely on DependencySystem.waitFor('projectManager') and the global 'app:ready' event.
-
+    this.pmNotify.info('[ProjectManager] initialize() completed successfully.', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
     return true;
   }
 

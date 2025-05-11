@@ -162,9 +162,21 @@ export function createKnowledgeBaseManager(ctx) {
    * @returns {Promise<void>}
    */
   async function _submitKnowledgeBaseForm(projectId, payload) {
+    notify.info("Enter _submitKnowledgeBaseForm. Current KB state from ctx:", {
+        source: "_submitKnowledgeBaseForm",
+        extra: {
+            kbIdFromState: ctx.state.knowledgeBase?.id,
+            kbExists: !!ctx.state.knowledgeBase?.id,
+            knowledgeBaseSummary: ctx.state.knowledgeBase ? { id: ctx.state.knowledgeBase.id, name: ctx.state.knowledgeBase.name, is_active: ctx.state.knowledgeBase.is_active } : null
+        }
+    });
     try {
       const kbId = ctx.state.knowledgeBase?.id;
       const isUpdating = !!kbId;
+      notify.info(`_submitKnowledgeBaseForm: Determined action based on kbId='${kbId}'`, {
+          source: "_submitKnowledgeBaseForm",
+          extra: { projectId, isUpdatingAction: isUpdating ? 'UPDATE (PATCH)' : 'CREATE (POST)' }
+      });
       const method = isUpdating ? "PATCH" : "POST";
       const url = isUpdating
         ? `/api/projects/${projectId}/knowledge-bases/${kbId}`
@@ -192,7 +204,35 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Invalid response from server");
       }
     } catch (err) {
-      notify.error(`Failed to save settings: ${err.message || 'Unknown error'}`, { source: '_submitKnowledgeBaseForm', originalError: err });
+      if (err.status === 409) { // HTTP 409 Conflict
+        notify.warn(`Project already has a knowledge base. Refreshing settings.`, {
+          source: '_submitKnowledgeBaseForm',
+          originalError: err,
+          extra: { projectId }
+        });
+        // Attempt to refresh the project details and re-render the KB info
+        // This should ideally update the UI to show the existing KB and remove the "create" form.
+        if (ctx.projectManager.loadProjectDetails) {
+          try {
+            const project = await ctx.projectManager.loadProjectDetails(projectId);
+            ctx.renderKnowledgeBaseInfo(project?.knowledge_base, projectId);
+            // If modal is still open, it might need to be re-initialized or closed/reopened
+            // For now, just ensure state is updated. The modal might repopulate on next open.
+            hideKnowledgeBaseModal(); // Close modal as the "create" action is invalid
+          } catch (refreshError) {
+            notify.error(`Failed to refresh project details after KB conflict: ${refreshError.message}`, {
+              source: '_submitKnowledgeBaseForm',
+              originalError: refreshError
+            });
+          }
+        }
+      } else {
+        notify.error(`Failed to save settings: ${err.message || 'Unknown error'}`, {
+          source: '_submitKnowledgeBaseForm',
+          originalError: err,
+          extra: { status: err.status }
+        });
+      }
     }
   }
 
@@ -270,13 +310,29 @@ export function createKnowledgeBaseManager(ctx) {
             // For robustness, we can also try a direct update if the event system is slow or has issues.
             if (projectDetails && typeof projectDetails.knowledge_base !== 'undefined') {
                  ctx.state.knowledgeBase = projectDetails.knowledge_base; // Direct update
-                 notify.info("KB state directly updated from refreshed project details.", { source: "showKnowledgeBaseModal", kbExists: !!projectDetails.knowledge_base });
+                 notify.info("KB state directly updated from refreshed project details.", {
+                    source: "showKnowledgeBaseModal",
+                    extra: { kbExists: !!projectDetails.knowledge_base, kbId: projectDetails.knowledge_base?.id }
+                });
             } else if (projectDetails === null) { // Project load failed
-                 notify.warn("Project details failed to load; KB state might be inaccurate.", { source: "showKnowledgeBaseModal" });
+                 notify.warn("Project details failed to load; KB state might be inaccurate for modal.", { source: "showKnowledgeBaseModal" });
             }
+            // Log the state of ctx.state.knowledgeBase AFTER the refresh attempt
+            notify.debug("ctx.state.knowledgeBase after refresh in showKnowledgeBaseModal:", {
+                source: "showKnowledgeBaseModal",
+                extra: {
+                    kbStateSummary: ctx.state.knowledgeBase ? {id: ctx.state.knowledgeBase.id, name: ctx.state.knowledgeBase.name, is_active: ctx.state.knowledgeBase.is_active} : null
+                }
+            });
         }
     } catch (err) {
         notify.error("Failed to refresh project details before showing KB modal. State may be stale.", { source: "showKnowledgeBaseModal", originalError: err });
+        notify.debug("ctx.state.knowledgeBase (after failed refresh) in showKnowledgeBaseModal:", {
+            source: "showKnowledgeBaseModal",
+            extra: {
+                kbStateSummary: ctx.state.knowledgeBase ? {id: ctx.state.knowledgeBase.id, name: ctx.state.knowledgeBase.name, is_active: ctx.state.knowledgeBase.is_active} : null
+            }
+        });
         // Continue with potentially stale state, or decide to block/warn user
     }
 

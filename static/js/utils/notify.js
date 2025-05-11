@@ -72,6 +72,47 @@ export function createNotify({
 
     notificationHandler.show(msg, _type, payload);
 
+    // If the notification is an error, also send it to the backend logging endpoint
+    if (_type === 'error') {
+      const logApiPayload = {
+        message: msg,
+        type: _type,
+        module: payload.module,
+        context: payload.context,
+        source: payload.source,
+        stack: richExtra.stack, // stack is already in richExtra if available
+        sessionId: richExtra.sessionId,
+        traceId: richExtra.traceId,
+        additional_details: { // Send the 'extra' details which might contain more context
+            endpoint: richExtra.endpoint,
+            requestPayload: richExtra.requestPayload,
+            responseDetail: richExtra.responseDetail,
+            // Include other custom 'extra' fields passed in opts
+            ...(typeof opts.extra === 'object' && opts.extra !== null ? opts.extra : {})
+        }
+      };
+
+      fetch('/api/log_notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(logApiPayload),
+      })
+      .then(response => {
+        if (!response.ok) {
+          console.error('Failed to POST error notification to /api/log_notification:', response.status, response.statusText, logApiPayload);
+        } else {
+          if (typeof window !== "undefined" && window.console && window.APP_CONFIG?.DEBUG) {
+            console.debug('Error notification successfully POSTed to /api/log_notification:', logApiPayload);
+          }
+        }
+      })
+      .catch(networkError => {
+        console.error('Network error when POSTing error notification to /api/log_notification:', networkError, logApiPayload);
+      });
+    }
+
     return eventId;
   };
 
