@@ -405,6 +405,9 @@ const app = {
     validateUUID: (id) => isValidProjectId(id)   // ← nuevo
 };
 
+// Make the DependencySystem accessible to all components that receive `app`
+app.DependencySystem = DependencySystem;
+
 // Attach apiRequest directly to app before creating ProjectManager
 app.apiRequest = apiRequest;
 
