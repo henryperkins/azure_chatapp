@@ -307,13 +307,20 @@ htmlTemplateLoader.loadTemplate({
 notify.info('[App] Called htmlTemplateLoader.loadTemplate for project_list.html');
 
 // ---------------------------------------------------------------------------
-// Global error catch (fail-fast at window level)
-if (typeof window !== "undefined") {
-    window.addEventListener('error',  e =>
-        notify?.error?.(e.message, { source:'global' })
+// Global error catch (fail-fast at window level) – now using eventHandlers for tracking
+if (typeof window !== 'undefined') {
+    const globalWin = browserAPI.getWindow?.() || window;
+    eventHandlers.trackListener(
+        globalWin,
+        'error',
+        (e) => notify.error(e.message, { source: 'global' }),
+        { context: 'app', description: 'Global window error listener' }
     );
-    window.addEventListener('unhandledrejection', e =>
-        notify?.error?.(e.reason?.message || 'unhandled rejection', { source:'global' })
+    eventHandlers.trackListener(
+        globalWin,
+        'unhandledrejection',
+        (e) => notify.error(e.reason?.message || 'unhandled rejection', { source: 'global' }),
+        { context: 'app', description: 'Global unhandledrejection listener' }
     );
 }
 
