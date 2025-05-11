@@ -17,6 +17,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from models.project import Project # ADDED
 import sentry_sdk
 from sentry_sdk import (
     capture_exception,
@@ -51,6 +52,7 @@ class ConversationCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
+    ai_settings: Optional[dict] = Field(None, description="AI-specific settings") # ADDED
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
 
@@ -180,6 +182,21 @@ async def create_conversation(
             with sentry_span(op="access.check", description="Validate project access"):
                 await validate_project_access(project_id, current_user, db)
 
+            # Fetch Project
+            project = await db.get(Project, project_id)
+            if not project:
+                transaction.set_tag("error.type", "project_retrieval")
+                metrics.incr("conversation.create.failure", tags={"reason": "project_not_found_post_validation"})
+                logger.error(f"Project {project_id} not found after access validation.")
+                raise HTTPException(status_code=404, detail="Project not found despite access validation.")
+
+            # Knowledge Base Validation
+            if not project.knowledge_base:
+                transaction.set_tag("error.type", "validation")
+                metrics.incr("conversation.create.failure", tags={"reason": "kb_missing"})
+                raise HTTPException(status_code=400, detail="Project has no knowledge base")
+            kb_id = project.knowledge_base.id
+
             # Create conversation
             with sentry_span(op="db.create", description="Create conversation record"):
                 from sqlalchemy.exc import IntegrityError
@@ -190,6 +207,9 @@ async def create_conversation(
                         title=conversation_data.title,
                         model_id=conversation_data.model_id,
                         project_id=project_id,
+                        knowledge_base_id=kb_id,  # ADDED
+                        use_knowledge_base=True,  # ADDED
+                        ai_settings=conversation_data.ai_settings # CORRECTED from extra_data
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
                 except IntegrityError as db_exc:
