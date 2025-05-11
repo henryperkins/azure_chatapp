@@ -40,6 +40,7 @@ import { createSidebar } from './sidebar.js';
 import { createUiRenderer } from './uiRenderer.js'; // Import the new UI Renderer
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
+import { createNavigationService } from './navigationService.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
@@ -225,6 +226,19 @@ const eventHandlers = createEventHandlers({
     APP_CONFIG
 });
 DependencySystem.register('eventHandlers', eventHandlers);
+
+// Navigation Service
+const navigationService = createNavigationService({
+  domAPI,
+  browserService: browserServiceInstance,
+  DependencySystem,
+  notify,
+  eventHandlers,
+  errorReporter: DependencySystem.modules.get('errorReporter') // Assuming errorReporter is sentryManager
+});
+DependencySystem.register('navigationService', navigationService);
+// Initialize navigation service after its dependencies are ready
+// We'll call navigationService.init() later in the main init() function after other core systems.
 
 // Add cleanupModuleListeners to DependencySystem
 DependencySystem.cleanupModuleListeners = function(moduleContext) {
@@ -481,7 +495,20 @@ export async function init() {
         }
 
         registerAppListeners();
-        handleNavigationChange();
+        // handleNavigationChange(); // Removed, navigationService handles this
+
+        // Initialize Navigation Service
+        if (navigationService?.init) {
+            try {
+                await navigationService.init();
+                notify.info('[App] NavigationService initialized successfully');
+            } catch (navErr) {
+                notify.error('[App] Error initializing NavigationService', { error: navErr });
+            }
+        } else {
+            notify.error('[App] NavigationService not available for initialization.');
+        }
+
 
         appState.initialized = true;
         _globalInitCompleted = true;
@@ -864,19 +891,14 @@ async function initializeUIComponents() {
         });
         DependencySystem.register('projectDashboardUtils', projectDashboardUtilsInstance);
 
+        const navigationService = DependencySystem.modules.get('navigationService'); // Ensure navigationService is in scope
+
         const projectListComponentInstance = new ProjectListComponent({
             projectManager,
             eventHandlers,
             modalManager,
             app,
-            router: {
-                navigate: (url) => {
-                    notify.debug('[App] ProjectList router.navigate called with URL:', { urlToPush: url, currentWindowLocation: browserAPI.getLocation().href });
-                    browserAPI.getHistory().pushState({}, '', url);
-                    domAPI.dispatchEvent(browserAPI.getWindow(), new Event('locationchange'));
-                },
-                getURL: () => browserAPI.getLocation().href
-            },
+            router: navigationService, // Pass navigationService as router
             notify,
             storage: DependencySystem.modules.get('storage'),
             sanitizer: DependencySystem.modules.get('sanitizer'),
@@ -892,13 +914,7 @@ async function initializeUIComponents() {
           throw new Error('[UI init] projectDashboard instance missing ‑ core mis-init');
 
         // Details component expects DI with proper router methods
-        const detailsRouter = {
-            navigate: (url) => {
-                browserAPI.getHistory().pushState({}, '', url);
-                domAPI.dispatchEvent(browserAPI.getWindow(), new Event('locationchange'));
-            },
-            getURL: () => browserAPI.getLocation().href
-        };
+        // (detailsRouter removed; handled by navigationService in onBack)
 
         // const authModule = DependencySystem.modules.get('auth'); // Ensure authModule is defined - Already defined and registered
         // const projectManager = DependencySystem.modules.get('projectManager'); // Ensure projectManager is defined - Already defined and registered
@@ -919,24 +935,18 @@ async function initializeUIComponents() {
             eventHandlers,
             modalManager,
             FileUploadComponentClass: fileUploadComponentClass,
-            router: detailsRouter,
             domAPI,
             notify,
             sanitizer: DependencySystem.modules.get('sanitizer'),
             app,
+            router: navigationService, // Pass navigationService as router
             // Inject chat-related dependencies so Conversations tab is fully functional
             chatManager: DependencySystem.modules.get('chatManager'),
             modelConfig: modelConfigInstance,
             knowledgeBaseComponent: knowledgeBaseComponentInstance, // Wire KB component
             onBack: async () => {
-                let pd;
-                try {
-                    pd = await DependencySystem.waitFor('projectDashboard');
-                } catch (err) {
-                    notify.error('[App] Dependency not met: projectDashboard', { error: err });
-                    throw err;
-                }
-                pd?.showProjectList?.();
+                const navService = DependencySystem.modules.get('navigationService');
+                navService?.navigateToProjectList();
             }
         });
         DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
@@ -1063,12 +1073,12 @@ function registerAppListeners() {
     DependencySystem.waitFor(['auth', 'chatManager', 'projectManager', 'eventHandlers'])
         .then(() => {
             setupChatInitializationTrigger();
-            eventHandlers.trackListener(
-                browserAPI.getWindow(), // or document if needed
-                'locationchange',
-                handleNavigationChange,
-                { description: 'locationchange -> handleNavigationChange', context: 'app' }
-            );
+            // eventHandlers.trackListener( // Removed: navigationService handles popstate
+            //     browserAPI.getWindow(),
+            //     'locationchange',
+            //     handleNavigationChange,
+            //     { description: 'locationchange -> handleNavigationChange', context: 'app' }
+            // );
         })
         .catch((err) => {
             notify.error('[App] Failed to wait for dependencies for global listeners.', { error: err });
@@ -1082,197 +1092,12 @@ function setupChatInitializationTrigger() {
 }
 
 // Track the last handled project/chat to skip repeated loads
-let lastHandledProj = null;
-let lastHandledChat = null;
+// let lastHandledProj = null; // Removed: NavigationService manages its own state
+// let lastHandledChat = null; // Removed: NavigationService manages its own state
 
-async function handleNavigationChange(options = {}) { // Accept options
-    const { forceListView } = options;
-    // Generate a traceId for this navigation event for grouping logs
-    const traceId = (typeof crypto !== "undefined" && crypto.randomUUID)
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-    try {
-        notify.debug('[App] handleNavigationChange: Navigation event triggered', {
-            context: 'navigation',
-            traceId,
-            url: browserAPI.getLocation().href
-        });
-        if (!appState.initialized) {
-            // If still not ready, short-circuit or wait briefly
-            if (appState.initializing) {
-                notify.debug('[App] handleNavigationChange: Waiting for initialization', { context: 'navigation', traceId });
-                await new Promise(r => browserAPI.requestAnimationFrame(r));
-                if (!appState.initialized) {
-                    notify.warn("[App] handleNavigationChange: Aborted, initialization didn't complete in time.", { context: 'navigation', traceId });
-                    return;
-                }
-            } else {
-                notify.warn("[App] handleNavigationChange: Aborted, application not initialized.", { context: 'navigation', traceId });
-                return;
-            }
-        }
-        notify.info('[App] Navigation changed', {
-            context: 'navigation',
-            traceId,
-            url: browserAPI.getLocation().href
-        });
-
-        let projectDashboard;
-        try {
-            notify.debug('[App] Waiting for projectDashboard dependency', { context: 'navigation', traceId });
-            projectDashboard = await DependencySystem.waitFor('projectDashboard', null, APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT);
-            notify.debug('[App] projectDashboard retrieved in handleNavigationChange', {
-                context: 'navigation',
-                traceId,
-                projectDashboardExists: !!projectDashboard,
-                typeofProjectDashboard: typeof projectDashboard,
-                projectDashboardKeys: projectDashboard ? Object.keys(projectDashboard).join(', ') : 'N/A',
-                hasShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList === 'function' : 'N/A'
-            });
-            notify.debug('[App] projectDashboard dependency resolved', { context: 'navigation', traceId });
-        } catch (e) {
-            notify.error('[App] Project Dashboard unavailable for navigation.', { error: e, context: 'navigation', traceId });
-            toggleElement(APP_CONFIG.SELECTORS.APP_FATAL_ERROR, true);
-            return;
-        }
-
-        // User suggested log:
-        console.log('[App Debug] Retrieved projectDashboard for navigation:', projectDashboard, typeof projectDashboard?.showProjectList);
-
-        const projectId = forceListView ? null : browserServiceInstance.getSearchParam('project');
-        const chatId    = forceListView ? null : browserServiceInstance.getSearchParam('chatId');
-
-        notify.debug('[App] Navigation state', {
-            context: 'navigation',
-            traceId,
-            projectId,
-            chatId,
-            lastHandledProj,
-            lastHandledChat
-        });
-
-        if (projectId === lastHandledProj && chatId === lastHandledChat) {
-            notify.debug('[App] Same project/chat; skipping re-load.', { context: 'navigation', traceId });
-            return;
-        }
-        lastHandledProj = projectId;
-        lastHandledChat = chatId;
-
-        if (!appState.isAuthenticated) {
-            notify.info('[App] Not authenticated -> show login required', { context: 'navigation', traceId });
-            projectDashboard.showLoginRequiredMessage?.();
-            return;
-        }
-        toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
-
-        try {
-            notify.debug('[App] Waiting for projectManager dependency', { context: 'navigation', traceId });
-            const pm = await DependencySystem.waitFor('projectManager', null, APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT);
-            notify.debug('[App] projectManager dependency resolved', { context: 'navigation', traceId });
-
-            if (projectId) {
-                notify.info('[App] Loading project details', { context: 'navigation', traceId, projectId });
-                await pm.loadProjectDetails(projectId);
-                notify.info('[App] Showing project details', { context: 'navigation', traceId, projectId });
-                await projectDashboard.showProjectDetails(projectId);
-
-                // If navigating to a specific chat within the project
-                if (chatId) {
-                    notify.info('[App] Navigating to conversation within project', { context: 'navigation', traceId, chatId });
-                    const chatMgr = DependencySystem.modules.get('chatManager');
-                    if (chatMgr?.loadConversation) {
-                        await chatMgr.loadConversation(chatId);
-                    } else {
-                        notify.warn('[App] chatManager not available for navigateToConversation in handleNavigationChange', { context: 'navigation', traceId });
-                    }
-                }
-            } else {
-                notify.info('[App] No project ID in URL, showing project list.', { context: 'navigation', traceId });
-                if (projectDashboard && typeof projectDashboard.showProjectList === 'function') {
-                    await projectDashboard.showProjectList();
-                } else {
-                    notify.error('[App] projectDashboard.showProjectList is not a function (else branch)', {
-                        context: 'navigation',
-                        traceId,
-                        projectDashboardExists: !!projectDashboard,
-                        typeOfShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList : 'N/A',
-                        constructorName: projectDashboard?.constructor?.name,
-                        projectDashboardInstance: projectDashboard
-                    });
-                    // Attempt to show login required as a last resort if project list can't be shown
-                    projectDashboard?.showLoginRequiredMessage?.();
-                }
-            }
-        } catch (navErr) {
-            notify.error('[App] Error during navigation logic.', {
-                error: navErr,
-                fullError: navErr ? navErr.toString() : 'undefined',
-                stack: navErr ? navErr.stack : 'no stack',
-                context: 'navigation',
-                traceId
-            });
-
-            // --- BEGIN DIAGNOSTIC LOGGING for TypeError ---
-            if (projectDashboard) {
-                const isShowProjectListFunction = typeof projectDashboard.showProjectList === 'function';
-                notify.warn('[App] Diagnosing projectDashboard in navErr catch block', {
-                    context: 'navigation',
-                    traceId,
-                    projectDashboardExists: !!projectDashboard,
-                    typeOfProjectDashboard: typeof projectDashboard,
-                    projectDashboard_showProjectList_property: projectDashboard.showProjectList, // Log the actual property value
-                    typeOf_showProjectList: typeof projectDashboard.showProjectList,
-                    isShowProjectListActuallyFunction: isShowProjectListFunction,
-                    constructorName: projectDashboard?.constructor?.name,
-                    instanceHasShowProjectDetails: typeof projectDashboard.showProjectDetails === 'function' // Check another method
-                });
-
-                if (!isShowProjectListFunction) {
-                    notify.error('[App] CRITICAL: projectDashboard.showProjectList is NOT a function in catch block.', {
-                        context: 'navigation',
-                        traceId,
-                        propertyValue: projectDashboard.showProjectList
-                    });
-                }
-            } else {
-                notify.error('[App] CRITICAL: projectDashboard is null or undefined in navErr catch block.', { context: 'navigation', traceId });
-            }
-            // --- END DIAGNOSTIC LOGGING ---
-
-            // Attempt to call showProjectList, relying on optional chaining for safety if projectDashboard itself is null/undefined.
-            // The primary concern is if projectDashboard.showProjectList is defined but *not* a function.
-            if (projectDashboard && typeof projectDashboard.showProjectList === 'function') {
-                projectDashboard.showProjectList().catch(fbErr => {
-                    notify.error('[App] Fallback to showProjectList also failed.', { error: fbErr, context: 'navigation', traceId });
-                });
-            } else {
-                 notify.error('[App] Cannot call projectDashboard.showProjectList in fallback because it is not a function or projectDashboard is missing.', {
-                    context: 'navigation',
-                    traceId,
-                    projectDashboardExists: !!projectDashboard,
-                    typeOfShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList : 'N/A'
-                });
-                // As an absolute fallback, try to show the login message if all else fails.
-                projectDashboard?.showLoginRequiredMessage?.();
-            }
-        }
-    } catch (err) {
-        const errorReporter = DependencySystem.modules.get('errorReporter');
-        maybeCapture(errorReporter, err, {
-            module: 'app',
-            method: 'handleNavigationChange',
-            traceId
-        });
-        notify.error('[App] Navigation change handler failed.', {
-            error: err,
-            module: 'app',
-            source: 'handleNavigationChange',
-            context: 'navigation',
-            traceId
-        });
-        throw err;
-    }
-}
+// async function handleNavigationChange(options = {}) { ... } // Removed: Entire function is now handled by NavigationService
+// The popstate events are handled internally by NavigationService.
+// Initial navigation based on URL is also handled by NavigationService.init().
 
 // ---------------------------------------------------------------------------
 // 12) Auth state changes
@@ -1380,44 +1205,22 @@ function handleAuthStateChange(e) {
             }
             toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
 
-            // Directly make the project list view visible
-            const projectListView = domAPI.getElementById('projectListView');
-            if (projectListView) {
-                projectListView.classList.remove('hidden');
-                projectListView.classList.remove('opacity-0');
-                projectListView.style.display = '';
-                notify.info('[App] Directly made project list view visible after login');
-            }
-
             // Ensure projectDashboard (pd) is resolved before calling showProjectList
             if (pd && typeof pd.showProjectList === 'function') {
-                pd.showProjectList();
+                pd.showProjectList(); // This will handle showing the list and loading projects
                 notify.info('[App] Called projectDashboard.showProjectList() after login');
             } else {
                 notify.error('[App] projectDashboard or showProjectList not available after login.', { pdExists: !!pd, canShowList: typeof pd?.showProjectList === 'function' });
             }
 
-            // Load projects after a short delay to ensure UI is ready
-            setTimeout(() => {
-                if (pm && typeof pm.loadProjects === 'function') {
-                    pm.loadProjects('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err }));
-                    notify.info('[App] Called projectManager.loadProjects() after login');
-                }
-
-                // Double-check visibility after a short delay
-                setTimeout(() => {
-                    const plv = domAPI.getElementById('projectListView');
-                    if (plv) {
-                        plv.classList.remove('opacity-0');
-                        plv.style.display = '';
-                        plv.classList.remove('hidden');
-                        notify.info('[App] Verified project list view visibility after login');
-                    }
-                }, 100);
-            }, 300);
-
             // Re-evaluate navigation, forcing list view
-            handleNavigationChange({ forceListView: true });
+            // handleNavigationChange({ forceListView: true }); // Removed: NavigationService handles this
+            const navService = DependencySystem.modules.get('navigationService');
+            if (navService) {
+                navService.navigateToProjectList({ replace: true });
+            } else {
+                notify.error('[App] NavigationService not available in handleAuthStateChange for login.');
+            }
         } else if (!appState.isAuthenticated && prevAuth) {
             // Just Logged OUT
             notify.debug('[App] User logged out -> clearing data/UI.');
@@ -1427,9 +1230,15 @@ function handleAuthStateChange(e) {
             pd?.showLoginRequiredMessage?.();
             sb?.clear?.();
             cm?.cleanup?.(); // Use cleanup if available, otherwise clear
-            lastHandledProj = null;
-            lastHandledChat = null;
-            handleNavigationChange({ forceListView: true }); // Re-evaluate navigation, forcing list view
+            // lastHandledProj = null; // Removed
+            // lastHandledChat = null; // Removed
+            // handleNavigationChange({ forceListView: true }); // Removed: NavigationService handles this
+            const navService = DependencySystem.modules.get('navigationService');
+            if (navService) {
+                navService.navigateToProjectList({ replace: true });
+            } else {
+                notify.error('[App] NavigationService not available in handleAuthStateChange for logout.');
+            }
         }
     })();
 }

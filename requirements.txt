@@ -18,7 +18,7 @@ sqlalchemy[asyncio]
 asyncpg
 httpx
 # Sentry integration
-sentry-sdk[fastapi]
+sentry-sdk[fastapi,sqlalchemy]
 # Cloud storage dependencies (optional)
 azure-storage-blob
 boto3
