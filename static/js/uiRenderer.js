@@ -10,18 +10,17 @@ export function createUiRenderer({
   eventHandlers,
   notify,
   apiRequest,
-  // apiEndpoints, // Assuming apiRequest will construct full URLs or endpoints are passed differently
+  apiEndpoints, // Added: To construct full URLs
   onConversationSelect, // Callback: (conversationId) => void
   onProjectSelect      // Callback: (projectId) => void
-  // sidebarContext removed
 } = {}) {
   if (!domAPI) throw new Error(`[${MODULE}] domAPI is required.`);
   if (!eventHandlers) throw new Error(`[${MODULE}] eventHandlers is required.`);
   if (!notify) throw new Error(`[${MODULE}] notify is required.`);
   if (!apiRequest) throw new Error(`[${MODULE}] apiRequest is required.`);
+  if (!apiEndpoints) throw new Error(`[${MODULE}] apiEndpoints is required.`); // Added validation
   if (typeof onConversationSelect !== 'function') throw new Error(`[${MODULE}] onConversationSelect callback is required.`);
   if (typeof onProjectSelect !== 'function') throw new Error(`[${MODULE}] onProjectSelect callback is required.`);
-  // Removed sidebarContext validation
 
   const uiNotify = notify.withContext({ module: MODULE });
 
@@ -39,17 +38,60 @@ export function createUiRenderer({
     return listElement;
   }
 
+  function _setLoadingState(listElement, isLoading) {
+    if (!listElement) return;
+    if (isLoading) {
+      // Add a loading indicator, e.g., a spinner or text
+      const loadingEl = domAPI.createElement('li');
+      loadingEl.className = 'loading-indicator p-2 text-center text-sm italic';
+      domAPI.setTextContent(loadingEl, 'Loading...');
+      listElement.appendChild(loadingEl);
+    } else {
+      const loadingEl = listElement.querySelector('.loading-indicator');
+      if (loadingEl) {
+        loadingEl.remove();
+      }
+    }
+  }
+
+  function _displayMessageInList(listElement, message, cssClass = 'info-message') {
+    if (!listElement) return;
+    const messageEl = domAPI.createElement('li');
+    messageEl.className = `${cssClass} p-2 text-center text-sm`;
+    domAPI.setTextContent(messageEl, message);
+    listElement.appendChild(messageEl);
+  }
+
+  function _extractConversationsFromResponse(response) {
+    // Adapt this based on your actual API response structure for a list of conversations
+    if (response?.data?.conversations && Array.isArray(response.data.conversations)) {
+        return response.data.conversations;
+    }
+    if (Array.isArray(response?.data)) { // e.g. if API returns { data: [...] }
+        return response.data;
+    }
+    if (Array.isArray(response)) { // e.g. if API returns [...] directly
+        return response;
+    }
+    uiNotify.warn('Could not extract conversations from API response.', { source: '_extractConversationsFromResponse', responseData: response });
+    return [];
+  }
+
+
   function _createConversationListItem(conversation, isListItemForStarredTab = false, isConversationStarredFn, toggleStarConversationCb) {
-    // Add checks for the new function parameters
     if (typeof isConversationStarredFn !== 'function') {
       uiNotify.warn('isConversationStarredFn is not a function', { source: '_createConversationListItem' });
+      // Provide a default fallback to prevent errors if critical
+      isConversationStarredFn = () => false;
     }
     if (typeof toggleStarConversationCb !== 'function') {
       uiNotify.warn('toggleStarConversationCb is not a function', { source: '_createConversationListItem' });
+      // Provide a default fallback
+      toggleStarConversationCb = () => {};
     }
 
     const li = domAPI.createElement('li');
-    li.className = 'py-1'; // Basic styling
+    li.className = 'py-1';
 
     const link = domAPI.createElement('a');
     link.href = '#';
@@ -59,128 +101,178 @@ export function createUiRenderer({
     eventHandlers.trackListener(link, 'click', safeInvoker((e) => {
       domAPI.preventDefault(e);
       onConversationSelect(conversation.id);
-    }, { notify: uiNotify }, { context: MODULE, source: '_createConversationListItem_select' }), { description: `Select conversation ${conversation.id}` });
+    }, { notify: uiNotify }, { context: MODULE, source: 'conversationLinkClick' }), { description: `Select conversation ${conversation.id}` });
 
+    // Star button (example, adjust styling as needed)
     const starButton = domAPI.createElement('button');
-    starButton.className = 'btn btn-ghost btn-sm btn-square';
-    const isStarred = typeof isConversationStarredFn === 'function' ? isConversationStarredFn(conversation.id) : false;
-    domAPI.setInnerHTML(starButton, isStarred
-      ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-warning"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.116 3.986 1.242 5.38c.317 1.173-.927 2.122-1.966 1.516L12 17.318l-4.555 2.524c-1.039.606-2.283-.343-1.966-1.516l1.242-5.38-4.116-3.986c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd" /></svg>'
-      : '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.615.049.878.83.423 1.268l-4.118 3.986a.562.562 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.822.672l-4.994-2.631a.562.562 0 0 0-.65 0l-4.994 2.63a.562.562 0 0 1-.823-.672l1.285-5.385a.562.562 0 0 0-.182-.557l-4.118-3.986c-.454-.438-.192-1.22.423-1.268l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>'
+    starButton.className = 'btn btn-ghost btn-sm btn-square text-accent';
+    const isStarred = isConversationStarredFn(conversation.id);
+    domAPI.setInnerHTML(starButton, isStarred ?
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5"><path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.116 3.552.975 5.34c.236 1.282-1.033 2.288-2.188 1.65l-4.851-2.958-4.851 2.958c-1.155.638-2.424-.368-2.188-1.65l.975-5.34-4.116-3.552c-.887-.76-.415-2.212.749-2.305l5.404-.434L10.788 3.21Z" clip-rule="evenodd" /></svg>' :
+      '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.615.049.878.83.423 1.263l-4.118 3.556a.563.563 0 0 0-.162.505l1.046 5.456c.12.618-.528 1.09-.996.77l-4.912-2.93a.562.562 0 0 0-.621 0l-4.912 2.93c-.468.32-.1116.152-.996-.77l1.046-5.456a.563.563 0 0 0-.162-.505L1.71 10.664c-.455-.433-.192-1.214.423-1.263l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" /></svg>'
     );
     starButton.setAttribute('aria-label', isStarred ? 'Unstar conversation' : 'Star conversation');
-    if (typeof toggleStarConversationCb === 'function') {
-      eventHandlers.trackListener(starButton, 'click', safeInvoker((e) => {
-        e.stopPropagation(); // Prevent link click
-        toggleStarConversationCb(conversation.id);
-        // The recursive call to renderStarredConversations() is removed.
-        // Re-rendering should be handled by the main sidebar logic listening to 'sidebarStarredChanged'.
-      }, { notify: uiNotify }, { context: MODULE, source: '_createConversationListItem_star' }), { description: `Toggle star for conversation ${conversation.id}` });
-    }
+    starButton.setAttribute('aria-pressed', isStarred.toString());
 
-    link.appendChild(starButton); // Add star button to the link for layout
-    domAPI.appendChild(li, link);
+    eventHandlers.trackListener(starButton, 'click', safeInvoker(() => {
+        toggleStarConversationCb(conversation.id);
+        // The visual update of the star button will happen when the list re-renders
+        // or could be done immediately here if preferred.
+    }, { notify: uiNotify }, { context: MODULE, source: 'starButtonClick' }), { description: `Toggle star for conversation ${conversation.id}` });
+
+    const wrapperDiv = domAPI.createElement('div');
+    wrapperDiv.className = 'flex items-center w-full'; // Ensure link takes available space
+    domAPI.appendChild(wrapperDiv, link);
+    domAPI.appendChild(wrapperDiv, starButton);
+    domAPI.appendChild(li, wrapperDiv);
+
     return li;
   }
 
-  async function renderConversations(searchTerm = "", isConversationStarredFn, toggleStarConversationCb) {
-    uiNotify.debug('renderConversations called', { searchTerm, source: 'renderConversations' });
+  async function renderConversations(projectId, searchTerm = '', isConversationStarredFn, toggleStarConversationCb) {
     const listElement = _clearList(RECENT_CONVERSATIONS_LIST_SELECTOR);
     if (!listElement) return;
 
+    if (!projectId) {
+      uiNotify.warn('No projectId provided to renderConversations. Cannot fetch conversations.', { source: 'renderConversations' });
+      _displayMessageInList(listElement, 'Select a project to see recent chats.');
+      return;
+    }
+
+    _setLoadingState(listElement, true);
     try {
-      // Placeholder: Replace with actual API endpoint and structure
-      // Assuming endpoint like /api/conversations?type=recent&q=searchTerm
-      const endpoint = `/api/conversations?type=recent${searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : ''}`;
-      const response = await apiRequest.get(endpoint);
-      const conversations = response?.data?.conversations || response?.data || response || [];
+      let conversationsUrl = apiEndpoints.CONVOS || apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE; // Prefer CONVOS if it's the template name
+      if (!conversationsUrl || typeof conversationsUrl !== 'string') {
+          uiNotify.error('Conversations API endpoint template not configured correctly in apiEndpoints.', { source: 'renderConversations', apiEndpoints });
+          _displayMessageInList(listElement, 'Configuration error: Missing conversation API endpoint.', 'error-message');
+          _setLoadingState(listElement, false);
+          return;
+      }
+      conversationsUrl = conversationsUrl.replace('{id}', projectId);
+
+      const queryParams = {};
+      if (searchTerm) {
+        queryParams.search = searchTerm;
+      }
+
+      const response = await apiRequest.get(conversationsUrl, { params: queryParams });
+      const conversations = _extractConversationsFromResponse(response);
+
+      _setLoadingState(listElement, false); // Remove loading before adding items
 
       if (conversations.length === 0) {
-        const emptyMsg = domAPI.createElement('li');
-        emptyMsg.className = 'p-2 text-center text-neutral-content';
-        domAPI.setTextContent(emptyMsg, searchTerm ? 'No recent conversations match your search.' : 'No recent conversations.');
-        domAPI.appendChild(listElement, emptyMsg);
+        _displayMessageInList(listElement, searchTerm ? 'No conversations match your search.' : 'No recent conversations in this project.');
       } else {
         conversations.forEach(convo => {
           const listItem = _createConversationListItem(convo, false, isConversationStarredFn, toggleStarConversationCb);
-          domAPI.appendChild(listElement, listItem);
+          listElement.appendChild(listItem);
         });
       }
-      uiNotify.info(`Rendered ${conversations.length} recent conversations.`, { count: conversations.length, source: 'renderConversations' });
     } catch (error) {
-      uiNotify.error('Failed to fetch or render recent conversations', { error, source: 'renderConversations' });
-      const errorMsg = domAPI.createElement('li');
-      errorMsg.className = 'p-2 text-error';
-      domAPI.setTextContent(errorMsg, 'Could not load recent conversations.');
-      domAPI.appendChild(listElement, errorMsg);
+      _setLoadingState(listElement, false);
+      uiNotify.error('Failed to fetch or render recent conversations', { source: 'renderConversations', originalError: error, projectId, searchTerm });
+      _displayMessageInList(listElement, 'Error loading conversations. Please try again.', 'error-message');
     }
   }
 
-  async function renderStarredConversations(searchTerm = "", isConversationStarredFn, toggleStarConversationCb) {
-    uiNotify.debug('renderStarredConversations called', { searchTerm, source: 'renderStarredConversations' });
+  async function renderStarredConversations(projectId, searchTerm = '', isConversationStarredFn, toggleStarConversationCb) {
     const listElement = _clearList(STARRED_CONVERSATIONS_LIST_SELECTOR);
     if (!listElement) return;
 
+    if (!projectId) {
+      uiNotify.warn('No projectId provided to renderStarredConversations. Cannot fetch conversations.', { source: 'renderStarredConversations' });
+      _displayMessageInList(listElement, 'Select a project to see starred chats.');
+      return;
+    }
+
+    _setLoadingState(listElement, true);
     try {
-      // Placeholder: Replace with actual API endpoint and structure
-      // Assuming endpoint like /api/conversations?type=starred&q=searchTerm
-      const endpoint = `/api/conversations?type=starred${searchTerm ? `&q=${encodeURIComponent(searchTerm)}` : ''}`;
-      const response = await apiRequest.get(endpoint);
-      const conversations = response?.data?.conversations || response?.data || response || [];
+      // Assuming starred conversations are a subset of all conversations, fetched similarly.
+      // If there's a dedicated endpoint for starred, adjust apiEndpoints and URL construction.
+      // For now, fetch all and filter client-side by isConversationStarredFn, or expect backend to filter by a param.
+      // Let's assume for now we fetch all and filter, or the backend supports a 'starred=true' param.
+      // If fetching all:
+      let conversationsUrl = apiEndpoints.CONVOS || apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE;
+      if (!conversationsUrl || typeof conversationsUrl !== 'string') {
+          uiNotify.error('Conversations API endpoint template not configured correctly for starred.', { source: 'renderStarredConversations', apiEndpoints });
+          _displayMessageInList(listElement, 'Configuration error.', 'error-message');
+          _setLoadingState(listElement, false);
+          return;
+      }
+      conversationsUrl = conversationsUrl.replace('{id}', projectId);
+
+      const queryParams = { starred: 'true' }; // Example: if backend supports this
+      if (searchTerm) {
+        queryParams.search = searchTerm;
+      }
+
+      const response = await apiRequest.get(conversationsUrl, { params: queryParams });
+      let conversations = _extractConversationsFromResponse(response);
+
+      // If backend doesn't filter by 'starred=true', filter client-side:
+      // conversations = conversations.filter(convo => isConversationStarredFn(convo.id));
+
+      _setLoadingState(listElement, false);
 
       if (conversations.length === 0) {
-        const emptyMsg = domAPI.createElement('li');
-        emptyMsg.className = 'p-2 text-center text-neutral-content';
-        domAPI.setTextContent(emptyMsg, searchTerm ? 'No starred conversations match your search.' : 'No starred conversations.');
-        domAPI.appendChild(listElement, emptyMsg);
+        _displayMessageInList(listElement, searchTerm ? 'No starred conversations match your search.' : 'No starred conversations in this project.');
       } else {
         conversations.forEach(convo => {
-          const listItem = _createConversationListItem(convo, true, isConversationStarredFn, toggleStarConversationCb);
-          domAPI.appendChild(listElement, listItem);
+          // Ensure only starred conversations are rendered if backend didn't filter
+          if (isConversationStarredFn(convo.id)) {
+            const listItem = _createConversationListItem(convo, true, isConversationStarredFn, toggleStarConversationCb);
+            listElement.appendChild(listItem);
+          }
         });
+        // Check if after client-side filtering, the list is empty
+        if (listElement.children.length === 0) {
+             _displayMessageInList(listElement, searchTerm ? 'No starred conversations match your search.' : 'No starred conversations in this project.');
+        }
       }
-      uiNotify.info(`Rendered ${conversations.length} starred conversations.`, { count: conversations.length, source: 'renderStarredConversations' });
     } catch (error) {
-      uiNotify.error('Failed to fetch or render starred conversations', { error, source: 'renderStarredConversations' });
-      const errorMsg = domAPI.createElement('li');
-      errorMsg.className = 'p-2 text-error';
-      domAPI.setTextContent(errorMsg, 'Could not load starred conversations.');
-      domAPI.appendChild(listElement, errorMsg);
+      _setLoadingState(listElement, false);
+      uiNotify.error('Failed to fetch or render starred conversations', { source: 'renderStarredConversations', originalError: error, projectId, searchTerm });
+      _displayMessageInList(listElement, 'Error loading starred conversations.', 'error-message');
     }
   }
 
+  // renderProjects remains largely the same, assuming it doesn't fetch but receives data.
+  // If it fetches, apply similar apiRequest.get() changes.
   function renderProjects(projects = []) {
-    uiNotify.debug('renderProjects called', { projectCount: projects.length, source: 'renderProjects' });
     const listElement = _clearList(PROJECT_LIST_SELECTOR);
     if (!listElement) return;
 
     if (projects.length === 0) {
-        const emptyMsg = domAPI.createElement('li');
-        emptyMsg.className = 'p-2 text-center text-neutral-content';
-        domAPI.setTextContent(emptyMsg, 'No projects found.');
-        domAPI.appendChild(listElement, emptyMsg);
-    } else {
-        projects.forEach(project => {
-            const li = domAPI.createElement('li');
-            li.className = 'py-1';
-            const link = domAPI.createElement('a');
-            link.href = '#';
-            link.className = 'block p-2 hover:bg-base-300 rounded-md';
-            domAPI.setTextContent(link, project.name || 'Untitled Project');
-            eventHandlers.trackListener(link, 'click', safeInvoker((e) => {
-                domAPI.preventDefault(e);
-                onProjectSelect(project.id);
-            }, { notify: uiNotify }, { context: MODULE, source: 'renderProjects_select' }), { description: `Select project ${project.id}` });
-            domAPI.appendChild(li, link);
-            domAPI.appendChild(listElement, li);
-        });
+      _displayMessageInList(listElement, 'No projects found.');
+      return;
     }
-    uiNotify.info(`Rendered ${projects.length} projects.`, { count: projects.length, source: 'renderProjects' });
+
+    projects.forEach(project => {
+      const li = domAPI.createElement('li');
+      li.className = 'py-1';
+
+      const link = domAPI.createElement('a');
+      link.href = '#';
+      link.className = 'block p-2 hover:bg-base-300 rounded-md';
+      domAPI.setTextContent(link, project.name || 'Untitled Project');
+
+      eventHandlers.trackListener(link, 'click', safeInvoker((e) => {
+        domAPI.preventDefault(e);
+        onProjectSelect(project.id);
+      }, { notify: uiNotify }, { context: MODULE, source: 'projectLinkClick' }), { description: `Select project ${project.id}` });
+
+      domAPI.appendChild(li, link);
+      listElement.appendChild(li);
+    });
   }
 
   return {
-    renderProjects,
     renderConversations,
     renderStarredConversations,
+    renderProjects,
+    // Expose clear functions if needed externally, though typically internal
+    // clearRecentConversationsList: () => _clearList(RECENT_CONVERSATIONS_LIST_SELECTOR),
+    // clearStarredConversationsList: () => _clearList(STARRED_CONVERSATIONS_LIST_SELECTOR),
+    // clearProjectsList: () => _clearList(PROJECT_LIST_SELECTOR),
   };
 }
