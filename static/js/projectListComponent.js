@@ -84,6 +84,9 @@ export class ProjectListComponent {
         this.domAPI = domAPI;
         this.browserService = browserService;
         this.globalUtils = globalUtils;
+        this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem; // Get DependencySystem from app or eventHandlers
+        this.navigationService = this.DependencySystem?.modules?.get('navigationService');
+
 
         // DI notify: use context/group everywhere; see notification-system.md
         this.notify = notify.withContext({ context: 'projectListComponent', module: 'ProjectListComponent' });
@@ -133,24 +136,13 @@ export class ProjectListComponent {
         // Default navigation callback - now triggers details load then navigation
         this.onViewProject = (projectObjOrId) => {
             const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
-            // Debug: log before calling details load
-            console.log("[ProjectListComponent] About to call onViewProject with projectId:", projectId);
-            // Save to app/session/global state
-            if (this.app && typeof this.app.setCurrentProjectId === "function") {
-                this.app.setCurrentProjectId(projectId);
+            this.notify.info(`[ProjectListComponent] onViewProject called for projectId: ${projectId}. Using NavigationService.`, { group: true, context: 'projectListComponent' });
+
+            if (this.navigationService && typeof this.navigationService.navigateToProject === "function") {
+                this.navigationService.navigateToProject(projectId);
             } else {
-                this.notify.warn("[ProjectListComponent] Cannot set current project; app.setCurrentProjectId not available.");
-            }
-            // (Optional) Persist to user preferences via API for cross-session behavior
-            if (this.apiClient?.patch) {
-                this.apiClient.patch('/api/user/preferences', { last_project_id: projectId })
-                  .catch(() => {});
-            } else {
-                this.notify.error('[ProjectListComponent] apiClient not available; cannot save user preferences.', { group: true });
-            }
-            // Now navigate SPA without ?project= in the URL, e.g., to /project-details or "main view"
-            if (this.router && typeof this.router.navigate === "function") {
-                this.router.navigate(`/project-details-view?project=${projectId}`);
+                this.notify.error("[ProjectListComponent] NavigationService.navigateToProject is not available.", { group: true, context: 'projectListComponent' });
+                // Fallback or further error handling if NavigationService is critical and missing
             }
         };
 
@@ -490,10 +482,17 @@ export class ProjectListComponent {
     /** Update URL via router abstraction */
     _updateUrl(filter) {
         try {
-            const current = this.router.getURL();
-            const url = new URL(current);
-            url.searchParams.set("filter", filter);
-            this.router.navigate(url.toString());
+            if (this.navigationService && typeof this.navigationService.updateUrlParams === 'function') {
+                this.navigationService.updateUrlParams({ filter }, true); // true to replace history
+                this.notify.debug(`[ProjectListComponent] Updated URL with filter: ${filter} using NavigationService.updateUrlParams.`, { group: true, context: 'projectListComponent' });
+            } else {
+                this.notify.warn('[ProjectListComponent] NavigationService.updateUrlParams not available for filter URL update.', { group: true, context: 'projectListComponent' });
+                // Fallback to old router method if absolutely necessary and router is still a dependency
+                // const current = this.router.getURL();
+                // const url = new URL(current);
+                // url.searchParams.set("filter", filter);
+                // this.router.navigate(url.toString());
+            }
         } catch (e) {
             this.notify.warn('[ProjectListComponent] Failed to update URL with filter', {
                 group: true, context: 'projectListComponent', error: e

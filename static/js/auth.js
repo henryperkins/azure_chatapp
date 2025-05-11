@@ -216,10 +216,15 @@ export function createAuthModule({
 
     authState.isAuthenticated = authenticated;
     authState.userObject = userObject;
-    authState.username = newUsername; // Keep username for quick access if needed
+    authState.username = userObject?.username || null; // Corrected: was newUsername
 
     if (changed) {
-      authNotify.info(`[Auth] State changed (${source}): Auth=${authenticated}, UserObject=${userObject ? JSON.stringify(userObject) : 'None'}`, { group: true, source: 'broadcastAuth' });
+      const logMessage = `[Auth] State changed (${source}): Auth=${authenticated}, UserObject=${userObject ? JSON.stringify(userObject) : 'None'}`;
+      if (!authenticated) { // ADDED: More prominent log if becoming unauthenticated
+        authNotify.error(`[CRITICAL_AUTH_STATE_FALSE] ${logMessage}`, { group: true, source: 'broadcastAuth', detailSource: source });
+      } else {
+        authNotify.info(logMessage, { group: true, source: 'broadcastAuth' });
+      }
 
       // Update DependencySystem with the current user
       if (DependencySystem && DependencySystem.modules) {
@@ -344,18 +349,18 @@ export function createAuthModule({
                 return true;
             } else {
                 // Not authenticated by any means (no valid user object with ID, and no positive auth flags)
-                authNotify.warn('[Auth] verifyAuthState: not authenticated by any criteria', { group: true, source: 'verifyAuthState', responseData: response });
+                authNotify.error('[Auth Verify] Setting auth to FALSE: No valid user object and no positive auth flags.', { group: true, source: 'verifyAuthState', responseData: response });
                 await clearTokenState({ source: 'verify_negative_no_flags_no_user' });
-                broadcastAuth(false, null, 'verify_negative_no_flags_no_user');
+                broadcastAuth(false, null, 'verify_negative_no_flags_no_user_EXPLICIT_LOG');
                 return false;
             }
         }
       } catch (error) {
         authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), { group: true, source: 'verifyAuthState' });
         if (error.status === 500) {
+          authNotify.error('[Auth Verify] Setting auth to FALSE: 500 error from verify endpoint.', { group: true, source: 'verifyAuthState', originalError: error });
           await clearTokenState({ source: 'verify_500_error' });
-          broadcastAuth(false, null, 'verify_500_error'); // Ensure state is cleared
-          // Do not throw, allow recovery or specific handling if needed, but return false
+          broadcastAuth(false, null, 'verify_500_error_EXPLICIT_LOG');
           return false;
         }
         if (error.status === 401) {
@@ -365,19 +370,19 @@ export function createAuthModule({
             return await verifyAuthState(true); // Re-verify after refresh
           }
           catch (refreshErr) {
-            authNotify.error('[Auth] verifyAuthState: Token refresh failed after 401.', { group: true, source: 'verifyAuthState', originalError: refreshErr });
+            authNotify.error('[Auth Verify] Setting auth to FALSE: Token refresh failed after 401.', { group: true, source: 'verifyAuthState', originalError: refreshErr });
             await clearTokenState({ source: 'refresh_failed_after_401' });
-            broadcastAuth(false, null, 'refresh_failed_after_401');
+            broadcastAuth(false, null, 'refresh_failed_after_401_EXPLICIT_LOG');
             return false;
           }
         }
         // For other errors, maintain current auth state but log it. Or decide to clear.
         // Defaulting to false if error is not a 401 or 500 that's handled.
-        authNotify.warn(`[Auth] verifyAuthState: Unhandled error status ${error.status}. Current auth state: ${authState.isAuthenticated}`, { group: true, source: 'verifyAuthState' });
+        authNotify.error(`[Auth Verify] Setting auth to FALSE: Unhandled error status ${error.status}.`, { group: true, source: 'verifyAuthState', originalError: error });
         // To be safe, if verification fails unexpectedly, consider it unauthenticated.
         await clearTokenState({ source: `verify_unhandled_error_${error.status}` });
-        broadcastAuth(false, null, `verify_unhandled_error_${error.status}`);
-            return false;
+        broadcastAuth(false, null, `verify_unhandled_error_${error.status}_EXPLICIT_LOG`);
+        return false;
         }
     } catch (outerErr) {
       authNotify.error('[Auth] verifyAuthState outer error: ' + (outerErr?.message || outerErr), { group: true, source: 'verifyAuthState' });
