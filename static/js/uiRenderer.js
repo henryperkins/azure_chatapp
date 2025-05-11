@@ -143,14 +143,24 @@ export function createUiRenderer({
 
     _setLoadingState(listElement, true);
     try {
-      let conversationsUrl = apiEndpoints.CONVOS || apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE; // Prefer CONVOS if it's the template name
-      if (!conversationsUrl || typeof conversationsUrl !== 'string') {
-          uiNotify.error('Conversations API endpoint template not configured correctly in apiEndpoints.', { source: 'renderConversations', apiEndpoints });
-          _displayMessageInList(listElement, 'Configuration error: Missing conversation API endpoint.', 'error-message');
-          _setLoadingState(listElement, false);
-          return;
+      let conversationsUrl;
+      if (typeof apiEndpoints.CONVERSATIONS === 'function') {
+        conversationsUrl = apiEndpoints.CONVERSATIONS(projectId);
+      } else {
+        conversationsUrl =
+          (apiEndpoints.CONVOS || apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE)
+            ?.replace('{id}', projectId);
       }
-      conversationsUrl = conversationsUrl.replace('{id}', projectId);
+      if (!conversationsUrl) {
+        uiNotify.error('Conversations API endpoint not configured in apiEndpoints.', {
+          source: 'renderConversations', apiEndpoints
+        });
+        _displayMessageInList(listElement,
+          'Configuration error: Missing conversation API endpoint.',
+          'error-message');
+        _setLoadingState(listElement, false);
+        return;
+      }
 
       const queryParams = {};
       if (searchTerm) {
@@ -189,19 +199,24 @@ export function createUiRenderer({
 
     _setLoadingState(listElement, true);
     try {
-      // Assuming starred conversations are a subset of all conversations, fetched similarly.
-      // If there's a dedicated endpoint for starred, adjust apiEndpoints and URL construction.
-      // For now, fetch all and filter client-side by isConversationStarredFn, or expect backend to filter by a param.
-      // Let's assume for now we fetch all and filter, or the backend supports a 'starred=true' param.
-      // If fetching all:
-      let conversationsUrl = apiEndpoints.CONVOS || apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE;
-      if (!conversationsUrl || typeof conversationsUrl !== 'string') {
-          uiNotify.error('Conversations API endpoint template not configured correctly for starred.', { source: 'renderStarredConversations', apiEndpoints });
-          _displayMessageInList(listElement, 'Configuration error.', 'error-message');
-          _setLoadingState(listElement, false);
-          return;
+      let conversationsUrl;
+      if (typeof apiEndpoints.CONVERSATIONS === 'function') {
+        conversationsUrl = apiEndpoints.CONVERSATIONS(projectId);
+      } else {
+        conversationsUrl =
+          (apiEndpoints.CONVOS || apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE)
+            ?.replace('{id}', projectId);
       }
-      conversationsUrl = conversationsUrl.replace('{id}', projectId);
+      if (!conversationsUrl) {
+        uiNotify.error('Conversations API endpoint not configured in apiEndpoints.', {
+          source: 'renderStarredConversations', apiEndpoints
+        });
+        _displayMessageInList(listElement,
+          'Configuration error.',
+          'error-message');
+        _setLoadingState(listElement, false);
+        return;
+      }
 
       const queryParams = { starred: 'true' }; // Example: if backend supports this
       if (searchTerm) {
