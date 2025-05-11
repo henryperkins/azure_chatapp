@@ -13,13 +13,23 @@ This section summarizes the responsibilities of the main backend and frontend mo
 ### Backend (Python/FastAPI)
 
 - **models/**
-  Database ORM models for core entities:
-  - `user.py`: User accounts, roles, and authentication-related data.
+  Database ORM models for core entities (using SQLAlchemy 2.0 style with `Mapped[]` and `mapped_column`):
+  - `user.py`: User accounts, roles, and authentication-related data.  
+    - Fields: `last_login`, `last_activity`, `preferences` (JSONB for user settings).
+    - Includes `TokenBlacklist` model for JWT revocation and token security.
   - `conversation.py`: Represents conversations including access validation and knowledge base relationships.
+    - Fields: `use_knowledge_base` (bool), `knowledge_base_id` (FK), validation logic for KB usage.
   - `message.py`: Messages within conversations, metadata validation.
   - `project.py`: Project entity and project-user association.
+    - Enforces one-to-one relationship with `KnowledgeBase` via unique `project_id`.
+    - Explicit DB constraints: token usage cannot exceed max, archive/pin/default exclusivity.
   - `project_file.py`: Files associated with projects.
+    - Fields: `file_hash` (SHA-256 for deduplication), `content` (inline storage), plus config/metadata.
   - `knowledge_base.py`: Represents knowledge base metadata and linkage.
+    - GitHub repo integration: `repo_url`, `branch`, `file_paths` (list of paths).
+  - `artifact.py`: Content generated in projects/conversations.
+    - Allowed `content_type` values: `code`, `document`, `image`, `audio`, `video`.
+    - Dual relationship: can belong to both a project and a conversation.
 
 - **services/**
   Business logic/services for major features:
@@ -42,9 +52,12 @@ This section summarizes the responsibilities of the main backend and frontend mo
 
 - **schemas/**
   Pydantic models for API request/response validation:
+  - All schemas use `from_attributes = True` for ORM compatibility.
+  - Custom JSON encoders for `datetime` and `UUID` ensure proper serialization.
   - `chat_schemas.py`: Message creation.
   - `file_upload_schemas.py`: File upload response formatting.
   - `project_schemas.py`: Project and artifact serialization, request validation, and output schemas.
+    - New fields in `ProjectResponse`, `ArtifactResponse`, etc. are included (e.g., `extra_data`, `knowledge_base_id`).
 
 - **utils/**
   Utilities and cross-cutting helpers:
@@ -350,10 +363,10 @@ Sentry is integrated across both backend (Python/FastAPI) and frontend (JavaScri
 - **Error Handling**: Use try/except with specific exceptions; log errors with context
 - **Naming**: snake_case for variables/functions, PascalCase for classes, UPPER_CASE for constants
 - **Formatting**: 4 spaces for indentation, maximum line length of 100 characters
-- **SQLAlchemy**: Use async session with proper relationship definitions
+- **SQLAlchemy**: Use SQLAlchemy 2.0 style (`Mapped[]`, `mapped_column`), async session, and proper relationship definitions
 - **FastAPI**: Router grouping by feature, dependency injection for auth/DB
 - **Frontend**: Vanilla JavaScript with Tailwind CSS v4 and DaisyUI for styling
-- **Security**: Follow OWASP practices; use JWT tokens; validate all inputs
+- **Security**: Follow OWASP practices; use JWT tokens; validate all inputs; enforce JWT blacklist for token revocation
 - **Logging**: Use built-in logging module with appropriate severity levels
 - **Azure**: Use Azure best practices for cloud-related code
 
