@@ -101,7 +101,8 @@ export function createUiRenderer({
     eventHandlers.trackListener(link, 'click', safeInvoker((e) => {
       domAPI.preventDefault(e);
       onConversationSelect(conversation.id);
-    }, { notify: uiNotify }, { context: MODULE, source: 'conversationLinkClick' }), { description: `Select conversation ${conversation.id}` });
+    }, { notify: uiNotify }, { context: MODULE, source: 'conversationLinkClick' }),
+    { description: `Select conversation ${conversation.id}`, context: MODULE });
 
     // Star button (example, adjust styling as needed)
     const starButton = domAPI.createElement('button');
@@ -118,7 +119,8 @@ export function createUiRenderer({
         toggleStarConversationCb(conversation.id);
         // The visual update of the star button will happen when the list re-renders
         // or could be done immediately here if preferred.
-    }, { notify: uiNotify }, { context: MODULE, source: 'starButtonClick' }), { description: `Toggle star for conversation ${conversation.id}` });
+    }, { notify: uiNotify }, { context: MODULE, source: 'starButtonClick' }),
+    { description: `Toggle star for conversation ${conversation.id}`, context: MODULE });
 
     const wrapperDiv = domAPI.createElement('div');
     wrapperDiv.className = 'flex items-center w-full'; // Ensure link takes available space
@@ -259,7 +261,8 @@ export function createUiRenderer({
       eventHandlers.trackListener(link, 'click', safeInvoker((e) => {
         domAPI.preventDefault(e);
         onProjectSelect(project.id);
-      }, { notify: uiNotify }, { context: MODULE, source: 'projectLinkClick' }), { description: `Select project ${project.id}` });
+      }, { notify: uiNotify }, { context: MODULE, source: 'projectLinkClick' }),
+      { description: `Select project ${project.id}`, context: MODULE });
 
       domAPI.appendChild(li, link);
       listElement.appendChild(li);
