@@ -580,26 +580,51 @@
           <div id="sidebarAuthFormContainer" class="p-4 border-t border-base-300">
             <h3 id="sidebarAuthFormTitle" class="text-lg font-semibold mb-2 text-base-content">Login</h3>
             <form id="sidebarAuthForm">
+              <!-- Username (shown only on registration) -->
               <div id="sidebarUsernameContainer" class="mb-2 hidden">
-                <label for="sidebarUsername" class="sr-only">Username</label>
-                <input type="text" id="sidebarUsername" name="username" placeholder="Username"
-                       class="input input-sm input-bordered w-full">
-              </div>
-              <div class="mb-2">
-                <label for="sidebarEmail" class="sr-only">Email</label>
-                <input type="text" id="sidebarEmail" name="email" placeholder="Email" required
-                       class="input input-sm input-bordered w-full">
-              </div>
-              <div class="mb-2">
-                <label for="sidebarPassword" class="sr-only">Password</label>
-                <input type="password" id="sidebarPassword" name="password" placeholder="Password" required
-                       class="input input-sm input-bordered w-full">
-              </div>
-              <div id="sidebarConfirmPasswordContainer" class="mb-3 hidden">
-                <label for="sidebarConfirmPassword" class="sr-only">Confirm Password</label>
-                <input type="password" id="sidebarConfirmPassword" name="confirmPassword" placeholder="Confirm Password"
-                       class="input input-sm input-bordered w-full">
-              </div>
+                 <label for="sidebarUsername" class="sr-only">Username</label>
+                 <input type="text"
+                        id="sidebarUsername"
+                        name="username"
+                        placeholder="Username"
+                        autocomplete="username"
+                        class="input input-sm input-bordered w-full">
+               </div>
+
+              <!-- Email -->
+               <div class="mb-2">
+                 <label for="sidebarEmail" class="sr-only">Email</label>
+                 <input type="email"
+                        id="sidebarEmail"
+                        name="email"
+                        placeholder="Email"
+                        autocomplete="email"
+                        required
+                        class="input input-sm input-bordered w-full">
+               </div>
+
+              <!-- Password -->
+               <div class="mb-2">
+                 <label for="sidebarPassword" class="sr-only">Password</label>
+                 <input type="password"
+                        id="sidebarPassword"
+                        name="password"
+                        placeholder="Password"
+                        autocomplete="new-password"
+                        required
+                        class="input input-sm input-bordered w-full">
+               </div>
+
+              <!-- Confirm Password (shown only on registration) -->
+               <div id="sidebarConfirmPasswordContainer" class="mb-3 hidden">
+                 <label for="sidebarConfirmPassword" class="sr-only">Confirm Password</label>
+                 <input type="password"
+                        id="sidebarConfirmPassword"
+                        name="confirmPassword"
+                        placeholder="Confirm Password"
+                        autocomplete="new-password"
+                        class="input input-sm input-bordered w-full">
+               </div>
               <button type="submit" id="sidebarAuthBtn" class="btn btn-primary btn-sm w-full">Login</button>
               <div id="sidebarAuthError" class="text-error text-xs mt-2 min-h-[1em]"></div>
             </form>

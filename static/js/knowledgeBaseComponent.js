@@ -365,8 +365,17 @@ export function createKnowledgeBaseComponent(options = {}) {
         const pid = this._getCurrentProjectId();
         if (pid) this.manager.reprocessFiles(pid);
       }, { description: "KB Reprocess Files" });
-      addListener(this.elements.setupButton, "click", () => this.manager.showKnowledgeBaseModal(), { description: "KB Setup Button" });
-      addListener(this.elements.settingsButton, "click", () => this.manager.showKnowledgeBaseModal(), { description: "KB Settings Button" });
+
+      const showModalHandler = () => {
+        this.notify.debug("Settings/Setup button clicked. Current KB state before showing modal:", {
+            source: "showKnowledgeBaseModalTrigger",
+            extra: { kbStateSummary: this.state.knowledgeBase ? {id: this.state.knowledgeBase.id, name: this.state.knowledgeBase.name, is_active: this.state.knowledgeBase.is_active} : null }
+        });
+        this.manager.showKnowledgeBaseModal();
+      };
+      addListener(this.elements.setupButton, "click", showModalHandler, { description: "KB Setup Button" });
+      addListener(this.elements.settingsButton, "click", showModalHandler, { description: "KB Settings Button" });
+
       addListener(this.elements.settingsForm, "submit", (e) => this.manager.handleKnowledgeBaseFormSubmit(e), { description: "KB Settings Form Submit" });
       addListener(this.elements.cancelSettingsBtn, "click", () => this.manager.hideKnowledgeBaseModal(), { description: "KB Cancel Settings" });
       addListener(this.elements.deleteKnowledgeBaseBtn, "click", () => this.manager.handleDeleteKnowledgeBase(), { description: "KB Delete Button" });
@@ -421,9 +430,17 @@ export function createKnowledgeBaseComponent(options = {}) {
      * @returns {Promise<void>}
      */
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
+      this.notify.debug(`renderKnowledgeBaseInfo called. projectId: ${projectId}`, {
+          source: "renderKnowledgeBaseInfo",
+          extra: {
+              receivedKbDataSummary: kbData ? { id: kbData.id, name: kbData.name, is_active: kbData.is_active } : null,
+              currentStateKbIdBeforeUpdate: this.state.knowledgeBase?.id
+          }
+      });
       this.notify.info(`Rendering KB info for projectId: ${projectId}`, { source: "renderKnowledgeBaseInfo" });
 
       if (!kbData) {
+        this.notify.info(`renderKnowledgeBaseInfo: No kbData provided for projectId ${projectId}. Showing inactive state.`, { source: "renderKnowledgeBaseInfo" });
         this._showInactiveState();
         this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
         if (projectId) {
@@ -432,7 +449,15 @@ export function createKnowledgeBaseComponent(options = {}) {
         return;
       }
 
-      this.state.knowledgeBase = kbData;
+      this.state.knowledgeBase = kbData; // This is the direct state update
+      this.notify.debug(`renderKnowledgeBaseInfo: this.state.knowledgeBase updated.`, {
+          source: "renderKnowledgeBaseInfo",
+          extra: {
+              newKbStateSummary: this.state.knowledgeBase ? { id: this.state.knowledgeBase.id, name: this.state.knowledgeBase.name, is_active: this.state.knowledgeBase.is_active } : null,
+              projectIdContext: projectId
+          }
+      });
+
       const pid = projectId || kbData.project_id || this._getCurrentProjectId();
       if (this.elements.activeSection) {
         this.elements.activeSection.dataset.projectId = pid || "";
