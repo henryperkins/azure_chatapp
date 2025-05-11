@@ -245,14 +245,26 @@ DependencySystem.register('errorReporter', sentryManager);
 sentryManager.initialize();
 
 // ── Accessibility utilities ───────────────────────────────
+notify.warn('[App] About to create AccessibilityUtils. Checking deps (now as WARN):', { // Changed to warn
+  source: 'app.js',
+  context: 'accessibilitySetup',
+  hasDomAPI: !!domAPI,
+  hasEventHandlers: !!eventHandlers,
+  hasNotify: !!notify,
+  hasSentryManagerAsErrorReporter: !!sentryManager,
+  typeOfDomAPI: typeof domAPI,
+  typeOfEventHandlers: typeof eventHandlers,
+  typeOfNotify: typeof notify,
+  typeOfSentryManager: typeof sentryManager,
+  sentryManagerCaptureExists: typeof sentryManager?.capture === 'function'
+});
 const accessibilityUtils = createAccessibilityEnhancements({
   domAPI,
-  eventHandlers,
-  notify,
-  errorReporter : sentryManager,
-  DependencySystem,
-  createDebugTools       // already imported earlier
-});
+            eventHandlers,
+            notify,
+            errorReporter: sentryManager, // Pass the actual sentryManager instance
+            // apiRequest, // Not a dep for accessibilityUtils
+        });
 // DependencySystem.register('accessibilityUtils', accessibilityUtils);
 accessibilityUtils.init?.();
 
@@ -358,6 +370,10 @@ app.state = appState;
 // Register the app object
 DependencySystem.register('app', app);
 
+// Register currentUser initially as null. It will be updated via app.state.currentUser and events.
+DependencySystem.register('currentUser', null);
+notify.info('[App] "currentUser" initially registered as null in DI.');
+
 // ---------------------------------------------------------------------------
 // 7) Main init
 // ---------------------------------------------------------------------------
@@ -399,13 +415,14 @@ export async function init() {
             notify.debug('[App] Auth verify/fetchCurrentUser response', { extra: { user } });
             notify.debug('[App] Before set currentUser', { extra: { currentUser, stateCurrentUser: app.state.currentUser } });
             if (user) {
-                currentUser = user;
-                app.state.currentUser = user;
-                browserAPI.setCurrentUser(user);
-                DependencySystem.register('currentUser', user);
-                // Re-render header now that we have full user info
+                currentUser = user; // Update module-scoped variable
+                app.state.currentUser = user; // Update shared state object
+                browserAPI.setCurrentUser(user); // Update browser API's context
+                // Do NOT re-register 'currentUser' in DI here. It's set once initially.
+                // Modules should get the dynamic user state from app.state.currentUser or auth events.
+                notify.info(`[App] User fetched in init. app.state.currentUser updated. User ID: ${user.id}`);
                 renderAuthHeader();
-                notify.debug('[App] After set currentUser', { extra: { currentUser, stateCurrentUser: app.state.currentUser } });
+                notify.debug('[App] After set currentUser in init', { extra: { moduleCurrentUser: currentUser, stateCurrentUser: app.state.currentUser } });
             }
         }
 
@@ -818,6 +835,7 @@ async function initializeUIComponents() {
             app,
             router: {
                 navigate: (url) => {
+                    notify.debug('[App] ProjectList router.navigate called with URL:', { urlToPush: url, currentWindowLocation: browserAPI.getLocation().href });
                     browserAPI.getHistory().pushState({}, '', url);
                     domAPI.dispatchEvent(browserAPI.getWindow(), new Event('locationchange'));
                 },
@@ -927,9 +945,9 @@ async function initializeUIComponents() {
             eventHandlers,
             notify,
             apiRequest,
+            apiEndpoints: apiEndpoints, // Pass the apiEndpoints variable directly
             onConversationSelect,
             onProjectSelect,
-            // sidebarContext is no longer passed here; star functions are passed directly by sidebar to render methods
         });
         DependencySystem.register('uiRenderer', uiRendererInstance); // Register it for potential other uses
 
@@ -1109,22 +1127,84 @@ async function handleNavigationChange(options = {}) { // Accept options
                 notify.info('[App] Showing project details', { context: 'navigation', traceId, projectId });
                 await projectDashboard.showProjectDetails(projectId);
 
+                // If navigating to a specific chat within the project
                 if (chatId) {
-                    notify.info('[App] Navigating to conversation', { context: 'navigation', traceId, chatId });
-                    const ok = await app.navigateToConversation(chatId);
-                    if (!ok) notify.warn('[App] Chat load failed from navigation', { context: 'navigation', traceId, chatId });
-                    else notify.info('[App] Chat loaded successfully', { context: 'navigation', traceId, chatId });
+                    notify.info('[App] Navigating to conversation within project', { context: 'navigation', traceId, chatId });
+                    const chatMgr = DependencySystem.modules.get('chatManager');
+                    if (chatMgr?.loadConversation) {
+                        await chatMgr.loadConversation(chatId);
+                    } else {
+                        notify.warn('[App] chatManager not available for navigateToConversation in handleNavigationChange', { context: 'navigation', traceId });
+                    }
                 }
             } else {
-                notify.info('[App] Showing project list', { context: 'navigation', traceId });
-                await projectDashboard.showProjectList();
-                notify.info('[App] Project list shown', { context: 'navigation', traceId });
+                notify.info('[App] No project ID in URL, showing project list.', { context: 'navigation', traceId });
+                if (projectDashboard && typeof projectDashboard.showProjectList === 'function') {
+                    await projectDashboard.showProjectList();
+                } else {
+                    notify.error('[App] projectDashboard.showProjectList is not a function (else branch)', {
+                        context: 'navigation',
+                        traceId,
+                        projectDashboardExists: !!projectDashboard,
+                        typeOfShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList : 'N/A',
+                        constructorName: projectDashboard?.constructor?.name
+                    });
+                    // Attempt to show login required as a last resort if project list can't be shown
+                    projectDashboard?.showLoginRequiredMessage?.();
+                }
             }
         } catch (navErr) {
-            notify.error('[App] Error during navigation logic.', { error: navErr, context: 'navigation', traceId });
-            projectDashboard.showProjectList?.().catch(fbErr => {
-                notify.error('[App] Fallback to showProjectList also failed.', { error: fbErr, context: 'navigation', traceId });
+            notify.error('[App] Error during navigation logic.', {
+                error: navErr,
+                fullError: navErr ? navErr.toString() : 'undefined',
+                stack: navErr ? navErr.stack : 'no stack',
+                context: 'navigation',
+                traceId
             });
+
+            // --- BEGIN DIAGNOSTIC LOGGING for TypeError ---
+            if (projectDashboard) {
+                const isShowProjectListFunction = typeof projectDashboard.showProjectList === 'function';
+                notify.warn('[App] Diagnosing projectDashboard in navErr catch block', {
+                    context: 'navigation',
+                    traceId,
+                    projectDashboardExists: !!projectDashboard,
+                    typeOfProjectDashboard: typeof projectDashboard,
+                    projectDashboard_showProjectList_property: projectDashboard.showProjectList, // Log the actual property value
+                    typeOf_showProjectList: typeof projectDashboard.showProjectList,
+                    isShowProjectListActuallyFunction: isShowProjectListFunction,
+                    constructorName: projectDashboard?.constructor?.name,
+                    instanceHasShowProjectDetails: typeof projectDashboard.showProjectDetails === 'function' // Check another method
+                });
+
+                if (!isShowProjectListFunction) {
+                    notify.error('[App] CRITICAL: projectDashboard.showProjectList is NOT a function in catch block.', {
+                        context: 'navigation',
+                        traceId,
+                        propertyValue: projectDashboard.showProjectList
+                    });
+                }
+            } else {
+                notify.error('[App] CRITICAL: projectDashboard is null or undefined in navErr catch block.', { context: 'navigation', traceId });
+            }
+            // --- END DIAGNOSTIC LOGGING ---
+
+            // Attempt to call showProjectList, relying on optional chaining for safety if projectDashboard itself is null/undefined.
+            // The primary concern is if projectDashboard.showProjectList is defined but *not* a function.
+            if (projectDashboard && typeof projectDashboard.showProjectList === 'function') {
+                projectDashboard.showProjectList().catch(fbErr => {
+                    notify.error('[App] Fallback to showProjectList also failed.', { error: fbErr, context: 'navigation', traceId });
+                });
+            } else {
+                 notify.error('[App] Cannot call projectDashboard.showProjectList in fallback because it is not a function or projectDashboard is missing.', {
+                    context: 'navigation',
+                    traceId,
+                    projectDashboardExists: !!projectDashboard,
+                    typeOfShowProjectList: projectDashboard ? typeof projectDashboard.showProjectList : 'N/A'
+                });
+                // As an absolute fallback, try to show the login message if all else fails.
+                projectDashboard?.showLoginRequiredMessage?.();
+            }
         }
     } catch (err) {
         const errorReporter = DependencySystem.modules.get('errorReporter');
@@ -1164,20 +1244,16 @@ function handleAuthStateChange(e) {
 
     // CRITICAL: Update app.state.currentUser with the user from the event
     // This ensures all modules see the most up-to-date user information.
-    if (user !== undefined) { // `user` can be null if unauthenticated, or a user object
-        currentUser = user; // Update module-scoped variable (legacy, ensure consistency)
-        app.state.currentUser = user; // Update shared state object
-        DependencySystem.register('currentUser', user); // Re-register in DI so new consumers get the latest
-        browserAPI.setCurrentUser(user); // Update browser API's context if it holds user state
-        notify.info(`[App] app.state.currentUser updated. User ID: ${user ? user.id : 'null'}. Authenticated: ${newAuthState}`);
-    } else if (!newAuthState) {
-        // If unauthenticated and no user object explicitly provided, ensure it's cleared.
-        currentUser = null;
-        app.state.currentUser = null;
-        DependencySystem.register('currentUser', null);
-        browserAPI.setCurrentUser(null);
-        notify.info(`[App] app.state.currentUser cleared due to unauthentication.`);
-    }
+    currentUser = user; // Update module-scoped variable
+    app.state.currentUser = user; // Update shared state object
+    browserAPI.setCurrentUser(user); // Update browser API's context
+
+    // We no longer attempt to update 'currentUser' in the DependencySystem here
+    // after its initial registration as null.
+    // Modules should rely on app.state.currentUser or listen to 'authStateChanged' events
+    // for dynamic user information.
+
+    notify.info(`[App] app.state.currentUser updated. User ID: ${app.state.currentUser ? app.state.currentUser.id : 'null'}. Authenticated: ${newAuthState}`);
     // Note: If newAuthState is true but `user` from event is undefined,
     // `fetchCurrentUser` (if called subsequently) should populate it.
 
@@ -1214,7 +1290,7 @@ function handleAuthStateChange(e) {
                     if (freshUser) {
                         currentUser = freshUser; // Update module-scoped
                         app.state.currentUser = freshUser; // Update shared state
-                        DependencySystem.register('currentUser', freshUser);
+                        // Do not re-register 'currentUser' in DI.
                         browserAPI.setCurrentUser(freshUser);
                         renderAuthHeader(); // Re-render again if user details were fetched now
                         notify.info(`[App] Fresh user details fetched and applied. User ID: ${freshUser.id}`);
@@ -1226,7 +1302,12 @@ function handleAuthStateChange(e) {
                 }
             }
             toggleElement(APP_CONFIG.SELECTORS.LOGIN_REQUIRED_MESSAGE, false);
-            pd?.showProjectList?.(); // This call internally handles loading projects.
+            // Ensure projectDashboard (pd) is resolved before calling showProjectList
+            if (pd && typeof pd.showProjectList === 'function') {
+                pd.showProjectList();
+            } else {
+                notify.error('[App] projectDashboard or showProjectList not available after login.', { pdExists: !!pd, canShowList: typeof pd?.showProjectList === 'function' });
+            }
             // pm?.loadProjects?.('all').catch(err => notify.error('[App] loadProjects failed after login', { error: err })); // Redundant call removed
             handleNavigationChange({ forceListView: true }); // Re-evaluate navigation, forcing list view
         } else if (!appState.isAuthenticated && prevAuth) {
