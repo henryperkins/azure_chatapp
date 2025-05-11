@@ -491,13 +491,13 @@ class ProjectDashboard {
             }
         } else {
             // This is an expected case for new projects or projects without conversations.
-            this.dashboardNotify.info(`[ProjectDashboard] _postProjectDetailsSuccess: Project has no conversations array, or it's empty. Cannot set default chatId.`, {
-                source: '_postProjectDetailsSuccess',
-                projectId,
-                conversationsDataExists: project.hasOwnProperty('conversations'), // Check if the key exists
-                conversationsIsArray: Array.isArray(project.conversations),
-                conversationsLength: Array.isArray(project.conversations) ? project.conversations.length : undefined
-            });
+                this.dashboardNotify.info(`[ProjectDashboard] _postProjectDetailsSuccess: Project has no conversations array, or it's empty. Cannot set default chatId.`, {
+                    source: '_postProjectDetailsSuccess',
+                    projectId,
+                    conversationsDataExists: Object.prototype.hasOwnProperty.call(project, 'conversations'), // Check if the key exists
+                    conversationsIsArray: Array.isArray(project.conversations),
+                    conversationsLength: Array.isArray(project.conversations) ? project.conversations.length : undefined
+                });
         }
     } else {
       // This case means the project object itself was invalid or missing when _postProjectDetailsSuccess was called.
@@ -538,8 +538,8 @@ class ProjectDashboard {
 
     const listView = this.domAPI.getElementById('projectListView');
     const detailsView = this.domAPI.getElementById('projectDetailsView');
+    const chatHeaderBar = this.domAPI.getElementById('chatHeaderBar');
 
-    // Enhanced logging: log both class and style.display before change
     this.logger.info('[ProjectDashboard] _setView DOM elements before:', {
       listViewExists: !!listView,
       detailsViewExists: !!detailsView,
@@ -549,63 +549,62 @@ class ProjectDashboard {
       detailsViewDisplay: detailsView ? detailsView.style.display : 'N/A'
     });
 
-    // CONSISTENT APPROACH: Always modify both classList and style.display
     if (listView) {
-      this.logger.info(`[ProjectDashboard] Setting listView visibility: ${showList ? 'VISIBLE' : 'HIDDEN'}`);
-      listView.classList.toggle('hidden', !showList);
-      listView.setAttribute('aria-hidden', String(!showList));
-      listView.style.display = showList ? '' : 'none'; // Use empty string for default display (block or flex)
-      // Ensure opacity-0 is removed when shown
-      if (showList) {
-        listView.classList.remove('opacity-0');
-      }
-      // Optionally, add opacity-0 back when hiding if you want a fade-out effect controlled here
-      // else { listView.classList.add('opacity-0'); }
+        this.domAPI.toggleClass(listView, 'hidden', !showList);
+        listView.style.display = showList ? '' : 'none';
+        this.domAPI.setAttribute(listView, 'aria-hidden', String(!showList));
+        if (showList) listView.classList.remove('opacity-0');
     }
 
     if (detailsView) {
-      this.logger.info(`[ProjectDashboard] Setting detailsView visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
-      detailsView.classList.toggle("hidden", !showDetails);
-      detailsView.setAttribute("aria-hidden", String(!showDetails));
-      detailsView.style.display = showDetails ? "flex" : "none"; // Project details uses flex
-      // Ensure opacity-0 is removed and flex classes are present when shown
-      if (showDetails) {
-        detailsView.classList.remove("opacity-0"); // If it was hidden by opacity
-        detailsView.classList.add("flex-1", "flex-col");
-      } else {
-        detailsView.classList.remove("flex-1", "flex-col");
-        // Optionally, add opacity-0 back when hiding
-        // detailsView.classList.add('opacity-0');
-      }
+        this.domAPI.toggleClass(detailsView, 'hidden', !showDetails);
+        detailsView.style.display = showDetails ? 'flex' : 'none'; // Assuming details view uses flex
+        this.domAPI.setAttribute(detailsView, 'aria-hidden', String(!showDetails));
+        if (showDetails) {
+            detailsView.classList.remove('opacity-0');
+            detailsView.classList.add("flex-1", "flex-col");
+        } else {
+            detailsView.classList.remove("flex-1", "flex-col");
+        }
     }
 
-    // Also manage visibility of the chatHeaderBar
-    const chatHeaderBar = this.domAPI.getElementById('chatHeaderBar');
     if (chatHeaderBar) {
-      this.logger.info(`[ProjectDashboard] Setting chatHeaderBar visibility: ${showDetails ? 'VISIBLE' : 'HIDDEN'}`);
-      chatHeaderBar.classList.toggle('hidden', !showDetails);
-      chatHeaderBar.setAttribute('aria-hidden', String(!showDetails));
-      // Ensure display style is also set correctly if 'hidden' class only does opacity or similar
-      // chatHeaderBar.style.display = showDetails ? '' : 'none'; // Assuming default is block/flex
+        this.domAPI.toggleClass(chatHeaderBar, 'hidden', !showDetails); // Show chat header with details view
+        this.domAPI.setAttribute(chatHeaderBar, 'aria-hidden', String(!showDetails));
     }
 
-    // Force browser reflow to ensure visibility transitions apply
-    if ((listView && showList) || (detailsView && showDetails)) {
-      const raf = this.browserService?.requestAnimationFrame || requestAnimationFrame;
-      raf(() => {
-        if (listView && showList) listView.getBoundingClientRect();
-        if (detailsView && showDetails) detailsView.getBoundingClientRect();
-      });
+    // Manage focus AFTER views are updated
+    if (showDetails && detailsView) {
+        const focusTarget = detailsView.querySelector('h1, [role="tab"], button:not([disabled])');
+        if (focusTarget && typeof focusTarget.focus === 'function') {
+            this.browserService.setTimeout(() => focusTarget.focus(), 0);
+        } else {
+            detailsView.setAttribute('tabindex', '-1');
+            this.browserService.setTimeout(() => detailsView.focus(), 0);
+        }
+    } else if (showList && listView) {
+        const focusTarget = listView.querySelector('h2, [role="tab"], button:not([disabled]), a[href]');
+            if (focusTarget && typeof focusTarget.focus === 'function') {
+            this.browserService.setTimeout(() => focusTarget.focus(), 0);
+        } else {
+            listView.setAttribute('tabindex', '-1');
+            this.browserService.setTimeout(() => listView.focus(), 0);
+        }
     }
 
-    // Enhanced logging: log both class and style.display after change
+    // Force browser reflow (optional, if transitions are still problematic)
+    // const raf = this.browserService?.requestAnimationFrame || requestAnimationFrame;
+    // raf(() => {
+    //   if (listView && showList) listView.getBoundingClientRect();
+    //   if (detailsView && showDetails) detailsView.getBoundingClientRect();
+    // });
+
     this.logger.info('[ProjectDashboard] View state after update:', {
       listViewVisible: listView ? !listView.classList.contains('hidden') && listView.style.display !== 'none' : false,
       detailsViewVisible: detailsView ? !detailsView.classList.contains('hidden') && detailsView.style.display !== 'none' : false,
-      chatHeaderBarVisible: chatHeaderBar ? !chatHeaderBar.classList.contains('hidden') && chatHeaderBar.style.display !== 'none' : false,
+      chatHeaderBarVisible: chatHeaderBar ? !chatHeaderBar.classList.contains('hidden') : false,
       listViewDisplay: listView?.style.display || 'N/A',
       detailsViewDisplay: detailsView?.style.display || 'N/A',
-      chatHeaderBarDisplay: chatHeaderBar?.style.display || 'N/A'
     });
   }
 

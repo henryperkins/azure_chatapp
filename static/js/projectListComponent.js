@@ -93,15 +93,24 @@ export class ProjectListComponent {
         this.htmlSanitizer = sanitizer;
 
         // --- DI-logged construction ---
+        const constructorContext = { group: true, context: 'projectListComponent', module: 'ProjectListComponent', source: 'constructor' };
         if (this.appConfig && this.appConfig.DEBUG) {
-            this.notify.info('[ProjectListComponent] CONSTRUCTOR called', {
-                group: true, context: 'projectListComponent', stack: (new Error()).stack
-            });
+            this.notify.info('[ProjectListComponent] CONSTRUCTOR called', { ...constructorContext, stack: (new Error()).stack });
         } else {
-            this.notify.info('[ProjectListComponent] CONSTRUCTOR called', {
-                group: true, context: 'projectListComponent'
-            });
+            this.notify.info('[ProjectListComponent] CONSTRUCTOR called', constructorContext);
         }
+
+        this.notify.debug('[ProjectListComponent] Optional dependencies status:', {
+            group: false, // Keep constructor logs less noisy
+            context: 'projectListComponent', module: 'ProjectListComponent', source: 'constructor',
+            extra: {
+                modalManager: !!this.modalManager,
+                app: !!this.app,
+                apiClient: !!this.apiClient,
+                domAPI: !!this.domAPI
+            }
+        });
+
         if (
             !this.projectManager ||
             !this.eventHandlers ||
@@ -185,14 +194,17 @@ export class ProjectListComponent {
         this.element = this.domAPI?.getElementById
             ? this.domAPI.getElementById(this.elementId)
             : this._doc.getElementById(this.elementId);
+
         if (!this.element) {
             this.notify.error(
-                `[ProjectListComponent] Element #${this.elementId} not found`,
-                { group: true, context: 'projectListComponent' }
+                `[ProjectListComponent] Main element #${this.elementId} not found. Initialization cannot proceed.`,
+                { group: true, context: 'projectListComponent', source: 'initialize_findElement' }
             );
             throw new Error(
-                `[ProjectListComponent] Element #${this.elementId} not found`
+                `[ProjectListComponent] Element #${this.elementId} not found. Cannot initialize.`
             );
+        } else {
+            this.notify.info(`[ProjectListComponent] Main element #${this.elementId} found.`, { group: true, context: 'projectListComponent', source: 'initialize_findElement' });
         }
 
         // Use the root element itself as the grid if it has the .grid class
@@ -203,18 +215,15 @@ export class ProjectListComponent {
         } else {
             this.gridElement = this.element.querySelector('.grid');
         }
+
         if (!this.gridElement) {
             this.notify.error(
-                `[ProjectListComponent.INIT] '.grid' container not found inside #${this.elementId}. Element HTML: ${this.element.innerHTML}`,
-                { group: true, context: 'projectListComponent' }
+                `[ProjectListComponent.INIT] '.grid' container not found inside #${this.elementId}. Element HTML might be: ${this.element.innerHTML.substring(0,100)}. Initialization cannot proceed.`,
+                { group: true, context: 'projectListComponent', source: 'initialize_findGridElement' }
             );
-            this.notify.error(
-                'Critical error: Unable to find project grid container.',
-                { group: true, context: 'projectListComponent' }
-            );
-            throw new Error(`'.grid' container not found`);
+            throw new Error(`'.grid' container not found within #${this.elementId}.`);
         } else {
-            this.notify.info('[ProjectListComponent] gridElement found and initialized.', { group: true, context: 'projectListComponent' });
+            this.notify.info('[ProjectListComponent] gridElement found successfully.', { group: true, context: 'projectListComponent', source: 'initialize_findGridElement' });
         }
 
         // Wait for critical internal/sibling DOM elements to be ready
@@ -610,55 +619,39 @@ export class ProjectListComponent {
 
     /** Handle click on project cards */
     _handleCardClick(e) {
-        // Debug: log card click and project id
-        console.log("[ProjectListComponent] Card clicked", e.target);
-
-        // Try to extract project ID from the clicked card
         const projectCard = e.target.closest('.project-card');
-        const projectId = projectCard?.getAttribute('data-project-id');
-        console.log("[ProjectListComponent] Extracted projectId:", projectId);
-
-        // Check if the click is on a create project button and ignore it
-        const isCreateButton = e.target.closest('#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn');
-        if (isCreateButton) {
-            return; // Ignore clicks on create buttons
-        }
         if (!projectCard) {
-            this.notify.warn('[Debug] No .project-card ancestor on click event.', { group: true, context: 'projectListComponent' });
+            // This click was not on or inside a project card.
             return;
         }
-        const actionBtn = e.target.closest("[data-action]");
+
+        const projectId = projectCard.dataset.projectId;
         if (!projectId) {
-          this.notify.error(
-            "[ProjectListComponent] Clicked a card without a valid projectId.",
-            { group: true, context: "projectListComponent" }
-          );
-          return;
+            this.notify.error("[ProjectListComponent] Clicked a card without a valid projectId.", { group: true, context: "projectListComponent" });
+            return;
         }
-        // Debug log actual click
-        this.notify.info(`[Debug] Project card clicked: projectId=${projectId}; isActionBtn=${!!actionBtn}`, {
-            group: true, context: 'projectListComponent'
-        });
+
+        // Check if the click was on an action button within the card.
+        // Action buttons now have their own direct listeners, so we only stop propagation here.
+        const actionBtn = e.target.closest("[data-action]");
         if (actionBtn) {
-            e.stopPropagation();
-            const action = actionBtn.dataset.action;
-            this._handleAction(action, projectId);
+            e.stopPropagation(); // Prevent card's own click (navigation) if an action button was clicked.
+            this.notify.debug(`Action button '${actionBtn.dataset.action}' clicked for project ${projectId}. Handler attached directly to button.`, { group: true, context: 'projectListComponent' });
+            return; // Let the button's own event listener handle the action.
+        }
+
+        // If the click was on the card itself (not an action button) and not a create button
+        const isCreateButton = e.target.closest('#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn');
+        if (isCreateButton) {
+            return;
+        }
+
+        this.notify.info(`Project card (not an action button) clicked for project: ${projectId}. Navigating...`, { group: true, context: 'projectListComponent' });
+        const appState = this.app?.state;
+        if (appState?.isAuthenticated && appState?.currentUser) {
+            this.onViewProject(projectId);
         } else {
-            // Debug before navigation
-            this.notify.info(`[Debug] Navigating to project details for: ${projectId}...`, {
-                group: true, context: 'projectListComponent'
-            });
-            // Only allow details load if user is authenticated and currentUser is set
-            const appState = this.app?.state;
-            if (appState?.isAuthenticated && appState?.currentUser) {
-                console.log("[ProjectListComponent] About to call onViewProject with:", projectId, this.onViewProject);
-                this.onViewProject(projectId);
-                console.log("[ProjectListComponent] Called onViewProject");
-            } else {
-                this.notify.warn("[ProjectListComponent] Ignoring card click: user not authenticated or currentUser not loaded.", {
-                    group: true, context: "projectListComponent"
-                });
-            }
+            this.notify.warn("[ProjectListComponent] Ignoring card click for navigation: user not authenticated or currentUser not loaded.", { group: true, context: "projectListComponent" });
         }
     }
 
@@ -952,12 +945,14 @@ export class ProjectListComponent {
         const header = document.createElement("div");
         header.className = "flex justify-between items-start";
 
-        const title = document.createElement("h3");
-        title.className = "font-semibold text-lg sm:text-xl mb-2 project-name truncate";
-        title.textContent = project.name || "Unnamed Project";
+        const titleEl = document.createElement("h3");
+        titleEl.className = "font-semibold text-lg sm:text-xl mb-2 project-name truncate";
+        titleEl.textContent = project.name || "Unnamed Project";
 
         const actions = document.createElement("div");
         actions.className = "flex gap-1";
+        const projectId = this._getProjectId(project);
+
         [
             {
                 action: "view",
@@ -967,7 +962,7 @@ export class ProjectListComponent {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
           `,
-                title: "View"
+                label: "View Project" // Using label as per user's snippet for description
             },
             {
                 action: "edit",
@@ -976,7 +971,7 @@ export class ProjectListComponent {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
           `,
-                title: "Edit"
+                label: "Edit Project"
             },
             {
                 action: "delete",
@@ -985,14 +980,15 @@ export class ProjectListComponent {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           `,
-                title: "Delete",
+                label: "Delete Project",
                 className: "text-error hover:bg-error/10"
             }
         ].forEach((btnDef) => {
-            actions.appendChild(this._createActionButton(btnDef));
+            // Pass projectId and label to _createActionButton
+            actions.appendChild(this._createActionButton({ ...btnDef, projectId }));
         });
 
-        header.appendChild(title);
+        header.appendChild(titleEl);
         header.appendChild(actions);
         return header;
     }
@@ -1057,14 +1053,22 @@ export class ProjectListComponent {
      * @returns {HTMLElement}
      * @private
      */
-    _createActionButton(btnDef) {
-        const btn = document.createElement("button");
-        btn.className = `btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] ${btnDef.className || ""}`;
-        btn.setAttribute("aria-label", btnDef.title);
-        btn.dataset.action = btnDef.action;
-        btn.title = btnDef.title;
-        this._safeSetInnerHTML(btn, btnDef.icon);
-        return btn;
+    _createActionButton(btnDef) { // btnDef now includes projectId and label
+        const button = document.createElement("button");
+        button.className = `btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] ${btnDef.className || ""}`;
+        button.setAttribute("aria-label", btnDef.label); // Use label for aria-label
+        button.dataset.action = btnDef.action;
+        button.title = btnDef.label; // Use label for title
+        this._safeSetInnerHTML(button, btnDef.icon);
+
+        this.eventHandlers.trackListener(button, 'click', (e) => {
+            e.stopPropagation(); // Prevent card click if the button itself is clicked
+            this._handleAction(btnDef.action, btnDef.projectId);
+        }, {
+            description: `Project card action: ${btnDef.label} for ${btnDef.projectId}`,
+            context: MODULE_CONTEXT // Use the module-level context
+        });
+        return button;
     }
 
     /** Format ISO date strings */
