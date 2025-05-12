@@ -125,6 +125,9 @@ if (!sanitizer) {
 DependencySystem.register('sanitizer', sanitizer);
 DependencySystem.register('domPurify', sanitizer); // legacy alias
 
+// Make the file-uploader class available to DI-consumers (ProjectDetailsComponent, etc.)
+DependencySystem.register('FileUploadComponent', FileUploadComponent);
+
 // Register apiEndpoints
 const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
   PROJECTS: '/api/projects/',
@@ -498,7 +501,7 @@ async function initializeCoreSystems() {
         remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
       }
     });
-    DependencySystem.register('projectManager', projectManager);
+    // DependencySystem.register('projectManager', projectManager);   // <--REMOVED, already registered in createProjectManager
     
     // Sync projectManager with eventHandlers
     eventHandlers.setProjectManager?.(projectManager);
