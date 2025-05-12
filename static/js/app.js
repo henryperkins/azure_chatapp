@@ -259,7 +259,7 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
   try {
     // Load project details template
     await htmlTemplateLoader.loadTemplate({
-      url: '/templates/project-details.html',
+      url: '/static/html/project-details.html',
       containerSelector: '#projectDetailsView',
       eventName: 'projectDetailsTemplateLoaded',
       timeout: 20000
@@ -267,8 +267,8 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
 
     // Load other templates as needed
     await htmlTemplateLoader.loadTemplate({
-      url: '/templates/modals.html',
-      containerSelector: '#modalContainer',
+      url: '/static/html/modals.html',
+      containerSelector: '#modalsContainer',
       eventName: 'modalsLoaded',
       timeout: 20000
     });
