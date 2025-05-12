@@ -257,23 +257,70 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
 // Load HTML templates immediately to ensure they're available for components
 (async function loadTemplates() {
   try {
-    // Load project details template
-    await htmlTemplateLoader.loadTemplate({
-      url: '/static/html/project_details.html',
-      containerSelector: '#projectDetailsView',
-      eventName: 'projectDetailsTemplateLoaded',
-      timeout: 20000
-    });
+    // Create proper cancellation signals for each template load
+    const projectDetailsSignal = new AbortController();
+    const modalsSignal = new AbortController();
+
+    // Set safety timeouts
+    const projectDetailsTimeout = setTimeout(() => {
+      projectDetailsSignal.abort();
+      notify.warn('[App] Timeout loading project_details.html, aborting fetch');
+    }, 20000);
+
+    const modalsTimeout = setTimeout(() => {
+      modalsSignal.abort();
+      notify.warn('[App] Timeout loading modals.html, aborting fetch');
+    }, 20000);
+
+    // Load project details template with proper error handling
+    try {
+      await htmlTemplateLoader.loadTemplate({
+        url: '/static/html/project_details.html',
+        containerSelector: '#projectDetailsView',
+        eventName: 'projectDetailsTemplateLoaded',
+        timeout: 20000
+      });
+      notify.info('[App] Project details template loaded successfully');
+    } catch (detailsErr) {
+      notify.error('[App] Failed to load project details template', {
+        error: detailsErr,
+        critical: true
+      });
+      // Dispatch event anyway to prevent UI from hanging
+      domAPI.dispatchEvent(
+        domAPI.getDocument(),
+        new CustomEvent('projectDetailsTemplateLoaded', {
+          detail: { success: false, error: detailsErr }
+        })
+      );
+    } finally {
+      clearTimeout(projectDetailsTimeout);
+    }
 
     // Load other templates as needed
-    await htmlTemplateLoader.loadTemplate({
-      url: '/static/html/modals.html',
-      containerSelector: '#modalsContainer',
-      eventName: 'modalsLoaded',
-      timeout: 20000
-    });
-
-    notify.info('[App] HTML templates loaded successfully');
+    try {
+      await htmlTemplateLoader.loadTemplate({
+        url: '/static/html/modals.html',
+        containerSelector: '#modalsContainer',
+        eventName: 'modalsLoaded',
+        timeout: 20000
+      });
+      notify.info('[App] Modals template loaded successfully');
+    } catch (modalsErr) {
+      notify.error('[App] Failed to load modals template', {
+        error: modalsErr,
+        critical: true
+      });
+      // Dispatch event anyway to prevent UI from hanging
+      domAPI.dispatchEvent(
+        domAPI.getDocument(),
+        new CustomEvent('modalsLoaded', {
+          detail: { success: false, error: modalsErr }
+        })
+      );
+    } finally {
+      clearTimeout(modalsTimeout);
+    }
   } catch (err) {
     notify.error('[App] Failed to load HTML templates', { error: err });
   }
@@ -415,15 +462,103 @@ export async function init() {
     registerAppListeners();
 
     // Initialize navigation service
-    if (navigationService?.init) {
-      try {
+    try {
+      // First, ensure navigationService is available in DependencySystem
+      const navService = DependencySystem.modules.get('navigationService');
+
+      if (!navService) {
+        notify.error('[App] NavigationService not found in DependencySystem. Re-registering...');
+        // Try to re-create and register it if missing
+        const recreatedNavService = createNavigationService({
+          domAPI,
+          browserService: browserServiceInstance,
+          DependencySystem,
+          notify,
+          eventHandlers,
+          errorReporter: sentryManager
+        });
+
+        DependencySystem.register('navigationService', recreatedNavService);
+        notify.info('[App] NavigationService re-registered successfully');
+
+        // Update local reference
+        navigationService = recreatedNavService;
+      } else if (navService !== navigationService) {
+        // Update local reference if DI instance is different
+        navigationService = navService;
+        notify.info('[App] Synchronized navigationService with DependencySystem');
+      }
+
+      // Now try to initialize navigationService
+      if (navigationService?.init) {
         await navigationService.init();
         notify.info('[App] NavigationService initialized successfully');
-      } catch (navErr) {
-        notify.error('[App] Error initializing NavigationService', { error: navErr });
+
+        // Register default views if they haven't been registered yet
+        const projectDashboard = DependencySystem.modules.get('projectDashboard');
+        if (projectDashboard?.components) {
+          const projectList = projectDashboard.components.projectList;
+          const projectDetails = projectDashboard.components.projectDetails;
+
+          if (projectList && !navigationService.getCurrentView()) {
+            navigationService.registerView('projectList', {
+              show: async () => {
+                if (projectList.showProjectList) {
+                  await projectList.showProjectList();
+                  return true;
+                }
+                return false;
+              },
+              hide: async () => {
+                if (projectList.hideProjectList) {
+                  await projectList.hideProjectList();
+                  return true;
+                }
+                return false;
+              }
+            });
+
+            notify.info('[App] Registered projectList view with NavigationService');
+          }
+
+          if (projectDetails && !navigationService.getCurrentView()) {
+            navigationService.registerView('projectDetails', {
+              show: async (params) => {
+                if (projectDetails.showProjectDetails) {
+                  await projectDetails.showProjectDetails(params.projectId);
+                  return true;
+                }
+                return false;
+              },
+              hide: async () => {
+                if (projectDetails.hideProjectDetails) {
+                  await projectDetails.hideProjectDetails();
+                  return true;
+                }
+                return false;
+              }
+            });
+
+            notify.info('[App] Registered projectDetails view with NavigationService');
+          }
+        }
+      } else {
+        notify.error('[App] NavigationService does not have init method.');
       }
-    } else {
-      notify.error('[App] NavigationService not available for initialization.');
+    } catch (navErr) {
+      notify.error('[App] Error initializing NavigationService', {
+        error: navErr,
+        critical: true,
+        extra: { phase: 'navigationService.init' }
+      });
+
+      if (errorReporter?.capture) {
+        errorReporter.capture(navErr, {
+          module: 'App',
+          method: 'init',
+          extra: { component: 'NavigationService' }
+        });
+      }
     }
 
     // Mark app as initialized

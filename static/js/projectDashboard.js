@@ -822,118 +822,238 @@ class ProjectDashboard {
   }
 
   async _initializeComponents() {
+    // Ensure we have the latest component references from DependencySystem
     this.components.projectList = this.components.projectList || this.getModule('projectListComponent') || null;
     this.components.projectDetails = this.components.projectDetails || this.getModule('projectDetailsComponent') || null;
 
-    this.logger.info('[ProjectDashboard] Initializing components...');
-
-    await new Promise((resolve) => {
-      const doc = this.domAPI ? this.domAPI.getDocument() : document;
-      const detailsTabs = this.domAPI
-        ? this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]')
-        : doc.querySelector('#projectDetailsView .tabs[role="tablist"]');
-      if (detailsTabs) return resolve();
-
-      const eventTarget = this.domAPI ? this.domAPI.getDocument() : document;
-      if (this.eventHandlers && this.eventHandlers.trackListener) {
-        this.eventHandlers.trackListener(eventTarget, 'projectDetailsHtmlLoaded', () => resolve(), { once: true, context: 'projectDashboard', description: 'Wait for projectDetailsHtmlLoaded' });
-      } else {
-        eventTarget.addEventListener('projectDetailsHtmlLoaded', () => resolve(), { once: true });
-      }
+    this.logger.info('[ProjectDashboard] Initializing components...', {
+      projectListExists: !!this.components.projectList,
+      projectDetailsExists: !!this.components.projectDetails
     });
 
-    const listViewEl = this.domAPI.getElementById('projectListView');
-    if (listViewEl && listViewEl.childElementCount > 0) {
-      this.logger.info('[ProjectDashboard] projectListHtml already present – skipping event wait.');
-    } else {
-      this.logger.info('[ProjectDashboard] Waiting for projectListHtmlLoaded event...');
+    // First, wait for project details template to be loaded
+    this.logger.info('[ProjectDashboard] Waiting for project details template...');
+    try {
       await new Promise((resolve, reject) => {
-        const eventTarget = this.domAPI ? this.domAPI.getDocument() : document;
-        const timeoutId = this.browserService.setTimeout(() => {
-          this.logger.error('[ProjectDashboard] Timeout waiting for projectListHtmlLoaded event.');
-          reject(new Error('Timeout waiting for projectListHtmlLoaded'));
-        }, 10000);
+        // First check if the template has already been loaded
+        const doc = this.domAPI.getDocument();
+        const detailsView = this.domAPI.getElementById('projectDetailsView');
+        const detailsTabs = detailsView ? this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]') : null;
 
+        if (detailsTabs) {
+          this.logger.info('[ProjectDashboard] Project details template already loaded');
+          return resolve();
+        }
+
+        // Set up timeout for template loading
+        const timeoutId = this.browserService.setTimeout(() => {
+          this.logger.error('[ProjectDashboard] Timeout waiting for projectDetailsTemplateLoaded event');
+          // Don't reject - try to continue even if the template isn't loaded
+          // This helps prevent hanging on initialization
+          resolve();
+        }, 8000);
+
+        // Set up event listener for template loaded event
         const handler = (event) => {
           this.browserService.clearTimeout(timeoutId);
           if (event.detail && event.detail.success) {
-            this.logger.info('[ProjectDashboard] projectListHtmlLoaded event received successfully.');
-            resolve();
+            this.logger.info('[ProjectDashboard] projectDetailsTemplateLoaded event received successfully');
           } else {
-            this.logger.error('[ProjectDashboard] projectListHtmlLoaded event received with failure.', { error: event.detail?.error });
-            reject(new Error(`projectListHtmlLoaded failed: ${event.detail?.error?.message || 'Unknown error'}`));
+            this.logger.warn('[ProjectDashboard] projectDetailsTemplateLoaded event received with failure',
+              { error: event.detail?.error });
           }
+          resolve();
         };
 
         if (this.eventHandlers && this.eventHandlers.trackListener) {
-          this.eventHandlers.trackListener(eventTarget, 'projectListHtmlLoaded', handler, { once: true, context: 'projectDashboard', description: 'Wait for projectListHtmlLoaded' });
+          this.eventHandlers.trackListener(
+            doc,
+            'projectDetailsTemplateLoaded',
+            handler,
+            {
+              once: true,
+              context: 'projectDashboard',
+              description: 'Wait for projectDetailsTemplateLoaded'
+            }
+          );
         } else {
-          eventTarget.addEventListener('projectListHtmlLoaded', handler, { once: true });
+          doc.addEventListener('projectDetailsTemplateLoaded', handler, { once: true });
+        }
+
+        // Check once more after setup in case event fired between our first check and listener setup
+        const detailsViewRecheck = this.domAPI.getElementById('projectDetailsView');
+        const detailsTabsRecheck = detailsViewRecheck ?
+          this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]') : null;
+
+        if (detailsTabsRecheck) {
+          this.logger.info('[ProjectDashboard] Project details template found after listener setup');
+          this.browserService.clearTimeout(timeoutId);
+          if (this.eventHandlers && this.eventHandlers.cleanupListeners) {
+            this.eventHandlers.cleanupListeners({
+              element: doc,
+              type: 'projectDetailsTemplateLoaded',
+              handler: handler
+            });
+          }
+          resolve();
         }
       });
+    } catch (err) {
+      this.logger.error('[ProjectDashboard] Error waiting for project details template', { error: err });
+      // Continue even if there was an error - we'll try to recover
     }
 
+    // Next, wait for project list template to be loaded
+    const listViewEl = this.domAPI.getElementById('projectListView');
+    if (listViewEl && listViewEl.childElementCount > 0) {
+      this.logger.info('[ProjectDashboard] Project list template already present');
+    } else {
+      this.logger.info('[ProjectDashboard] Waiting for project list template...');
+      try {
+        await new Promise((resolve, reject) => {
+          const eventTarget = this.domAPI.getDocument();
+
+          // Set up timeout
+          const timeoutId = this.browserService.setTimeout(() => {
+            this.logger.error('[ProjectDashboard] Timeout waiting for project list template');
+            // Resolve anyway to prevent hanging
+            resolve();
+          }, 8000);
+
+          const handler = (event) => {
+            this.browserService.clearTimeout(timeoutId);
+            if (event.detail && event.detail.success) {
+              this.logger.info('[ProjectDashboard] projectListHtmlLoaded event received successfully');
+            } else {
+              this.logger.warn('[ProjectDashboard] projectListHtmlLoaded event received with failure',
+                { error: event.detail?.error });
+            }
+            resolve();
+          };
+
+          if (this.eventHandlers && this.eventHandlers.trackListener) {
+            this.eventHandlers.trackListener(
+              eventTarget,
+              'projectListHtmlLoaded',
+              handler,
+              {
+                once: true,
+                context: 'projectDashboard',
+                description: 'Wait for projectListHtmlLoaded'
+              }
+            );
+          } else {
+            eventTarget.addEventListener('projectListHtmlLoaded', handler, { once: true });
+          }
+
+          // Dispatch an event to trigger template loading if needed
+          this.logger.info('[ProjectDashboard] Dispatching requestProjectListTemplate event');
+          this.domAPI.dispatchEvent(
+            eventTarget,
+            new CustomEvent('requestProjectListTemplate', {
+              detail: { requesterId: 'projectDashboard' }
+            })
+          );
+        });
+      } catch (err) {
+        this.logger.error('[ProjectDashboard] Error waiting for project list template', { error: err });
+        // Continue execution
+      }
+    }
+
+    // Use waitForDepsAndDom utility if available
     const waitForDepsAndDom = this.globalUtils?.waitForDepsAndDom;
     if (!waitForDepsAndDom) {
-      this.logger.error('[ProjectDashboard] waitForDepsAndDom utility is not available via this.globalUtils. Component initialization might be unstable.');
+      this.logger.warn('[ProjectDashboard] waitForDepsAndDom utility is not available. Component initialization might be unstable.');
     }
 
-    // ProjectList
+    // Initialize ProjectList component
     if (this.components.projectList && !this.components.projectList.state?.initialized) {
-      this.logger.info('[ProjectDashboard] Waiting for ProjectList DOM elements...');
-      if (waitForDepsAndDom) {
-        try {
-          await waitForDepsAndDom({
-            DependencySystem: this.dependencySystem, // Correct: pass the instance directly
-            domSelectors: ['#projectList', '#projectList .grid', '#projectFilterTabs', '#projectListCreateBtn'],
-            timeout: 5000,
-            notify: this.logger,
-            domAPI: this.domAPI,
-            source: 'ProjectDashboard_InitProjectList_ExtendedWait'
-          });
-          this.logger.info('[ProjectDashboard] ProjectList and its essential child DOM elements ready.');
-        } catch (err) {
-          this.logger.error('[ProjectDashboard] Timeout or error waiting for ProjectList DOM elements. Initialization will halt.', { error: err });
-          throw err; // Re-throw if waitForDepsAndDom fails
-        }
-      }
-      // REMOVED: await this.components.projectList.initialize();
-      this.logger.info('[ProjectDashboard] ProjectList container check complete.');
-    } else if (this.components.projectList && this.components.projectList.state?.initialized) {
-      this.logger.info('[ProjectDashboard] ProjectListComponent was already initialized (checked in _initializeComponents).');
-    } else {
-      this.logger.error('[ProjectDashboard] projectListComponent instance not found in _initializeComponents.');
-    }
+      this.logger.info('[ProjectDashboard] Initializing ProjectList component...');
 
-    // ProjectDetails Container Check
-    if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) { // Only check if component exists but is not initialized
-      this.logger.info('[ProjectDashboard] Checking ProjectDetails container DOM elements...');
+      // Wait for DOM elements if possible
       if (waitForDepsAndDom) {
         try {
-          // Check only for the main container existence here
           await waitForDepsAndDom({
             DependencySystem: this.dependencySystem,
-            domSelectors: ['#projectDetailsView'], // Just the container
+            domSelectors: ['#projectList', '#projectListView'],
             timeout: 5000,
             notify: this.logger,
             domAPI: this.domAPI,
-            source: 'ProjectDashboard_CheckProjectDetailsContainer'
+            source: 'ProjectDashboard_InitProjectList'
           });
-          this.logger.info('[ProjectDashboard] ProjectDetails container element ready.');
+          this.logger.info('[ProjectDashboard] ProjectList DOM elements ready');
         } catch (err) {
-          this.logger.error('[ProjectDashboard] Timeout or error waiting for ProjectDetails container element.', { error: err });
-          // Don't throw, allow potential initialization later
+          this.logger.warn('[ProjectDashboard] Not all ProjectList DOM elements found', { error: err });
+          // Continue anyway
         }
       }
-      // REMOVED: await this.components.projectDetails.initialize();
-      this.logger.info('[ProjectDashboard] ProjectDetails container check complete.');
-    } else if (this.components.projectDetails && this.components.projectDetails.state?.initialized) {
-      this.logger.info('[ProjectDashboard] ProjectDetailsComponent was already initialized (checked in _initializeComponents).');
+
+      // Now explicitly initialize the component
+      try {
+        if (typeof this.components.projectList.initialize === 'function') {
+          await this.components.projectList.initialize();
+          this.logger.info('[ProjectDashboard] ProjectList component initialized successfully');
+        } else {
+          this.logger.error('[ProjectDashboard] ProjectList component missing initialize method');
+        }
+      } catch (err) {
+        this.logger.error('[ProjectDashboard] Error initializing ProjectList component', { error: err });
+        // Continue execution to give projectDetails a chance
+      }
+    } else if (this.components.projectList && this.components.projectList.state?.initialized) {
+      this.logger.info('[ProjectDashboard] ProjectList component already initialized');
     } else {
-      this.logger.error('[ProjectDashboard] projectDetailsComponent instance not found in _initializeComponents.');
+      this.logger.error('[ProjectDashboard] ProjectList component not found');
     }
 
-    this.logger.info('[ProjectDashboard] Component container checks complete.');
+    // Initialize ProjectDetails component
+    if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
+      this.logger.info('[ProjectDashboard] Initializing ProjectDetails component...');
+
+      // Wait for DOM elements if possible
+      if (waitForDepsAndDom) {
+        try {
+          await waitForDepsAndDom({
+            DependencySystem: this.dependencySystem,
+            domSelectors: ['#projectDetailsView'],
+            timeout: 5000,
+            notify: this.logger,
+            domAPI: this.domAPI,
+            source: 'ProjectDashboard_InitProjectDetails'
+          });
+          this.logger.info('[ProjectDashboard] ProjectDetails DOM elements ready');
+        } catch (err) {
+          this.logger.warn('[ProjectDashboard] ProjectDetails DOM element not found', { error: err });
+          // Continue anyway
+        }
+      }
+
+      // Now explicitly initialize the component
+      try {
+        if (typeof this.components.projectDetails.initialize === 'function') {
+          await this.components.projectDetails.initialize();
+          this.logger.info('[ProjectDashboard] ProjectDetails component initialized successfully');
+        } else {
+          this.logger.error('[ProjectDashboard] ProjectDetails component missing initialize method');
+        }
+      } catch (err) {
+        this.logger.error('[ProjectDashboard] Error initializing ProjectDetails component', { error: err });
+      }
+    } else if (this.components.projectDetails && this.components.projectDetails.state?.initialized) {
+      this.logger.info('[ProjectDashboard] ProjectDetails component already initialized');
+    } else {
+      this.logger.error('[ProjectDashboard] ProjectDetails component not found');
+    }
+
+    // Double check both components are properly accessible before completing
+    this.components.projectList = this.components.projectList || this.getModule('projectListComponent');
+    this.components.projectDetails = this.components.projectDetails || this.getModule('projectDetailsComponent');
+
+    this.logger.info('[ProjectDashboard] Component initialization complete', {
+      projectListInitialized: this.components.projectList?.state?.initialized || false,
+      projectDetailsInitialized: this.components.projectDetails?.state?.initialized || false
+    });
   }
 
   _setupEventListeners() {

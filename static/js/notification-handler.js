@@ -4,6 +4,9 @@
 export function createNotificationHandler({
   DependencySystem,
   domAPI,
+  eventHandlers = null,
+  sanitizer = null,
+  errorReporter = null,
   position = "top-right",        // "top-left" | "bottom-right" | "bottom-left"
   maxVisible = 5,
   theme = {
@@ -15,6 +18,12 @@ export function createNotificationHandler({
   },
 } = {}) {
   if (!domAPI) throw new Error('notificationHandler: domAPI is required');
+
+  // Module constants
+  const MODULE_CONTEXT = 'NotificationHandler';
+
+  // Track registered listeners for cleanup
+  const registeredListeners = [];
   const DEFAULT_TIMEOUT = 15000; // ← 15s
 
   /* ────────────────────────── container ─────────────────────────── */
@@ -117,7 +126,24 @@ export function createNotificationHandler({
       ctxDiv.style.marginLeft = "0.5em";
       ctxDiv.style.opacity = "0.85";
       ctxDiv.style.wordBreak = "break-all";
-      ctxDiv.innerHTML = contextLines.join("");
+
+      // Sanitize HTML content before setting innerHTML
+      const htmlContent = contextLines.join("");
+      if (sanitizer && typeof sanitizer.sanitize === 'function') {
+        ctxDiv.innerHTML = sanitizer.sanitize(htmlContent);
+      } else {
+        // Log warning if sanitizer is not available
+        if (errorReporter?.capture) {
+          const err = new Error('Setting innerHTML without sanitization');
+          errorReporter.capture(err, {
+            module: MODULE_CONTEXT,
+            method: 'buildBanner',
+            extra: { type }
+          });
+        }
+        ctxDiv.innerHTML = htmlContent;
+      }
+
       root.appendChild(ctxDiv);
     }
     // --- END: Troubleshooting context display ---
@@ -140,42 +166,70 @@ export function createNotificationHandler({
       userSelect    : "none",
     });
     closeBtn.textContent = "✕";
-    // Use direct event listener initially, but set up a MutationObserver to rebind with eventHandlers when available
-    closeBtn.addEventListener("click", () => fadeOut(root));
 
-    // Set up deferred binding if DependencySystem is available
-    if (DependencySystem) {
-      // Check if eventHandlers is already available
-      const eventHandlers = DependencySystem.modules?.get?.("eventHandlers");
-      if (eventHandlers?.trackListener) {
-        // Replace the direct listener with tracked listener
-        closeBtn.removeEventListener("click", () => fadeOut(root));
-        eventHandlers.trackListener(closeBtn, "click", () => fadeOut(root), {
+    // Handle click event with proper tracking
+    const onCloseClick = () => fadeOut(root);
+
+    // If eventHandlers is directly provided, use it
+    if (eventHandlers && typeof eventHandlers.trackListener === 'function') {
+      // Use the injected eventHandlers
+      eventHandlers.trackListener(closeBtn, "click", onCloseClick, {
+        description: "Notification_Close",
+        context: MODULE_CONTEXT
+      });
+
+      // Add to our tracked listeners for cleanup
+      registeredListeners.push({ element: closeBtn, type: "click", handler: onCloseClick });
+    }
+    // Otherwise, if DependencySystem is available, try to get eventHandlers from there
+    else if (DependencySystem) {
+      // Check if eventHandlers is already available in DependencySystem
+      const ehFromDI = DependencySystem.modules?.get?.("eventHandlers");
+      if (ehFromDI?.trackListener) {
+        // Use the eventHandlers from DependencySystem
+        ehFromDI.trackListener(closeBtn, "click", onCloseClick, {
           description: "Notification_Close",
-          context: "NotificationHandlerCloseButton"
+          context: MODULE_CONTEXT
         });
+
+        // Add to our tracked listeners for cleanup
+        registeredListeners.push({ element: closeBtn, type: "click", handler: onCloseClick });
       } else {
+        // Fallback to direct event listener if no eventHandlers available
+        closeBtn.addEventListener("click", onCloseClick);
+
         // Set up a one-time check for eventHandlers availability
         DependencySystem.waitFor(['eventHandlers'])
           .then(() => {
             const eh = DependencySystem.modules.get("eventHandlers");
-            if (eh?.trackListener && !root.isConnected) {
-              // Only rebind if the element is still in the DOM
-              closeBtn.removeEventListener("click", () => fadeOut(root));
-              eh.trackListener(closeBtn, "click", () => fadeOut(root), {
+            if (eh?.trackListener && root.isConnected) {
+              // Remove direct listener
+              closeBtn.removeEventListener("click", onCloseClick);
+
+              // Add tracked listener
+              eh.trackListener(closeBtn, "click", onCloseClick, {
                 description: "Notification_Close",
-                context: "NotificationHandlerCloseButton"
+                context: MODULE_CONTEXT
               });
+
+              // Add to our tracked listeners for cleanup
+              registeredListeners.push({ element: closeBtn, type: "click", handler: onCloseClick });
             }
           })
-          .catch(() => {
-            // If waitFor times out, log a warning if possible
-            const logger = DependencySystem.modules?.get?.("logger");
-            if (logger?.warn) {
-              logger.warn("[notificationHandler] Failed to bind eventHandlers.trackListener after waiting; close button using direct event listener.");
+          .catch((err) => {
+            // If waitFor times out, log a warning
+            if (errorReporter?.capture) {
+              errorReporter.capture(err, {
+                module: MODULE_CONTEXT,
+                method: 'buildBanner',
+                extra: { message: "Failed to bind eventHandlers.trackListener after waiting" }
+              });
             }
           });
       }
+    } else {
+      // Last resort: direct event listener if no DI system available
+      closeBtn.addEventListener("click", onCloseClick);
     }
     root.appendChild(closeBtn);
 
@@ -210,7 +264,47 @@ export function createNotificationHandler({
 
   const clear = () => { while (container.firstChild) container.firstChild.remove(); };
 
-  const api = { show, clear, getContainer: () => container };
+  // Cleanup method to remove all event listeners and clear notifications
+  const destroy = () => {
+    // Clear all notifications
+    clear();
+
+    // Clean up registered event listeners
+    if (registeredListeners.length > 0) {
+      // If we have eventHandlers, use its cleanup method
+      if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+        eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+      }
+      // Otherwise, manually remove event listeners
+      else {
+        registeredListeners.forEach(({ element, type, handler }) => {
+          if (element && typeof element.removeEventListener === 'function') {
+            element.removeEventListener(type, handler);
+          }
+        });
+      }
+
+      // Clear the listeners array
+      registeredListeners.length = 0;
+    }
+
+    // Log cleanup if errorReporter is available
+    if (errorReporter?.capture) {
+      errorReporter.capture(new Error('NotificationHandler destroyed'), {
+        module: MODULE_CONTEXT,
+        method: 'destroy',
+        severity: 'info'
+      });
+    }
+  };
+
+  const api = {
+    show,
+    clear,
+    getContainer: () => container,
+    destroy
+  };
+
   ["debug", "info", "success", "warning", "error"].forEach(lvl => {
     api[lvl] = (msg, opts = {}) => show(msg, lvl, opts);
   });
@@ -218,9 +312,11 @@ export function createNotificationHandler({
   // Keep warn alias for backward compatibility
   api.warn = api.warning;
 
+  // If notificationHandler is already registered, return the existing instance
   if (DependencySystem?.modules?.has("notificationHandler")) {
     return DependencySystem.modules.get("notificationHandler");
   }
+
   return api;
 }
 
