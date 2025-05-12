@@ -1,0 +1,21 @@
+modules = ["nodejs-18", "python-3.12", "web", "nodejs-23", "postgresql-17", "python-base-3.12", "postgresql-16"]
+run = "uvicorn main:app —reload"
+
+[nix]
+channel = "stable-24_05"
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
+
+[deployment]
+run = ["sh", "-c", "uvicorn main:app —reload"]
+
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+author = 33613185
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "uvicorn main:app --reload --host=0.0.0.0 --port=5000"
