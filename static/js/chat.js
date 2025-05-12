@@ -496,11 +496,16 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
           const conversationPayload = conversationDataFromServer?.conversation;
           chatNotify.debug('conversationResponse.data.conversation (payload):', { source: 'loadConversation', payload: conversationPayload });
 
-          const conversation = conversationPayload || conversationDataFromServer || conversationResponse;
-          chatNotify.debug('Final "conversation" object for ID check:', { source: 'loadConversation', finalObject: conversation, idExists: conversation ? Object.prototype.hasOwnProperty.call(conversation, 'id') : false, idValue: conversation ? conversation.id : undefined });
+          const conversation =
+                conversationResponse?.data?.conversation            // {status:'success',data:{conversation:{…}}}
+             ?? conversationResponse?.data                          // {status:'success',data:{…}}
+             ?? conversationResponse?.conversation                  // {conversation:{…}}
+             ?? conversationResponse;                               // fallback (object itself)
 
-          if (!conversation || !conversation.id) {
-            chatNotify.error('Validation failed: "conversation" object is null/undefined or has no "id" property.', { source: 'loadConversation', checkedObject: conversation });
+          if (!conversation?.id) {
+            chatNotify.error('Validation failed: "conversation" object missing ID.', {
+              source: 'loadConversation', responsePreview: conversationResponse
+            });
             throw new Error('Failed to fetch valid conversation details.');
           }
 
@@ -591,16 +596,17 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         const response = await this._api(convoEndpoint, { method: "POST", body: payload });
         chatNotify.debug('Received response from new conversation API.', { source: 'createNewConversation', responseData: response?.data });
 
-
-        let conversation = null;
-        if (response?.data?.conversation?.id) conversation = response.data.conversation;
-        else if (response?.data?.id) conversation = response.data;
-        else if (response?.conversation?.id) conversation = response.conversation;
-        else if (response?.id) conversation = response;
+        const conversation =
+              response?.data?.conversation
+           ?? response?.data
+           ?? response?.conversation
+           ?? response;
 
         if (!conversation?.id) {
-          chatNotify.error('Server response missing valid conversation ID after creation.', { source: 'createNewConversation', response });
-          throw new Error("Server response missing conversation ID: " + JSON.stringify(response));
+          chatNotify.error('Server response missing valid conversation ID.', {
+            source: 'createNewConversation', responsePreview: response
+          });
+          throw new Error('Server response missing conversation ID');
         }
         chatNotify.debug(`Successfully parsed conversation object from API response. ID: ${conversation.id}`, { source: 'createNewConversation', conversation });
 
