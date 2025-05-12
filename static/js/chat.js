@@ -609,6 +609,7 @@ export function createChatManager({
           return true;
         } catch (error) {
           this._handleError("loading conversation", error); // Already logs
+          maybeCapture(errorReporter, error, { module:'ChatManager', source:'loadConversation', context:'api', originalError:error });
           // this.notify(`[ChatManager] loadConversation error`, "error", { phase: "loadConversation", error: error?.message, stack: error?.stack }); // Redundant
           return false;
         } finally {
