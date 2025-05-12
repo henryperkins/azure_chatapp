@@ -1,0 +1,9 @@
+modules = ["nodejs-18", "python-3.12", "web", "nodejs-23", "postgresql-17", "python-base-3.12", "postgresql-16"]
+run = "uvicorn main:app —reload"
+
+[nix]
+channel = "stable-24_05"
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
+
+[deployment]
+run = ["sh", "-c", "uvicorn main:app —reload"]
