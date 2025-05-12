@@ -664,14 +664,9 @@ async function initializeAuthSystem() {
     await auth.init();
     appState.isAuthenticated = auth.isAuthenticated();
 
-    // Initialize project dashboard after auth is ready
-    const projectDashboard = DependencySystem.modules.get('projectDashboard');
-    if (projectDashboard?.initialize) {
-      notify.debug('[App] Initializing ProjectDashboard after auth system is ready.');
-      await projectDashboard.initialize();
-    } else {
-      notify.warn('[App] ProjectDashboard not found or not initializable after auth system.');
-    }
+    // ProjectDashboard listens to the `authStateChanged` event and
+    // self-initialises when the user becomes authenticated – no manual
+    // call needed here to avoid duplicate initialisation.
 
     // Register auth event listeners
     if (auth.AuthBus) {
