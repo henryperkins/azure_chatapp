@@ -254,6 +254,31 @@ const htmlTemplateLoader = createHtmlTemplateLoader({
 });
 DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
 
+// Load HTML templates immediately to ensure they're available for components
+(async function loadTemplates() {
+  try {
+    // Load project details template
+    await htmlTemplateLoader.loadTemplate({
+      url: '/templates/project-details.html',
+      containerSelector: '#projectDetailsView',
+      eventName: 'projectDetailsTemplateLoaded',
+      timeout: 20000
+    });
+
+    // Load other templates as needed
+    await htmlTemplateLoader.loadTemplate({
+      url: '/templates/modals.html',
+      containerSelector: '#modalContainer',
+      eventName: 'modalsLoaded',
+      timeout: 20000
+    });
+
+    notify.info('[App] HTML templates loaded successfully');
+  } catch (err) {
+    notify.error('[App] Failed to load HTML templates', { error: err });
+  }
+})();
+
 // ---------------------------------------------------------------------------
 // 12) Create API client
 // ---------------------------------------------------------------------------
@@ -337,7 +362,7 @@ export async function init() {
   try {
     // Initialize core systems in the correct order
     await initializeCoreSystems();
-    
+
     // Wait for critical dependencies
     try {
       await DependencySystem.waitFor(
@@ -349,7 +374,7 @@ export async function init() {
       notify.error('[App] Critical deps not met', { error: err });
       throw err;
     }
-    
+
     // Initialize auth system
     await initializeAuthSystem();
 
@@ -405,26 +430,26 @@ export async function init() {
     appState.initialized = true;
     _globalInitCompleted = true;
     notify.info('[App] Initialization complete.', { authenticated: appState.isAuthenticated });
-    
+
     // Dispatch app:ready event
     if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
       domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('app:ready', { detail: { success: true } }));
     } else {
       document.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
     }
-    
+
     return true;
   } catch (err) {
     notify.error(`[App] Initialization failed: ${err?.message}`, { error: err });
     handleInitError(err);
-    
+
     // Dispatch app:ready event with error
     if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
       domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('app:ready', { detail: { success: false, error: err } }));
     } else {
       document.dispatchEvent(new CustomEvent('app:ready', { detail: { success: false, error: err } }));
     }
-    
+
     return false;
   } finally {
     _globalInitInProgress = false;
@@ -442,7 +467,7 @@ async function initializeCoreSystems() {
   const _t = _dbg.start?.('initializeCoreSystems');
   try {
     notify.debug('[App] Initializing core systems...');
-    
+
     // Ensure DOM is ready
     await waitForDepsAndDom({ DependencySystem, domAPI });
 
@@ -472,9 +497,9 @@ async function initializeCoreSystems() {
     DependencySystem.register('auth', authModule);
 
     // Create model config
-    const modelConfigInstance = createModelConfig({ 
-      DependencySystem, 
-      notify 
+    const modelConfigInstance = createModelConfig({
+      DependencySystem,
+      notify
     });
     DependencySystem.register('modelConfig', modelConfigInstance);
 
@@ -493,16 +518,16 @@ async function initializeCoreSystems() {
       apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
       storage: DependencySystem.modules.get('storage'),
       listenerTracker: {
-        add: (element, type, handler, description) => 
-          eventHandlers.trackListener(element, type, handler, { 
-            description, 
-            context: 'projectManager' 
+        add: (element, type, handler, description) =>
+          eventHandlers.trackListener(element, type, handler, {
+            description,
+            context: 'projectManager'
           }),
         remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
       }
     });
     // DependencySystem.register('projectManager', projectManager);   // <--REMOVED, already registered in createProjectManager
-    
+
     // Sync projectManager with eventHandlers
     eventHandlers.setProjectManager?.(projectManager);
 
@@ -530,8 +555,8 @@ async function initializeCoreSystems() {
         (e) => {
           modalsLoadedSuccess = !!(e?.detail?.success);
           if (!modalsLoadedSuccess) {
-            notify.error('[App] modalsLoaded event fired but modals failed to load', { 
-              error: e?.detail?.error 
+            notify.error('[App] modalsLoaded event fired but modals failed to load', {
+              error: e?.detail?.error
             });
           } else {
             notify.info('[App] modalsLoaded event fired: modals injected successfully');
@@ -566,6 +591,33 @@ async function initializeCoreSystems() {
       }
     }
 
+    // Wait for HTML templates to be loaded before creating UI components
+    notify.debug('[App] Waiting for HTML templates to be loaded before creating UI components...');
+    try {
+      // Check if project details template is already loaded
+      const projectDetailsLoaded = domAPI.getElementById('projectDetailsView')?.querySelector('#projectTitle');
+      if (!projectDetailsLoaded) {
+        notify.debug('[App] Project details template not yet loaded, waiting...');
+        await new Promise((resolve) => {
+          const listener = () => {
+            domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
+            resolve();
+          };
+
+          domAPI.addEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
+
+          // Set a timeout in case the event never fires
+          setTimeout(() => {
+            domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
+            notify.warn('[App] Timed out waiting for project details template in initializeCoreSystems');
+            resolve();
+          }, 10000);
+        });
+      }
+    } catch (err) {
+      notify.error('[App] Error waiting for HTML templates in initializeCoreSystems', { error: err });
+    }
+
     // Initialize UI components
     createAndRegisterUIComponents();
 
@@ -590,21 +642,48 @@ async function initializeCoreSystems() {
 // 16) Create and register UI components
 // ---------------------------------------------------------------------------
 function createAndRegisterUIComponents() {
-  // Create project list component
-  const projectListComponentInstance = new ProjectListComponent({
-    projectManager: DependencySystem.modules.get('projectManager'),
-    eventHandlers,
-    modalManager: DependencySystem.modules.get('modalManager'),
-    app,
-    router: DependencySystem.modules.get('navigationService'),
-    notify,
-    storage: DependencySystem.modules.get('storage'),
-    sanitizer: DependencySystem.modules.get('sanitizer'),
-    domAPI,
-    browserService: browserServiceInstance,
-    globalUtils: DependencySystem.modules.get('globalUtils')
-  });
-  DependencySystem.register('projectListComponent', projectListComponentInstance);
+  // Check if required DOM elements exist before creating components
+  const projectListElement = domAPI.getElementById('projectList');
+  const projectDetailsElement = domAPI.getElementById('projectDetailsView');
+  const projectTitleElement = domAPI.getElementById('projectTitle');
+  const projectDescriptionElement = domAPI.getElementById('projectDescription');
+  const backBtnElement = domAPI.getElementById('backToProjectsBtn');
+
+  if (!projectListElement) {
+    notify.error('[App] #projectList element not found, cannot create ProjectListComponent', {
+      source: 'createAndRegisterUIComponents'
+    });
+  }
+
+  if (!projectDetailsElement || !projectTitleElement || !projectDescriptionElement || !backBtnElement) {
+    notify.error('[App] Project details elements not found, cannot create ProjectDetailsComponent', {
+      source: 'createAndRegisterUIComponents',
+      detail: {
+        projectDetailsFound: !!projectDetailsElement,
+        projectTitleFound: !!projectTitleElement,
+        projectDescriptionFound: !!projectDescriptionElement,
+        backBtnFound: !!backBtnElement
+      }
+    });
+  }
+
+  // Create project list component if DOM element exists
+  if (projectListElement) {
+    const projectListComponentInstance = new ProjectListComponent({
+      projectManager: DependencySystem.modules.get('projectManager'),
+      eventHandlers,
+      modalManager: DependencySystem.modules.get('modalManager'),
+      app,
+      router: DependencySystem.modules.get('navigationService'),
+      notify,
+      storage: DependencySystem.modules.get('storage'),
+      sanitizer: DependencySystem.modules.get('sanitizer'),
+      domAPI,
+      browserService: browserServiceInstance,
+      globalUtils: DependencySystem.modules.get('globalUtils')
+    });
+    DependencySystem.register('projectListComponent', projectListComponentInstance);
+  }
 
   // Create knowledge base component
   const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
@@ -617,34 +696,56 @@ function createAndRegisterUIComponents() {
   });
   DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
 
-  // Create project details component
-  const projectDetailsComponentInstance = createProjectDetailsComponent({
-    projectManager: DependencySystem.modules.get('projectManager'),
-    eventHandlers,
-    modalManager: DependencySystem.modules.get('modalManager'),
-    FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
-    domAPI,
-    notify,
-    sanitizer: DependencySystem.modules.get('sanitizer'),
-    app,
-    router: DependencySystem.modules.get('navigationService'),
-    errorReporter: DependencySystem.modules.get('errorReporter'),
-    chatManager: DependencySystem.modules.get('chatManager'),
-    modelConfig: DependencySystem.modules.get('modelConfig'),
-    knowledgeBaseComponent: knowledgeBaseComponentInstance,
-    onBack: async () => {
-      const navService = DependencySystem.modules.get('navigationService');
-      navService?.navigateToProjectList();
-    }
-  });
-  DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
+  // Create project details component if DOM elements exist
+  if (projectDetailsElement && projectTitleElement && projectDescriptionElement && backBtnElement) {
+    const projectDetailsComponentInstance = createProjectDetailsComponent({
+      projectManager: DependencySystem.modules.get('projectManager'),
+      eventHandlers,
+      modalManager: DependencySystem.modules.get('modalManager'),
+      FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
+      domAPI,
+      notify,
+      sanitizer: DependencySystem.modules.get('sanitizer'),
+      app,
+      router: DependencySystem.modules.get('navigationService'),
+      errorReporter: DependencySystem.modules.get('errorReporter'),
+      chatManager: DependencySystem.modules.get('chatManager'),
+      modelConfig: DependencySystem.modules.get('modelConfig'),
+      knowledgeBaseComponent: knowledgeBaseComponentInstance,
+      onBack: async () => {
+        const navService = DependencySystem.modules.get('navigationService');
+        navService?.navigateToProjectList();
+      }
+    });
+    DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
+  } else {
+    notify.warn('[App] Skipping ProjectDetailsComponent creation due to missing DOM elements', {
+      source: 'createAndRegisterUIComponents'
+    });
+  }
 
   // Update ProjectDashboard's component references
   const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
   if (projectDashboardInstance?.components) {
-    projectDashboardInstance.components.projectDetails = projectDetailsComponentInstance;
-    projectDashboardInstance.components.projectList = projectListComponentInstance;
-    notify.debug('[App CoreSys] ProjectDashboard components updated with new instances.');
+    // Get components from DependencySystem
+    const projectDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
+    const projectListComponent = DependencySystem.modules.get('projectListComponent');
+
+    // Update dashboard components if they exist
+    if (projectDetailsComponent) {
+      projectDashboardInstance.components.projectDetails = projectDetailsComponent;
+    }
+
+    if (projectListComponent) {
+      projectDashboardInstance.components.projectList = projectListComponent;
+    }
+
+    notify.debug('[App CoreSys] ProjectDashboard components updated with instances from DependencySystem.', {
+      detail: {
+        projectDetailsFound: !!projectDetailsComponent,
+        projectListFound: !!projectListComponent
+      }
+    });
   } else {
     notify.warn('[App CoreSys] ProjectDashboard instance or its components property not found for update.');
   }
@@ -658,7 +759,7 @@ async function initializeAuthSystem() {
   if (!auth?.init) {
     throw new Error('[App] Auth module is missing or invalid.');
   }
-  
+
   try {
     // Initialize auth module
     await auth.init();
@@ -683,7 +784,7 @@ async function initializeAuthSystem() {
         { description: '[App] AuthBus authReady', context: 'app' }
       );
     }
-    
+
     renderAuthHeader();
     return true;
   } catch (err) {
@@ -698,26 +799,86 @@ async function initializeAuthSystem() {
 // ---------------------------------------------------------------------------
 async function initializeUIComponents() {
   const _t = _dbg.start?.('initializeUIComponents');
-  
+
   try {
     if (_uiInitialized) {
       notify.warn('[App] initializeUIComponents called again; skipping.');
       return;
     }
-    
+
     notify.debug('[App] Initializing UI components...');
+
+    // Wait for HTML templates to be loaded
+    notify.debug('[App] Waiting for HTML templates to be loaded...');
+    try {
+      // Wait for project details template
+      await new Promise((resolve) => {
+        const alreadyLoaded = domAPI.getElementById('projectDetailsView')?.querySelector('#projectTitle');
+        if (alreadyLoaded) {
+          notify.debug('[App] Project details template already loaded');
+          resolve();
+          return;
+        }
+
+        const listener = (e) => {
+          notify.debug('[App] Project details template loaded event received', {
+            success: e.detail?.success
+          });
+          domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
+          resolve();
+        };
+
+        domAPI.addEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
+
+        // Set a timeout in case the event never fires
+        setTimeout(() => {
+          domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
+          notify.warn('[App] Timed out waiting for project details template to load');
+          resolve();
+        }, 10000);
+      });
+
+      // Wait for modals to be loaded
+      await new Promise((resolve) => {
+        const alreadyLoaded = domAPI.getElementById('modalContainer')?.querySelector('.modal');
+        if (alreadyLoaded) {
+          notify.debug('[App] Modals already loaded');
+          resolve();
+          return;
+        }
+
+        const listener = (e) => {
+          notify.debug('[App] Modals loaded event received', {
+            success: e.detail?.success
+          });
+          domAPI.removeEventListener(domAPI.getDocument(), 'modalsLoaded', listener);
+          resolve();
+        };
+
+        domAPI.addEventListener(domAPI.getDocument(), 'modalsLoaded', listener);
+
+        // Set a timeout in case the event never fires
+        setTimeout(() => {
+          domAPI.removeEventListener(domAPI.getDocument(), 'modalsLoaded', listener);
+          notify.warn('[App] Timed out waiting for modals to load');
+          resolve();
+        }, 10000);
+      });
+    } catch (err) {
+      notify.error('[App] Error waiting for HTML templates', { error: err });
+    }
 
     // Ensure DOM elements exist
     await waitForDepsAndDom({
       DependencySystem,
       domAPI,
-      domSelectors: ['#projectList', '#projectDetailsView']
+      domSelectors: ['#projectList', '#projectDetailsView', '#projectTitle', '#projectDescription', '#backToProjectsBtn']
     });
 
     // Create chat extensions
     const chatExtensionsInstance = createChatExtensions({
-      DependencySystem, 
-      eventHandlers, 
+      DependencySystem,
+      eventHandlers,
       notificationHandler: notify
     });
     DependencySystem.register('chatExtensions', chatExtensionsInstance);
@@ -741,14 +902,14 @@ async function initializeUIComponents() {
           try {
             await chatManager.loadConversation(conversationId);
           } catch (err) {
-            notify.error('[App] Failed to load conversation from uiRenderer selection.', { 
-              error: err, 
-              conversationId 
+            notify.error('[App] Failed to load conversation from uiRenderer selection.', {
+              error: err,
+              conversationId
             });
           }
         } else {
-          notify.error('[App] chatManager not available for onConversationSelect.', { 
-            conversationId 
+          notify.error('[App] chatManager not available for onConversationSelect.', {
+            conversationId
           });
         }
       },
@@ -758,14 +919,14 @@ async function initializeUIComponents() {
           try {
             await projectDashboardDep.showProjectDetails(projectId);
           } catch (err) {
-            notify.error('[App] Failed to show project details from uiRenderer selection.', { 
-              error: err, 
-              projectId 
+            notify.error('[App] Failed to show project details from uiRenderer selection.', {
+              error: err,
+              projectId
             });
           }
         } else {
-          notify.error('[App] projectDashboard not available for onProjectSelect.', { 
-            projectId 
+          notify.error('[App] projectDashboard not available for onProjectSelect.', {
+            projectId
           });
         }
       }
@@ -795,10 +956,9 @@ async function initializeUIComponents() {
     await safeInit(sidebarInstance, 'Sidebar', 'init');
     await safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
     await safeInit(DependencySystem.modules.get('knowledgeBaseComponent'), 'KnowledgeBase', 'initialize');
-    await safeInit(DependencySystem.modules.get('projectListComponent'), 'ProjectList', 'initialize');
-    await safeInit(DependencySystem.modules.get('projectDetailsComponent'), 'ProjectDetails', 'initialize');
+    // Initialization of ProjectList and ProjectDetails moved to ProjectDashboard after template loading
 
-    // Load projects if authenticated
+    // Load projects if authenticated (ProjectList will handle rendering when initialized by Dashboard)
     if (appState.isAuthenticated) {
       const pm = DependencySystem.modules.get('projectManager');
       pm?.loadProjects?.('all').catch(err => {
@@ -840,12 +1000,12 @@ async function safeInit(instance, name, methodName) {
     notify.warn(`[App] ${name} instance not found for ${methodName}`);
     return false;
   }
-  
+
   if (typeof instance[methodName] !== 'function') {
     notify.debug(`[App] ${name} has no ${methodName} method`);
     return false;
   }
-  
+
   try {
     await instance[methodName]();
     notify.debug(`[App] ${name}.${methodName}() completed successfully`);
@@ -862,30 +1022,30 @@ function handleAuthStateChange(event) {
   const detail = event?.detail || {};
   const isAuthenticated = !!detail.authenticated;
   const user = detail.user || null;
-  
+
   notify.debug(`[App] Auth state changed: ${isAuthenticated ? 'authenticated' : 'not authenticated'}`, {
     source: 'handleAuthStateChange',
     extra: { user, eventSource: detail.source }
   });
-  
+
   appState.isAuthenticated = isAuthenticated;
   app.state.currentUser = user;
   currentUser = user;
-  
+
   renderAuthHeader();
-  
+
   // Update chat manager if available
   const chatManager = DependencySystem.modules.get('chatManager');
   if (chatManager && typeof chatManager.setAuthState === 'function') {
     chatManager.setAuthState(isAuthenticated);
   }
-  
+
   // Update project manager if available
   const projectManager = DependencySystem.modules.get('projectManager');
   if (projectManager && typeof projectManager.setAuthState === 'function') {
     projectManager.setAuthState(isAuthenticated);
   }
-  
+
   // If authenticated, load projects
   if (isAuthenticated && projectManager && typeof projectManager.loadProjects === 'function') {
     projectManager.loadProjects('all').catch(err => {
@@ -905,13 +1065,13 @@ function renderAuthHeader() {
     const userInitialsEl = domAPI.getElementById('userInitials');
     const authStatus = domAPI.getElementById('authStatus');
     const userStatus = domAPI.getElementById('userStatus');
-    
+
     notify.debug('[App] renderAuthHeader invoked', {
       isAuth,
       authBtnExists: !!authBtn,
       authBtnHidden: authBtn ? authBtn.classList.contains('hidden') : 'n/a'
     });
-    
+
     if (isAuth) {
       if (authBtn) domAPI.addClass(authBtn, 'hidden');
       if (userMenu) domAPI.removeClass(userMenu, 'hidden');
@@ -922,7 +1082,7 @@ function renderAuthHeader() {
       const orphan = domAPI.getElementById('headerLoginForm');
       if (orphan) orphan.remove();
     }
-    
+
     // Update user initials and details if logged in
     if (isAuth && userMenu && userInitialsEl) {
       let initials = '?';
@@ -933,7 +1093,7 @@ function renderAuthHeader() {
       }
       domAPI.setTextContent(userInitialsEl, initials);
     }
-    
+
     // Auth status text
     if (authStatus) {
       domAPI.setTextContent(authStatus, isAuth ?
@@ -941,14 +1101,14 @@ function renderAuthHeader() {
         'Not Authenticated'
       );
     }
-    
+
     // User status text
     if (userStatus) {
       domAPI.setTextContent(userStatus, isAuth && user?.username ?
         `Hello, ${user.name ?? user.username}` : 'Offline'
       );
     }
-    
+
     // Logout button
     if (logoutBtn) {
       eventHandlers.trackListener(
@@ -973,7 +1133,7 @@ async function fetchCurrentUser() {
       notify.error('[App] Auth module not available in fetchCurrentUser.');
       return null;
     }
-    
+
     // Priority 1: Use dedicated async fetchCurrentUser
     if (authModule.fetchCurrentUser && typeof authModule.fetchCurrentUser === 'function') {
       const userObj = await authModule.fetchCurrentUser();
@@ -983,7 +1143,7 @@ async function fetchCurrentUser() {
       }
       notify.warn('[App] fetchCurrentUser (from authModule.fetchCurrentUser) did not return a valid user object with ID.', { userObj });
     }
-    
+
     // Priority 2: Fallback to getCurrentUserObject
     if (authModule.getCurrentUserObject && typeof authModule.getCurrentUserObject === 'function') {
       const userObjFromGetter = authModule.getCurrentUserObject();
@@ -993,7 +1153,7 @@ async function fetchCurrentUser() {
       }
       notify.warn('[App] fetchCurrentUser (from authModule.getCurrentUserObject) did not return a valid user object with ID.', { userObjFromGetter });
     }
-    
+
     // Priority 3: Check getCurrentUserAsync
     if (authModule.getCurrentUserAsync && typeof authModule.getCurrentUserAsync === 'function') {
       const userObjAsync = await authModule.getCurrentUserAsync();
@@ -1003,7 +1163,7 @@ async function fetchCurrentUser() {
       }
       notify.warn('[App] fetchCurrentUser (from authModule.getCurrentUserAsync) did not return a valid user object with ID.', { userObjAsync });
     }
-    
+
     notify.error('[App] fetchCurrentUser: Could not retrieve a valid user object with ID from auth module using any available method.');
     return null;
   } catch (error) {
@@ -1030,19 +1190,19 @@ function setupChatInitializationTrigger() {
   const projectManager = DependencySystem.modules.get('projectManager');
   const chatManager = DependencySystem.modules.get('chatManager');
   const auth = DependencySystem.modules.get('auth');
-  
+
   if (!projectManager || !chatManager || !auth) {
     notify.warn('[App] Missing dependencies for setupChatInitializationTrigger');
     return;
   }
-  
+
   eventHandlers.trackListener(
     projectManager,
     'projectSelected',
     async (e) => {
       const projectId = e?.detail?.projectId;
       if (!projectId) return;
-      
+
       if (auth.isAuthenticated() && chatManager?.initialize) {
         try {
           await chatManager.initialize({ projectId });
@@ -1058,7 +1218,7 @@ function setupChatInitializationTrigger() {
 
 function handleInitError(err) {
   notify.error('[App] Initialization error', { error: err });
-  
+
   // Try to show error in UI
   try {
     const errorContainer = domAPI.getElementById('appInitError');
@@ -1089,9 +1249,9 @@ function toggleLoadingSpinner(show) {
 function createOrGetChatManager() {
   let cm = DependencySystem.modules.get('chatManager');
   if (cm) return cm;
-  
+
   const authModule = DependencySystem.modules.get('auth');
-  
+
   cm = createChatManager({
     DependencySystem,
     apiRequest,
@@ -1115,7 +1275,7 @@ function createOrGetChatManager() {
     notify,
     errorReporter: DependencySystem.modules.get('errorReporter')
   });
-  
+
   DependencySystem.register('chatManager', cm);
   return cm;
 }
