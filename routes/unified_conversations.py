@@ -17,6 +17,8 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select # Add this import
+from sqlalchemy.orm import selectinload # Add this import
 from models.project import Project # ADDED
 import sentry_sdk
 from sentry_sdk import (
@@ -182,8 +184,10 @@ async def create_conversation(
             with sentry_span(op="access.check", description="Validate project access"):
                 await validate_project_access(project_id, current_user, db)
 
-            # Fetch Project
-            project = await db.get(Project, project_id)
+            # Fetch Project and eagerly load its knowledge_base
+            stmt = select(Project).options(selectinload(Project.knowledge_base)).where(Project.id == project_id)
+            result = await db.execute(stmt)
+            project = result.scalar_one_or_none()
             if not project:
                 transaction.set_tag("error.type", "project_retrieval")
                 metrics.incr("conversation.create.failure", tags={"reason": "project_not_found_post_validation"})
