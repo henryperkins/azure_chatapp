@@ -123,8 +123,11 @@ class ConversationService:
                 raise ConversationError("Invalid project ID format", 400) from None
 
             filters.append(Conversation.project_id == pid)
-            # Eager load project only when project_id is specified
-            query = query.options(joinedload(Conversation.project))
+            # Eager load project and knowledge_base only when project_id is specified
+            query = query.options(
+                joinedload(Conversation.project),
+                joinedload(Conversation.knowledge_base) # Add this
+            )
 
             result = await self.db.execute(query.where(and_(*filters)))
             conv = result.scalar_one_or_none()
@@ -144,19 +147,19 @@ class ConversationService:
 
         if not conv:
             logger.warning(
-                f"Conversation access validation failed. "
+                f"Conversation NOT FOUND. "
                 f"ID: {conversation_id}, User: {user_id}, Project: {project_id}, Found: {bool(conv)}"
             )
-            raise ConversationError("Conversation not found or access denied", 404)
+            raise ConversationError("Conversation not found", 404)
 
         # If project_id was provided, ensure the loaded conversation's project is accessible
         if project_id and conv.project:
             if conv.project.user_id != user_id:
                 logger.error(
-                    f"Project access denied for project {project_id} linked to conversation {conversation_id}. "
-                    f"User: {user_id}"
+                    f"ACCESS DENIED: Project {project_id} (for conversation {conversation_id}) "
+                    f"belongs to user {conv.project.user_id} but tried by user {user_id}"
                 )
-                raise ConversationError("Project access denied", 403)
+                raise ConversationError("Access denied to conversation (invalid permissions or ownership)", 403)
 
         return conv
 
@@ -260,6 +263,12 @@ class ConversationService:
         else:
             filters.append(Conversation.project_id.is_(None))
 
+        # Define eager loading options
+        load_options = [
+            joinedload(Conversation.project),
+            joinedload(Conversation.knowledge_base)
+        ]
+
         return await get_all_by_condition(
             self.db,
             Conversation,
@@ -267,6 +276,7 @@ class ConversationService:
             order_by=Conversation.created_at.desc(),
             limit=limit,
             offset=skip,
+            options=load_options # Pass the options here
         )
 
     async def update_conversation(
@@ -768,7 +778,7 @@ class ConversationService:
                 .distinct()
                 .order_by(c_alias.created_at.desc())
             )
-            total_query = select(func.count("*")).select_from(
+            total_query = select(func.count()).select_from( # Corrected: func.count()
                 join_stmt.order_by(None).subquery()
             )
 
@@ -786,7 +796,7 @@ class ConversationService:
                 .where(and_(*base_filters, search_filter))
                 .order_by(Conversation.created_at.desc())
             )
-            count_stmt = select(func.count("*")).select_from(
+            count_stmt = select(func.count()).select_from( # Corrected: func.count()
                 query_stmt.order_by(None).subquery()
             )
             result_count = await self.db.execute(count_stmt)

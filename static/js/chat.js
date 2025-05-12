@@ -489,8 +489,18 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
             this._api(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: "GET" })
           ]);
 
-          const conversation = conversationResponse?.data?.conversation || conversationResponse?.data || conversationResponse;
+          // Enhanced logging for debugging conversation data structure
+          chatNotify.debug('Raw conversationResponse from API:', { source: 'loadConversation', response: conversationResponse });
+          const conversationDataFromServer = conversationResponse?.data;
+          chatNotify.debug('conversationResponse.data:', { source: 'loadConversation', data: conversationDataFromServer });
+          const conversationPayload = conversationDataFromServer?.conversation;
+          chatNotify.debug('conversationResponse.data.conversation (payload):', { source: 'loadConversation', payload: conversationPayload });
+
+          const conversation = conversationPayload || conversationDataFromServer || conversationResponse;
+          chatNotify.debug('Final "conversation" object for ID check:', { source: 'loadConversation', finalObject: conversation, idExists: conversation ? Object.prototype.hasOwnProperty.call(conversation, 'id') : false, idValue: conversation ? conversation.id : undefined });
+
           if (!conversation || !conversation.id) {
+            chatNotify.error('Validation failed: "conversation" object is null/undefined or has no "id" property.', { source: 'loadConversation', checkedObject: conversation });
             throw new Error('Failed to fetch valid conversation details.');
           }
 

@@ -20,7 +20,7 @@ export const APP_CONFIG = {
   TIMEOUTS: {
     DEPENDENCY_WAIT: 5000,      // generic waitFor timeout (hardened, was 15000)
     STARTUP_ABORT: 12000,       // whole-app bootstrap max
-    API_REQUEST: 10000 // Added a default API timeout, was missing in globalUtils for timer
+    API_REQUEST: 30000 // Increased API timeout to 30 seconds
   },
   PERFORMANCE_THRESHOLDS: {
     INIT_WARN: 3000

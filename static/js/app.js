@@ -1138,11 +1138,15 @@ function handleAuthStateChange(e) {
     browserAPI.setCurrentUser(user); // Update browser API's context
 
     // Add debug log for authentication state change
-    console.log('[App Debug] Authentication state changed:', {
-      authenticated: newAuthState,
-      userId: user?.id,
-      userEmail: user?.email,
-      source: source || 'unknown'
+    notify.debug('[App Debug] Authentication state changed:', {
+      extra: {
+        authenticated: newAuthState,
+        userId: user?.id,
+        userEmail: user?.email,
+        source: source || 'unknown'
+      },
+      group: true, // Optional: to group related debug messages if your notify supports it
+      context: 'handleAuthStateChange' // Provide context for the notification
     });
 
     // Update currentUser in DependencySystem to ensure consistency

@@ -1,142 +1,169 @@
-# 🚀 Frontend Code Patterns – Quick Reference
+# Frontend Code Patterns (Condensed)
 
-Follow these guidelines to ensure consistency, maintainability, and security across all frontend modules.
+Use these guidelines to keep frontend code consistent, maintainable, and secure. Each pattern shows preferred usage and highlights common pitfalls.
 
 ---
 
 ## 1. Factory Function Export
-
-Always export modules via a factory function:
-
-```javascript
+**Do**
+```js
 export function createXyz(deps) {
-  if (!deps.eventHandlers) throw new Error('eventHandlers required');
+  if (!deps.eventHandlers) throw new Error('missing eventHandlers');
   return new XyzModule(deps);
 }
 ```
+**Don’t**
+```js
+// Running logic directly on import
+setupListeners(); // side effect
+```
+• Always export a factory that takes dependencies.
+• Validate dependencies at the start.
+
+---
 
 ## 2. Strict Dependency Injection (No Globals)
-
-Never directly access global `window`, `document`, or DOM APIs:
-
-✅ **Good:**
-
-```javascript
+**Do**
+```js
 const sidebar = domAPI.getElementById('sidebar');
 ```
-
-❌ **Bad:**
-
-```javascript
+**Don’t**
+```js
 const sidebar = document.getElementById('sidebar');
 ```
+• Never directly use global objects (window, document, console).
+• Inject and use abstractions (domAPI, notify, etc.).
+
+---
 
 ## 3. No Side Effects on Import
+• Keep modules "pure" at import.
+• Only start processes or attach listeners inside an exported initializer function.
 
-Avoid executing code or altering state upon module import:
+---
 
-✅ **Good:**
-
-```javascript
-export function createWidget(deps) { /* logic */ }
+## 4. Centralized Event Handling & Cleanup
+**Do**
+```js
+eventHandlers.trackListener(el, 'click', onClick, { context: 'myModule' });
+// later…
+eventHandlers.cleanupListeners({ context: 'myModule' });
 ```
+• Use a single eventHandlers utility.
+• Provide a unique `context` for each module’s listeners.
 
-❌ **Bad:**
-
-```javascript
-setupListeners(); // side effect at import
-```
-
-## 4. Event Listener Cleanup
-
-Always track listeners explicitly and provide cleanup methods:
-
-```javascript
-const listeners = [];
-listeners.push(eventHandlers.trackListener(el, 'click', onClick, { context: 'sidebar' }));
-
-function cleanup() {
-  listeners.forEach(listener => listener.remove());
-}
-```
+---
 
 ## 5. Contextual Listener Tracking
+• Always specify a meaningful `context` for eventHandlers.
+• That context is used for easy listener cleanup.
 
-Include a clear context identifier for organized listener cleanup:
+---
 
-```javascript
-eventHandlers.trackListener(el, 'click', handler, { context: 'myModule' });
-
-function destroy() {
-  eventHandlers.cleanupListeners({ context: 'myModule' });
-}
-```
-
-## 6. Notifications (No Console or Alert)
-
-Use injected `notify` utility for messaging and logging:
-
-```javascript
+## 6. Notifications (Avoid console/alert)
+**Do**
+```js
 notify.error('Failed to load data', { module: 'myModule', context: 'dataFetch' });
 ```
+• Use injected `notify` for all messages.
+• Helps maintain a consistent user experience and log format.
 
-Simplify with context helpers:
+---
 
-```javascript
-const moduleNotify = notify.withContext({ module: 'MyModule' });
-moduleNotify.info('Operation started');
+## 7. Debug & Trace
+**Do**
+```js
+const dbg = createDebugTools({ notify });
+const id = dbg.start('fetch');
+// operations…
+dbg.stop(id, 'fetch completed');
 ```
+• Use a single debugging utility to measure performance and gather diagnostic info.
 
-## 7. Debug and Trace Utilities
-
-Leverage injected `notify` via `createDebugTools` for performance tracing:
-
-```javascript
-const debug = createDebugTools({ notify });
-const traceId = debug.start('fetchData');
-// ... perform operations ...
-debug.stop(traceId, 'fetchData');
-```
+---
 
 ## 8. Context-Rich Error Logging
-
-Always provide detailed context when logging errors:
-
-```javascript
+**Do**
+```js
 try {
   await api.getData(id);
 } catch (err) {
   errorReporter.capture(err, { module: 'myModule', method: 'fetch', id });
 }
 ```
-
-## 9. DOM Security: Sanitized Inputs
-
-Always sanitize user inputs before inserting them into the DOM:
-
-```javascript
-const safeHtml = sanitizer.sanitize(userInput);
-el.innerHTML = safeHtml;
-```
-
-## 10. Application Readiness Coordination
-
-Coordinate initialization by awaiting the global `app:ready` event or using `DependencySystem.waitFor`:
-
-```javascript
-await DependencySystem.waitFor(['serviceA']);
-await new Promise(resolve => {
-  eventHandlers.trackListener(domAPI.getDocument(), 'app:ready', resolve, { once: true });
-});
-```
-
-Avoid dispatching module-specific readiness events.
+• Always include module/method details.
+• Helps trace issues quickly.
 
 ---
 
-### Always Remember:
+## 9. DOM Security – Sanitize Inputs
+**Do**
+```js
+el.innerHTML = sanitizer.sanitize(userInput);
+```
+• Never trust user inputs. Clean them before injecting into the DOM.
 
-* Explicitly inject all dependencies.
-* Provide and implement event listener cleanup.
-* Validate dependencies early.
-* Ensure module imports are pure and side-effect free.
+---
+
+## 10. App Readiness Coordination
+```js
+await DependencySystem.waitFor(['serviceA']);
+```
+• Wait or listen for `'app:ready'` before starting module logic.
+
+---
+
+## 11. Central `app.state`
+• Store key global states (authenticated, currentUser) in `app.state`.
+• Modules read or subscribe rather than directly mutating.
+
+---
+
+## 12. Module-Specific Event Bus
+```js
+// AuthBus in auth module
+AuthBus.dispatchEvent(new CustomEvent('authChanged', { detail: {...} }));
+```
+• If a module manages significant internal state, expose an EventTarget.
+• Other modules listen without tight coupling.
+
+---
+
+## 13. Uniform Navigation Service
+```js
+navigationService.navigateTo('projectDetails', { projectId: 123 });
+```
+• Route and URL management go through a single `navigationService`.
+• Ensures consistent transitions, history, and event hooks.
+
+---
+
+## 14. Single API Client
+```js
+const response = await apiRequest('/login', {
+  method: 'POST',
+  body: { username, password }
+});
+```
+• Centralize fetch logic in one `apiClient`.
+• Handles CSRF, headers, error handling in one place.
+
+---
+
+## 15. Contextual Notifier Factories
+```js
+const authNotify = notify.withContext({ module: 'Auth', context: 'login' });
+authNotify.info('Logging in...');
+```
+• Use `notify.withContext` to automatically tag notifications with module/context/source.
+• Encourages consistent, easily traceable logging.
+
+---
+
+### Final Reminders
+• **Inject everything you use** – no hidden globals.
+• **Centralize repeated tasks** (events, nav, API, notifications).
+• **No initialization on import** – do it in your factory.
+• **Use contexts** for cleaning up listeners or tagging logs.
+
+By adhering to these patterns and verifying each module against them, you’ll avoid anti-patterns like global references, scattered event cleanup, uncontrolled side effects, and inconsistent notification or logging approaches.

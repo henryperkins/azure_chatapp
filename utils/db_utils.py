@@ -25,6 +25,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import strategy_options # Add this import
 from sqlalchemy.sql.expression import BinaryExpression
 from sqlalchemy.sql import ColumnElement
 
@@ -107,7 +108,7 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
         )
     )
     logger.info(f"Scheduled token cleanup to run every {interval_minutes} minutes")
-    
+
     # Start the database health check task in the background
     asyncio.create_task(
         run_periodic_task(
@@ -121,10 +122,10 @@ async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
 async def periodic_health_check(session: AsyncSession) -> str:
     """
     Periodic database health check to ensure connectivity.
-    
+
     Args:
         session: Database session
-        
+
     Returns:
         Status message
     """
@@ -169,6 +170,7 @@ async def get_all_by_condition(
     order_by: Optional[Any] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
+    options: Optional[List[strategy_options.Load]] = None, # New parameter
 ) -> List[T]:
     """
     Generic function to retrieve all model instances matching given conditions.
@@ -185,6 +187,10 @@ async def get_all_by_condition(
         List of model instances matching the conditions
     """
     query = select(model_class)
+
+    # Apply loader options if provided
+    if options:
+        query = query.options(*options) # Apply options here
 
     # Apply all where conditions
     for condition in where_clauses:

@@ -89,23 +89,20 @@ def serialize_conversation(conversation: Conversation) -> dict[str, Any]:
     Returns:
         Dictionary with serialized conversation data
     """
-    conv_dict = (
-        conversation if isinstance(conversation, dict) else conversation.__dict__
-    )
-
-    # Explicitly handle datetime fields
-    created_at = conv_dict.get("created_at")
-    updated_at = conv_dict.get("updated_at")
-
+    # Instead of using __dict__, access attributes directly from the ORM object
+    # This is safer and more standard for SQLAlchemy models.
     return {
-        "id": serialize_uuid(conv_dict.get("id")),
-        "title": conv_dict.get("title"),
-        "model_id": conv_dict.get("model_id"),
-        "project_id": serialize_uuid(conv_dict.get("project_id")),
-        "created_at": serialize_datetime(created_at),
-        "updated_at": serialize_datetime(updated_at),
-        "is_deleted": conv_dict.get("is_deleted", False),
-        "extra_data": conv_dict.get("extra_data", {}),
+        "id": serialize_uuid(conversation.id if hasattr(conversation, 'id') else None),
+        "title": conversation.title if hasattr(conversation, 'title') else None,
+        "model_id": conversation.model_id if hasattr(conversation, 'model_id') else None,
+        "project_id": serialize_uuid(conversation.project_id if hasattr(conversation, 'project_id') else None),
+        "created_at": serialize_datetime(conversation.created_at if hasattr(conversation, 'created_at') else None),
+        "updated_at": serialize_datetime(conversation.updated_at if hasattr(conversation, 'updated_at') else None),
+        "is_deleted": conversation.is_deleted if hasattr(conversation, 'is_deleted') else False,
+        "extra_data": conversation.extra_data if hasattr(conversation, 'extra_data') else {},
+        "user_id": serialize_uuid(conversation.user_id if hasattr(conversation, 'user_id') else None),
+        "knowledge_base_id": serialize_uuid(conversation.knowledge_base_id if hasattr(conversation, 'knowledge_base_id') else None),
+        "use_knowledge_base": conversation.use_knowledge_base if hasattr(conversation, 'use_knowledge_base') else False,
     }
 
 
