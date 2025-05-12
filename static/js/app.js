@@ -608,8 +608,7 @@ async function initializeCoreSystems() {
 
         const projectDashboard = createProjectDashboard(DependencySystem);
         DependencySystem.register('projectDashboard', projectDashboard);
-        // (optional) eager-initialise so that showProjectList exists
-        await projectDashboard.initialize?.();
+        // projectDashboard.initialize() will be called in initializeAuthSystem after auth.init()
 
         // Project modal
         const projectModal = createProjectModal({
@@ -681,6 +680,82 @@ async function initializeCoreSystems() {
             projectModal.init();
         }
 
+        // --- BEGIN MOVED COMPONENT CREATION ---
+        // Instantiate and register ProjectListComponent, ProjectDetailsComponent, KnowledgeBaseComponent here
+        // so they are available when projectDashboard.initialize() is called later.
+
+        const projectManagerDep = DependencySystem.modules.get('projectManager');
+        const modalManagerDep = DependencySystem.modules.get('modalManager');
+        const fileUploadComponentClassDep = DependencySystem.modules.get('FileUploadComponent'); // Assuming FileUploadComponent is already registered or simple class
+        const authModuleDep = DependencySystem.modules.get('auth');
+        const chatManagerDep = DependencySystem.modules.get('chatManager');
+        const modelConfigDep = DependencySystem.modules.get('modelConfig');
+        const navigationServiceDep = DependencySystem.modules.get('navigationService');
+        const apiRequestDep = DependencySystem.modules.get('apiRequest'); // Added for KB component
+
+        if (FileUploadComponent && !DependencySystem.modules.has('FileUploadComponent')) { // Ensure FileUploadComponent is registered if it's a class constructor
+            DependencySystem.register('FileUploadComponent', FileUploadComponent);
+        }
+        const FileUploadComponentClassForDetails = DependencySystem.modules.get('FileUploadComponent');
+
+
+        const projectListComponentInstance = new ProjectListComponent({
+            projectManager: projectManagerDep,
+            eventHandlers,
+            modalManager: modalManagerDep,
+            app,
+            router: navigationServiceDep,
+            notify,
+            storage: DependencySystem.modules.get('storage'),
+            sanitizer: DependencySystem.modules.get('sanitizer'),
+            domAPI,
+            browserService: browserServiceInstance,
+            globalUtils: DependencySystem.modules.get('globalUtils')
+        });
+        DependencySystem.register('projectListComponent', projectListComponentInstance);
+
+        const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
+            DependencySystem,
+            apiRequest: apiRequestDep,
+            auth: authModuleDep,
+            projectManager: projectManagerDep,
+            uiUtils,
+            sanitizer: DependencySystem.modules.get('sanitizer')
+        });
+        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+
+        const projectDetailsComponentInstance = createProjectDetailsComponent({
+            projectManager: projectManagerDep,
+            eventHandlers,
+            modalManager: modalManagerDep,
+            FileUploadComponentClass: FileUploadComponentClassForDetails,
+            domAPI,
+            notify,
+            sanitizer: DependencySystem.modules.get('sanitizer'),
+            app,
+            router: navigationServiceDep,
+            chatManager: chatManagerDep,
+            modelConfig: modelConfigDep,
+            knowledgeBaseComponent: knowledgeBaseComponentInstance,
+            onBack: async () => {
+                const navService = DependencySystem.modules.get('navigationService');
+                navService?.navigateToProjectList();
+            }
+        });
+        DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
+
+        // Update ProjectDashboard's component references immediately after creation
+        const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
+        if (projectDashboardInstance?.components) {
+            projectDashboardInstance.components.projectDetails = projectDetailsComponentInstance;
+            projectDashboardInstance.components.projectList    = projectListComponentInstance;
+            notify.debug('[App CoreSys] ProjectDashboard components updated with new instances.');
+        } else {
+            notify.warn('[App CoreSys] ProjectDashboard instance or its components property not found for update.');
+        }
+        // --- END MOVED COMPONENT CREATION ---
+
+
         notify.debug('[App] Core systems initialized.');
     } catch (err) {
         const errorReporter = DependencySystem.modules.get('errorReporter');
@@ -708,8 +783,18 @@ async function initializeAuthSystem() {
         throw new Error('[App] Auth module is missing or invalid.');
     }
     try {
-        await auth.init();
-        appState.isAuthenticated = auth.isAuthenticated();
+        await auth.init(); // Auth module initializes and verifies its state
+        appState.isAuthenticated = auth.isAuthenticated(); // Update app's copy of auth state
+
+        // Now that auth is initialized, initialize projectDashboard
+        const projectDashboard = DependencySystem.modules.get('projectDashboard');
+        if (projectDashboard?.initialize) {
+            notify.debug('[App] Initializing ProjectDashboard after auth system is ready.');
+            await projectDashboard.initialize();
+        } else {
+            notify.warn('[App] ProjectDashboard not found or not initializable after auth system.');
+        }
+
         // register bus listener
         if (auth.AuthBus) {
             eventHandlers.trackListener(
@@ -863,6 +948,8 @@ async function initializeUIComponents() {
         notify.debug('[App] Initializing UI components...');
 
         // Ensure DOM element for ProjectList and ProjectDetailsView exists before continuing.
+        // This wait can remain here as UI components might still need the DOM ready for their internal setup,
+        // even if their instances are created earlier.
         await waitForDepsAndDom({
             DependencySystem,
             domAPI,
@@ -871,97 +958,33 @@ async function initializeUIComponents() {
 
         // -------------------------------------------------------------------
         // Resolve concrete dependency instances up-front for strict DI
+        // (Most component instances are now created in initializeCoreSystems)
         // -------------------------------------------------------------------
-        const projectManager = DependencySystem.modules.get('projectManager');
-        const modalManager = DependencySystem.modules.get('modalManager');
-        // Register or create any optional modules
-        if (FileUploadComponent) {
-            DependencySystem.register('FileUploadComponent', FileUploadComponent);
-        }
-        const fileUploadComponentClass = DependencySystem.modules.get('FileUploadComponent');
-        const authModule = DependencySystem.modules.get('auth');
+        // const projectManager = DependencySystem.modules.get('projectManager'); // Already available
+        // const modalManager = DependencySystem.modules.get('modalManager'); // Already available
+        // const authModule = DependencySystem.modules.get('auth'); // Already available
 
         const chatExtensionsInstance = createChatExtensions({
             DependencySystem, eventHandlers, notificationHandler: notify
         });
         DependencySystem.register('chatExtensions', chatExtensionsInstance);
 
-        let modelConfigInstance = DependencySystem.modules.get('modelConfig');
-        if (!modelConfigInstance) {
-          modelConfigInstance = createModelConfig({ DependencySystem, notify });
-          DependencySystem.register('modelConfig', modelConfigInstance);
-        }
+        // modelConfigInstance should be available from initializeCoreSystems if needed by chatExtensions
+        // let modelConfigInstance = DependencySystem.modules.get('modelConfig');
+        // if (!modelConfigInstance) {
+        //   modelConfigInstance = createModelConfig({ DependencySystem, notify });
+        //   DependencySystem.register('modelConfig', modelConfigInstance);
+        // }
 
         const projectDashboardUtilsInstance = createProjectDashboardUtils({
             DependencySystem
         });
         DependencySystem.register('projectDashboardUtils', projectDashboardUtilsInstance);
 
-        const navigationService = DependencySystem.modules.get('navigationService'); // Ensure navigationService is in scope
+        // const projectDashboardInstance = DependencySystem.modules.get('projectDashboard'); // Already available
+        // if (!projectDashboardInstance)
+        //   throw new Error('[UI init] projectDashboard instance missing ‑ core mis-init');
 
-        const projectListComponentInstance = new ProjectListComponent({
-            projectManager,
-            eventHandlers,
-            modalManager,
-            app,
-            router: navigationService, // Pass navigationService as router
-            notify,
-            storage: DependencySystem.modules.get('storage'),
-            sanitizer: DependencySystem.modules.get('sanitizer'),
-            domAPI,
-            browserService: browserServiceInstance,
-            globalUtils: DependencySystem.modules.get('globalUtils') // Added globalUtils
-        });
-        DependencySystem.register('projectListComponent', projectListComponentInstance);
-
-        const projectDashboardInstance =
-                DependencySystem.modules.get('projectDashboard');
-        if (!projectDashboardInstance)
-          throw new Error('[UI init] projectDashboard instance missing ‑ core mis-init');
-
-        // Details component expects DI with proper router methods
-        // (detailsRouter removed; handled by navigationService in onBack)
-
-        // const authModule = DependencySystem.modules.get('auth'); // Ensure authModule is defined - Already defined and registered
-        // const projectManager = DependencySystem.modules.get('projectManager'); // Ensure projectManager is defined - Already defined and registered
-        // const apiRequest = DependencySystem.modules.get('apiRequest'); // Ensure apiRequest is defined - Already defined and registered
-
-        const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
-            DependencySystem,
-            apiRequest,
-            auth: authModule,
-            projectManager,
-            uiUtils,                           // ahora módulo real con helpers
-            sanitizer: DependencySystem.modules.get('sanitizer')
-        });
-        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
-
-        const projectDetailsComponentInstance = createProjectDetailsComponent({
-            projectManager,
-            eventHandlers,
-            modalManager,
-            FileUploadComponentClass: fileUploadComponentClass,
-            domAPI,
-            notify,
-            sanitizer: DependencySystem.modules.get('sanitizer'),
-            app,
-            router: navigationService, // Pass navigationService as router
-            // Inject chat-related dependencies so Conversations tab is fully functional
-            chatManager: DependencySystem.modules.get('chatManager'),
-            modelConfig: modelConfigInstance,
-            knowledgeBaseComponent: knowledgeBaseComponentInstance, // Wire KB component
-            onBack: async () => {
-                const navService = DependencySystem.modules.get('navigationService');
-                navService?.navigateToProjectList();
-            }
-        });
-        DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
-
-        // Actualiza el ProjectDashboard con las instancias ya creadas
-        if (projectDashboardInstance?.components) {
-            projectDashboardInstance.components.projectDetails = projectDetailsComponentInstance;
-            projectDashboardInstance.components.projectList    = projectListComponentInstance;
-        }
 
         // ── AccessibilityUtils for Sidebar ──
         const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
@@ -1005,28 +1028,45 @@ async function initializeUIComponents() {
         });
         DependencySystem.register('uiRenderer', uiRendererInstance); // Register it for potential other uses
 
-        const sidebarInstance = createSidebar({
-            DependencySystem,
-            eventHandlers,
-            app,
-            projectDashboard: projectDashboardInstance,
-            projectManager,
-            uiRenderer: uiRendererInstance, // Inject the created uiRenderer
-            notify,
-            storageAPI: DependencySystem.modules.get('storage'),
-            domAPI,
-            viewportAPI : { getInnerWidth: () => browserAPI.getInnerWidth() },
-            accessibilityUtils
-        });
-        DependencySystem.register('sidebar', sidebarInstance);
-
         // Init each piece
+        // Note: projectListComponentInstance and projectDetailsComponentInstance are now initialized here
+        // along with knowledgeBaseComponentInstance.
+        // projectDashboardInstance is initialized in initializeAuthSystem.
+        let sidebarInstance = DependencySystem.modules.get('sidebar');
+        if (!sidebarInstance) {
+            // Create sidebar if not already done
+            // Ensure correct dependencies are fetched from DependencySystem
+            const pdInstance = DependencySystem.modules.get('projectDashboard');
+            const pmInstance = DependencySystem.modules.get('projectManager');
+            const uiRendererDep = DependencySystem.modules.get('uiRenderer');
+
+            sidebarInstance = createSidebar({ // Assign to the existing variable
+                DependencySystem,
+                eventHandlers,
+                app,
+                projectDashboard: pdInstance,
+                projectManager: pmInstance,
+                uiRenderer: uiRendererDep,
+                notify,
+                storageAPI: DependencySystem.modules.get('storage'),
+                domAPI,
+                viewportAPI : { getInnerWidth: () => browserAPI.getInnerWidth() },
+                accessibilityUtils
+            });
+            DependencySystem.register('sidebar', sidebarInstance);
+        }
         await safeInit(sidebarInstance, 'Sidebar', 'init');
+
         await safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
-        await safeInit(knowledgeBaseComponentInstance, 'KnowledgeBase', 'initialize');
-        // projectDashboardInstance is already initialized in core systems phase
-        await safeInit(projectListComponentInstance, 'ProjectList', 'initialize');
-        await safeInit(projectDetailsComponentInstance, 'ProjectDetails', 'initialize');
+
+        const kbComponent = DependencySystem.modules.get('knowledgeBaseComponent');
+        await safeInit(kbComponent, 'KnowledgeBase', 'initialize');
+
+        const pListComponent = DependencySystem.modules.get('projectListComponent');
+        await safeInit(pListComponent, 'ProjectList', 'initialize');
+
+        const pDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
+        await safeInit(pDetailsComponent, 'ProjectDetails', 'initialize');
 
         // If authenticated, tell projectManager to load projects
         if (appState.isAuthenticated) {
