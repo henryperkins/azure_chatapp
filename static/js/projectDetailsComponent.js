@@ -874,6 +874,8 @@ this.domAPI.dispatchEvent(
       this.errorReporter.capture(err, { module: MODULE, source: "createNewConversation", originalError: err });
     }
 
+  }  // ← closes createNewConversation()
+
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
     if (!newChatBtn) return;
