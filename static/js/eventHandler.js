@@ -25,6 +25,7 @@ const MODULE = 'EventHandler';
 export function createEventHandlers({
   app, projectManager, modalManager, DependencySystem,
   domAPI, browserService, notify,
+  errorReporter,
   APP_CONFIG,
   navigate, storage
 } = {}) {
@@ -37,6 +38,9 @@ export function createEventHandlers({
   if (!browserService) throw new Error(`[${MODULE}] browserService is required`);
   if (!notify) throw new Error(`[${MODULE}] notify utility (handlerNotify) is required`);
   if (!APP_CONFIG) throw new Error(`[${MODULE}] APP_CONFIG is required`);
+  if (!errorReporter) {
+    throw new Error(`[${MODULE}] errorReporter utility is required for guardrail-compliant error logging`);
+  }
 
   // Primary notifier reference (may be replaced by setNotifier)
   let handlerNotify = notify;
@@ -132,6 +136,9 @@ export function createEventHandlers({
               group: true, context: listenerContext, source: listenerSource, module: listenerContext,
               originalError: error, extra: { type }
             });
+            if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+              errorReporter.capture(error, { module: listenerContext, source: listenerSource, originalError: error });
+            }
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
               localNotify.warn(`preventDefault() called on passive listener: ${description}`, {
                 group: true, context: listenerContext, source: listenerSource, module: listenerContext, extra: { type }
@@ -161,6 +168,9 @@ export function createEventHandlers({
           group: true, context: listenerContext, source: listenerSource, module: listenerContext,
           originalError: error, extra: { type }
         });
+        if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+          errorReporter.capture(error, { module: listenerContext, source: listenerSource, originalError: error });
+        }
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
           localNotify.warn(`preventDefault() called on passive listener: ${description}`, {
             group: true, context: listenerContext, source: listenerSource, module: listenerContext, extra: { type }
@@ -230,17 +240,32 @@ export function createEventHandlers({
       domAPI.setAttribute(toggleButton, 'aria-expanded', String(expand));
       if (expand && typeof onExpand === 'function') {
         try { onExpand(); }
-        catch (err) { handlerNotify.error('Error in onExpand callback for collapsible', { module: MODULE, source: 'setupCollapsible', group: true, originalError: err, extra: { toggleId } }); }
+        catch (err) {
+          handlerNotify.error('Error in onExpand callback for collapsible', { module: MODULE, source: 'setupCollapsible', group: true, originalError: err, extra: { toggleId } });
+          if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+            errorReporter.capture(err, { module: MODULE, source: 'setupCollapsible', originalError: err });
+          }
+        }
       }
       if (toggleId && storageBackend?.setItem) {
         try { storageBackend.setItem(`${toggleId}_expanded`, String(expand)); }
-        catch (err) { handlerNotify.warn('Failed to save collapsible state', { module: MODULE, source: 'setupCollapsible', originalError: err, extra: { toggleId } }); }
+        catch (err) {
+          handlerNotify.warn('Failed to save collapsible state', { module: MODULE, source: 'setupCollapsible', originalError: err, extra: { toggleId } });
+          if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+            errorReporter.capture(err, { module: MODULE, source: 'setupCollapsible', originalError: err });
+          }
+        }
       }
     };
 
     let savedState = null;
     if (toggleId && storageBackend?.getItem) {
-      try { savedState = storageBackend.getItem(`${toggleId}_expanded`); } catch { /* ignore */ }
+      try { savedState = storageBackend.getItem(`${toggleId}_expanded`); }
+      catch (err) {
+        if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+          errorReporter.capture(err, { module: MODULE, source: 'setupCollapsible', originalError: err });
+        }
+      }
     }
     togglePanel(savedState === 'true');
 
@@ -263,7 +288,12 @@ export function createEventHandlers({
     const open = () => {
       if (typeof onOpen === 'function') {
         try { onOpen(modal); }
-        catch (err) { handlerNotify.error('Error in onOpen callback for modal', { module: MODULE, source: 'setupModal', group: true, originalError: err, extra: { modalId } }); }
+        catch (err) {
+          handlerNotify.error('Error in onOpen callback for modal', { module: MODULE, source: 'setupModal', group: true, originalError: err, extra: { modalId } });
+          if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+            errorReporter.capture(err, { module: MODULE, source: 'setupModal', originalError: err });
+          }
+        }
       }
       if (modalManager?.show) modalManager.show(modalId);
       else if (typeof modal.showModal === 'function') modal.showModal();
@@ -276,7 +306,12 @@ export function createEventHandlers({
       else { domAPI.addClass(modal, 'hidden'); domAPI.removeAttribute(modal, 'open'); }
       if (typeof onClose === 'function') {
         try { onClose(modal); }
-        catch (err) { handlerNotify.error('Error in onClose callback for modal', { module: MODULE, source: 'setupModal', group: true, originalError: err, extra: { modalId } }); }
+        catch (err) {
+          handlerNotify.error('Error in onClose callback for modal', { module: MODULE, source: 'setupModal', group: true, originalError: err, extra: { modalId } });
+          if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+            errorReporter.capture(err, { module: MODULE, source: 'setupModal', originalError: err });
+          }
+        }
       }
     };
 
@@ -327,9 +362,17 @@ export function createEventHandlers({
           group: true, context: 'formSubmission', module: MODULE, source: 'setupForm',
           originalError: error, extra: { formId }
         });
+        if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+          errorReporter.capture(error, { module: MODULE, source: 'setupForm', originalError: error });
+        }
         if (options.onError) {
           try { options.onError(error); }
-          catch (onErrorErr) { handlerNotify.error('Error in form onError callback', { module: MODULE, source: 'setupForm', group: true, originalError: onErrorErr, extra: { formId } }); }
+          catch (onErrorErr) {
+            handlerNotify.error('Error in form onError callback', { module: MODULE, source: 'setupForm', group: true, originalError: onErrorErr, extra: { formId } });
+            if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+              errorReporter.capture(onErrorErr, { module: MODULE, source: 'setupForm', originalError: onErrorErr });
+            }
+          }
         }
       } finally {
         if (showLoadingState) {
@@ -359,131 +402,153 @@ export function createEventHandlers({
     }
     const _t = debugTools?.start?.('EventHandler.init');
     handlerNotify.info('Initializing event handlers...', { module: MODULE, source: 'init' });
-    try {
-      // APP_CONFIG assumed to be globally available for TIMEOUTS.
-      // Ideally, specific timeout values would be injected.
-      const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10_000;
-      await waitForDepsAndDom({
-        deps: ['app', 'auth', 'projectManager', 'modalManager', 'notify', 'domAPI', 'browserService'],
-        domSelectors: ['body'],
-        DependencySystem,
-        domAPI,
-        timeout: dependencyWaitTimeout
-      });
+      await DependencySystem.waitFor?.([
+        'app',
+        'auth',
+        'projectManager',
+        'modalManager',
+        'notify',
+        'domAPI',
+        'browserService'
+      ]);
 
-      setupCommonElements();
-      setupNavigationElements();
-      setupContentElements();
+      try {
+        // APP_CONFIG assumed to be globally available for TIMEOUTS.
+        // Ideally, specific timeout values would be injected.
+        const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10_000;
+        await waitForDepsAndDom({
+          deps: ['app', 'auth', 'projectManager', 'modalManager', 'notify', 'domAPI', 'browserService'],
+          domSelectors: ['body'],
+          DependencySystem,
+          domAPI,
+          timeout: dependencyWaitTimeout
+        });
 
-      const checkProjectModalForm = () => {
-        if (domAPI.getElementById('projectModalForm')) {
-          setupProjectModalForm();
+        setupCommonElements();
+        setupNavigationElements();
+        setupContentElements();
+
+        const checkProjectModalForm = () => {
+          if (domAPI.getElementById('projectModalForm')) {
+            setupProjectModalForm();
+          }
+        };
+
+        if (domAPI.getDocument().readyState !== 'loading') {
+          checkProjectModalForm();
+        } else {
+          trackListener(domAPI.getDocument(), 'DOMContentLoaded', checkProjectModalForm, { once: true, module: MODULE, context: 'init' });
         }
-      };
-
-      if (domAPI.getDocument().readyState !== 'loading') {
-        checkProjectModalForm();
-      } else {
-        trackListener(domAPI.getDocument(), 'DOMContentLoaded', checkProjectModalForm, { once: true, module: MODULE, context: 'init' });
-      }
-      // --- BEGIN: LOGIN BUTTON/MODAL HANDLING ---
-      // Header Login Button
-      // Direct event handler for Login button
-      /**
-       * Robust login button delegation using event delegation.
-       * Attaches a click handler to a stable parent (header or document) that listens for #authButton clicks,
-       * ensuring handler works even if #authButton is dynamically replaced.
-       */
-      function bindAuthButtonDelegate() {
-        if (authButtonDelegationBound) return;          // already bound
-        // Use a stable parent for delegation: header (if present), otherwise fallback to document.
-        let parentNode = domAPI.getElementById('header') || domAPI.getDocument();
-        // Ensure modalManager dependency is met before binding (try DI if not injected)
-        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-        if (!currentModalManager || typeof currentModalManager.show !== 'function') {
-            handlerNotify.error("[EventHandler] modalManager is missing or .show is not a function during bindAuthButtonDelegate", { module: MODULE, source: 'bindAuthButtonDelegate' });
-            return;
+        // --- BEGIN: LOGIN BUTTON/MODAL HANDLING ---
+        // Header Login Button
+        // Direct event handler for Login button
+        /**
+         * Robust login button delegation using event delegation.
+         * Attaches a click handler to a stable parent (header or document) that listens for #authButton clicks,
+         * ensuring handler works even if #authButton is dynamically replaced.
+         */
+        function bindAuthButtonDelegate() {
+          if (authButtonDelegationBound) return;          // already bound
+          // Use a stable parent for delegation: header (if present), otherwise fallback to document.
+          let parentNode = domAPI.getElementById('header') || domAPI.getDocument();
+          // Ensure modalManager dependency is met before binding (try DI if not injected)
+          const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
+          if (!currentModalManager || typeof currentModalManager.show !== 'function') {
+              handlerNotify.error("[EventHandler] modalManager is missing or .show is not a function during bindAuthButtonDelegate", { module: MODULE, source: 'bindAuthButtonDelegate' });
+              if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+                errorReporter.capture(
+                  new Error("modalManager is missing or .show is not a function during bindAuthButtonDelegate"),
+                  { module: MODULE, source: 'bindAuthButtonDelegate' }
+                );
+              }
+              return;
+          }
+          // Remove any previous delegate to avoid duplicate binding (optional: could track and cleanup if needed)
+          // Attach delegated listener for #authButton click
+          delegate(
+            parentNode,
+            'click',
+            '#authButton',
+            function(e) {
+              domAPI.preventDefault(e);
+              handlerNotify.info('Login button DELEGATED click, attempting modalManager.show("login")', { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE });
+              try {
+                const result = currentModalManager.show('login');
+                handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE });
+              } catch (error) {
+                handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
+                if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+                  errorReporter.capture(error, { module: MODULE, source: 'DelegatedLoginButtonHandler', originalError: error });
+                }
+              }
+            },
+            { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
+          );
+          handlerNotify.debug('Delegated click listener bound for #authButton', { module: MODULE, source: 'bindAuthButtonDelegate' });
+          authButtonDelegationBound = true;               // mark as bound
         }
-        // Remove any previous delegate to avoid duplicate binding (optional: could track and cleanup if needed)
-        // Attach delegated listener for #authButton click
-        delegate(
-          parentNode,
-          'click',
-          '#authButton',
-          function(e) {
-            domAPI.preventDefault(e);
-            handlerNotify.info('Login button DELEGATED click, attempting modalManager.show("login")', { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE });
-            try {
-              const result = currentModalManager.show('login');
-              handlerNotify.info('modalManager.show("login") executed (delegated), result: ' + JSON.stringify(result), { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE });
-            } catch (error) {
-              handlerNotify.error('modalManager.show("login") failed (delegated)', { source: 'DelegatedLoginButtonHandler', context: 'auth', module: MODULE, originalError: error });
-            }
-          },
-          { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
-        );
-        handlerNotify.debug('Delegated click listener bound for #authButton', { module: MODULE, source: 'bindAuthButtonDelegate' });
-        authButtonDelegationBound = true;               // mark as bound
-      }
 
-      // Listen for requestLogin event (used by project list and others)
-      trackListener(domAPI.getDocument(), 'requestLogin', () => {
-        // Attempt to retrieve modalManager via DI if not injected
-        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-        if (currentModalManager && typeof currentModalManager.show === 'function') {
-          currentModalManager.show('login');
-        }
-      }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
+        // Listen for requestLogin event (used by project list and others)
+        trackListener(domAPI.getDocument(), 'requestLogin', () => {
+          // Attempt to retrieve modalManager via DI if not injected
+          const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
+          if (currentModalManager && typeof currentModalManager.show === 'function') {
+            currentModalManager.show('login');
+          }
+        }, { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE });
 
-      // Bind immediately so we don’t miss an already-fired modalsLoaded
-      bindAuthButtonDelegate();
-
-      // --- END: LOGIN BUTTON/MODAL HANDLING ---
-
-      // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
-      // After modalsLoaded, rebind but ensure only one handler exists.
-      trackListener(domAPI.getDocument(), 'modalsLoaded', (event) => {
+        // Bind immediately so we don’t miss an already-fired modalsLoaded
         bindAuthButtonDelegate();
 
-        setupLoginModalTabs(); // Call setup for login modal tabs here
+        // --- END: LOGIN BUTTON/MODAL HANDLING ---
 
-        if (event && event.detail && event.detail.success) {
-          handlerNotify.info('Rebound login button delegation and set up login tabs after successful modalsLoaded', {
-            module: MODULE,
-            context: 'auth',
-            source: 'modalsLoaded'
-          });
-        } else {
-          handlerNotify.warn('Modals failed to load or event detail missing. Login button delegation rebound and tab setup attempted anyway.', {
-            module: MODULE,
-            context: 'auth',
-            source: 'modalsLoaded',
-            eventDetail: event && event.detail ? event.detail : 'N/A'
-          });
+        // --- BEGIN: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
+        // After modalsLoaded, rebind but ensure only one handler exists.
+        trackListener(domAPI.getDocument(), 'modalsLoaded', (event) => {
+          bindAuthButtonDelegate();
+
+          setupLoginModalTabs(); // Call setup for login modal tabs here
+
+          if (event && event.detail && event.detail.success) {
+            handlerNotify.info('Rebound login button delegation and set up login tabs after successful modalsLoaded', {
+              module: MODULE,
+              context: 'auth',
+              source: 'modalsLoaded'
+            });
+          } else {
+            handlerNotify.warn('Modals failed to load or event detail missing. Login button delegation rebound and tab setup attempted anyway.', {
+              module: MODULE,
+              context: 'auth',
+              source: 'modalsLoaded',
+              eventDetail: event && event.detail ? event.detail : 'N/A'
+            });
+          }
+        }, {
+          once: true, // Ensure this runs only once
+          description: 'Rebind login and setup tabs after modalsLoaded',
+          context: 'auth',
+          module: MODULE
+        });
+        // --- END: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
+
+        // setupLoginModalTabs(); // Moved into modalsLoaded listener
+
+        initialized = true;
+        debugTools?.stop?.(_t,'EventHandler.init');
+        handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
+
+      } catch (err) {
+        handlerNotify.error('EventHandler initialization failed', {
+          group: true, context: 'initialization', module: MODULE, source: 'init', originalError: err
+        });
+        if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+          errorReporter.capture(err, { module: MODULE, source: 'init', originalError: err });
         }
-      }, {
-        once: true, // Ensure this runs only once
-        description: 'Rebind login and setup tabs after modalsLoaded',
-        context: 'auth',
-        module: MODULE
-      });
-      // --- END: LOGIN BUTTON REBIND AFTER MODALSLOADED ---
-
-      // setupLoginModalTabs(); // Moved into modalsLoaded listener
-
-      initialized = true;
-      debugTools?.stop?.(_t,'EventHandler.init');
-      handlerNotify.info("EventHandler module initialized successfully.", { module: MODULE, source: 'init' });
-
-    } catch (err) {
-      handlerNotify.error('EventHandler initialization failed', {
-        group: true, context: 'initialization', module: MODULE, source: 'init', originalError: err
-      });
-      debugTools?.stop?.(_t,'EventHandler.init-error');
-      throw err;
+        debugTools?.stop?.(_t,'EventHandler.init-error');
+        throw err;
+      }
+      return this; // Return API object
     }
-    return this; // Return API object
-  }
 
   function setupCommonElements() {
     const darkModeToggle = domAPI.getElementById('darkModeToggle');
@@ -566,6 +631,9 @@ export function createEventHandlers({
       if (elementMap.size === 0) trackedListeners.delete(el);
     } catch (error) {
       handlerNotify.warn('Error in untrackListener', { module: MODULE, source: 'untrackListener', originalError: error });
+      if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+        errorReporter.capture(error, { module: MODULE, source: 'untrackListener', originalError: error });
+      }
     }
   }
 
@@ -594,19 +662,22 @@ export function createEventHandlers({
               }
               // Mark for removal from map after iteration to avoid modifying map during iteration
               entriesToRemove.push({ element, type, originalHandler });
-            } catch (error) {
-              handlerNotify.warn('Error removing listener during cleanup', {
-                module: MODULE,
-                source: 'cleanupListeners',
-                originalError: error,
-                extra: {
-                  context: details.context,
-                  description: details.options?.description, // Safely access description
-                  elementType: element.constructor.name,
-                  elementId: element.id
-                }
-              });
+          } catch (error) {
+            handlerNotify.warn('Error removing listener during cleanup', {
+              module: MODULE,
+              source: 'cleanupListeners',
+              originalError: error,
+              extra: {
+                context: details.context,
+                description: details.options?.description, // Safely access description
+                elementType: element.constructor.name,
+                elementId: element.id
+              }
+            });
+            if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+              errorReporter.capture(error, { module: MODULE, source: 'cleanupListeners', originalError: error });
             }
+          }
           }
         });
       });
@@ -688,6 +759,12 @@ export function createEventHandlers({
         source: 'setupLoginModalTabs',
         group: true
       });
+      if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+        errorReporter.capture(
+          new Error('#loginModal not found for tab setup'),
+          { module: MODULE, source: 'setupLoginModalTabs' }
+        );
+      }
       return;
     }
 
@@ -716,6 +793,12 @@ export function createEventHandlers({
 
       if (!registerTabElement || !loginPanel || !registerPanel) {
         handlerNotify.error('Required elements for Login tab action missing at click time.', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
+        if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+          errorReporter.capture(
+            new Error('Required elements missing for Login tab click'),
+            { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' }
+          );
+        }
         return;
       }
 
@@ -745,6 +828,12 @@ export function createEventHandlers({
 
       if (!loginTabElement || !loginPanel || !registerPanel) {
         handlerNotify.error('Required elements for Register tab action missing at click time.', { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' });
+        if (typeof errorReporter !== "undefined" && errorReporter && typeof errorReporter.capture === "function") {
+          errorReporter.capture(
+            new Error('Required elements missing for Register tab click'),
+            { module: MODULE, source: 'setupLoginModalTabs_DelegatedClick', context: 'authTabs' }
+          );
+        }
         return;
       }
 

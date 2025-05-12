@@ -171,16 +171,22 @@ export function createChatManager({
     throw new Error('[ChatManager Factory] Critical: Injected `notify` dependency is missing or lacks `withContext` method.');
   }
   if (!domAPI || typeof domAPI.getDocument !== 'function') {
-    throw new Error('[ChatManager Factory] Critical: Injected `domAPI` dependency is missing or lacks `getDocument` method.');
+    // Allow domAPI to be initially undefined if chat is initialized headless or UI is deferred
+    // throw new Error('[ChatManager Factory] Critical: Injected `domAPI` dependency is missing or lacks `getDocument` method.');
   }
   // Further validation for domAPI.getDocument().dispatchEvent will be done after getting the document object.
   if (!apiRequest) throw new Error('[ChatManager Factory] apiRequest is required.');
   if (!app) throw new Error('[ChatManager Factory] app is required.');
-  if (!eventHandlers) throw new Error('[ChatManager Factory] eventHandlers is required.');
+  // Allow eventHandlers to be initially undefined if chat is initialized headless or UI is deferred
+  // if (!eventHandlers) throw new Error('[ChatManager Factory] eventHandlers is required.');
   if (!isValidProjectId) throw new Error('[ChatManager Factory] isValidProjectId is required.');
   if (!isAuthenticated) throw new Error('[ChatManager Factory] isAuthenticated is required.');
   if (!DOMPurify) throw new Error('[ChatManager Factory] DOMPurify is required.');
   if (!apiEndpoints) throw new Error('[ChatManager Factory] apiEndpoints is required.');
+
+  // DependencySystem is crucial for waitFor
+  const DependencySystem = app.DependencySystem; // Assuming app has DependencySystem
+  if (!DependencySystem) throw new Error('[ChatManager Factory] DependencySystem is required (via app).');
 
 
   const chatNotify = notify.withContext({ module: 'ChatManager', context: 'chatManager' });
@@ -261,9 +267,16 @@ export function createChatManager({
       this.inputField = null;
       this.sendButton = null;
       this.titleElement = null;
+      this.containerSelector = null; // For storing selector from init options
+      this.messageContainerSelector = null;
+      this.inputSelector = null;
+      this.sendButtonSelector = null;
+      this.minimizeButtonSelector = null;
+      this._authChangeListener = null; // To store the auth listener for cleanup
 
       // Local copy of the model config
       this.modelConfig = this.modelConfigAPI.getConfig();
+      this.DependencySystem = DependencySystem; // Store DependencySystem
 
       chatNotify.debug('ChatManager constructor finished.', {
         source: 'constructor',
@@ -286,7 +299,7 @@ export function createChatManager({
      * @param {string} [options.messageContainerSelector]
      * @param {string} [options.inputSelector]
      * @param {string} [options.sendButtonSelector]
-     * @param {string} [options.titleSelector]
+     * @param {string} [options.titleSelector] // titleSelector is still used for chat title
      * @param {string} [options.minimizeButtonSelector]
      */
     async initialize(options = {}) {
@@ -299,123 +312,172 @@ export function createChatManager({
         isInitialized: this.isInitialized
       });
 
-      const requestedProjectId = options.projectId && this.isValidProjectId(options.projectId)
-        ? options.projectId
-        : null;
-      chatNotify.debug(`Requested Project ID: ${requestedProjectId}`, { source: 'initialize', options });
+      // Store selectors from options
+      this.containerSelector = options.containerSelector || "#chatUI"; // Default if not provided
+      this.messageContainerSelector = options.messageContainerSelector || "#conversationArea";
+      this.inputSelector = options.inputSelector || "#chatInput";
+      this.sendButtonSelector = options.sendButtonSelector || "#sendBtn";
+      this.titleSelector = options.titleSelector || "#chatTitle"; // Keep titleSelector
+      this.minimizeButtonSelector = options.minimizeButtonSelector || "#minimizeChatBtn";
 
-      if (this.isInitialized && this.projectId === requestedProjectId) {
-        chatNotify.warn(`Already initialized for project ${requestedProjectId}. Re-binding UI...`, { source: 'initialize', projectId: requestedProjectId });
-        this._setupUIElements(options);
-        this._bindEvents();
-        chatNotify.info(`ChatManager initialize (rebinding) completed for project ${requestedProjectId}.`, { source: 'initialize', phase: 'rebind_complete', durationMs: (performance.now() - _initStart).toFixed(2) });
-        return true;
-      }
 
-      // If switching or first load:
-      const previousProjectId = this.projectId;
-      this.projectId = requestedProjectId;
-      this.isGlobalMode = !this.isValidProjectId(this.projectId);
-      chatNotify.debug(`Global mode determined: ${this.isGlobalMode}. Project ID: ${this.projectId}`, { source: 'initialize' });
-
-      if (this.isInitialized && previousProjectId !== requestedProjectId) {
-        chatNotify.info(`Switching from project ${previousProjectId} to ${requestedProjectId}. Resetting state.`, { source: 'initialize', fromProjectId: previousProjectId, toProjectId: requestedProjectId });
-        // Reset relevant state
-        // this.isInitialized = false; // Keep isInitialized true if re-binding UI for a new project
-        this.currentConversationId = null;
-        this.loadPromise = null;
-        this.isLoading = false;
-        this._clearMessages();
-      }
-
-      if (!this.isAuthenticated()) {
-        const msg = "User not authenticated. Cannot initialize ChatManager.";
-        this._showErrorMessage(msg); // This likely calls notify internally or should
-        this._handleError("initialization", msg); // Already logs via this.notify
-        this.projectDetails?.disableChatUI?.("Not authenticated");
-        chatNotify.error(msg, { source: 'initialize', critical: true });
-        throw new Error(msg);
-      }
-
-      this._setupUIElements(options); // Internally logs
-      this._bindEvents(); // Internally logs
-const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
-      if (newConversationBtn) {
-        newConversationBtn.classList.remove("hidden");
-
-        /* remove ONLY previous handlers for this button instead of
-           erasing every listener in the app */
-        if (typeof this.eventHandlers.cleanupListeners === 'function')
-          this.eventHandlers.cleanupListeners({ context: 'chatManager:newConvoBtn' });
-
-        this.eventHandlers.trackListener(
-          newConversationBtn,
-          "click",
-          safeInvoker(async () => {
-            try {
-              await this.createNewConversation();
-            } catch (err) {
-              this._handleError("New Conversation Button", err);
-              this._showErrorMessage("Failed to start new chat: " + (err?.message || err));
-            }
-          }, { notify: this.notify, errorReporter: this.errorReporter }),
-          { description: "New Conversation Button",
-            context: "chatManager:newConvoBtn",
-            source: "ChatManager.initialize" }
-        );
-      }
-
-      if (this.isGlobalMode) {
-        chatNotify.info("Starting in global (no-project) mode.", { source: 'initialize' });
-        this._clearMessages(); // Internally logs
-        this._showMessage("system", "Select a project or start a new global chat."); // Internally logs
-        this.isInitialized = true;
-        chatNotify.info(`ChatManager initialized (global mode).`, { source: 'initialize', phase: 'complete_global', durationMs: (performance.now() - _initStart).toFixed(2) });
-
-        // Removed dispatch of 'chatmanager:initialized' event (global mode)
-        return true;
-      }
-
-      chatNotify.info(`Initializing for project ID: ${this.projectId}`, { source: 'initialize' });
-      // Initialize is now async due to awaiting loadConversation
       try {
-        // Validate domAPI.getDocument().dispatchEvent before use
-        const doc = this.domAPI.getDocument();
-        if (!doc || typeof doc.dispatchEvent !== 'function') {
-          throw new Error('[ChatManager Initialize] Document object from domAPI.getDocument() must have a dispatchEvent method.');
-        }
+        // Wait for auth module to be ready
+        await this.DependencySystem.waitFor(['auth']);
+        const auth = this.DependencySystem.modules.get('auth');
 
-        const urlParams = new URLSearchParams(this.navAPI.getSearch());
-          const urlChatId = urlParams.get('chatId');
-          chatNotify.debug(`URL params: ${urlParams.toString()}, Chat ID from URL: ${urlChatId}`, { source: 'initialize' });
+        if (!auth || !auth.isAuthenticated()) {
+          const msg = "User not authenticated. Cannot initialize ChatManager.";
+          // this._showErrorMessage(msg); // Don't show UI error if UI elements might not exist yet
+          this._handleError("initialization - not authenticated", msg);
+          this.projectDetails?.disableChatUI?.("Not authenticated");
+          chatNotify.error(msg, { source: 'initialize', critical: true });
 
-          if (urlChatId) {
-            chatNotify.info(`Found chatId=${urlChatId} in URL, attempting to load conversation...`, { source: 'initialize', chatId: urlChatId });
-            const loadedSuccessfully = await this.loadConversation(urlChatId); // Await the load
-
-            if (!loadedSuccessfully) {
-              chatNotify.error(`Failed to load conversation ${urlChatId} from API. It may not exist or you may not have access for project ${this.projectId}.`, { source: 'initialize', chatId: urlChatId, projectId: this.projectId });
-              this._removeConversationIdFromURL(); // Clear invalid chat ID from URL
-              this._clearMessages();
-              this._showMessage("system", `Could not load chat ${urlChatId}. Please select a valid conversation or start a new one.`);
-              // Do NOT set this.currentConversationId to urlChatId here
+          // Listen for auth state changes to retry initialization
+          if (!this._authChangeListener && auth?.AuthBus) {
+            this._authChangeListener = async (e) => {
+              if (e.detail?.authenticated && this.projectId) { // Check if projectId is set
+                chatNotify.info("Auth state changed to authenticated, retrying chat initialization", { source: 'authListener', projectId: this.projectId });
+                // Ensure eventHandlers is available before tracking
+                if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
+                    this.eventHandlers.cleanupListeners({ context: 'chatManagerAuthRetryListener' });
+                }
+                if (this._authChangeListener && auth?.AuthBus?.removeEventListener) {
+                    auth.AuthBus.removeEventListener('authStateChanged', this._authChangeListener);
+                }
+                this._authChangeListener = null; // Clear listener after use
+                await this.initialize({ // Pass original or current options
+                    projectId: this.projectId, // Use the currently set projectId
+                    containerSelector: this.containerSelector,
+                    messageContainerSelector: this.messageContainerSelector,
+                    inputSelector: this.inputSelector,
+                    sendButtonSelector: this.sendButtonSelector,
+                    titleSelector: this.titleSelector,
+                    minimizeButtonSelector: this.minimizeButtonSelector
+                });
+              }
+            };
+            // Ensure eventHandlers is available before tracking
+            if (this.eventHandlers && typeof this.eventHandlers.trackListener === 'function') {
+                this.eventHandlers.trackListener(auth.AuthBus, 'authStateChanged', this._authChangeListener, {
+                    context: 'chatManagerAuthRetryListener', // Unique context for this listener
+                    description: 'Auth state change listener for chat initialization retry'
+                });
+            } else {
+                auth?.AuthBus?.addEventListener('authStateChanged', this._authChangeListener);
+                chatNotify.warn('eventHandlers.trackListener not available for auth retry, using direct addEventListener.', {source: 'initialize'});
             }
-          } else {
-            chatNotify.info("No chatId in URL. Ready for new chat or selection.", { source: 'initialize' });
-          this._clearMessages();
+          }
+          throw new Error(msg); // Propagate error to stop further execution in this attempt
         }
+
+        // If already initialized for the same project, re-bind UI if selectors changed, otherwise skip.
+        const requestedProjectId = options.projectId && this.isValidProjectId(options.projectId)
+          ? options.projectId
+          : this.projectId; // Fallback to current if options.projectId is not valid
+
+        if (this.isInitialized && this.projectId === requestedProjectId) {
+          chatNotify.warn(`Already initialized for project ${requestedProjectId}. Re-binding UI if selectors changed...`, { source: 'initialize', projectId: requestedProjectId });
+          // Only re-setup and re-bind if selectors might have changed or if forced
+          // For simplicity, we can re-setup and re-bind.
+          await this._setupUIElements(); // Use stored selectors
+          this._setupEventListeners();   // Use stored selectors
+          chatNotify.info(`ChatManager initialize (rebinding) completed for project ${requestedProjectId}.`, { source: 'initialize', phase: 'rebind_complete', durationMs: (performance.now() - _initStart).toFixed(2) });
+          return true;
+        }
+
+        // Store projectId if provided and valid
+        if (options.projectId && this.isValidProjectId(options.projectId)) {
+            this.projectId = options.projectId;
+        } else if (!this.projectId && requestedProjectId) { // If this.projectId isn't set, use requested if valid
+            this.projectId = requestedProjectId;
+        }
+
+
+        if (!this.projectId) {
+            const noProjectMsg = "No valid project ID provided for ChatManager initialization.";
+            chatNotify.error(noProjectMsg, { source: 'initialize' });
+            throw new Error(noProjectMsg);
+        }
+
+        this.isGlobalMode = !this.isValidProjectId(this.projectId); // Recalculate global mode
+
+        // If switching projects, reset relevant state
+        if (this.isInitialized && this.projectId !== requestedProjectId) {
+            chatNotify.info(`Switching project context. Resetting chat state. From ${this.projectId} to ${requestedProjectId}`, { source: 'initialize' });
+            this.currentConversationId = null;
+            this.loadPromise = null;
+            this.isLoading = false;
+            if(this.messageContainer) this._clearMessages(); // Clear messages only if UI is set up
+        }
+        this.projectId = requestedProjectId; // Update to the new project ID
+
+
+        await this._setupUIElements(); // Uses stored selectors
+        this._setupEventListeners();   // Uses stored selectors
+
+        const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
+        if (newConversationBtn) {
+            newConversationBtn.classList.remove("hidden");
+            if (typeof this.eventHandlers.cleanupListeners === 'function') {
+                this.eventHandlers.cleanupListeners({ context: 'chatManager:newConvoBtn' });
+            }
+            this.eventHandlers.trackListener(
+                newConversationBtn,
+                "click",
+                safeInvoker(async () => {
+                    try {
+                        await this.createNewConversation();
+                    } catch (err) {
+                        this._handleError("New Conversation Button", err);
+                        this._showErrorMessage("Failed to start new chat: " + (err?.message || err));
+                    }
+                }, { notify: this.notify, errorReporter: this.errorReporter }),
+                { description: "New Conversation Button", context: "chatManager:newConvoBtn", source: "ChatManager.initialize" }
+            );
+        }
+
+        if (this.isGlobalMode) {
+            chatNotify.info("Starting in global (no-project) mode.", { source: 'initialize' });
+            if(this.messageContainer) this._clearMessages();
+            if(this.messageContainer) this._showMessage("system", "Select a project or start a new global chat.");
+            this.isInitialized = true;
+            chatNotify.info(`ChatManager initialized (global mode).`, { source: 'initialize', phase: 'complete_global', durationMs: (performance.now() - _initStart).toFixed(2) });
+            return true;
+        }
+
+        chatNotify.info(`Initializing for project ID: ${this.projectId}`, { source: 'initialize' });
+
+        // Load conversation history or start new one
+        await this._loadConversationHistory(); // This will also handle URL params for chatId
 
         this.isInitialized = true;
         chatNotify.info(`ChatManager initialized (project mode for ${this.projectId}).`, { source: 'initialize', phase: 'complete_project', durationMs: (performance.now() - _initStart).toFixed(2) });
-
-        // Removed dispatch of 'chatmanager:initialized' event (project mode)
         return true;
+
       } catch (error) {
-        this._handleError("initialization (project mode setup)", error);
-        this.projectDetails?.disableChatUI?.("Chat setup error: " + (error.message || error));
-        this.isInitialized = false;
-        // Removed dispatch of failure 'chatmanager:initialized' event
-        throw error;
+        // Error already logged by specific failure points or _handleError
+        this.isInitialized = false; // Ensure state reflects failure
+        const initEndMs = performance.now() - _initStart;
+        chatNotify.error(`ChatManager initialization failed after ${initEndMs.toFixed(2)}ms`, {
+            source: 'initializeCatchAll',
+            originalError: error, // Keep original error for context
+            projectId: this.projectId, // Log current projectId context
+            optionsUsed: options // Log options that led to failure
+        });
+        // Do not re-throw here if we want the app to continue running,
+        // but allow projectDetailsComponent to know about the failure if needed.
+        // Or, re-throw if chat is critical for the view.
+        // For now, let's not re-throw to allow other parts of UI to function.
+        // Check for specific "Project has no knowledge base" error to provide better feedback
+        const originalErrorMessage = this._extractErrorMessage(error.originalError || error);
+        if (originalErrorMessage.includes("Project has no knowledge base")) {
+          const specificMessage = "Chat initialization failed: Project has no knowledge base. Please add one to enable chat.";
+          this._showErrorMessage(specificMessage); // Show in chat UI
+          this.projectDetails?.disableChatUI?.(specificMessage); // Update project details component
+          chatNotify.warn(specificMessage, { source: 'initializeCatchAll', projectId: this.projectId });
+        }
+        return false; // Indicate failure
       }
     }
 
@@ -639,9 +701,19 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
 
         return conversation;
       } catch (error) {
+        const errorMessage = this._extractErrorMessage(error);
         this._handleError("creating new conversation", error); // Already logs
-        this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
-        throw error;
+
+        if (errorMessage.includes("Project has no knowledge base")) {
+          const specificMessage = "Project has no knowledge base. Please add one to enable chat.";
+          this._showErrorMessage(specificMessage);
+          this.projectDetails?.disableChatUI?.(specificMessage);
+          chatNotify.warn("Chat disabled: Project has no knowledge base.", { source: 'createNewConversation' });
+        } else {
+          this._showErrorMessage("Failed to create conversation: " + errorMessage);
+          this.projectDetails?.disableChatUI?.("Chat error: " + errorMessage);
+        }
+        throw error; // This re-throws the error
       }
     }
 
@@ -863,90 +935,86 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
     /**
      * Sets up or rebinds references to container, message area, input, etc.
      * @private
-     * @param {Object} options
      */
-    _setupUIElements(options) {
-      chatNotify.debug('Setting up UI elements for ChatManager.', { source: '_setupUIElements', options });
-      const containerSelector = options.containerSelector || "#chatUI";
-      const messageContainerSelector = options.messageContainerSelector || "#conversationArea";
-      const inputSelector = options.inputSelector || "#chatInput";
-      const sendButtonSelector = options.sendButtonSelector || "#sendBtn";
-      const titleSelector = options.titleSelector || "#chatTitle";
-      const minimizeButtonSelector = options.minimizeButtonSelector || "#minimizeChatBtn";
+    async _setupUIElements() { // Removed options, uses stored selectors
+      chatNotify.debug('Setting up UI elements using stored selectors.', {
+        source: '_setupUIElements',
+        selectors: {
+          container: this.containerSelector,
+          messages: this.messageContainerSelector,
+          input: this.inputSelector,
+          send: this.sendButtonSelector,
+          minimize: this.minimizeButtonSelector,
+          title: this.titleSelector
+        }
+      });
 
-      const selectorsToValidate = {
-        container: containerSelector,
-        messageContainer: messageContainerSelector,
-        inputField: inputSelector,
-        sendButton: sendButtonSelector,
-        titleElement: titleSelector,
-        minimizeButton: minimizeButtonSelector // Optional, but good to check if selector provided
-      };
+      if (!this.domAPI) {
+        chatNotify.error('domAPI not available in _setupUIElements. Cannot proceed with UI setup.', { source: '_setupUIElements' });
+        throw new Error('domAPI is required for UI setup.');
+      }
 
-      for (const [key, selector] of Object.entries(selectorsToValidate)) {
-        if (selector.startsWith("#")) { // Only validate IDs for uniqueness
-          const elements = this.domAPI.querySelectorAll(
-            selector,
-            this.container ?? undefined      // limit search scope
-          );
-          if (elements.length > 1) {
-            const errorMsg = `Duplicate DOM elements found for selector '${selector}' (key: ${key}). ChatManager requires unique IDs for its core elements.`;
-            chatNotify.error(errorMsg, { source: '_setupUIElements', critical: true, extra: { selector, count: elements.length } });
-            throw new Error(errorMsg);
-          }
+      this.container = this.domAPI.querySelector(this.containerSelector);
+      if (!this.container) {
+        // If chat UI is meant to be dynamically injected, this might be acceptable if called before injection.
+        // However, for now, let's assume the container should exist.
+        chatNotify.error(`Chat container not found with selector: ${this.containerSelector}`, { source: '_setupUIElements' });
+        throw new Error(`Chat container not found: ${this.containerSelector}`);
+      }
+
+      this.messageContainer = this.domAPI.querySelector(this.messageContainerSelector);
+      if (!this.messageContainer) {
+         chatNotify.warn(`Message container not found with selector: ${this.messageContainerSelector}. Attempting to create.`, { source: '_setupUIElements' });
+         this.messageContainer = this.domAPI.createElement('div');
+         this.messageContainer.id = this.messageContainerSelector.startsWith('#') ? this.messageContainerSelector.substring(1) : 'chatMessages'; // Basic ID
+         this.domAPI.appendChild(this.container, this.messageContainer);
+      }
+
+      this.inputField = this.domAPI.querySelector(this.inputSelector);
+      if (!this.inputField) {
+        chatNotify.warn(`Input field not found with selector: ${this.inputSelector}. Attempting to create.`, { source: '_setupUIElements' });
+        // Create basic input and send button if not found
+        const inputArea = this.domAPI.createElement("div");
+        inputArea.className = "chat-input-area flex p-2 border-t border-base-300"; // Example styling
+
+        this.inputField = this.domAPI.createElement("textarea"); // Changed to textarea for multiline
+        this.inputField.id = this.inputSelector.startsWith('#') ? this.inputSelector.substring(1) : 'chatInput';
+        this.inputField.className = "flex-grow p-2 border rounded-l-md resize-none"; // Example styling
+        this.inputField.placeholder = "Type your message...";
+        this.inputField.setAttribute("aria-label", "Chat input");
+
+        this.sendButton = this.domAPI.createElement("button");
+        this.sendButton.id = this.sendButtonSelector.startsWith('#') ? this.sendButtonSelector.substring(1) : 'sendBtn';
+        this.sendButton.className = "p-2 bg-primary text-primary-content rounded-r-md"; // Example styling
+        this.sendButton.textContent = "Send";
+        this.sendButton.setAttribute("aria-label", "Send message");
+
+        this.domAPI.appendChild(inputArea, this.inputField);
+        this.domAPI.appendChild(inputArea, this.sendButton);
+        this.domAPI.appendChild(this.container, inputArea);
+      } else {
+        // If inputField exists, assume sendButton also exists or is found by its selector
+        this.sendButton = this.domAPI.querySelector(this.sendButtonSelector);
+        if (!this.sendButton) {
+            chatNotify.warn(`Send button not found with selector: ${this.sendButtonSelector}, even though input field was found.`, { source: '_setupUIElements' });
+            // Potentially create it or throw error depending on strictness
         }
       }
 
-      // Container
-      this.container = this.domAPI.querySelector(containerSelector);
-      if (!this.container) {
-        // If querySelector fails, it implies the element doesn't exist, not necessarily a duplicate.
-        // The original logic for creating elements if not found is fine.
-        // The check above handles cases where an ID selector *does* find multiple elements.
-        this.container = this.domAPI.createElement("div");
-        this.container.id = containerSelector.replace('#', '');
-        this.domAPI.appendChild(this.domAPI.querySelector('body') || {}, this.container);
+      this.titleElement = this.domAPI.querySelector(this.titleSelector);
+      // titleElement is optional for the core chat functionality but good for context.
+      if (!this.titleElement) {
+          chatNotify.debug(`Chat title element not found with selector: ${this.titleSelector}. Chat title will not be displayed by ChatManager.`, { source: '_setupUIElements' });
       }
 
-      // Message container
-      this.messageContainer = this.domAPI.querySelector(messageContainerSelector);
-      if (!this.messageContainer) {
-        this.messageContainer = this.domAPI.createElement("div");
-        this.messageContainer.id = messageContainerSelector.replace('#', '');
-        this.domAPI.appendChild(this.container, this.messageContainer);
+      if (this.minimizeButtonSelector) {
+        this.minimizeButton = this.domAPI.querySelector(this.minimizeButtonSelector);
+        if (!this.minimizeButton) {
+            chatNotify.debug(`Minimize button not found with selector: ${this.minimizeButtonSelector}. Minimize functionality will not be available.`, { source: '_setupUIElements' });
+        }
       }
 
-      // Input field
-      this.inputField = this.domAPI.querySelector(inputSelector);
-      if (!this.inputField) {
-        const inputArea = this.domAPI.createElement("div");
-        inputArea.className = "chat-input-area";
-        const field = this.domAPI.createElement("input");
-        field.id = inputSelector.replace('#', '');
-        field.className = "chat-input";
-        field.placeholder = "Type your message...";
-        field.setAttribute("aria-label", "Chat input");
-        this.inputField = field;
-
-        const sBtn = this.domAPI.createElement("button");
-        sBtn.className = "chat-send-button";
-        sBtn.textContent = "Send";
-        sBtn.setAttribute("aria-label", "Send message");
-        this.sendButton = sBtn;
-
-        this.domAPI.appendChild(inputArea, field);
-        this.domAPI.appendChild(inputArea, sBtn);
-        this.domAPI.appendChild(this.container, inputArea);
-      } else {
-        this.sendButton = this.domAPI.querySelector(sendButtonSelector);
-      }
-
-      // Minimize button
-      this.minimizeButton = this.domAPI.querySelector(minimizeButtonSelector);
-
-      // Title element
-      this.titleElement = this.domAPI.querySelector(titleSelector);
-      chatNotify.debug('UI elements setup complete.', {
+      chatNotify.debug('UI elements setup process complete.', {
         source: '_setupUIElements',
         elementsFound: {
           container: !!this.container,
@@ -959,80 +1027,143 @@ const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
       });
     }
 
-    /**
-     * Bind UI events via eventHandlers (trackListener). Store them for cleanup.
-     * @private
-     */
-    _bindEvents() {
-      chatNotify.debug('Binding UI events for ChatManager.', { source: '_bindEvents' });
-      // Remove all listeners for this ChatManager context before rebinding
-      if (typeof this.eventHandlers.cleanupListeners === 'function') {
-        this.eventHandlers.cleanupListeners({ context: 'chatManager' });
-        chatNotify.debug('Cleaned up existing chatManager event listeners before rebinding.', { source: '_bindEvents' });
-      }
-
-      const track = (element, event, fn, opts = {}) => {
-        if (!element || !fn) return;
-        const wrapped = safeInvoker(fn,
-          { notify: chatNotify, errorReporter }, // Use validated chatNotify directly
-          { context:'chatManager', module:'ChatManager', source: opts.description || event });
-        this.eventHandlers.trackListener(element, event, wrapped, {
-          ...opts,
-          context: 'chatManager',
-          source: 'ChatManager._bindEvents'
-        });
-      };
-
-      if (this.inputField) {
-        track(this.inputField, "keydown", (e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            this.sendMessage(this.inputField.value);
-          }
-        }, { description: 'Chat input Enter key' });
-      }
-
-      if (this.sendButton) {
-        track(this.sendButton, "click", () => {
-          this.sendMessage(this.inputField?.value);
-        }, { description: 'Chat send button' });
-      }
-
-      if (this.minimizeButton) {
-        track(
-          this.minimizeButton,
-          "click",
-          () => this._toggleChatVisibility(),
-          { description: "Minimize / restore chat" }
-        );
-      }
-
-      // Listen for a custom "regenerateChat" event
-      track(this.domAPI.querySelector('body'), "regenerateChat", () => {
-        if (!this.currentConversationId) return;
-        if (!this.messageContainer) return;
-        const userMessages = Array.from(this.messageContainer.querySelectorAll(".user-message"));
-        if (!userMessages.length) return;
-        const lastUserMessage = userMessages[userMessages.length - 1];
-        const textEl = lastUserMessage?.querySelector(".message-content");
-        const messageText = textEl?.textContent;
-        if (messageText) {
-          // remove last assistant response + re-send
-          const assistantMsgs = Array.from(this.messageContainer.querySelectorAll(".assistant-message"));
-          if (assistantMsgs.length) {
-            const lastAssist = assistantMsgs[assistantMsgs.length - 1];
-            lastAssist.remove();
-          }
-          this.sendMessage(messageText);
+    _setupEventListeners() {
+        chatNotify.debug('Setting up event listeners', { source: '_setupEventListeners' });
+        if (!this.eventHandlers || typeof this.eventHandlers.trackListener !== 'function') {
+            chatNotify.error('eventHandlers.trackListener not available. Cannot bind UI events.', { source: '_setupEventListeners' });
+            return;
         }
-      }, { description: 'Regenerate chat event' });
+        // Cleanup previous listeners for 'chatManager' context to prevent duplicates if re-initialized
+        if (typeof this.eventHandlers.cleanupListeners === 'function') {
+            this.eventHandlers.cleanupListeners({ context: 'chatManager' });
+        }
 
-      // Listen for "modelConfigChanged"
-      track(this.domAPI.querySelector('body'), "modelConfigChanged", (e) => {
-        if (e.detail) this.updateModelConfig(e.detail); // Internally logs
-      }, { description: 'Model config changed event' });
-      chatNotify.debug('UI events bound.', { source: '_bindEvents' });
+        if (this.sendButton && this.inputField) {
+            this.eventHandlers.trackListener(this.sendButton, 'click', () => {
+                const messageText = this.inputField.value.trim();
+                if (messageText) {
+                    this.sendMessage(messageText);
+                    this.inputField.value = '';
+                }
+            }, { context: 'chatManager', description: 'Chat Send Button' });
+        }
+
+        if (this.inputField) {
+            this.eventHandlers.trackListener(this.inputField, 'keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const messageText = this.inputField.value.trim();
+                    if (messageText) {
+                        this.sendMessage(messageText);
+                        this.inputField.value = '';
+                    }
+                }
+            }, { context: 'chatManager', description: 'Chat Input Enter Key' });
+        }
+
+        if (this.minimizeButton) {
+            this.eventHandlers.trackListener(this.minimizeButton, 'click', () => {
+                this.toggleMinimize();
+            }, { context: 'chatManager', description: 'Chat Minimize Toggle' });
+        }
+
+        // Listen for "modelConfigChanged" - assuming body/document is a safe target
+        const eventTargetForModelConfig = this.domAPI?.getDocument?.() || document;
+        this.eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
+            if (e.detail) this.updateModelConfig(e.detail);
+        }, { description: 'Model config changed event for ChatManager', context: 'chatManager' });
+
+        chatNotify.debug('Event listeners set up successfully', { source: '_setupEventListeners' });
     }
+
+    toggleMinimize() {
+        if (!this.container || !this.messageContainer || !this.inputField) {
+            chatNotify.warn('Cannot toggle minimize: core UI elements not found.', { source: 'toggleMinimize' });
+            return;
+        }
+        // Example: Toggle a class on the main container
+        this.container.classList.toggle('chat-minimized'); // Add CSS for .chat-minimized
+        chatNotify.info(`Chat UI minimized state toggled. Now: ${this.container.classList.contains('chat-minimized') ? 'minimized' : 'expanded'}`, { source: 'toggleMinimize' });
+    }
+
+    async _loadConversationHistory() {
+        if (!this.projectId) {
+            chatNotify.warn('Cannot load conversation history: no project ID', { source: '_loadConversationHistory' });
+            if(this.messageContainer) this._showMessage("system", "Please select a project to start chatting.");
+            return;
+        }
+        chatNotify.info('Loading conversation history or starting new.', { source: '_loadConversationHistory', projectId: this.projectId });
+
+        const urlParams = new URLSearchParams(this.navAPI.getSearch());
+        const urlChatId = urlParams.get('chatId');
+
+        if (urlChatId) {
+            chatNotify.info(`Found chatId=${urlChatId} in URL, attempting to load specific conversation...`, { source: '_loadConversationHistory', chatId: urlChatId });
+            const loadedSuccessfully = await this.loadConversation(urlChatId);
+            if (loadedSuccessfully) {
+                return; // Specific conversation loaded
+            }
+            chatNotify.warn(`Failed to load specific conversation ${urlChatId} from URL. Will try to load latest or create new.`, { source: '_loadConversationHistory' });
+            this._removeConversationIdFromURL(); // Remove invalid/failed chatId
+        }
+
+        // If no specific chat ID in URL, or if it failed to load, try to get latest or create new.
+        try {
+            // The _api method (via wrapApi) should already return the 'data' part of the response,
+            // or the full JSON if it's not wrapped with {status: 'success', data: ...}
+            const responseData = await this._api(apiEndpoints.CONVERSATIONS(this.projectId), { method: 'GET', params: { limit: 1, sort: 'desc' } });
+
+            // Adapt to how _api and wrapApi return data.
+            // Common patterns: responseData.conversations, or responseData directly if it's an array.
+            const conversations = responseData?.conversations || (Array.isArray(responseData) ? responseData : []);
+
+            if (conversations && conversations.length > 0) {
+                this.currentConversationId = conversations[0].id;
+                if (this.titleElement) this.titleElement.textContent = conversations[0].title || "Conversation";
+                await this._loadMessages(this.currentConversationId);
+                this._updateURLWithConversationId(this.currentConversationId); // Update URL if we picked the latest
+            } else {
+                await this.createNewConversation(); // This will set currentConversationId and update URL
+            }
+            chatNotify.info('Conversation history loaded/initiated.', { source: '_loadConversationHistory', conversationId: this.currentConversationId });
+        } catch (error) {
+            chatNotify.error('Failed to load or create initial conversation.', { source: '_loadConversationHistory', originalError: error });
+            await this.createNewConversation(); // Fallback to creating a new one on error
+        }
+    }
+
+    async _loadMessages(conversationId) {
+        if (!conversationId) {
+            chatNotify.warn('Cannot load messages: no conversation ID', { source: '_loadMessages' });
+            return;
+        }
+        if (!this.messageContainer) {
+            chatNotify.error('Cannot load messages: messageContainer is not available.', { source: '_loadMessages' });
+            return;
+        }
+        chatNotify.info('Loading messages', { source: '_loadMessages', conversationId });
+        this._showLoadingIndicator(); // Show loading indicator for messages
+
+        try {
+            const response = await this._api(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: 'GET' });
+            const messages = response?.messages || response?.data?.messages || response || []; // Adapt to actual response structure
+
+            this._clearMessages(); // Clear existing messages
+            messages.forEach(message => {
+                this._showMessage(message.role, message.content, message.id, message.thinking, message.redacted_thinking);
+            });
+            if (this.messageContainer) {
+                 this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
+            }
+            chatNotify.info(`Loaded ${messages.length} messages`, { source: '_loadMessages', conversationId });
+        } catch (error) {
+            chatNotify.error('Failed to load messages', { source: '_loadMessages', originalError: error, conversationId });
+            this._showErrorMessage('Failed to load messages. Please try again.');
+        } finally {
+            this._hideLoadingIndicator();
+        }
+    }
+
 
     /**
      * Add a message to the UI.

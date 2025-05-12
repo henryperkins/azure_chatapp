@@ -315,8 +315,10 @@ async def get_user_from_token(
     Retrieve and verify a JWT token, then load the user from the database.
     Raises HTTPException if the token is invalid, revoked, expired, or if the user is not found/disabled.
     """
+    logger.info(f"[GET_USER_FROM_TOKEN] Attempting to get user from token. Expected type: {expected_type}. Token (first 10 chars): {token[:10] if token else 'None'}")
+
     if not token:
-        logger.warning(f"No {expected_type} token found in request")
+        logger.warning(f"[GET_USER_FROM_TOKEN] No {expected_type} token provided.")
         raise HTTPException(
             status_code=401,
             detail=f"Missing {expected_type} token",
@@ -326,41 +328,46 @@ async def get_user_from_token(
     # Verify token and decode its payload
     decoded = await verify_token(token, expected_type, request, db_session=db)
     if not decoded:
-        logger.warning("Token verification failed or token was None")
+        logger.warning("[GET_USER_FROM_TOKEN] Token verification failed or token was None after verify_token call.")
+        # verify_token itself should raise HTTPException, but as a safeguard:
         raise HTTPException(
             status_code=401,
-            detail="Invalid token",
+            detail="Invalid token (verify_token returned None/False)",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.info(f"[GET_USER_FROM_TOKEN] Token decoded: {decoded.get('sub')}, jti: {decoded.get('jti')}")
 
     username = decoded.get("sub")
     if not username:
-        logger.warning("Token missing 'sub' (subject) claim")
+        logger.warning("[GET_USER_FROM_TOKEN] Token missing 'sub' (subject) claim.")
         raise HTTPException(
             status_code=401,
             detail="Invalid token payload: missing subject",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.info(f"[GET_USER_FROM_TOKEN] Username from token: {username}")
 
     # Fetch user from DB
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalars().first()
 
     if not user:
-        logger.warning(f"User '{username}' from token not found in database")
+        logger.warning(f"[GET_USER_FROM_TOKEN] User '{username}' from token not found in database.")
         raise HTTPException(
             status_code=401,
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.info(f"[GET_USER_FROM_TOKEN] User '{username}' found in database. ID: {user.id}")
 
     if not user.is_active:
-        logger.warning(f"Attempt to use token for disabled account: {username}")
+        logger.warning(f"[GET_USER_FROM_TOKEN] Attempt to use token for disabled account: {username}")
         raise HTTPException(
             status_code=403,
             detail="Account disabled",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.info(f"[GET_USER_FROM_TOKEN] User '{username}' is active.")
 
     # Attach token metadata to the user object (optional)
     user.jti = decoded.get("jti")
@@ -389,26 +396,25 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
       3. Returns (User, token) if authenticated, or raises an HTTPException otherwise.
     """
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
+    logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Attempting to extract access token. Request cookies: {request.cookies}")
 
-    token = extract_token(request)
+    token = extract_token(request) # extract_token already has good logging
     if not token:
+        logger.warning("[GET_CURRENT_USER_AND_TOKEN] Access token not found after extract_token call.")
+        # Log headers for more context if debugging is enabled
         if debugging:
-            logger.warning("Access token not found in request cookies or headers")
-            logger.debug(f"Request cookies: {request.cookies}")
-            logger.debug(
-                f"Authorization header: {request.headers.get('authorization', 'None')}"
-            )
-
+            logger.debug(f"[GET_CURRENT_USER_AND_TOKEN] Request headers for missing token: {request.headers}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
+            detail="Not authenticated (token not found by extract_token)",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Token extracted (first 10 chars): {token[:10]}")
 
     # Token verification + user load within a single DB session
     async with get_async_session_context() as db:
         user = await get_user_from_token(
             token=token, db=db, request=request, expected_type="access"
         )
-
+    logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Successfully retrieved user: {user.username} (ID: {user.id})")
     return user, token

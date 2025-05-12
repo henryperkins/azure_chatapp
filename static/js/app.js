@@ -236,15 +236,15 @@ DependencySystem.register('debugTools', debugTools);
 const _dbg = debugTools;
 
 // ---------------------------------------------------------------------------
-// 3) Create the event handlers (now notify is initialized)
+// 3) Create and register event handlers (after all required deps are available in DI)
 // ---------------------------------------------------------------------------
 const eventHandlers = createEventHandlers({
     DependencySystem,
-    domAPI,
-    browserService: browserServiceInstance,
-    notify,
-    errorReporter: sentryManager,     // ← supply required dependency
-    APP_CONFIG
+    domAPI: DependencySystem.modules.get('domAPI'),
+    browserService: DependencySystem.modules.get('browserService'),
+    notify: DependencySystem.modules.get('notify'),
+    errorReporter: DependencySystem.modules.get('errorReporter'),
+    APP_CONFIG: APP_CONFIG
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
@@ -587,15 +587,15 @@ async function initializeCoreSystems() {
         // createOrGetChatManager will handle registration internally if it creates a new instance.
         const chatManager = createOrGetChatManager();
 
-        // Project manager
-        const projectManager = createProjectManager({
+        // Project manager (FIX: await the factory since it returns a Promise)
+        const projectManager = await createProjectManager({
             DependencySystem,
             chatManager,
             app,
-            modelConfig: modelConfigInstance,      // ← nuevo
+            modelConfig: modelConfigInstance,
             notify,
             debugTools,
-            apiRequest, // <-- inject directly
+            apiRequest,
             apiEndpoints: DependencySystem.modules.get('apiEndpoints'),
             storage: DependencySystem.modules.get('storage'),
             listenerTracker: {
@@ -735,6 +735,7 @@ async function initializeCoreSystems() {
             sanitizer: DependencySystem.modules.get('sanitizer'),
             app,
             router: navigationServiceDep,
+            errorReporter: DependencySystem.modules.get('errorReporter'),
             chatManager: chatManagerDep,
             modelConfig: modelConfigDep,
             knowledgeBaseComponent: knowledgeBaseComponentInstance,

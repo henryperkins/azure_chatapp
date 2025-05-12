@@ -1,20 +1,10 @@
-/**
- * projectManager.js – DI-strict, Notification-aware, Advanced Edition (context-rich notifications)
- *
- * Combines:
- *  - Modern DI/notification patterns from Untitled 4
- *  - Full feature set from projectManager (file upload, KB, archive, etc)
- *  - Notification calls always emit context/module/source/module for end-to-end traceability
- */
-
-/* -------------------------------------------------------------------------- */
-/* Imports                                                                   */
-/* -------------------------------------------------------------------------- */
+// AUTO-INJECTED BY GUARDRAIL REMEDIATION
 import { wrapApi, emitReady } from "./utils/notifications-helpers.js";
 
-/* -------------------------------------------------------------------------- */
-/* Local utility helpers – pure and safe to unit-test                         */
-/* -------------------------------------------------------------------------- */
+ // Universal error capture helper
+function _capture(err, meta, er) {
+  if (er?.capture) er.capture(err, meta);
+}
 
 const MODULE = "ProjectManager";
 
@@ -67,20 +57,27 @@ function extractResourceList(res, keys = ['projects', 'conversations', 'files', 
   return [];
 }
 
-async function retryWithBackoff(fn, maxRetries, timer) {
+async function retryWithBackoff(fn, maxRetries, timer, notify, errorReporter) {
   let attempt = 0;
   while (true) {
     try {
       return await fn();
     } catch (err) {
-      // Check if the error object has a status property (common for fetch errors)
-      // Do not retry 405 errors or other client errors (400-499) except for 429 (Too Many Requests)
+      _capture(err, { module: MODULE, method: "retryWithBackoff" }, errorReporter);
       if (err && err.status && ((err.status >= 400 && err.status < 500 && err.status !== 429) || err.status === 405)) {
         throw err;
       }
       if (++attempt > maxRetries) throw err;
-      // Log the retry attempt with error details for better debugging
-      console.warn(`Retry attempt ${attempt}/${maxRetries} for ${fn.name || 'anonymous function'} due to error:`, err);
+      notify?.warn?.(
+        `Retry attempt ${attempt}/${maxRetries} for ${fn.name || 'anonymous function'}`,
+        { module: MODULE, context: 'retryWithBackoff', attempt, maxRetries, originalError: err }
+      );
+      errorReporter?.capture?.(err, {
+        module: MODULE,
+        method: 'retryWithBackoff',
+        attempt,
+        maxRetries
+      });
       await new Promise(r => timer(r, 1000 * attempt));
     }
   }
@@ -151,9 +148,6 @@ class ProjectManager {
       }
       listenerTracker = {
         add: (t, e, h, dsc) => ev.trackListener(t, e, h, { description: dsc, context: MODULE }),
-        // If remove is for a specific listener:
-        // remove: (t, e, h) => ev.untrackListener?.(t, e, h),
-        // If remove is for all listeners of this module's context (ProjectManager):
         remove: () => ev.cleanupListeners?.({ context: MODULE }),
       };
     }
@@ -162,8 +156,8 @@ class ProjectManager {
     /** @type {?Object} */
     this.currentProject = null;
     this._loadingProjects = false;
-    this._loadProjectsDebounceTimer = null; // Added for debounce
-    this._DEBOUNCE_DELAY = 300; // milliseconds, for debounce
+    this._loadProjectsDebounceTimer = null;
+    this._DEBOUNCE_DELAY = 300;
 
     this.apiEndpoints = apiEndpoints;
     this._CONFIG = {
@@ -173,26 +167,18 @@ class ProjectManager {
       FILES: apiEndpoints.FILES || '/api/projects/{id}/files/',
       CONVOS: apiEndpoints.CONVOS || '/api/projects/{id}/conversations/',
       ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
-      KB_LIST_URL_TEMPLATE: apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/', // For listing KBs if needed
-      KB_DETAIL_URL_TEMPLATE: apiEndpoints.KB_DETAIL_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/{kb_id}/', // For specific KB
+      KB_LIST_URL_TEMPLATE: apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/',
+      KB_DETAIL_URL_TEMPLATE: apiEndpoints.KB_DETAIL_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/{kb_id}/',
       ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/'
     };
 
     this.pmNotify?.debug?.('[ProjectManager] Configured API Endpoints:', {
       source: 'constructor',
-      extra: { config: JSON.parse(JSON.stringify(this._CONFIG)) } // Avoid logging functions if any
+      extra: { config: JSON.parse(JSON.stringify(this._CONFIG)) }
     });
     this.pmNotify?.info?.('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* Standardized DI-safe API request wrapper with error grouping            */
-  /* ---------------------------------------------------------------------- */
-  /**
-   * _req: Unified API request layer with error notification and grouping.
-   * Automatically captures endpoint/method and groups API errors.
-   * Usage: await this._req(url, opts, src)
-   */
   async _req(url, opts = {}, src = MODULE) {
     return wrapApi(
       this.apiRequest,
@@ -203,15 +189,15 @@ class ProjectManager {
     );
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* Helpers                                                                */
-  /* ---------------------------------------------------------------------- */
-
   _emit(event, detail) {
     if (this.domAPI && typeof this.domAPI.dispatchEvent === 'function') {
       this.domAPI.dispatchEvent(this.domAPI.getDocument(), new CustomEvent(event, { detail }));
     } else {
-      document.dispatchEvent(new CustomEvent(event, { detail }));
+      (this.notify || console).warn?.(
+        `[ProjectManager] Missing domAPI; using global dispatchEvent`,
+        { module: MODULE, context: '_emit', event }
+      );
+      globalThis.document?.dispatchEvent(new CustomEvent(event, { detail }));
     }
   }
   _authOk(failEvent, extraDetail = {}) {
@@ -221,7 +207,7 @@ class ProjectManager {
     return false;
   }
   _handleErr(eventName, err, fallback, extra = {}) {
-    // Extract API/context details for richer error reporting
+    _capture(err, { module: MODULE, method: eventName }, this.errorReporter);
     const status = err?.status || err?.response?.status;
     const detail = err?.detail || err?.response?.data?.detail || err?.response?.detail;
     const endpoint = extra?.endpoint || err?.endpoint || '';
@@ -241,72 +227,57 @@ class ProjectManager {
       endpoint,
       detail,
       originalError: err,
-      ...extra // Spread all extra context for troubleshooting
+      ...extra
     });
     this._emit(eventName, { error: err.message, status, endpoint, detail });
     return fallback;
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* Core API: Project List/Details                                         */
-  /* ---------------------------------------------------------------------- */
-
   async loadProjects(filter = 'all') {
-    // Clear any existing debounce timer
     if (this._loadProjectsDebounceTimer) {
-        clearTimeout(this._loadProjectsDebounceTimer); // Assuming global clearTimeout is available
+      clearTimeout(this._loadProjectsDebounceTimer);
     }
-
-    // Return a new promise that resolves/rejects when the debounced function executes
     return new Promise((resolve) => {
-        // Correctly invoke this.timer, which is likely setTimeout or a compatible function.
-        // Using .call(null, ...) ensures it's not called as a method of `this`.
-        this._loadProjectsDebounceTimer = this.timer.call(null, async () => {
-            const _t = this.debugTools?.start?.('ProjectManager.loadProjects_debounced');
-            if (this._loadingProjects) {
-                this.notify.info('[ProjectManager] loadProjects already running (debounced call skipped)', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
-                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_busy');
-                resolve(this.projects || []); // Resolve with current/last known projects or empty array
-                return;
-            }
-            if (!this._authOk('projectsLoaded', { filter })) {
-                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_auth_fail');
-                resolve([]); // Resolve with empty array on auth fail
-                return;
-            }
-            this._loadingProjects = true;
-            this._emit('projectsLoading', { filter });
-
-            try {
-                let baseUrl = typeof this.apiEndpoints.PROJECTS === 'function'
-                    ? this.apiEndpoints.PROJECTS()
-                    : this.apiEndpoints.PROJECTS || this._CONFIG.PROJECTS; // Fallback to _CONFIG
-
-                // Ensure baseUrl (typically a path like /api/projects/) ends with a slash
-                // before adding query parameters, if it doesn't already have query params.
-                if (typeof baseUrl === 'string' && !baseUrl.endsWith('/') && !baseUrl.includes('?')) {
-                    this.pmNotify?.warn?.(`[ProjectManager] Base URL for PROJECTS (${baseUrl}) is missing a trailing slash. Adding one.`, { source: 'loadProjects_debounced' });
-                    baseUrl += '/';
-                }
-
-                const urlObj = new URL(baseUrl, location.origin); // baseUrl should now be like /api/projects/
-                urlObj.searchParams.set('filter', filter);
-
-                const res = await this._req(String(urlObj), undefined, "loadProjects");
-                const list = extractResourceList(res, ['projects']);
-                this.projects = list; // Cache projects
-                this.notify.success(`[ProjectManager] ${list.length} projects (debounced)`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
-                this._emit('projectsLoaded', { projects: list, filter });
-                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_success');
-                resolve(list);
-            } catch (err) {
-                this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_error');
-                resolve(this._handleErr('projectsLoaded', err, [])); // _handleErr emits event and returns fallback
-            } finally {
-                this._loadingProjects = false;
-                // _t is stopped within try/catch for accurate labeling
-            }
-        }, this._DEBOUNCE_DELAY);
+      this._loadProjectsDebounceTimer = this.timer.call(null, async () => {
+        const _t = this.debugTools?.start?.('ProjectManager.loadProjects_debounced');
+        if (this._loadingProjects) {
+          this.notify.info('[ProjectManager] loadProjects already running (debounced call skipped)', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
+          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_busy');
+          resolve(this.projects || []);
+          return;
+        }
+        if (!this._authOk('projectsLoaded', { filter })) {
+          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_auth_fail');
+          resolve([]);
+          return;
+        }
+        this._loadingProjects = true;
+        this._emit('projectsLoading', { filter });
+        try {
+          let baseUrl = typeof this.apiEndpoints.PROJECTS === 'function'
+            ? this.apiEndpoints.PROJECTS()
+            : this.apiEndpoints.PROJECTS || this._CONFIG.PROJECTS;
+          if (typeof baseUrl === 'string' && !baseUrl.endsWith('/') && !baseUrl.includes('?')) {
+            this.pmNotify?.warn?.(`[ProjectManager] Base URL for PROJECTS (${baseUrl}) is missing a trailing slash. Adding one.`, { source: 'loadProjects_debounced' });
+            baseUrl += '/';
+          }
+          const urlObj = new URL(baseUrl, location.origin);
+          urlObj.searchParams.set('filter', filter);
+          const res = await this._req(String(urlObj), undefined, "loadProjects");
+          const list = extractResourceList(res, ['projects']);
+          this.projects = list;
+          this.notify.success(`[ProjectManager] ${list.length} projects (debounced)`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
+          this._emit('projectsLoaded', { projects: list, filter });
+          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_success');
+          resolve(list);
+        } catch (err) {
+          _capture(err, { module: MODULE, method: "loadProjects" }, this.errorReporter);
+          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_error');
+          resolve(this._handleErr('projectsLoaded', err, []));
+        } finally {
+          this._loadingProjects = false;
+        }
+      }, this._DEBOUNCE_DELAY);
     });
   }
 
@@ -324,8 +295,6 @@ class ProjectManager {
       this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       throw new Error('Invalid projectId');
     }
-
-    // Early authentication and access check
     if (!this.app || !this.app.state || !this.app.state.currentUser) {
       this.pmNotify?.warn?.("[ProjectManager] Missing app state or currentUser, returning early", {
         source: "loadProjectDetails"
@@ -334,10 +303,6 @@ class ProjectManager {
       this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return null;
     }
-
-    // NOTE: skip local permission heuristic; always attempt to fetch project details via API
-    // (Permission enforcement is handled server-side and will return 403 if unauthorized)
-
     if (!this._authOk('projectDetailsError', { id })) {
       this.pmNotify?.warn?.("[ProjectManager] _authOk returned false, returning early", {
         source: "loadProjectDetails"
@@ -345,29 +310,24 @@ class ProjectManager {
       this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return null;
     }
-
     let detailUrlTemplate = typeof this.apiEndpoints.DETAIL === 'function'
-        ? null // Cannot modify template if it's a function result directly here
-        : String(this.apiEndpoints.DETAIL || this._CONFIG.DETAIL);
-
+      ? null
+      : String(this.apiEndpoints.DETAIL || this._CONFIG.DETAIL);
     let detailUrl;
     if (detailUrlTemplate) {
-        // Ensure template ends with a slash if {id} is at the very end and no slash after it
-        if (detailUrlTemplate.includes('{id}') &&
-            !detailUrlTemplate.endsWith('/') &&
-            detailUrlTemplate.substring(detailUrlTemplate.indexOf('{id}') + '{id}'.length).length === 0) {
-            this.pmNotify?.warn?.(`[ProjectManager] Detail URL template (${detailUrlTemplate}) for project ID ${id} is missing a trailing slash after {id}. Adding one.`, { source: 'loadProjectDetails' });
-            detailUrlTemplate += '/';
-        }
-        detailUrl = detailUrlTemplate.replace('{id}', id);
+      if (detailUrlTemplate.includes('{id}') &&
+          !detailUrlTemplate.endsWith('/') &&
+          detailUrlTemplate.substring(detailUrlTemplate.indexOf('{id}') + '{id}'.length).length === 0) {
+        this.pmNotify?.warn?.(`[ProjectManager] Detail URL template (${detailUrlTemplate}) for project ID ${id} is missing a trailing slash after {id}. Adding one.`, { source: 'loadProjectDetails' });
+        detailUrlTemplate += '/';
+      }
+      detailUrl = detailUrlTemplate.replace('{id}', id);
     } else if (typeof this.apiEndpoints.DETAIL === 'function') {
-        detailUrl = this.apiEndpoints.DETAIL(id); // Call the function if template is null
+      detailUrl = this.apiEndpoints.DETAIL(id);
     } else {
-        // Fallback or error, though constructor checks should prevent this state for DETAIL
-        this.pmNotify?.error?.('[ProjectManager] Invalid DETAIL endpoint configuration.', { source: 'loadProjectDetails' });
-        throw new Error('Invalid DETAIL endpoint configuration');
+      this.pmNotify?.error?.('[ProjectManager] Invalid DETAIL endpoint configuration.', { source: 'loadProjectDetails' });
+      throw new Error('Invalid DETAIL endpoint configuration');
     }
-
     this.pmNotify?.debug?.("[ProjectManager] Fetching project details from", {
       source: "loadProjectDetails",
       extra: { detailUrl }
@@ -379,7 +339,7 @@ class ProjectManager {
         const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
         this.currentProject = normalizeProjectResponse(detailRes);
       } catch (err) {
-        // Log full error and response for debugging API issues
+        _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
         this.pmNotify?.error?.("[ProjectManager] loadProjectDetails error", {
           source: "loadProjectDetails",
           extra: {
@@ -392,21 +352,19 @@ class ProjectManager {
       }
       this._emit('projectLoaded', this.currentProject);
 
-      // Don't continue if archived
       if (this.currentProject.archived) {
         this._emit('projectArchivedNotice', { id: this.currentProject.id });
         this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
         return { ...this.currentProject };
       }
 
-      // Sequentially load Knowledge Base after project details are fetched and this.currentProject is set
-      // This is crucial if KB loading depends on an ID from the project details (e.g., project.knowledge_base_id)
-      let kbLoadResult = { status: 'fulfilled', value: null }; // Default if no KB to load
+      let kbLoadResult = { status: 'fulfilled', value: null };
       if (this.currentProject && this.currentProject.knowledge_base_id) {
         try {
           const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
           kbLoadResult = { status: 'fulfilled', value: kbValue };
         } catch (kbError) {
+          _capture(kbError, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
           kbLoadResult = { status: 'rejected', reason: kbError };
           this.pmNotify?.error?.(`[ProjectManager] Failed to load knowledge base details for KB ID ${this.currentProject.knowledge_base_id}`, {
             source: "loadProjectDetails",
@@ -418,11 +376,9 @@ class ProjectManager {
           source: "loadProjectDetails",
           extra: { projectId: id }
         });
-        // Ensure event is still emitted so UI can react to "no KB"
         this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
       }
 
-      // Parallel fetch other additional resources (non-fatal on failure)
       const otherResourcesPromises = [
         this.loadProjectStats(id),
         this.loadProjectFiles(id),
@@ -432,7 +388,6 @@ class ProjectManager {
       const otherResults = await Promise.allSettled(otherResourcesPromises);
       const [stats, files, convos, artifacts] = otherResults;
 
-      // Track if any critical components failed (including KB if it was attempted)
       const allResults = [kbLoadResult, stats, files, convos, artifacts];
       const criticalErrors = allResults
         .filter(r => r.status === 'rejected')
@@ -447,13 +402,12 @@ class ProjectManager {
       }
       this.notify.success(`[ProjectManager] Project ${id} and its sub-resources processed.`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id } });
 
-      // Notify UI that every required resource is now loaded or attempted
       this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
 
       this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return { ...this.currentProject };
     } catch (err) {
-      // Gather context for troubleshooting
+      _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
       const userId = this.app?.state?.currentUser?.id || null;
       const status = err?.status || err?.response?.status;
       const endpoint = detailUrl;
@@ -471,63 +425,7 @@ class ProjectManager {
       return null;
     }
   }
-  /**
-   * Checks if the user likely has access to the project using local cache.
-   * Returns true if project is in user's project list (app.state.currentUser.projects).
-   * This is a heuristic and may not reflect true backend permissions.
-   * @param {string|number} projectId
-   * @returns {boolean}
-   */
-  _userHasProjectAccess(projectId) {
-    const projects = this.app?.state?.currentUser?.projects;
-    if (!projects || !Array.isArray(projects)) return false;
-    return projects.some(p => String(p.id) === String(projectId));
-  }
 
-  /* ---------------------------------------------------------------------- */
-  /* Project Subresources                                                   */
-  /* ---------------------------------------------------------------------- */
-
-  async loadProjectStats(id) {
-    try {
-      const res = await this._req(this._CONFIG.STATS.replace('{id}', id), undefined, "loadProjectStats");
-      const stats = res?.data ?? {};
-      this._emit('projectStatsLoaded', { id, ...stats });
-      return stats;
-    } catch (err) {
-      return this._handleErr('projectStatsError', err, {});
-    }
-  }
-  async loadProjectFiles(id) {
-    try {
-      const res = await this._req(this._CONFIG.FILES.replace('{id}', id), undefined, "loadProjectFiles");
-      const files = extractResourceList(res, ['files', 'file']) ?? [];
-      this._emit('projectFilesLoaded', { id, files });
-      return files;
-    } catch (err) {
-      return this._handleErr('projectFilesError', err, []);
-    }
-  }
-  async loadProjectConversations(id) {
-    try {
-      const res = await this._req(this._CONFIG.CONVOS.replace('{id}', id), undefined, "loadProjectConversations");
-      const conversations = extractResourceList(res, ['conversations']) ?? [];
-      this._emit('projectConversationsLoaded', { id, conversations });
-      return conversations;
-    } catch (err) {
-      return this._handleErr('projectConversationsError', err, []);
-    }
-  }
-  async loadProjectArtifacts(id) {
-    try {
-      const res = await this._req(this._CONFIG.ARTIFACTS.replace('{id}', id), undefined, "loadProjectArtifacts");
-      const artifacts = extractResourceList(res, ['artifacts']) ?? [];
-      this._emit('projectArtifactsLoaded', { id, artifacts });
-      return artifacts;
-    } catch (err) {
-      return this._handleErr('projectArtifactsError', err, []);
-    }
-  }
   async loadProjectKnowledgeBase(projectId, knowledgeBaseId) {
     if (!knowledgeBaseId) {
       this.pmNotify?.info(`[ProjectManager] No knowledgeBaseId provided for project ${projectId}. Assuming no specific KB to load.`, {
@@ -536,20 +434,16 @@ class ProjectManager {
       this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
       return null;
     }
-
     try {
       this.pmNotify?.info(`[ProjectManager] Loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId})...`, {
         group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }
       });
-
       const url = this._CONFIG.KB_DETAIL_URL_TEMPLATE
         .replace('{id}', projectId)
         .replace('{kb_id}', knowledgeBaseId);
-
       const res = await this._req(url, undefined, "loadProjectKnowledgeBase");
-      const kb = res?.data || res; // Assuming the response directly contains the KB object or { data: kb_object }
-
-      if (!kb || !kb.id) { // Ensure the fetched KB object has an ID
+      const kb = res?.data || res;
+      if (!kb || !kb.id) {
         this.pmNotify?.warn(`[ProjectManager] No valid knowledge base data returned for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
           group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId, response: res }
         });
@@ -563,18 +457,59 @@ class ProjectManager {
         return kb;
       }
     } catch (err) {
+      _capture(err, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
       this.pmNotify?.error(`[ProjectManager] Error loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
         group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
       });
       this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
-      // Re-throw or handle as per existing _handleErr. For now, let's re-throw to be caught by loadProjectDetails.
       throw err;
     }
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* Project Creation/Update/Delete/Archive                                 */
-  /* ---------------------------------------------------------------------- */
+  async loadProjectStats(id) {
+    try {
+      const res = await this._req(this._CONFIG.STATS.replace('{id}', id), undefined, "loadProjectStats");
+      const stats = res?.data ?? {};
+      this._emit('projectStatsLoaded', { id, ...stats });
+      return stats;
+    } catch (err) {
+      _capture(err, { module: MODULE, method: "loadProjectStats" }, this.errorReporter);
+      return this._handleErr('projectStatsError', err, {});
+    }
+  }
+  async loadProjectFiles(id) {
+    try {
+      const res = await this._req(this._CONFIG.FILES.replace('{id}', id), undefined, "loadProjectFiles");
+      const files = extractResourceList(res, ['files', 'file']) ?? [];
+      this._emit('projectFilesLoaded', { id, files });
+      return files;
+    } catch (err) {
+      _capture(err, { module: MODULE, method: "loadProjectFiles" }, this.errorReporter);
+      return this._handleErr('projectFilesError', err, []);
+    }
+  }
+  async loadProjectConversations(id) {
+    try {
+      const res = await this._req(this._CONFIG.CONVOS.replace('{id}', id), undefined, "loadProjectConversations");
+      const conversations = extractResourceList(res, ['conversations']) ?? [];
+      this._emit('projectConversationsLoaded', { id, conversations });
+      return conversations;
+    } catch (err) {
+      _capture(err, { module: MODULE, method: "loadProjectConversations" }, this.errorReporter);
+      return this._handleErr('projectConversationsError', err, []);
+    }
+  }
+  async loadProjectArtifacts(id) {
+    try {
+      const res = await this._req(this._CONFIG.ARTIFACTS.replace('{id}', id), undefined, "loadProjectArtifacts");
+      const artifacts = extractResourceList(res, ['artifacts']) ?? [];
+      this._emit('projectArtifactsLoaded', { id, artifacts });
+      return artifacts;
+    } catch (err) {
+      _capture(err, { module: MODULE, method: "loadProjectArtifacts" }, this.errorReporter);
+      return this._handleErr('projectArtifactsError', err, []);
+    }
+  }
 
   async saveProject(id, payload) {
     if (!this._authOk('projectSaveError', { id })) throw new Error('auth');
@@ -592,6 +527,7 @@ class ProjectManager {
       );
       return proj;
     } catch (err) {
+      _capture(err, { module: MODULE, method: "saveProject" }, this.errorReporter);
       this._handleErr('projectSaveError', err, null, { method: 'saveProject', endpoint: url });
       throw err;
     }
@@ -604,6 +540,7 @@ class ProjectManager {
       this._emit('projectDeleted', { id });
       this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProject', detail: { id } });
     } catch (err) {
+      _capture(err, { module: MODULE, method: "deleteProject" }, this.errorReporter);
       this._handleErr('projectDeleteError', err, null, { method: 'deleteProject', endpoint: this._CONFIG.DETAIL.replace('{id}', id) });
       throw err;
     }
@@ -616,20 +553,18 @@ class ProjectManager {
       this.notify.success(`[ProjectManager] Project ${id} archive toggled`, { group: true, context: 'projectManager', module: MODULE, source: 'toggleArchiveProject', detail: { id, archived: res?.archived } });
       return res;
     } catch (err) {
+      _capture(err, { module: MODULE, method: "toggleArchiveProject" }, this.errorReporter);
       this._handleErr('projectArchiveToggled', err, null, { method: 'toggleArchiveProject', endpoint: this._CONFIG.ARCHIVE.replace('{id}', id) });
       throw err;
     }
   }
-
-  /* ---------------------------------------------------------------------- */
-  /* Chat/Conversation Delegations                                          */
-  /* ---------------------------------------------------------------------- */
 
   async createConversation(projectId, opts = {}) {
     try {
       this.storage.setItem?.('selectedProjectId', projectId);
       return await this.chatManager.createNewConversation(projectId, opts);
     } catch (err) {
+      _capture(err, { module: MODULE, method: "createConversation" }, this.errorReporter);
       this._handleErr('conversationCreateError', err, null, { source: 'createConversation', detail: { projectId } });
       throw err;
     }
@@ -644,12 +579,12 @@ class ProjectManager {
     try {
       const endpoint = `/api/projects/${projectId}/conversations/${conversationId}/`;
       const res = await this._req(endpoint, undefined, "getConversation");
-      // Backend returns { "status": "success", "conversation": { ... } }
       const convo = res?.conversation;
       if (!convo || !convo.id) throw new Error('Invalid conversation data received');
       this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
       return convo;
     } catch (err) {
+      _capture(err, { module: MODULE, method: "getConversation" }, this.errorReporter);
       this._handleErr(`conversationLoadError`, err, null, { source: 'getConversation', detail: { conversationId, projectId } });
       throw err;
     }
@@ -661,14 +596,11 @@ class ProjectManager {
       this.notify.success(`[ProjectManager] Conversation ${conversationId} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       return true;
     } catch (err) {
+      _capture(err, { module: MODULE, method: "deleteProjectConversation" }, this.errorReporter);
       this._handleErr('deleteProjectConversationError', err, null, { source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       throw err;
     }
   }
-
-  /* ---------------------------------------------------------------------- */
-  /* File Handling                                                          */
-  /* ---------------------------------------------------------------------- */
 
   getCurrentProject() {
     return this.currentProject ? JSON.parse(JSON.stringify(this.currentProject)) : null;
@@ -695,22 +627,24 @@ class ProjectManager {
     return { validatedFiles, invalidFiles };
   }
   async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
-    return retryWithBackoff(async () => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('projectId', projectId);
-      await this._req(`/api/projects/${projectId}/files/`, {
-        method: 'POST',
-        body: formData
-      }, "uploadFileWithRetry");
-      this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
-      return true;
-    }, maxRetries, this.timer);
+    return retryWithBackoff(
+      async () => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('projectId', projectId);
+        await this._req(`/api/projects/${projectId}/files/`, {
+          method: 'POST',
+          body: formData
+        }, "uploadFileWithRetry");
+        this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
+        return true;
+      },
+      maxRetries,
+      this.timer,
+      this.notify,
+      this.errorReporter
+    );
   }
-
-  /* ---------------------------------------------------------------------- */
-  /* Additional Project Creation Helpers (Ensured Conversation, KB, etc)     */
-  /* ---------------------------------------------------------------------- */
 
   async createProject(projectData) {
     try {
@@ -736,7 +670,7 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
     } catch (err) {
-      // Extract more context for error notification
+      _capture(err, { module: MODULE, method: "createProject" }, this.errorReporter);
       const endpoint = this._CONFIG.PROJECTS;
       const status = err?.status || err?.response?.status;
       const detail = err?.detail || err?.response?.data?.detail || err?.response?.detail;
@@ -771,53 +705,36 @@ class ProjectManager {
       this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id, { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId, conversationId: conversation.id } });
       return conversation;
     } catch (err) {
+      _capture(err, { module: MODULE, method: "createDefaultConversation" }, this.errorReporter);
       this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId }, originalError: err });
       return null;
     }
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* General retry utility                                                  */
-  /* ---------------------------------------------------------------------- */
   async retryWithBackoff(fn, maxRetries = 3) {
-    return retryWithBackoff(fn, maxRetries, this.timer);
+    return retryWithBackoff(fn, maxRetries, this.timer, this.notify, this.errorReporter);
   }
 
-  /* ---------------------------------------------------------------------- */
-  /* Required DI lifecycle method: initialize                               */
-  /* ---------------------------------------------------------------------- */
-  /**
-   * Initializes the ProjectManager (DI contract).
-   * Ensures compatibility with orchestrator/module loader.
-   * Returns a resolved promise immediately.
-   * @returns {Promise<boolean>}
-   */
   async initialize() {
     this.pmNotify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
-    // Optional: Log critical dependencies status
     this.pmNotify.debug('[ProjectManager] Dependencies status:', {
       source: 'initialize',
       extra: {
         appAvailable: !!this.app,
         chatManagerAvailable: !!this.chatManager,
         apiRequestAvailable: !!this.apiRequest,
-        notifyAvailable: !!this.notify // The original notify, not pmNotify
+        notifyAvailable: !!this.notify
       }
     });
 
-    // The 'projectManagerReady' event is no longer dispatched from here.
-    // Modules should rely on DependencySystem.waitFor('projectManager') and the global 'app:ready' event.
     this.pmNotify.info('[ProjectManager] initialize() completed successfully.', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
     return true;
   }
 
-  /**
-   * Cleans up listeners registered by this ProjectManager instance.
-   */
   destroy() {
     this.pmNotify?.info?.('[ProjectManager] destroy() called', { group: true, context: 'projectManager', module: MODULE, source: 'destroy' });
     if (this.listenerTracker && typeof this.listenerTracker.remove === 'function') {
-      this.listenerTracker.remove(); // This should call eventHandlers.cleanupListeners({ context: MODULE })
+      this.listenerTracker.remove();
       this.pmNotify?.debug?.('[ProjectManager] Listener cleanup requested via listenerTracker.', { source: 'destroy' });
     } else {
       this.pmNotify?.warn?.('[ProjectManager] listenerTracker.remove is not available. Listeners may not be cleaned up.', { source: 'destroy' });
@@ -826,56 +743,24 @@ class ProjectManager {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Factory export – always returns a NEW instance                              */
+/* Readiness Gate wrapper                                                     */
 /* -------------------------------------------------------------------------- */
 
+function _readyWrapper(deps) {
+  return Promise.resolve(
+    deps.DependencySystem?.waitFor?.(['app', 'notify']) ??
+    globalThis.DependencySystem?.waitFor?.(['app', 'notify'])
+  ).then(() => {
+    const instance = new ProjectManager(deps);
+    deps.DependencySystem?.register?.('projectManager', instance);
+    return instance;
+  });
+}
+
+/* Factory export – always returns a NEW instance */
+
 export function createProjectManager(deps = {}) {
-  if (!deps.DependencySystem) {
-    const msg = '[createProjectManager] DependencySystem missing: Did you forget to inject it via DI?';
-    // Use notification system instead of console.error
-    if (deps.notify) {
-      deps.notify.error(msg, {
-        group: true,
-        context: 'projectManager',
-        module: MODULE,
-        source: 'createProjectManager',
-        extra: { deps }
-      });
-    } else if (deps.notificationHandler?.show) {
-      deps.notificationHandler.show(msg, 'error', 0, {
-        group: true,
-        context: 'projectManager',
-        module: MODULE,
-        source: 'createProjectManager',
-        extra: { deps }
-      });
-    }
-    throw new Error(msg);
-  }
-  try {
-    return new ProjectManager({ ...deps, debugTools: deps.debugTools || deps.DependencySystem.modules.get('debugTools') });
-  } catch (err) {
-    const diag = `[createProjectManager] Construction failed: ${err && err.message ? err.message : err}`;
-    // Use notification system instead of console.error
-    if (deps.notify) {
-      deps.notify.error(diag, {
-        group: true,
-        context: 'projectManager',
-        module: MODULE,
-        source: 'createProjectManager',
-        extra: { deps, error: err }
-      });
-    } else if (deps.notificationHandler?.show) {
-      deps.notificationHandler.show(diag, 'error', 0, {
-        group: true,
-        context: 'projectManager',
-        module: MODULE,
-        source: 'createProjectManager',
-        extra: { deps, error: err }
-      });
-    }
-    throw new Error(diag);
-  }
+  return _readyWrapper(deps);
 }
 
 export { isValidProjectId, extractResourceList, normalizeProjectResponse, retryWithBackoff };
