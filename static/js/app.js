@@ -524,7 +524,8 @@ async function initializeCoreSystems() {
             context: 'projectManager'
           }),
         remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
-      }
+      },
+      domAPI // ← add domAPI to ProjectManager
     });
     // DependencySystem.register('projectManager', projectManager);   // <--REMOVED, already registered in createProjectManager
 
@@ -1197,7 +1198,7 @@ function setupChatInitializationTrigger() {
   }
 
   eventHandlers.trackListener(
-    projectManager,
+    domAPI.getDocument(),
     'projectSelected',
     async (e) => {
       const projectId = e?.detail?.projectId;
