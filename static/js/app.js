@@ -503,15 +503,17 @@ export async function init() {
           if (projectList && !navigationService.getCurrentView()) {
             navigationService.registerView('projectList', {
               show: async () => {
-                if (projectList.showProjectList) {
-                  await projectList.showProjectList();
+                // Call showProjectList on the projectDashboard instance
+                if (projectDashboard.showProjectList) {
+                  await projectDashboard.showProjectList();
                   return true;
                 }
                 return false;
               },
               hide: async () => {
-                if (projectList.hideProjectList) {
-                  await projectList.hideProjectList();
+                // Call hide on the ProjectListComponent instance
+                if (projectDashboard.components.projectList?.hide) {
+                  await projectDashboard.components.projectList.hide();
                   return true;
                 }
                 return false;
