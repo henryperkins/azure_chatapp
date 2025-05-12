@@ -230,6 +230,8 @@ from routes.unified_conversations import router as conversations_router
 from routes.sentry_test import router as sentry_test_router
 from routes.log_notification import router as log_notification_router
 
+from routes.admin import router as admin_router
+
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Default to dev
@@ -405,9 +407,12 @@ app.include_router(
 app.include_router(user_preferences_router, tags=["preferences"])
 app.include_router(conversations_router, prefix="/api/projects", tags=["conversations"])
 app.include_router(log_notification_router)
-
 # Debug-only Sentry test routes
 app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring"])
+
+# Admin/debug repairs
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+
 
 
 @app.get("/debug/routes", include_in_schema=False)
