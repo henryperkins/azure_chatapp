@@ -198,6 +198,23 @@ notify = createNotify({
     notificationHandler,
     DependencySystem
 });
+
+// ── Sentry (errorReporter) MUST exist before modules that depend on it ──
+const sentryManager = createSentryManager({
+  config  : sentryConfig,
+  env     : sentryEnv,
+  domAPI,
+  storage : browserServiceInstance,
+  notification : notify,
+  navigator    : browserAPI.getWindow()?.navigator,
+  window       : browserAPI.getWindow(),
+  document     : browserAPI.getDocument(),
+  sentryNamespace
+});
+DependencySystem.register('sentryManager', sentryManager);
+DependencySystem.register('errorReporter', sentryManager);
+sentryManager.initialize();
+
 // Register notify only once
 DependencySystem.register('notify', notify);
 
@@ -269,23 +286,6 @@ DependencySystem.cleanupModuleListeners = function(moduleContext) {
   });
 };
 
-
-// ---------------------------------------------------------------------------
-// 2.5) Build our error-reporting integration (depends on notify)
-const sentryManager = createSentryManager({
-    config: sentryConfig,
-    env: sentryEnv,
-    domAPI,
-    storage: browserServiceInstance,
-    notification: notify,
-    navigator: browserAPI.getWindow()?.navigator,
-    window: browserAPI.getWindow(),
-    document: browserAPI.getDocument(),
-    sentryNamespace
-});
-DependencySystem.register('sentryManager', sentryManager);
-DependencySystem.register('errorReporter', sentryManager);
-sentryManager.initialize();
 
 notify.debug('[App] About to create AccessibilityUtils. Checking deps (now as DEBUG):', {
   source: 'app.js',
