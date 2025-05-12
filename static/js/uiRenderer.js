@@ -67,6 +67,9 @@ export function createUiRenderer({
     if (response?.data?.conversations && Array.isArray(response.data.conversations)) {
         return response.data.conversations;
     }
+    if (response?.conversations && Array.isArray(response.conversations)) {
+      return response.conversations;        // ← NEW path: `{ conversations:[…] }`
+    }
     if (Array.isArray(response?.data)) { // e.g. if API returns { data: [...] }
         return response.data;
     }
