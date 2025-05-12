@@ -181,27 +181,61 @@ class ProjectDashboard {
           show: async (params = {}) => {
             this.logger.info('[ProjectDashboard] NavigationService: show projectDetails view', { params });
             const { projectId, conversationId, activeTab } = params;
+
             if (!projectId) {
                 this.dashboardNotify.error('Project ID is required to show project details.', { source: 'navService.showProjectDetails' });
-                this.navigationService.navigateToProjectList(); // Fallback to list
+                this.navigationService.navigateToProjectList();
                 return false;
             }
-            this._setView({ showList: false, showDetails: true });
-            if (this.components.projectDetails) {
-                await this.components.projectDetails.show();
-                if (this.projectManager && typeof this.projectManager.setCurrentProjectById === 'function') {
-                    await this.projectManager.setCurrentProjectById(projectId);
-                }
-                if (this.components.projectDetails.renderProject && this.projectManager.currentProject) {
-                    this.components.projectDetails.renderProject(this.projectManager.currentProject);
-                }
 
+            this._setView({ showList: false, showDetails: true }); // Switch UI first
+
+            if (!this.components.projectDetails) {
+                this.dashboardNotify.error('ProjectDetailsComponent is not available.', { source: 'navService.showProjectDetails' });
+                this.navigationService.navigateToProjectList();
+                return false;
+            }
+
+            await this.components.projectDetails.show(); // Ensure component UI is shown
+
+            let projectToRender = null;
+            if (this.projectManager && typeof this.projectManager.loadProjectDetails === 'function') { // Use loadProjectDetails directly
+                try {
+                    projectToRender = await this.projectManager.loadProjectDetails(projectId);
+                } catch (error) {
+                    this.dashboardNotify.error('Failed to load project details from projectManager.', { source: 'navService.showProjectDetails', originalError: error });
+                    // projectManager.loadProjectDetails already emits projectDetailsError/projectNotFound
+                    // and projectDashboard listens to projectNotFound to showProjectList.
+                    return false;
+                }
+            } else {
+                this.dashboardNotify.error('ProjectManager or loadProjectDetails method is not available.', { source: 'navService.showProjectDetails' });
+                this.navigationService.navigateToProjectList();
+                return false;
+            }
+
+            if (projectToRender && this.components.projectDetails.renderProject) {
+                this.components.projectDetails.renderProject(projectToRender); // THIS IS KEY
+
+                // Now that renderProject has been called, ProjectDetailsComponent.state.currentProject should be set.
+                // Proceed with tab switching if needed.
                 if (conversationId && typeof this.components.projectDetails.switchTab === 'function' && typeof this.components.projectDetails.loadConversation === 'function') {
                     this.components.projectDetails.switchTab(activeTab || 'chat');
                     await this.components.projectDetails.loadConversation(conversationId);
                 } else if (activeTab && typeof this.components.projectDetails.switchTab === 'function') {
                      this.components.projectDetails.switchTab(activeTab);
                 }
+            } else {
+                // This case means projectToRender was null (e.g., 404) or renderProject is missing
+                if (!projectToRender) {
+                     this.dashboardNotify.warn('Project data was not found or couldn\'t be loaded.', { source: 'navService.showProjectDetails' });
+                     // projectManager.loadProjectDetails would have emitted projectNotFound,
+                     // which projectDashboard listens to and calls showProjectList().
+                } else {
+                     this.dashboardNotify.error('ProjectDetailsComponent.renderProject is not available.', { source: 'navService.showProjectDetails' });
+                     this.navigationService.navigateToProjectList();
+                }
+                return false;
             }
             return true;
           },
