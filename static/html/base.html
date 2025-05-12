@@ -82,6 +82,8 @@
       modules: new Map(),
       states: new Map(),
       waiters: new Map(),
+      _pendingCleanups: [],   // contexts awaiting eventHandlers
+
       /**
        * Register a module, ensuring all dependencies are loaded first.
        * If dependencies are not loaded, waits for them before registering.
@@ -100,6 +102,11 @@
         }
         console.log(`[DependencySystem] Registering module: ${name}`);
         this.modules.set(name, instance);
+        // if eventHandlers just registered, flush any queued clean-ups
+        if (name === 'eventHandlers' && this._pendingCleanups.length && instance?.cleanupListeners){
+          this._pendingCleanups.forEach(ctx => instance.cleanupListeners({ context: ctx }));
+          this._pendingCleanups.length = 0;
+        }
         this.states.set(name, 'loaded');
         this._notifyWaiters(name);
         return instance;
@@ -153,7 +160,30 @@
             });
           });
         });
-      }
+      },
+
+      /** Convenience getter so modules can DependencySystem.get('foo') */
+      get(name) { return this.modules.get(name); },
+
+      /** Very-lightweight tracing helpers expected by some modules */
+      getCurrentTraceIds() {             // returns stable object each call
+        const id = `trace-${Date.now()}-${Math.floor(Math.random()*1e5)}`;
+        return { traceId: id, parentId: id };
+      },
+      generateTransactionId() {
+        return `txn-${Date.now()}-${Math.floor(Math.random()*1e5)}`;
+      },
+
+      /** Allow modules to ask DS to remove their tracked listeners */
+      cleanupModuleListeners(context){
+        const eh = this.modules.get('eventHandlers');
+        if (eh?.cleanupListeners) {
+          eh.cleanupListeners({ context });
+        } else {
+          // eventHandlers not registered yet – remember for later
+          if (context) this._pendingCleanups.push(context);
+        }
+      },
     };
     window.DependencySystem = DependencySystem;
   </script>
