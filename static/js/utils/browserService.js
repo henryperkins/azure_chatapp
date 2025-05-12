@@ -26,6 +26,9 @@ export function normaliseUrl(u = '') {
   } catch { return u; }
 }
 
+// U.S.-spelling alias – keeps backward compatibility
+export const normalizeUrl = normaliseUrl;
+
 export function createBrowserService({ windowObject } = {}) {
 
   let _currentUser = null;
@@ -67,6 +70,7 @@ export function createBrowserService({ windowObject } = {}) {
     // Query-string helpers
     buildUrl,
     normaliseUrl,              // ← add this line
+    normalizeUrl,              // ← new alias
     getSearchParam: (k) => new URL(windowObject.location.href).searchParams.get(k),
     setSearchParam: (k, v) => windowObject.history.replaceState({}, '', buildUrl({ [k]: v })),
     removeSearchParam: (k) => windowObject.history.replaceState({}, '', buildUrl({ [k]: '' })),
