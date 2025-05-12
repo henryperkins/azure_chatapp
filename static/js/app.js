@@ -226,6 +226,7 @@ const eventHandlers = createEventHandlers({
     domAPI,
     browserService: browserServiceInstance,
     notify,
+    errorReporter: sentryManager,     // ← supply required dependency
     APP_CONFIG
 });
 DependencySystem.register('eventHandlers', eventHandlers);
