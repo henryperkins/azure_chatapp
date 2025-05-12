@@ -190,6 +190,16 @@ const checks = [
     link: 'custominstructions.md#strict-dependency-injection'
   },
   {
+    id: 'DI-DOCUMENT',
+    severity: 'error',
+    // Match document.foo, document['foo'], document = …, but NOT when passed as
+    // an injected parameter identifier.
+    regex: /\bdocument\s*(\.|\[)|\bdocument\s*=/,
+    desc: 'Direct document global usage',
+    suggestion: 'Use injected domAPI abstraction.',
+    link: 'custominstructions.md#strict-dependency-injection'
+  },
+  {
     id: 'DI-GLOBALTHIS',
     severity: 'error',
     regex: /\bglobalThis\./,
