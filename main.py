@@ -263,8 +263,8 @@ class SuppressUnwantedLogsFilter(logging.Filter):
 
         return True
 
-# Apply the filter to uvicorn.access logger and the root logger if needed
-for logname in ("uvicorn.access", ""): # Add to root logger as well if uvicorn.access doesn't catch all
+# Apply the filter to all noisy access loggers
+for logname in ("uvicorn.access", "", "notification_system"):
     logging.getLogger(logname).addFilter(SuppressUnwantedLogsFilter())
 
 # Create app with docs always enabled (even in "production" - insecure for debug)
