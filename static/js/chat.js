@@ -951,6 +951,7 @@ export function createChatManager({
 
       if (!this.domAPI) {
         chatNotify.error('domAPI not available in _setupUIElements. Cannot proceed with UI setup.', { source: '_setupUIElements' });
+        this._handleError('_setupUIElements', new Error('domAPI is required for UI setup.'));
         throw new Error('domAPI is required for UI setup.');
       }
 
@@ -1455,7 +1456,14 @@ export function createChatManager({
       if (err.message) return err.message;
       try {
         return JSON.stringify(err);
-      } catch {
+      } catch (jsonErr) {
+        if (errorReporter?.capture) {
+          errorReporter.capture(jsonErr, {
+            module : 'ChatManager',
+            source : '_extractErrorMessage',
+            originalError: jsonErr
+          });
+        }
         return "Unknown error object";
       }
     }
@@ -1469,6 +1477,15 @@ export function createChatManager({
         originalError: error, // Pass the original error object for full Sentry reporting
         errorMessage: message
       });
+      /* Guardrail #8 – context-rich error logging */
+      if (errorReporter?.capture) {
+        errorReporter.capture(error, {
+          module : 'ChatManager',
+          source : '_handleError',
+          context,
+          originalError: error
+        });
+      }
     }
   } // end ChatManager class
   chatNotify.debug('ChatManager class defined. Instantiating...', { source: 'factory', phase: 'pre_instantiate' });
