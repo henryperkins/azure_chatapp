@@ -1,3 +1,6 @@
+<a href="#mainContent" class="skip-to-content sr-only focus:not-sr-only">
+    Skip to content
+  </a>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -40,8 +43,7 @@
   <link rel="stylesheet" href="/static/css/dist/tailwind.css">
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
 
-  <!-- Skip to content link for accessibility -->
-  <a href="#mainContent" class="skip-to-content">Skip to content</a>
+
 
   <!-- DaisyUI theme initialization (MUST match theme-toggle.js) -->
   <!-- Removed theme initialization script to avoid conflict with theme-toggle.js -->
@@ -713,6 +715,13 @@
             <div id="projectList" class="project-list grid gap-4 p-4"></div>
           </div>
           <div id="projectDetailsView" class="hidden"></div>
+<div class="flex items-start justify-between mb-4">
+    <h3 id="projectTitle" class="text-xl font-semibold truncate"></h3>
+    <button id="backToProjectsBtn" type="button"
+            class="btn btn-ghost btn-sm">← Back</button>
+  </div>
+  <p id="projectDescription" class="text-base-content/80 mb-4"></p>
+  <!-- Template loader will inject the rest -->
         </section>
       </div>
     </main>
@@ -761,7 +770,7 @@
   </div>
   <div id="chatUIContainer" class="hidden" data-requires-chat="true"></div>
 
-  <div id="appLoading" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" role="status">
+  <div id="appLoadingSpinner" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center" role="status">
     <div class="text-center">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
       <p class="text-lg">Loading application...</p>

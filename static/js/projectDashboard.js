@@ -712,13 +712,6 @@ class ProjectDashboard {
           display: listView.style.display,
           ariaHidden: listView.getAttribute('aria-hidden')
         });
-
-        if (this.components.projectList && typeof this.components.projectList.show === 'function') {
-          this.browserService.setTimeout(() => {
-            this.components.projectList.show();
-            this.logger.debug('[ProjectDashboard] Called projectList.show() from _setView');
-          }, 0);
-        }
       } else {
         this.domAPI.toggleClass(listView, 'hidden', true);
         listView.style.display = 'none';
@@ -738,13 +731,6 @@ class ProjectDashboard {
         detailsView.classList.remove('opacity-0');
         detailsView.classList.add('flex-1', 'flex-col');
         this.logger.info('[ProjectDashboard] Project details view made visible');
-
-        if (this.components.projectDetails && typeof this.components.projectDetails.show === 'function') {
-          this.browserService.setTimeout(() => {
-            this.components.projectDetails.show();
-            this.logger.debug('[ProjectDashboard] Called projectDetails.show() from _setView');
-          }, 0);
-        }
       } else {
         this.domAPI.toggleClass(detailsView, 'hidden', true);
         detailsView.style.display = 'none';
