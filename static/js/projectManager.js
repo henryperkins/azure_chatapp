@@ -101,7 +101,8 @@ class ProjectManager {
     apiEndpoints,
     apiRequest = null,
     errorReporter = null,
-    debugTools = null
+    debugTools = null,
+    domAPI = null
   } = {}) {
     if (!DependencySystem) {
       if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
@@ -125,6 +126,7 @@ class ProjectManager {
     this.timer = timer;
     this.storage = storage;
     this.apiRequest = apiRequest ?? app?.apiRequest;
+    this.domAPI = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
     // Fallback: wrap raw handler if notify util isn't injected yet
     if (!this.notify && notificationHandler?.show) {
