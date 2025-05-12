@@ -1166,6 +1166,7 @@ export function createChatManager({
         } catch (error) {
             chatNotify.error('Failed to load messages', { source: '_loadMessages', originalError: error, conversationId });
             this._showErrorMessage('Failed to load messages. Please try again.');
+            this._handleError('_loadMessages', error);
         } finally {
             this._hideLoadingIndicator();
         }
