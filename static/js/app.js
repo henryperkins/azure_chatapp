@@ -259,7 +259,7 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
   try {
     // Load project details template
     await htmlTemplateLoader.loadTemplate({
-      url: '/static/html/project-details.html',
+      url: '/static/html/project_details.html',
       containerSelector: '#projectDetailsView',
       eventName: 'projectDetailsTemplateLoaded',
       timeout: 20000
