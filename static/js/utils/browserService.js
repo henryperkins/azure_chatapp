@@ -37,7 +37,7 @@ export function createBrowserService({ windowObject } = {}) {
     throw new Error('browserService: windowObject must be injected (no global fallback)');
   if (!windowObject?.location) throw new Error('browserService: windowObject is required');
 
-  function buildUrl(params = {}) {
+  function _buildUrl(params = {}) {
     const url = new URL(windowObject.location.href);
     Object.entries(params).forEach(([k, v]) => {
       if (v === undefined || v === null || v === '') url.searchParams.delete(k);
@@ -68,12 +68,12 @@ export function createBrowserService({ windowObject } = {}) {
 
   return {
     // Query-string helpers
-    buildUrl,
+    buildUrl        : _buildUrl,
     normaliseUrl,              // ← add this line
     normalizeUrl,              // ← new alias
     getSearchParam: (k) => new URL(windowObject.location.href).searchParams.get(k),
-    setSearchParam: (k, v) => windowObject.history.replaceState({}, '', buildUrl({ [k]: v })),
-    removeSearchParam: (k) => windowObject.history.replaceState({}, '', buildUrl({ [k]: '' })),
+    setSearchParam   : (k, v) => windowObject.history.replaceState({}, '', _buildUrl({ [k]: v })),
+    removeSearchParam: (k) => windowObject.history.replaceState({}, '', _buildUrl({ [k]: '' })),
 
     // Storage helpers
     getItem: (k) => windowObject.localStorage.getItem(k),
