@@ -34,7 +34,7 @@ Roo Code uses a modular tool system to interact with your development environmen
 
 ---
 ## Example Tool Usages (Patterns)
-- **Reading:** `read_file` (show file content), `search_files` (find pattern), `list_files` (project structure)
+- **Reading:** `read_file` (show file content), `search_files` (find pattern), `list_files` (project structure)  **REQUIRED PARAMETERS:** path
 - **Editing:** `apply_diff` (patch), `insert_content` (add-only), `search_and_replace` (find/replace), `write_to_file` (full file replace/new file)
 - **Commands:** `execute_command` (run build/lint/server), with optional working directory
 - **Task Flow:** `ask_followup_question` (clarify before actions), `attempt_completion` (mark done), `switch_mode`/`new_task` for context or subtasks
@@ -578,3 +578,107 @@ Apply these guardrails whenever you (the LLM) generate, refactor, or review 
 ---
 
 **Golden Rules**: Inject every dependency, avoid global side effects, tag artifacts with `context`, clean up listeners and resources, and route logs, traces, and errors through the central utilities.
+
+## **Other Notable Smells to Avoid**
+
+
+### ▪️ **Maintainability Smells**
+
+* **Duplicated Code**
+
+  * Multiple instances of similar logic scattered throughout codebase.
+* **Long Functions**
+
+  * Functions doing too much; harder to read, debug, or extend.
+* **Magic Numbers and Strings**
+
+  * Hardcoded values with unclear meanings or origins.
+* **Excessive Nesting**
+
+  * Deeply nested loops or conditions that make code unreadable.
+* **Large Classes or Modules**
+
+  * Modules that handle multiple concerns rather than adhering to Single Responsibility Principle.
+
+---
+
+### ▪️ **Design & Architectural Smells**
+
+* **Global Variables**
+
+  * Pollute the global namespace; increase coupling and unintended side-effects.
+* **Strong Coupling (Tight Dependencies)**
+
+  * Directly importing or referencing other modules directly instead of using dependency injection.
+* **Primitive Obsession**
+
+  * Overuse of primitive types (`string`, `number`) instead of proper objects or enums.
+* **Feature Envy**
+
+  * Functions or modules overly dependent on another module’s properties or methods.
+* **Lack of Encapsulation**
+
+  * Exposing too much internal logic, leading to fragile implementations.
+
+---
+
+### ▪️ **Performance & Optimization Smells**
+
+* **Memory Leaks**
+
+  * Not properly removing event listeners, timers, or intervals, causing leaks.
+* **Repeated DOM Access**
+
+  * Frequent unnecessary reads or updates to the DOM; causes slow UI.
+* **Excessive Closures**
+
+  * Creating unnecessary closures, causing memory overhead.
+* **Inefficient Loops**
+
+  * Repeated or redundant calculations within loops.
+
+---
+
+### ▪️ **Readability & Style Smells**
+
+* **Deeply Nested Callbacks ("Callback Hell")**
+
+  * Excessively nested callbacks making code hard to follow.
+* **Overly Complex Expressions**
+
+  * Chaining multiple ternaries, conditionals, or logical expressions together.
+* **Commented-Out Code**
+
+  * Indicates uncertainty, clutter, and outdated implementation.
+* **Inconsistent Naming Conventions**
+
+  * Mixed naming conventions (`camelCase`, `snake_case`, `PascalCase`).
+
+---
+
+### ▪️ **Async/Await Smells**
+
+* **Unhandled Promise Rejections**
+
+  * Missing proper error handling for promises.
+* **Async Functions Without Await**
+
+  * Declared as `async` but not leveraging `await`; causes confusion.
+* **Improper Async Error Handling**
+
+  * Not consistently using `try/catch` blocks around async calls.
+
+---
+
+### ▪️ **Testing & Error-Handling Smells**
+
+* **Insufficient Test Coverage**
+
+  * Lacking tests, especially for critical or complex functionality.
+* **Silent Error Handling**
+
+  * Empty catch blocks or ignoring errors completely.
+* **Overly Broad Catch Statements**
+
+  * Catching all exceptions (`catch(e)` without specifics) hides critical errors.
+

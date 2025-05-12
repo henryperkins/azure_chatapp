@@ -19,7 +19,8 @@ export function createAuthModule({
   sanitizer,
   modalManager,
   apiEndpoints,
-  DependencySystem // Added DependencySystem
+  DependencySystem, // Added DependencySystem
+  errorReporter = null // Added errorReporter
 } = {}) {
   if (!apiRequest) throw new Error('Auth module requires apiRequest as a dependency');
   if (!DependencySystem) throw new Error('Auth module requires DependencySystem as a dependency'); // Added check
@@ -34,7 +35,9 @@ export function createAuthModule({
 
   // --- Debug Utility ---
   function logCookieState(tag = '') {
-    authNotify.debug('[COOKIE_SNAPSHOT]', { tag, cookie: typeof document !== 'undefined' ? document.cookie : '' });
+    // Use domAPI to access cookies instead of document directly
+    const cookies = domAPI.getAttribute ? domAPI.getAttribute(domAPI.getDocument(), 'cookie') : '';
+    authNotify.debug('[COOKIE_SNAPSHOT]', { tag, cookie: cookies });
   }
 
   // --- Input Validation Utilities ---
@@ -67,7 +70,27 @@ export function createAuthModule({
     if (isLoading) {
       btn.disabled = true;
       btn.dataset.originalText = btn.textContent;
-      btn.innerHTML = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+
+      // Create HTML content with loading spinner
+      const htmlContent = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+
+      // Sanitize HTML content before setting innerHTML
+      if (sanitizer && typeof sanitizer.sanitize === 'function') {
+        btn.innerHTML = sanitizer.sanitize(htmlContent);
+      } else {
+        // Log warning if sanitizer is not available
+        if (errorReporter?.capture) {
+          const err = new Error('Setting innerHTML without sanitization');
+          errorReporter.capture(err, {
+            module: MODULE_CONTEXT,
+            method: 'setButtonLoading',
+            extra: { element: 'button' }
+          });
+        }
+
+        // Still set the content, but with a warning
+        btn.innerHTML = htmlContent;
+      }
     } else {
       btn.disabled = false;
       if (btn.dataset.originalText) {
@@ -97,8 +120,11 @@ export function createAuthModule({
 
   // --- Cookie helper ------------------------------------------------------
   function readCookie(name) {
-    if (typeof document === 'undefined') return null;
-    const m = document.cookie.match(
+    // Use domAPI to access cookies instead of document directly
+    const cookieStr = domAPI.getAttribute ? domAPI.getAttribute(domAPI.getDocument(), 'cookie') : '';
+    if (!cookieStr) return null;
+
+    const m = cookieStr.match(
       new RegExp('(?:^|;\\s*)' + name + '\\s*=\\s*([^;]+)')
     );
     return m ? decodeURIComponent(m[1]) : null;
@@ -127,6 +153,15 @@ export function createAuthModule({
       }
       return data.token;
     } catch (error) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(error, {
+          module: MODULE_CONTEXT,
+          method: 'fetchCSRFToken',
+          extra: { endpoint: apiEndpoints.AUTH_CSRF }
+        });
+      }
+
       authNotify.error('[Auth] CSRF token fetch failed: ' + (error?.message || error), { group: true, source: 'fetchCSRFToken' });
       throw error;
     }
@@ -177,6 +212,15 @@ export function createAuthModule({
       logCookieState(`after ${method} ${endpoint}`);
       return data;
     } catch (error) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(error, {
+          module: MODULE_CONTEXT,
+          method: 'authRequest',
+          extra: { endpoint, method }
+        });
+      }
+
       authNotify.apiError(`[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`, { group: true, source: 'authRequest' });
       if (!error.status) Object.assign(error, { status: 0, data: { detail: error.message || 'Network error/CORS issue' } });
       throw error;
@@ -195,6 +239,15 @@ export function createAuthModule({
         authNotify.debug('[Auth] refreshTokens: success', { group: true, source: 'refreshTokens' });
         return { success: true, response };
       } catch (error) {
+        // Use errorReporter to capture the error with context
+        if (errorReporter?.capture) {
+          errorReporter.capture(error, {
+            module: MODULE_CONTEXT,
+            method: 'refreshTokens',
+            extra: { endpoint: apiEndpoints.AUTH_REFRESH }
+          });
+        }
+
         authNotify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), { group: true, source: 'refreshTokens' });
         if (error.status === 401) await clearTokenState({ source: 'refresh_401_error', isError: true });
         throw error;
@@ -219,14 +272,42 @@ export function createAuthModule({
     authState.username = userObject?.username || null; // Corrected: was newUsername
 
     if (changed) {
+      // Log auth state change appropriately
       const logMessage = `[Auth] State changed (${source}): Auth=${authenticated}, UserObject=${userObject ? JSON.stringify(userObject) : 'None'}`;
-      if (!authenticated) { // ADDED: More prominent log if becoming unauthenticated
-        authNotify.error(`[CRITICAL_AUTH_STATE_FALSE] ${logMessage}`, { group: true, source: 'broadcastAuth', detailSource: source });
+      if (!authenticated) { // More prominent log if becoming unauthenticated
+        authNotify.error(`[CRITICAL_AUTH_STATE_FALSE] ${logMessage}`, {
+          group: true,
+          source: 'broadcastAuth',
+          context: MODULE_CONTEXT,
+          detailSource: source
+        });
       } else {
-        authNotify.info(logMessage, { group: true, source: 'broadcastAuth' });
+        authNotify.info(logMessage, {
+          group: true,
+          source: 'broadcastAuth',
+          context: MODULE_CONTEXT
+        });
       }
 
-      // Update DependencySystem with the current user
+      // 1. Update app.state first (central source of truth per requirement #11)
+      const appInstance = DependencySystem.modules.get('app');
+      if (appInstance && appInstance.state) {
+        appInstance.state.isAuthenticated = authenticated;
+        appInstance.state.currentUser = userObject;
+        authNotify.debug('[Auth] Updated app.state with authentication state', {
+          group: true,
+          source: 'broadcastAuth',
+          context: MODULE_CONTEXT
+        });
+      } else {
+        authNotify.warn('[Auth] Could not update app.state - app not available in DI', {
+          group: true,
+          source: 'broadcastAuth',
+          context: MODULE_CONTEXT
+        });
+      }
+
+      // 2. Update DependencySystem with the current user
       if (DependencySystem && DependencySystem.modules) {
         // We don't re-register, but we update the existing registration
         const currentUserModule = DependencySystem.modules.get('currentUser');
@@ -234,6 +315,7 @@ export function createAuthModule({
           authNotify.debug('[Auth] Updating currentUser in DependencySystem', {
             group: true,
             source: 'broadcastAuth',
+            context: MODULE_CONTEXT,
             previousUser: currentUserModule ? 'exists' : 'null',
             newUser: userObject ? 'exists' : 'null'
           });
@@ -241,7 +323,7 @@ export function createAuthModule({
         }
       }
 
-      // Dispatch the full user object on AuthBus
+      // 3. Dispatch the auth event on AuthBus (following requirement #12)
       AuthBus.dispatchEvent(new CustomEvent('authStateChanged', {
         detail: {
           authenticated,
@@ -251,12 +333,11 @@ export function createAuthModule({
         }
       }));
 
-      // Also dispatch on document for components that listen there
-      // This ensures all components receive the same event regardless of where they listen
+      // 4. Also dispatch on document via domAPI (no direct document usage per requirement #2)
       try {
-        const doc = typeof document !== 'undefined' ? document : null;
+        const doc = domAPI.getDocument();
         if (doc) {
-          doc.dispatchEvent(new CustomEvent('authStateChanged', {
+          domAPI.dispatchEvent(doc, new CustomEvent('authStateChanged', {
             detail: {
               authenticated,
               user: userObject,
@@ -266,10 +347,20 @@ export function createAuthModule({
           }));
         }
       } catch (err) {
+        // Use errorReporter to capture the error with context (following requirement #8)
+        if (errorReporter?.capture) {
+          errorReporter.capture(err, {
+            module: MODULE_CONTEXT,
+            method: 'broadcastAuth',
+            extra: { message: 'Failed to dispatch authStateChanged on document' }
+          });
+        }
+
         authNotify.warn('[Auth] Failed to dispatch authStateChanged on document', {
           error: err,
           group: true,
-          source: 'broadcastAuth'
+          source: 'broadcastAuth',
+          context: MODULE_CONTEXT
         });
       }
     }
@@ -291,7 +382,19 @@ export function createAuthModule({
         let response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
         // If backend sent plain text, attempt JSON parse
         if (typeof response === 'string') {
-          try { response = JSON.parse(response); } catch { /* keep as string */ }
+          try {
+            response = JSON.parse(response);
+          } catch (parseErr) {
+            // Use errorReporter to capture the error with context
+            if (errorReporter?.capture) {
+              errorReporter.capture(parseErr, {
+                module: MODULE_CONTEXT,
+                method: 'verifyAuthState',
+                extra: { message: 'Failed to parse response as JSON, keeping as string' }
+              });
+            }
+            /* keep as string */
+          }
         }
 
         // --- DISPLAY RAW RESPONSE IN DOM FOR DEBUGGING ---
@@ -319,7 +422,11 @@ export function createAuthModule({
             if (body) {
                 domAPI.appendChild(body, debugEl);
             } else {
-                console.error("Could not find body to append debug element for auth verify response.");
+                authNotify.error("Could not find body to append debug element for auth verify response.", {
+                  module: MODULE_CONTEXT,
+                  context: 'verifyAuthState',
+                  source: 'debugDisplay'
+                });
             }
           }
           if (debugEl) {
@@ -329,7 +436,21 @@ export function createAuthModule({
             debugEl.textContent = newContent + (debugEl.textContent || "");
           }
         } catch (e) {
-          console.error("Error displaying auth verify debug info in DOM:", e);
+          // Use errorReporter to capture the error with context
+          if (errorReporter?.capture) {
+            errorReporter.capture(e, {
+              module: MODULE_CONTEXT,
+              method: 'verifyAuthState',
+              extra: { message: 'Error displaying auth verify debug info in DOM' }
+            });
+          }
+
+          authNotify.error("Error displaying auth verify debug info in DOM", {
+            module: MODULE_CONTEXT,
+            context: 'verifyAuthState',
+            source: 'debugDisplay',
+            originalError: e
+          });
         }
         // --- END DOM DEBUG DISPLAY ---
 
@@ -410,6 +531,15 @@ export function createAuthModule({
             }
         }
       } catch (error) {
+        // Use errorReporter to capture the error with context
+        if (errorReporter?.capture) {
+          errorReporter.capture(error, {
+            module: MODULE_CONTEXT,
+            method: 'verifyAuthState',
+            extra: { message: 'Error in verifyAuthState', status: error.status }
+          });
+        }
+
         authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), { group: true, source: 'verifyAuthState' });
         if (error.status === 500) {
           authNotify.error('[Auth Verify] Setting auth to FALSE: 500 error from verify endpoint.', { group: true, source: 'verifyAuthState', originalError: error });
@@ -424,6 +554,15 @@ export function createAuthModule({
             return await verifyAuthState(true); // Re-verify after refresh
           }
           catch (refreshErr) {
+            // Use errorReporter to capture the error with context
+            if (errorReporter?.capture) {
+              errorReporter.capture(refreshErr, {
+                module: MODULE_CONTEXT,
+                method: 'verifyAuthState',
+                extra: { message: 'Token refresh failed after 401' }
+              });
+            }
+
             authNotify.error('[Auth Verify] Setting auth to FALSE: Token refresh failed after 401.', { group: true, source: 'verifyAuthState', originalError: refreshErr });
             await clearTokenState({ source: 'refresh_failed_after_401' });
             broadcastAuth(false, null, 'refresh_failed_after_401_EXPLICIT_LOG');
@@ -439,6 +578,15 @@ export function createAuthModule({
         return false;
         }
     } catch (outerErr) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(outerErr, {
+          module: MODULE_CONTEXT,
+          method: 'verifyAuthState',
+          extra: { forceVerify }
+        });
+      }
+
       authNotify.error('[Auth] verifyAuthState outer error: ' + (outerErr?.message || outerErr), { group: true, source: 'verifyAuthState' });
       throw outerErr;
     } finally {
@@ -466,6 +614,15 @@ export function createAuthModule({
       authNotify.error("Login succeeded but received invalid response from server.", { group: true, source: "loginUser" });
       throw new Error('Login succeeded but invalid response data.');
     } catch (error) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(error, {
+          module: MODULE_CONTEXT,
+          method: 'loginUser',
+          extra: { username }
+        });
+      }
+
       await clearTokenState({ source: 'login_error' });
       authNotify.error("Login failed: " + (error.message || "Unknown login error."), { group: true, source: "loginUser" });
       throw error;
@@ -479,6 +636,15 @@ export function createAuthModule({
       await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
       authNotify.success('Logout successful.', { group: true, source: 'logout' });
     } catch (err) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(err, {
+          module: MODULE_CONTEXT,
+          method: 'logout',
+          extra: { message: 'Backend logout call failed' }
+        });
+      }
+
       authNotify.warn('[Auth] Backend logout call failed: ' + (err?.message || err), { group: true, source: 'logout' });
     }
   }
@@ -498,6 +664,15 @@ export function createAuthModule({
       }
       return response;
     } catch (error) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(error, {
+          module: MODULE_CONTEXT,
+          method: 'registerUser',
+          extra: { username: userData.username }
+        });
+      }
+
       await clearTokenState({ source: 'register_error', isError: true });
       authNotify.error("Registration failed: " + (error.message || "Unknown error."), { group: true, source: "registerUser" });
       throw error;
@@ -547,6 +722,15 @@ export function createAuthModule({
             await publicAuth.login(username, password);
             if (loginForm.id === 'loginModalForm' && modalManager?.hide) modalManager.hide('login');
           } catch (error) {
+            // Use errorReporter to capture the error with context
+            if (errorReporter?.capture) {
+              errorReporter.capture(error, {
+                module: MODULE_CONTEXT,
+                method: 'loginFormHandler',
+                extra: { username }
+              });
+            }
+
             let msg;
             if (error.status === 401) msg = 'Incorrect username or password.';
             else if (error.status === 400) msg = (error.data && error.data.detail) || 'Invalid login request.';
@@ -556,7 +740,11 @@ export function createAuthModule({
             setButtonLoading(submitBtn, false, "Login");
           }
         };
-        registeredListeners.push(eventHandlers.trackListener(loginForm, 'submit', handler, { passive: false, context: MODULE_CONTEXT, description: 'Login Form Submit' }));
+        registeredListeners.push(eventHandlers.trackListener(loginForm, 'submit', handler, {
+          passive: false,
+          context: MODULE_CONTEXT,
+          description: 'Login Form Submit'
+        }));
       }
     });
     const registerModalForm = domAPI.getElementById('registerModalForm');
@@ -608,6 +796,15 @@ export function createAuthModule({
           if (modalManager?.hide) modalManager.hide('login');
           authNotify.success('Registration successful. You may now log in.', { group: true, source: 'registerModalForm' });
         } catch (error) {
+          // Use errorReporter to capture the error with context
+          if (errorReporter?.capture) {
+            errorReporter.capture(error, {
+              module: MODULE_CONTEXT,
+              method: 'registerFormHandler',
+              extra: { username }
+            });
+          }
+
           let msg;
           if (error.status === 409) msg = 'A user with that username already exists.';
           else if (error.status === 400) msg = (error.data && error.data.detail) || 'Invalid registration data.';
@@ -617,7 +814,11 @@ export function createAuthModule({
           setButtonLoading(submitBtn, false, "Register");
         }
       };
-      registeredListeners.push(eventHandlers.trackListener(registerModalForm, 'submit', handler, { passive: false, context: MODULE_CONTEXT, description: 'Register Form Submit' }));
+      registeredListeners.push(eventHandlers.trackListener(registerModalForm, 'submit', handler, {
+        passive: false,
+        context: MODULE_CONTEXT,
+        description: 'Register Form Submit'
+      }));
     }
   }
 
@@ -627,9 +828,10 @@ export function createAuthModule({
   // --- Module Initialization
   async function init() {
     // Debug: log presence of cookies at module init
-    if (typeof document !== 'undefined') {
-      const hasAccess = document.cookie.includes('access_token');
-      const hasRefresh = document.cookie.includes('refresh_token');
+    const cookieStr = domAPI.getAttribute ? domAPI.getAttribute(domAPI.getDocument(), 'cookie') : '';
+    if (cookieStr) {
+      const hasAccess = cookieStr.includes('access_token');
+      const hasRefresh = cookieStr.includes('refresh_token');
       authNotify.info(`[Auth][DEBUG] Cookie presence at init: access_token=${hasAccess}, refresh_token=${hasRefresh}`, { group: true, source: 'init' });
     }
 
@@ -646,7 +848,8 @@ export function createAuthModule({
     // Setup auth forms and ensure they're properly initialized when modals are loaded
     setupAuthForms();
     if (eventHandlers.trackListener) {
-      eventHandlers.trackListener(document, 'modalsLoaded', setupAuthForms, {
+      // Use domAPI.getDocument() instead of document directly
+      eventHandlers.trackListener(domAPI.getDocument(), 'modalsLoaded', setupAuthForms, {
         context: MODULE_CONTEXT,
         description: 'Auth Modals Loaded Listener'
       });
@@ -658,6 +861,15 @@ export function createAuthModule({
         await getCSRFTokenAsync();
         authNotify.debug('[Auth] CSRF token obtained successfully', { group: true, source: 'init' });
       } catch (csrfErr) {
+        // Use errorReporter to capture the error with context
+        if (errorReporter?.capture) {
+          errorReporter.capture(csrfErr, {
+            module: MODULE_CONTEXT,
+            method: 'init',
+            extra: { message: 'Failed to get CSRF token, but continuing initialization' }
+          });
+        }
+
         authNotify.warn('[Auth] Failed to get CSRF token, but continuing initialization', {
           error: csrfErr,
           group: true,
@@ -675,6 +887,15 @@ export function createAuthModule({
           source: 'init'
         });
       } catch (verifyErr) {
+        // Use errorReporter to capture the error with context
+        if (errorReporter?.capture) {
+          errorReporter.capture(verifyErr, {
+            module: MODULE_CONTEXT,
+            method: 'init',
+            extra: { message: 'Initial verification failed, treating as unauthenticated' }
+          });
+        }
+
         authNotify.error('[Auth] Initial verification failed, treating as unauthenticated', {
           error: verifyErr,
           group: true,
@@ -713,11 +934,21 @@ export function createAuthModule({
       AuthBus.dispatchEvent(new CustomEvent('authReady', { detail: readyEventDetail }));
 
       try {
-        const doc = typeof document !== 'undefined' ? document : null;
+        // Use domAPI to dispatch event instead of document directly
+        const doc = domAPI.getDocument();
         if (doc) {
-          doc.dispatchEvent(new CustomEvent('authReady', { detail: readyEventDetail }));
+          domAPI.dispatchEvent(doc, new CustomEvent('authReady', { detail: readyEventDetail }));
         }
       } catch (docErr) {
+        // Use errorReporter to capture the error with context
+        if (errorReporter?.capture) {
+          errorReporter.capture(docErr, {
+            module: MODULE_CONTEXT,
+            method: 'init',
+            extra: { message: 'Failed to dispatch authReady on document' }
+          });
+        }
+
         authNotify.warn('[Auth] Failed to dispatch authReady on document', {
           error: docErr,
           group: true,
@@ -730,6 +961,15 @@ export function createAuthModule({
 
       return verified;
     } catch (err) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(err, {
+          module: MODULE_CONTEXT,
+          method: 'init',
+          extra: { message: 'Unhandled error during initialization' }
+        });
+      }
+
       authNotify.error('[Auth] Unhandled error during initialization: ' + (err?.stack || err), {
         group: true,
         source: 'init'
@@ -795,6 +1035,15 @@ export function createAuthModule({
       authNotify.warn('[Auth] fetchCurrentUser: User object in response not recognized or essential ID field missing.', { group: true, source: 'fetchCurrentUser', responseData: resp });
       return null;
     } catch (error) {
+      // Use errorReporter to capture the error with context
+      if (errorReporter?.capture) {
+        errorReporter.capture(error, {
+          module: MODULE_CONTEXT,
+          method: 'fetchCurrentUser',
+          extra: { endpoint: apiEndpoints.AUTH_VERIFY }
+        });
+      }
+
       authNotify.error('[Auth] fetchCurrentUser API call failed.', { group: true, source: 'fetchCurrentUser', originalError: error });
       return null;
     }
@@ -815,9 +1064,11 @@ export function createAuthModule({
     AuthBus,
     getCSRFTokenAsync,
     getCSRFToken,
-    hasAuthCookies: () =>
-      typeof document !== 'undefined' &&
-      (document.cookie.includes('access_token') || document.cookie.includes('refresh_token')),
+    hasAuthCookies: () => {
+      // Use domAPI to access cookies instead of document directly
+      const cookieStr = domAPI.getAttribute ? domAPI.getAttribute(domAPI.getDocument(), 'cookie') : '';
+      return cookieStr && (cookieStr.includes('access_token') || cookieStr.includes('refresh_token'));
+    },
     cleanup,
     fetchCurrentUser
   };
