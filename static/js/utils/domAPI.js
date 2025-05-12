@@ -30,17 +30,24 @@ export function createDomAPI({
   documentObject,
   windowObject,
   debug = false,
-  notify = null
+  notify = null,
+  sanitizer = null,
+  errorReporter = null
 } = {}) {
 
   if (!documentObject || !windowObject) {
     throw new Error('[domAPI] documentObject & windowObject are required – do not rely on globals.');
   }
 
+  // Create module-scoped notifier for consistent logging
+  const domAPINotify = notify?.withContext ?
+    notify.withContext({ module: 'domAPI', context: 'core' }) :
+    notify;
+
   // Local debug output (disabled when debug === false)
   const _log = (...m) => {
     if (!debug) return;
-    if (notify?.debug) notify.debug('[domAPI]', { extra: m });
+    if (domAPINotify?.debug) domAPINotify.debug('Debug log', { extra: m, module: 'domAPI', context: 'debug' });
     /* no console fall-back – stay silent if notify not supplied */
   };
 
@@ -74,7 +81,24 @@ export function createDomAPI({
     appendChild: (parent, child) => parent && child && parent.appendChild(child),
     replaceChildren: (parent, ...nodes) => parent && parent.replaceChildren && parent.replaceChildren(...nodes),
     setInnerHTML: (el, html) => {
-      if (el) el.innerHTML = html;
+      if (!el) return;
+
+      // Sanitize HTML content before setting innerHTML
+      if (sanitizer && typeof sanitizer.sanitize === 'function') {
+        el.innerHTML = sanitizer.sanitize(html);
+      } else {
+        // Log warning if sanitizer is not available
+        if (domAPINotify?.warn) {
+          domAPINotify.warn('Setting innerHTML without sanitization', {
+            module: 'domAPI',
+            context: 'setInnerHTML',
+            critical: true
+          });
+        }
+
+        // Still set the content, but with a warning
+        el.innerHTML = html;
+      }
     },
     isDocumentHidden: () => documentObject.hidden === true,
     ownerDocument: documentObject,
@@ -300,15 +324,41 @@ export function createDomAPI({
      */
     dispatchEvent: (target, event) => {
       if (!target || typeof target.dispatchEvent !== 'function') {
-        const n = (typeof window !== 'undefined' && window.DependencySystem?.modules?.get?.('notify')) || null;
-        n?.error?.('dispatchEvent target invalid', {
-          module: 'domAPI',
-          source: 'dispatchEvent',
-          extra: { eventType: event?.type, target }
-        });
+        // Use injected notify instead of global window.DependencySystem
+        if (domAPINotify?.error) {
+          domAPINotify.error('dispatchEvent target invalid', {
+            module: 'domAPI',
+            context: 'dispatchEvent',
+            extra: { eventType: event?.type, target }
+          });
+        }
+
+        // Use errorReporter if available
+        if (errorReporter?.capture) {
+          const err = new Error('dispatchEvent: invalid target');
+          errorReporter.capture(err, {
+            module: 'domAPI',
+            method: 'dispatchEvent',
+            extra: { eventType: event?.type, target }
+          });
+        }
+
         throw new Error('dispatchEvent: invalid target');
       }
-      return target.dispatchEvent(event);
+
+      try {
+        return target.dispatchEvent(event);
+      } catch (err) {
+        // Capture dispatch errors
+        if (errorReporter?.capture) {
+          errorReporter.capture(err, {
+            module: 'domAPI',
+            method: 'dispatchEvent',
+            extra: { eventType: event?.type, target }
+          });
+        }
+        throw err;
+      }
     },
 
     /**

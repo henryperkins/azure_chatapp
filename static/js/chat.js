@@ -1067,11 +1067,17 @@ export function createChatManager({
             }, { context: 'chatManager', description: 'Chat Minimize Toggle' });
         }
 
-        // Listen for "modelConfigChanged" - assuming body/document is a safe target
-        const eventTargetForModelConfig = this.domAPI?.getDocument?.() || document;
-        this.eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
-            if (e.detail) this.updateModelConfig(e.detail);
-        }, { description: 'Model config changed event for ChatManager', context: 'chatManager' });
+        // Listen for "modelConfigChanged" - strictly use injected domAPI
+        if (!this.domAPI || typeof this.domAPI.getDocument !== 'function') {
+            chatNotify.error('Cannot listen for modelConfigChanged: domAPI.getDocument is not available.', { source: '_setupEventListeners' });
+            // Depending on strictness, could throw new Error here.
+            // For now, we log and skip this listener if domAPI is not fully available.
+        } else {
+            const eventTargetForModelConfig = this.domAPI.getDocument();
+            this.eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
+                if (e.detail) this.updateModelConfig(e.detail);
+            }, { description: 'Model config changed event for ChatManager', context: 'chatManager' });
+        }
 
         chatNotify.debug('Event listeners set up successfully', { source: '_setupEventListeners' });
     }
