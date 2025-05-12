@@ -1,4 +1,5 @@
-import { wrapApi, safeInvoker } from "./utils/notifications-helpers.js";
+import { wrapApi, safeInvoker, maybeCapture } from "./utils/notifications-helpers.js";
+import { attachChatUI }                       from "./chat-ui-utils.js";
 import { APP_CONFIG } from './appConfig.js'; // Import APP_CONFIG
 
 /**
@@ -289,6 +290,14 @@ export function createChatManager({
           modelConfig: this.modelConfig
         }
       });
+
+      attachChatUI(this, {
+        domAPI      : this.domAPI,
+        DOMPurify   : this.DOMPurify,
+        eventHandlers: this.eventHandlers,
+        notify      : chatNotify,
+        errorReporter
+      });
     }
 
     /**
@@ -311,6 +320,9 @@ export function createChatManager({
         currentProjectId: this.projectId,
         isInitialized: this.isInitialized
       });
+
+      // Guardrail #10 – wait until the core app (and DOM helpers) are ready
+      await this.DependencySystem.waitFor?.(['app', 'domAPI', 'eventHandlers']);
 
       // Store selectors from options
       this.containerSelector = options.containerSelector || "#chatUI"; // Default if not provided
@@ -431,6 +443,7 @@ export function createChatManager({
                     } catch (err) {
                         this._handleError("New Conversation Button", err);
                         this._showErrorMessage("Failed to start new chat: " + (err?.message || err));
+                        maybeCapture(errorReporter, err, { module:'ChatManager', source:'newConversationBtn', context:'ui', originalError:err });
                     }
                 }, { notify: this.notify, errorReporter: this.errorReporter }),
                 { description: "New Conversation Button", context: "chatManager:newConvoBtn", source: "ChatManager.initialize" }
@@ -465,6 +478,7 @@ export function createChatManager({
             projectId: this.projectId, // Log current projectId context
             optionsUsed: options // Log options that led to failure
         });
+        maybeCapture(errorReporter, error, { module:'ChatManager', source:'initialize', context:'initialization', originalError:error });
         // Do not re-throw here if we want the app to continue running,
         // but allow projectDetailsComponent to know about the failure if needed.
         // Or, re-throw if chat is critical for the view.
@@ -703,6 +717,7 @@ export function createChatManager({
       } catch (error) {
         const errorMessage = this._extractErrorMessage(error);
         this._handleError("creating new conversation", error); // Already logs
+        maybeCapture(errorReporter, error, { module:'ChatManager', source:'createNewConversation', context:'api', originalError:error });
 
         if (errorMessage.includes("Project has no knowledge base")) {
           const specificMessage = "Project has no knowledge base. Please add one to enable chat.";
@@ -778,6 +793,7 @@ export function createChatManager({
             this._hideThinkingIndicator(); // Internally logs
             this._showErrorMessage(error.message); // Internally logs
             this._handleError("sending message", error); // Already logs
+            maybeCapture(errorReporter, error, { module:'ChatManager', source:'sendMessageTask', context:'api', originalError:error });
             this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
           }
         },
@@ -906,6 +922,7 @@ export function createChatManager({
         return true;
       } catch (error) {
         this._handleError("deleting conversation", error); // Already logs
+        maybeCapture(errorReporter, error, { module:'ChatManager', source:'deleteConversation', context:'api', originalError:error });
         return false;
       }
     }
@@ -932,167 +949,7 @@ export function createChatManager({
 
     // -------------------- UI Methods ----------------------
 
-    /**
-     * Sets up or rebinds references to container, message area, input, etc.
-     * @private
-     */
-    async _setupUIElements() { // Removed options, uses stored selectors
-      chatNotify.debug('Setting up UI elements using stored selectors.', {
-        source: '_setupUIElements',
-        selectors: {
-          container: this.containerSelector,
-          messages: this.messageContainerSelector,
-          input: this.inputSelector,
-          send: this.sendButtonSelector,
-          minimize: this.minimizeButtonSelector,
-          title: this.titleSelector
-        }
-      });
-
-      if (!this.domAPI) {
-        chatNotify.error('domAPI not available in _setupUIElements. Cannot proceed with UI setup.', { source: '_setupUIElements' });
-        this._handleError('_setupUIElements', new Error('domAPI is required for UI setup.'));
-        throw new Error('domAPI is required for UI setup.');
-      }
-
-      this.container = this.domAPI.querySelector(this.containerSelector);
-      if (!this.container) {
-        // If chat UI is meant to be dynamically injected, this might be acceptable if called before injection.
-        // However, for now, let's assume the container should exist.
-        chatNotify.error(`Chat container not found with selector: ${this.containerSelector}`, { source: '_setupUIElements' });
-        throw new Error(`Chat container not found: ${this.containerSelector}`);
-      }
-
-      this.messageContainer = this.domAPI.querySelector(this.messageContainerSelector);
-      if (!this.messageContainer) {
-         chatNotify.warn(`Message container not found with selector: ${this.messageContainerSelector}. Attempting to create.`, { source: '_setupUIElements' });
-         this.messageContainer = this.domAPI.createElement('div');
-         this.messageContainer.id = this.messageContainerSelector.startsWith('#') ? this.messageContainerSelector.substring(1) : 'chatMessages'; // Basic ID
-         this.domAPI.appendChild(this.container, this.messageContainer);
-      }
-
-      this.inputField = this.domAPI.querySelector(this.inputSelector);
-      if (!this.inputField) {
-        chatNotify.warn(`Input field not found with selector: ${this.inputSelector}. Attempting to create.`, { source: '_setupUIElements' });
-        // Create basic input and send button if not found
-        const inputArea = this.domAPI.createElement("div");
-        inputArea.className = "chat-input-area flex p-2 border-t border-base-300"; // Example styling
-
-        this.inputField = this.domAPI.createElement("textarea"); // Changed to textarea for multiline
-        this.inputField.id = this.inputSelector.startsWith('#') ? this.inputSelector.substring(1) : 'chatInput';
-        this.inputField.className = "flex-grow p-2 border rounded-l-md resize-none"; // Example styling
-        this.inputField.placeholder = "Type your message...";
-        this.inputField.setAttribute("aria-label", "Chat input");
-
-        this.sendButton = this.domAPI.createElement("button");
-        this.sendButton.id = this.sendButtonSelector.startsWith('#') ? this.sendButtonSelector.substring(1) : 'sendBtn';
-        this.sendButton.className = "p-2 bg-primary text-primary-content rounded-r-md"; // Example styling
-        this.sendButton.textContent = "Send";
-        this.sendButton.setAttribute("aria-label", "Send message");
-
-        this.domAPI.appendChild(inputArea, this.inputField);
-        this.domAPI.appendChild(inputArea, this.sendButton);
-        this.domAPI.appendChild(this.container, inputArea);
-      } else {
-        // If inputField exists, assume sendButton also exists or is found by its selector
-        this.sendButton = this.domAPI.querySelector(this.sendButtonSelector);
-        if (!this.sendButton) {
-            chatNotify.warn(`Send button not found with selector: ${this.sendButtonSelector}, even though input field was found.`, { source: '_setupUIElements' });
-            // Potentially create it or throw error depending on strictness
-        }
-      }
-
-      this.titleElement = this.domAPI.querySelector(this.titleSelector);
-      // titleElement is optional for the core chat functionality but good for context.
-      if (!this.titleElement) {
-          chatNotify.debug(`Chat title element not found with selector: ${this.titleSelector}. Chat title will not be displayed by ChatManager.`, { source: '_setupUIElements' });
-      }
-
-      if (this.minimizeButtonSelector) {
-        this.minimizeButton = this.domAPI.querySelector(this.minimizeButtonSelector);
-        if (!this.minimizeButton) {
-            chatNotify.debug(`Minimize button not found with selector: ${this.minimizeButtonSelector}. Minimize functionality will not be available.`, { source: '_setupUIElements' });
-        }
-      }
-
-      chatNotify.debug('UI elements setup process complete.', {
-        source: '_setupUIElements',
-        elementsFound: {
-          container: !!this.container,
-          messageContainer: !!this.messageContainer,
-          inputField: !!this.inputField,
-          sendButton: !!this.sendButton,
-          titleElement: !!this.titleElement,
-          minimizeButton: !!this.minimizeButton
-        }
-      });
-    }
-
-    _setupEventListeners() {
-        chatNotify.debug('Setting up event listeners', { source: '_setupEventListeners' });
-        if (!this.eventHandlers || typeof this.eventHandlers.trackListener !== 'function') {
-            chatNotify.error('eventHandlers.trackListener not available. Cannot bind UI events.', { source: '_setupEventListeners' });
-            return;
-        }
-        // Cleanup previous listeners for 'chatManager' context to prevent duplicates if re-initialized
-        if (typeof this.eventHandlers.cleanupListeners === 'function') {
-            this.eventHandlers.cleanupListeners({ context: 'chatManager' });
-        }
-
-        if (this.sendButton && this.inputField) {
-            this.eventHandlers.trackListener(this.sendButton, 'click', () => {
-                const messageText = this.inputField.value.trim();
-                if (messageText) {
-                    this.sendMessage(messageText);
-                    this.inputField.value = '';
-                }
-            }, { context: 'chatManager', description: 'Chat Send Button' });
-        }
-
-        if (this.inputField) {
-            this.eventHandlers.trackListener(this.inputField, 'keypress', (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    const messageText = this.inputField.value.trim();
-                    if (messageText) {
-                        this.sendMessage(messageText);
-                        this.inputField.value = '';
-                    }
-                }
-            }, { context: 'chatManager', description: 'Chat Input Enter Key' });
-        }
-
-        if (this.minimizeButton) {
-            this.eventHandlers.trackListener(this.minimizeButton, 'click', () => {
-                this.toggleMinimize();
-            }, { context: 'chatManager', description: 'Chat Minimize Toggle' });
-        }
-
-        // Listen for "modelConfigChanged" - strictly use injected domAPI
-        if (!this.domAPI || typeof this.domAPI.getDocument !== 'function') {
-            chatNotify.error('Cannot listen for modelConfigChanged: domAPI.getDocument is not available.', { source: '_setupEventListeners' });
-            // Depending on strictness, could throw new Error here.
-            // For now, we log and skip this listener if domAPI is not fully available.
-        } else {
-            const eventTargetForModelConfig = this.domAPI.getDocument();
-            this.eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
-                if (e.detail) this.updateModelConfig(e.detail);
-            }, { description: 'Model config changed event for ChatManager', context: 'chatManager' });
-        }
-
-        chatNotify.debug('Event listeners set up successfully', { source: '_setupEventListeners' });
-    }
-
-    toggleMinimize() {
-        if (!this.container || !this.messageContainer || !this.inputField) {
-            chatNotify.warn('Cannot toggle minimize: core UI elements not found.', { source: 'toggleMinimize' });
-            return;
-        }
-        // Example: Toggle a class on the main container
-        this.container.classList.toggle('chat-minimized'); // Add CSS for .chat-minimized
-        chatNotify.info(`Chat UI minimized state toggled. Now: ${this.container.classList.contains('chat-minimized') ? 'minimized' : 'expanded'}`, { source: 'toggleMinimize' });
-    }
-
+    // UI methods moved to chat-ui-utils.js via attachChatUI
     async _loadConversationHistory() {
         if (!this.projectId) {
             chatNotify.warn('Cannot load conversation history: no project ID', { source: '_loadConversationHistory' });
@@ -1167,6 +1024,7 @@ export function createChatManager({
             chatNotify.error('Failed to load messages', { source: '_loadMessages', originalError: error, conversationId });
             this._showErrorMessage('Failed to load messages. Please try again.');
             this._handleError('_loadMessages', error);
+            maybeCapture(errorReporter, error, { module:'ChatManager', source:'_loadMessages', context:'api', originalError:error });
         } finally {
             this._hideLoadingIndicator();
         }
@@ -1431,24 +1289,6 @@ export function createChatManager({
       } else {
         chatNotify.warn('Message container not found. Cannot clear messages.', { source: '_clearMessages' });
       }
-    }
-
-    _renderMessages(messages) {
-      chatNotify.debug(`Rendering ${messages?.length || 0} messages.`, { source: '_renderMessages', count: messages?.length || 0 });
-      this._clearMessages(); // Internally logs
-      if (!messages?.length) {
-        this._showMessage("system", "No messages yet"); // Internally logs
-        return;
-      }
-      messages.forEach((msg) => { // _showMessage logs internally
-        this._showMessage(
-          msg.role,
-          msg.content,
-          msg.id,
-          msg.thinking,
-          msg.redacted_thinking
-        );
-      });
     }
 
     _extractErrorMessage(err) {

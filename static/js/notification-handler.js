@@ -16,6 +16,9 @@ export function createNotificationHandler({
 } = {}) {
   if (!domAPI) throw new Error('notificationHandler: domAPI is required');
 
+  // Guardrail #10 – wait for the core app readiness before DOM work
+  DependencySystem?.waitFor?.(['app']).catch(() => {});
+
   // Module constants
   const MODULE_CONTEXT = 'NotificationHandler';
   const DEFAULT_TIMEOUT = 5000;
@@ -188,7 +191,9 @@ export function createNotificationHandler({
 
   /* Guardrail #4 – Centralised listener cleanup */
   api.cleanup = () => {
-    eventHandlers?.cleanupListeners?.({ context: "notificationHandler" });
+    if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+      eventHandlers.cleanupListeners({ context: "notificationHandler" });
+    }
     clear();
   };
 
