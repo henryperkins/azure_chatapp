@@ -294,6 +294,45 @@ export function createAuthModule({
           try { response = JSON.parse(response); } catch { /* keep as string */ }
         }
 
+        // --- DISPLAY RAW RESPONSE IN DOM FOR DEBUGGING ---
+        try {
+          let debugEl = domAPI.getElementById('authVerifyResponseDebug');
+          if (!debugEl) {
+            debugEl = domAPI.createElement('pre');
+            debugEl.id = 'authVerifyResponseDebug';
+            Object.assign(debugEl.style, {
+              position: 'fixed',
+              bottom: '0',
+              left: '0',
+              right: '0',
+              maxHeight: '200px',
+              overflowY: 'scroll',
+              backgroundColor: 'rgba(0,0,0,0.7)',
+              color: 'white',
+              padding: '10px',
+              zIndex: '99999',
+              fontSize: '12px',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all'
+            });
+            const body = domAPI.getBody();
+            if (body) {
+                domAPI.appendChild(body, debugEl);
+            } else {
+                console.error("Could not find body to append debug element for auth verify response.");
+            }
+          }
+          if (debugEl) {
+            const timestamp = new Date().toISOString();
+            const newContent = `[${timestamp}] /api/auth/verify response:\n${JSON.stringify(response, null, 2)}\n\n`;
+            // Prepend new content to keep the latest at the top
+            debugEl.textContent = newContent + (debugEl.textContent || "");
+          }
+        } catch (e) {
+          console.error("Error displaying auth verify debug info in DOM:", e);
+        }
+        // --- END DOM DEBUG DISPLAY ---
+
         // -----------------------------
         // NUEVA lógica de verificación
         // -----------------------------
@@ -304,11 +343,14 @@ export function createAuthModule({
         // Si se detecta usuario, lo extraemos para difundirlo.
 
         let userObject = null;
-        if (response?.user && typeof response.user === 'object' && response.user.id) {
-          userObject = response.user;
-        } else if (response && typeof response === 'object' && response.id && response.username) {
-          // Handle cases where the response itself is the user object
-          userObject = response;
+        // Ensure response itself is an object before trying to access properties
+        if (response && typeof response === 'object') {
+            if (response.user && typeof response.user === 'object' && response.user.id) {
+              userObject = response.user;
+            } else if (response.id && response.username) {
+              // Handle cases where the response itself is the user object
+              userObject = response;
+            }
         }
 
 
@@ -318,24 +360,36 @@ export function createAuthModule({
         let finalUserObject = null;
         let userIdFromObject = null;
 
+        authNotify.info('[Auth Verify] Step 1: userObject before processing:', { group: true, source: 'verifyAuthStateSteps', userObject: JSON.stringify(userObject) });
+
         if (userObject) {
             // Try common ID field names
             userIdFromObject = userObject.id || userObject.user_id || userObject.userId || userObject._id;
+            authNotify.info('[Auth Verify] Step 2: userIdFromObject extracted:', { group: true, source: 'verifyAuthStateSteps', userIdFromObject: String(userIdFromObject) });
             if (userIdFromObject) {
                 // If an ID was found, ensure the userObject has a consistent 'id' property for downstream use
                 finalUserObject = { ...userObject, id: userIdFromObject };
+                authNotify.info('[Auth Verify] Step 3: finalUserObject created:', { group: true, source: 'verifyAuthStateSteps', finalUserObject: JSON.stringify(finalUserObject) });
+            } else {
+                authNotify.warn('[Auth Verify] Step 3: userIdFromObject was falsy, finalUserObject not created from userObject.', { group: true, source: 'verifyAuthStateSteps' });
             }
+        } else {
+            authNotify.warn('[Auth Verify] Step 1: userObject was falsy.', { group: true, source: 'verifyAuthStateSteps' });
         }
 
         const isAuthenticatedBasedOnValidUserObjectWithId = !!(finalUserObject && finalUserObject.id);
+        authNotify.info('[Auth Verify] Step 4: isAuthenticatedBasedOnValidUserObjectWithId:', { group: true, source: 'verifyAuthStateSteps', value: isAuthenticatedBasedOnValidUserObjectWithId });
+
 
         if (isAuthenticatedBasedOnValidUserObjectWithId) {
-            authNotify.debug('[Auth] verifyAuthState: authenticated with valid user object and ID', { group: true, source: 'verifyAuthState', userObject: finalUserObject });
+            authNotify.info('[Auth] verifyAuthState: authenticated with valid user object and ID', { group: true, source: 'verifyAuthState', userObject: finalUserObject });
             broadcastAuth(true, finalUserObject, 'verify_success_with_user_id');
             return true;
         } else {
+            authNotify.warn('[Auth Verify] Condition (isAuthenticatedBasedOnValidUserObjectWithId) is FALSE. Checking flags.', { group: true, source: 'verifyAuthStateSteps' });
             // Check flags only if we couldn't establish auth via a user object with a recognized ID
             const isAuthenticatedByFlags = truthy(response?.authenticated) || truthy(response?.is_authenticated);
+            authNotify.info('[Auth Verify] Step 5: isAuthenticatedByFlags:', { group: true, source: 'verifyAuthStateSteps', value: isAuthenticatedByFlags, rawAuthFlag: String(response?.authenticated), rawIsAuthFlag: String(response?.is_authenticated) });
             if (isAuthenticatedByFlags) {
                 // Backend reports authenticated but didn't include a detailed user object.
                 // Accept authentication state and continue with minimal info instead of forcing logout.

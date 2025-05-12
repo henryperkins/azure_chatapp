@@ -170,7 +170,7 @@ export function createUiRenderer({
         queryParams.search = searchTerm;
       }
 
-      const response = await apiRequest.get(conversationsUrl, { params: queryParams });
+      const response = await apiRequest(conversationsUrl, { method: 'GET', params: queryParams });
       const conversations = _extractConversationsFromResponse(response);
 
       _setLoadingState(listElement, false); // Remove loading before adding items
@@ -226,7 +226,7 @@ export function createUiRenderer({
         queryParams.search = searchTerm;
       }
 
-      const response = await apiRequest.get(conversationsUrl, { params: queryParams });
+      const response = await apiRequest(conversationsUrl, { method: 'GET', params: queryParams });
       let conversations = _extractConversationsFromResponse(response);
 
       // If backend doesn't filter by 'starred=true', filter client-side:

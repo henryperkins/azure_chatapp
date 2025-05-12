@@ -5,7 +5,7 @@
 # generating AI responses.
 
 import logging
-from typing import List, Optional, Any, Union
+from typing import List, Optional, Any, Union, cast
 from uuid import UUID
 from datetime import datetime
 
@@ -276,7 +276,7 @@ class ConversationService:
             order_by=Conversation.created_at.desc(),
             limit=limit,
             offset=skip,
-            options=load_options # Pass the options here
+            options=cast(List[Any], load_options) # Pass the options here
         )
 
     async def update_conversation(

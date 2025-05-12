@@ -42,7 +42,15 @@ export function createApiClient({
     }
 
     const auth = getAuthModule?.();
-    const fullUrl = globalUtils.isAbsoluteUrl(url) ? url : `${BASE_URL}${url}`;
+    let fullUrl = globalUtils.isAbsoluteUrl(url) ? url : `${BASE_URL}${url}`;
+
+    // Handle opts.params for GET requests
+    if (method === "GET" && opts.params && typeof opts.params === 'object') {
+      const queryParams = new URLSearchParams(opts.params).toString();
+      if (queryParams) {
+        fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryParams;
+      }
+    }
 
     let normUrl;
     try {

@@ -1,4 +1,3 @@
-import { logEventToServer } from "./utils/notifications-helpers.js";
 /* ---------------------------------------------------------------------------
  *  notificationHandler.js  ★ slimmed v4.0  (2025-05-04, minimal, no grouping, no metadata)
  *  -------------------------------------------------------------------------- */
@@ -189,8 +188,8 @@ export function createNotificationHandler({
   function show(message, type = "info", opts = {}) {
     if (!message) return null;
     const _type = ['info', 'success', 'warning', 'error', 'debug'].includes(type) ? type : 'info';
-    // Send sampled events to the server for backend logging (handled by logEventToServer)
-    logEventToServer(_type, message, opts);
+    // Backend logging is now handled by notify.js for all event types.
+    // logEventToServer(_type, message, opts); // Removed this call
 
     const banner = buildBanner(_type, { ...opts, message });
 
