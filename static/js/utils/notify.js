@@ -72,8 +72,8 @@ export function createNotify({
 
     notificationHandler.show(msg, _type, payload);
 
-    // If the notification is an error, also send it to the backend logging endpoint
-    if (_type === 'error') {
+    // Send ALL notifications to the backend logging endpoint
+    // if (_type === 'error') { // Condition removed to send all types
       const logApiPayload = {
         message: msg,
         type: _type,
@@ -101,17 +101,17 @@ export function createNotify({
       })
       .then(response => {
         if (!response.ok) {
-          console.error('Failed to POST error notification to /api/log_notification:', response.status, response.statusText, logApiPayload);
+          console.error(`Failed to POST ${_type} notification to /api/log_notification:`, response.status, response.statusText, logApiPayload);
         } else {
           if (typeof window !== "undefined" && window.console && window.APP_CONFIG?.DEBUG) {
-            console.debug('Error notification successfully POSTed to /api/log_notification:', logApiPayload);
+            console.debug(`${_type} notification successfully POSTed to /api/log_notification:`, logApiPayload);
           }
         }
       })
       .catch(networkError => {
-        console.error('Network error when POSTing error notification to /api/log_notification:', networkError, logApiPayload);
+        console.error(`Network error when POSTing ${_type} notification to /api/log_notification:`, networkError, logApiPayload);
       });
-    }
+    // } // Corresponding closing brace for the removed if condition
 
     return eventId;
   };

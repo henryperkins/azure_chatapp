@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, Annotated, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -487,7 +488,7 @@ class VerifyResponse(BaseModel):
 async def verify_auth_status(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
-):
+) -> VerifyResponse:
     """
     Verifies the current access token, returns user info if valid.
     Enhanced: includes request context for debugging.
@@ -519,11 +520,11 @@ async def verify_auth_status(
     except HTTPException as ex:
         if ex.status_code in (401, 403):
             return VerifyResponse(authenticated=False, user=None)
-        else:
-            raise
+        logger.warning(f"Verify auth encountered non-401/403 HTTPException ({ex.status_code}): {ex.detail}", exc_info=True)
+        return VerifyResponse(authenticated=False, user=None)
     except Exception as e:
-        logger.error("Verify error => %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Server error verifying token.")
+        logger.error("Verify auth general error => %s", e, exc_info=True)
+        return VerifyResponse(authenticated=False, user=None)
 
 
 class TokenExpirySettings(BaseModel):
