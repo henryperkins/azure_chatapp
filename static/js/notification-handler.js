@@ -22,34 +22,39 @@ export function createNotificationHandler({
 
   // Create container
   const CONTAINER_ID = "notificationArea";
-  let container = domAPI.getElementById(CONTAINER_ID);
+  let container = null;
 
-  if (!container) {
-    container = domAPI.createElement("div");
-    container.id = CONTAINER_ID;
-    container.setAttribute("role", "region");
-    container.setAttribute("aria-label", "Notifications");
+  function ensureContainer() {
+    if (container) return container;
+    container = domAPI.getElementById(CONTAINER_ID);
+    if (!container) {
+      container = domAPI.createElement("div");
+      container.id = CONTAINER_ID;
+      container.setAttribute("role", "region");
+      container.setAttribute("aria-label", "Notifications");
 
-    // Apply styles
-    Object.assign(container.style, {
-      position: "fixed",
-      zIndex: 10000,
-      maxWidth: "28rem",
-      width: "calc(100vw - 2rem)",
-      pointerEvents: "none",
-      display: "flex",
-      flexDirection: position.startsWith("bottom") ? "column-reverse" : "column",
-      gap: "0.5rem",
-    });
+      // Apply styles
+      Object.assign(container.style, {
+        position: "fixed",
+        zIndex: 10000,
+        maxWidth: "28rem",
+        width: "calc(100vw - 2rem)",
+        pointerEvents: "none",
+        display: "flex",
+        flexDirection: position.startsWith("bottom") ? "column-reverse" : "column",
+        gap: "0.5rem",
+      });
 
-    // Position based on config
-    const [v, h] = position.split("-");
-    container.style[v] = "1rem";
-    container.style[h] = "1rem";
+      // Position based on config
+      const [v, h] = position.split("-");
+      container.style[v] = "1rem";
+      container.style[h] = "1rem";
 
-    // Append to body
-    const body = domAPI.getBody();
-    if (body) body.appendChild(container);
+      // Append to body
+      const body = domAPI.getBody();
+      if (body) body.appendChild(container);
+    }
+    return container;
   }
 
   // Utility: fade in/out
@@ -122,7 +127,7 @@ export function createNotificationHandler({
     if (eventHandlers?.trackListener) {
       eventHandlers.trackListener(closeBtn, "click", onCloseClick, {
         description: "Notification_Close",
-        context: MODULE_CONTEXT
+        context: "notificationHandler"
       });
     } else {
       closeBtn.addEventListener("click", onCloseClick);
@@ -142,6 +147,7 @@ export function createNotificationHandler({
 
     // Create banner
     const banner = buildBanner(_type, { message, ...opts });
+    const container = ensureContainer();
 
     // Remove excess banners
     while (container.children.length >= maxVisible) {
@@ -168,6 +174,7 @@ export function createNotificationHandler({
 
   // Clear all notifications
   const clear = () => {
+    const container = ensureContainer();
     while (container.firstChild) container.firstChild.remove();
   };
 
@@ -175,8 +182,14 @@ export function createNotificationHandler({
   const api = {
     show,
     clear,
-    getContainer: () => container,
+    getContainer: () => ensureContainer(),
     destroy: clear
+  };
+
+  /* Guardrail #4 – Centralised listener cleanup */
+  api.cleanup = () => {
+    eventHandlers?.cleanupListeners?.({ context: "notificationHandler" });
+    clear();
   };
 
   // Add convenience methods
