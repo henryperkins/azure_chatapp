@@ -39,7 +39,65 @@ import { waitForDepsAndDom } from './utils/globalUtils.js';
 
 const MODULE = "ProjectDetailsComponent";
 
-export class ProjectDetailsComponent {
+function createProjectDetailsComponent({
+  onBack,
+  app,
+  projectManager,
+  eventHandlers,
+  modalManager,
+  FileUploadComponentClass,
+  router,
+  notify,
+  errorReporter,
+  sanitizer,
+  domAPI,
+  browserService,
+  globalUtils,
+  knowledgeBaseComponent = null,
+  modelConfig = null,
+  chatManager = null
+} = {}) {
+  if (
+    !app ||
+    !projectManager ||
+    !eventHandlers ||
+    !modalManager ||
+    !FileUploadComponentClass ||
+    !router ||
+    !notify ||
+    !errorReporter ||
+    !sanitizer ||
+    !domAPI
+  ) {
+    throw new Error(
+      "[ProjectDetailsComponent] Missing required dependencies " +
+      "(app, projectManager, eventHandlers, modalManager, FileUploadComponentClass, " +
+      "router, notify, errorReporter, sanitizer, domAPI)."
+    );
+  }
+
+  // Factory validation done. Construct and return instance.
+  return new ProjectDetailsComponent({
+    onBack,
+    app,
+    projectManager,
+    eventHandlers,
+    modalManager,
+    FileUploadComponentClass,
+    router,
+    notify,
+    errorReporter,
+    sanitizer,
+    domAPI,
+    browserService,
+    globalUtils,
+    knowledgeBaseComponent,
+    modelConfig,
+    chatManager
+  });
+}
+
+class ProjectDetailsComponent {
   constructor({
     onBack,
     app,
@@ -49,6 +107,7 @@ export class ProjectDetailsComponent {
     FileUploadComponentClass,
     router,
     notify,
+    errorReporter,
     sanitizer,
     domAPI,
     browserService,
@@ -57,24 +116,11 @@ export class ProjectDetailsComponent {
     modelConfig = null,
     chatManager = null
   } = {}) {
-    if (
-      !app ||
-      !projectManager ||
-      !eventHandlers ||
-      !modalManager ||
-      !FileUploadComponentClass ||
-      !router ||
-      !notify ||
-      !sanitizer ||
-      !domAPI
-    ) {
-      throw new Error(
-        "[ProjectDetailsComponent] Missing required dependencies " +
-        "(app, projectManager, eventHandlers, modalManager, FileUploadComponentClass, " +
-        "router, notify, sanitizer, domAPI)."
-      );
+    if (!errorReporter) {
+      throw new Error("[ProjectDetailsComponent] errorReporter is required for context-rich error logging.");
     }
 
+    this.errorReporter = errorReporter;
     this.app = app;
     this.projectManager = projectManager;
     this.eventHandlers = eventHandlers;
@@ -129,10 +175,9 @@ export class ProjectDetailsComponent {
     this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem; // Get DependencySystem
     this.navigationService = this.DependencySystem?.modules?.get('navigationService');
 
-
     this.notify.debug('[ProjectDetailsComponent] Optional dependencies status:', {
         group: false, // Keep constructor logs less noisy unless debugging
-        context: "projectDetailsComponent", module: MODULE, source: "constructor",
+        source: "constructor", // context and module are auto-applied
         extra: {
             knowledgeBaseComponent: !!this.knowledgeBaseComponent,
             modelConfig: !!this.modelConfig,
@@ -142,7 +187,7 @@ export class ProjectDetailsComponent {
 
     this.onBack = onBack || (() => {
       this.notify.warn("[ProjectDetailsComponent] onBack callback not provided.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "onBack"
+        group: true, source: "constructor_onBackFallback" // context and module are auto-applied
       });
     });
 
@@ -179,7 +224,7 @@ export class ProjectDetailsComponent {
   async initialize() {
     const traceId = this.debugTools?.start?.('ProjectDetailsComponent.initialize');
     this.notify.info("[ProjectDetailsComponent] initialize() called", {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
+      group: true, source: "initialize" // context and module are auto-applied
     });
 
     // Wait for DOM to be ready before finding elements
@@ -193,7 +238,7 @@ export class ProjectDetailsComponent {
 
     if (this.state.initialized) {
       this.notify.info("[ProjectDetailsComponent] Already initialized.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize"
+        group: true, source: "initialize_alreadyInitialized" // context and module are auto-applied
       });
       this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize');
       return true;
@@ -201,27 +246,27 @@ export class ProjectDetailsComponent {
     try {
       if (!this._findElements()) {
         this.notify.error("Critical error: required DOM nodes missing for Project Details.", {
-          group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize", timeout: 0
+          group: true, source: "initialize_findElements_critical", timeout: 0 // context and module are auto-applied
         });
         // Add more detail to the error log about which elements were missing
         const missingElements = Object.entries(this.elements)
             .filter(([key, value]) => !value && key !== 'container' /* already checked */ && key !== 'loadingIndicators' && key !== 'tabContents') // filter out complex objects or less critical ones for this specific log
             .map(([key]) => key);
         this.notify.error(`[ProjectDetailsComponent] Missing DOM elements during _findElements: ${missingElements.join(', ')}`, {
-            group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize_findElements",
+            group: true, source: "initialize_findElements_detail", // context and module are auto-applied
             detail: { checkedElements: Object.keys(this.elements).filter(k => k !== 'loadingIndicators' && k !== 'tabContents') }
         });
         throw new Error("Required DOM nodes missing in #projectDetailsView for initialization.");
       }
       this.notify.info("[ProjectDetailsComponent] _findElements successful. All essential elements found.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize_findElements"
+        group: true, source: "initialize_findElements_success" // context and module are auto-applied
       });
       this._bindCoreEvents();
       await this._initSubComponents();
 
       this.state.initialized = true;
       this.notify.success("Project Details module initialized.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize", timeout: 3000
+        group: true, source: "initialize_success", timeout: 3000 // context and module are auto-applied
       });
 
       // --- Standardized "projectdetailscomponent:initialized" event ---
@@ -244,8 +289,9 @@ export class ProjectDetailsComponent {
       return true;
     } catch (err) {
       this.notify.error("[ProjectDetailsComponent] Init failed: " + (err?.message || err), {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "initialize", originalError: err, timeout: 0
+        group: true, source: "initialize_catch", originalError: err, timeout: 0 // context and module are auto-applied
       });
+      this.errorReporter.capture(err, { module: MODULE, source: "initialize", originalError: err });
       this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize (error)');
       return false;
     } finally {
@@ -261,7 +307,7 @@ export class ProjectDetailsComponent {
     this.elements.container = this.domAPI.getElementById("projectDetailsView");
     if (!this.elements.container) {
       this.notify.error("[ProjectDetailsComponent] #projectDetailsView not found", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_findElements", timeout: 0
+        group: true, source: "_findElements_containerMissing", timeout: 0 // context and module are auto-applied
       });
       return false;
     }
@@ -304,7 +350,7 @@ export class ProjectDetailsComponent {
 
     if (!essentialElementsFound) {
       this.notify.error("[ProjectDetailsComponent] Not all essential child elements found within #projectDetailsView.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_findElements",
+        group: true, source: "_findElements_essentialMissing", // context and module are auto-applied
         detail: {
           titleFound: !!this.elements.title,
           descriptionFound: !!this.elements.description,
@@ -417,11 +463,11 @@ this.domAPI.dispatchEvent(
 
     on("projectDetailsFullyLoaded", (e) => {
       this.notify.info(`[ProjectDetailsComponent] Received projectDetailsFullyLoaded for project ${e.detail?.projectId}.`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents", detail: { projectId: e.detail?.projectId }
+        group: true, source: "_bindCoreEvents_projectDetailsFullyLoaded", detail: { projectId: e.detail?.projectId } // context and module are auto-applied
       });
       this.state.projectDataActuallyLoaded = true;
       this.notify.info(`[ProjectDetailsComponent] projectDataActuallyLoaded set to true.`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents"
+        group: true, source: "_bindCoreEvents_projectDataActuallyLoaded" // context and module are auto-applied
       });
       this._updateNewChatButtonState();
     }, "PD_FullyLoaded");
@@ -429,7 +475,7 @@ this.domAPI.dispatchEvent(
     // Listen for global auth state changes to re-evaluate button state
     on("authStateChanged", (authEvent) => {
         this.notify.info(`[ProjectDetailsComponent] Auth state changed event received (authenticated: ${authEvent.detail?.authenticated}). Updating chat button.`, {
-            group: true, context: "projectDetailsComponent", module: MODULE, source: "_bindCoreEvents",
+            group: true, source: "_bindCoreEvents_authStateChanged", // context and module are auto-applied
             detail: { user: authEvent.detail?.user }
         });
         this._updateNewChatButtonState();
@@ -445,7 +491,7 @@ this.domAPI.dispatchEvent(
 
       if (!ready) {
         this.notify.warn("[ProjectDetailsComponent] FileUploadComponent DOM nodes missing.", {
-          group: true, context: "projectDetailsComponent", module: MODULE, source: "_initSubComponents"
+          group: true, source: "_initSubComponents_fileUploadDomMissing" // context and module are auto-applied
         });
         return;
       }
@@ -476,7 +522,7 @@ this.domAPI.dispatchEvent(
         await initFn.call(this.fileUploadComponent);
       }
       this.notify.info("[ProjectDetailsComponent] FileUploadComponent ready.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_initSubComponents"
+        group: true, source: "_initSubComponents_fileUploadReady" // context and module are auto-applied
       });
     }
   }
@@ -484,7 +530,7 @@ this.domAPI.dispatchEvent(
   show() {
     if (!this.state.initialized || !this.elements.container) {
       this.notify.error("[ProjectDetailsComponent] show() called before init.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "show", timeout: 0
+        group: true, source: "show_notInitialized", timeout: 0 // context and module are auto-applied
       });
       return;
     }
@@ -506,7 +552,7 @@ this.domAPI.dispatchEvent(
     }
 
     this.notify.info("[ProjectDetailsComponent] Shown.", {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "show"
+      group: true, source: "show" // context and module are auto-applied
     });
   }
 
@@ -516,7 +562,7 @@ this.domAPI.dispatchEvent(
       // this.elements.container.classList.add("opacity-0"); // Optionally add for fade effect
       this.elements.container.setAttribute("aria-hidden", "true");
       this.notify.info("[ProjectDetailsComponent] Hidden.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "hide"
+        group: true, source: "hide" // context and module are auto-applied
       });
     }
   }
@@ -524,23 +570,23 @@ this.domAPI.dispatchEvent(
   renderProject(project) {
     if (!this.state.initialized) {
       this.notify.error("[ProjectDetailsComponent] renderProject before init.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "renderProject", timeout: 0, detail: { project }
+        group: true, source: "renderProject_notInitialized", timeout: 0, detail: { project } // context and module are auto-applied
       });
       return;
     }
     if (!project || !this.app.validateUUID(project.id)) {
       this.notify.error("[ProjectDetailsComponent] Invalid project payload.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "renderProject", timeout: 0, detail: { project }
+        group: true, source: "renderProject_invalidPayload", timeout: 0, detail: { project } // context and module are auto-applied
       });
       this.notify.error("Failed to load project details: Invalid or missing project ID.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "renderProject", timeout: 0
+        group: true, source: "renderProject_invalidId", timeout: 0 // context and module are auto-applied
       });
       this.onBack();
       return;
     }
 
     this.notify.info(`[ProjectDetailsComponent] Render project ${project.id}`, {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "renderProject", detail: { project }
+      group: true, source: "renderProject", detail: { project } // context and module are auto-applied
     });
     this.state.currentProject = project;
     // mark data ready → enable “New Chat” button
@@ -559,7 +605,7 @@ this.domAPI.dispatchEvent(
   switchTab(tabName) {
     if (!this.state.initialized) {
       this.notify.warn("[ProjectDetailsComponent] switchTab before init.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab"
+        group: true, source: "switchTab_notInitialized"
       });
       return;
     }
@@ -567,10 +613,10 @@ this.domAPI.dispatchEvent(
     const TABS = ["details", "files", "knowledge", "conversations", "artifacts", "chat"];
     if (!TABS.includes(tabName)) {
       this.notify.warn(`[ProjectDetailsComponent] invalid tab "${tabName}".`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab"
+        group: true, source: "switchTab_invalidTabName"
       });
       this.notify.warn("Attempted to switch to invalid tab: " + tabName, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 5000
+        group: true, source: "switchTab_invalidTabAttempt", timeout: 5000
       });
       return;
     }
@@ -580,20 +626,20 @@ this.domAPI.dispatchEvent(
 
     if (needsProject && !this.app.validateUUID(pid)) {
       this.notify.error(`[ProjectDetailsComponent] tab "${tabName}" needs valid project.`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", detail: { tabName }
+        group: true, source: "switchTab_projectNeeded", detail: { tabName }
       });
       this.notify.warn("Please select a valid project before accessing this tab.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 5000
+        group: true, source: "switchTab_selectValidProject", timeout: 5000
       });
       return;
     }
 
     this.notify.info(`[ProjectDetailsComponent] tab => ${tabName}`, {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab"
+      group: true, source: "switchTab_switchingTo"
     });
     this.state.activeTab = tabName;
     this.notify.info(`Switched to "${tabName}" tab.`, {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 2500
+      group: true, source: "switchTab_switchedTo", timeout: 2500
     });
 
     this.elements.tabContainer?.querySelectorAll(".project-tab-btn").forEach(btn => {
@@ -615,7 +661,7 @@ this.domAPI.dispatchEvent(
             this.modelConfig.renderQuickConfig(panel);
           } catch (e) {
             this.notify.error("[ProjectDetailsComponent] modelConfig render failed: " + (e?.message || e), {
-              group: true, context: "projectDetailsComponent", module: MODULE, source: "_loadTabContent", originalError: e, timeout: 0
+              group: true, source: "switchTab_modelConfigRenderFail", originalError: e, timeout: 0
             });
           }
 this.domAPI.dispatchEvent(
@@ -628,36 +674,39 @@ this.domAPI.dispatchEvent(
       }
     }
     // Initialize chatManager only for the "chat" tab
+    // The "chat" functionality is now integrated within the "conversations" tab's HTML structure.
     if (tabName === "chat" && this.chatManager?.initialize) {
-      // Ensure chat UI elements are ready before initializing ChatManager
-      waitForDepsAndDom({
-        DependencySystem: this.eventHandlers?.DependencySystem ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
-        domAPI          : this.domAPI,
-        domSelectors: ["#projectChatUI", "#projectChatMessages", "#projectChatInput", "#projectChatSendBtn", "#projectMinimizeChatBtn"],
-        timeout: 3000, // Short timeout, elements should be there quickly after tab switch
-        notify: this.notify, // Use component's notify for logging
-        source: 'ProjectDetailsComponent_ChatManagerInit'
-      }).then(() => {
+      // Use the "conversations" tab content area as the host for the chat UI
+      const conversationsTabContent = this.elements.tabContents.conversations;
+
+      if (conversationsTabContent) {
+        this.notify.info("[ProjectDetailsComponent] Initializing chat within 'conversations' tab.", {
+            source: "switchTab_initChatInConversations",
+            projectId: this.state.currentProject?.id
+        });
+
+        // The HTML already contains elements with IDs like #projectChatUI, #projectChatMessages etc.
+        // Pass these existing selectors to the chatManager.
+        // The chatManager's _setupUIElements will find these if they exist,
+        // or create them if its internal logic is set up to do so (which it is, based on recent chat.js changes).
         this.chatManager.initialize({
           projectId: this.state.currentProject?.id,
-          containerSelector: "#projectChatUI",
-          messageContainerSelector: "#projectChatMessages",
-          inputSelector: "#projectChatInput",
-          sendButtonSelector: "#projectChatSendBtn",
-          minimizeButtonSelector: "#projectMinimizeChatBtn"
+          containerSelector: "#projectChatUI", // Existing ID in project_details.html within #conversationsTab
+          messageContainerSelector: "#projectChatMessages", // Existing ID
+          inputSelector: "#projectChatInput", // Existing ID
+          sendButtonSelector: "#projectChatSendBtn", // Existing ID
+          titleSelector: "#projectChatContainer h3", // Selector for the "Conversation" title if needed
+          minimizeButtonSelector: "#projectMinimizeChatBtn" // Existing ID
         }).catch((err) => {
-          this.notify.error("[ProjectDetailsComponent] Failed to init chatManager for chat tab: " + (err?.message || err), {
-            group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", originalError: err, timeout: 0
-          });
-          this.notify.error("Unable to initialize chat manager for Chat tab.", {
-            group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab", timeout: 0
+          this.notify.error("[ProjectDetailsComponent] Failed to init chatManager within conversations tab: " + (err?.message || err), {
+            group: true, source: "switchTab_chatManagerInitFailInConversations", originalError: err, timeout: 0
           });
         });
-      }).catch(err => {
-        this.notify.error("[ProjectDetailsComponent] Chat UI elements not ready for ChatManager init: " + (err?.message || err), {
-          group: true, context: "projectDetailsComponent", module: MODULE, source: "switchTab_WaitForChatDOM", originalError: err, timeout: 0
+      } else {
+        this.notify.error("[ProjectDetailsComponent] Conversations tab content area (#conversationsTab) not found. Cannot initialize chat.", {
+            group: true, source: "switchTab_convTabNotFoundForChat", timeout: 0
         });
-      });
+      }
     }
   }
 
@@ -682,7 +731,7 @@ this.domAPI.dispatchEvent(
         })
       );
       this.notify.info(`[ProjectDetailsComponent] Dispatched projectDetailsReady for ${this.state.currentProject.id}`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_maybeEmitReady", detail: { project: this.state.currentProject }
+        group: true, source: "_maybeEmitReady", detail: { project: this.state.currentProject }
       });
     }
   }
@@ -691,7 +740,7 @@ this.domAPI.dispatchEvent(
     const c = this.elements.filesList;
     if (!c) {
       this.notify.warn("[ProjectDetailsComponent] filesList node missing.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "renderFiles"
+        group: true, source: "renderFiles_listNodeMissing"
       });
 this.domAPI.dispatchEvent(
     this.domAPI.ownerDocument,
@@ -719,7 +768,7 @@ this.domAPI.dispatchEvent(
     const c = this.elements.conversationsList;
     if (!c) {
       this.notify.warn("[ProjectDetailsComponent] conversationsList missing.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "renderConversations"
+        group: true, source: "renderConversations_listNodeMissing"
       });
 this.domAPI.dispatchEvent(
     this.domAPI.ownerDocument,
@@ -746,7 +795,7 @@ this.domAPI.dispatchEvent(
     const c = this.elements.artifactsList;
     if (!c) {
       this.notify.warn("[ProjectDetailsComponent] artifactsList missing.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "renderArtifacts"
+        group: true, source: "renderArtifacts_listNodeMissing"
       });
 this.domAPI.dispatchEvent(
     this.domAPI.ownerDocument,
@@ -770,7 +819,7 @@ this.domAPI.dispatchEvent(
     if (fileCount && s.fileCount !== undefined) fileCount.textContent = s.fileCount;
     if (convoCount && s.conversationCount !== undefined) convoCount.textContent = s.conversationCount;
     this.notify.info("[ProjectDetailsComponent] stats updated", {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "renderStats", detail: { stats: s }
+      group: true, source: "renderStats", detail: { stats: s }
     });
   }
 
@@ -778,13 +827,13 @@ this.domAPI.dispatchEvent(
     const pid = this.state.currentProject?.id;
     if (!this.app.validateUUID(pid)) {
       this.notify.warn("Invalid project.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation"
+        group: true, source: "createNewConversation_invalidProject"
       });
       return;
     }
     if (this.projectManager.projectLoadingInProgress) {
       this.notify.info("Please wait, project still loading…", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation"
+        group: true, source: "createNewConversation_loadingInProgress"
       });
       return;
     }
@@ -798,7 +847,7 @@ this.domAPI.dispatchEvent(
 
     if (!currentUser || !currentUser.id) {
       this.notify.error("[ProjectDetailsComponent] User ID not available (checked via auth module). Cannot create conversation.", {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", timeout: 0
+        group: true, source: "createNewConversation_noUserId", timeout: 0
       });
       // Optionally, prompt user to log in or refresh
       // this.modalManager.alert({ title: "Authentication Error", message: "Your session might have expired. Please log in again." });
@@ -807,12 +856,12 @@ this.domAPI.dispatchEvent(
 
     try {
       this.notify.info(`[ProjectDetailsComponent] create conversation @${pid} for user ${currentUser.id}`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", detail: { projectId: pid, userId: currentUser.id }
+        group: true, source: "createNewConversation_attempt", detail: { projectId: pid, userId: currentUser.id }
       });
       const conv = await this.projectManager.createConversation(pid);
       if (conv?.id) {
         this.notify.success(`Conversation “${conv.title || "Untitled"}” created.`, {
-          group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", detail: { conversationId: conv.id, projectId: pid }
+          group: true, source: "createNewConversation_success", detail: { conversationId: conv.id, projectId: pid }
         });
         this._openConversation(conv);
       } else {
@@ -820,10 +869,10 @@ this.domAPI.dispatchEvent(
       }
     } catch (err) {
       this.notify.error("[ProjectDetailsComponent] createConversation failed: " + (err?.message || err), {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "createNewConversation", originalError: err, timeout: 0
+        group: true, source: "createNewConversation_catch", originalError: err, timeout: 0
       });
+      this.errorReporter.capture(err, { module: MODULE, source: "createNewConversation", originalError: err });
     }
-  }
 
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
@@ -841,15 +890,15 @@ this.domAPI.dispatchEvent(
     if (projectReady && userIsReady) {
       newChatBtn.disabled = false;
       newChatBtn.classList.remove("btn-disabled");
-      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Authenticated: ${userIsReady}`, { // MODIFIED to use local userIsReady
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
-        detail: { projectDataActuallyLoaded: this.state.projectDataActuallyLoaded, currentUserId: auth?.getCurrentUserObject?.()?.id } // MODIFIED
+      this.notify.info(`[ProjectDetailsComponent] _updateNewChatButtonState: ENABLING button. Project Ready: ${projectReady}, User Authenticated: ${userIsReady}`, {
+        group: true, source: "_updateNewChatButtonState_enabled", // context and module are auto-applied
+        detail: { projectDataActuallyLoaded: this.state.projectDataActuallyLoaded, currentUserId: auth?.getCurrentUserObject?.()?.id }
       });
     } else {
       newChatBtn.disabled = true;
       newChatBtn.classList.add("btn-disabled");
-      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Authenticated: ${userIsReady}`, { // MODIFIED to use local userIsReady
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_updateNewChatButtonState",
+      this.notify.warn(`[ProjectDetailsComponent] _updateNewChatButtonState: DISABLING button. Project Ready: ${projectReady}, User Authenticated: ${userIsReady}`, {
+        group: true, source: "_updateNewChatButtonState_disabled", // context and module are auto-applied
         detail: {
             projectDataActuallyLoaded: this.state.projectDataActuallyLoaded,
             authModuleExists: !!auth,
@@ -862,7 +911,7 @@ this.domAPI.dispatchEvent(
 
   destroy() {
     this.notify.info("[ProjectDetailsComponent] destroy()", {
-      group: true, context: "projectDetailsComponent", module: MODULE, source: "destroy"
+      group: true, source: "destroy" // context and module are auto-applied
     });
     // this.eventHandlers.cleanupListeners(this.elements.container); // Old way
     // this.eventHandlers.cleanupListeners(this.domAPI.getDocument()); // Old way
@@ -896,9 +945,12 @@ this.domAPI.dispatchEvent(
         if (this.knowledgeBaseComponent) {
           const kb = this.state.currentProject?.knowledge_base;
           Promise.resolve().then(() => this.knowledgeBaseComponent.initialize(true, kb, pid))
-            .catch(e => this.notify.error("[ProjectDetailsComponent] KB init failed: " + (e?.message || e), {
-              group: true, context: "projectDetailsComponent", module: MODULE, source: "_loadTabContent", originalError: e, timeout: 0
-            }));
+            .catch(e => {
+              this.notify.error("[ProjectDetailsComponent] KB init failed: " + (e?.message || e), {
+                group: true, source: "_loadTabContent_kbInitFail", originalError: e, timeout: 0 // context and module are auto-applied
+              });
+              this.errorReporter.capture(e, { module: MODULE, source: "_loadTabContent", originalError: e });
+            });
         }
         break;
     }
@@ -912,8 +964,9 @@ this.domAPI.dispatchEvent(
       await asyncFn();
     } catch (err) {
       this.notify.error(`[ProjectDetailsComponent] load ${section} failed: ${err?.message || err}`, {
-        group: true, context: "projectDetailsComponent", module: MODULE, source: "_withLoading", originalError: err, timeout: 0
+        group: true, source: `_withLoading_${section}Fail`, originalError: err, timeout: 0 // context and module are auto-applied
       });
+      this.errorReporter.capture(err, { module: MODULE, source: "_withLoading", section, originalError: err });
     } finally {
       this.state.isLoading[section] = false;
       this._toggleIndicator(section, false);
@@ -1021,28 +1074,27 @@ this.domAPI.dispatchEvent(
           .catch(e => {
             this.notify.error("[ProjectDetailsComponent] artifact download failed: " + (e?.message || e), {
               group: true,
-              context: "projectDetailsComponent", // This is notify context, not listener context
-              module: MODULE,
-              source: "_artifactItem",
+              source: "_artifactItem_downloadCatch", // context and module are auto-applied
               originalError: e,
-              timeout: 0
+              timeout: 0,
+              detail: { artifactId: art.id }
             });
-            this.notify.error(`Download failed: ${e.message}`, {
+            // The second notify.error here seems redundant if the first one already captures the essence.
+            // However, to strictly follow "standardize all identified logic" without removing existing logic:
+            this.notify.error(`Download failed for artifact ${art.name || art.id}: ${e.message}`, {
               group: true,
-              context: "projectDetailsComponent", // This is notify context
-              module: MODULE,
-              source: "_artifactItem",
+              source: "_artifactItem_downloadUserMsg", // context and module are auto-applied
               originalError: e,
-              timeout: 0
+              timeout: 0,
+              detail: { artifactId: art.id }
             });
           });
       } else {
         this.notify.error("[ProjectDetailsComponent] downloadArtifact not available.", {
           group: true,
-          context: "projectDetailsComponent", // This is notify context
-          module: MODULE,
-          source: "_artifactItem",
-          timeout: 0
+          source: "_artifactItem_downloadNotAvailable", // context and module are auto-applied
+          timeout: 0,
+          detail: { artifactId: art.id }
         });
       }
     }, { description: `DownloadArtifact_${art.id}`, context: MODULE });
@@ -1054,9 +1106,7 @@ this.domAPI.dispatchEvent(
     if (!this.app.validateUUID(pid) || !fileId) {
       this.notify.error("[ProjectDetailsComponent] deleteFile invalid ids", {
         group: true,
-        context: "projectDetailsComponent",
-        module: MODULE,
-        source: "_confirmDeleteFile",
+        source: "_confirmDeleteFile_invalidIds", // context and module are auto-applied
         detail: { fileId, fileName, projectId: pid }
       });
       return;
@@ -1071,18 +1121,14 @@ this.domAPI.dispatchEvent(
           await this.projectManager.deleteFile(pid, fileId);
           this.notify.success("File deleted.", {
             group: true,
-            context: "projectDetailsComponent",
-            module: MODULE,
-            source: "_confirmDeleteFile",
+            source: "_confirmDeleteFile_success", // context and module are auto-applied
             detail: { fileId, fileName, projectId: pid }
           });
           this.projectManager.loadProjectFiles(pid);
         } catch (e) {
           this.notify.error("[ProjectDetailsComponent] deleteFile failed: " + (e?.message || e), {
             group: true,
-            context: "projectDetailsComponent",
-            module: MODULE,
-            source: "_confirmDeleteFile",
+            source: "_confirmDeleteFile_catch", // context and module are auto-applied
             originalError: e,
             detail: { fileId, fileName, projectId: pid }
           });
@@ -1096,9 +1142,7 @@ this.domAPI.dispatchEvent(
     if (!this.app.validateUUID(pid) || !fileId) {
       this.notify.error("[ProjectDetailsComponent] downloadFile invalid ids", {
         group: true,
-        context: "projectDetailsComponent",
-        module: MODULE,
-        source: "_downloadFile",
+        source: "_downloadFile_invalidIds", // context and module are auto-applied
         detail: { fileId, fileName, projectId: pid }
       });
       return;
@@ -1106,9 +1150,7 @@ this.domAPI.dispatchEvent(
     if (!this.projectManager.downloadFile) {
       this.notify.error("[ProjectDetailsComponent] downloadFile not implemented.", {
         group: true,
-        context: "projectDetailsComponent",
-        module: MODULE,
-        source: "_downloadFile",
+        source: "_downloadFile_notImplemented", // context and module are auto-applied
         detail: { fileId, fileName, projectId: pid }
       });
       return;
@@ -1117,9 +1159,7 @@ this.domAPI.dispatchEvent(
       .catch(e => {
         this.notify.error("[ProjectDetailsComponent] downloadFile failed: " + (e?.message || e), {
           group: true,
-          context: "projectDetailsComponent",
-          module: MODULE,
-          source: "_downloadFile",
+          source: "_downloadFile_catch", // context and module are auto-applied
           originalError: e,
           detail: { fileId, fileName, projectId: pid }
         });
@@ -1131,9 +1171,7 @@ this.domAPI.dispatchEvent(
     if (!this.app.validateUUID(pid) || !cv?.id) {
       this.notify.error("[ProjectDetailsComponent] openConversation invalid ids", {
         group: true,
-        context: "projectDetailsComponent",
-        module: MODULE,
-        source: "_openConversation",
+        source: "_openConversation_invalidIds", // context and module are auto-applied
         detail: { conversation: cv, projectId: pid }
       });
       return;
@@ -1167,18 +1205,14 @@ this.domAPI.dispatchEvent(
         this.navigationService.navigateToConversation(pid, cv.id);
         this.notify.info(`[ProjectDetailsComponent] Navigating to conversation ${cv.id} via NavigationService`, {
           group: true,
-          context: "projectDetailsComponent",
-          module: MODULE,
-          source: "_openConversation",
+          source: "_openConversation_navService", // context and module are auto-applied
           detail: { conversationId: cv.id, projectId: pid }
         });
       } else {
         // Fallback or error if NavigationService is not available
         this.notify.error("[ProjectDetailsComponent] NavigationService not available to open conversation.", {
           group: true,
-          context: "projectDetailsComponent",
-          module: MODULE,
-          source: "_openConversation",
+          source: "_openConversation_noNavService", // context and module are auto-applied
           detail: { conversationId: cv.id, projectId: pid }
         });
         // Fallback to old method if necessary, though ideally this shouldn't happen
@@ -1188,18 +1222,14 @@ this.domAPI.dispatchEvent(
         this.router.navigate(url.toString());
         this.notify.warn(`[ProjectDetailsComponent] Fallback: conversation ${cv.id} opened and switched to chat tab using router`, {
           group: true,
-          context: "projectDetailsComponent",
-          module: MODULE,
-          source: "_openConversation",
+          source: "_openConversation_fallback", // context and module are auto-applied
           detail: { conversationId: cv.id, projectId: pid }
         });
       }
     } catch (error) {
       this.notify.error("[ProjectDetailsComponent] Failed to fetch conversation: " + (error?.message || error), {
         group: true,
-        context: "projectDetailsComponent",
-        module: MODULE,
-        source: "_openConversation",
+        source: "_openConversation_catch", // context and module are auto-applied
         originalError: error,
         detail: { conversation: cv, projectId: pid }
       });
@@ -1207,4 +1237,4 @@ this.domAPI.dispatchEvent(
   }
 }
 
-export const createProjectDetailsComponent = (opts) => new ProjectDetailsComponent(opts);
+export { createProjectDetailsComponent };
