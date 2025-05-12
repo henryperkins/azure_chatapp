@@ -74,6 +74,9 @@ const uiUtils = {
 
 // Example: For consistent message durations, etc.
 
+/* Core Systems Setup - Establish root injected utilities only.
+ * All event handler and navigationService factories are now moved into initializeCoreSystems (see below) for order discipline.
+ */
 // ---------------------------------------------------------------------------
 // 1) Create DI-based references: browserAPI, domAPI, notify, etc.
 // ---------------------------------------------------------------------------
@@ -189,15 +192,10 @@ const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
 DependencySystem.register('apiEndpoints', apiEndpoints);
 
 // ---------------------------------------------------------------------------
-// 4) Create the actual notification system + register
+// 4) notificationHandler will now be created AFTER eventHandlers exists, in initializeCoreSystems
 // ---------------------------------------------------------------------------
-const notificationHandler = createNotificationHandler({ DependencySystem, domAPI });
-DependencySystem.register('notificationHandler', notificationHandler);
 
-notify = createNotify({
-    notificationHandler,
-    DependencySystem
-});
+let notificationHandler; // defer creation until after eventHandlers DI
 
 // ── Sentry (errorReporter) MUST exist before modules that depend on it ──
 const sentryManager = createSentryManager({
@@ -235,83 +233,13 @@ const debugTools = createDebugTools({ notify });
 DependencySystem.register('debugTools', debugTools);
 const _dbg = debugTools;
 
-// ---------------------------------------------------------------------------
-// 3) Create and register event handlers (after all required deps are available in DI)
-// ---------------------------------------------------------------------------
-const eventHandlers = createEventHandlers({
-    DependencySystem,
-    domAPI: DependencySystem.modules.get('domAPI'),
-    browserService: DependencySystem.modules.get('browserService'),
-    notify: DependencySystem.modules.get('notify'),
-    errorReporter: DependencySystem.modules.get('errorReporter'),
-    APP_CONFIG: APP_CONFIG
-});
-DependencySystem.register('eventHandlers', eventHandlers);
+/* EventHandlers and navigationService factories have been MOVED:
+ * - Now constructed and DI-registered inside initializeCoreSystems() to strictly enforce staged boot order.
+ */
 
-// Navigation Service
-const navigationService = createNavigationService({
-  domAPI,
-  browserService: browserServiceInstance,
-  DependencySystem,
-  notify,
-  eventHandlers,
-  errorReporter: DependencySystem.modules.get('errorReporter') // Assuming errorReporter is sentryManager
-});
-DependencySystem.register('navigationService', navigationService);
-// Initialize navigation service after its dependencies are ready
-// We'll call navigationService.init() later in the main init() function after other core systems.
+let eventHandlers, navigationService;
 
-// Add cleanupModuleListeners to DependencySystem
-DependencySystem.cleanupModuleListeners = function(moduleContext) {
-  if (!eventHandlers || typeof eventHandlers.cleanupListeners !== 'function') {
-    notify.error('[DependencySystem] eventHandlers.cleanupListeners is not available.', {
-      source: 'cleanupModuleListeners',
-      context: 'DependencySystem' // This is the context for the notify call itself
-    });
-    return;
-  }
-  if (!moduleContext || typeof moduleContext !== 'string' || moduleContext.trim() === '') {
-    notify.warn('[DependencySystem] cleanupModuleListeners called without a valid moduleContext string. Global cleanup will NOT be performed to prevent unintended side effects. Please provide a specific module context.', {
-      source: 'cleanupModuleListeners',
-      context: 'DependencySystem', // Notify context
-      extra: { providedContext: moduleContext }
-    });
-    return; // Explicitly do not call global cleanup if context is invalid
-  }
-  // Ensure an object with a 'context' property is passed to eventHandlers.cleanupListeners
-  eventHandlers.cleanupListeners({ context: moduleContext });
-  notify.debug(`[DependencySystem] Requested cleanup for module context: ${moduleContext}`, { // Changed log message slightly
-    source: 'cleanupModuleListeners',
-    context: 'DependencySystem' // Notify context
-  });
-};
-
-
-notify.debug('[App] About to create AccessibilityUtils. Checking deps (now as DEBUG):', {
-  source: 'app.js',
-  context: 'accessibilitySetup',
-  hasDomAPI: !!domAPI,
-  hasEventHandlers: !!eventHandlers,
-  hasNotify: !!notify,
-  hasSentryManagerAsErrorReporter: !!sentryManager,
-  typeOfDomAPI: typeof domAPI,
-  typeOfEventHandlers: typeof eventHandlers,
-  typeOfNotify: typeof notify,
-  typeOfSentryManager: typeof sentryManager,
-  sentryManagerCaptureExists: typeof sentryManager?.capture === 'function'
-});
-const accessibilityUtils = createAccessibilityEnhancements({
-  domAPI,
-            eventHandlers,
-            notify,
-            errorReporter: sentryManager, // Pass the actual sentryManager instance
-            // apiRequest, // Not a dep for accessibilityUtils
-        });
-DependencySystem.register('accessibilityUtils', accessibilityUtils); // Ensure this line is uncommented
-accessibilityUtils.init?.();
-
-// Late-bind the real notify into eventHandlers so all new events use the correct notifier
-eventHandlers.setNotifier?.(notify);
+/* AccessibilityUtils and eventHandlers.setNotifier will now be created immediately after eventHandlers itself is registered, inside initializeCoreSystems. */
 
 // ---------------------------------------------------------------------------
 // HTML-template loader
@@ -545,13 +473,91 @@ export async function init() {
     }
 }
 // 8) Core systems initialization
-// ---------------------------------------------------------------------------
+/**
+ * Add eventHandlers and navigationService to DependencySystem strictly in initializeCoreSystems as the FIRST major action post-DI utilities.
+ */
 async function initializeCoreSystems() {
     const _t = _dbg.start?.('initializeCoreSystems');
     try {
         notify.debug('[App] Initializing core systems...');
         // Ensure DOM is ready using shared util (also future-proofs for SSR tests)
         await waitForDepsAndDom({ DependencySystem, domAPI });
+
+        // [NEW] Strictly register eventHandlers and navigationService at the start of core-systems phase
+        eventHandlers = createEventHandlers({
+            DependencySystem,
+            domAPI: DependencySystem.modules.get('domAPI'),
+            browserService: DependencySystem.modules.get('browserService'),
+            notify: DependencySystem.modules.get('notify'),
+            errorReporter: DependencySystem.modules.get('errorReporter'),
+            APP_CONFIG: APP_CONFIG
+        });
+        DependencySystem.register('eventHandlers', eventHandlers);
+
+        navigationService = createNavigationService({
+            domAPI,
+            browserService: browserServiceInstance,
+            DependencySystem,
+            notify,
+            eventHandlers,
+            errorReporter: DependencySystem.modules.get('errorReporter')
+        });
+        DependencySystem.register('navigationService', navigationService);
+        // We'll call navigationService.init() later in the main init() function after other core systems.
+
+        // notificationHandler is now created AFTER eventHandlers DI exists
+        notificationHandler = createNotificationHandler({ DependencySystem, domAPI });
+        DependencySystem.register('notificationHandler', notificationHandler);
+
+        // Provide cleanupModuleListeners on DependencySystem after eventHandlers is created
+        DependencySystem.cleanupModuleListeners = function(moduleContext) {
+          if (!eventHandlers || typeof eventHandlers.cleanupListeners !== 'function') {
+            notify.error('[DependencySystem] eventHandlers.cleanupListeners is not available.', {
+              source: 'cleanupModuleListeners',
+              context: 'DependencySystem'
+            });
+            return;
+          }
+          if (!moduleContext || typeof moduleContext !== 'string' || moduleContext.trim() === '') {
+            notify.warn('[DependencySystem] cleanupModuleListeners called without a valid moduleContext string. Global cleanup will NOT be performed to prevent unintended side effects. Please provide a specific module context.', {
+              source: 'cleanupModuleListeners',
+              context: 'DependencySystem',
+              extra: { providedContext: moduleContext }
+            });
+            return;
+          }
+          eventHandlers.cleanupListeners({ context: moduleContext });
+          notify.debug(`[DependencySystem] Requested cleanup for module context: ${moduleContext}`, {
+            source: 'cleanupModuleListeners',
+            context: 'DependencySystem'
+          });
+        };
+
+        // -- AccessibilityUtils and setNotifier must be constructed after eventHandlers exists --
+        notify.debug('[App] Creating AccessibilityUtils after eventHandlers DI, late binding notifier', {
+          context: 'accessibilitySetup',
+          hasDomAPI: !!domAPI,
+          hasEventHandlers: !!eventHandlers,
+          hasNotify: !!notify,
+          hasSentryManagerAsErrorReporter: !!DependencySystem.modules.get('errorReporter'),
+        });
+        const accessibilityUtils = createAccessibilityEnhancements({
+          domAPI,
+          eventHandlers,
+          notify,
+          errorReporter: DependencySystem.modules.get('errorReporter'), // Pass the actual errorReporter from DI
+        });
+        DependencySystem.register('accessibilityUtils', accessibilityUtils); // Ensure this line is uncommented
+        accessibilityUtils.init?.();
+
+        // Late-bind the real notify into eventHandlers so all new events use the correct notifier
+        eventHandlers.setNotifier?.(notify);
+
+        // Now that notificationHandler exists, re-assign real notify via createNotify:
+        notify = createNotify({
+            notificationHandler,
+            DependencySystem
+        });
 
         // Initialize modal manager
         const modalManager = createModalManager({
