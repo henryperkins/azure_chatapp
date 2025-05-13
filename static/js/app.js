@@ -1383,7 +1383,7 @@ async function fetchCurrentUser() {
 // 21) App listeners and error handling
 // ---------------------------------------------------------------------------
 function registerAppListeners() {
-  notify.debug('[App] Registering global application listeners...');
+  appNotify.debug('Registering global application listeners...', { source: 'registerAppListeners' });
   DependencySystem.waitFor(['auth', 'chatManager', 'projectManager', 'eventHandlers'])
     .then(() => {
       setupChatInitializationTrigger();
