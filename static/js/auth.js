@@ -57,16 +57,11 @@ export function createAuthModule({
   // ----------------------------
   // Guardrail #8 & #17: Context-rich error capture, respecting user consent
   // ----------------------------
-  function captureError(error, contextData) {
-    try {
-      const appInstance = DependencySystem?.modules?.get('app');
-      // Guardrail #17: if user has opted out, skip error tracking
-      if (appInstance?.state?.disableErrorTracking) {
-        return;
-      }
-      errorReporter?.capture(error, contextData);
-    } catch (ignore) {
-      // If an error occurs in error capture, we do nothing to avoid infinite loops
+  function captureError(error, contextData = {}) {
+    const appInstance = DependencySystem?.modules?.get('app');
+    if (appInstance?.state?.disableErrorTracking) return;      // Guard-rail #17
+    if (errorReporter && typeof errorReporter.capture === 'function') {
+      errorReporter.capture(error, { module: MODULE, ...contextData });
     }
   }
 
