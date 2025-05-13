@@ -91,7 +91,7 @@ export class ProjectListComponent {
 
         if (!domAPI) throw new Error("[ProjectListComponent] domAPI injection is mandatory.");
         this.domAPI  = domAPI;
-        this._doc    = domAPI.getDocument?.();   // cache for convenience
+        this._doc    = null;     // set after app-ready in initialize()
 
         this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem; // Get DependencySystem from app or eventHandlers
         this.navigationService = this.DependencySystem?.modules?.get('navigationService');
@@ -123,11 +123,13 @@ export class ProjectListComponent {
             }
         });
 
-        this.backendLogger?.log?.({
-          level  : 'info',
-          module : 'ProjectListComponent',
-          message: 'constructor'
-        });
+        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+          this.backendLogger.log({
+            level  : 'info',
+            module : 'ProjectListComponent',
+            message: 'constructor'
+          });
+        }
 
         if (
             !this.projectManager ||
@@ -193,6 +195,7 @@ export class ProjectListComponent {
     async initialize() { // Changed to async
         if (this.DependencySystem?.waitFor)
           await this.DependencySystem.waitFor(['app:ready']);
+        this._doc = this.domAPI.getDocument?.();
         // --- DI-logged initialization ---
         if (this.appConfig && this.appConfig.DEBUG) {
             this.notify.info('[ProjectListComponent] INITIALIZE called', {
@@ -270,6 +273,11 @@ export class ProjectListComponent {
             this.notify.info('[ProjectListComponent] Essential internal DOM elements ready.', { group: true, context: 'projectListComponent', selectors: essentialSelectors });
         } catch (err) {
             this._captureError(err, 'initialize');
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : 'initialize',
+              context: MODULE_CONTEXT
+            });
             this.notify.error('[ProjectListComponent] Timeout or error waiting for essential internal DOM elements. Component initialization will halt.', {
                 group: true, context: 'projectListComponent', originalError: err, selectors: essentialSelectors
             });
@@ -289,11 +297,13 @@ export class ProjectListComponent {
         // --- Standardized "projectlistcomponent:initialized" event ---
         this.eventBus.dispatchEvent(new CustomEvent('initialized', { detail: { success: true } }));
 
-        this.backendLogger?.log?.({
-          level  : 'info',
-          module : 'ProjectListComponent',
-          message: 'initialized'
-        });
+        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+          this.backendLogger.log({
+            level  : 'info',
+            module : 'ProjectListComponent',
+            message: 'initialized'
+          });
+        }
 
         this._loadProjects();
     }
@@ -313,6 +323,11 @@ export class ProjectListComponent {
             element.innerHTML = this.htmlSanitizer.sanitize(rawHtml);
         } catch (err) {
             this._captureError(err, '_safeSetInnerHTML');
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_safeSetInnerHTML',
+              context: MODULE_CONTEXT
+            });
             /* ------------------------------------------------------------------
              *  DOMPurify failed — fall back to safe plain-text insertion
              * ------------------------------------------------------------------ */
@@ -332,6 +347,11 @@ export class ProjectListComponent {
                 element.textContent = plain;
             } catch (innerErr) {
                 this._captureError(innerErr, '_safeSetInnerHTML_fallback');
+                this.errorReporter?.capture?.(innerErr, {
+                  module : 'ProjectListComponent',
+                  source : '_safeSetInnerHTML_fallback',
+                  context: MODULE_CONTEXT
+                });
                 // As a last resort, clear the element
                 element.textContent = "";
                 this.notify.error("[ProjectListComponent] Fallback plain-text insertion also failed", {
@@ -534,6 +554,11 @@ export class ProjectListComponent {
                 // this.router.navigate(url.toString());
             }
         } catch (e) {
+            this.errorReporter?.capture?.(e, {
+              module : 'ProjectListComponent',
+              source : '_updateUrl',
+              context: MODULE_CONTEXT
+            });
             this.notify.warn('[ProjectListComponent] Failed to update URL with filter', {
                 group: true, context: 'projectListComponent', error: e
             });
@@ -599,6 +624,11 @@ export class ProjectListComponent {
             this._makeVisible();
         } catch (error) {
             this._captureError(error, 'renderProjects');
+            this.errorReporter?.capture?.(error, {
+              module : 'ProjectListComponent',
+              source : 'renderProjects',
+              context: MODULE_CONTEXT
+            });
             this.notify.error("[ProjectListComponent.renderProjects] Error rendering projects", {
                 group: true,
                 context: 'projectListComponent',
@@ -747,6 +777,11 @@ export class ProjectListComponent {
                 this.renderProjects(this.state.projects);
             } catch (error) {
                 this._captureError(error, 'show');
+                this.errorReporter?.capture?.(error, {
+                  module : 'ProjectListComponent',
+                  source : 'show',
+                  context: MODULE_CONTEXT
+                });
                 this.notify.error("[ProjectListComponent.show] Error rendering projects", {
                     group: true,
                     context: 'projectListComponent',
@@ -797,6 +832,11 @@ export class ProjectListComponent {
             this.notify.success("Projects loaded successfully.", { group: true, context: 'projectListComponent' });
         } catch (error) {
             this._captureError(error, '_loadProjects');
+            this.errorReporter?.capture?.(error, {
+              module : 'ProjectListComponent',
+              source : '_loadProjects',
+              context: MODULE_CONTEXT
+            });
             // Enhanced error reporting with source, method, endpoint, and server details
             const status = error?.status || error?.response?.status;
             const detail = error?.detail || error?.response?.data?.detail || error?.response?.detail;
@@ -905,10 +945,7 @@ export class ProjectListComponent {
         } else {
             this.notify.warn("[ProjectListComponent] Ignoring card click for navigation: user not authenticated (checked via auth module).", { group: true, context: "projectListComponent" });
             // Optionally, dispatch 'requestLogin' or similar to trigger login modal
-            const doc = this.domAPI?.getDocument?.() || document;
-            if (doc && typeof doc.dispatchEvent === 'function') {
-                doc.dispatchEvent(new CustomEvent("requestLogin", { bubbles: true, composed: true }));
-            }
+            this.eventBus.dispatchEvent(new CustomEvent("requestLogin"));
         }
     }
 
@@ -950,9 +987,7 @@ export class ProjectListComponent {
             "emptyStateCreateBtn"
         ];
         buttonIds.forEach((id) => {
-            const btn = docAPI?.getElementById
-                ? docAPI.getElementById(id)
-                : document.getElementById(id);
+            const btn = docAPI.getElementById(id);
             if (!btn) return;
             const handler = () => this._openNewProjectModal();
             this.eventHandlers.trackListener(btn, "click", handler, {
@@ -1029,6 +1064,11 @@ export class ProjectListComponent {
             this.notify.success("Project deleted", { group: true, context: 'projectListComponent' });
             this._loadProjects();
         } catch (err) {
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_executeDelete',
+              context: MODULE_CONTEXT
+            });
             this.notify.error("[ProjectListComponent] Failed to delete project: " + (err?.message || err), {
                 group: true, context: 'projectListComponent'
             });
@@ -1360,7 +1400,12 @@ export class ProjectListComponent {
             return saved
                 ? JSON.parse(saved)
                 : this._getDefaultCustomization();
-        } catch {
+        } catch (err) {
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_loadCustomization',
+              context: MODULE_CONTEXT
+            });
             return this._getDefaultCustomization();
         }
     }
