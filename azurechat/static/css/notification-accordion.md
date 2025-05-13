@@ -1,0 +1,491 @@
+```css
+/* notification-accordion.css - Modern Notification System Fixes */
+
+/* 1. Stacking area - Responsive, sticky, pointer-events-none except notification elems */
+.notification-area,
+#notificationArea {
+  position: fixed !important;
+  /* Explicit px offset to always clear sticky header/navbar on all themes */
+  top: 90px !important;      /* Desktop: always below header */
+  right: 64px !important;    /* Align visually to right margin, tune as needed */
+  z-index: 6000 !important;  /* Above everything except tooltips/modals */
+  display: flex;
+  /* Remove diagnostics (border/background/box-shadow) for clean UI */
+  flex-direction: column;
+  align-items: flex-end;
+  max-height: 98vh;
+  min-width: 220px;
+  width: min(410px, 96vw);
+  pointer-events: none;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: none;
+  box-sizing: border-box;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+body.with-sidebar-open .notification-area,
+body.with-sidebar-open #notificationArea {
+  left: 18rem !important; /* Sidebar width: w-72 in tailwind = 18rem */
+  right: 0 !important;
+  max-width: calc(100vw - 18rem - 1rem) !important;
+}
+
+@media (max-width: 768px) {
+  body.with-sidebar-open .notification-area,
+  body.with-sidebar-open #notificationArea {
+    left: 0 !important;
+    right: 0 !important;
+    max-width: 100vw !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .notification-area,
+  #notificationArea {
+    /* On small screens, adjust to avoid mobile header (tune for your actual header size) */
+    top: 64px !important;
+    right: 4px !important;
+    left: 4px !important;
+    min-width: 0;
+    width: 100vw;
+    max-width: 100vw;
+    align-items: stretch;
+    max-height: 75vh;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+}
+
+.notification-area > *,
+#notificationArea > * {
+  pointer-events: auto;
+}
+
+/* 2. Notification Item, Accordion Banner Core */
+.notification-item,
+.alert.notification-item,
+.accordion-banner {
+  background: var(--color-base-100, #fff) !important;
+  color: var(--color-base-content, #212121) !important;
+  box-shadow: 0 2px 8px 0 rgba(44, 44, 56, 0.14), 0 0.5px 2px 0 rgba(44,44,55,0.07);
+  border-radius: 0.22rem;
+  margin: 0.33rem 0.12rem;
+  display: flex !important;
+  align-items: flex-start;
+  min-width: 180px;
+  max-width: 100vw;
+  word-break: break-word;
+  font-size: 0.99rem;
+  font-weight: 500;
+  opacity: 1 !important;
+  transition: background 0.17s, box-shadow 0.17s;
+  border-left-width: 6px;
+  border-left-style: solid;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .notification-item,
+  .alert.notification-item,
+  .accordion-banner {
+    margin: 0.25rem 0.1rem;
+    min-width: auto;
+    font-size: 1.1rem;
+    padding: 0.75rem 1rem;
+    min-height: 52px;
+  }
+}
+
+/* Notification type color classes—now theme variable driven for background and border */
+.notification-item.info,
+.accordion-banner.notification-info {
+  border-left-color: var(--color-info, #2563eb) !important;
+  background: var(--color-info, #e6f0fa) !important;
+  color: var(--color-info-content, #212121) !important;
+}
+
+.notification-item.success,
+.accordion-banner.notification-success {
+  border-left-color: var(--color-success, #047857) !important;
+  background: var(--color-success, #e9faf3) !important;
+  color: var(--color-success-content, #212121) !important;
+}
+
+.notification-item.error,
+.accordion-banner.notification-error {
+  border-left-color: var(--color-error, #d32f2f) !important;
+  background: var(--color-error, #fff2f2) !important;
+  color: var(--color-error-content, #212121) !important;
+}
+
+.notification-item.warning,
+.accordion-banner.notification-warning {
+  border-left-color: var(--color-warning, #f59e42) !important;
+  background: var(--color-warning, #fff8e1) !important;
+  color: var(--color-warning-content, #212121) !important;
+}
+
+.accordion-banner {
+  flex-direction: column;
+  width: 100%;
+  max-width: 97vw;
+  position: relative;
+}
+.accordion-banner .collapse-title {
+  font-weight: 600;
+  outline: none;
+}
+
+/* 3. Animations */
+@keyframes fadeInNotification {
+  from { opacity: 0; transform: translateY(-14px);}
+  to   { opacity: 1; transform: translateY(0);}
+}
+@keyframes fadeOutNotification {
+  from { opacity: 1; transform: translateY(0);}
+  to   { opacity: 0; transform: translateY(-15px);}
+}
+.animate-fadeIn {
+  animation: fadeInNotification 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+.animate-fadeOut {
+  animation: fadeOutNotification 0.28s cubic-bezier(0.55, 0.06, 0.68, 0.19) forwards;
+}
+
+/* Pulse for group "updated" state */
+@keyframes pulseBanner {
+  0%   { box-shadow: 0 0 0 0 rgba(99,102,241,0.45);}
+  70%  { box-shadow: 0 0 0 7px rgba(99,102,241,0);}
+  100% { box-shadow: 0 0 0 0 rgba(99,102,241,0);}
+}
+.accordion-banner.group-updated {
+  animation: pulseBanner 0.42s linear;
+}
+
+/* Accessible reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn,
+  .animate-fadeOut,
+  .accordion-banner.group-updated {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+  }
+}
+
+/* 4. Icon, Close, Copy Buttons */
+.notification-icon {
+  flex-shrink: 0;
+  margin-right: 0.35rem;
+  margin-left: 0.10rem;
+  width: 1.45em;
+  height: 1.45em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.notification-message {
+  flex: 1 1 0%;
+  font-size: 0.98em;
+  font-weight: 400;
+  color: #222 !important;
+}
+
+.notification-copy-btn,
+.notification-close,
+.accordion-copy-btn,
+.accordion-dismiss-btn,
+.accordion-banner .btn-xs {
+  min-width: 32px !important;
+  min-height: 32px !important;
+  height: 32px;
+  width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.23em;
+  color: #565f6d !important;
+  background: transparent;
+  border: none;
+  transition: color 0.17s;
+  cursor: pointer;
+  pointer-events: auto !important;
+  box-sizing: border-box;
+}
+
+.accordion-dismiss-btn {
+  color: #b85d5d !important;
+}
+.notification-copy-btn:active,
+.notification-close:active,
+.accordion-copy-btn:active,
+.accordion-dismiss-btn:active {
+  color: #1768c9 !important;
+}
+@media (max-width: 640px) {
+  .notification-copy-btn,
+  .notification-close,
+  .accordion-copy-btn,
+  .accordion-dismiss-btn {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    height: 44px;
+    width: 44px;
+    font-size: 1.07em;
+    margin-left: 0.3em;
+  }
+}
+
+/* Focus ring accessibility for notification actions */
+.notification-copy-btn:focus-visible,
+.notification-close:focus-visible,
+.accordion-copy-btn:focus-visible,
+.accordion-dismiss-btn:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+/* 5. Accordion Group styling */
+.notification-context-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.30rem;
+  background: var(--color-base-200, #f4f5fa);
+  color: var(--color-base-content, #5e6c7b);
+  padding: 0.18em 0.7em;
+  font-size: 0.93em;
+  font-weight: 600;
+  margin: 0 0.45em 0 0.15em;
+  border: 1px solid var(--color-base-300, #ced2e3);
+  letter-spacing: 0.01em;
+}
+
+.accordion-banner .accordion-message-list {
+  margin-top: 0.36em;
+  padding-left: 1.35em;
+  font-size: 0.97em;
+  color: var(--color-base-content, #374151);
+  border-left: 2.5px solid var(--color-base-300, #e5e7eb);
+  background: var(--color-base-100, #f9fafd);
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.27s cubic-bezier(0.42,0,0.58,1);
+}
+
+.accordion-banner .accordion-message-list.expanded,
+.accordion-banner.expanded .accordion-message-list {
+  max-height: 44vh !important;
+  overflow-y: auto;
+}
+.accordion-banner .accordion-message-list li {
+  margin-bottom: 0.29em;
+  padding-left: 0.31em;
+  font-size: 0.99em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  max-width: 98vw;
+  background: transparent;
+}
+.accordion-banner .accordion-message-list li:nth-child(even) {
+  background: var(--color-base-200, #f3f8fb);
+}
+
+/* Accordion banner title/summary styling */
+.accordion-banner .collapse-title,
+.accordion-banner .accordion-summary-text {
+  font-weight: 600 !important;
+  letter-spacing: 0.015em;
+}
+
+/* [CUSTOM NEW] 1. Hide radio input for group accordion (a11y visible) */
+.group-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* [CUSTOM NEW] 2. Expand notification list when DaisyUI's collapse-open is present */
+.accordion-banner.collapse-open .accordion-message-list {
+  max-height: 44vh;
+  overflow-y: auto;
+}
+
+/* 5.1 Clear All button, pins to cluster top right */
+.notification-clear-all {
+  position: sticky;
+  top: 0.39em;
+  right: 0.21em;
+  z-index: 1220;
+  min-width: 33px;
+  min-height: 33px;
+  height: 33px;
+  width: auto;
+  color: #1768c9 !important;
+  background: #e6f0fa !important;
+  border-radius: 0.18rem;
+  border: 1.3px solid #2563eb !important;
+  font-size: 0.96em;
+  pointer-events: auto;
+  transition: border 0.13s, color 0.13s;
+  box-sizing: border-box;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.notification-clear-all:focus-visible {
+  outline: 2px solid #246bdb;
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .notification-clear-all {
+    min-width: 41px;
+    min-height: 41px;
+    top: 0.15em;
+    right: 0.08em;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* 6. Dark/Enhanced Themes (Dracula, etc) */
+/* Notification backgrounds, borders, and focus for dark/light are controlled by DaisyUI theme tokens in enhanced-components.css.
+   No additional dark-override styling is necessary here. */
+
+/* 7. Extra: ensure a11y visible focus on summary/buttons in dark themes */
+[data-theme*="dracula"] .notification-copy-btn:focus-visible,
+[data-theme*="dracula"] .notification-close:focus-visible,
+[data-theme*="dracula"] .accordion-copy-btn:focus-visible,
+[data-theme*="dracula"] .accordion-dismiss-btn:focus-visible,
+[data-theme*="dracula"] .notification-clear-all:focus-visible,
+.notification-copy-btn:focus-visible,
+.notification-close:focus-visible,
+.accordion-copy-btn:focus-visible,
+.accordion-dismiss-btn:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * Notification system • Theme-safe polish                        *
+ * ------------------------------------------------------------- */
+
+/* A. De-opacity sibling banners instead of dimming them out */
+#notificationArea .accordion-banner[aria-expanded="true"] ~ .accordion-banner {
+  /* 60 % keeps text readable in both themes */
+  opacity: .6;
+}
+
+/* B. Keep Clear-All fixed to the container’s padding-box */
+#notificationArea {
+  position: relative;            /* establish containing block */
+}
+#notificationArea > .notification-clear-all {
+  position: sticky;
+  top: .25rem;
+  right: .5rem;
+  z-index: 1250;                 /* above banners & scrollbar */
+}
+
+/* C. Icon & text perfect centring */
+.accordion-banner .collapse-title {
+  display: flex;
+  gap: .5rem;
+  align-items: center;           /* NEW – fixes vertical drift */
+}
+.accordion-banner .collapse-title .accordion-icon svg {
+  flex-shrink: 0;
+}
+
+/* D. Always show a scrollbar when overflowed (both themes) */
+#notificationArea {
+  overflow-y: auto;
+  max-height: 92vh;              /* safety on very small viewports */
+}
+
+/* E. Rounded corners stay when list expands */
+.accordion-banner.collapse-open {
+  border-bottom-left-radius: theme(borderRadius.lg);
+  border-bottom-right-radius: theme(borderRadius.lg);
+}
+
+/* Theming variables (optional but recommended) */
+:root{
+  /* Notification group banner background: info color (light mode), readable aqua for dark mode */
+  --notif-group-bg: #83eaff;      /* rgb(131, 234, 255) DaisyUI info default */
+  --notif-dim-opacity: .6;
+}
+html[data-theme="dark"]{
+  --notif-group-bg: #226b81;      /* deep aqua for dark, visually accessible */
+}
+
+.accordion-banner.grouped{
+  background-color: var(--notif-group-bg);
+}
+#notificationArea .accordion-banner[aria-expanded="true"] ~ .accordion-banner{
+  opacity: var(--notif-dim-opacity);
+}
+
+/* Dark Mode Readability & Contrast Enhancements */
+html[data-theme="dark"] {
+  /* Super-bright text for message, summary, badge */
+  .notification-item .notification-message,
+  .alert.notification-item .notification-message,
+  .accordion-banner .collapse-title,
+  .accordion-banner .accordion-summary-text,
+  .accordion-banner .notification-context-badge,
+  .accordion-banner .accordion-message-list li,
+  .accordion-banner .accordion-message-list {
+      color: #fafbfd !important; /* Max brightness for dark bg */
+      text-shadow: 0 1px 2px #04051544;
+  }
+  /* Strong dark background for all banners */
+  .notification-item,
+  .alert.notification-item,
+  .accordion-banner {
+      background-color: #181a20 !important;
+  }
+  /* Badge: accent border, darker bg, lighter text */
+  .notification-context-badge {
+     background-color: #23243a !important;
+     border-color: #4ec9fa !important;
+     color: #fafbfd !important;
+     font-weight: 600;
+  }
+  /* Accordion summary and message list: bright text, darker alternate bg */
+  .accordion-banner .accordion-message-list li {
+    color: #f6f6fb !important;
+    background-color: transparent !important;
+  }
+  .accordion-banner .accordion-message-list li:nth-child(even) {
+    background-color: #23243a !important;
+  }
+  /* Button, icons, and close need to be white for visibility */
+  .notification-copy-btn,
+  .notification-close,
+  .accordion-copy-btn,
+  .accordion-dismiss-btn,
+  .accordion-banner .btn-xs {
+    color: #fafbfd !important;
+    opacity: 0.94;
+  }
+  .accordion-dismiss-btn {
+    color: #ff7a7a !important; /* Brighter error for dismiss */
+  }
+  /* Notification left border: preserve color emphasis */
+  .notification-item.info,
+  .accordion-banner.notification-info    { border-left-color: #4ec9fa !important; }
+  .notification-item.success,
+  .accordion-banner.notification-success { border-left-color: #90efb7 !important; }
+  .notification-item.error,
+  .accordion-banner.notification-error   { border-left-color: #fa7ea6 !important; }
+  .notification-item.warning,
+  .accordion-banner.notification-warning { border-left-color: #ffcb6b !important; }
+}
+
+```

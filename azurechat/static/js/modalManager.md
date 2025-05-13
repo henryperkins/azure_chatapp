@@ -1,0 +1,841 @@
+```javascript
+import { MODAL_MAPPINGS } from './modalConstants.js';
+
+/*
+ * Dependencies required by ModalManager (from code, not comments):
+ *
+ * A. Imported symbol
+ *    • MODAL_MAPPINGS – from './modalConstants.js' (fallback when no custom mapping is injected)
+ *
+ * B. Objects that MUST be supplied through DI (constructor/factory)
+ *    1. domAPI – required; must expose at least:
+ *       getElementById, querySelectorAll, querySelector, getDocument, dispatchEvent,
+ *       getBody, getDocumentElement, getScrollingElement, ownerDocument, add/removeEventListener,
+ *       addClass / removeClass operations via classList.
+ *    2. eventHandlers – required; expects methods:
+ *       trackListener(element,type,handler,opts) and cleanupListeners(filter?).
+ *    3. notify – required; must provide debug, info, warn, error, success, withContext.
+ *    4. browserService – required by constructor (throw if absent) even though current code does not use it later.
+ *    5. DependencySystem – required; the code calls:
+ *       · DependencySystem.modules.get(name)
+ *       · DependencySystem.waitFor(deps, …)
+ *
+ * C. Optional-but-used DI parameters
+ *    • modalMapping – object map name→modalId (defaults to MODAL_MAPPINGS)
+ *    • debugTools   – object with start(label) / stop(id,label)
+ *    • domPurify    – only consumed inside ProjectModal._setButtonLoading (optional)
+ *    • projectManager – required for ProjectModal.saveProject() but not for ModalManager itself
+ *    • app – fetched via DependencySystem.modules.get('app'); only its config.debug and isInitializing flags are read.
+ *
+ * D. Globals / browser APIs referenced (not DI)
+ *    • window (indirectly via AbortController fallback checks in utils but here only for CustomEvent availability)
+ *    • document – accessed only through domAPI when available, but global document is used as fallback in a few dispatchEvent calls.
+ *    • CustomEvent – constructor used to emit ‘modalmanager:initialized’.
+ *    • FormData – used in ProjectModal.handleSubmit.
+ *
+ * No other modules, services, or globals are accessed by modalManager.js.
+ */
+
+/* getScrollingElement (old) removed; now available via injected domAPI */
+
+/**
+ * @class ModalManager
+ * Provides methods to show/hide mapped modals, handle scroll lock,
+ * manages <dialog> elements (or fallback), and tracks event cleanup.
+ */
+class ModalManager {
+  /**
+   * @constructor
+   * @param {Object} opts - Dependencies config object.
+   * @param {Object} [opts.eventHandlers] - For managed event binding (trackListener, cleanupListeners).
+   * @param {Object} [opts.DependencySystem] - For dynamic injection (app, showNotification, etc.).
+   * @param {Object} [opts.modalMapping] - Overwrites the default modal mappings if provided.
+   * @param {Function} [opts.showNotification] - Notification function override.
+   * @param {Object} [opts.domPurify] - Sanitization library for any needed HTML.
+   */
+  /**
+   * @param {Object} opts - Dependencies config object.
+   * @param {Object} [opts.eventHandlers]
+   * @param {DomAPI} [opts.domAPI]
+   * @param {BrowserService} [opts.browserService]
+   * @param {Object} [opts.DependencySystem]
+   * @param {Object} [opts.modalMapping]
+   * @param {Function} [opts.notify]
+   * @param {Object} [opts.domPurify]
+   */
+  constructor({
+    eventHandlers,
+    domAPI,
+    browserService,
+    DependencySystem,
+    modalMapping,
+    notify,
+    domPurify,
+    debugTools
+  } = {}) {
+    this.DependencySystem = DependencySystem || undefined;
+    this.eventHandlers = eventHandlers || this.DependencySystem?.modules?.get?.('eventHandlers') || undefined;
+    this.domAPI = domAPI || this.DependencySystem?.modules?.get?.('domAPI');
+    if (!this.domAPI) throw new Error('[ModalManager] domAPI DI not provided');
+    this.browserService = browserService || this.DependencySystem?.modules?.get?.('browserService');
+    if (!this.browserService) throw new Error('[ModalManager] browserService DI not provided');
+    this.modalMappings = modalMapping || this.DependencySystem?.modules?.get?.('modalMapping') || MODAL_MAPPINGS;
+    // Canonical context-aware notify for all modalManager notifications:
+    if (!notify) {
+      notify = this.DependencySystem?.modules?.get?.('notify');
+      if (!notify) throw new Error('[modalManager] notify DI not provided');
+    }
+    this.notify      = notify.withContext({ module: 'ModalManager', context: 'modalManager' });
+    this.debugTools  = debugTools || DependencySystem?.modules?.get?.('debugTools') || null;
+    this.domPurify = domPurify
+      || this.DependencySystem?.modules?.get?.('domPurify')
+      || this.DependencySystem?.modules?.get?.('sanitizer')   // fallback alias
+      || null;
+
+    /**
+     * Attempt to retrieve an app reference (to check isInitializing, debug, etc.).
+     */
+    this.app = this.DependencySystem?.modules?.get?.('app') || null;
+
+    /** @type {string|null} The currently active modal ID */
+    this.activeModal = null;
+
+    /** @type {number|undefined} Scroll position for body scroll lock */
+    this._scrollLockY = undefined;
+    // No internal event tracking; rely on eventHandlers context-based cleanup.
+  }
+
+  /**
+   * Internal convenience to see if debug mode is on via app config.
+   * @returns {boolean}
+   * @private
+   */
+  _isDebug() {
+    return !!this.app?.config?.debug;
+  }
+
+  /**
+   * Provide a unified user notification approach (error, warn, info).
+   * If showNotification is available, uses it. Otherwise no-op.
+   * You may tweak logic to handle debug logs only in debug mode, etc.
+   * @param {'error'|'warn'|'info'} level
+   * @param {string} message
+   * @param {boolean} [debugOnly=false]
+   */
+  // Unified notification interface
+  _notify(level, message, debugOnly = false, extra = {}) {
+    if (debugOnly && !this._isDebug()) {
+      return;
+    }
+    if (typeof this.notify?.[level] === 'function') {
+      this.notify[level](message, { group: true, ...extra, context: "modalManager" });
+    }
+    // else do nothing
+  }
+
+  // ---------------------------
+  // Scroll locking / unlocking
+  // ---------------------------
+
+  /**
+   * @method _manageBodyScroll
+   * Lock or unlock body scrolling by using position:fixed trick
+   * @param {boolean} enableScroll - True to unlock, false to lock
+   * @private
+   */
+  _manageBodyScroll(enableScroll) {
+    const scrollingEl = this.domAPI.getScrollingElement();
+    if (!enableScroll) {
+      // Lock scrolling (modal open)
+      this._scrollLockY = scrollingEl.scrollTop;
+      this.domAPI.getBody().style.position = 'fixed';
+      this.domAPI.getBody().style.top = `-${this._scrollLockY}px`;
+      this.domAPI.getBody().style.width = '100vw';
+      this.domAPI.getBody().style.overflow = 'hidden';
+      this.domAPI.getDocumentElement().style.overflow = 'hidden';
+    } else {
+      // Unlock scrolling (modal close)
+      this.domAPI.getBody().style.position = '';
+      this.domAPI.getBody().style.top = '';
+      this.domAPI.getBody().style.width = '';
+      this.domAPI.getBody().style.overflow = '';
+      this.domAPI.getDocumentElement().style.overflow = '';
+      if (this._scrollLockY !== undefined) {
+        scrollingEl.scrollTop = this._scrollLockY;
+        this._scrollLockY = undefined;
+      }
+    }
+  }
+
+  // -----------
+  // Modal show/hide helpers
+  // -----------
+
+  /**
+   * Show a dialog element (native or fallback).
+   * @private
+   * @param {HTMLElement} modalEl
+   */
+  _showModalElement(modalEl) {
+    if (typeof modalEl.showModal === 'function') {
+      modalEl.showModal();
+      this._manageBodyScroll(false);
+    } else {
+      modalEl.classList.remove('hidden');
+      modalEl.style.display = 'flex';
+      modalEl.setAttribute('open', 'true');
+      this._manageBodyScroll(false);
+    }
+  }
+
+  /**
+   * Hide a dialog element (native or fallback).
+   * @private
+   * @param {HTMLElement} modalEl
+   */
+  _hideModalElement(modalEl) {
+    if (typeof modalEl.close === 'function') {
+      modalEl.close();
+    } else {
+      modalEl.classList.add('hidden');
+      modalEl.style.display = 'none';
+      modalEl.removeAttribute('open');
+    }
+    this._manageBodyScroll(true);
+  }
+
+  /**
+   * Handle the native 'close' event for a dialog if we are tracking it with trackListener.
+   * @private
+   * @param {string} modalId
+   */
+  _onDialogClose(modalId) {
+    if (this.activeModal === modalId) {
+      if (this._isDebug()) {
+        this._notify('info', `[ModalManager] Dialog ${modalId} closed (native event).`, true);
+      }
+      this.activeModal = null;
+      this.domAPI.getBody().style.overflow = '';
+    }
+  }
+
+  // -----------
+  // Modal core API
+  // -----------
+
+  /**
+   * @method init
+   * Attach 'close' listeners to each mapped dialog. Orchestrator must call after DOM is ready.
+   * Also validates mappings for missing/duplicate IDs.
+   */
+    async init() {
+      const _t = this.debugTools?.start?.('ModalManager.init');
+      this._notify('info', '[ModalManager] init() called. Setting up modals...', { context: 'modalManager', module: 'ModalManager', source: 'init' });
+
+      try {
+        // PHASE: Strict waitFor on core deps
+        const depSys = this.DependencySystem;
+        if (!depSys) throw new Error('[ModalManager] DependencySystem missing in init');
+        try {
+          await depSys.waitFor(['eventHandlers', 'notify'], null, 5000);
+        } catch (err) {
+          this._notify('error', '[ModalManager] Core deps not satisfied before modal init', false, { source: 'init', module: 'ModalManager', extra: { err } });
+          throw err;
+        }
+
+        this.validateModalMappings(this.modalMappings);
+
+        Object.values(this.modalMappings).forEach((modalId) => {
+          const modalEl = this.domAPI.getElementById(modalId);
+          if (!modalEl) {
+            this._notify('error', `[ModalManager] Required modal missing in DOM: ${modalId}`, false, { context: 'modalManager', source: 'init', modalId });
+            throw new Error(`[ModalManager] Required modal missing in DOM: ${modalId}`);
+          }
+          const handler = () => this._onDialogClose(modalId);
+          if (this.eventHandlers?.trackListener) {
+            this.eventHandlers.trackListener(
+              modalEl,
+              'close',
+              handler,
+              {
+                description: `Close event for ${modalId}`,
+                context: 'modalManager',
+                source: 'ModalManager.init'
+              }
+            );
+          } else {
+            this._notify('warn', `No eventHandlers found; cannot attach close event for ${modalId}`, false, { source: 'init', modalId });
+          }
+        });
+
+        this._notify('info', '[ModalManager] Initialization complete.', { context: 'modalManager', module: 'ModalManager', source: 'init' });
+        this.debugTools?.stop?.(_t,'ModalManager.init');
+
+        // --- Standardized "modalmanager:initialized" event ---
+        const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+        if (doc && typeof this.domAPI?.dispatchEvent === "function") {
+          this.domAPI.dispatchEvent(
+            doc,
+            new CustomEvent('modalmanager:initialized', { detail: { success: true } })
+          );
+        }
+
+      } catch (err) {
+        this._notify('error', '[ModalManager] Initialization failed: ' + (err && err.message ? err.message : err), false, { context: 'modalManager', module: 'ModalManager', source: 'init', originalError: err });
+        this.debugTools?.stop?.(_t,'ModalManager.init-error');
+        throw err;
+      }
+    }
+
+  /**
+   * Remove all tracked event listeners. For use in SPAs or dynamic re-inits.
+   */
+    destroy() {
+      if (!this.eventHandlers?.cleanupListeners) {
+        if (this._isDebug()) {
+          this._notify('warn', '[ModalManager] destroy() called but no eventHandlers.cleanupListeners available.');
+        }
+        return;
+      }
+      // Remove all listeners for this context
+      this.eventHandlers.cleanupListeners({ context: 'modalManager' });
+
+      if (this._isDebug()) {
+        this._notify('info', '[ModalManager] destroyed: all tracked listeners removed.', true);
+      }
+    }
+
+  /**
+   * Check for missing or duplicate modal IDs in the DOM.
+   * @param {Object} modalMapping
+   */
+  validateModalMappings(modalMapping) {
+    Object.entries(modalMapping).forEach(([key, modalId]) => {
+      // USE domAPI ONLY (no global document)
+      const elements = this.domAPI.querySelectorAll(`#${modalId}`);
+      if (elements.length === 0) {
+        this._notify('error', `ModalManager: No element found for ${key} with ID "${modalId}"`, false, { source: 'validateModalMappings', modalId });
+      } else if (elements.length > 1) {
+        this._notify('error', `ModalManager: Duplicate elements found for ${key} with ID "${modalId}"`, false, { source: 'validateModalMappings', modalId });
+      }
+    });
+  }
+
+  /**
+   * Show a modal by its name (from modalMappings).
+   * @param {string} modalName
+   * @param {object} [options]
+   * @returns {boolean}
+   */
+  show(modalName, options = {}) {
+    // Instead of window.__appInitializing, rely on app?.isInitializing
+    if (this.app?.isInitializing && !options.showDuringInitialization) {
+      if (this._isDebug()) {
+        this._notify('info', `[ModalManager] Skipping modal '${modalName}' during app init`, true);
+      }
+      return false;
+    }
+
+    const modalId = this.modalMappings[modalName];
+    if (!modalId) {
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false, { source: 'show', modalName });
+      return false;
+    }
+
+    const modalEl = this.domAPI.getElementById(modalId);
+    if (!modalEl) {
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false, { source: 'show', modalId });
+      return false;
+    }
+
+    this._showModalElement(modalEl);
+    this.activeModal = modalName;
+    return true;
+  }
+
+  /**
+   * Show a confirmation modal with custom text and handlers.
+   * @param {Object} options
+   *   @param {string} [options.title]
+   *   @param {string} [options.message]
+   *   @param {string} [options.confirmText]
+   *   @param {string} [options.cancelText]
+   *   @param {string} [options.confirmClass]
+   *   @param {Function} [options.onConfirm]
+   *   @param {Function} [options.onCancel]
+   *   @param {boolean} [options.showDuringInitialization]
+   */
+  confirmAction(options) {
+    const modalName = 'confirm';
+    const modalId = this.modalMappings[modalName];
+    if (!modalId) {
+      this._notify('error', '[ModalManager] Confirm modal ID not mapped.', false, { source: 'confirmAction' });
+      return;
+    }
+
+    const modalEl = this.domAPI.getElementById(modalId);
+    if (!modalEl) {
+      this._notify('error', '[ModalManager] Confirm modal element not found.', false, { source: 'confirmAction' });
+      return;
+    }
+
+    // Retrieve key elements for updating text, buttons, etc.
+    const titleEl = modalEl.querySelector('h3');
+    const messageEl = modalEl.querySelector('p');
+    const confirmBtn = modalEl.querySelector('#confirmActionBtn');
+    const cancelBtn = modalEl.querySelector('#cancelActionBtn');
+
+    // Set provided text or fallback values
+    if (titleEl) titleEl.textContent = options.title || 'Confirm?';
+    if (messageEl) messageEl.textContent = options.message || '';
+    if (confirmBtn) {
+      confirmBtn.textContent = options.confirmText || 'Confirm';
+      confirmBtn.className = `btn ${options.confirmClass || 'btn-primary'}`;
+    }
+    if (cancelBtn) {
+      cancelBtn.textContent = options.cancelText || 'Cancel';
+    }
+
+    // To avoid leftover event handlers, we replace the buttons with clones
+    function replaceWithClone(btn) {
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      return newBtn;
+    }
+    const newConfirmBtn = confirmBtn ? replaceWithClone(confirmBtn) : null;
+    const newCancelBtn = cancelBtn ? replaceWithClone(cancelBtn) : null;
+
+    // Handlers for Confirm/Cancel
+    const confirmHandler = () => {
+      this.hide(modalName);
+      if (typeof options.onConfirm === 'function') {
+        options.onConfirm();
+      }
+    };
+    const cancelHandler = () => {
+      this.hide(modalName);
+      if (typeof options.onCancel === 'function') {
+        options.onCancel();
+      }
+    };
+
+    // Attach handlers with eventHandlers->trackListener if available, otherwise throw
+    if (this.eventHandlers?.trackListener) {
+      if (newConfirmBtn) {
+        this.eventHandlers.trackListener(newConfirmBtn, 'click', confirmHandler, {
+          description: 'Confirm Modal Confirm Click',
+          context: 'modalManager',
+          source: 'ModalManager.confirmAction'
+        });
+      }
+      if (newCancelBtn) {
+        this.eventHandlers.trackListener(newCancelBtn, 'click', cancelHandler, {
+          description: 'Confirm Modal Cancel Click',
+          context: 'modalManager',
+          source: 'ModalManager.confirmAction'
+        });
+      }
+    } else {
+      throw new Error('[ModalManager] eventHandlers.trackListener is required for confirmAction');
+    }
+
+    // Finally, show the modal
+    this.show(modalName, {
+      showDuringInitialization: options.showDuringInitialization,
+    });
+  }
+
+  /**
+   * Hide a modal by its name (from modalMappings).
+   * @param {string} modalName
+   */
+  hide(modalName) {
+    const modalId = this.modalMappings[modalName];
+    if (!modalId) {
+      this._notify('error', `[ModalManager] Modal mapping missing for: ${modalName}`, false, { source: 'hide', modalName });
+      return;
+    }
+    const modalEl = this.domAPI.getElementById(modalId);
+    if (!modalEl) {
+      this._notify('error', `[ModalManager] Modal element missing: ${modalId}`, false, { source: 'hide', modalId });
+      return;
+    }
+    this._hideModalElement(modalEl);
+    if (this.activeModal === modalName) {
+      this.activeModal = null;
+    }
+  }
+}
+
+/**
+ * A factory function to create a new ModalManager instance.
+ * The init() method must be called separately after the modal DOM is ready.
+ * @returns {ModalManager} A new ModalManager instance.
+ */
+/**
+ * Factory: Create ModalManager with full DI context (REQUIRED: domAPI, browserService)
+ */
+export function createModalManager({ eventHandlers, domAPI, browserService, DependencySystem, modalMapping, notify } = {}) {
+  return new ModalManager({ eventHandlers, domAPI, browserService, DependencySystem, modalMapping, notify });
+}
+
+/**
+ * -------------------------------------------------------------------------
+ * ProjectModal (Dedicated to creating/editing a single project)
+ * -------------------------------------------------------------------------
+ */
+
+/**
+ * @class ProjectModal
+ * A dedicated class for handling the project creation/editing modal.
+ */
+class ProjectModal {
+  /**
+   * @constructor
+   * @param {Object} opts
+   *   @param {Object} [opts.projectManager] - Project manager instance.
+   *   @param {Object} [opts.eventHandlers] - Event handler utilities.
+   *   @param {Function} [opts.notify] - Notification function.
+   *   @param {Object} [opts.DependencySystem] - For dynamic injection (optional).
+   *   @param {Object} [opts.domAPI] - Injected domAPI abstraction (REQUIRED).
+   *   @param {Object} [opts.domPurify] - Sanitization library for any needed HTML.
+   */
+  constructor({ projectManager, eventHandlers, notify, DependencySystem, domAPI, domPurify } = {}) {
+    this.DependencySystem = DependencySystem || undefined;
+
+    this.eventHandlers = eventHandlers ||
+      this.DependencySystem?.modules?.get?.('eventHandlers') ||
+      undefined;
+    this.projectManager = projectManager ||
+      this.DependencySystem?.modules?.get?.('projectManager') ||
+      undefined;
+    this.domAPI = domAPI || this.DependencySystem?.modules?.get?.('domAPI');
+    if (!this.domAPI) throw new Error('[ProjectModal] domAPI DI not provided');
+    // Canonical context-aware notify
+    if (!notify) {
+      notify = this.DependencySystem?.modules?.get?.('notify');
+      if (!notify) throw new Error('[ProjectModal] notify DI not provided');
+    }
+    this.notify = notify.withContext({ module: 'ProjectModal', context: 'projectModal' });
+
+    this.domPurify = domPurify
+      || this.DependencySystem?.modules?.get?.('domPurify')
+      || this.DependencySystem?.modules?.get?.('sanitizer')   // fallback alias
+      || null;
+
+    this.modalElement = null;
+    this.formElement = null;
+    this.isOpen = false;
+    this.currentProjectId = null;
+
+    // No internal event tracking; rely on eventHandlers context-based cleanup.
+  }
+
+  /**
+   * @private
+   * Check if app debug mode is on, if the app is available via DI.
+   */
+  _isDebug() {
+    const app = this.DependencySystem?.modules?.get?.('app');
+    return !!app?.config?.debug;
+  }
+
+  // --- DRY Modal Show/Hide helpers ---
+  _showModalElement() {
+    if (typeof this.modalElement.showModal === 'function') {
+      this.modalElement.showModal();
+    } else {
+      this.modalElement.classList.remove('hidden');
+      this.modalElement.style.display = 'flex';
+      this.modalElement.setAttribute('open', 'true');
+    }
+  }
+
+  _hideModalElement() {
+    if (typeof this.modalElement.close === 'function') {
+      this.modalElement.close();
+    } else {
+      this.modalElement.classList.add('hidden');
+      this.modalElement.style.display = 'none';
+      this.modalElement.removeAttribute('open');
+    }
+  }
+
+  /**
+   * Provide unified user notification approach (errors, success, etc.).
+   * @private
+   */
+  _notify(type, message, extra = {}) {
+    if (typeof this.notify?.[type] === 'function') {
+      this.notify[type](message, { group: true, ...extra, context: 'projectModal' });
+    }
+    // else do nothing
+  }
+
+  /**
+   * Indicate loading/spinner on buttons to prevent double-submits.
+   * @private
+   * @param {HTMLElement} btn
+   * @param {boolean} isLoading
+   * @param {string} [loadingText="Saving..."]
+   */
+  /**
+   * Indicate loading/spinner on buttons to prevent double-submits.
+   * @private
+   * @param {HTMLElement} btn
+   * @param {boolean} isLoading
+   * @param {string} [loadingText="Saving..."]
+   * Uses domPurify if available for sanitization.
+   */
+  _setButtonLoading(btn, isLoading, loadingText = 'Saving...') {
+    if (!btn) return;
+    if (isLoading) {
+      btn.disabled = true;
+      btn.dataset.originalText = btn.textContent;
+      let html = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
+      if (this.domPurify && typeof this.domPurify.sanitize === 'function') {
+        btn.innerHTML = this.domPurify.sanitize(html);
+      } else {
+        // Fallback: strip tags, set as textContent (safe, but no spinner)
+        btn.textContent = loadingText;
+      }
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.originalText) {
+        btn.textContent = btn.dataset.originalText;
+        delete btn.dataset.originalText;
+      }
+    }
+  }
+
+  /**
+   * Initialize after DOM is ready. Throws if modal/form elements not found.
+   * Typically called from the orchestrator (e.g. app.js).
+   */
+  init() {
+    this.modalElement = this.domAPI.getElementById('projectModal');
+    this.formElement = this.domAPI.getElementById('projectModalForm');
+    if (!this.modalElement || !this.formElement) {
+      throw new Error('[ProjectModal] Required DOM elements not found on init.');
+    }
+    this.setupEventListeners();
+
+    if (this._isDebug()) {
+      this._notify('info', '[ProjectModal] Initialized successfully');
+    }
+  }
+
+  /**
+   * Provide a cleanup method to remove event listeners in an SPA scenario.
+   */
+    destroy() {
+      if (!this.eventHandlers?.cleanupListeners) {
+        if (this._isDebug()) {
+          this._notify('warn', '[ProjectModal] destroy() called but eventHandlers.cleanupListeners is unavailable.');
+        }
+        return;
+      }
+      // Remove all listeners for this context
+      this.eventHandlers.cleanupListeners({ context: 'projectModal' });
+      if (this._isDebug()) {
+        this._notify('info', '[ProjectModal] destroyed: all tracked listeners removed.');
+      }
+    }
+
+  /**
+   * Open the project modal (for creating or editing).
+   * @param {object|null} project - If null, we create a new project. Otherwise, we edit the existing one.
+   */
+  openModal(project = null) {
+    if (!this.modalElement) {
+      this._notify('error', '[ProjectModal] No modalElement found!', { source: 'openModal' });
+      return;
+    }
+
+    // Reset form each time
+    if (this.formElement) {
+      this.formElement.reset();
+    }
+
+    // Update title
+    const titleEl = this.modalElement.querySelector('#projectModalTitle');
+    if (titleEl) {
+      titleEl.textContent = project ? 'Edit Project' : 'Create Project';
+    }
+
+    // If editing an existing project, populate form fields
+    if (project) {
+      this.currentProjectId = project.id;
+      const idInput = this.modalElement.querySelector('#projectModalIdInput');
+      const nameInput = this.modalElement.querySelector('#projectModalNameInput');
+      const descInput = this.modalElement.querySelector('#projectModalDescInput');
+      const goalsInput = this.modalElement.querySelector('#projectModalGoalsInput');
+      const maxTokensInput = this.modalElement.querySelector('#projectModalMaxTokensInput');
+
+      if (idInput) idInput.value = project.id || '';
+      if (nameInput) nameInput.value = project.name || '';
+      if (descInput) descInput.value = project.description || '';
+      if (goalsInput) goalsInput.value = project.goals || '';
+      if (maxTokensInput) maxTokensInput.value = project.max_tokens || '';
+    } else {
+      this.currentProjectId = null;
+      const idEl = this.modalElement.querySelector('#projectModalIdInput');
+      if (idEl) idEl.value = '';
+    }
+
+    // Show the dialog (native or fallback)
+    this._showModalElement();
+    this.isOpen = true;
+  }
+
+  /**
+   * Attach all needed DOM event listeners for form submission, cancel, ESC key, etc.
+   * This is called once in init().
+   */
+  setupEventListeners() {
+    if (!this.formElement) return;
+
+    const submitHandler = async (e) => { await this.handleSubmit(e); };
+    this._bindEvent(this.formElement, 'submit', submitHandler, 'ProjectModal submit', { passive: false });
+
+    const cancelBtn = this.modalElement.querySelector('#projectCancelBtn');
+    if (cancelBtn) {
+      const cancelHandler = (e) => {
+        e.preventDefault();
+        this.closeModal();
+      };
+      this._bindEvent(cancelBtn, 'click', cancelHandler, 'ProjectModal Cancel');
+    }
+
+    const escHandler = (e) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.closeModal();
+      }
+    };
+    // Use injected domAPI.ownerDocument for event binding on the document node for SPA/testability
+    this._bindEvent(this.domAPI.ownerDocument, 'keydown', escHandler, 'ProjectModal ESC handler');
+
+    const backdropHandler = (e) => {
+      if (e.target === this.modalElement && this.isOpen) {
+        this.closeModal();
+      }
+    };
+    this._bindEvent(this.modalElement, 'click', backdropHandler, 'ProjectModal backdrop click');
+  }
+
+  /**
+   * Close the modal dialog if open.
+   */
+  closeModal() {
+    if (!this.modalElement) return;
+    this._hideModalElement();
+    this.isOpen = false;
+    this.currentProjectId = null;
+  }
+
+  /**
+   * Handle the form submission, which either creates or updates a project.
+   * @param {Event} e - Form submit event.
+   */
+  async handleSubmit(e) {
+    e.preventDefault();
+    if (!this.formElement) {
+      this._notify('error', '[ProjectModal] No formElement found!', { source: 'handleSubmit' });
+      return;
+    }
+
+    try {
+      const formData = new FormData(this.formElement);
+      const projectData = {
+        name: formData.get('name') || '',
+        description: formData.get('description') || '',
+        goals: formData.get('goals') || '',
+        max_tokens: formData.get('maxTokens') || null,
+      };
+      const projectId = formData.get('projectId');
+
+      if (!projectData.name.trim()) {
+        this._notify('error', 'Project name is required', { source: 'handleSubmit' });
+        return;
+      }
+
+      const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
+      this._setButtonLoading(saveBtn, true);
+
+      await this.saveProject(projectId, projectData);
+
+      this.closeModal();
+      this._notify('success', projectId ? 'Project updated' : 'Project created', { source: 'handleSubmit' });
+    } catch {
+      this._notify('error', 'Failed to save project', { source: 'handleSubmit' });
+    } finally {
+      const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
+      this._setButtonLoading(saveBtn, false);
+    }
+  }
+
+  /**
+   * Save a project via projectManager. If projectId is provided, updates; otherwise creates new.
+   * @param {string|null} projectId - If provided, updates an existing project.
+   * @param {object} projectData - The data to create or update.
+   * @throws If no projectManager is available or the save operation fails.
+   */
+  async saveProject(projectId, projectData) {
+    if (!this.projectManager) {
+      throw new Error('[ProjectModal] projectManager not available (not injected)');
+    }
+    await this.projectManager.saveProject(projectId, projectData);
+  }
+
+  /**
+   * Indicate loading/spinner on buttons to prevent double-submits.
+   * @param {boolean} isLoading - True to disable and set spinner, false to restore.
+   */
+  setLoading(isLoading) {
+    const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
+    const cancelBtn = this.modalElement.querySelector('#projectCancelBtn');
+    if (saveBtn) {
+      saveBtn.disabled = isLoading;
+      saveBtn.classList.toggle('loading', isLoading);
+    }
+    if (cancelBtn) {
+      cancelBtn.disabled = isLoading;
+    }
+  }
+
+  /**
+   * Helper for binding an event. Uses eventHandlers if available, else throws.
+   * @private
+   * @param {HTMLElement|Document} element - The element to bind.
+   * @param {string} type - The event type.
+   * @param {Function} handler - The event callback.
+   * @param {string} description - A short description for debugging.
+   * @param {object} [options] - Additional event options (capture, passive, etc.).
+   */
+    _bindEvent(element, type, handler, description, options = {}) {
+      if (this.eventHandlers?.trackListener) {
+        this.eventHandlers.trackListener(element, type, handler, {
+          description,
+          context: 'projectModal',
+          source: 'ProjectModal._bindEvent',
+          ...options,
+        });
+      } else {
+        throw new Error('[ProjectModal] eventHandlers.trackListener is required');
+      }
+    }
+}
+
+/**
+ * A factory function to create the ProjectModal without attaching it to a global.
+ * This allows app.js (or another orchestrator) to decide when to initialize/destroy.
+ * @returns {ProjectModal} A new ProjectModal instance.
+ */
+/**
+ * Factory: Create ProjectModal with full DI context (RECOMMENDED: inject domPurify for HTML sanitization)
+ */
+export function createProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domAPI, domPurify } = {}) {
+  return new ProjectModal({ projectManager, eventHandlers, notify, DependencySystem, domAPI, domPurify });
+}
+
+```

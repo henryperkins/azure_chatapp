@@ -1,0 +1,162 @@
+```css
+/* =============================================================================
+   file-upload-enhanced.css
+   =============================================================================
+   Enhanced File Upload Component Styles
+   Tailwind CSS v4 + DaisyUI 5
+*/
+
+/* Do NOT import Tailwind here. The aggregator (tailwind.css) does that. */
+
+.file-upload-container {
+  @apply border-2 border-dashed border-base-300 rounded-box p-6 bg-base-200/50 transition-colors duration-300;
+}
+
+.file-upload-container:hover,
+.file-upload-container:focus-within {
+  @apply border-primary/70 bg-primary/5;
+}
+
+.file-upload-container.dragging {
+  @apply border-primary/90 bg-primary/10;
+}
+
+.file-upload-container.error {
+  @apply border-error/70 bg-error/5;
+}
+
+.file-upload-icon {
+  @apply mx-auto h-12 w-12 text-base-content/70;
+}
+
+.file-upload-title {
+  @apply mt-2 text-center text-base font-semibold;
+}
+
+.file-upload-instructions {
+  @apply mt-1 text-center text-sm text-base-content/70;
+}
+
+.file-upload-btn {
+  @apply mt-4 mx-auto btn btn-sm btn-primary;
+}
+
+.file-upload-browse-btn {
+  @apply text-primary hover:underline cursor-pointer font-medium;
+}
+
+.file-upload-input {
+  @apply hidden;
+}
+
+.file-preview-list {
+  @apply mt-4 space-y-2;
+}
+
+/* Old "animate-in fade-in-0 zoom-in-95" is invalid in Tailwind v4
+   Replaced with "fade-zoom-in" (defined in tailwind.css) */
+.file-preview-item {
+  @apply p-2 bg-base-100 rounded-box shadow-xs flex items-center gap-2 border border-base-300;
+  animation: fadeZoomIn 0.3s ease-in-out forwards;
+}
+
+.file-preview-icon {
+  @apply w-10 h-10 flex items-center justify-center rounded-box bg-base-200 text-base-content flex-shrink-0;
+}
+
+.file-preview-icon svg {
+  @apply w-6 h-6;
+}
+
+.file-preview-details {
+  @apply flex-1 overflow-hidden;
+}
+
+.file-preview-name {
+  @apply font-medium truncate;
+}
+
+.file-preview-info {
+  @apply text-xs text-base-content/70 flex gap-2;
+}
+
+.file-preview-type {
+  @apply font-mono;
+}
+
+.file-preview-size {
+  @apply font-mono;
+}
+
+.file-preview-actions {
+  @apply flex items-center gap-1 shrink-0;
+}
+
+.file-preview-delete {
+  @apply btn btn-ghost btn-xs btn-square text-error;
+}
+
+.file-preview-delete:hover {
+  @apply bg-error/10;
+}
+
+.file-upload-error {
+  @apply text-sm text-error mt-2;
+}
+
+.file-upload-progress {
+  @apply mt-4;
+}
+
+.file-upload-progress-label {
+  @apply text-xs text-base-content/70 mb-1;
+}
+
+.file-upload-progress-bar {
+  @apply progress progress-primary w-full h-2;
+}
+
+/* Pulse border animation for drag-and-drop highlight */
+@keyframes pulse-border {
+  0%,
+  100% {
+    border-color: rgba(107, 114, 128, 0.7);
+    /* base-300 70% opacity */
+  }
+  50% {
+    border-color: rgba(107, 114, 128, 1);
+    /* base-300 100% opacity */
+  }
+}
+
+.file-upload-container.dragging {
+  animation: pulse-border 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Indeterminate progress keyframes */
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.file-upload-progress-indeterminate {
+  @apply relative overflow-hidden;
+}
+
+.file-upload-progress-indeterminate::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-primary, #2563eb);
+  animation: progress-indeterminate 1.5s infinite linear;
+  transform: translateX(-100%);
+}
+
+```

@@ -1,0 +1,5 @@
+```json
+{
+  "sidebarActiveTab" : "projects"
+}
+```
