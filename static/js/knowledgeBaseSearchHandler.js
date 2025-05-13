@@ -20,8 +20,16 @@ const MODULE = "KnowledgeBaseSearchHandler";
  * @param {Function} ctx._safeSetInnerHTML - Function to safely set innerHTML.
  * @returns {Object} Search handler instance with public methods.
  */
-export function createKnowledgeBaseSearchHandler(ctx) {
-  const notify = ctx.notify; // Use the already contextualized notifier from ctx
+export async function createKnowledgeBaseSearchHandler(ctx) {
+  // App readiness guard—wait for dependencies before wiring up
+  if (!ctx.DependencySystem) throw new Error(`[${MODULE}] DependencySystem missing for app readiness check`);
+  await ctx.DependencySystem.waitFor?.([
+    "app", "projectManager", "notify", "eventHandlers", "domAPI"
+  ]);
+  if (!ctx.errorReporter) throw new Error(`[${MODULE}] errorReporter must be provided in ctx for error capture`);
+
+  // Always use module-scoped contextual notifier
+  const notify = ctx.notify.withContext({ module: MODULE, context: "searchHandler" });
 
   /**
    * Perform a search against the knowledge base
@@ -42,7 +50,7 @@ export function createKnowledgeBaseSearchHandler(ctx) {
 
     const pid = ctx._getCurrentProjectId();
     if (!pid) {
-      notify.error("No valid project selected for KB search", { source: "searchKnowledgeBase" });
+      notify.error("No valid project selected for KB search", { module: MODULE, context: "search", source: "searchKnowledgeBase" });
       return;
     }
 
@@ -74,7 +82,8 @@ export function createKnowledgeBaseSearchHandler(ctx) {
         _showNoResults();
       }
     } catch (err) {
-      notify.error("Search failed. Please try again.", { source: "searchKnowledgeBase", originalError: err });
+      notify.error("Search failed. Please try again.", { module: MODULE, context: "search", source: "searchKnowledgeBase", originalError: err });
+      ctx.errorReporter.capture?.(err, { module: MODULE, source: "searchKnowledgeBase", context: "search", originalError: err });
     } finally {
       ctx.state.isSearching = false;
       _hideSearchLoading();
@@ -188,7 +197,7 @@ export function createKnowledgeBaseSearchHandler(ctx) {
   function _showResultDetail(result) {
     const modal = ctx.elements.resultModal;
     if (!modal || typeof modal.showModal !== "function") {
-      notify.error("Result detail modal not found or invalid.", { source: "_showResultDetail" });
+      notify.error("Result detail modal not found or invalid.", { module: MODULE, context: "searchDetail", source: "_showResultDetail" });
       return;
     }
     _populateResultDetail(result);
