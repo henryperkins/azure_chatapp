@@ -55,6 +55,9 @@ export function createEventHandlers({
     throw new Error(`[${MODULE}] backendLogger is required for backend event logging (guardrail #16)`);
   }
 
+  // Ensure core app/DOM modules are ready before any execution paths touch them
+  DependencySystem?.waitFor?.(['app', 'domAPI', 'notify']);
+
   // Guardrail #10: All DOM/app wiring runs ONLY after DependencySystem.waitFor/waitForDepsAndDom inside .init()
   // Guardrail-compliance: This ensures no app/DOM logic runs before readiness.
 
@@ -147,7 +150,7 @@ export function createEventHandlers({
       localNotify.warn(`trackListener called with invalid element type for '${description}'.`, {
         source,
         context,
-        module: optModule,
+        module: MODULE,
         group: true,
         extra: {
           elementType: typeof element,
@@ -195,17 +198,23 @@ export function createEventHandlers({
               group: true,
               context: listenerContext,
               source: listenerSource,
-              module: listenerContext,
+              module: MODULE,
               originalError: error,
               extra: { type }
             });
-            captureError(error, { module: listenerContext, source: listenerSource, originalError: error });
+            captureError(error, { module: MODULE, source: listenerSource, originalError: error });
+            errorReporter.capture?.(error, {
+              module : MODULE,
+              source : listenerSource,
+              context: listenerContext,
+              originalError: error
+            });
             if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
               localNotify.warn(`preventDefault() called on passive listener: ${description}`, {
                 group: true,
                 context: listenerContext,
                 source: listenerSource,
-                module: listenerContext,
+                module: MODULE,
                 extra: { type }
               });
             }
@@ -217,7 +226,7 @@ export function createEventHandlers({
                 group: true,
                 context: listenerContext,
                 source: listenerSource,
-                module: listenerContext,
+                module: MODULE,
                 extra: { type, duration }
               });
             }
@@ -231,7 +240,7 @@ export function createEventHandlers({
               group: true,
               context: listenerContext,
               source: listenerSource,
-              module: listenerContext,
+              module: MODULE,
               extra: { type, duration }
             });
           }
@@ -242,17 +251,23 @@ export function createEventHandlers({
           group: true,
           context: listenerContext,
           source: listenerSource,
-          module: listenerContext,
+          module: MODULE,
           originalError: error,
           extra: { type }
         });
-        captureError(error, { module: listenerContext, source: listenerSource, originalError: error });
+        captureError(error, { module: MODULE, source: listenerSource, originalError: error });
+        errorReporter.capture?.(error, {
+          module : MODULE,
+          source : listenerSource,
+          context: listenerContext,
+          originalError: error
+        });
         if (error.name === 'TypeError' && error.message.includes('passive') && finalOptions.passive) {
           localNotify.warn(`preventDefault() called on passive listener: ${description}`, {
             group: true,
             context: listenerContext,
             source: listenerSource,
-            module: listenerContext,
+            module: MODULE,
             extra: { type }
           });
         }
@@ -1248,6 +1263,12 @@ export function createEventHandlers({
               module: MODULE,
               source: 'setupLoginModalTabs_DelegatedClick',
               context: 'authTabs'
+            });
+            errorReporter.capture?.(err, {
+              module : MODULE,
+              source : 'setupLoginModalTabs_DelegatedClick',
+              context: 'authTabs',
+              originalError: err
             });
           }
         },
