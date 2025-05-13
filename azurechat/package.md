@@ -1,0 +1,90 @@
+```json
+{
+  "type": "module",
+  "name": "azure_chatapp",
+  "version": "1.0.0",
+  "description": "Azure OpenAI Chat Application with Tailwind CSS",
+  "scripts": {
+    "build:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css",
+    "watch:css": "postcss ./static/css/tailwind.css -o ./static/css/dist/tailwind.css --watch",
+    "dev": "npm run watch:css",
+    "lint:css": "stylelint './static/css/*.css' --custom-syntax postcss-lit",
+    "lint": "eslint \"static/js/**/*.js\"",
+    "audit": "node scripts/audit.js",
+    "codemod": "jscodeshift -t scripts/remove-window-export.js static/js/**/*.js",
+    "prebuild": "npm run build:css",
+    "start": "node your-server-file.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/henryperkins/azure_chatapp.git"
+  },
+  "keywords": [
+    "azure",
+    "openai",
+    "chat",
+    "tailwind",
+    "daisyui"
+  ],
+  "author": "Your Name",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/henryperkins/azure_chatapp/issues"
+  },
+  "homepage": "https://github.com/henryperkins/azure_chatapp#readme",
+  "engines": {
+    "node": ">=18.12.0",
+    "npm": ">=9.0.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.27.1",
+    "@babel/parser": "^7.27.2",
+    "@babel/traverse": "^7.27.1",
+    "@eslint/js": "^9.25.1",
+    "@tailwindcss/postcss": "^4.1.5",
+    "@tailwindcss/typography": "^0.5.16",
+    "autoprefixer": "^10.4.21",
+    "boxen": "^8.0.1",
+    "chalk": "^4.1.2",
+    "cli-table3": "^0.6.5",
+    "daisyui": "^5.0.35",
+    "eslint": "^9.25.1",
+    "eslint-plugin-import": "^2.31.0",
+    "figures": "^6.1.0",
+    "globals": "^16.0.0",
+    "jscodeshift": "^0.15.2",
+    "postcss": "^8.5.3",
+    "postcss-cli": "^11.0.1",
+    "postcss-import": "^16.1.0",
+    "postcss-nested": "^7.0.2",
+    "postcss-nesting": "^13.0.1",
+    "stylelint": "^16.18.0",
+    "stylelint-config-standard": "^38.0.0",
+    "tailwindcss": "^4.1.5"
+  },
+  "dependencies": {
+    "@azure/identity": "^4.9.1",
+    "@modelcontextprotocol/sdk": "^1.10.1",
+    "@opentelemetry/instrumentation": "^0.200.0",
+    "@playwright/test": "^1.52.0",
+    "@sentry/browser": "^9.15.0",
+    "@sentry/node": "^9.13.0",
+    "codex": "^0.2.3",
+    "dompurify": "^3.2.5",
+    "express": "^4.18.2",
+    "jsdom": "^26.1.0",
+    "mcp": "^1.4.2",
+    "playwright": "^1.52.0",
+    "remark-parse": "^10.0.1",
+    "remark-slug": "^7.0.1",
+    "remark-stringify": "^10.0.2",
+    "unified": "^10.1.2"
+  },
+  "main": "playwright.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  }
+}
+
+```

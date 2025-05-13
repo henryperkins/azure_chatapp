@@ -1,0 +1,529 @@
+```html
+<!-- Breadcrumb navigation for better navigation -->
+<div class="flex items-center mb-4 text-sm text-base-content/60">
+  <button id="backToProjectsBtn" type="button"
+    class="mr-2 btn btn-ghost btn-sm flex items-center">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+      <path fill-rule="evenodd" d="M9.707 16.707a1 1
+            0 01-1.414 0l-6-6a1 1
+            0 010-1.414l6-6a1 1
+            0 011.414 1.414L5.414
+            9H17a1 1 0 110 2H5.414l4.293
+            4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+    </svg>
+    <span class="ml-1">All Projects</span>
+  </button>
+  <span class="mx-2">/</span>
+  <span id="projectTitle" class="text-base-content font-semibold">Project Title</span>
+</div>
+
+<!-- Enhanced action buttons -->
+<div class="flex justify-end mb-4 gap-2">
+  <button id="editProjectBtn" type="button"
+    class="btn btn-ghost btn-square btn-sm text-primary" title="Edit project details">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+      stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2
+            2v11a2 2 0 002 2h11a2
+            2 0 002-2v-5m-1.414-9.414a2
+            2 0 112.828 2.828L11.828
+            15H9v-2.828l8.586-8.586z" />
+    </svg>
+  </button>
+  <button id="pinProjectBtn" type="button"
+    class="btn btn-ghost btn-square btn-sm text-warning" title="Pin project">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+      stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2
+            0 012-2h10a2 2 0 012
+            2v16l-7-3.5L5 21V5z" />
+    </svg>
+  </button>
+  <button id="archiveProjectBtn" type="button"
+    class="btn btn-ghost btn-square btn-sm" title="Archive project">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+      stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2
+            2 0 110-4h14a2 2 0 110
+            4M5 8v10a2 2 0 002 2h10a2
+            2 0 002-2V8m-9 4h4" />
+    </svg>
+  </button>
+</div>
+
+<!-- Project stats panel -->
+<div id="projectStats" class="stats shadow-custom mb-4 sm:mb-6 project-stats" data-testid="project-stats">
+  <div class="stat">
+    <div class="stat-title">Token Usage</div>
+    <div class="stat-value"><span id="tokenUsage">0</span> / <span id="maxTokens">200,000</span></div>
+    <div class="stat-desc"><span id="tokenPercentage">0%</span></div>
+    <progress id="tokenProgressBar" class="progress progress-primary w-full" value="0" max="100"></progress>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Conversations</div>
+    <div class="stat-value" id="conversationCount">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Files</div>
+    <div class="stat-value" id="fileCount">0</div>
+  </div>
+  <div class="stat">
+    <div class="stat-title">Artifacts</div>
+    <div class="stat-value" id="artifactCount">0</div>
+  </div>
+</div>
+
+<!-- Tab navigation (No Chat tab now)-->
+<div class="tabs mb-6" role="tablist">
+  <button id="detailsTabBtn" class="tab tab-bordered tab-active project-tab-btn" role="tab"
+    aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
+    Details
+  </button>
+  <button id="filesTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
+    Files
+  </button>
+  <button id="conversationsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
+    <span class="hidden xs:inline">Conversations</span>
+    <span class="xs:hidden">Convos</span>
+  </button>
+  <button id="artifactsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
+    Artifacts
+  </button>
+  <button id="knowledgeTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+    aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
+    <span class="hidden xs:inline">Knowledge Base</span>
+    <span class="xs:hidden">KB</span>
+  </button>
+</div>
+
+<!-- Tab content -->
+<div id="projectTabContent">
+  <!-- Details tab -->
+  <div id="detailsTab" class="project-tab-content" role="tabpanel" aria-labelledby="detailsTabBtn"
+    tabindex="0">
+    <div class="tab-section">
+      <h3 class="tab-heading">Description</h3>
+      <p id="projectDescription" class="tab-content">
+        Project description will appear here.
+      </p>
+    </div>
+    <div class="tab-section">
+      <h3 class="tab-heading">Goals</h3>
+      <p id="projectGoals" class="tab-content">
+        Project goals will appear here.
+      </p>
+    </div>
+    <div class="tab-section">
+      <h3 class="tab-heading">Custom Instructions</h3>
+      <div class="bg-base-200 p-4 rounded-box">
+        <p id="projectInstructions" class="tab-content">No custom instructions set.</p>
+        <button id="editInstructionsBtn" type="button" class="mt-3 text-sm text-primary hover:underline">
+          Edit Instructions
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Files tab -->
+  <div id="filesTab" class="project-tab-content hidden" role="tabpanel" aria-labelledby="filesTabBtn"
+    tabindex="0">
+    <div class="tab-section flex justify-between items-center">
+      <h3 class="tab-heading">Project Files</h3>
+      <div>
+        <input type="file" id="fileInput" class="hidden" multiple />
+        <button id="uploadFileBtn" type="button"
+          class="btn btn-success btn-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0
+                  01-.88-7.903A5 5 0
+                  1115.9 6L16 6a5 5
+                  0 011 9.9M15 13l-3-3m0
+                  0l-3 3m3-3v12" />
+          </svg>
+          Upload Files
+        </button>
+      </div>
+    </div>
+
+    <!-- Drag and drop zone -->
+    <div id="dragDropZone" class="mb-4 drag-zone">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto text-gray-400 mb-2" fill="none"
+        viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5
+              5 0 1115.9 6L16 6a5
+              5 0 011 9.9M15 13l-3-3m0
+              0l-3 3m3-3v12" />
+      </svg>
+      <p class="text-sm font-medium mb-1">Drag and drop your files here</p>
+      <p class="text-xs text-gray-500">or click the Upload button above</p>
+      <p class="text-xs text-gray-500 mt-2">Supported formats: .txt, .pdf, .doc, .docx, .csv, .json, .md</p>
+    </div>
+
+    <div id="filesUploadProgress" class="hidden mb-4 bg-base-100 p-3 rounded-box shadow-xs">
+      <div class="flex items-center justify-between mb-2">
+        <span id="kbStatusIndicator" class="text-sm font-medium"></span>
+        <div id="kbRequirementTooltip"
+          class="hidden text-xs bg-warning/20 text-warning px-2 py-1 rounded-box">
+          Files are indexed in Knowledge Base for AI search
+        </div>
+      </div>
+      <progress id="fileProgressBar" class="progress progress-success w-full" value="0" max="100"></progress>
+      <p id="uploadStatus" class="text-xs text-base-content/60 mt-1">Uploading...</p>
+      <div id="supportedFileTypes" class="text-xs text-base-content/60 mt-2">
+        Supported: .txt, .md, .csv, .json, .pdf, .doc, .docx, .py, .js, .html, .css (Max 30MB)
+        <span class="inline-block ml-2" title="Files will be indexed in Knowledge Base">ℹ️</span>
+      </div>
+    </div>
+
+    <div id="projectFilesList" class="grid grid-cols-1 gap-2 mt-4">
+      <!-- Files will be dynamically inserted here -->
+      <div class="text-base-content/60 text-center py-8">No files uploaded yet</div>
+    </div>
+  </div>
+
+  <!-- Conversations tab (chat UI now above the conversations list) -->
+  <div id="conversationsTab" class="project-tab-content hidden" role="tabpanel"
+    aria-labelledby="conversationsTabBtn" tabindex="0">
+
+    <!-- Model Configuration panel for chat -->
+    <div id="modelConfigPanel" class="mb-2"></div>
+    <!-- Moved chat UI here -->
+    <div id="projectChatContainer" class="mt-4 transition-all duration-300 ease-in-out">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-medium text-lg">Conversation</h3>
+        <button id="projectMinimizeChatBtn" type="button" class="text-gray-500 hover:text-gray-700 p-1">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <div id="projectChatUI" class="bg-base-100 rounded-box shadow-md border border-base-200">
+        <div id="projectChatMessages" class="chat-message-container" aria-live="polite"></div>
+        <div class="flex items-center border-t border-base-200 p-2">
+          <input id="projectChatInput" type="text" class="flex-1 input input-bordered rounded-l-sm" placeholder="Type your message..."/>
+          <button id="projectChatSendBtn" type="button" class="btn btn-primary rounded-r-sm rounded-l-none">Send</button>
+        </div>
+      </div>
+    </div>
+    <!-- End chat UI moved -->
+
+    <div class="tab-section flex justify-between items-center">
+      <h3 class="tab-heading">Conversations</h3>
+      <button id="projectNewConversationBtn" type="button"
+        class="btn btn-primary btn-sm">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6
+                0H6" />
+        </svg>
+        New Chat
+      </button>
+    </div>
+    <div id="projectConversationsList" class="mt-4">
+      <!-- Conversations will be populated here -->
+      <div class="text-base-content/60 text-center py-8">No conversations yet.</div>
+    </div>
+  </div>
+
+  <!-- Artifacts tab -->
+  <div id="artifactsTab" class="project-tab-content hidden" role="tabpanel"
+    aria-labelledby="artifactsTabBtn" tabindex="0">
+    <div class="tab-section">
+      <h3 class="tab-heading">Generated Artifacts</h3>
+      <p class="tab-content mt-1">
+        Artifacts are automatically created during conversations when you ask the AI to generate code,
+        documents, or other content.
+      </p>
+    </div>
+    <div id="projectArtifactsList" class="mt-4">
+      <!-- Artifacts will be populated here -->
+      <div class="text-base-content/60 text-center py-8">No artifacts generated yet.</div>
+    </div>
+  </div>
+
+  <!-- Knowledge Base tab -->
+  <div id="knowledgeTab" class="project-tab-content hidden" role="tabpanel"
+    aria-labelledby="knowledgeTabBtn" tabindex="0">
+    <div class="tab-section flex justify-between items-center">
+      <h3 class="tab-heading">Knowledge Base</h3>
+      <div id="knowledgeBaseActions" class="flex flex-col sm:flex-row gap-2 w-full">
+        <button id="searchKnowledgeBtn" type="button"
+          class="btn btn-primary btn-sm w-full sm:w-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
+                  7 0 11-14 0 7 7 0
+                  0114 0z" />
+          </svg>
+          Search Knowledge
+        </button>
+        <button id="reprocessFilesBtn" type="button"
+          class="btn btn-warning btn-sm w-full sm:w-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356
+                  2A8.001 8.001 0
+                  004.582 9m0 0H9m11 11v-5h-.581m0
+                  0a8.003 8.003 0
+                  01-15.357-2m15.357
+                  2H15" />
+          </svg>
+          Reprocess
+        </button>
+        <button id="knowledgeBaseSettingsBtn" type="button"
+          class="btn btn-neutral btn-sm w-full sm:w-auto">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325
+                  4.317c.426-1.756
+                  2.924-1.756
+                  3.35 0a1.724
+                  1.724 0
+                  002.573
+                  1.066c1.543-.94
+                  3.31.826
+                  2.37 2.37a1.724
+                  1.724 0
+                  001.065
+                  2.572c1.756.426
+                  1.756 2.924
+                  0 3.35a1.724
+                  1.724 0
+                  00-1.066
+                  2.573c-.94
+                  1.543-.826
+                  3.31-2.37
+                  2.37a1.724
+                  1.724 0
+                  00-2.572
+                  1.065c-.426
+                  1.756-2.924
+                  1.756-3.35
+                  0a1.724
+                  1.724 0
+                  00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724
+                  1.724 0
+                  001.066-2.572c-1.756-.426-1.756-2.924
+                  0-3.35a1.724
+                  1.724 0
+                  001.066-2.573c-.94-1.543.826-3.31
+                  2.37-2.37.996.608
+                  2.296.07
+                  2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15
+                  12a3 3
+                  0 11-6 0
+                  3 3
+                  0 016
+                  0z" />
+          </svg>
+          Settings
+        </button>
+      </div>
+    </div>
+
+    <!-- Knowledge Base Status -->
+    <div id="knowledgeBaseStatus" class="mb-6 p-4 bg-base-200 rounded-box">
+      <div id="knowledgeBaseInactive" class="flex flex-col items-center justify-center py-8">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-base-content/40 mb-3" fill="none"
+          viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832
+                5.477 9.246 5
+                7.5 5S4.168
+                5.477 3
+                6.253v13C4.168
+                18.477 5.754
+                18 7.5
+                18s3.332.477
+                4.5 1.253m0-13C13.168
+                5.477 14.754
+                5 16.5
+                5c1.747
+                0 3.332.477
+                4.5
+                1.253v13C19.832
+                18.477 18.247
+                18 16.5
+                18c-1.746
+                0-3.332.477-4.5
+                1.253" />
+        </svg>
+        <h4 class="text-lg font-medium mb-2">Knowledge Base Not Configured</h4>
+        <p class="text-base-content/60 text-center mb-3 max-w-lg">
+          Configure a knowledge base to enable AI to search your project files and use relevant information
+          to answer your questions.
+        </p>
+        <button id="setupKnowledgeBaseBtn" type="button"
+          class="btn btn-primary">
+          Set Up Knowledge Base
+        </button>
+      </div>
+
+      <div id="knowledgeBaseActive" class="hidden">
+        <div class="flex items-center mb-4">
+          <div
+            class="flex-shrink-0 h-10 w-10 rounded-full bg-success/20 flex items-center justify-center mr-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-success" fill="none"
+              viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6
+                    2a9 9
+                    0 11-18
+                    0 9 9
+                    0 0118
+                    0z" />
+            </svg>
+          </div>
+          <div>
+            <h4 class="font-medium text-lg"><span id="knowledgeBaseName">Project Knowledge Base</span></h4>
+            <p class="text-sm text-base-content/60">
+              <span id="kbStatusText">Active</span>
+              <span id="kbStatusBadge"
+                class="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/20 text-success">
+                <span class="h-2 w-2 rounded-full bg-success mr-1.5 flex-shrink-0"></span>
+                Enabled
+              </span>
+            </p>
+          </div>
+          <div class="ml-auto">
+            <span id="knowledgeBaseToggle" class="relative inline-block w-12 mr-2 align-middle select-none">
+              <input type="checkbox" name="knowledgeBaseEnabled" id="knowledgeBaseEnabled" checked
+                class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer" />
+              <label for="knowledgeBaseEnabled"
+                class="toggle-label block overflow-hidden h-6 rounded-full bg-base-300 cursor-pointer"></label>
+            </span>
+            <span class="text-sm" id="knowledgeBaseEnabledLabel">Enabled</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
+            <div class="text-2xl font-semibold mb-1" id="knowledgeFileCount">0</div>
+            <div class="text-xs text-base-content/60">Files Processed</div>
+          </div>
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
+            <div class="text-2xl font-semibold mb-1" id="knowledgeChunkCount">0</div>
+            <div class="text-xs text-base-content/60">Text Chunks</div>
+          </div>
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
+            <div class="text-2xl font-semibold mb-1" id="kbVersionDisplay"
+              aria-label="Knowledge Base Schema Version">
+              Schema v1
+            </div>
+            <div class="text-xs text-base-content/60">Schema Version</div>
+          </div>
+
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
+            <div class="text-2xl font-semibold mb-1" id="kbLastUsedDisplay"
+              aria-label="Last Used Timestamp">
+              Never
+            </div>
+            <div class="text-xs text-base-content/60">Last Used</div>
+          </div>
+
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
+            <div class="text-2xl font-semibold mb-1" id="knowledgeFileSize">0 MB</div>
+            <div class="text-xs text-base-content/60">Total Size</div>
+          </div>
+
+          <div class="bg-base-100 p-3 rounded-box shadow-xs">
+            <div>
+              <select id="knowledgeBaseModelSelect" class="w-full text-sm border rounded-box">
+                <option value="all-MiniLM-L6-v2" selected>Default Model</option>
+                <option value="text-embedding-3-small">OpenAI Small</option>
+                <option value="text-embedding-3-large">OpenAI Large</option>
+              </select>
+            </div>
+            <div class="text-xs text-base-content/60 mt-1">Embedding Model</div>
+          </div>
+        </div>
+
+        <div class="text-sm text-base-content/80 mt-2" id="knowledgeBaseDescription">
+          This knowledge base helps the AI provide more accurate responses by searching relevant information
+          from your project files.
+        </div>
+      </div>
+    </div>
+
+    <!-- Knowledge Base Files List -->
+    <div id="knowledgeBaseFilesSection" class="mb-6 hidden"> <!-- Initially hidden, shown when KB is active -->
+        <h3 class="font-medium mb-3">Knowledge Base Files</h3>
+        <div id="knowledgeBaseFilesListContainer" class="max-h-96 overflow-y-auto bg-base-100 p-3 rounded-box shadow-xs">
+            <!-- File items will be dynamically inserted here -->
+            <p class="text-base-content/60 text-center py-4">No files in Knowledge Base or unable to load.</p>
+        </div>
+    </div>
+
+    <!-- Search Interface -->
+    <div class="mb-6">
+      <h3 class="font-medium mb-3">Search Knowledge</h3>
+      <div class="join mb-3 w-full">
+        <input type="text" id="knowledgeSearchInput" placeholder="Search your project knowledge..."
+          class="join-item input input-bordered w-full" />
+        <button id="runKnowledgeSearchBtn" type="button"
+          class="join-item btn btn-primary">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7
+                  7 0 11-14 0 7 7 0
+                  0114 0z" />
+          </svg>
+        </button>
+      </div>
+      <div id="knowledgeSearchOptions" class="flex justify-end mb-2">
+        <label class="text-sm text-base-content/80 mr-2">Results: </label>
+        <select id="knowledgeTopK" class="text-sm border border-base-300 rounded-box">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Search Results -->
+    <div id="knowledgeSearchResults" class="mb-6 hidden">
+      <h3 class="font-medium mb-3">Search Results</h3>
+      <div id="knowledgeResultsList">
+        <!-- Results will be populated here -->
+      </div>
+    </div>
+
+    <!-- No results placeholder -->
+    <div id="knowledgeNoResults" class="mb-6 hidden">
+      <div class="bg-base-200 p-6 rounded-box text-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-base-content/40 mx-auto mb-3" fill="none"
+          viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172
+                16.172a4 4 0 015.656
+                0M9
+                10h.01M15
+                10h.01M21
+                12a9
+                9 0
+                11-18
+                0 9 9
+                0 0118
+                0z" />
+        </svg>
+        <h4 class="text-lg font-medium mb-2">No results found</h4>
+        <p class="text-base-content/60">Try a different search query or add more files to your project.</p>
+      </div>
+    </div>
+
+    <!-- Files with Knowledge Processing Status -->
+    <div class="mb-6">
+      <h3 class="font-medium mb-3">Files with Knowledge Processing</h3>
+      <div id="knowledgeProcessedFiles">
+        <!-- Files with processing status will be displayed here -->
+        <div class="text-base-content/60 text-center py-8">No files have been processed for knowledge search yet.
+        </div>
+      </div>
+    </div>
+    </div>
+<!-- At the end of project_details.html -->
+
+```
