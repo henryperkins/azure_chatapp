@@ -39,6 +39,9 @@ import { waitForDepsAndDom } from './utils/globalUtils.js';
 
 const MODULE = "ProjectDetailsComponent";
 
+// Dedicated intra-module event bus
+const ProjectDetailsBus = new EventTarget();
+
 function createProjectDetailsComponent({
   onBack,
   app,
@@ -55,7 +58,8 @@ function createProjectDetailsComponent({
   globalUtils,
   knowledgeBaseComponent = null,
   modelConfig = null,
-  chatManager = null
+  chatManager = null,
+  backendLogger = null
 } = {}) {
   if (
     !app ||
@@ -93,7 +97,8 @@ function createProjectDetailsComponent({
     globalUtils,
     knowledgeBaseComponent,
     modelConfig,
-    chatManager
+    chatManager,
+    backendLogger
   });
 }
 
@@ -114,7 +119,8 @@ class ProjectDetailsComponent {
     globalUtils,
     knowledgeBaseComponent = null,
     modelConfig = null,
-    chatManager = null
+    chatManager = null,
+    backendLogger = null
   } = {}) {
     if (!errorReporter) {
       throw new Error("[ProjectDetailsComponent] errorReporter is required for context-rich error logging.");
@@ -128,6 +134,8 @@ class ProjectDetailsComponent {
     this.FileUploadComponentClass = FileUploadComponentClass;
     this.router = router;
     this.originalNotify = notify; // Preserve original notify API for subcomponents
+    this.backendLogger = backendLogger;
+    this.bus = ProjectDetailsBus;
 
     // Defensive handling for notify - ensure we have withContext or create a fallback
     if (notify && typeof notify.withContext === 'function') {
@@ -137,27 +145,27 @@ class ProjectDetailsComponent {
       this.notify = {
         debug: (msg, opts = {}) => {
           if (notify && typeof notify.debug === 'function') {
-            notify.debug(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+            notify.debug(msg, { context: "projectDetailsComponent", module: MODULE, source: opts.source || 'fallbackNotifyShim', ...opts });
           }
         },
         info: (msg, opts = {}) => {
           if (notify && typeof notify.info === 'function') {
-            notify.info(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+            notify.info(msg, { context: "projectDetailsComponent", module: MODULE, source: opts.source || 'fallbackNotifyShim', ...opts });
           }
         },
         warn: (msg, opts = {}) => {
           if (notify && typeof notify.warn === 'function') {
-            notify.warn(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+            notify.warn(msg, { context: "projectDetailsComponent", module: MODULE, source: opts.source || 'fallbackNotifyShim', ...opts });
           }
         },
         error: (msg, opts = {}) => {
           if (notify && typeof notify.error === 'function') {
-            notify.error(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+            notify.error(msg, { context: "projectDetailsComponent", module: MODULE, source: opts.source || 'fallbackNotifyShim', ...opts });
           }
         },
         success: (msg, opts = {}) => {
           if (notify && typeof notify.success === 'function') {
-            notify.success(msg, { context: "projectDetailsComponent", module: MODULE, ...opts });
+            notify.success(msg, { context: "projectDetailsComponent", module: MODULE, source: opts.source || 'fallbackNotifyShim', ...opts });
           }
         },
         // eslint-disable-next-line no-unused-vars
@@ -220,6 +228,12 @@ class ProjectDetailsComponent {
     this._backBtnHandler = null;
     this._tabClickHandler = null;
   }
+  _setState(patch = {}, caller = '_setState') {
+    this.state = { ...this.state, ...patch };
+    this.notify.debug('state updated', {
+      module: MODULE, context: 'state', source: caller, extra: patch
+    });
+  }
 
   async initialize() {
     const traceId = this.debugTools?.start?.('ProjectDetailsComponent.initialize');
@@ -229,8 +243,7 @@ class ProjectDetailsComponent {
 
     // Wait for DOM to be ready before finding elements
     await waitForDepsAndDom({
-      DependencySystem: this.eventHandlers?.DependencySystem
-                        ?? (typeof window !== 'undefined' ? window.DependencySystem : null),
+      DependencySystem: this.eventHandlers?.DependencySystem ?? null,
       domAPI          : this.domAPI,
       domSelectors : ['#projectDetailsView'],
       timeout      : 5000
@@ -264,7 +277,7 @@ class ProjectDetailsComponent {
       this._bindCoreEvents();
       await this._initSubComponents();
 
-      this.state.initialized = true;
+      this._setState({ initialized: true }, 'initialize_success');
       this.notify.success("Project Details module initialized.", {
         group: true, source: "initialize_success", timeout: 3000 // context and module are auto-applied
       });
@@ -282,8 +295,18 @@ class ProjectDetailsComponent {
         }
       }
 
+      this.bus.dispatchEvent(new CustomEvent('initialized', { detail: { success: true } }));
+
       this._uiReadyFlag = true;
       this._maybeEmitReady();
+
+      this.backendLogger?.log?.({
+        level  : 'info',
+        module : MODULE,
+        context: 'initialize',
+        source : 'initialize_success',
+        message: 'ProjectDetailsComponent initialised'
+      });
 
       this.debugTools?.stop?.(traceId, 'ProjectDetailsComponent.initialize');
       return true;
@@ -465,7 +488,7 @@ class ProjectDetailsComponent {
       this.notify.info(`[ProjectDetailsComponent] Received projectDetailsFullyLoaded for project ${e.detail?.projectId}.`, {
         group: true, source: "_bindCoreEvents_projectDetailsFullyLoaded", detail: { projectId: e.detail?.projectId } // context and module are auto-applied
       });
-      this.state.projectDataActuallyLoaded = true;
+      this._setState({ projectDataActuallyLoaded: true }, '_bindCoreEvents_projectDetailsFullyLoaded');
       this.notify.info(`[ProjectDetailsComponent] projectDataActuallyLoaded set to true.`, {
         group: true, source: "_bindCoreEvents_projectDataActuallyLoaded" // context and module are auto-applied
       });
@@ -590,7 +613,7 @@ class ProjectDetailsComponent {
     });
     this.state.currentProject = project;
     // mark data ready → enable “New Chat” button
-    this.state.projectDataActuallyLoaded = true;
+    this._setState({ projectDataActuallyLoaded: true }, 'renderProject');
     this._updateNewChatButtonState();
     this._dataReadyProjectId = project.id;
     this._dataReadyFlag = true;
@@ -637,7 +660,7 @@ class ProjectDetailsComponent {
     this.notify.info(`[ProjectDetailsComponent] tab => ${tabName}`, {
       group: true, source: "switchTab_switchingTo"
     });
-    this.state.activeTab = tabName;
+    this._setState({ activeTab: tabName }, 'switchTab');
     this.notify.info(`Switched to "${tabName}" tab.`, {
       group: true, source: "switchTab_switchedTo", timeout: 2500
     });
@@ -730,6 +753,9 @@ class ProjectDetailsComponent {
           }
         })
       );
+      this.bus.dispatchEvent(new CustomEvent('ready', {
+        detail: { project: this.state.currentProject, container: this.elements.container }
+      }));
       this.notify.info(`[ProjectDetailsComponent] Dispatched projectDetailsReady for ${this.state.currentProject.id}`, {
         group: true, source: "_maybeEmitReady", detail: { project: this.state.currentProject }
       });
@@ -923,7 +949,7 @@ class ProjectDetailsComponent {
     } else if (typeof this.eventHandlers.cleanupListeners === 'function') {
         this.eventHandlers.cleanupListeners({ context: MODULE });
     }
-    this.state.initialized = false;
+    this._setState({ initialized: false }, 'destroy');
   }
 
   _loadTabContent(tab) {
@@ -1081,6 +1107,7 @@ class ProjectDetailsComponent {
               timeout: 0,
               detail: { artifactId: art.id }
             });
+            this.errorReporter.capture(e, { module: MODULE, source: '_artifactItem_download', originalError: e });
             // The second notify.error here seems redundant if the first one already captures the essence.
             // However, to strictly follow "standardize all identified logic" without removing existing logic:
             this.notify.error(`Download failed for artifact ${art.name || art.id}: ${e.message}`, {
@@ -1165,6 +1192,7 @@ class ProjectDetailsComponent {
           originalError: e,
           detail: { fileId, fileName, projectId: pid }
         });
+        this.errorReporter.capture(e, { module: MODULE, source: '_downloadFile', originalError: e });
       });
   }
 
@@ -1235,6 +1263,7 @@ class ProjectDetailsComponent {
         originalError: error,
         detail: { conversation: cv, projectId: pid }
       });
+      this.errorReporter.capture(error, { module: MODULE, source: '_openConversation', originalError: error });
     }
   }
 }
