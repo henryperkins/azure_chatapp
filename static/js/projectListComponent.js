@@ -73,6 +73,8 @@ export class ProjectListComponent {
         apiClient,
         domAPI,
         browserService,
+        errorReporter      = null,   // ← NEW
+        backendLogger      = null,   // ← NEW
         globalUtils
     } = {}) {
         // Assign DI fields before any usage
@@ -81,9 +83,16 @@ export class ProjectListComponent {
         this.modalManager = modalManager;
         this.app = app;
         this.router = router;
-        this.domAPI = domAPI;
         this.browserService = browserService;
         this.globalUtils = globalUtils;
+        this.errorReporter = errorReporter;
+        this.backendLogger = backendLogger;
+        this.eventBus      = new EventTarget();   // ← dedicated intra-module bus
+
+        if (!domAPI) throw new Error("[ProjectListComponent] domAPI injection is mandatory.");
+        this.domAPI  = domAPI;
+        this._doc    = domAPI.getDocument?.();   // cache for convenience
+
         this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem; // Get DependencySystem from app or eventHandlers
         this.navigationService = this.DependencySystem?.modules?.get('navigationService');
 
@@ -112,6 +121,12 @@ export class ProjectListComponent {
                 apiClient: !!this.apiClient,
                 domAPI: !!this.domAPI
             }
+        });
+
+        this.backendLogger?.log?.({
+          level  : 'info',
+          module : 'ProjectListComponent',
+          message: 'constructor'
         });
 
         if (
@@ -157,6 +172,18 @@ export class ProjectListComponent {
         this.element = null;
     }
 
+    _captureError(err, source){
+      this.errorReporter?.capture?.(err, {
+        module : 'ProjectListComponent',
+        context: 'projectListComponent',
+        source
+      });
+    }
+
+    _setState(partial){
+      this.state = { ...this.state, ...partial };
+    }
+
     /** Resolve the canonical identifier we should send to router / API */
     _getProjectId(p) {
       return p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
@@ -164,6 +191,8 @@ export class ProjectListComponent {
 
     /** Initialize component once DOM has #projectList */
     async initialize() { // Changed to async
+        if (this.DependencySystem?.waitFor)
+          await this.DependencySystem.waitFor(['app:ready']);
         // --- DI-logged initialization ---
         if (this.appConfig && this.appConfig.DEBUG) {
             this.notify.info('[ProjectListComponent] INITIALIZE called', {
@@ -182,9 +211,10 @@ export class ProjectListComponent {
             return;
         }
 
-        this._doc = this.domAPI.getDocument?.() ?? document;
-        this.element = this.domAPI?.getElementById
-            ? this.domAPI.getElementById(this.elementId)
+        const docAPI = this.domAPI;
+        this._doc = docAPI.getDocument?.();
+        this.element = docAPI?.getElementById
+            ? docAPI.getElementById(this.elementId)
             : this._doc.getElementById(this.elementId);
 
         if (!this.element) {
@@ -202,8 +232,8 @@ export class ProjectListComponent {
         // Use the root element itself as the grid if it has the .grid class
         if (this.element.classList.contains('grid')) {
             this.gridElement = this.element;
-        } else if (this.domAPI?.querySelector) {
-            this.gridElement = this.domAPI.querySelector('.grid', this.element);
+        } else if (docAPI?.querySelector) {
+            this.gridElement = docAPI.querySelector('.grid', this.element);
         } else {
             this.gridElement = this.element.querySelector('.grid');
         }
@@ -234,11 +264,12 @@ export class ProjectListComponent {
                 domSelectors: essentialSelectors,
                 timeout: 10000, // Increased timeout
                 notify: this.notify,
-                domAPI: this.domAPI, // Pass the injected domAPI
+                domAPI: docAPI, // Pass the injected domAPI
                 source: 'ProjectListComponent_InternalDOMWait'
             });
             this.notify.info('[ProjectListComponent] Essential internal DOM elements ready.', { group: true, context: 'projectListComponent', selectors: essentialSelectors });
         } catch (err) {
+            this._captureError(err, 'initialize');
             this.notify.error('[ProjectListComponent] Timeout or error waiting for essential internal DOM elements. Component initialization will halt.', {
                 group: true, context: 'projectListComponent', originalError: err, selectors: essentialSelectors
             });
@@ -249,15 +280,20 @@ export class ProjectListComponent {
         this._bindEventListeners();
         this._bindCreateProjectButtons();
 
-        this.state.initialized = true;
+        this._setState({ initialized: true });
         if (this.app?.config?.debug) {
             this.notify.info('[ProjectListComponent] Initialized successfully.', { group: true, context: 'projectListComponent' });
         }
         this.notify.success('Project list loaded.', { group: true, context: 'projectListComponent' });
 
         // --- Standardized "projectlistcomponent:initialized" event ---
-        const doc2 = typeof document !== "undefined" ? document : null;
-        if (doc2) doc2.dispatchEvent(new CustomEvent('projectlistcomponent:initialized', { detail: { success: true } }));
+        this.eventBus.dispatchEvent(new CustomEvent('initialized', { detail: { success: true } }));
+
+        this.backendLogger?.log?.({
+          level  : 'info',
+          module : 'ProjectListComponent',
+          message: 'initialized'
+        });
 
         this._loadProjects();
     }
@@ -276,6 +312,7 @@ export class ProjectListComponent {
         try {
             element.innerHTML = this.htmlSanitizer.sanitize(rawHtml);
         } catch (err) {
+            this._captureError(err, '_safeSetInnerHTML');
             /* ------------------------------------------------------------------
              *  DOMPurify failed — fall back to safe plain-text insertion
              * ------------------------------------------------------------------ */
@@ -294,6 +331,7 @@ export class ProjectListComponent {
                     : String(rawHtml);
                 element.textContent = plain;
             } catch (innerErr) {
+                this._captureError(innerErr, '_safeSetInnerHTML_fallback');
                 // As a last resort, clear the element
                 element.textContent = "";
                 this.notify.error("[ProjectListComponent] Fallback plain-text insertion also failed", {
@@ -313,7 +351,8 @@ export class ProjectListComponent {
 
     /** Bind core event listeners */
     _bindEventListeners() {
-        const doc = this.domAPI?.getDocument?.() || document;
+        const docAPI = this.domAPI;
+        const doc = docAPI?.getDocument?.();
         const projectsLoadedHandler = (e) => this.renderProjects(e.detail);
         this.eventHandlers.trackListener(
             doc,
@@ -383,7 +422,7 @@ export class ProjectListComponent {
         const docAPI = this.domAPI;
         const container = docAPI?.getElementById
             ? docAPI.getElementById("projectFilterTabs")
-            : document.getElementById("projectFilterTabs");
+            : docAPI.getElementById("projectFilterTabs");
         if (!container) return;
         const tabs = docAPI?.querySelectorAll
             ? [...docAPI.querySelectorAll(".tab[data-filter]", container)]
@@ -423,8 +462,9 @@ export class ProjectListComponent {
      * @private
      */
     _bindFilterTablistKeyboardNav(container, tabs) {
+        const docAPI = this.domAPI;
         this.eventHandlers.trackListener(container, "keydown", (event) => {
-            const currentTab = document.activeElement;
+            const currentTab = (this._doc || docAPI.getDocument()).activeElement;
             if (!tabs.includes(currentTab)) return;
             let idx = tabs.indexOf(currentTab);
             if (event.key === "ArrowRight" || event.key === "Right") {
@@ -449,7 +489,7 @@ export class ProjectListComponent {
 
     /** Apply a new filter */
     _setFilter(filter) {
-        this.state.filter = filter;
+        this._setState({ filter });
         this._updateActiveTab();
         this._updateUrl(filter);
         this.notify.info(`Filter applied: ${filter}`, { group: true });
@@ -461,7 +501,7 @@ export class ProjectListComponent {
         const docAPI = this.domAPI;
         const tabs = docAPI?.querySelectorAll
             ? docAPI.querySelectorAll("#projectFilterTabs .tab[data-filter]")
-            : document.querySelectorAll("#projectFilterTabs .tab[data-filter]");
+            : docAPI.querySelectorAll("#projectFilterTabs .tab[data-filter]");
         let activeTabId = null;
         tabs.forEach((tab) => {
             const isActive = tab.dataset.filter === this.state.filter;
@@ -473,7 +513,7 @@ export class ProjectListComponent {
         // Update aria-labelledby for the project card grid/tabpanel
         const projectCardsPanel = docAPI?.getElementById
             ? docAPI.getElementById("projectCardsPanel")
-            : document.getElementById("projectCardsPanel");
+            : docAPI.getElementById("projectCardsPanel");
         if (projectCardsPanel && activeTabId) {
             projectCardsPanel.setAttribute("aria-labelledby", activeTabId);
         }
@@ -502,6 +542,7 @@ export class ProjectListComponent {
 
     /** Render list of projects */
     renderProjects(data) {
+        const docAPI = this.domAPI;
         // Track if we're already in a rendering cycle to prevent recursive loops
         if (this._isRendering) {
             this.notify.warn("[ProjectListComponent] Preventing recursive renderProjects call", {
@@ -531,7 +572,7 @@ export class ProjectListComponent {
             }
 
             const projects = this._extractProjects(data);
-            this.state.projects = projects || [];
+            this._setState({ projects: projects || [] });
 
             if (!this.gridElement) {
                 this.notify.error("[ProjectListComponent.renderProjects] Grid element not found.", {
@@ -546,7 +587,7 @@ export class ProjectListComponent {
             }
 
             this._clearElement(this.gridElement);
-            const fragment = document.createDocumentFragment();
+            const fragment = (this._doc || docAPI.getDocument()).createDocumentFragment();
             projects.forEach((_project) => {
                 if (_project && typeof _project === "object") {
                     fragment.appendChild(this._createProjectCard(_project));
@@ -557,6 +598,7 @@ export class ProjectListComponent {
             // Make the container visible without triggering another render cycle
             this._makeVisible();
         } catch (error) {
+            this._captureError(error, 'renderProjects');
             this.notify.error("[ProjectListComponent.renderProjects] Error rendering projects", {
                 group: true,
                 context: 'projectListComponent',
@@ -573,6 +615,7 @@ export class ProjectListComponent {
      * Extracted from show() to avoid recursive calls
      */
     _makeVisible() {
+        const docAPI = this.domAPI;
         // Make the grid element visible
         if (this.gridElement) {
             this.gridElement.classList.remove("hidden");
@@ -585,7 +628,7 @@ export class ProjectListComponent {
         }
 
         // Ensure the main container #projectListView is also visible and opacity is reset
-        const listViewContainer = this.domAPI?.getElementById("projectListView") || document.getElementById("projectListView");
+        const listViewContainer = docAPI?.getElementById("projectListView") || docAPI.getElementById("projectListView");
         if (listViewContainer) {
             listViewContainer.classList.remove("hidden", "opacity-0");
             listViewContainer.style.display = "";
@@ -609,6 +652,7 @@ export class ProjectListComponent {
 
     /** Extract projects array/object */
     _extractProjects(data) {
+        // No direct document usage here
         if (Array.isArray(data)) return data;
         const paths = ["projects", "data.projects", "data"];
         for (let path of paths) {
@@ -633,6 +677,7 @@ export class ProjectListComponent {
 
     /** Show the list container */
     show() {
+        const docAPI = this.domAPI;
         // Track if we're already in a show/render cycle to prevent recursive loops
         if (this._isRendering) {
             this.notify.warn("[ProjectListComponent] Preventing recursive show call during rendering", {
@@ -659,7 +704,7 @@ export class ProjectListComponent {
             });
 
             // Try to find or create the grid element
-            const parentElement = this.element || this.domAPI?.getElementById(this.elementId) || document.getElementById(this.elementId);
+            const parentElement = this.element || docAPI?.getElementById(this.elementId) || docAPI.getElementById(this.elementId);
             if (parentElement) {
                 // Look for existing grid
                 this.gridElement = parentElement.querySelector('.grid');
@@ -671,9 +716,9 @@ export class ProjectListComponent {
                         context: "projectListComponent"
                     });
 
-                    const grid = this.domAPI?.createElement ?
-                        this.domAPI.createElement('div') :
-                        document.createElement('div');
+                    const grid = docAPI?.createElement ?
+                        docAPI.createElement('div') :
+                        docAPI.createElement('div');
 
                     grid.className = "grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 py-2";
                     grid.setAttribute('id', 'projectCardsPanel');
@@ -701,6 +746,7 @@ export class ProjectListComponent {
             try {
                 this.renderProjects(this.state.projects);
             } catch (error) {
+                this._captureError(error, 'show');
                 this.notify.error("[ProjectListComponent.show] Error rendering projects", {
                     group: true,
                     context: 'projectListComponent',
@@ -718,13 +764,14 @@ export class ProjectListComponent {
 
     /** Hide the list container */
     hide() {
+        const docAPI = this.domAPI;
         if (this.gridElement) {
             this.gridElement.classList.add("hidden");
         }
         if (this.element) {
             this.element.classList.add("hidden");
         }
-        const listViewContainer = this.domAPI?.getElementById("projectListView") || document.getElementById("projectListView");
+        const listViewContainer = docAPI?.getElementById("projectListView") || docAPI.getElementById("projectListView");
         // Ensure the main container #projectListView is also hidden
         if (listViewContainer) {
             listViewContainer.classList.add("hidden");
@@ -743,12 +790,13 @@ export class ProjectListComponent {
             );
             return;
         }
-        this.state.loading = true;
+        this._setState({ loading: true });
         this._showLoadingState();
         try {
             await this.projectManager.loadProjects(this.state.filter);
             this.notify.success("Projects loaded successfully.", { group: true, context: 'projectListComponent' });
         } catch (error) {
+            this._captureError(error, '_loadProjects');
             // Enhanced error reporting with source, method, endpoint, and server details
             const status = error?.status || error?.response?.status;
             const detail = error?.detail || error?.response?.data?.detail || error?.response?.detail;
@@ -778,7 +826,7 @@ export class ProjectListComponent {
                 method: '_loadProjects'
             });
         } finally {
-            this.state.loading = false;
+            this._setState({ loading: false });
         }
     }
 
@@ -866,7 +914,7 @@ export class ProjectListComponent {
 
     _handleProjectCreated(project) {
         if (!project) return;
-        this.state.projects.unshift(project);
+        this._setState({ projects: [project, ...this.state.projects] });
         this.renderProjects(this.state.projects);
     }
 
@@ -876,7 +924,9 @@ export class ProjectListComponent {
             (p) => String(this._getProjectId(p)) === String(this._getProjectId(updatedProject))
         );
         if (idx >= 0) {
-            this.state.projects[idx] = updatedProject;
+            const newProjects = [...this.state.projects];
+            newProjects[idx] = updatedProject;
+            this._setState({ projects: newProjects });
             this.renderProjects(this.state.projects);
         }
     }
@@ -988,13 +1038,14 @@ export class ProjectListComponent {
 
     /** Loading skeletons */
     _showLoadingState() {
+        const docAPI = this.domAPI;
         if (!this.gridElement) return;
         this._clearElement(this.gridElement);
 
         // Use a responsive grid container for loading state
         this.gridElement.classList.add("grid", "project-list");
         for (let i = 0; i < 6; i++) {
-            const skeleton = document.createElement("div");
+            const skeleton = docAPI.createElement("div");
             skeleton.className = "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
             const raw = `
               <div class="h-6 bg-base-300 rounded w-3/4 mb-3"></div>
@@ -1009,13 +1060,11 @@ export class ProjectListComponent {
 
     /** Empty state UI */
     _showEmptyState() {
+        const docAPI = this.domAPI;
         if (!this.gridElement) return;
         this._clearElement(this.gridElement);
         this.gridElement.classList.add("grid", "project-list");
-        const docAPI = this.domAPI;
-        const emptyDiv = (docAPI?.createElement
-            ? docAPI.createElement("div")
-            : document.createElement("div"));
+        const emptyDiv = docAPI.createElement("div");
         emptyDiv.className = "project-list-empty";
         this._safeSetInnerHTML(emptyDiv, `
           <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1029,7 +1078,7 @@ export class ProjectListComponent {
 
         const createBtn = docAPI?.getElementById
             ? docAPI.getElementById("emptyStateCreateBtn")
-            : document.getElementById("emptyStateCreateBtn");
+            : docAPI.getElementById("emptyStateCreateBtn");
         if (createBtn) {
             this.eventHandlers.trackListener(
                 createBtn,
@@ -1042,13 +1091,11 @@ export class ProjectListComponent {
 
     /** Login required UI */
     _showLoginRequired() {
+        const docAPI = this.domAPI;
         if (!this.element) return;
         this._clearElement(this.element);
         this.element.classList.add("grid", "project-list");
-        const docAPI = this.domAPI;
-        const loginDiv = (docAPI?.createElement
-            ? docAPI.createElement("div")
-            : document.createElement("div"));
+        const loginDiv = docAPI.createElement("div");
         loginDiv.className = "project-list-fallback";
         this._safeSetInnerHTML(loginDiv, `
           <p class="mt-4 text-lg">Please log in to view your projects</p>
@@ -1058,18 +1105,18 @@ export class ProjectListComponent {
 
         const loginBtn = docAPI?.getElementById
             ? docAPI.getElementById("loginButton")
-            : document.getElementById("loginButton");
+            : docAPI.getElementById("loginButton");
         if (loginBtn) {
             this.eventHandlers.trackListener(loginBtn, "click", (e) => {
                 e.preventDefault();
-                const doc = docAPI?.getDocument?.() || document;
-                doc.dispatchEvent(new CustomEvent("requestLogin"));
+                this.eventBus.dispatchEvent(new CustomEvent("requestLogin"));
             }, { description: "ProjectList: Login Button", context: MODULE_CONTEXT });
         }
     }
 
     /** Error UI */
     _showErrorState(message) {
+        const docAPI = this.domAPI;
         this.notify.error("[ProjectListComponent] Error state shown with message: " + message, {
             group: true, context: "projectListComponent"
         });
@@ -1082,7 +1129,7 @@ export class ProjectListComponent {
         this._clearElement(this.element);
         this.element.classList.add("grid", "project-list");
         const msg = message || "An unknown error occurred.";
-        const errorDiv = document.createElement("div");
+        const errorDiv = docAPI.createElement("div");
         errorDiv.className = "project-list-error";
         this._safeSetInnerHTML(errorDiv, `
           <svg class="w-16 h-16 mx-auto text-error/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1093,7 +1140,7 @@ export class ProjectListComponent {
           <div class="mt-4 text-sm text-base-content/70">If the issue persists, check console logs for more details.</div>
         `);
         this.element.appendChild(errorDiv);
-        const retryBtn = document.getElementById("retryButton");
+        const retryBtn = docAPI.getElementById("retryButton");
         if (retryBtn) {
             this.eventHandlers.trackListener(
                 retryBtn,
@@ -1110,7 +1157,8 @@ export class ProjectListComponent {
      * @returns {HTMLElement}
      */
     _createProjectCard(project) {
-        const card  = document.createElement("div");
+        const docAPI = this.domAPI;
+        const card  = docAPI.createElement("div");
         card.className = this._computeCardClasses(project);
         // Robustly pick whichever field the API returned
         const projectId = this._getProjectId(project) ?? "";
@@ -1151,14 +1199,15 @@ export class ProjectListComponent {
      * @private
      */
     _buildCardHeader(project) {
-        const header = document.createElement("div");
+        const docAPI = this.domAPI;
+        const header = docAPI.createElement("div");
         header.className = "flex justify-between items-start";
 
-        const titleEl = document.createElement("h3");
+        const titleEl = docAPI.createElement("h3");
         titleEl.className = "font-semibold text-lg sm:text-xl mb-2 project-name truncate";
         titleEl.textContent = project.name || "Unnamed Project";
 
-        const actions = document.createElement("div");
+        const actions = docAPI.createElement("div");
         actions.className = "flex gap-1";
         const projectId = this._getProjectId(project);
 
@@ -1209,14 +1258,15 @@ export class ProjectListComponent {
      * @private
      */
     _buildCardDescription(project) {
+        const docAPI = this.domAPI;
         if (this.state.customization.showDescription && project.description) {
-            const description = document.createElement("p");
+            const description = docAPI.createElement("p");
             description.className = "text-sm text-base-content/70 mb-3 line-clamp-2";
             description.textContent = project.description;
             return description;
         }
         // Return a fragment or empty span to keep structure
-        return document.createElement("span");
+        return docAPI.createElement("span");
     }
 
     /**
@@ -1226,26 +1276,27 @@ export class ProjectListComponent {
      * @private
      */
     _buildCardFooter(project) {
-        const footer = document.createElement("div");
+        const docAPI = this.domAPI;
+        const footer = docAPI.createElement("div");
         footer.className = "mt-auto pt-2 flex justify-between text-xs text-base-content/70";
 
         if (this.state.customization.showDate && project.updated_at) {
-            const dateEl = document.createElement("span");
+            const dateEl = docAPI.createElement("span");
             dateEl.textContent = this._formatDate(project.updated_at);
             footer.appendChild(dateEl);
         }
 
-        const badges = document.createElement("div");
+        const badges = docAPI.createElement("div");
         badges.className = "flex gap-1";
         if (project.pinned) {
-            const pinBadge = document.createElement("span");
+            const pinBadge = docAPI.createElement("span");
             pinBadge.textContent = "📌";
             pinBadge.classList.add("tooltip");
             pinBadge.dataset.tip = "Pinned";
             badges.appendChild(pinBadge);
         }
         if (project.archived) {
-            const archiveBadge = document.createElement("span");
+            const archiveBadge = docAPI.createElement("span");
             archiveBadge.textContent = "📦";
             archiveBadge.classList.add("tooltip");
             archiveBadge.dataset.tip = "Archived";
@@ -1263,7 +1314,8 @@ export class ProjectListComponent {
      * @private
      */
     _createActionButton(btnDef) { // btnDef now includes projectId and label
-        const button = document.createElement("button");
+        const docAPI = this.domAPI;
+        const button = docAPI.createElement("button");
         button.className = `btn btn-ghost btn-xs btn-square min-w-[44px] min-h-[44px] ${btnDef.className || ""}`;
         button.setAttribute("aria-label", btnDef.label); // Use label for aria-label
         button.dataset.action = btnDef.action;
@@ -1330,7 +1382,7 @@ export class ProjectListComponent {
         } else {
             this.notify.warn('[ProjectListComponent] eventHandlers.cleanupListeners not available. Listeners may not be cleaned up.', { source: 'destroy' });
         }
-        this.state.initialized = false;
+        this._setState({ initialized: false });
         // Optionally, clear other state or DOM references if necessary
     }
 }
