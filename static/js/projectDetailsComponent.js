@@ -611,7 +611,7 @@ class ProjectDetailsComponent {
     this.notify.info(`[ProjectDetailsComponent] Render project ${project.id}`, {
       group: true, source: "renderProject", detail: { project } // context and module are auto-applied
     });
-    this.state.currentProject = project;
+    this._setState({ currentProject: project }, 'renderProject');
     // mark data ready → enable “New Chat” button
     this._setState({ projectDataActuallyLoaded: true }, 'renderProject');
     this._updateNewChatButtonState();
