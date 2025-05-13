@@ -54,12 +54,15 @@ export function createEventHandlers({
   if (!backendLogger) {
     throw new Error(`[${MODULE}] backendLogger is required for backend event logging (guardrail #16)`);
   }
+  if (typeof errorReporter.capture !== 'function') {
+    throw new Error(`[${MODULE}] errorReporter.capture method is required`);
+  }
 
   // Guardrail #10: ensure app/DOM readiness early
-  DependencySystem?.waitFor?.(['app', 'domAPI', 'notify']).catch(() => { /* noop – fire-and-forget */ });
+  DependencySystem.waitFor(['app', 'domAPI', 'notify']).catch(() => { /* noop – fire-and-forget */ });
 
   // Ensure core app/DOM modules are ready before any execution paths touch them
-  DependencySystem?.waitFor?.(['app', 'domAPI', 'notify']);
+  DependencySystem.waitFor(['app', 'domAPI', 'notify']);
 
   // Guardrail #10: All DOM/app wiring runs ONLY after DependencySystem.waitFor/waitForDepsAndDom inside .init()
   // Guardrail-compliance: This ensures no app/DOM logic runs before readiness.
@@ -206,7 +209,7 @@ export function createEventHandlers({
               extra: { type }
             });
             captureError(error, { module: MODULE, source: listenerSource, originalError: error });
-            errorReporter.capture?.(error, {
+            errorReporter.capture(error, {
               module : MODULE,
               source : listenerSource,
               context: listenerContext,
@@ -259,7 +262,7 @@ export function createEventHandlers({
           extra: { type }
         });
         captureError(error, { module: MODULE, source: listenerSource, originalError: error });
-        errorReporter.capture?.(error, {
+        errorReporter.capture(error, {
           module : MODULE,
           source : listenerSource,
           context: listenerContext,
@@ -309,7 +312,7 @@ export function createEventHandlers({
         context: listenerContext,
         originalError: err
       });
-      errorReporter.capture?.(err, {
+      errorReporter.capture(err, {
         module : MODULE,
         source : listenerSource,
         context: listenerContext,
@@ -944,7 +947,7 @@ export function createEventHandlers({
         context: 'projectModal',
         originalError: new Error('ProjectManager not available for projectModalForm setup.')
       });
-      errorReporter.capture?.(new Error('ProjectManager not available for projectModalForm setup.'), {
+      errorReporter.capture(new Error('ProjectManager not available for projectModalForm setup.'), {
         module : MODULE,
         source : 'setupProjectModalForm',
         context: 'projectModal',
@@ -1306,7 +1309,7 @@ export function createEventHandlers({
               source: 'setupLoginModalTabs_DelegatedClick',
               context: 'authTabs'
             });
-            errorReporter.capture?.(err, {
+            errorReporter.capture(err, {
               module : MODULE,
               source : 'setupLoginModalTabs_DelegatedClick',
               context: 'authTabs',
