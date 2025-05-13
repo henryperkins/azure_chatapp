@@ -71,15 +71,18 @@ export function createAuthModule({
   }
 
   // --- Enhanced Debug Utilities (Guardrail #2: do not use console) ---
+  function meta(source, extra = {}) {
+    return { module: MODULE, context: `${MODULE}:${source}`, source, ...extra };
+  }
+
   function logCookieState(tag = '') {
     const cookies = domAPI.getAttribute
       ? domAPI.getAttribute(domAPI.getDocument(), 'cookie')
       : '';
-    authNotify.debug(`[COOKIE_SNAPSHOT]`, {
-      context: `AuthModule:logCookieState`,
+    authNotify.debug(`[COOKIE_SNAPSHOT]`, meta('logCookieState', {
       tag,
       cookie: cookies
-    });
+    }));
 
     // Create a visual indicator in the UI for debugging
     try {
@@ -116,6 +119,8 @@ export function createAuthModule({
         debugEl.style.backgroundColor = hasCookies ? 'rgba(0,128,0,0.7)' : 'rgba(128,0,0,0.7)';
       }
     } catch (e) {
+      errorReporter?.capture(e, { module: MODULE, source: 'logCookieState', method: 'logCookieState' });
+      captureError(e, { source: 'logCookieState', method: 'logCookieState' });
       // Silently fail for UI indicators to avoid breaking login
     }
   }
@@ -193,6 +198,7 @@ export function createAuthModule({
   };
   const AuthBus = new EventTarget();
   const MODULE_CONTEXT = 'AuthModule';
+  const MODULE = MODULE_CONTEXT;   // shorthand used in guard-rail metadata
 
   // --- Cookie helper (Guardrail #2: no direct doc usage) ---
   function readCookie(name) {
@@ -238,15 +244,11 @@ export function createAuthModule({
       }
       return data.token;
     } catch (error) {
-      captureError(error, {
-        module: MODULE_CONTEXT,
-        method: 'fetchCSRFToken',
-        extra: { endpoint: apiEndpoints.AUTH_CSRF }
-      });
-      authNotify.error('[Auth] CSRF token fetch failed: ' + (error?.message || error), {
-        group: true,
-        context: 'AuthModule:fetchCSRFToken'
-      });
+      errorReporter?.capture(error, { module: MODULE, source: 'fetchCSRFToken', method: 'fetchCSRFToken' });
+      captureError(error, { source: 'fetchCSRFToken', method: 'fetchCSRFToken' });
+      authNotify.error('[Auth] CSRF token fetch failed: ' + (error?.message || error), meta('fetchCSRFToken', {
+        group: true
+      }));
       throw error;
     }
   }
@@ -265,6 +267,10 @@ export function createAuthModule({
         const token = await fetchCSRFToken();
         if (token) csrfToken = token;
         return token;
+      } catch (error) {
+        errorReporter?.capture(error, { module: MODULE, source: 'getCSRFTokenAsync', method: 'getCSRFTokenAsync' });
+        captureError(error, { source: 'getCSRFTokenAsync', method: 'getCSRFTokenAsync' });
+        throw error;
       } finally {
         csrfTokenPromise = null;
       }
@@ -307,14 +313,11 @@ export function createAuthModule({
       logCookieState(`after ${method} ${endpoint}`);
       return data;
     } catch (error) {
-      captureError(error, {
-        module: MODULE_CONTEXT,
-        method: 'authRequest',
-        extra: { endpoint, method }
-      });
+      errorReporter?.capture(error, { module: MODULE, source: 'authRequest', method: 'authRequest' });
+      captureError(error, { source: 'authRequest', method: 'authRequest', endpoint, httpMethod: method });
       authNotify.apiError(
         `[Auth] Request failed ${method} ${endpoint}: ${error?.message || error}`,
-        { group: true, context: 'AuthModule:authRequest' }
+        meta('authRequest', { group: true })
       );
       // Standardize some error fields
       if (!error.status) {
@@ -333,27 +336,21 @@ export function createAuthModule({
     tokenRefreshInProgress = true;
     tokenRefreshPromise = (async () => {
       try {
-        authNotify.debug('[Auth] refreshTokens: starting', {
-          group: true,
-          context: 'AuthModule:refreshTokens'
-        });
+        authNotify.debug('[Auth] refreshTokens: starting', meta('refreshTokens', {
+          group: true
+        }));
         await getCSRFTokenAsync();
         const response = await authRequest(apiEndpoints.AUTH_REFRESH, 'POST');
-        authNotify.debug('[Auth] refreshTokens: success', {
-          group: true,
-          context: 'AuthModule:refreshTokens'
-        });
+        authNotify.debug('[Auth] refreshTokens: success', meta('refreshTokens', {
+          group: true
+        }));
         return { success: true, response };
       } catch (error) {
-        captureError(error, {
-          module: MODULE_CONTEXT,
-          method: 'refreshTokens',
-          extra: { endpoint: apiEndpoints.AUTH_REFRESH }
-        });
-        authNotify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), {
-          group: true,
-          context: 'AuthModule:refreshTokens'
-        });
+        errorReporter?.capture(error, { module: MODULE, source: 'refreshTokens', method: 'refreshTokens' });
+        captureError(error, { source: 'refreshTokens', method: 'refreshTokens', endpoint: apiEndpoints.AUTH_REFRESH });
+        authNotify.apiError('[Auth] Refresh token failed: ' + (error?.message || error), meta('refreshTokens', {
+          group: true
+        }));
         if (error.status === 401) {
           await clearTokenState({ source: 'refresh_401_error', isError: true });
         }
@@ -469,22 +466,17 @@ export function createAuthModule({
             detail: eventDetail
           })
         );
-        authNotify.debug('[Auth] Dispatched authStateChanged on AuthBus', {
+        authNotify.debug('[Auth] Dispatched authStateChanged on AuthBus', meta('broadcastAuth', {
           group: true,
-          context: 'AuthModule:broadcastAuth',
           detail: eventDetail
-        });
+        }));
       } catch (busErr) {
-        captureError(busErr, {
-          module: MODULE_CONTEXT,
-          method: 'broadcastAuth',
-          extra: { message: 'Failed to dispatch authStateChanged on AuthBus' }
-        });
-        authNotify.warn('[Auth] Failed to dispatch authStateChanged on AuthBus', {
+        errorReporter?.capture(busErr, { module: MODULE, source: 'broadcastAuth', method: 'broadcastAuth' });
+        captureError(busErr, { source: 'broadcastAuth', method: 'broadcastAuth', message: 'Failed to dispatch authStateChanged on AuthBus' });
+        authNotify.warn('[Auth] Failed to dispatch authStateChanged on AuthBus', meta('broadcastAuth', {
           error: busErr,
-          group: true,
-          context: 'AuthModule:broadcastAuth'
-        });
+          group: true
+        }));
       }
 
       // Also dispatch on document via domAPI
@@ -501,23 +493,18 @@ export function createAuthModule({
               }
             })
           );
-          authNotify.debug('[Auth] Dispatched authStateChanged on document', {
+          authNotify.debug('[Auth] Dispatched authStateChanged on document', meta('broadcastAuth', {
             group: true,
-            context: 'AuthModule:broadcastAuth',
             detail: eventDetail
-          });
+          }));
         }
       } catch (err) {
-        captureError(err, {
-          module: MODULE_CONTEXT,
-          method: 'broadcastAuth',
-          extra: { message: 'Failed to dispatch authStateChanged on document' }
-        });
-        authNotify.warn('[Auth] Failed to dispatch authStateChanged on document', {
+        errorReporter?.capture(err, { module: MODULE, source: 'broadcastAuth', method: 'broadcastAuth' });
+        captureError(err, { source: 'broadcastAuth', method: 'broadcastAuth', message: 'Failed to dispatch authStateChanged on document' });
+        authNotify.warn('[Auth] Failed to dispatch authStateChanged on document', meta('broadcastAuth', {
           error: err,
-          group: true,
-          context: 'AuthModule:broadcastAuth'
-        });
+          group: true
+        }));
       }
 
       // Force a direct update of app.state.isAuthenticated
@@ -525,18 +512,18 @@ export function createAuthModule({
         const appInstance = DependencySystem?.modules?.get('app');
         if (appInstance?.state) {
           appInstance.state.isAuthenticated = authenticated;
-          authNotify.debug('[Auth] Directly updated app.state.isAuthenticated', {
+          authNotify.debug('[Auth] Directly updated app.state.isAuthenticated', meta('broadcastAuth', {
             group: true,
-            context: 'AuthModule:broadcastAuth',
             newValue: authenticated
-          });
+          }));
         }
       } catch (appErr) {
-        authNotify.warn('[Auth] Failed to directly update app.state.isAuthenticated', {
+        errorReporter?.capture(appErr, { module: MODULE, source: 'broadcastAuth', method: 'broadcastAuth' });
+        captureError(appErr, { source: 'broadcastAuth', method: 'broadcastAuth', message: 'Failed to directly update app.state.isAuthenticated' });
+        authNotify.warn('[Auth] Failed to directly update app.state.isAuthenticated', meta('broadcastAuth', {
           error: appErr,
-          group: true,
-          context: 'AuthModule:broadcastAuth'
-        });
+          group: true
+        }));
       }
     }
   }
@@ -553,11 +540,8 @@ export function createAuthModule({
           try {
             response = JSON.parse(response);
           } catch (parseErr) {
-            captureError(parseErr, {
-              module: MODULE_CONTEXT,
-              method: 'verifyAuthState',
-              extra: { message: 'Failed to parse response as JSON' }
-            });
+            errorReporter?.capture(parseErr, { module: MODULE, source: 'verifyAuthState', method: 'verifyAuthState' });
+            captureError(parseErr, { source: 'verifyAuthState', method: 'verifyAuthState', message: 'Failed to parse response as JSON' });
             // keep as string
           }
         }
@@ -587,11 +571,9 @@ export function createAuthModule({
             if (body) {
               domAPI.appendChild(body, debugEl);
             } else {
-              authNotify.error('Could not find body to append debug element for auth verify response.', {
-                module: MODULE_CONTEXT,
-                context: 'verifyAuthState',
+              authNotify.error('Could not find body to append debug element for auth verify response.', meta('verifyAuthState', {
                 source: 'debugDisplay'
-              });
+              }));
             }
           }
           if (debugEl) {
@@ -604,17 +586,12 @@ export function createAuthModule({
             debugEl.textContent = newContent + (debugEl.textContent || '');
           }
         } catch (e) {
-          captureError(e, {
-            module: MODULE_CONTEXT,
-            method: 'verifyAuthState',
-            extra: { message: 'Error displaying auth verify debug info' }
-          });
-          authNotify.error('Error displaying auth verify debug info in DOM', {
-            module: MODULE_CONTEXT,
-            context: 'verifyAuthState',
+          errorReporter?.capture(e, { module: MODULE, source: 'verifyAuthState', method: 'verifyAuthState' });
+          captureError(e, { source: 'verifyAuthState', method: 'verifyAuthState', message: 'Error displaying auth verify debug info' });
+          authNotify.error('Error displaying auth verify debug info in DOM', meta('verifyAuthState', {
             source: 'debugDisplay',
             originalError: e
-          });
+          }));
         }
 
         // Attempt user detection
@@ -788,42 +765,33 @@ export function createAuthModule({
           }
         }
       } catch (error) {
-        captureError(error, {
-          module: MODULE_CONTEXT,
-          method: 'verifyAuthState',
-          extra: { message: 'Error in verifyAuthState', status: error.status }
-        });
-        authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), {
-          group: true,
-          context: 'AuthModule:verifyAuthState'
-        });
+        errorReporter?.capture(error, { module: MODULE, source: 'verifyAuthState', method: 'verifyAuthState' });
+        captureError(error, { source: 'verifyAuthState', method: 'verifyAuthState', status: error.status });
+        authNotify.warn('[Auth] verifyAuthState error: ' + (error?.message || error), meta('verifyAuthState', {
+          group: true
+        }));
         if (error.status === 500) {
-          authNotify.error('[Auth Verify] Setting auth=false: 500 error on verify endpoint.', {
+          authNotify.error('[Auth Verify] Setting auth=false: 500 error on verify endpoint.', meta('verifyAuthState', {
             group: true,
-            context: 'AuthModule:verifyAuthState',
             originalError: error
-          });
+          }));
           await clearTokenState({ source: 'verify_500_error' });
           broadcastAuth(false, null, 'verify_500_error_EXPLICIT_LOG');
           return false;
         }
         if (error.status === 401) {
           try {
-            authNotify.info('[Auth] verifyAuthState: 401 received, attempting token refresh.', {
-              group: true,
-              context: 'AuthModule:verifyAuthState'
-            });
+            authNotify.info('[Auth] verifyAuthState: 401 received, attempting token refresh.', meta('verifyAuthState', {
+              group: true
+            }));
             await refreshTokens();
             return await verifyAuthState(true);
           } catch (refreshErr) {
-            captureError(refreshErr, {
-              module: MODULE_CONTEXT,
-              method: 'verifyAuthState',
-              extra: { message: 'Token refresh failed after 401' }
-            });
+            errorReporter?.capture(refreshErr, { module: MODULE, source: 'verifyAuthState', method: 'verifyAuthState' });
+            captureError(refreshErr, { source: 'verifyAuthState', method: 'verifyAuthState', message: 'Token refresh failed after 401' });
             authNotify.error(
               '[Auth Verify] Setting auth=false: Token refresh failed after 401.',
-              { group: true, context: 'AuthModule:verifyAuthState', originalError: refreshErr }
+              meta('verifyAuthState', { group: true, originalError: refreshErr })
             );
             await clearTokenState({ source: 'refresh_failed_after_401' });
             broadcastAuth(false, null, 'refresh_failed_after_401_EXPLICIT_LOG');
@@ -832,22 +800,18 @@ export function createAuthModule({
         }
         authNotify.error(
           `[Auth Verify] Setting auth=false: Unhandled error status ${error.status}.`,
-          { group: true, context: 'AuthModule:verifyAuthState', originalError: error }
+          meta('verifyAuthState', { group: true, originalError: error })
         );
         await clearTokenState({ source: `verify_unhandled_error_${error.status}` });
         broadcastAuth(false, null, `verify_unhandled_error_${error.status}_EXPLICIT_LOG`);
         return false;
       }
     } catch (outerErr) {
-      captureError(outerErr, {
-        module: MODULE_CONTEXT,
-        method: 'verifyAuthState',
-        extra: { forceVerify }
-      });
-      authNotify.error('[Auth] verifyAuthState outer error: ' + (outerErr?.message || outerErr), {
-        group: true,
-        context: 'AuthModule:verifyAuthState'
-      });
+      errorReporter?.capture(outerErr, { module: MODULE, source: 'verifyAuthState', method: 'verifyAuthState' });
+      captureError(outerErr, { source: 'verifyAuthState', method: 'verifyAuthState', forceVerify });
+      authNotify.error('[Auth] verifyAuthState outer error: ' + (outerErr?.message || outerErr), meta('verifyAuthState', {
+        group: true
+      }));
       throw outerErr;
     } finally {
       authCheckInProgress = false;
@@ -872,10 +836,9 @@ export function createAuthModule({
       });
 
       // Debug the full login response
-      authNotify.debug('[Auth] Login response:', {
-        context: 'AuthModule:loginUser',
+      authNotify.debug('[Auth] Login response:', meta('loginUser', {
         responseData: JSON.stringify(response || {})
-      });
+      }));
 
       // Log cookie state after login attempt
       logCookieState('after login attempt');
@@ -903,26 +866,24 @@ export function createAuthModule({
         try {
           const verified = await verifyAuthState(true);
           if (verified) {
-            authNotify.success('Login successful.', { group: true, context: 'AuthModule:loginUser' });
+            authNotify.success('Login successful.', meta('loginUser', { group: true }));
             return response;
           } else {
             // Even if verification fails, we'll consider it a success since the login API returned a username
-            authNotify.warn('Login returned username but verification failed. Treating as authenticated anyway.', {
-              group: true,
-              context: 'AuthModule:loginUser'
-            });
+            authNotify.warn('Login returned username but verification failed. Treating as authenticated anyway.', meta('loginUser', { group: true }));
 
             // Force authentication state - the delayed verification will fix any issues
             broadcastAuth(true, userObject, 'login_forced_auth_despite_verify_fail');
             return response;
           }
         } catch (verifyErr) {
+          errorReporter?.capture(verifyErr, { module: MODULE, source: 'loginUser', method: 'loginUser' });
+          captureError(verifyErr, { source: 'loginUser', method: 'loginUser', message: 'Login verification error' });
           // Even with verification error, proceed with successful login
-          authNotify.warn('Login verification error, but login succeeded. Treating as authenticated.', {
+          authNotify.warn('Login verification error, but login succeeded. Treating as authenticated.', meta('loginUser', {
             error: verifyErr,
-            group: true,
-            context: 'AuthModule:loginUser'
-          });
+            group: true
+          }));
 
           // Force authentication state
           broadcastAuth(true, userObject, 'login_forced_auth_with_verify_error');
@@ -931,48 +892,32 @@ export function createAuthModule({
       }
 
       // Log but don't immediately clear token state
-      authNotify.error('Login succeeded but received invalid response from server.', {
+      authNotify.error('Login succeeded but received invalid response from server.', meta('loginUser', {
         group: true,
-        context: 'AuthModule:loginUser',
         responseData: response
-      });
+      }));
 
       throw new Error('Login succeeded but invalid response data.');
     } catch (error) {
-      captureError(error, {
-        module: MODULE_CONTEXT,
-        method: 'loginUser',
-        extra: { username }
-      });
+      errorReporter?.capture(error, { module: MODULE, source: 'loginUser', method: 'loginUser' });
+      captureError(error, { source: 'loginUser', method: 'loginUser', username });
       await clearTokenState({ source: 'login_error' });
-      authNotify.error('Login failed: ' + (error.message || 'Unknown login error.'), {
-        group: true,
-        context: 'AuthModule:loginUser'
-      });
+      authNotify.error('Login failed: ' + (error.message || 'Unknown login error.'), meta('loginUser', { group: true }));
       throw error;
     }
   }
 
   async function logout() {
-    authNotify.info('[Auth] Initiating logout...', {
-      group: true,
-      context: 'AuthModule:logout'
-    });
+    authNotify.info('[Auth] Initiating logout...', meta('logout', { group: true }));
     await clearTokenState({ source: 'logout_manual' });
     try {
       await getCSRFTokenAsync();
       await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
-      authNotify.success('Logout successful.', { group: true, context: 'AuthModule:logout' });
+      authNotify.success('Logout successful.', meta('logout', { group: true }));
     } catch (err) {
-      captureError(err, {
-        module: MODULE_CONTEXT,
-        method: 'logout',
-        extra: { message: 'Backend logout call failed' }
-      });
-      authNotify.warn('[Auth] Backend logout call failed: ' + (err?.message || err), {
-        group: true,
-        context: 'AuthModule:logout'
-      });
+      errorReporter?.capture(err, { module: MODULE, source: 'logout', method: 'logout' });
+      captureError(err, { source: 'logout', method: 'logout', message: 'Backend logout call failed' });
+      authNotify.warn('[Auth] Backend logout call failed: ' + (err?.message || err), meta('logout', { group: true }));
     }
   }
 
@@ -992,28 +937,16 @@ export function createAuthModule({
       });
       const verified = await verifyAuthState(true);
       if (!verified) {
-        authNotify.warn('[Auth] Registration succeeded but verification failed.', {
-          group: true,
-          context: 'AuthModule:registerUser'
-        });
+        authNotify.warn('[Auth] Registration succeeded but verification failed.', meta('registerUser', { group: true }));
       } else {
-        authNotify.success('Registration successful.', {
-          group: true,
-          context: 'AuthModule:registerUser'
-        });
+        authNotify.success('Registration successful.', meta('registerUser', { group: true }));
       }
       return response;
     } catch (error) {
-      captureError(error, {
-        module: MODULE_CONTEXT,
-        method: 'registerUser',
-        extra: { username: userData.username }
-      });
+      errorReporter?.capture(error, { module: MODULE, source: 'registerUser', method: 'registerUser' });
+      captureError(error, { source: 'registerUser', method: 'registerUser', username: userData.username });
       await clearTokenState({ source: 'register_error', isError: true });
-      authNotify.error('Registration failed: ' + (error.message || 'Unknown error.'), {
-        group: true,
-        context: 'AuthModule:registerUser'
-      });
+      authNotify.error('Registration failed: ' + (error.message || 'Unknown error.'), meta('registerUser', { group: true }));
       throw error;
     }
   }
@@ -1059,11 +992,8 @@ export function createAuthModule({
               modalManager.hide('login');
             }
           } catch (error) {
-            captureError(error, {
-              module: MODULE_CONTEXT,
-              method: 'loginFormHandler',
-              extra: { username }
-            });
+            errorReporter?.capture(error, { module: MODULE, source: 'loginFormHandler', method: 'loginFormHandler' });
+            captureError(error, { source: 'loginFormHandler', method: 'loginFormHandler', username });
             let msg = 'Login failed due to server error.';
             if (error.status === 401) {
               msg = 'Incorrect username or password.';
@@ -1135,11 +1065,8 @@ export function createAuthModule({
             context: 'AuthModule:registerModalForm'
           });
         } catch (error) {
-          captureError(error, {
-            module: MODULE_CONTEXT,
-            method: 'registerFormHandler',
-            extra: { username }
-          });
+          errorReporter?.capture(error, { module: MODULE, source: 'registerFormHandler', method: 'registerFormHandler' });
+          captureError(error, { source: 'registerFormHandler', method: 'registerFormHandler', username });
           let msg = 'Registration failed due to server error.';
           if (error.status === 409) {
             msg = 'A user with that username already exists.';
@@ -1164,36 +1091,27 @@ export function createAuthModule({
   }
 
   AuthBus.addEventListener('authStateChanged', (e) =>
-    authNotify.debug('[AUTH_EVENT]', {
-      detail: e.detail,
-      context: 'AuthModule:AuthBus'
-    })
+    authNotify.debug('[AUTH_EVENT]', meta('AuthBus', {
+      detail: e.detail
+    }))
   );
 
   // --- Module Initialization
   async function init() {
     // Guardrail #10: Wait for app readiness before accessing app resources
     if (DependencySystem?.waitFor) {
-      authNotify.debug('[Auth] Waiting for app readiness before initialization.', {
-        context: 'AuthModule:init'
-      });
+      authNotify.debug('[Auth] Waiting for app readiness before initialization.', meta('init'));
       await DependencySystem.waitFor(['app']);
     }
 
     // Prevent multiple initializations
     if (authState.isReady) {
-      authNotify.warn('[Auth] init called multiple times.', {
-        group: true,
-        context: 'AuthModule:init'
-      });
+      authNotify.warn('[Auth] init called multiple times.', meta('init', { group: true }));
       broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_already_ready');
       return authState.isAuthenticated;
     }
 
-    authNotify.info('[Auth] Initializing auth module...', {
-      group: true,
-      context: 'AuthModule:init'
-    });
+    authNotify.info('[Auth] Initializing auth module...', meta('init', { group: true }));
 
     // Setup auth forms
     setupAuthForms();
@@ -1207,41 +1125,27 @@ export function createAuthModule({
     try {
       try {
         await getCSRFTokenAsync();
-        authNotify.debug('[Auth] CSRF token obtained successfully', {
-          group: true,
-          context: 'AuthModule:init'
-        });
+        authNotify.debug('[Auth] CSRF token obtained successfully', meta('init', { group: true }));
       } catch (csrfErr) {
-        captureError(csrfErr, {
-          module: MODULE_CONTEXT,
-          method: 'init',
-          extra: { message: 'Failed to get CSRF token, continuing init' }
-        });
-        authNotify.warn('[Auth] Failed to get CSRF token, continuing initialization', {
+        errorReporter?.capture(csrfErr, { module: MODULE, source: 'init', method: 'init' });
+        captureError(csrfErr, { source: 'init', method: 'init', message: 'Failed to get CSRF token, continuing init' });
+        authNotify.warn('[Auth] Failed to get CSRF token, continuing initialization', meta('init', {
           error: csrfErr,
-          group: true,
-          context: 'AuthModule:init'
-        });
+          group: true
+        }));
       }
 
       let verified = false;
       try {
         verified = await verifyAuthState(true);
-        authNotify.info(`[Auth] Initial verification complete: authenticated=${verified}`, {
-          group: true,
-          context: 'AuthModule:init'
-        });
+        authNotify.info(`[Auth] Initial verification complete: authenticated=${verified}`, meta('init', { group: true }));
       } catch (verifyErr) {
-        captureError(verifyErr, {
-          module: MODULE_CONTEXT,
-          method: 'init',
-          extra: { message: 'Initial verification failed' }
-        });
-        authNotify.error('[Auth] Initial verification failed, treating as unauthenticated.', {
+        errorReporter?.capture(verifyErr, { module: MODULE, source: 'init', method: 'init' });
+        captureError(verifyErr, { source: 'init', method: 'init', message: 'Initial verification failed' });
+        authNotify.error('[Auth] Initial verification failed, treating as unauthenticated.', meta('init', {
           error: verifyErr,
-          group: true,
-          context: 'AuthModule:init'
-        });
+          group: true
+        }));
         await clearTokenState({ source: 'init_verify_error', isError: true });
         verified = false;
       }
@@ -1250,10 +1154,9 @@ export function createAuthModule({
       verifyInterval = setInterval(() => {
         if (!domAPI.isDocumentHidden() && authState.isAuthenticated) {
           verifyAuthState(false).catch((e) => {
-            authNotify.warn('[Auth] verifyAuthState periodic error: ' + (e?.message || e), {
-              group: true,
-              context: 'AuthModule:verifyAuthState'
-            });
+            errorReporter?.capture(e, { module: MODULE, source: 'verifyAuthState', method: 'verifyAuthState' });
+            captureError(e, { source: 'verifyAuthState', method: 'verifyAuthState', message: 'verifyAuthState periodic error' });
+            authNotify.warn('[Auth] verifyAuthState periodic error: ' + (e?.message || e), meta('verifyAuthState', { group: true }));
           });
         }
       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
@@ -1276,31 +1179,21 @@ export function createAuthModule({
           domAPI.dispatchEvent(doc, new CustomEvent('authReady', { detail: readyEventDetail }));
         }
       } catch (docErr) {
-        captureError(docErr, {
-          module: MODULE_CONTEXT,
-          method: 'init',
-          extra: { message: 'Failed to dispatch authReady on document' }
-        });
-        authNotify.warn('[Auth] Failed to dispatch authReady on document', {
+        errorReporter?.capture(docErr, { module: MODULE, source: 'init', method: 'init' });
+        captureError(docErr, { source: 'init', method: 'init', message: 'Failed to dispatch authReady on document' });
+        authNotify.warn('[Auth] Failed to dispatch authReady on document', meta('init', {
           error: docErr,
-          group: true,
-          context: 'AuthModule:init'
-        });
+          group: true
+        }));
       }
 
       // Final broadcast
       broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_complete');
       return verified;
     } catch (err) {
-      captureError(err, {
-        module: MODULE_CONTEXT,
-        method: 'init',
-        extra: { message: 'Unhandled error during initialization' }
-      });
-      authNotify.error('[Auth] Unhandled error during initialization: ' + (err?.stack || err), {
-        group: true,
-        context: 'AuthModule:init'
-      });
+      errorReporter?.capture(err, { module: MODULE, source: 'init', method: 'init' });
+      captureError(err, { source: 'init', method: 'init', message: 'Unhandled error during initialization' });
+      authNotify.error('[Auth] Unhandled error during initialization: ' + (err?.stack || err), meta('init', { group: true }));
       await clearTokenState({ source: 'init_unhandled_error', isError: true });
       authState.isReady = true;
       broadcastAuth(false, null, 'init_unhandled_error');
@@ -1310,10 +1203,7 @@ export function createAuthModule({
 
   // --- Cleanup (Listeners & Interval Removal)
   function cleanup() {
-    authNotify.info('[Auth] cleanup called.', {
-      group: true,
-      context: 'AuthModule:cleanup'
-    });
+    authNotify.info('[Auth] cleanup called.', meta('cleanup', { group: true }));
     if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
       DependencySystem.cleanupModuleListeners(MODULE_CONTEXT);
     } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
@@ -1339,10 +1229,9 @@ export function createAuthModule({
       });
 
       // Debug response
-      authNotify.debug('[Auth] fetchCurrentUser response:', {
-        context: 'AuthModule:fetchCurrentUser:debug',
+      authNotify.debug('[Auth] fetchCurrentUser response:', meta('fetchCurrentUser', {
         responseData: JSON.stringify(resp || {})
-      });
+      }));
 
       // Log cookie state after API call
       logCookieState('fetchCurrentUser - after API call');
@@ -1402,32 +1291,25 @@ export function createAuthModule({
           username: 'user' // Generic fallback
         };
         userToReturn = minimalUser;
-        authNotify.info('[Auth] Created minimal user from auth flags', {
-          context: 'AuthModule:fetchCurrentUser'
-        });
+        authNotify.info('[Auth] Created minimal user from auth flags', meta('fetchCurrentUser'));
       }
 
       if (userToReturn) {
-        authNotify.info('[Auth] Successfully extracted user info', {
+        authNotify.info('[Auth] Successfully extracted user info', meta('fetchCurrentUser', {
           group: true,
-          context: 'AuthModule:fetchCurrentUser',
           userInfo: JSON.stringify(userToReturn)
-        });
+        }));
         return userToReturn;
       }
 
-      authNotify.warn('[Auth] fetchCurrentUser: unrecognized response or missing user ID.', {
+      authNotify.warn('[Auth] fetchCurrentUser: unrecognized response or missing user ID.', meta('fetchCurrentUser', {
         group: true,
-        context: 'AuthModule:fetchCurrentUser',
         responseData: resp
-      });
+      }));
 
       // Check for auth cookies as a fallback
       if (publicAuth.hasAuthCookies()) {
-        authNotify.info('[Auth] No user object but found auth cookies. Creating temporary user.', {
-          group: true,
-          context: 'AuthModule:fetchCurrentUser'
-        });
+        authNotify.info('[Auth] No user object but found auth cookies. Creating temporary user.', meta('fetchCurrentUser', { group: true }));
 
         return {
           username: 'authenticated-user',
@@ -1437,16 +1319,12 @@ export function createAuthModule({
 
       return null;
     } catch (error) {
-      captureError(error, {
-        module: MODULE_CONTEXT,
-        method: 'fetchCurrentUser',
-        extra: { endpoint: apiEndpoints.AUTH_VERIFY }
-      });
-      authNotify.error('[Auth] fetchCurrentUser API call failed.', {
+      errorReporter?.capture(error, { module: MODULE, source: 'fetchCurrentUser', method: 'fetchCurrentUser' });
+      captureError(error, { source: 'fetchCurrentUser', method: 'fetchCurrentUser', endpoint: apiEndpoints.AUTH_VERIFY });
+      authNotify.error('[Auth] fetchCurrentUser API call failed.', meta('fetchCurrentUser', {
         group: true,
-        context: 'AuthModule:fetchCurrentUser',
         originalError: error
-      });
+      }));
       return null;
     }
   }
