@@ -65,6 +65,14 @@ export function createApiClient({
           context: 'apiClient', module: 'ApiClient', source: 'apiRequest', originalError: err
         });
       }
+      if (errorReporter?.capture) {
+        errorReporter.capture(err, {
+          module: 'ApiClient',
+          method: 'apiRequest',
+          source: 'urlNormalization',
+          originalError: err
+        });
+      }
     }
 
     const bodyKey =
@@ -94,7 +102,20 @@ export function createApiClient({
         try {
           opts.body = JSON.stringify(opts.body);
         } catch (err) {
-          notify.error("[API] Failed to stringify body", err);
+          notify.error("[API] Failed to stringify body", {
+            originalError: err,
+            module: 'ApiClient',
+            context: 'apiClient',
+            source: 'apiRequest'
+          });
+          if (errorReporter?.capture) {
+            errorReporter.capture(err, {
+              module: 'ApiClient',
+              method: 'apiRequest',
+              source: 'stringifyBody',
+              originalError: err
+            });
+          }
           return Promise.reject(new Error("Failed to serialize request body."));
         }
       }
@@ -136,7 +157,20 @@ export function createApiClient({
             notify.debug("[AUTH DEBUG] /api/auth/verify response", { extra: body });
             notify.debug("[AUTH DEBUG] /api/auth/verify headers",  { extra: headersObj });
           } catch (e) {
-            notify.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", { originalError: e });
+            notify.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", {
+              originalError: e,
+              module: 'ApiClient',
+              context: 'authDebug',
+              source: 'apiRequest'
+            });
+            if (errorReporter?.capture) {
+              errorReporter.capture(e, {
+                module: 'ApiClient',
+                method: 'apiRequest',
+                source: 'authDebug',
+                originalError: e
+              });
+            }
           }
         }
 
@@ -148,11 +182,32 @@ export function createApiClient({
             if (detail)
               errPayload.message = typeof detail === "string" ? detail : JSON.stringify(detail);
             Object.assign(errPayload, json);
-          } catch {
+          } catch (jsonErr) {
+            if (errorReporter?.capture) {
+              errorReporter.capture(jsonErr, {
+                module: 'ApiClient',
+                method: 'apiRequest',
+                source: 'parseErrorPayloadJson',
+                originalError: jsonErr
+              });
+            }
             try {
               errPayload.raw = await resp.text();
             } catch (e) {
-              notify.warn("[apiClient] (fallback) Failed to read response text", { originalError: e });
+              notify.warn("[apiClient] (fallback) Failed to read response text", {
+                originalError: e,
+                module: 'ApiClient',
+                context: 'errorReadFallback',
+                source: 'apiRequest'
+              });
+              if (errorReporter?.capture) {
+                errorReporter.capture(e, {
+                  module: 'ApiClient',
+                  method: 'apiRequest',
+                  source: 'errorReadFallback',
+                  originalError: e
+                });
+              }
             }
           }
           const e = new Error(errPayload.message);
@@ -175,8 +230,16 @@ export function createApiClient({
         try {
           const json = JSON.parse(rawText);
           return json?.status === "success" && "data" in json ? json.data : json;
-        } catch {
+        } catch (parseErr) {
           /* not JSON */
+          if (errorReporter?.capture) {
+            errorReporter.capture(parseErr, {
+              module: 'ApiClient',
+              method: 'apiRequest',
+              source: 'parseRawText',
+              originalError: parseErr
+            });
+          }
         }
         return rawText;
       } finally {

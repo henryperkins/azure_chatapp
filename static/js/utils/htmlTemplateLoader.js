@@ -8,12 +8,16 @@
  * @param {Object} deps.domAPI
  * @param {Function} deps.notify            – DI notify util (required)
  * @param {Window}   [deps.windowObj=window]
+ * @param {Object}   [deps.sanitizer]      – sanitizer util (should provide .sanitize)
+ * @param {Object}   [deps.errorReporter]  – error monitoring util (optional)
  */
 export function createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
   notify,
-  windowObj = window
+  windowObj = window,
+  sanitizer = null,
+  errorReporter = null
 } = {}) {
   if (!DependencySystem) throw new Error('DependencySystem required');
   if (!domAPI)           throw new Error('domAPI required');
@@ -53,7 +57,17 @@ export function createHtmlTemplateLoader({
       const resp = await fetch(url, { cache: 'no-store', signal: controller.signal });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const html = await resp.text();
-      container.innerHTML = html;
+      if (sanitizer && typeof sanitizer.sanitize === "function") {
+        container.innerHTML = sanitizer.sanitize(html);
+      } else {
+        loaderNotify.warn("Injecting HTML without sanitizer present", {
+          module: 'HtmlTemplateLoader',
+          context: 'loadTemplate',
+          critical: true,
+          url
+        });
+        container.innerHTML = html;
+      }
       loaderNotify.success(`Injected ${url}`, { source: 'loadTemplate' });
       domAPI.dispatchEvent(domAPI.getDocument(),
         new CustomEvent(eventName, { detail: { success: true } }));
@@ -62,6 +76,15 @@ export function createHtmlTemplateLoader({
       loaderNotify.error(`Failed ${url}: ${err.message}`, {
         source: 'loadTemplate', originalError: err
       });
+      if (errorReporter?.capture) {
+        errorReporter.capture(err, {
+          module: 'HtmlTemplateLoader',
+          method: 'loadTemplate',
+          url,
+          source: 'loadTemplate',
+          originalError: err
+        });
+      }
       domAPI.dispatchEvent(domAPI.getDocument(),
         new CustomEvent(eventName, { detail: { success: false, error: err.message } }));
       return false;

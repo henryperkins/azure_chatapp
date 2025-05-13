@@ -3,100 +3,21 @@
 <head>
   <meta charset="utf-8">
   <title>Login</title>
-  <meta name="csrf-token" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="/static/css/dist/tailwind.css" rel="stylesheet">
-
   <!-- Core dependencies -->
-
-  <!-- Application framework -->
   <script type="module" src="/static/js/app.js"></script>
-
-  <!-- Auth service -->
-
-  <script>
-    window.addEventListener('DOMContentLoaded', () => {
-      const loginForm = document.getElementById('loginForm');
-      const loadingDiv = document.createElement('div');
-      loadingDiv.id = 'appLoading';
-      loadingDiv.className = 'fixed inset-0 bg-base-100 z-50 flex items-center justify-center';
-      loadingDiv.innerHTML = `
-        <div class="text-center">
-          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p class="text-lg">Loading application...</p>
-        </div>
-      `;
-      document.body.appendChild(loadingDiv);
-
-      // Initialize dependencies and handle login
-      window.DependencySystem.waitFor(['auth', 'app'], (auth, app) => {
-        auth.init().then(() => {
-          loadingDiv.style.display = 'none';
-
-          loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            try {
-              const username = document.getElementById('username').value;
-              const password = document.getElementById('password').value;
-              await auth.login(username, password);
-              window.location.href = '/';
-            } catch (error) {
-              // Determine friendly message
-              let msg;
-              if (error.status === 401) {
-                msg = 'Incorrect username or password.';
-              } else if (error.status === 400) {
-                msg = (error.data && error.data.detail) || 'Invalid login request.';
-              } else {
-                msg = (error.data && error.data.detail) || error.message || 'Login failed. Please try again.';
-              }
-              if (window.showNotification) {
-                window.showNotification(msg, 'error');
-              } else {
-                alert(msg);
-              }
-            }
-          });
-        });
-      });
-    });
-  </script>
 </head>
 <body class="bg-base-100 text-base-content min-h-screen flex items-center justify-center">
-  <!-- Container -->
-  <div class="w-full max-w-xs p-4 bg-base-200 rounded shadow-md">
-    <h1 class="text-2xl font-bold text-center mb-4">Login</h1>
-    <p class="text-sm text-center mb-6">
-      This is a placeholder login page. Replace or enhance as needed.
-    </p>
-    <!-- Form -->
-    <form id="loginForm" class="space-y-4">
-      <div>
-        <label for="username" class="block text-sm font-medium mb-1">Username</label>
-        <input
-          id="username"
-          name="username"
-          type="text"
-          autocomplete="username"
-          class="w-full px-3 py-2 rounded border border-base-300 bg-base-100 text-base-content focus:outline-none focus:border-primary"
-        />
-      </div>
-      <div>
-        <label for="password" class="block text-sm font-medium mb-1">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autocomplete="current-password"
-          class="w-full px-3 py-2 rounded border border-base-300 bg-base-100 text-base-content focus:outline-none focus:border-primary"
-        />
-      </div>
-      <button
-        type="submit"
-        class="w-full py-2 px-4 bg-primary text-base-content rounded font-semibold shadow hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-base-200"
-      >
-        Sign In
-      </button>
-    </form>
+  <!--
+    This file is a placeholder to support deployments that want a pretty standalone login page.
+    In application, authentication is handled via modal dialogs loaded from static/html/modals.html,
+    using modalManager.js and the app's dependency-injected system.
+    If you want to adjust the login/register UI, change static/html/modals.html instead.
+  -->
+  <div class="text-center">
+    <h1 class="text-2xl font-bold mb-4">Please use the in-app modal to log in or register</h1>
+    <p class="text-base mb-2">Reload the main app or visit the home page to trigger the login/register modal.</p>
   </div>
 </body>
 </html>

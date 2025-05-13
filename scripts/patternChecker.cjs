@@ -638,6 +638,7 @@ function checkApiClientUsage(ast, filePath, errors) {
 function checkNotifyWithContextUsage(ast, filePath, errors) {
   let foundNotifyCall = false;
   let foundWithContextCall = false;
+  let notifyCalls = [];
 
   traverse(ast, {
     CallExpression(pathNode) {
@@ -647,9 +648,10 @@ function checkNotifyWithContextUsage(ast, filePath, errors) {
       if (
         callee.type === 'MemberExpression' &&
         callee.object.name === 'notify' &&
-        ['info', 'warn', 'error', 'success'].includes(callee.property.name)
+        ['info', 'warn', 'error', 'success', 'debug', 'apiError', 'authWarn'].includes(callee.property.name)
       ) {
         foundNotifyCall = true;
+        notifyCalls.push(pathNode);
 
         // Check if the second argument has module & context
         if (
@@ -659,17 +661,38 @@ function checkNotifyWithContextUsage(ast, filePath, errors) {
           const props = pathNode.node.arguments[1].properties;
           const hasModule = props.some(p => p.key && p.key.name === 'module');
           const hasContext = props.some(p => p.key && p.key.name === 'context');
+          const hasSource = props.some(p => p.key && p.key.name === 'source');
 
           if (!hasModule || !hasContext) {
             errors.push({
               filePath,
               line: pathNode.node.loc?.start.line,
-              message: `notify calls should include module and context properties. (contextual-notifier-factories)`,
-              hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction' });`,
+              message: `notify calls should include both module and context properties. (contextual-notifier-factories)`,
+              hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction', source: 'functionName' });`,
+              node: pathNode.node,
+              ruleId: 15
+            });
+          } else if (!hasSource) {
+            // Just a warning for missing source
+            errors.push({
+              filePath,
+              line: pathNode.node.loc?.start.line,
+              message: `notify calls should ideally include source property for better tracing. (contextual-notifier-factories)`,
+              hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction', source: 'functionName' });`,
               node: pathNode.node,
               ruleId: 15
             });
           }
+        } else if (pathNode.node.arguments.length === 1) {
+          // Only one argument (message) without metadata
+          errors.push({
+            filePath,
+            line: pathNode.node.loc?.start.line,
+            message: `notify calls should include metadata object with module and context properties. (contextual-notifier-factories)`,
+            hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction', source: 'functionName' });`,
+            node: pathNode.node,
+            ruleId: 15
+          });
         }
       }
 
@@ -694,8 +717,8 @@ function checkNotifyWithContextUsage(ast, filePath, errors) {
             errors.push({
               filePath,
               line: pathNode.node.loc?.start.line,
-              message: `notify.withContext should include module and context properties. (contextual-notifier-factories)`,
-              hint: `Example: const moduleNotify = notify.withContext({ module: 'MyModule', context: 'initialization' });`,
+              message: `notify.withContext should include both module and context properties. (contextual-notifier-factories)`,
+              hint: `Example: const moduleNotify = notify.withContext({ module: 'MyModule', context: 'operations' });`,
               node: pathNode.node,
               ruleId: 15
             });
@@ -705,13 +728,13 @@ function checkNotifyWithContextUsage(ast, filePath, errors) {
     }
   });
 
-  // If found direct notify calls but no withContext usage, suggest using withContext
-  if (foundNotifyCall && !foundWithContextCall) {
+  // If found multiple direct notify calls but no withContext usage, suggest using withContext
+  if (foundNotifyCall && !foundWithContextCall && notifyCalls.length > 2) {
     errors.push({
       filePath,
       line: 1, // General file issue
-      message: `Use notify.withContext to create module-scoped notifiers. (contextual-notifier-factories)`,
-      hint: `Example:\nconst moduleNotify = notify.withContext({ module: 'MyModule', context: 'initialization' });\n// Then use: moduleNotify.info('message');`,
+      message: `Multiple notify calls (${notifyCalls.length}) without using notify.withContext to create module-scoped notifiers. (contextual-notifier-factories)`,
+      hint: `Example:\n// Create once at module level\nconst moduleNotify = notify.withContext({ module: 'MyModule', context: 'operations' });\n\n// Then use throughout the module\nmoduleNotify.info('Operation started');\nmoduleNotify.success('Operation completed');`,
       ruleId: 15
     });
   }
@@ -1007,7 +1030,7 @@ function getGuardrailDescription(guardrailId) {
     12: "When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.",
     13: "Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.",
     14: "Make every network request through `apiClient`; centralize headers, CSRF, and error handling.",
-    15: "Create module‑scoped notifiers with `notify.withContext({ module, context })`.",
+    15: "Create module‑scoped notifiers with `notify.withContext({ module, context })`. Always include module, context, and source properties in notifications.",
     16: "Log critical client events with `backendLogger.log({ level, message, module, … })`.",
     17: "Honor user opt‑out preferences before initializing analytics or error‑tracking SDKs.",
     0: "Other issues not directly related to the 17 guardrails."
