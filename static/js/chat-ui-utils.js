@@ -1,4 +1,3 @@
-/*
 // static/js/chat-ui-utils.js
 // Factory that adds UI helpers onto an existing ChatManager instance
 export function attachChatUI(chatMgr, deps) {
@@ -397,4 +396,3 @@ export function attachChatUI(chatMgr, deps) {
     toggleMinimize
   });
 }
-*/
