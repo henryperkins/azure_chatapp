@@ -34,6 +34,7 @@ export function createEventHandlers({
   browserService,
   notify,
   errorReporter,
+  backendLogger,
   APP_CONFIG,
   navigate,
   storage,
@@ -50,6 +51,14 @@ export function createEventHandlers({
   if (!errorReporter) {
     throw new Error(`[${MODULE}] errorReporter utility is required for guardrail-compliant error logging`);
   }
+  if (!backendLogger) {
+    throw new Error(`[${MODULE}] backendLogger is required for backend event logging (guardrail #16)`);
+  }
+  // Guardrail #16: Log module load (Backend Event Logging, rule 16)
+  backendLogger.log({ level: 'info', module: MODULE, message: 'EventHandler module loaded', source: 'factoryInit' });
+
+  // Guardrail #10: All DOM/app wiring runs ONLY after DependencySystem.waitFor/waitForDepsAndDom inside .init()
+  // Guardrail-compliance: This ensures no app/DOM logic runs before readiness.
 
   // Guardrail #6, #15: Create a module-scoped notifier using withContext
   let handlerNotify = notify.withContext({ module: MODULE, context: 'handler' });
@@ -61,7 +70,12 @@ export function createEventHandlers({
       return;
     }
     if (errorReporter?.capture) {
-      errorReporter.capture(error, meta);
+      // Guardrail #8: Ensure context-rich error logging with context and module/source every time
+      if (meta && (meta.module || meta.source || meta.context)) {
+        errorReporter.capture(error, { module: meta.module || MODULE, source: meta.source || 'unknown', ...meta });
+      } else {
+        errorReporter.capture(error, { module: MODULE, source: 'unknown' });
+      }
     }
   }
 
@@ -314,6 +328,7 @@ export function createEventHandlers({
         try {
           onExpand();
         } catch (err) {
+          captureError(err, { module: MODULE, source: 'setupCollapsible' });
           handlerNotify.error('Error in onExpand callback for collapsible', {
             module: MODULE,
             source: 'setupCollapsible',
@@ -333,6 +348,7 @@ export function createEventHandlers({
         try {
           storageBackend.setItem(`${toggleId}_expanded`, String(expand));
         } catch (err) {
+          captureError(err, { module: MODULE, source: 'setupCollapsible' });
           handlerNotify.warn('Failed to save collapsible state', {
             module: MODULE,
             source: 'setupCollapsible',
@@ -353,11 +369,7 @@ export function createEventHandlers({
       try {
         savedState = storageBackend.getItem(`${toggleId}_expanded`);
       } catch (err) {
-        captureError(err, {
-          module: MODULE,
-          source: 'setupCollapsible',
-          originalError: err
-        });
+        captureError(err, { module: MODULE, source: 'setupCollapsible' });
       }
     }
     togglePanel(savedState === 'true');
@@ -391,6 +403,7 @@ export function createEventHandlers({
         try {
           onOpen(modal);
         } catch (err) {
+          captureError(err, { module: MODULE, source: 'setupModal' });
           handlerNotify.error('Error in onOpen callback for modal', {
             module: MODULE,
             source: 'setupModal',
@@ -428,6 +441,7 @@ export function createEventHandlers({
         try {
           onClose(modal);
         } catch (err) {
+          captureError(err, { module: MODULE, source: 'setupModal' });
           handlerNotify.error('Error in onClose callback for modal', {
             module: MODULE,
             source: 'setupModal',
@@ -544,6 +558,7 @@ export function createEventHandlers({
           try {
             options.onError(error);
           } catch (onErrorErr) {
+            captureError(onErrorErr, { module: MODULE, source: 'setupForm' });
             handlerNotify.error('Error in form onError callback', {
               module: MODULE,
               source: 'setupForm',
@@ -753,6 +768,7 @@ export function createEventHandlers({
         source: 'init'
       });
     } catch (err) {
+      captureError(err, { module: MODULE, source: 'init' });
       handlerNotify.error('EventHandler initialization failed', {
         group: true,
         context: 'initialization',
