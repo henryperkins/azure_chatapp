@@ -89,6 +89,15 @@ export class ProjectListComponent {
         this.backendLogger = backendLogger;
         this.eventBus      = new EventTarget();   // ← dedicated intra-module bus
 
+        // Backend event: module loaded
+        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+          this.backendLogger.log({
+            level  : 'info',
+            module : 'ProjectListComponent',
+            message: 'loaded'
+          });
+        }
+
         if (!domAPI) throw new Error("[ProjectListComponent] domAPI injection is mandatory.");
         this.domAPI  = domAPI;
         this._doc    = null;     // set after app-ready in initialize()
@@ -168,8 +177,10 @@ export class ProjectListComponent {
 
     /** Initialize component once DOM has #projectList */
     async initialize() { // Changed to async
-        if (this.DependencySystem?.waitFor)
-          await this.DependencySystem.waitFor(['app:ready']);
+        const { DependencySystem } = this;
+        if (DependencySystem?.waitFor) {
+          await DependencySystem.waitFor(['app:ready']);
+        }
 
         // ✅ Backend event log after readiness
         if (this.backendLogger && typeof this.backendLogger.log === 'function') {
@@ -257,13 +268,11 @@ export class ProjectListComponent {
             });
             this.notify.info('[ProjectListComponent] Essential internal DOM elements ready.', { group: true, context: 'projectListComponent', selectors: essentialSelectors });
         } catch (err) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(err, {
-                module : 'ProjectListComponent',
-                source : 'initialize',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : 'initialize',
+              context: MODULE_CONTEXT
+            });
             this.notify.error('[ProjectListComponent] Timeout or error waiting for essential internal DOM elements. Component initialization will halt.', {
                 group: true, context: 'projectListComponent', originalError: err, selectors: essentialSelectors
             });
@@ -308,13 +317,11 @@ export class ProjectListComponent {
         try {
             element.innerHTML = this.htmlSanitizer.sanitize(rawHtml);
         } catch (err) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(err, {
-                module : 'ProjectListComponent',
-                source : '_safeSetInnerHTML',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_safeSetInnerHTML',
+              context: MODULE_CONTEXT
+            });
             /* ------------------------------------------------------------------
              *  DOMPurify failed — fall back to safe plain-text insertion
              * ------------------------------------------------------------------ */
@@ -333,13 +340,11 @@ export class ProjectListComponent {
                     : String(rawHtml);
                 element.textContent = plain;
             } catch (innerErr) {
-                if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-                  this.errorReporter.capture(innerErr, {
-                    module : 'ProjectListComponent',
-                    source : '_safeSetInnerHTML_fallback',
-                    context: MODULE_CONTEXT
-                  });
-                }
+                this.errorReporter?.capture?.(innerErr, {
+                  module : 'ProjectListComponent',
+                  source : '_safeSetInnerHTML_fallback',
+                  context: MODULE_CONTEXT
+                });
                 // As a last resort, clear the element
                 element.textContent = "";
                 this.notify.error("[ProjectListComponent] Fallback plain-text insertion also failed", {
@@ -542,13 +547,11 @@ export class ProjectListComponent {
                 // this.router.navigate(url.toString());
             }
         } catch (e) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(e, {
-                module : 'ProjectListComponent',
-                source : '_updateUrl',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(e, {
+              module : 'ProjectListComponent',
+              source : '_updateUrl',
+              context: MODULE_CONTEXT
+            });
             this.notify.warn('[ProjectListComponent] Failed to update URL with filter', {
                 group: true, context: 'projectListComponent', error: e
             });
@@ -613,13 +616,11 @@ export class ProjectListComponent {
             // Make the container visible without triggering another render cycle
             this._makeVisible();
         } catch (error) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(error, {
-                module : 'ProjectListComponent',
-                source : 'renderProjects',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(error, {
+              module : 'ProjectListComponent',
+              source : 'renderProjects',
+              context: MODULE_CONTEXT
+            });
             this.notify.error("[ProjectListComponent.renderProjects] Error rendering projects", {
                 group: true,
                 context: 'projectListComponent',
@@ -767,13 +768,11 @@ export class ProjectListComponent {
             try {
                 this.renderProjects(this.state.projects);
             } catch (error) {
-                if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-                  this.errorReporter.capture(error, {
-                    module : 'ProjectListComponent',
-                    source : 'show',
-                    context: MODULE_CONTEXT
-                  });
-                }
+                this.errorReporter?.capture?.(error, {
+                  module : 'ProjectListComponent',
+                  source : 'show',
+                  context: MODULE_CONTEXT
+                });
                 this.notify.error("[ProjectListComponent.show] Error rendering projects", {
                     group: true,
                     context: 'projectListComponent',
@@ -823,13 +822,11 @@ export class ProjectListComponent {
             await this.projectManager.loadProjects(this.state.filter);
             this.notify.success("Projects loaded successfully.", { group: true, context: 'projectListComponent' });
         } catch (error) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(error, {
-                module : 'ProjectListComponent',
-                source : '_loadProjects',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(error, {
+              module : 'ProjectListComponent',
+              source : '_loadProjects',
+              context: MODULE_CONTEXT
+            });
             // Enhanced error reporting with source, method, endpoint, and server details
             const status = error?.status || error?.response?.status;
             const detail = error?.detail || error?.response?.data?.detail || error?.response?.detail;
@@ -1057,13 +1054,11 @@ export class ProjectListComponent {
             this.notify.success("Project deleted", { group: true, context: 'projectListComponent' });
             this._loadProjects();
         } catch (err) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(err, {
-                module : 'ProjectListComponent',
-                source : '_executeDelete',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_executeDelete',
+              context: MODULE_CONTEXT
+            });
             this.notify.error("[ProjectListComponent] Failed to delete project: " + (err?.message || err), {
                 group: true, context: 'projectListComponent'
             });
@@ -1384,13 +1379,11 @@ export class ProjectListComponent {
             const date = new Date(dateString);
             return date.toLocaleDateString();
         } catch (err) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(err, {
-                module : 'ProjectListComponent',
-                source : '_formatDate',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_formatDate',
+              context: MODULE_CONTEXT
+            });
             return dateString;
         }
     }
@@ -1403,13 +1396,11 @@ export class ProjectListComponent {
                 ? JSON.parse(saved)
                 : this._getDefaultCustomization();
         } catch (err) {
-            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
-              this.errorReporter.capture(err, {
-                module : 'ProjectListComponent',
-                source : '_loadCustomization',
-                context: MODULE_CONTEXT
-              });
-            }
+            this.errorReporter?.capture?.(err, {
+              module : 'ProjectListComponent',
+              source : '_loadCustomization',
+              context: MODULE_CONTEXT
+            });
             return this._getDefaultCustomization();
         }
     }
