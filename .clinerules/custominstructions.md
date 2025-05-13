@@ -16,7 +16,7 @@ Apply these guardrails whenever you (the LLM) generate, refactor, or review **Ja
 12. **Module Event Bus** – When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.
 13. **Navigation Service** – Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.
 14. **Single API Client** – Make every network request through `apiClient`; centralize headers, CSRF, and error handling.
-15. **Notifier Factories** – Create module‑scoped notifiers with `notify.withContext({ module: 'MyModule', context: 'operations' })`. Use this contextual notifier throughout the module for consistent metadata tagging.
+15. **Notifier Factories** – Create module-scoped notifiers with `notify.withContext({ module: 'MyModule', context: 'operations' })`. Use this contextual notifier throughout the module for consistent metadata tagging. **Every subsequent `notify.*` call must include `module`, `context`, and `source` metadata. Making more than two raw `notify.*` calls without first creating a contextual notifier is considered a guard-rail violation.**
 16. **Backend Event Logging** – Log critical client events with `backendLogger.log({ level, message, module, … })`
 17. **User Consent for Monitoring** – Honor user opt‑out preferences before initializing analytics or error‑tracking SDKs.
 

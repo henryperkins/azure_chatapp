@@ -93,5 +93,94 @@ export function createHtmlTemplateLoader({
     }
   }
 
-  return { loadTemplate };
+  /**
+   * Orchestrates the loading of multiple HTML templates.
+   * Each template is loaded individually with its own timeout and error handling.
+   *
+   * @param {Array<Object>} templateConfigs - Array of template configuration objects.
+   * Each object should have: { url, containerSelector, eventName, timeout }
+   * @returns {Promise<Array<Object>>} A promise that resolves to an array of result objects,
+   *                                   each indicating success/failure for a template.
+   */
+  async function loadAppTemplates(templateConfigs = []) {
+    if (!Array.isArray(templateConfigs) || templateConfigs.length === 0) {
+      loaderNotify.warn('No template configurations provided to loadAppTemplates.', {
+        source: 'loadAppTemplates'
+      });
+      return [];
+    }
+
+    loaderNotify.info(`Starting to load ${templateConfigs.length} app templates.`, {
+      source: 'loadAppTemplates',
+      count: templateConfigs.length
+    });
+
+    const results = [];
+
+    for (const config of templateConfigs) {
+      if (!config.url || !config.containerSelector) {
+        loaderNotify.error('Invalid template configuration. Missing url or containerSelector.', {
+          source: 'loadAppTemplates',
+          config
+        });
+        results.push({ url: config.url, success: false, error: 'Invalid configuration' });
+        continue;
+      }
+
+      // Use a default eventName if not provided, specific to this orchestrated load
+      const eventName = config.eventName || `templateLoaded:${config.url.split('/').pop()}`;
+      const timeout = config.timeout || 15000; // Default timeout for individual template
+
+      loaderNotify.info(`Orchestrating load for: ${config.url}`, {
+        source: 'loadAppTemplates',
+        url: config.url,
+        container: config.containerSelector,
+        eventName,
+        timeout
+      });
+
+      try {
+        // The existing loadTemplate function handles its own AbortController and timeout.
+        // We await its completion here.
+        const success = await loadTemplate({
+          url: config.url,
+          containerSelector: config.containerSelector,
+          eventName: eventName, // Ensure this event name is unique or handled appropriately
+          timeout: timeout
+        });
+        results.push({ url: config.url, success, eventNameEmitted: eventName });
+        if (success) {
+          loaderNotify.success(`Successfully loaded template via orchestration: ${config.url}`, {
+            source: 'loadAppTemplates',
+            url: config.url
+          });
+        } else {
+          loaderNotify.error(`Failed to load template via orchestration: ${config.url}`, {
+            source: 'loadAppTemplates',
+            url: config.url
+          });
+        }
+      } catch (err) {
+        // This catch block might be redundant if loadTemplate handles all its errors
+        // and doesn't re-throw, but kept for safety.
+        loaderNotify.error(`Critical error during orchestrated load of ${config.url}: ${err.message}`, {
+          source: 'loadAppTemplates',
+          url: config.url,
+          originalError: err
+        });
+        results.push({ url: config.url, success: false, error: err.message, eventNameEmitted: eventName });
+        // Dispatch event even on critical error to prevent hangs if something upstream awaits it
+        domAPI.dispatchEvent(domAPI.getDocument(),
+          new CustomEvent(eventName, { detail: { success: false, error: err.message } }));
+      }
+    }
+
+    loaderNotify.info(`Finished loading all app templates. Results count: ${results.length}`, {
+      source: 'loadAppTemplates',
+      resultsSummary: results.map(r => ({ url: r.url, success: r.success }))
+    });
+    return results;
+  }
+
+  return { loadTemplate, loadAppTemplates };
 }
