@@ -105,31 +105,6 @@ export class ProjectListComponent {
         this.htmlSanitizer = sanitizer;
 
         // --- DI-logged construction ---
-        const constructorContext = { group: true, context: 'projectListComponent', module: 'ProjectListComponent', source: 'constructor' };
-        if (this.appConfig && this.appConfig.DEBUG) {
-            this.notify.info('[ProjectListComponent] CONSTRUCTOR called', { ...constructorContext, stack: (new Error()).stack });
-        } else {
-            this.notify.info('[ProjectListComponent] CONSTRUCTOR called', constructorContext);
-        }
-
-        this.notify.debug('[ProjectListComponent] Optional dependencies status:', {
-            group: false, // Keep constructor logs less noisy
-            context: 'projectListComponent', module: 'ProjectListComponent', source: 'constructor',
-            extra: {
-                modalManager: !!this.modalManager,
-                app: !!this.app,
-                apiClient: !!this.apiClient,
-                domAPI: !!this.domAPI
-            }
-        });
-
-        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
-          this.backendLogger.log({
-            level  : 'info',
-            module : 'ProjectListComponent',
-            message: 'constructor'
-          });
-        }
 
         if (
             !this.projectManager ||
@@ -195,6 +170,16 @@ export class ProjectListComponent {
     async initialize() { // Changed to async
         if (this.DependencySystem?.waitFor)
           await this.DependencySystem.waitFor(['app:ready']);
+
+        // ✅ Backend event log after readiness
+        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+          this.backendLogger.log({
+            level  : 'info',
+            module : 'ProjectListComponent',
+            message: 'loaded'
+          });
+        }
+
         this._doc = this.domAPI.getDocument?.();
         // --- DI-logged initialization ---
         if (this.appConfig && this.appConfig.DEBUG) {
@@ -272,12 +257,13 @@ export class ProjectListComponent {
             });
             this.notify.info('[ProjectListComponent] Essential internal DOM elements ready.', { group: true, context: 'projectListComponent', selectors: essentialSelectors });
         } catch (err) {
-            this._captureError(err, 'initialize');
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : 'initialize',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(err, {
+                module : 'ProjectListComponent',
+                source : 'initialize',
+                context: MODULE_CONTEXT
+              });
+            }
             this.notify.error('[ProjectListComponent] Timeout or error waiting for essential internal DOM elements. Component initialization will halt.', {
                 group: true, context: 'projectListComponent', originalError: err, selectors: essentialSelectors
             });
@@ -322,12 +308,13 @@ export class ProjectListComponent {
         try {
             element.innerHTML = this.htmlSanitizer.sanitize(rawHtml);
         } catch (err) {
-            this._captureError(err, '_safeSetInnerHTML');
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : '_safeSetInnerHTML',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(err, {
+                module : 'ProjectListComponent',
+                source : '_safeSetInnerHTML',
+                context: MODULE_CONTEXT
+              });
+            }
             /* ------------------------------------------------------------------
              *  DOMPurify failed — fall back to safe plain-text insertion
              * ------------------------------------------------------------------ */
@@ -346,12 +333,13 @@ export class ProjectListComponent {
                     : String(rawHtml);
                 element.textContent = plain;
             } catch (innerErr) {
-                this._captureError(innerErr, '_safeSetInnerHTML_fallback');
-                this.errorReporter?.capture?.(innerErr, {
-                  module : 'ProjectListComponent',
-                  source : '_safeSetInnerHTML_fallback',
-                  context: MODULE_CONTEXT
-                });
+                if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+                  this.errorReporter.capture(innerErr, {
+                    module : 'ProjectListComponent',
+                    source : '_safeSetInnerHTML_fallback',
+                    context: MODULE_CONTEXT
+                  });
+                }
                 // As a last resort, clear the element
                 element.textContent = "";
                 this.notify.error("[ProjectListComponent] Fallback plain-text insertion also failed", {
@@ -554,11 +542,13 @@ export class ProjectListComponent {
                 // this.router.navigate(url.toString());
             }
         } catch (e) {
-            this.errorReporter?.capture?.(e, {
-              module : 'ProjectListComponent',
-              source : '_updateUrl',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(e, {
+                module : 'ProjectListComponent',
+                source : '_updateUrl',
+                context: MODULE_CONTEXT
+              });
+            }
             this.notify.warn('[ProjectListComponent] Failed to update URL with filter', {
                 group: true, context: 'projectListComponent', error: e
             });
@@ -623,12 +613,13 @@ export class ProjectListComponent {
             // Make the container visible without triggering another render cycle
             this._makeVisible();
         } catch (error) {
-            this._captureError(error, 'renderProjects');
-            this.errorReporter?.capture?.(error, {
-              module : 'ProjectListComponent',
-              source : 'renderProjects',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(error, {
+                module : 'ProjectListComponent',
+                source : 'renderProjects',
+                context: MODULE_CONTEXT
+              });
+            }
             this.notify.error("[ProjectListComponent.renderProjects] Error rendering projects", {
                 group: true,
                 context: 'projectListComponent',
@@ -776,12 +767,13 @@ export class ProjectListComponent {
             try {
                 this.renderProjects(this.state.projects);
             } catch (error) {
-                this._captureError(error, 'show');
-                this.errorReporter?.capture?.(error, {
-                  module : 'ProjectListComponent',
-                  source : 'show',
-                  context: MODULE_CONTEXT
-                });
+                if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+                  this.errorReporter.capture(error, {
+                    module : 'ProjectListComponent',
+                    source : 'show',
+                    context: MODULE_CONTEXT
+                  });
+                }
                 this.notify.error("[ProjectListComponent.show] Error rendering projects", {
                     group: true,
                     context: 'projectListComponent',
@@ -831,12 +823,13 @@ export class ProjectListComponent {
             await this.projectManager.loadProjects(this.state.filter);
             this.notify.success("Projects loaded successfully.", { group: true, context: 'projectListComponent' });
         } catch (error) {
-            this._captureError(error, '_loadProjects');
-            this.errorReporter?.capture?.(error, {
-              module : 'ProjectListComponent',
-              source : '_loadProjects',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(error, {
+                module : 'ProjectListComponent',
+                source : '_loadProjects',
+                context: MODULE_CONTEXT
+              });
+            }
             // Enhanced error reporting with source, method, endpoint, and server details
             const status = error?.status || error?.response?.status;
             const detail = error?.detail || error?.response?.data?.detail || error?.response?.detail;
@@ -1064,11 +1057,13 @@ export class ProjectListComponent {
             this.notify.success("Project deleted", { group: true, context: 'projectListComponent' });
             this._loadProjects();
         } catch (err) {
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : '_executeDelete',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(err, {
+                module : 'ProjectListComponent',
+                source : '_executeDelete',
+                context: MODULE_CONTEXT
+              });
+            }
             this.notify.error("[ProjectListComponent] Failed to delete project: " + (err?.message || err), {
                 group: true, context: 'projectListComponent'
             });
@@ -1388,7 +1383,14 @@ export class ProjectListComponent {
         try {
             const date = new Date(dateString);
             return date.toLocaleDateString();
-        } catch {
+        } catch (err) {
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(err, {
+                module : 'ProjectListComponent',
+                source : '_formatDate',
+                context: MODULE_CONTEXT
+              });
+            }
             return dateString;
         }
     }
@@ -1401,11 +1403,13 @@ export class ProjectListComponent {
                 ? JSON.parse(saved)
                 : this._getDefaultCustomization();
         } catch (err) {
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : '_loadCustomization',
-              context: MODULE_CONTEXT
-            });
+            if (this.errorReporter && typeof this.errorReporter.capture === 'function') {
+              this.errorReporter.capture(err, {
+                module : 'ProjectListComponent',
+                source : '_loadCustomization',
+                context: MODULE_CONTEXT
+              });
+            }
             return this._getDefaultCustomization();
         }
     }
