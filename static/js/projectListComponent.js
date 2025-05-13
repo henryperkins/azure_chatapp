@@ -193,7 +193,7 @@ export class ProjectListComponent {
 
         this._doc = this.domAPI.getDocument?.();
         // --- DI-logged initialization ---
-        if (this.appConfig && this.appConfig.DEBUG) {
+        if (this.app?.config?.debug) {
             this.notify.info('[ProjectListComponent] INITIALIZE called', {
                 group: true, context: 'projectListComponent', stack: (new Error()).stack
             });
