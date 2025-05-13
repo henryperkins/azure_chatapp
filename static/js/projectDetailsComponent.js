@@ -410,9 +410,9 @@ class ProjectDetailsComponent {
 
     on("projectConversationsLoaded", (e) => {
       this.renderConversations(e.detail?.conversations || []);
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectConversationsRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectConversationsRendered", {
           detail: { projectId: e.detail?.projectId }
         })
       );
@@ -420,9 +420,9 @@ this.domAPI.dispatchEvent(
 
     on("projectFilesLoaded", (e) => {
       this.renderFiles(e.detail?.files || []);
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectFilesRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectFilesRendered", {
           detail: { projectId: e.detail?.projectId }
         })
       );
@@ -430,9 +430,9 @@ this.domAPI.dispatchEvent(
 
     on("projectArtifactsLoaded", (e) => {
       this.renderArtifacts(e.detail?.artifacts || []);
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectArtifactsRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectArtifactsRendered", {
           detail: { projectId: e.detail?.projectId }
         })
       );
@@ -440,9 +440,9 @@ this.domAPI.dispatchEvent(
 
     on("projectStatsLoaded", (e) => {
       this.renderStats(e.detail);
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectStatsRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectStatsRendered", {
           detail: { projectId: e.detail?.projectId }
         })
       );
@@ -453,9 +453,9 @@ this.domAPI.dispatchEvent(
         e.detail?.knowledgeBase,
         e.detail?.projectId
       );
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectKnowledgeBaseRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectKnowledgeBaseRendered", {
           detail: { projectId: e.detail?.projectId }
         })
       );
@@ -664,9 +664,9 @@ this.domAPI.dispatchEvent(
               group: true, source: "switchTab_modelConfigRenderFail", originalError: e, timeout: 0
             });
           }
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("modelConfigRendered", {
+          this.domAPI.dispatchEvent(
+            this.domAPI.getDocument(),
+            new CustomEvent("modelConfigRendered", {
               detail: { projectId: pid }
             })
           );
@@ -721,9 +721,9 @@ this.domAPI.dispatchEvent(
       if (this._lastReadyEmittedId === this.state.currentProject.id) return;
       this._lastReadyEmittedId = this.state.currentProject.id;
 
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectDetailsReady", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectDetailsReady", {
           detail: {
             project: this.state.currentProject,
             container: this.elements.container
@@ -742,9 +742,9 @@ this.domAPI.dispatchEvent(
       this.notify.warn("[ProjectDetailsComponent] filesList node missing.", {
         group: true, source: "renderFiles_listNodeMissing"
       });
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectFilesRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectFilesRendered", {
           detail: { projectId: this.state.currentProject?.id }
         })
       );
@@ -770,9 +770,9 @@ this.domAPI.dispatchEvent(
       this.notify.warn("[ProjectDetailsComponent] conversationsList missing.", {
         group: true, source: "renderConversations_listNodeMissing"
       });
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectConversationsRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectConversationsRendered", {
           detail: { projectId: this.state.currentProject?.id }
         })
       );
@@ -797,9 +797,9 @@ this.domAPI.dispatchEvent(
       this.notify.warn("[ProjectDetailsComponent] artifactsList missing.", {
         group: true, source: "renderArtifacts_listNodeMissing"
       });
-this.domAPI.dispatchEvent(
-    this.domAPI.ownerDocument,
-    new CustomEvent("projectArtifactsRendered", {
+      this.domAPI.dispatchEvent(
+        this.domAPI.getDocument(),
+        new CustomEvent("projectArtifactsRendered", {
           detail: { projectId: this.state.currentProject?.id }
         })
       );

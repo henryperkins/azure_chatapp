@@ -1050,9 +1050,9 @@ export function createEventHandlers({
             context: 'authTabs'
           });
           try {
-            const registerTabElement = domAPI.querySelector(loginModal, '#modalRegisterTab');
-            const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
-            const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
+            const registerTabElement = loginModal.querySelector('#modalRegisterTab');
+            const loginPanel = loginModal.querySelector('#loginPanel');
+            const registerPanel = loginModal.querySelector('#registerPanel');
 
             if (!registerTabElement || !loginPanel || !registerPanel) {
               handlerNotify.error('Required elements for Login tab action missing at click time.', {
@@ -1103,9 +1103,9 @@ export function createEventHandlers({
             context: 'authTabs'
           });
           try {
-            const loginTabElement = domAPI.querySelector(loginModal, '#modalLoginTab');
-            const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
-            const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
+            const loginTabElement = loginModal.querySelector('#modalLoginTab');
+            const loginPanel = loginModal.querySelector('#loginPanel');
+            const registerPanel = loginModal.querySelector('#registerPanel');
 
             if (!loginTabElement || !loginPanel || !registerPanel) {
               handlerNotify.error('Required elements for Register tab action missing at click time.', {
@@ -1121,14 +1121,44 @@ export function createEventHandlers({
               return;
             }
 
-            domAPI.addClass(tabElement, 'tab-active');
-            domAPI.setAttribute(tabElement, 'aria-selected', 'true');
-            domAPI.removeClass(loginTabElement, 'tab-active');
-            domAPI.setAttribute(loginTabElement, 'aria-selected', 'false');
-            domAPI.removeClass(registerPanel, 'hidden');
-            domAPI.addClass(loginPanel, 'hidden');
+            // Defensive: Only act if element is truthy and has classList/setAttribute
+            if (tabElement && tabElement.classList) {
+              domAPI.addClass(tabElement, 'tab-active');
+              domAPI.setAttribute(tabElement, 'aria-selected', 'true');
+            } else {
+              handlerNotify.error('Register tabElement missing or invalid in register tab handler', { module: MODULE, context: 'authTabs' });
+              return;
+            }
+            if (loginTabElement && loginTabElement.classList) {
+              domAPI.removeClass(loginTabElement, 'tab-active');
+              domAPI.setAttribute(loginTabElement, 'aria-selected', 'false');
+            } else {
+              handlerNotify.error('Register handler: loginTabElement missing or invalid', { module: MODULE, context: 'authTabs' });
+              return;
+            }
+            if (registerPanel && registerPanel.classList) {
+              domAPI.removeClass(registerPanel, 'hidden');
+            } else {
+              handlerNotify.error('Register handler: registerPanel missing or invalid', { module: MODULE, context: 'authTabs' });
+              return;
+            }
+            if (loginPanel && loginPanel.classList) {
+              domAPI.addClass(loginPanel, 'hidden');
+            } else {
+              handlerNotify.error('Register handler: loginPanel missing or invalid', { module: MODULE, context: 'authTabs' });
+              return;
+            }
           } catch (err) {
-            handlerNotify.error('Error in register tab click handler', {
+            // Attempt to print the error object as a string, including stack if available
+            let extraErrorText = '';
+            if (err && (typeof err === 'object' || typeof err === 'function')) {
+              extraErrorText = err.stack
+                ? `\nStack: ${err.stack}`
+                : `\nError string: ${err.toString()}`;
+            } else {
+              extraErrorText = `\nRaw error: ${String(err)}`;
+            }
+            handlerNotify.error(`Error in register tab click handler: ${extraErrorText}`, {
               module: MODULE,
               source: 'setupLoginModalTabs_DelegatedClick',
               context: 'authTabs',

@@ -1,4 +1,6 @@
-fastapi
+fastapialembic>=1.7.0
+alembic>=1.7.0
+gitpython>=3.1.0
 uvicorn
 sqlalchemy
 psycopg2-binary

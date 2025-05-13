@@ -4,8 +4,26 @@
  * @param {Window} deps.windowObject – injected window for testability
  */
 
+/**
+ * Shared URL helpers
+ * Refactored for strict dependency injection — no global window.
+ * If you need app-level location, inject windowObject and call createBrowserService({ windowObject }).
+ * The standalone helpers below now require explicit baseHref/location.
+ * Optionally pass errorReporter for context-rich error logging.
+ */
+
 // --- shared URL helpers -------------------------------------------------
-export function buildUrl(params = {}, baseHref = (typeof window !== 'undefined' ? window.location.href : 'http://_/')) {
+export function buildUrl(params = {}, baseHref, errorReporter = null) {
+  if (!baseHref) {
+    if (errorReporter?.capture) {
+      errorReporter.capture(new Error('buildUrl called without baseHref'), {
+        module: 'browserService',
+        method: 'buildUrl',
+        source: 'param_check'
+      });
+    }
+    throw new Error('buildUrl requires baseHref (no global window access allowed)');
+  }
   const url = new URL(baseHref, baseHref.startsWith('http') ? undefined : 'http://_');
   Object.entries(params).forEach(([k, v]) =>
     (v === undefined || v === null || v === '')
@@ -18,12 +36,22 @@ export function buildUrl(params = {}, baseHref = (typeof window !== 'undefined' 
   return url.pathname + (url.search ? `?${url.search}` : '');
 }
 
-export function normaliseUrl(u = '') {
+export function normaliseUrl(u = '', errorReporter = null) {
   try {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
     // url.search already includes '?' if params exist, or is empty string otherwise.
     return url.pathname.replace(/\/+$/, '') + url.search + url.hash;
-  } catch { return u; }
+  } catch (err) {
+    if (errorReporter?.capture) {
+      errorReporter.capture(err, {
+        module: 'browserService',
+        method: 'normaliseUrl',
+        source: 'invalid_url',
+        originalError: err
+      });
+    }
+    return u;
+  }
 }
 
 // U.S.-spelling alias – keeps backward compatibility

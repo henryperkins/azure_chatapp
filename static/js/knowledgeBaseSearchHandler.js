@@ -143,7 +143,7 @@ export function createKnowledgeBaseSearchHandler(ctx) {
    * @returns {HTMLElement}
    */
   function _createResultItem(result) {
-    const item = document.createElement("div");
+    const item = ctx.domAPI.createElement("div");
     item.className =
       "card card-compact bg-base-100 shadow-md hover:shadow-lg transition-shadow mb-3 cursor-pointer border border-base-300";
     item.setAttribute("role", "button");
@@ -244,10 +244,10 @@ export function createKnowledgeBaseSearchHandler(ctx) {
    */
   function _useInConversation(result) {
     const chatInput =
-      document.getElementById("chatUIInput") ||
-      document.getElementById("projectChatInput") ||
-      document.getElementById("chatInput") ||
-      document.querySelector('textarea[placeholder*="Send a message"]');
+      ctx.domAPI.getElementById("chatUIInput") ||
+      ctx.domAPI.getElementById("projectChatInput") ||
+      ctx.domAPI.getElementById("chatInput") ||
+      ctx.domAPI.querySelector('textarea[placeholder*="Send a message"]', undefined);
 
     if (!chatInput) return;
     const filename = result.metadata?.file_name || "the knowledge base";

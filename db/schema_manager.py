@@ -37,15 +37,13 @@ Main entry points:
 
 import logging
 import time
-from typing import Optional, List, Set, Tuple, AsyncGenerator
-from contextlib import asynccontextmanager
+from typing import Optional, List, Set
 import hashlib
 from pathlib import Path
 
-from sqlalchemy import inspect, text, MetaData, UniqueConstraint, CheckConstraint
+from sqlalchemy import inspect, text, UniqueConstraint, CheckConstraint
 from sqlalchemy.schema import AddConstraint # Added import
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from db.db import Base, sync_engine, async_engine
@@ -56,18 +54,16 @@ logger = logging.getLogger(__name__)
 MIGRATIONS_PATH = Path(__file__).parent.parent / "db" / "migrations"
 
 # --- Alembic Automated Migration Integration ---
+import os
+import glob
+from alembic.config import Config
+from alembic import command
+
 def automated_alembic_migrate(message: str = "Automated migration", revision_dir: str = "alembic"):
     """
     Autogenerate and apply Alembic migrations automatically
     — but if the migration is a no-op ("pass"), do not write or apply it. Prevents reload loops.
     """
-    import os
-    import logging
-    from alembic.config import Config
-    from alembic import command
-    import glob
-
-    logger = logging.getLogger(__name__)
     logger.info("Starting Alembic auto-migration workflow with no-op pruning")
     print("==> (Alembic) Starting Alembic auto-migration workflow...")
 
@@ -322,7 +318,6 @@ class SchemaManager:
         3. Aligns schema with ORM definitions (additive only, handled by fix_schema)
         4. Validates final schema
         """
-        import os
         try:
             logger.info("Starting database initialization...")
             print("==> Starting database initialization...")
@@ -413,8 +408,6 @@ class SchemaManager:
 
     async def fix_schema(self) -> None:
         """Schema alignment using async connection"""
-        import os
-
         logger.info("Starting schema alignment...")
 
         destructive = os.getenv("AUTO_SCHEMA_DESTRUCTIVE", "false").lower() == "true"
@@ -426,13 +419,13 @@ class SchemaManager:
             # Add missing columns, indexes, and foreign key constraints as needed
             for table in Base.metadata.tables.values():
                 table_exists = await conn.run_sync(
-                    lambda sync_conn: inspect(sync_conn).has_table(table.name)
+                    lambda sync_conn, table=table: inspect(sync_conn).has_table(table.name)
                 )
                 if not table_exists:
                     continue
 
                 db_columns_set = await conn.run_sync(
-                    lambda sync_conn: {c["name"] for c in inspect(sync_conn).get_columns(table.name)}
+                    lambda sync_conn, table=table: {c["name"] for c in inspect(sync_conn).get_columns(table.name)}
                 )
                 for column in table.columns:
                     if column.name not in db_columns_set:
@@ -442,13 +435,13 @@ class SchemaManager:
             # --- Enhanced: Drop obsolete columns and alter column types ---
             for table in Base.metadata.tables.values():
                 table_exists = await conn.run_sync(
-                    lambda sync_conn: inspect(sync_conn).has_table(table.name)
+                    lambda sync_conn, table=table: inspect(sync_conn).has_table(table.name)
                 )
                 if not table_exists:
                     continue
 
                 db_columns = await conn.run_sync(
-                    lambda sync_conn: {c["name"]: c for c in inspect(sync_conn).get_columns(table.name)}
+                    lambda sync_conn, table=table: {c["name"]: c for c in inspect(sync_conn).get_columns(table.name)}
                 )
                 orm_columns = {col.name: col for col in table.columns}
 

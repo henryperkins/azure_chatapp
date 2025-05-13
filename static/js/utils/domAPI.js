@@ -57,19 +57,46 @@ export function createDomAPI({
       if (!el) _log(`getElementById("${id}") → null`);
       return el;
     },
-    querySelector(selector, contextEl) {
-      const base = contextEl && typeof contextEl.querySelector === 'function'
-        ? contextEl
-        : documentObject;
+    /**
+     * Flexible, DI-compliant querySelector.
+     * Allows: querySelector(selector) -or- querySelector(contextEl, selector)
+     * Always route all DOM access via DI as required.
+     */
+    querySelector(arg1, arg2) {
+      let base, selector;
+      if (typeof arg1 === 'string') {
+        selector = arg1;
+        base = (arg2 && typeof arg2.querySelector === 'function') ? arg2 : documentObject;
+      } else if (arg1 && typeof arg1.querySelector === 'function' && typeof arg2 === 'string') {
+        base = arg1;
+        selector = arg2;
+      } else {
+        // fallback: treat first arg as selector, use document
+        selector = String(arg1);
+        base = documentObject;
+      }
       const el = base.querySelector(selector);
-      if (!el) _log(`querySelector("${selector}") → null`);
+      if (!el) _log(`querySelector("${selector}") (base=${base?.id || base?.nodeName || 'document'}) → null`);
       return el;
     },
-    querySelectorAll: (selector, contextEl) => {
-      if (contextEl && typeof contextEl.querySelectorAll === 'function') {
-        return contextEl.querySelectorAll(selector);
+    /**
+     * Flexible, DI-compliant querySelectorAll.
+     * Allows: querySelectorAll(selector) -or- querySelectorAll(contextEl, selector)
+     * Always use DI.
+     */
+    querySelectorAll(arg1, arg2) {
+      let base, selector;
+      if (typeof arg1 === 'string') {
+        selector = arg1;
+        base = (arg2 && typeof arg2.querySelectorAll === 'function') ? arg2 : documentObject;
+      } else if (arg1 && typeof arg1.querySelectorAll === 'function' && typeof arg2 === 'string') {
+        base = arg1;
+        selector = arg2;
+      } else {
+        selector = String(arg1);
+        base = documentObject;
       }
-      return documentObject.querySelectorAll(selector);
+      return base.querySelectorAll(selector);
     },
     createElement: (tag) => documentObject.createElement(tag),
     getBody: () => documentObject.body,

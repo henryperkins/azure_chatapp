@@ -78,49 +78,87 @@ class ProjectDashboard {
       throw new Error('[ProjectDashboard] eventHandlers.trackListener is required for event binding');
     }
 
-    // AuthBus event
+    // AuthBus event with improved handling
     const authBus = this.auth?.AuthBus;
     const handler = (e) => {
       const { authenticated } = e.detail || {};
       this.logger.info(`[ProjectDashboard authStateChanged listener] Event received: authenticated=${authenticated}`, { detail: e.detail });
+
+      // Always ensure UI elements are in the correct state
+      const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
+      const mainCnt = this.domAPI.getElementById('mainContent');
+      const projectListView = this.domAPI.getElementById('projectListView');
+      const projectDetailsView = this.domAPI.getElementById('projectDetailsView');
+
       if (!authenticated) {
         // If the event indicates logout, ensure the UI reflects this.
         this.logger.info('[ProjectDashboard authStateChanged listener] Not authenticated. Ensuring login message is shown.');
-        this._showLoginRequiredMessage(); // Explicitly show login message on logout event
+
+        // Show login message, hide main content
+        if (loginMsg) loginMsg.classList.remove('hidden');
+        if (mainCnt) mainCnt.classList.add('hidden');
+
+        // Hide project views
+        if (projectListView) {
+          projectListView.classList.add('hidden');
+          projectListView.style.display = 'none';
+        }
+        if (projectDetailsView) {
+          projectDetailsView.classList.add('hidden');
+          projectDetailsView.style.display = 'none';
+        }
+
+        this.state._aborted = true; // Prevent any pending view transitions
         return;
       }
+
       // If authenticated:
-      const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
+      this.state._aborted = false; // Reset aborted flag
+
+      // Hide login message, show main content
       if (loginMsg) loginMsg.classList.add('hidden');
-      const mainCnt = this.domAPI.getElementById('mainContent');
       if (mainCnt) mainCnt.classList.remove('hidden');
+
       this.logger.info('[ProjectDashboard authStateChanged listener] Ensured login message hidden, main content visible.');
 
+      // Initialize if needed, then show project list
       const actionPromise = !this.state.initialized
         ? this.initialize().then(initSuccess => {
-          if (initSuccess) {
-            this.logger.info('[ProjectDashboard authStateChanged listener] Dashboard initialized successfully. Will load projects.');
-            return this._loadProjects();
-          }
-          this.logger.warn('[ProjectDashboard authStateChanged listener] Dashboard initialization failed after auth event.');
-          return null;
-        })
+            if (initSuccess) {
+              this.logger.info('[ProjectDashboard authStateChanged listener] Dashboard initialized successfully. Will show project list.');
+              return this.showProjectList(); // This also loads projects
+            }
+            this.logger.warn('[ProjectDashboard authStateChanged listener] Dashboard initialization failed after auth event.');
+            return null;
+          })
         : Promise.resolve(this.showProjectList()); // showProjectList also calls _loadProjects
 
       actionPromise.then(() => {
         // Final safeguard: ensure project list is visible and login message is hidden
         this.browserService.setTimeout(() => {
           const finalLoginMsg = this.domAPI.getElementById('loginRequiredMessage');
-          if (finalLoginMsg) finalLoginMsg.classList.add('hidden');
           const finalMainCnt = this.domAPI.getElementById('mainContent');
-          if (finalMainCnt) finalMainCnt.classList.remove('hidden');
           const finalListView = this.domAPI.getElementById('projectListView');
+
+          if (finalLoginMsg) finalLoginMsg.classList.add('hidden');
+          if (finalMainCnt) finalMainCnt.classList.remove('hidden');
+
           if (finalListView) {
             finalListView.classList.remove('hidden', 'opacity-0');
-            finalListView.style.display = ''; // Ensure display is not 'none'
+            finalListView.style.display = '';
+            finalListView.style.visibility = 'visible';
+            finalListView.style.opacity = '1';
+
+            // Force reflow
+            void finalListView.offsetHeight;
           }
-          this.logger.info('[ProjectDashboard authStateChanged listener] Final visibility safeguard executed for authenticated state.');
-        }, 150); // Increased delay slightly
+
+          this.logger.info('[ProjectDashboard authStateChanged listener] Final visibility safeguard executed for authenticated state.', {
+            loginMsgHidden: finalLoginMsg ? finalLoginMsg.classList.contains('hidden') : 'N/A',
+            mainCntVisible: finalMainCnt ? !finalMainCnt.classList.contains('hidden') : 'N/A',
+            listViewVisible: finalListView ? (!finalListView.classList.contains('hidden') && finalListView.style.display !== 'none') : 'N/A'
+          });
+        }, 200); // Increased delay for more reliability
       }).catch(err => {
         this.logger.error('[ProjectDashboard authStateChanged listener] Error in post-auth action promise.', { error: err });
       });
@@ -686,6 +724,13 @@ class ProjectDashboard {
     }
     this.logger.info('[ProjectDashboard] _setView called with:', { showList, showDetails });
 
+    // First, ensure login message is hidden and main content is visible
+    const loginMessage = this.domAPI.getElementById('loginRequiredMessage');
+    const mainContent = this.domAPI.getElementById('mainContent');
+
+    if (loginMessage) loginMessage.classList.add('hidden');
+    if (mainContent) mainContent.classList.remove('hidden');
+
     const listView = this.domAPI.getElementById('projectListView');
     const detailsView = this.domAPI.getElementById('projectDetailsView');
     const chatHeaderBar = this.domAPI.getElementById('chatHeaderBar');
@@ -699,12 +744,15 @@ class ProjectDashboard {
       detailsViewDisplay: detailsView ? detailsView.style.display : 'N/A'
     });
 
-    // Handle project list view visibility
+    // Handle project list view visibility - use more direct approach to ensure visibility
     if (listView) {
       if (showList) {
+        // Force visibility with multiple approaches to overcome any CSS conflicts
         listView.classList.remove('hidden');
         listView.classList.remove('opacity-0');
         listView.style.display = '';
+        listView.style.visibility = 'visible'; // Explicitly set visibility
+        listView.style.opacity = '1'; // Ensure opacity is set to visible
         this.domAPI.setAttribute(listView, 'aria-hidden', 'false');
         void listView.offsetHeight; // Force a reflow
         this.logger.info('[ProjectDashboard] Project list view made visible', {
@@ -722,15 +770,22 @@ class ProjectDashboard {
       this.logger.warn('[ProjectDashboard] Project list view element not found');
     }
 
-    // Handle project details view visibility
+    // Handle project details view visibility - use more direct approach
     if (detailsView) {
       if (showDetails) {
-        this.domAPI.toggleClass(detailsView, 'hidden', false);
+        // Force visibility with multiple approaches to overcome any CSS conflicts
+        detailsView.classList.remove('hidden');
         detailsView.style.display = 'flex';
+        detailsView.style.visibility = 'visible'; // Explicitly set visibility
+        detailsView.style.opacity = '1'; // Ensure opacity is set to visible
         this.domAPI.setAttribute(detailsView, 'aria-hidden', 'false');
         detailsView.classList.remove('opacity-0');
         detailsView.classList.add('flex-1', 'flex-col');
-        this.logger.info('[ProjectDashboard] Project details view made visible');
+        this.logger.info('[ProjectDashboard] Project details view made visible', {
+          classes: detailsView.className,
+          display: detailsView.style.display,
+          ariaHidden: detailsView.getAttribute('aria-hidden')
+        });
       } else {
         this.domAPI.toggleClass(detailsView, 'hidden', true);
         detailsView.style.display = 'none';
@@ -740,6 +795,38 @@ class ProjectDashboard {
       }
     } else {
       this.logger.warn('[ProjectDashboard] Project details view element not found');
+
+      // Try to recreate the details view if it's missing
+      if (showDetails) {
+        const projectManagerPanel = this.domAPI.getElementById('projectManagerPanel');
+        if (projectManagerPanel) {
+          this.logger.info('[ProjectDashboard] Attempting to recreate missing projectDetailsView');
+          const newDetailsView = this.domAPI.createElement('div');
+          newDetailsView.id = 'projectDetailsView';
+          newDetailsView.classList.add('flex-1', 'flex-col');
+          newDetailsView.style.display = 'flex';
+          newDetailsView.style.visibility = 'visible';
+          newDetailsView.style.opacity = '1';
+          projectManagerPanel.appendChild(newDetailsView);
+
+          // Load the template content
+          this.browserService.fetch('/static/html/project_details.html')
+            .then(response => response.text())
+            .then(html => {
+              newDetailsView.innerHTML = html;
+              this.logger.info('[ProjectDashboard] Successfully recreated projectDetailsView');
+
+              // Notify that the template is loaded
+              this.domAPI.dispatchEvent(
+                this.domAPI.getDocument(),
+                new CustomEvent('projectDetailsTemplateLoaded', { detail: { success: true } })
+              );
+            })
+            .catch(err => {
+              this.logger.error('[ProjectDashboard] Failed to load project details template', { error: err });
+            });
+        }
+      }
     }
 
     // Handle chat header bar visibility
@@ -769,6 +856,13 @@ class ProjectDashboard {
 
     // Force browser reflow again to ensure transitions apply
     this.browserService.requestAnimationFrame(() => {
+      // Double-check login message is hidden and main content is visible
+      const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
+      const mainCnt = this.domAPI.getElementById('mainContent');
+      if (loginMsg) loginMsg.classList.add('hidden');
+      if (mainCnt) mainCnt.classList.remove('hidden');
+
+      // Ensure list view visibility
       if (listView && showList) {
         void listView.getBoundingClientRect();
         this.browserService.setTimeout(() => {
@@ -777,13 +871,53 @@ class ProjectDashboard {
             listView.classList.remove('hidden');
             listView.classList.remove('opacity-0');
             listView.style.display = '';
+            listView.style.visibility = 'visible';
+            listView.style.opacity = '1';
           }
         }, 50);
       }
+
+      // Ensure details view visibility
       if (detailsView && showDetails) {
         void detailsView.getBoundingClientRect();
+        this.browserService.setTimeout(() => {
+          if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
+            this.logger.warn('[ProjectDashboard] Details view still hidden after _setView, forcing visibility');
+            detailsView.classList.remove('hidden');
+            detailsView.classList.remove('opacity-0');
+            detailsView.style.display = 'flex';
+            detailsView.style.visibility = 'visible';
+            detailsView.style.opacity = '1';
+            detailsView.classList.add('flex-1', 'flex-col');
+          }
+        }, 50);
       }
     });
+
+    // Final visibility check with a longer delay to catch any race conditions
+    this.browserService.setTimeout(() => {
+      const finalLoginMsg = this.domAPI.getElementById('loginRequiredMessage');
+      const finalMainCnt = this.domAPI.getElementById('mainContent');
+
+      if (finalLoginMsg) finalLoginMsg.classList.add('hidden');
+      if (finalMainCnt) finalMainCnt.classList.remove('hidden');
+
+      if (listView && showList && (listView.classList.contains('hidden') || listView.style.display === 'none')) {
+        this.logger.warn('[ProjectDashboard] Final check: List view still hidden, forcing visibility');
+        listView.classList.remove('hidden');
+        listView.style.display = '';
+        listView.style.visibility = 'visible';
+        listView.style.opacity = '1';
+      }
+
+      if (detailsView && showDetails && (detailsView.classList.contains('hidden') || detailsView.style.display === 'none')) {
+        this.logger.warn('[ProjectDashboard] Final check: Details view still hidden, forcing visibility');
+        detailsView.classList.remove('hidden');
+        detailsView.style.display = 'flex';
+        detailsView.style.visibility = 'visible';
+        detailsView.style.opacity = '1';
+      }
+    }, 150);
 
     this.logger.info('[ProjectDashboard] View state after update:', {
       listViewVisible: listView ? !listView.classList.contains('hidden') && listView.style.display !== 'none' : false,
@@ -1077,7 +1211,8 @@ class ProjectDashboard {
           'projectKnowledgeBaseRendered'
         ];
         events.forEach((eventName) => {
-          document.dispatchEvent(
+          this.domAPI.dispatchEvent(
+            this.domAPI.getDocument(),
             new CustomEvent(eventName, {
               detail: { projectId }
             })
@@ -1348,7 +1483,7 @@ class ProjectDashboard {
     const { projectId } = event.detail || {};
     this.logger.warn('[ProjectDashboard] Project not found:', projectId);
     this.state.currentProject = null;
-    const detailsView = document.getElementById('projectDetailsView');
+    const detailsView = this.domAPI.getElementById('projectDetailsView');
     if (detailsView) {
       detailsView.classList.add('hidden');
       detailsView.style.display = 'none';

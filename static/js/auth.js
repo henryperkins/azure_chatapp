@@ -345,6 +345,15 @@ export function createAuthModule({
       authenticated !== previousAuth ||
       JSON.stringify(userObject) !== JSON.stringify(previousUserObject);
 
+    // Always log the auth state change for debugging
+    authNotify.debug(`[Auth] broadcastAuth called: authenticated=${authenticated}, source=${source}`, {
+      group: true,
+      context: 'AuthModule:broadcastAuth',
+      previousAuth,
+      newAuth: authenticated,
+      source
+    });
+
     authState.isAuthenticated = authenticated;
     authState.userObject = userObject;
     authState.username = userObject?.username || null;
@@ -407,33 +416,58 @@ export function createAuthModule({
         }
       }
 
+      // Create a single event detail object to ensure consistency
+      const eventDetail = {
+        authenticated,
+        user: userObject,
+        timestamp: Date.now(),
+        source
+      };
+
       // Dispatch the auth event on AuthBus
-      AuthBus.dispatchEvent(
-        new CustomEvent('authStateChanged', {
-          detail: {
-            authenticated,
-            user: userObject,
-            timestamp: Date.now(),
-            source
-          }
-        })
-      );
+      try {
+        AuthBus.dispatchEvent(
+          new CustomEvent('authStateChanged', {
+            detail: eventDetail
+          })
+        );
+        authNotify.debug('[Auth] Dispatched authStateChanged on AuthBus', {
+          group: true,
+          context: 'AuthModule:broadcastAuth',
+          detail: eventDetail
+        });
+      } catch (busErr) {
+        captureError(busErr, {
+          module: MODULE_CONTEXT,
+          method: 'broadcastAuth',
+          extra: { message: 'Failed to dispatch authStateChanged on AuthBus' }
+        });
+        authNotify.warn('[Auth] Failed to dispatch authStateChanged on AuthBus', {
+          error: busErr,
+          group: true,
+          context: 'AuthModule:broadcastAuth'
+        });
+      }
 
       // Also dispatch on document via domAPI
       try {
         const doc = domAPI.getDocument();
         if (doc) {
+          // Use the same event detail for consistency
           domAPI.dispatchEvent(
             doc,
             new CustomEvent('authStateChanged', {
               detail: {
-                authenticated,
-                user: userObject,
-                timestamp: Date.now(),
+                ...eventDetail,
                 source: source + '_via_auth_module'
               }
             })
           );
+          authNotify.debug('[Auth] Dispatched authStateChanged on document', {
+            group: true,
+            context: 'AuthModule:broadcastAuth',
+            detail: eventDetail
+          });
         }
       } catch (err) {
         captureError(err, {
@@ -443,6 +477,25 @@ export function createAuthModule({
         });
         authNotify.warn('[Auth] Failed to dispatch authStateChanged on document', {
           error: err,
+          group: true,
+          context: 'AuthModule:broadcastAuth'
+        });
+      }
+
+      // Force a direct update of app.state.isAuthenticated
+      try {
+        const appInstance = DependencySystem?.modules?.get('app');
+        if (appInstance?.state) {
+          appInstance.state.isAuthenticated = authenticated;
+          authNotify.debug('[Auth] Directly updated app.state.isAuthenticated', {
+            group: true,
+            context: 'AuthModule:broadcastAuth',
+            newValue: authenticated
+          });
+        }
+      } catch (appErr) {
+        authNotify.warn('[Auth] Failed to directly update app.state.isAuthenticated', {
+          error: appErr,
           group: true,
           context: 'AuthModule:broadcastAuth'
         });
@@ -887,22 +940,16 @@ export function createAuthModule({
         setButtonLoading(submitBtn, true, 'Registering...');
         const formData = new FormData(registerModalForm);
         const username = formData.get('username')?.trim();
-        const email = formData.get('email')?.trim();
         const password = formData.get('password');
         const passwordConfirm = formData.get('passwordConfirm');
 
-        if (!username || !email || !password || !passwordConfirm) {
+        if (!username || !password || !passwordConfirm) {
           showError(errorEl, 'All fields are required.');
           setButtonLoading(submitBtn, false, 'Register');
           return;
         }
         if (!validateUsername(username)) {
           showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
-          setButtonLoading(submitBtn, false, 'Register');
-          return;
-        }
-        if (!validateEmail(email)) {
-          showError(errorEl, 'Invalid email address.');
           setButtonLoading(submitBtn, false, 'Register');
           return;
         }

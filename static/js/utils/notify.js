@@ -1,7 +1,12 @@
 import { getSessionId } from "./session.js";
 
+/**
+ * Notifier system — all notification feedback, logging, and routing through DI only.
+ * All backend event logs must go through injected apiClient; never use fetch directly.
+ */
 export function createNotify({
-  notificationHandler
+  notificationHandler,
+  apiClient = null    // injected apiClient for backend logging, DI only
 } = {}) {
   if (!notificationHandler?.show) throw new Error('notificationHandler missing');
 
@@ -19,7 +24,7 @@ export function createNotify({
       source,
       id,
       traceId,
-      originalError, // pass Error object or stack trace here for full detail!
+      originalError,
       endpoint,
       requestPayload,
       responseDetail,
@@ -28,30 +33,15 @@ export function createNotify({
     } = opts || {};
 
     const eventId = id || `${_type}-${Date.now()}`;
-    const sessionId = getSessionId();
+    const session = getSessionId();
 
-    // Add stack trace if Error is supplied
+    // Extract stack trace if available
     let stack = null;
-    if (originalError && typeof originalError === "object") {
-      if (originalError.stack) stack = originalError.stack;
-      else if (typeof originalError === "string") stack = originalError;
-    }
-    // Also accept direct .stack or .error fields from opts or extra
-    if (!stack && opts.stack) stack = opts.stack;
-    if (!stack && extra && extra.stack) stack = extra.stack;
+    if (originalError?.stack) stack = originalError.stack;
+    else if (opts.stack) stack = opts.stack;
+    else if (extra?.stack) stack = extra.stack;
 
-    // Compose a merged extra object including advanced context
-    const richExtra = {
-      ...extra,
-      // Purposefully inject API and trace/session context
-      endpoint,
-      requestPayload,
-      responseDetail,
-      sessionId,
-      traceId: traceId || sessionId,
-      ...(stack ? { stack } : {})
-    };
-
+    // Prepare notification payload for UI
     const payload = {
       timeout: DURATION[_type],
       ...rest,
@@ -59,64 +49,40 @@ export function createNotify({
       context,
       module,
       source,
-      group,
-      extra: richExtra
+      group
     };
 
-    // Debug log for notification troubleshooting (shows all context passed)
-    if (typeof window !== "undefined" && window.console && window.APP_CONFIG?.DEBUG) {
-      // Only log if in debug mode
-      // eslint-disable-next-line no-console
-      console.debug('[notify.send] Notification payload:', { msg, type: _type, payload });
-    }
-
+    // Show UI notification
     notificationHandler.show(msg, _type, payload);
 
-    // Send ALL notifications to the backend logging endpoint
-    // if (_type === 'error') { // Condition removed to send all types
-      const logApiPayload = {
-        message: msg,
-        type: _type,
-        module: payload.module,
-        context: payload.context,
-        source: payload.source,
-        stack: richExtra.stack, // stack is already in richExtra if available
-        sessionId: richExtra.sessionId,
-        traceId: richExtra.traceId,
-        additional_details: { // Send the 'extra' details which might contain more context
-            endpoint: richExtra.endpoint,
-            requestPayload: richExtra.requestPayload,
-            responseDetail: richExtra.responseDetail,
-            // Include other custom 'extra' fields passed in opts
-            ...(typeof opts.extra === 'object' && opts.extra !== null ? opts.extra : {})
-        }
-      };
+    // Prepare for backend logging (if DI apiClient provided)
+    const logApiPayload = {
+      message: msg,
+      type: _type,
+      module,
+      context,
+      source,
+      stack,
+      sessionId: session,
+      traceId: traceId || session,
+      extra: {
+        endpoint,
+        requestPayload,
+        responseDetail,
+        ...extra
+      }
+    };
 
-      fetch('/api/log_notification', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(logApiPayload),
-      })
-      .then(response => {
-        if (!response.ok) {
-          console.error(`Failed to POST ${_type} notification to /api/log_notification:`, response.status, response.statusText, logApiPayload);
-        } else {
-          if (typeof window !== "undefined" && window.console && window.APP_CONFIG?.DEBUG) {
-            console.debug(`${_type} notification successfully POSTed to /api/log_notification:`, logApiPayload);
-          }
-        }
-      })
-      .catch(networkError => {
-        console.error(`Network error when POSTing ${_type} notification to /api/log_notification:`, networkError, logApiPayload);
-      });
-    // } // Corresponding closing brace for the removed if condition
+    // Only use apiClient for backend logging
+    if (apiClient && typeof apiClient.post === "function") {
+      apiClient.post('/api/log_notification', logApiPayload).catch(() => {});
+    }
+    // else: do not fall back to fetch; no logging if not available
 
     return eventId;
   };
 
-  // -- Contextual helper factory: pre-binds module/context/source to avoid context misses
+  // Create contextual helper
   const withContext = (preset, defaults = {}) => {
     if (!preset) throw new Error('notify.withContext requires a context/module/source preset');
     const { module, context, source } = preset;
@@ -131,7 +97,8 @@ export function createNotify({
     };
   };
 
-  const api = (msg, type = 'info', opts = {}) => send(msg, type, opts);  // callable
+  // Create API
+  const api = (msg, type = 'info', opts = {}) => send(msg, type, opts);
 
   Object.assign(api, {
     debug   : (m, o = {}) => send(m, 'debug',   o),
