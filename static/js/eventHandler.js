@@ -446,7 +446,7 @@ export function createEventHandlers({
         const isCurrentlyExpanded = domAPI.getAttribute(toggleButton, 'aria-expanded') === 'true';
         togglePanel(!isCurrentlyExpanded);
       },
-      { description: `Toggle Collapsible ${toggleId}`, module: MODULE, context: 'collapsible' }
+      { description: `Toggle Collapsible ${toggleId}`, module: MODULE, context: 'collapsible', source: 'setupCollapsible' }
     );
   }
 
@@ -544,14 +544,16 @@ export function createEventHandlers({
       trackListener(openBtn, 'click', open, {
         description: `Open Modal ${modalId}`,
         module: MODULE,
-        context: 'modal'
+        context: 'modal',
+        source: 'setupModal'
       });
     }
     if (closeBtn) {
       trackListener(closeBtn, 'click', close, {
         description: `Close Modal ${modalId} via Button`,
         module: MODULE,
-        context: 'modal'
+        context: 'modal',
+        source: 'setupModal'
       });
     }
 
@@ -561,7 +563,7 @@ export function createEventHandlers({
       (e) => {
         if (e.key === 'Escape') close();
       },
-      { description: `Modal ESC Close ${modalId}`, module: MODULE, context: 'modal' }
+      { description: `Modal ESC Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
     trackListener(
@@ -570,7 +572,7 @@ export function createEventHandlers({
       (e) => {
         if (domAPI.isSameNode(e.target, modal)) close();
       },
-      { description: `Modal Backdrop Close ${modalId}`, module: MODULE, context: 'modal' }
+      { description: `Modal Backdrop Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
     return { open, close };
@@ -691,7 +693,8 @@ export function createEventHandlers({
       passive: false,
       description: `Form Submit ${formId}`,
       module: MODULE,
-      context: 'form'
+      context: 'form',
+      source: 'setupForm'
     });
   }
 
@@ -755,7 +758,7 @@ export function createEventHandlers({
           domAPI.getDocument(),
           'DOMContentLoaded',
           checkProjectModalForm,
-          { once: true, module: MODULE, context: 'init' }
+          { once: true, module: MODULE, context: 'init', source: 'init' }
         );
       }
 
@@ -840,7 +843,8 @@ export function createEventHandlers({
         {
           description: 'Show Login Modal (Global Event)',
           context: 'auth',
-          module: MODULE
+          module: MODULE,
+          source: 'requestLogin'
         }
       );
 
@@ -874,7 +878,8 @@ export function createEventHandlers({
           once: true,
           description: 'Rebind login and setup tabs after modalsLoaded',
           context: 'auth',
-          module: MODULE
+          module: MODULE,
+          source: 'modalsLoaded'
         }
       );
 
@@ -923,7 +928,7 @@ export function createEventHandlers({
             source: 'setupCommonElements'
           });
         },
-        { description: 'Dark Mode Toggle', module: MODULE, context: 'ui' }
+        { description: 'Dark Mode Toggle', module: MODULE, context: 'ui', source: 'setupCommonElements' }
       );
       // Initial dark mode state
       if (storageBackend.getItem('darkMode') === 'true') {
@@ -994,7 +999,8 @@ export function createEventHandlers({
         {
           description: `Navigation Link: ${domAPI.getAttribute(link, 'href') || 'unknown'}`,
           module: MODULE,
-          context: 'navigation'
+          context: 'navigation',
+          source: 'setupNavigationElements'
         }
       );
     });
