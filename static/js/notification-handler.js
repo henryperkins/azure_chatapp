@@ -16,8 +16,11 @@ export function createNotificationHandler({
 } = {}) {
   if (!domAPI) throw new Error('notificationHandler: domAPI is required');
 
-  // Guardrail #10 – wait for the core app readiness before DOM work
-  DependencySystem?.waitFor?.(['app']).catch(() => {});
+  // Guardrail #10 – wait for eventHandlers readiness before DOM work
+  let _eventHandlersReady = Promise.resolve();
+  if (DependencySystem?.waitFor) {
+    _eventHandlersReady = DependencySystem.waitFor(['eventHandlers']).catch(() => {});
+  }
 
   // Module constants
   const MODULE_CONTEXT = 'NotificationHandler';
@@ -27,7 +30,8 @@ export function createNotificationHandler({
   const CONTAINER_ID = "notificationArea";
   let container = null;
 
-  function ensureContainer() {
+  async function ensureContainer() {
+    await _eventHandlersReady;
     if (container) return container;
     container = domAPI.getElementById(CONTAINER_ID);
     if (!container) {
@@ -73,7 +77,8 @@ export function createNotificationHandler({
   };
 
   // Create notification element
-  function buildBanner(type, { message = "" } = {}) {
+  async function buildBanner(type, { message = "" } = {}) {
+    await _eventHandlersReady;
     const root = domAPI.createElement("div");
     root.setAttribute("role", "alert");
     root.setAttribute("aria-live", "polite");
@@ -130,7 +135,7 @@ export function createNotificationHandler({
     if (eventHandlers?.trackListener) {
       eventHandlers.trackListener(closeBtn, "click", onCloseClick, {
         description: "Notification_Close",
-        context: "notificationHandler"
+        context: "NotificationHandler"
       });
     } else {
       closeBtn.addEventListener("click", onCloseClick);
@@ -142,15 +147,15 @@ export function createNotificationHandler({
   }
 
   // Show notification
-  function show(message, type = "info", opts = {}) {
+  async function show(message, type = "info", opts = {}) {
     if (!message) message = "Notification without message";
 
     // Validate type
     const _type = ['info', 'success', 'warning', 'error', 'debug'].includes(type) ? type : 'info';
 
     // Create banner
-    const banner = buildBanner(_type, { message, ...opts });
-    const container = ensureContainer();
+    const banner = await buildBanner(_type, { message, ...opts });
+    const container = await ensureContainer();
 
     // Remove excess banners
     while (container.children.length >= maxVisible) {
@@ -176,8 +181,8 @@ export function createNotificationHandler({
   }
 
   // Clear all notifications
-  const clear = () => {
-    const container = ensureContainer();
+  const clear = async () => {
+    const container = await ensureContainer();
     while (container.firstChild) container.firstChild.remove();
   };
 
@@ -192,7 +197,7 @@ export function createNotificationHandler({
   /* Guardrail #4 – Centralised listener cleanup */
   api.cleanup = () => {
     if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-      eventHandlers.cleanupListeners({ context: "notificationHandler" });
+      eventHandlers.cleanupListeners({ context: "NotificationHandler" });
     }
     clear();
   };
@@ -204,6 +209,9 @@ export function createNotificationHandler({
 
   // Keep warn alias for backward compatibility
   api.warn = api.warning;
+
+  // Provide async init for readiness in guards
+  api.init = () => _eventHandlersReady;
 
   // Return existing instance if already registered
   if (DependencySystem?.modules?.has("notificationHandler")) {

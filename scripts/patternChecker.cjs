@@ -2,992 +2,1044 @@
 /* eslint-env node */
 /* global process */
 /*
-  guardrailChecker.js
+  patternChecker.js
 
-  Scans your JavaScript code for violations of frontend coding guardrails.
+  Scans your JavaScript code for violations of frontend coding patterns.
 
   Usage:
     1) npm install --save-dev @babel/core @babel/parser @babel/traverse
-    2) node guardrailChecker.js <file1.js> [file2.js...]
+    2) node patternChecker.js <file1.js> [file2.js...]
 */
 
 "use strict";
 
-const fs = require('fs');
-const path = require('path');
-const { parse } = require('@babel/parser');
-const traverse = require('@babel/traverse').default;
+const fs = require("fs");
+const path = require("path");
+const { parse } = require("@babel/parser");
+const traverse = require("@babel/traverse").default;
 
-// Simple symbols (no external library needed)
+////////////////////////////////////////////////////////////////////////////////
+// Visitor-merging helper
+////////////////////////////////////////////////////////////////////////////////
+function mergeVisitors(...visitors) {
+  const merged = {};
+  visitors.forEach((v) => {
+    if (!v) return; // Skip null/undefined visitors
+    Object.entries(v).forEach(([key, fn]) => {
+      if (typeof fn === 'function') {
+        (merged[key] ??= []).push(fn);
+      }
+    });
+  });
+  Object.keys(merged).forEach((k) => {
+    const chain = merged[k];
+    merged[k] = function (path) {
+      chain.forEach((f) => {
+        if (typeof f === 'function') {
+          f(path);
+        }
+      });
+    };
+  });
+  return merged;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// CLI symbols
+////////////////////////////////////////////////////////////////////////////////
 const SYMBOLS = {
-  error: '✖',
-  warning: '⚠',
-  info: 'ℹ',
-  success: '✓',
-  bullet: '•',
-  pointer: '❯',
-  arrowRight: '→',
-  shield: '🛡️',
-  lock: '🔒',
-  alert: '🚨',
-  light: '💡'
+  error: "✖",
+  warning: "⚠",
+  info: "ℹ",
+  success: "✓",
+  bullet: "•",
+  pointer: "❯",
+  arrowRight: "→",
+  shield: "🛡️",
+  lock: "🔒",
+  alert: "🚨",
+  light: "💡",
 };
 
-/**
- * Read file contents safely.
- */
+////////////////////////////////////////////////////////////////////////////////
+// Helpers
+////////////////////////////////////////////////////////////////////////////////
 function readFileContent(filePath) {
   try {
-    return fs.readFileSync(filePath, 'utf8');
+    return fs.readFileSync(filePath, "utf8");
   } catch (err) {
     console.error(`${SYMBOLS.error} Unable to read file: ${filePath}\n`, err);
     return null;
   }
 }
 
-// ... [All the check functions remain the same as the previous implementation] ...
-
-/**
- * 1) Factory Function Export Pattern
- */
-function checkFactoryFunctionExportPattern(ast, filePath, errors) {
-  let foundMatchingFactory = false;
-
-  traverse(ast, {
-    ExportNamedDeclaration(pathNode) {
-      const { declaration } = pathNode.node;
-      if (declaration && declaration.type === 'FunctionDeclaration') {
-        const fnName = declaration.id && declaration.id.name;
-        if (fnName && fnName.startsWith('create')) {
-          // Check for 'deps' parameter (or at least one parameter)
-          const hasDepsParam = declaration.params.length > 0;
-          // A simple check for a 'new' expression in the body
-          let hasNewExpressionInBody = false;
-          traverse(declaration.body, {
-            NewExpression(innerPath) {
-              hasNewExpressionInBody = true;
-              innerPath.stop(); // Stop traversal once found
-            },
-          }, pathNode.scope, pathNode); // Pass scope and parent path
-
-          if (hasDepsParam && hasNewExpressionInBody) {
-            foundMatchingFactory = true;
-            pathNode.stop(); // Stop traversal once a matching factory is found
-          } else if (hasDepsParam && !hasNewExpressionInBody) {
-            errors.push({
-              filePath,
-              line: declaration.loc?.start.line,
-              message: `Factory function "${fnName}" should typically return a new instance (e.g., using "new"). (factory-function-export-pattern)`,
-              hint: `Example: return new MyModule(deps);`,
-              node: declaration,
-              ruleId: 1
-            });
-          } else if (!hasDepsParam && hasNewExpressionInBody) {
-             errors.push({
-              filePath,
-              line: declaration.loc?.start.line,
-              message: `Factory function "${fnName}" should accept a dependencies argument (e.g., "deps"). (factory-function-export-pattern)`,
-              hint: `Example: export function ${fnName}(deps) { ... }`,
-              node: declaration,
-              ruleId: 1
-            });
-          }
-        }
-      }
-    },
-  });
-
-  if (!foundMatchingFactory) {
-    let hasAnyCreateExportNode = null;
-    traverse(ast, {
-      ExportNamedDeclaration(pathNode) {
-        const { declaration } = pathNode.node;
-        if (declaration && declaration.type === 'FunctionDeclaration') {
-          const fnName = declaration.id && declaration.id.name;
-          if (fnName && fnName.startsWith('create')) {
-            hasAnyCreateExportNode = declaration; // Store the node if it's a potential but non-matching factory
-            pathNode.stop();
-          }
-        }
-      }
-    });
-
-    if (!hasAnyCreateExportNode) {
-        errors.push({
-            filePath,
-            line: 1, // General file issue
-            message: `Missing "export function createXYZ(deps)" pattern that returns a new instance. (factory-function-export-pattern)`,
-            hint: `Example:\n\nexport function createProjectManager(deps) {\n  if (!deps.DependencySystem) throw new Error('DependencySystem required');\n  return new ProjectManager(deps);\n}`,
-            // No specific node for this general error
-            ruleId: 1
-        });
-    } else if (!foundMatchingFactory &&
-               !errors.some(e => e.message.includes(`Factory function "${hasAnyCreateExportNode.id.name}"`))) {
-        // If a createXXX function exists but didn't trigger specific errors above
-        errors.push({
-            filePath,
-            line: hasAnyCreateExportNode.loc?.start.line,
-            message: `Exported function "${hasAnyCreateExportNode.id.name}" looks like a factory but doesn't fully match the pattern. (factory-function-export-pattern)`,
-            hint: `Example:\n\nexport function ${hasAnyCreateExportNode.id.name}(deps) {\n  /* ... validate deps ... */\n  return new SomeModule(deps);\n}`,
-            node: hasAnyCreateExportNode,
-            ruleId: 1
-        });
-    }
-  }
+function getLineContent(fullCode, lineNumber) {
+  if (!fullCode || typeof lineNumber !== "number" || lineNumber < 1) return "";
+  const lines = fullCode.split(/\r?\n/);
+  return lines[lineNumber - 1]?.trim() ?? "";
 }
 
-/**
- * 2) Strict Dependency Injection (No Globals)
- * 6) Notifications via notify (not console/alert)
- */
-function checkNoGlobalUsage(ast, filePath, errors) {
-  traverse(ast, {
-    MemberExpression(pathNode) {
-      const { object } = pathNode.node;
-      if (!object || !object.name) return;
+// Helper to safely get property key name
+function getPropertyKeyName(prop) {
+  if (!prop || !prop.key) return null;
 
-      if (['document', 'window'].includes(object.name) && object.name !== 'globalThis') {
+  if (prop.key.type === "Identifier") {
+    return prop.key.name;
+  } else if (prop.key.type === "StringLiteral") {
+    return prop.key.value;
+  }
+
+  return null;
+}
+
+// Check if an object expression has a property with a specific name
+function hasProperty(objExpr, propName) {
+  if (!objExpr || objExpr.type !== "ObjectExpression" || !objExpr.properties) {
+    return false;
+  }
+
+  return objExpr.properties.some(prop => {
+    const keyName = getPropertyKeyName(prop);
+    return keyName === propName;
+  });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Guardrail check visitors 1-17
+////////////////////////////////////////////////////////////////////////////////
+
+/* ---------- 1) Factory Function Export ---------- */
+function checkFactoryFunctionExportPattern(errors, filePath) {
+  const state = { foundExport: false };
+
+  return {
+    ExportNamedDeclaration(pathNode) {
+      const decl = pathNode.node.declaration;
+      if (decl?.type !== "FunctionDeclaration") return;
+
+      const fnName = decl.id?.name;
+      if (!fnName?.startsWith("create")) return;
+
+      state.foundExport = true;
+
+      const hasDepsParam = decl.params.length > 0;
+      let hasDepValidation = false;
+      let hasNew = false;
+
+      pathNode.traverse({
+        IfStatement(inner) {
+          if (/throw new Error\([^)]*dependency/i.test(inner.toString()))
+            hasDepValidation = true;
+        },
+        NewExpression() {
+          hasNew = true;
+        },
+      });
+
+      if (!hasDepsParam)
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use injected dependencies instead of ${object.name}. (strict-dependency-injection)`,
-          hint: `Example:\nconst el = domAPI.getElementById('something');`,
-          node: pathNode.node,
-          ruleId: 2
+          line: decl.loc.start.line,
+          message:
+            `Factory "${fnName}" should accept 'deps' as its first argument. (factory-function-export-pattern)`,
+          hint: `Example: export function ${fnName}(deps) { /* ... */ }`,
+          node: decl,
+          ruleId: 1,
         });
-      } else if (object.name === 'console') {
+      if (!hasDepValidation)
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Do not use console.*; inject a notify or errorReporter instead. (notifications-via-di)`,
-          hint: `Example:\nnotify.info('message', { module: 'MyModule', context: 'myFunction' })`,
+          line: decl.loc.start.line,
+          message:
+            `Factory "${fnName}" must validate injected dependencies at the top. (factory-function-export-pattern)`,
+          hint: "Check required deps at start and throw if missing.",
+          node: decl,
+          ruleId: 1,
+        });
+      if (!hasNew)
+        errors.push({
+          filePath,
+          line: decl.loc.start.line,
+          message:
+            `Factory "${fnName}" should return a new instance (via new …). (factory-function-export-pattern)`,
+          hint: "return new MyModule(deps);",
+          node: decl,
+          ruleId: 1,
+        });
+    },
+    Program: {
+      exit() {
+        if (!state.foundExport)
+          errors.push({
+            filePath,
+            line: 1,
+            message:
+              "Missing 'export function createXyz(deps)' factory export. (factory-function-export-pattern)",
+            hint: "Module must export a named factory function.",
+            ruleId: 1,
+          });
+      },
+    },
+  };
+}
+
+/* ---------- 2 & 6) Strict DI / Notify instead of console/alert ---------- */
+function checkNoGlobalUsage(errors, filePath) {
+  return {
+    MemberExpression(pathNode) {
+      const obj = pathNode.node.object;
+      if (!obj?.name) return;
+
+      if (["document", "window"].includes(obj.name) && obj.name !== "globalThis") {
+        errors.push({
+          filePath,
+          line: pathNode.node.loc.start.line,
+          message:
+            `Use injected dependencies instead of ${obj.name}. (strict-dependency-injection)`,
+          hint: "const el = domAPI.getElementById('something');",
           node: pathNode.node,
-          ruleId: 6
+          ruleId: 2,
+        });
+      } else if (obj.name === "console") {
+        errors.push({
+          filePath,
+          line: pathNode.node.loc.start.line,
+          message:
+            "Do not use console.*; inject a notify or errorReporter instead. (notifications-via-di)",
+          hint:
+            "notify.info('msg', { module: 'MyModule', context: 'myFunction' })",
+          node: pathNode.node,
+          ruleId: 6,
         });
       }
     },
     CallExpression(pathNode) {
-      if (pathNode.node.callee.name === 'alert') {
+      if (pathNode.node.callee.name === "alert") {
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use injected notify utility instead of alert(). (notifications-via-di)`,
-          hint: `Example:\nnotify.info('User message', { module: 'MyModule', context: 'myFunction' })`,
+          line: pathNode.node.loc.start.line,
+          message: "Use notify instead of alert(). (notifications-via-di)",
+          hint:
+            "notify.info('User message', { module: 'MyModule', context: 'myFunction' })",
           node: pathNode.node,
-          ruleId: 6
+          ruleId: 6,
         });
       }
-    }
-  });
+    },
+  };
 }
 
-/**
- * 3) Pure Imports - No side effects at import time
- */
-function checkPureModuleContracts(ast, filePath, errors) {
-  ast.program.body.forEach((node) => {
-    if (
-      node.type === 'ExpressionStatement' &&
-      node.expression.type !== 'Literal' // Allow simple literals like "use strict";
-    ) {
-      // Avoid flagging 'use strict';
-      if (node.expression.type === 'Literal' && node.expression.value === 'use strict') {
-        return;
-      }
-      // Avoid flagging constant declarations like: const MY_CONST = "value";
-      if (node.type === 'VariableDeclaration' && node.kind === 'const') {
-        return;
-      }
-      errors.push({
-        filePath,
-        line: node.loc?.start.line,
-        message: `Found top-level side effect; factor into createXYZ function. (pure-imports)`,
-        hint: `Move initialization and side effects into a createXYZ(...) function.`,
-        node,
-        ruleId: 3
-      });
-    }
-  });
+/* ---------- 3) Pure imports (no side-effects) ---------- */
+function checkPureModuleContracts(errors, filePath) {
+  return {
+    Program: {
+      exit(pathNode) {
+        pathNode.node.body.forEach((node) => {
+          if (
+            node.type === "ImportDeclaration" ||
+            node.type === "VariableDeclaration" ||
+            (node.type === "ExpressionStatement" &&
+              node.expression.type === "Literal" &&
+              node.expression.value === "use strict")
+          )
+            return;
+
+          errors.push({
+            filePath,
+            line: node.loc.start.line,
+            message:
+              "Found top-level side-effect; move into the factory. (pure-imports)",
+            hint: "Wrap logic in createXyz(...) and export that factory.",
+            node,
+            ruleId: 3,
+          });
+        });
+      },
+    },
+  };
 }
 
-/**
- * 4) Centralized Event Handling
- * 5) Context Tags for event listeners
- */
-function checkEventListenerCleanup(ast, filePath, errors) {
-  traverse(ast, {
+/* ---------- 4 & 5) Centralised event handling / context tags ---------- */
+function checkEventListenerCleanup(errors, filePath) {
+  const state = { usesTrack: false, hasCleanup: false, cleanupHasContext: false };
+
+  return {
     CallExpression(pathNode) {
       const { callee, arguments: args } = pathNode.node;
 
-      // Check for event listener tracking
+      // eventHandlers.trackListener
       if (
-        callee.type === 'MemberExpression' &&
-        callee.object.name === 'eventHandlers' &&
-        callee.property.name === 'trackListener'
+        callee.type === "MemberExpression" &&
+        callee.object.name === "eventHandlers" &&
+        callee.property.name === "trackListener"
       ) {
-        // Check if context is provided (Guardrail #5)
-        let hasContextParam = false;
+        state.usesTrack = true;
 
-        if (args.length > 1) {
-          const lastArg = args[args.length - 1];
-          if (lastArg.type === 'ObjectExpression') {
-            hasContextParam = lastArg.properties.some(prop =>
-              prop.key.name === 'context' && prop.value.type === 'StringLiteral'
-            );
-          }
-        }
-
-        if (!hasContextParam) {
+        const last = args[args.length - 1];
+        const ok = last?.type === "ObjectExpression" &&
+                   hasProperty(last, "context");
+        if (!ok) {
           errors.push({
             filePath,
-            line: pathNode.node.loc?.start.line,
-            message: `Missing context tag in eventHandlers.trackListener call. (event-context-tag-missing)`,
-            hint: `Example:\neventHandlers.trackListener(element, 'click', handleClick, { context: 'sidebar-menu' })`,
+            line: pathNode.node.loc.start.line,
+            message:
+              "Missing context tag in eventHandlers.trackListener. (event-context-tag-missing)",
+            hint:
+              "eventHandlers.trackListener(el, 'click', handler, { context: 'sidebar-menu' })",
             node: pathNode.node,
-            ruleId: 5
+            ruleId: 5,
           });
         }
       }
 
-      // Look for direct addEventListener instead of using eventHandlers
+      // direct addEventListener on globals
       if (
-        callee.type === 'MemberExpression' &&
-        callee.property.name === 'addEventListener' &&
-        callee.object.type === 'Identifier' &&         // Warn only when the target *is* a bare identifier
-        !pathNode.scope.hasBinding(callee.object.name) // that isn’t DI-injected
+        callee.type === "MemberExpression" &&
+        callee.property.name === "addEventListener" &&
+        ((callee.object.type === "MemberExpression" &&
+          ["document", "window"].includes(callee.object.object?.name || "")) ||
+          (callee.object.type === "Identifier" && !pathNode.scope.hasBinding(callee.object.name)))
       ) {
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use eventHandlers.trackListener instead of direct addEventListener. (centralized-event-handling)`,
-          hint: `Example:\nconst listener = eventHandlers.trackListener(element, 'click', handleClick, { context: 'sidebar-menu' })`,
+          line: pathNode.node.loc.start.line,
+          message:
+            "Use eventHandlers.trackListener instead of addEventListener. (centralized-event-handling)",
+          hint:
+            "eventHandlers.trackListener(el, 'click', handler, { context: 'sidebar-menu' })",
           node: pathNode.node,
-          ruleId: 4
+          ruleId: 4,
         });
       }
-    }
-  });
+    },
 
-  // Look for cleanup function that removes listeners
-  let foundCleanupFunction = false;
-  let foundRemoveListenerCalls = false;
-
-  traverse(ast, {
     FunctionDeclaration(pathNode) {
-      if (pathNode.node.id?.name === 'cleanup' || pathNode.node.id?.name === 'teardown') { // Added teardown
-        foundCleanupFunction = true;
-
-        // Look for cleanupListeners call with context
+      if (["cleanup", "teardown"].includes(pathNode.node.id?.name)) {
+        state.hasCleanup = true;
         pathNode.traverse({
-          CallExpression(innerPath) {
+          CallExpression(p) {
             if (
-              innerPath.node.callee.type === 'MemberExpression' &&
-              innerPath.node.callee.object.name === 'eventHandlers' &&
-              innerPath.node.callee.property.name === 'cleanupListeners'
+              p.node.callee.type === "MemberExpression" &&
+              p.node.callee.object.name === "eventHandlers" &&
+              p.node.callee.property.name === "cleanupListeners"
             ) {
-              // Check if context is provided
-              if (
-                innerPath.node.arguments.length > 0 &&
-                innerPath.node.arguments[0].type === 'ObjectExpression' &&
-                innerPath.node.arguments[0].properties.some(prop => prop.key.name === 'context')
-              ) {
-                foundRemoveListenerCalls = true;
-              }
+              const arg = p.node.arguments[0];
+              if (arg?.type === "ObjectExpression" &&
+                  hasProperty(arg, "context"))
+                state.cleanupHasContext = true;
             }
-          }
+          },
         });
       }
-    }
-  });
+    },
 
-  // Look for trackListener without proper cleanup
-  let usesTrackListener = false;
-  traverse(ast, {
-    CallExpression(pathNode) {
-      if (
-        pathNode.node.callee.type === 'MemberExpression' &&
-        pathNode.node.callee.object.name === 'eventHandlers' &&
-        pathNode.node.callee.property.name === 'trackListener'
-      ) {
-        usesTrackListener = true;
-      }
-    }
-  });
-
-  if (usesTrackListener && (!foundCleanupFunction || !foundRemoveListenerCalls)) {
-    errors.push({
-      filePath,
-      line: 1, // General file issue
-      message: `Module registers event listeners but doesn't have a proper cleanup/teardown function using eventHandlers.cleanupListeners. (centralized-event-handling)`,
-      hint: `Example:\nfunction cleanup() {\n  eventHandlers.cleanupListeners({ context: 'module-name' });\n}\n\nreturn { setup, cleanup };`,
-      ruleId: 4
-    });
-  }
-}
-
-/**
- * 7) Debug & Trace Utilities
- */
-function checkCreateDebugToolsUsage(ast, filePath, errors) {
-  let foundCreateDebugTools = false;
-
-  traverse(ast, {
-    CallExpression(pathNode) {
-      if (pathNode.node.callee.name === 'createDebugTools') {
-        foundCreateDebugTools = true;
-
-        // Check if options include notify
-        let hasNotifyOption = false;
-        if (
-          pathNode.node.arguments.length > 0 &&
-          pathNode.node.arguments[0].type === 'ObjectExpression'
-        ) {
-          hasNotifyOption = pathNode.node.arguments[0].properties.some(
-            p => p.key.name === 'notify'
-          );
-        }
-
-        if (!hasNotifyOption) {
+    Program: {
+      exit() {
+        if (state.usesTrack && (!state.hasCleanup || !state.cleanupHasContext)) {
           errors.push({
             filePath,
-            line: pathNode.node.loc?.start.line,
-            message: `createDebugTools() should be called with a notify dependency. (debug-trace-usage)`,
-            hint: `Example: const dbg = createDebugTools({ notify });`,
-            node: pathNode.node,
-            ruleId: 7
+            line: 1,
+            message:
+              "Listeners registered but no cleanupListeners({ context }) call. (centralized-event-handling)",
+            hint:
+              "function cleanup() {\n  eventHandlers.cleanupListeners({ context: 'module' });\n}",
+            ruleId: 4,
           });
         }
-      }
-    }
-  });
+      },
+    },
+  };
 }
 
-/**
- * 8) Context-Rich Error Logging
- */
-function checkErrorHandling(ast, filePath, errors) {
-  traverse(ast, {
+/* ---------- 7) Debug tools ---------- */
+function checkCreateDebugToolsUsage(errors, filePath) {
+  return {
+    CallExpression(pathNode) {
+      if (pathNode.node.callee.name !== "createDebugTools") return;
+      const cfg = pathNode.node.arguments[0];
+      const hasNotify = cfg?.type === "ObjectExpression" &&
+                        hasProperty(cfg, "notify");
+      if (!hasNotify) {
+        errors.push({
+          filePath,
+          line: pathNode.node.loc.start.line,
+          message: "createDebugTools() should receive notify. (debug-trace-usage)",
+          hint: "const dbg = createDebugTools({ notify });",
+          node: pathNode.node,
+          ruleId: 7,
+        });
+      }
+    },
+  };
+}
+
+/* ---------- 8) Context-rich error logging ---------- */
+function checkErrorHandling(errors, filePath) {
+  return {
     CatchClause(pathNode) {
-      const catchParamName = pathNode.node.param ? pathNode.node.param.name : null;
-      let foundProperCapture = false;
+      const errName = pathNode.node.param?.name;
+      let ok = false;
 
       pathNode.traverse({
-        CallExpression(innerPath) {
-          const { callee, arguments: args } = innerPath.node;
+        CallExpression(p) {
+          const { callee, arguments: a } = p.node;
           if (
-            callee.type === 'MemberExpression' &&
-            callee.object.name === 'errorReporter' &&
-            callee.property.name === 'capture'
+            callee.type === "MemberExpression" &&
+            callee.object.name === "errorReporter" &&
+            callee.property.name === "capture"
           ) {
-            // Check if the first argument is the error object from the catch clause
-            const firstArgIsCatchParam = args.length > 0 &&
-                                       args[0].type === 'Identifier' &&
-                                       args[0].name === catchParamName;
+            const first = a[0];
+            const meta = a[1];
+            const firstMatch = first?.type === "Identifier" && first.name === errName;
+            const metaOk = meta?.type === "ObjectExpression" &&
+                        ["module", "source", "method"].some(k => hasProperty(meta, k));
 
-            // Check if the second argument is an ObjectExpression with module/source/method
-            let secondArgHasContext = false;
-            if (args.length > 1 && args[1].type === 'ObjectExpression') {
-              const props = args[1].properties;
-              const hasModule = props.some(p => p.key.name === 'module');
-              const hasSourceOrMethod = props.some(p =>
-                p.key.name === 'source' || p.key.name === 'method'
-              );
-
-              if (hasModule && hasSourceOrMethod) {
-                secondArgHasContext = true;
-              }
-            }
-
-            if (firstArgIsCatchParam && secondArgHasContext) {
-              foundProperCapture = true;
-              innerPath.stop(); // Found a good one, stop searching this catch block
-            }
+            if (firstMatch && metaOk) ok = true;
           }
         },
       });
 
-      if (!foundProperCapture) {
+      if (!ok) {
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `No errorReporter.capture found in catch block with required context. (error-handling--context-rich-logging)`,
-          hint: `Example:\ntry {\n  // ...\n} catch (err) {\n  errorReporter.capture(err, {\n    module: 'MyModule',\n    source: 'myFunction',\n    originalError: err \n  });\n}`,
+          line: pathNode.node.loc.start.line,
+          message:
+            "No errorReporter.capture(err, { module, … }) in catch block. (error-handling--context-rich-logging)",
+          hint:
+            "errorReporter.capture(err, { module: 'MyModule', source: 'fnName' });",
           node: pathNode.node,
-          ruleId: 8
+          ruleId: 8,
         });
       }
     },
-  });
+  };
 }
 
-/**
- * 9) Sanitize All User HTML
- */
-function checkSanitizedInputs(ast, filePath, errors) {
-  traverse(ast, {
-    AssignmentExpression(pathNode) {
-      const { left, right } = pathNode.node;
-      if (
-        left.type === 'MemberExpression' &&
-        left.property.name === 'innerHTML'
-      ) {
-        // Skip if it's an empty string assignment (common for clearing)
-        if (right.type === 'StringLiteral' && right.value === '') {
-          return;
-        }
+/* ---------- 9) Sanitize HTML ---------- */
+function checkSanitizedInputs(errors, filePath) {
+  const propName = (mem) => {
+    if (!mem || !mem.property) return null;
 
-        const isSanitizedCall =
-          right.type === 'CallExpression' &&
-          right.callee.type === 'MemberExpression' &&
-          right.callee.object?.name === 'sanitizer' &&
-          right.callee.property?.name === 'sanitize';
+    return mem.property.type === "Identifier"
+      ? mem.property.name
+      : mem.property.type === "StringLiteral"
+      ? mem.property.value
+      : null;
+  };
 
-        if (!isSanitizedCall) {
+  const isSanitizeCall = (n) => {
+    if (!n || n.type !== "CallExpression") return false;
+
+    const { callee } = n;
+
+    // Direct sanitize call: sanitize(...)
+    if (callee.type === "Identifier" && callee.name === "sanitize") return true;
+
+    // Method call: obj.sanitize(...)
+    if (callee.type === "MemberExpression" && propName(callee) === "sanitize") {
+      // Simple case: sanitizer.sanitize(...)
+      return true;
+    }
+
+    // Nested case: deps.sanitizer.sanitize(...)
+    if (callee.type === "MemberExpression" &&
+        propName(callee) === "sanitize" &&
+        callee.object?.type === "MemberExpression" &&
+        propName(callee.object) === "sanitizer") {
+      return true;
+    }
+
+    return false;
+  };
+
+  return {
+    AssignmentExpression(p) {
+      const { left, right } = p.node;
+      if (left.type !== "MemberExpression") return;
+      const pn = propName(left);
+      if (!["innerHTML", "outerHTML"].includes(pn)) return;
+      if (right.type === "StringLiteral" && right.value === "") return; // clearing
+      if (!isSanitizeCall(right))
+        errors.push({
+          filePath,
+          line: p.node.loc.start.line,
+          message:
+            `Setting .${pn} without sanitizer.sanitize(...). (dom--security-sanitized-inputs)`,
+          hint:
+            "const safe = sanitizer.sanitize(userHtml);\nel.innerHTML = safe;",
+          node: p.node,
+          ruleId: 9,
+        });
+    },
+
+    CallExpression(p) {
+      const pn = propName(p.node.callee);
+      // insertAdjacentHTML
+      if (pn === "insertAdjacentHTML") {
+        const htmlArg = p.node.arguments[1];
+        if (!isSanitizeCall(htmlArg))
           errors.push({
             filePath,
-            line: pathNode.node.loc?.start.line,
-            message: `Setting .innerHTML without sanitizer.sanitize(...) detected. (dom--security-sanitized-inputs)`,
-            hint: `Example:\nconst safeHtml = sanitizer.sanitize(userHtml);\nel.innerHTML = safeHtml;`,
-            node: pathNode.node,
-            ruleId: 9
+            line: p.node.loc.start.line,
+            message:
+              "insertAdjacentHTML() without sanitizer.sanitize(...). (dom--security-sanitized-inputs)",
+            hint:
+              "el.insertAdjacentHTML('beforeend', sanitizer.sanitize(userHtml));",
+            node: p.node,
+            ruleId: 9,
           });
-        }
+      }
+
+      // setAttribute('src', …)
+      if (
+        pn === "setAttribute" &&
+        p.node.arguments.length >= 2 &&
+        p.node.arguments[0].type === "StringLiteral" &&
+        p.node.arguments[0].value === "src"
+      ) {
+        const val = p.node.arguments[1];
+        const safe =
+          (val.type === "StringLiteral" && /^https?:/.test(val.value)) ||
+          isSanitizeCall(val);
+        if (!safe)
+          errors.push({
+            filePath,
+            line: p.node.loc.start.line,
+            message:
+              "setAttribute('src', …) without sanitizer or absolute URL. (dom--security-sanitized-inputs)",
+            hint:
+              "img.setAttribute('src', sanitizer.sanitizeUrl(userUrl)); // or ensure http/https",
+            node: p.node,
+            ruleId: 9,
+          });
       }
     },
-  });
+  };
 }
 
-/**
- * 10) App Readiness check
- */
+/* ---------- 10) App readiness ---------- */
 function checkAppReadiness(ast, filePath, errors) {
-  let foundReadinessCheck = false;
-
+  let ok = false;
   traverse(ast, {
-    CallExpression(pathNode) {
-      const { callee } = pathNode.node;
-
-      // Check for DependencySystem.waitFor
+    CallExpression(p) {
+      const callee = p.node.callee;
+      // DependencySystem.waitFor(...)
       if (
-        callee.type === 'MemberExpression' &&
-        callee.object.name === 'DependencySystem' &&
-        callee.property.name === 'waitFor'
-      ) {
-        foundReadinessCheck = true;
-      }
-
-      // Check for addEventListener with 'app:ready'
+        callee.type === "MemberExpression" &&
+        callee.object.name === "DependencySystem" &&
+        callee.property.name === "waitFor"
+      )
+        ok = true;
+      // addEventListener('app:ready')
       if (
-        callee.type === 'MemberExpression' &&
-        callee.property.name === 'addEventListener' &&
-        pathNode.node.arguments.length > 0 &&
-        pathNode.node.arguments[0].type === 'StringLiteral' &&
-        pathNode.node.arguments[0].value === 'app:ready'
-      ) {
-        foundReadinessCheck = true;
-      }
-    }
+        callee.type === "MemberExpression" &&
+        callee.property.name === "addEventListener" &&
+        p.node.arguments[0]?.type === "StringLiteral" &&
+        p.node.arguments[0].value === "app:ready"
+      )
+        ok = true;
+    },
   });
-
-  if (!foundReadinessCheck) {
+  if (!ok)
     errors.push({
       filePath,
       line: 1,
-      message: `No readiness gate detected before DOM / app access. (app-readiness-check-missing)`,
-      hint: `Wrap main logic in DependencySystem.waitFor([...]) or app:ready.`,
-      ruleId: 10
+      message:
+        "No readiness gate detected before DOM / app access. (app-readiness-check-missing)",
+      hint: "Wrap main logic in DependencySystem.waitFor([...]) or 'app:ready'.",
+      ruleId: 10,
     });
-  }
 }
 
-/**
- * 11) Central app.state Only - No direct mutation
- */
+/* ---------- 11) App-state direct mutation ---------- */
 function checkAppStateMutation(ast, filePath, errors) {
   traverse(ast, {
-    AssignmentExpression(pathNode) {
-      const { left } = pathNode.node;
-
+    AssignmentExpression(p) {
+      const left = p.node.left;
+      // app.state.*
       if (
-        left.type === 'MemberExpression' &&
-        left.object.type === 'MemberExpression' &&
-        left.object.object.name === 'app' &&
-        left.object.property.name === 'state'
-      ) {
+        left.type === "MemberExpression" &&
+        left.object.type === "MemberExpression" &&
+        left.object.object.name === "app" &&
+        left.object.property.name === "state"
+      )
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Direct mutation of app.state is not allowed. (app-state-direct-mutation)`,
-          hint: `Example: Use app.state.get() to read values and appropriate setters for changes.`,
-          node: pathNode.node,
-          ruleId: 11
+          line: p.node.loc.start.line,
+          message: "Direct mutation of app.state. (app-state-direct-mutation)",
+          hint: "Use app.state.set(...) / designated setter.",
+          node: p.node,
+          ruleId: 11,
         });
-      }
-    }
+      // this.state.*
+      if (
+        left.type === "MemberExpression" &&
+        left.object.type === "MemberExpression" &&
+        left.object.object.type === "ThisExpression" &&
+        left.object.property.name === "state"
+      )
+        errors.push({
+          filePath,
+          line: p.node.loc.start.line,
+          message: "Direct mutation of this.state. (app-state-direct-mutation)",
+          hint: "Use controlled setter or state manager.",
+          node: p.node,
+          ruleId: 11,
+        });
+    },
   });
 }
 
-/**
- * 13) Navigation Service - Use navigationService.navigateTo
- */
+/* ---------- 12) Module Event Bus ---------- */
+function checkModuleEventBus(ast, filePath, errors) {
+  let newEventTarget = false;
+  traverse(ast, {
+    NewExpression(p) {
+      if (p.node.callee.name === "EventTarget") newEventTarget = true;
+    },
+  });
+  let dispatchesCustom = false;
+  traverse(ast, {
+    CallExpression(p) {
+      if (
+        p.node.callee.type === "MemberExpression" &&
+        p.node.callee.property.name === "dispatchEvent" &&
+        p.node.arguments[0]?.type === "NewExpression" &&
+        p.node.arguments[0].callee.name === "CustomEvent"
+      )
+        dispatchesCustom = true;
+    },
+  });
+  if (dispatchesCustom && !newEventTarget)
+    errors.push({
+      filePath,
+      line: 1,
+      message:
+        "Custom events dispatched without dedicated EventTarget. (module-event-bus-missing)",
+      hint:
+        "const MyBus = new EventTarget(); … MyBus.dispatchEvent(new CustomEvent('x'));",
+      ruleId: 12,
+    });
+}
+
+/* ---------- 13) Navigation Service ---------- */
 function checkNavigationService(ast, filePath, errors) {
   traverse(ast, {
-    AssignmentExpression(pathNode) {
-      const { left } = pathNode.node;
-
-      // Check for window.location assignments
+    AssignmentExpression(p) {
+      const { left } = p.node;
       if (
-        left.type === 'MemberExpression' &&
-        left.object.name === 'window' &&
-        (left.property.name === 'location' ||
-         left.property.name === 'href')
-      ) {
+        left.type === "MemberExpression" &&
+        left.object.name === "window" &&
+        ["location", "href"].includes(left.property.name)
+      )
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use navigationService.navigateTo() instead of direct window.location changes. (navigation-service-bypass)`,
-          hint: `Example: navigationService.navigateTo('/new-route');`,
-          node: pathNode.node,
-          ruleId: 13
+          line: p.node.loc.start.line,
+          message:
+            "Use navigationService.navigateTo() instead of window.location assignment. (navigation-service-bypass)",
+          hint: "navigationService.navigateTo('/route');",
+          node: p.node,
+          ruleId: 13,
         });
-      }
     },
-    CallExpression(pathNode) {
-      // Check for window.location.assign()
+    CallExpression(p) {
+      const c = p.node.callee;
       if (
-        pathNode.node.callee.type === 'MemberExpression' &&
-        pathNode.node.callee.object.type === 'MemberExpression' &&
-        pathNode.node.callee.object.object.name === 'window' &&
-        pathNode.node.callee.object.property.name === 'location' &&
-        pathNode.node.callee.property.name === 'assign'
-      ) {
+        c.type === "MemberExpression" &&
+        c.object.type === "MemberExpression" &&
+        c.object.object.name === "window" &&
+        c.object.property.name === "location" &&
+        c.property.name === "assign"
+      )
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use navigationService.navigateTo() instead of window.location.assign(). (navigation-service-bypass)`,
-          hint: `Example: navigationService.navigateTo('/new-route');`,
-          node: pathNode.node,
-          ruleId: 13
+          line: p.node.loc.start.line,
+          message:
+            "Use navigationService.navigateTo() instead of window.location.assign(). (navigation-service-bypass)",
+          hint: "navigationService.navigateTo('/route');",
+          node: p.node,
+          ruleId: 13,
         });
-      }
     },
-    MemberExpression(pathNode) {
-      // Check for window.location.href access
-      if (
-        pathNode.node.object.type === 'MemberExpression' &&
-        pathNode.node.object.object.name === 'window' &&
-        pathNode.node.object.property.name === 'location' &&
-        pathNode.node.property.name === 'href' &&
-        pathNode.parent.type === 'AssignmentExpression' &&
-        pathNode.parent.left === pathNode.node
-      ) {
-        errors.push({
-          filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use navigationService.navigateTo() instead of direct window.location.href assignment. (navigation-service-bypass)`,
-          hint: `Example: navigationService.navigateTo('/new-route');`,
-          node: pathNode.node,
-          ruleId: 13
-        });
-      }
-    }
   });
 }
 
-/**
- * 14) Single API Client
- */
+/* ---------- 14) Single API Client ---------- */
 function checkApiClientUsage(ast, filePath, errors) {
   traverse(ast, {
-    NewExpression(pathNode) {
-      if (pathNode.node.callee.name === 'XMLHttpRequest') {
+    NewExpression(p) {
+      if (p.node.callee.name === "XMLHttpRequest")
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use apiClient instead of direct XMLHttpRequest. (api-client-bypass)`,
-          hint: `Example: apiClient.get('/api/data').then(handleResponse);`,
-          node: pathNode.node,
-          ruleId: 14
+          line: p.node.loc.start.line,
+          message: "Use apiClient instead of XMLHttpRequest. (api-client-bypass)",
+          hint: "apiClient.get('/api/data')",
+          node: p.node,
+          ruleId: 14,
         });
+    },
+    CallExpression(p) {
+      if (p.node.callee.name === "fetch" && !filePath.includes("apiClient"))
+        errors.push({
+          filePath,
+          line: p.node.loc.start.line,
+          message: "Use apiClient instead of fetch. (api-client-bypass)",
+          hint: "apiClient.post('/endpoint', payload)",
+          node: p.node,
+          ruleId: 14,
+        });
+    },
+  });
+}
+
+/* ---------- 15) Contextual notifier factories ---------- */
+function checkNotifyWithContextUsage(errors, filePath) {
+  let hasWithContext = false;
+  let notifyCalls = 0;
+
+  return {
+    CallExpression(p) {
+      const { callee } = p.node;
+      // notify.withContext(...)
+      if (
+        callee.type === "MemberExpression" &&
+        callee.object.name === "notify" &&
+        callee.property.name === "withContext"
+      ) {
+        hasWithContext = true;
+        const meta = p.node.arguments[0];
+        const hasModule = meta?.type === "ObjectExpression" &&
+                          hasProperty(meta, "module");
+        const hasContext = meta?.type === "ObjectExpression" &&
+                          hasProperty(meta, "context");
+
+        if (!hasModule || !hasContext)
+          errors.push({
+            filePath,
+            line: p.node.loc.start.line,
+            message:
+              "notify.withContext() must include module and context. (contextual-notifier-factories)",
+            node: p.node,
+            ruleId: 15,
+          });
+      }
+
+      // notify.info / moduleNotify.info
+      if (
+        callee.type === "MemberExpression" &&
+        ((callee.object.name === "notify" &&
+          ["info", "warn", "error", "success", "debug", "apiError", "authWarn"].includes(
+            callee.property.name
+          )) ||
+          (callee.object.type === "Identifier" && hasWithContext))
+      ) {
+        notifyCalls += 1;
+        const meta = p.node.arguments[1];
+        const missing = [];
+
+        // Check for required properties
+        ["module", "context", "source"].forEach((k) => {
+          if (meta?.type === "ObjectExpression" && !hasProperty(meta, k)) {
+            missing.push(k);
+          }
+        });
+
+        if (missing.length)
+          errors.push({
+            filePath,
+            line: p.node.loc.start.line,
+            message:
+              `notify call missing properties: ${missing.join(", ")}. (contextual-notifier-factories)`,
+            node: p.node,
+            ruleId: 15,
+          });
       }
     },
+    Program: {
+      exit() {
+        if (notifyCalls > 2 && !hasWithContext)
+          errors.push({
+            filePath,
+            line: 1,
+            message:
+              "Multiple notify calls without notify.withContext(). (contextual-notifier-factories)",
+            hint:
+              "const n = notify.withContext({ module: 'MyModule', context: 'ops' });",
+            ruleId: 15,
+          });
+      },
+    },
+  };
+}
 
-    CallExpression(pathNode) {
-      // Check for fetch calls
-      if (pathNode.node.callee.name === 'fetch') {
-        // Allow fetch if it's inside a module named apiClient.js or similar
-        if (filePath.includes('apiClient')) { // Basic check, can be made more robust
-          return;
+/* ---------- 16) Backend event logging ---------- */
+function checkBackendEventLogging(ast, filePath, errors) {
+  let logged = false;
+  traverse(ast, {
+    CallExpression(p) {
+      const { callee } = p.node;
+      if (
+        callee.type === "MemberExpression" &&
+        callee.object.name === "backendLogger" &&
+        callee.property.name === "log"
+      )
+        logged = true;
+    },
+  });
+  if (!logged)
+    errors.push({
+      filePath,
+      line: 1,
+      message:
+        "No backendLogger.log(...) call detected. (backend-event-logging-missing)",
+      hint:
+        "backendLogger.log({ level: 'info', module: 'MyModule', message: 'loaded' });",
+      ruleId: 16,
+    });
+}
+
+/* ---------- 17) User consent before analytics ---------- */
+function checkUserConsent(ast, filePath, errors) {
+  const analytics = ["GoogleAnalytics", "Segment", "Mixpanel", "Sentry", "LogRocket"];
+  traverse(ast, {
+    NewExpression(p) {
+      if (!analytics.includes(p.node.callee.name)) return;
+
+      let consent = false;
+      let current = p.parentPath;
+      while (current && !consent) {
+        if (current.isIfStatement()) {
+          current.traverse({
+            MemberExpression(inner) {
+              if (
+                inner.node.object.name === "user" &&
+                inner.node.property.name === "hasConsent"
+              )
+                consent = true;
+            },
+          });
         }
+        current = current.parentPath;
+      }
+      if (!consent)
         errors.push({
           filePath,
-          line: pathNode.node.loc?.start.line,
-          message: `Use apiClient instead of direct fetch calls. (api-client-bypass)`,
-          hint: `Example: apiClient.post('/api/data', payload).then(handleResponse);`,
-          node: pathNode.node,
-          ruleId: 14
+          line: p.node.loc.start.line,
+          message: "Analytics init without user consent. (user-consent-check-missing)",
+          hint: "if (user.hasConsent('analytics')) { initAnalytics(); }",
+          ruleId: 17,
         });
-      }
-    }
+    },
   });
 }
 
-/**
- * 15) Notifier Factories
- */
-function checkNotifyWithContextUsage(ast, filePath, errors) {
-  let foundNotifyCall = false;
-  let foundWithContextCall = false;
-  let notifyCalls = [];
-
-  traverse(ast, {
-    CallExpression(pathNode) {
-      const { callee } = pathNode.node;
-
-      // Check for direct notify calls
-      if (
-        callee.type === 'MemberExpression' &&
-        callee.object.name === 'notify' &&
-        ['info', 'warn', 'error', 'success', 'debug', 'apiError', 'authWarn'].includes(callee.property.name)
-      ) {
-        foundNotifyCall = true;
-        notifyCalls.push(pathNode);
-
-        // Check if the second argument has module & context
-        if (
-          pathNode.node.arguments.length > 1 &&
-          pathNode.node.arguments[1].type === 'ObjectExpression'
-        ) {
-          const props = pathNode.node.arguments[1].properties;
-          const hasModule = props.some(p => p.key && p.key.name === 'module');
-          const hasContext = props.some(p => p.key && p.key.name === 'context');
-          const hasSource = props.some(p => p.key && p.key.name === 'source');
-
-          if (!hasModule || !hasContext) {
-            errors.push({
-              filePath,
-              line: pathNode.node.loc?.start.line,
-              message: `notify calls should include both module and context properties. (contextual-notifier-factories)`,
-              hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction', source: 'functionName' });`,
-              node: pathNode.node,
-              ruleId: 15
-            });
-          } else if (!hasSource) {
-            // Just a warning for missing source
-            errors.push({
-              filePath,
-              line: pathNode.node.loc?.start.line,
-              message: `notify calls should ideally include source property for better tracing. (contextual-notifier-factories)`,
-              hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction', source: 'functionName' });`,
-              node: pathNode.node,
-              ruleId: 15
-            });
-          }
-        } else if (pathNode.node.arguments.length === 1) {
-          // Only one argument (message) without metadata
-          errors.push({
-            filePath,
-            line: pathNode.node.loc?.start.line,
-            message: `notify calls should include metadata object with module and context properties. (contextual-notifier-factories)`,
-            hint: `Example: notify.info('Message', { module: 'MyModule', context: 'myFunction', source: 'functionName' });`,
-            node: pathNode.node,
-            ruleId: 15
-          });
-        }
-      }
-
-      // Check for notify.withContext usage
-      if (
-        callee.type === 'MemberExpression' &&
-        callee.object.name === 'notify' &&
-        callee.property.name === 'withContext'
-      ) {
-        foundWithContextCall = true;
-
-        // Check if it has module & context
-        if (
-          pathNode.node.arguments.length > 0 &&
-          pathNode.node.arguments[0].type === 'ObjectExpression'
-        ) {
-          const props = pathNode.node.arguments[0].properties;
-          const hasModule = props.some(p => p.key && p.key.name === 'module');
-          const hasContext = props.some(p => p.key && p.key.name === 'context');
-
-          if (!hasModule || !hasContext) {
-            errors.push({
-              filePath,
-              line: pathNode.node.loc?.start.line,
-              message: `notify.withContext should include both module and context properties. (contextual-notifier-factories)`,
-              hint: `Example: const moduleNotify = notify.withContext({ module: 'MyModule', context: 'operations' });`,
-              node: pathNode.node,
-              ruleId: 15
-            });
-          }
-        }
-      }
-    }
-  });
-
-  // If found multiple direct notify calls but no withContext usage, suggest using withContext
-  if (foundNotifyCall && !foundWithContextCall && notifyCalls.length > 2) {
-    errors.push({
-      filePath,
-      line: 1, // General file issue
-      message: `Multiple notify calls (${notifyCalls.length}) without using notify.withContext to create module-scoped notifiers. (contextual-notifier-factories)`,
-      hint: `Example:\n// Create once at module level\nconst moduleNotify = notify.withContext({ module: 'MyModule', context: 'operations' });\n\n// Then use throughout the module\nmoduleNotify.info('Operation started');\nmoduleNotify.success('Operation completed');`,
-      ruleId: 15
-    });
-  }
-}
-
-/**
- * 16) Backend Event Logging
- */
-function checkBackendEventLogging(ast, filePath, errors) {
-  let foundBackendLogCall = false;
-  traverse(ast, {
-    CallExpression(pathNode) {
-      if (
-        pathNode.node.callee.type === 'MemberExpression' &&
-        pathNode.node.callee.object.name === 'backendLogger' &&
-        pathNode.node.callee.property.name === 'log'
-      ) {
-        foundBackendLogCall = true;
-        pathNode.stop();
-      }
-    }
-  });
-
-  if (!foundBackendLogCall) {
-    // This is a soft warning, as not all modules need backend logging.
-    // Consider if this should be a stricter error based on project needs.
-    // For now, let's not push an error to avoid false positives.
-    /*
-    errors.push({
-      filePath,
-      line: 1, // General file issue
-      message: `No backendLogger.log call detected. Consider logging critical client events. (backend-event-logging-missing)`,
-      hint: `Example: backendLogger.log({ level: 'info', message: 'User action', module: 'MyModule' });`,
-      ruleId: 16
-    });
-    */
-  }
-}
-
-/**
- * 12) Module Event Bus
- */
-function checkModuleEventBus(ast, filePath, errors) {
-  let foundEventTargetNew = false;
-  traverse(ast, {
-    NewExpression(pathNode) {
-      if (pathNode.node.callee.name === 'EventTarget') {
-        foundEventTargetNew = true;
-        pathNode.stop();
-      }
-    }
-  });
-
-  let sendsCustomEvent = false;
-  traverse(ast, {
-    CallExpression(pathNode) {
-        if (pathNode.node.callee.type === 'MemberExpression' &&
-            pathNode.node.callee.property?.name === 'dispatchEvent') {
-            // Further check if the event dispatched is a CustomEvent
-            if (pathNode.node.arguments.length > 0 && pathNode.node.arguments[0].type === 'NewExpression' && pathNode.node.arguments[0].callee.name === 'CustomEvent') {
-                 sendsCustomEvent = true;
-                 pathNode.stop();
-            }
-        }
-    }
-  });
-
-  if (sendsCustomEvent && !foundEventTargetNew) {
-    errors.push({
-      filePath,
-      line: 1, // General file issue as it's about module structure
-      message: `Custom events dispatched without a dedicated EventBus (new EventTarget()). (module-event-bus-missing)`,
-      hint: `Instantiate and use a local EventTarget for module-specific events:\nconst MyModuleBus = new EventTarget();\nMyModuleBus.dispatchEvent(new CustomEvent('custom-event'));`,
-      ruleId: 12
-    });
-  }
-}
-
-
-/**
- * 17) User Consent for Monitoring
- */
-function checkUserConsent(ast, filePath, errors) {
-  traverse(ast, {
-    NewExpression(pathNode) {
-      // Check for analytics services initialization without consent check
-      const analyticsServices = ['GoogleAnalytics', 'Segment', 'Mixpanel', 'Sentry', 'LogRocket'];
-
-      if (analyticsServices.includes(pathNode.node.callee.name)) {
-        let hasConsentCheck = false;
-
-        // Look for user consent check in the current or parent blocks
-        let currentPath = pathNode.parentPath;
-        while (currentPath && !hasConsentCheck) {
-          if (currentPath.isIfStatement()) {
-            currentPath.traverse({
-              MemberExpression(innerPath) {
-                if (
-                  innerPath.node.object.name === 'user' &&
-                  innerPath.node.property.name === 'hasConsent'
-                ) {
-                  hasConsentCheck = true;
-                  innerPath.stop();
-                }
-              }
-            });
-          }
-          currentPath = currentPath.parentPath;
-        }
-
-        if (!hasConsentCheck) {
-          errors.push({
-            filePath,
-            line: pathNode.node.loc?.start.line,
-            message: `Analytics/monitoring initialization without user consent check. (user-consent-check-missing)`,
-            hint: `Example: if (user.hasConsent('analytics')) { initializeAnalytics(); }`,
-            node: pathNode.node,
-            ruleId: 17
-          });
-        }
-      }
-    }
-  });
-}
-
-/**
- * Get line content from file
- */
-function getLineContent(fullCode, lineNumber) {
-  if (!fullCode || typeof lineNumber !== 'number' || lineNumber < 1) {
-    return '';
-  }
-  const lines = fullCode.split(/\r?\n/);
-  if (lineNumber > lines.length) {
-    return '';
-  }
-  return lines[lineNumber - 1].trim();
-}
-
-/**
- * Run all checks on a single file.
- */
-function analyzeFile(filePath, fullFileContent) {
+////////////////////////////////////////////////////////////////////////////////
+// Main analysis per file
+////////////////////////////////////////////////////////////////////////////////
+function analyzeFile(filePath, code) {
   let ast;
   try {
-    ast = parse(fullFileContent, {
-      sourceType: 'module',
-      plugins: ['jsx', 'typescript'],
+    ast = parse(code, {
+      sourceType: "module",
+      plugins: [
+        "jsx",
+        "typescript",
+        "classProperties",
+        "classPrivateProperties",
+        "decorators-legacy",
+        "dynamicImport",
+        "optionalChaining",
+        "nullishCoalescingOperator",
+      ],
     });
   } catch (err) {
-    return [
-      {
-        filePath,
-        message: `Failed to parse file: ${err.message}`,
-      },
-    ];
+    return [{ filePath, message: `Failed to parse: ${err.message}` }];
   }
 
   const errors = [];
 
-  // Run all checks against the AST
-  checkFactoryFunctionExportPattern(ast, filePath, errors);
-  checkNoGlobalUsage(ast, filePath, errors);
-  checkPureModuleContracts(ast, filePath, errors);
-  checkEventListenerCleanup(ast, filePath, errors);
-  checkErrorHandling(ast, filePath, errors);
-  checkSanitizedInputs(ast, filePath, errors);
-  checkCreateDebugToolsUsage(ast, filePath, errors);
-  checkNotifyWithContextUsage(ast, filePath, errors);
-  checkAppReadiness(ast, filePath, errors);
+  // ────────────────── Phase 1: single-pass visitor guardrails ──────────────────
+  const visitor = mergeVisitors(
+    checkFactoryFunctionExportPattern(errors, filePath),
+    checkNoGlobalUsage(errors, filePath),
+    checkPureModuleContracts(errors, filePath),
+    checkEventListenerCleanup(errors, filePath),
+    checkCreateDebugToolsUsage(errors, filePath),
+    checkErrorHandling(errors, filePath),
+    checkSanitizedInputs(errors, filePath),
+    checkNotifyWithContextUsage(errors, filePath)
+  );
+
+  traverse(ast, visitor);
+
+  // ────────────────── Phase 2: AST-scanning guardrails ──────────────────
   checkAppStateMutation(ast, filePath, errors);
+  checkModuleEventBus(ast, filePath, errors);
   checkNavigationService(ast, filePath, errors);
   checkApiClientUsage(ast, filePath, errors);
   checkBackendEventLogging(ast, filePath, errors);
-  checkModuleEventBus(ast, filePath, errors);
   checkUserConsent(ast, filePath, errors);
+  checkAppReadiness(ast, filePath, errors);     // readiness check last
 
-  // Add actualLineContent to errors that have a line number
-  errors.forEach(err => {
-    if (err.line) {
-      err.actualLineContent = getLineContent(fullFileContent, err.line);
-    }
+  errors.forEach((e) => {
+    if (e.line) e.actualLineContent = getLineContent(code, e.line);
   });
-
   return errors;
 }
 
-/**
- * Map error types to guardrail numbers (1-17)
- */
-function mapErrorTypeToGuardrail(errorType) {
-  const mapping = {
-    'factory-function-export-pattern': 1,
-    'strict-dependency-injection': 2,
-    'pure-imports': 3,
-    'centralized-event-handling': 4,
-    'event-context-tag-missing': 5,
-    'notifications-via-di': 6,
-    'debug-trace-usage': 7,
-    'error-handling--context-rich-logging': 8,
-    'dom--security-sanitized-inputs': 9,
-    'app-readiness-check-missing': 10,
-    'app-state-direct-mutation': 11,
-    'module-event-bus-missing': 12,
-    'navigation-service-bypass': 13,
-    'api-client-bypass': 14,
-    'contextual-notifier-factories': 15,
-    'backend-event-logging-missing': 16,
-    'user-consent-check-missing': 17
-  };
-
-  // Extract the error pattern from the message if not directly available
-  if (!mapping[errorType]) {
-    for (const [pattern, guardrailId] of Object.entries(mapping)) {
-      if (errorType.includes(pattern)) {
-        return guardrailId;
-      }
-    }
-  }
-
-  return mapping[errorType] || 0;
+////////////////////////////////////////////////////////////////////////////////
+// CLI helpers (drawBox, drawTable)
+////////////////////////////////////////////////////////////////////////////////
+function pad(s, len, padChar = " ") {
+  return s + padChar.repeat(Math.max(0, len - s.length));
+}
+function drawBox(title, width = 80) {
+  const top = "┌" + "─".repeat(width - 2) + "┐";
+  const bot = "└" + "─".repeat(width - 2) + "┘";
+  const empty = "│" + " ".repeat(width - 2) + "│";
+  const start = Math.floor((width - title.length - 2) / 2);
+  const line =
+    "│" + " ".repeat(start) + title + " ".repeat(width - 2 - start - title.length) + "│";
+  console.log(top);
+  console.log(empty);
+  console.log(line);
+  console.log(empty);
+  console.log(bot);
+  console.log("");
+}
+function drawTable(rows, headers, widths) {
+  const headerRow = headers.map((h, i) => pad(h, widths[i])).join(" │ ");
+  const sep = widths.map((w) => "─".repeat(w)).join("─┼─");
+  console.log("┌─" + sep + "─┐");
+  console.log("│ " + headerRow + " │");
+  console.log("├─" + sep + "─┤");
+  rows.forEach((r) => console.log("│ " + r.map((c, i) => pad(c, widths[i])).join(" │ ") + " │"));
+  console.log("└─" + sep + "─┘\n");
 }
 
-/**
- * Group errors by guardrail number
- */
-function groupErrorsByGuardrail(errors) {
-  const errorsByGuardrail = {};
+////////////////////////////////////////////////////////////////////////////////
+// CLI entry
+////////////////////////////////////////////////////////////////////////////////
+function main() {
+  const args = process.argv.slice(2);
+  let ruleFilter = null;
+  let files = [];
 
-  errors.forEach(error => {
-    let guardrailId = error.ruleId; // Prefer direct ruleId
-
-    if (guardrailId === undefined) { // Fallback to regex parsing if ruleId is missing
-      const typeMatch = error.message.match(/\(([\w-]+)\)/);
-      const errorType = typeMatch ? typeMatch[1] : 'unknown';
-      guardrailId = mapErrorTypeToGuardrail(errorType);
+  // Check for --rule=N filter option
+  args.forEach(arg => {
+    if (arg.startsWith('--rule=')) {
+      ruleFilter = parseInt(arg.split('=')[1], 10);
+      if (isNaN(ruleFilter)) ruleFilter = null;
+    } else {
+      files.push(arg);
     }
-
-    if (!errorsByGuardrail[guardrailId]) {
-      errorsByGuardrail[guardrailId] = [];
-    }
-
-    errorsByGuardrail[guardrailId].push(error);
   });
 
-  return errorsByGuardrail;
+  if (!files.length) {
+    console.log("\nFrontend Pattern Checker\n");
+    console.log("Usage: node patternChecker.js [--rule=N] <file1.js> [file2.js...]");
+    console.log("Options:");
+    console.log("  --rule=N  Only check rule number N (1-17)");
+    process.exit(0);
+  }
+
+  let total = 0;
+  const all = [];
+
+  files.forEach((f) => {
+    const abs = path.resolve(f);
+    const code = readFileContent(abs);
+    if (!code) return;
+
+    // Get all errors
+    let errs = analyzeFile(abs, code);
+
+    // Filter by rule number if specified
+    if (ruleFilter !== null) {
+      errs = errs.filter(err => err.ruleId === ruleFilter);
+    }
+
+    if (errs.length) {
+      total += errs.length;
+      all.push({ filePath: abs, errors: errs });
+    }
+  });
+
+  if (total) {
+    all.forEach(({ filePath, errors }) => {
+      drawBox(`${SYMBOLS.shield} Frontend Patterns: ${path.basename(filePath)}`, 80);
+      const grouped = groupErrorsByGuardrail(errors);
+      drawTable(
+        Object.entries(grouped).map(([id, v]) => [getGuardrailName(id), String(v.length)]),
+        ["Pattern", "Violations"],
+        [50, 10]
+      );
+
+      console.log("Detailed Violations\n");
+      Object.entries(grouped).forEach(([id, violations]) => {
+        console.log(`${SYMBOLS.lock} ${getGuardrailName(id)}\n${getGuardrailDescription(id)}\n`);
+        const byRule = {};
+        violations.forEach((v) => {
+          const m = v.message.match(/\(([\w-]+)\)/);
+          const rule = m ? m[1] : "unknown";
+          (byRule[rule] ??= []).push(v);
+        });
+        Object.values(byRule).forEach((list) =>
+          list.forEach((v, i) => {
+            console.log(`Line ${v.line}: ${v.actualLineContent}`);
+            console.log(`${SYMBOLS.error} ${v.message.split("(")[0].trim()}`);
+            if (i === 0 && v.hint) {
+              console.log(`${SYMBOLS.light} Pattern:`);
+              v.hint.split("\n").forEach((l) => console.log("   " + l));
+            }
+            console.log("");
+          })
+        );
+      });
+    });
+    drawBox(`${SYMBOLS.alert} Found ${total} pattern violation(s)!`, 80);
+    process.exit(1);
+  } else {
+    drawBox(`${SYMBOLS.success} No pattern violations found!`, 60);
+  }
 }
 
-/**
- * Get guardrail name by number
- */
-function getGuardrailName(guardrailId) {
-  const names = {
+////////////////////////////////////////////////////////////////////////////////
+// Mapping helpers
+////////////////////////////////////////////////////////////////////////////////
+function mapErrorTypeToGuardrail(t) {
+  const m = {
+    "factory-function-export-pattern": 1,
+    "strict-dependency-injection": 2,
+    "pure-imports": 3,
+    "centralized-event-handling": 4,
+    "event-context-tag-missing": 5,
+    "notifications-via-di": 6,
+    "debug-trace-usage": 7,
+    "error-handling--context-rich-logging": 8,
+    "dom--security-sanitized-inputs": 9,
+    "app-readiness-check-missing": 10,
+    "app-state-direct-mutation": 11,
+    "module-event-bus-missing": 12,
+    "navigation-service-bypass": 13,
+    "api-client-bypass": 14,
+    "contextual-notifier-factories": 15,
+    "backend-event-logging-missing": 16,
+    "user-consent-check-missing": 17,
+  };
+  if (!m[t]) for (const [pat, id] of Object.entries(m)) if (t.includes(pat)) return id;
+  return m[t] ?? 0;
+}
+function groupErrorsByGuardrail(errs) {
+  const g = {};
+  errs.forEach((e) => {
+    const id = e.ruleId ?? mapErrorTypeToGuardrail(e.message.match(/\(([\w-]+)\)/)?.[1] ?? "0");
+    (g[id] ??= []).push(e);
+  });
+  return g;
+}
+function getGuardrailName(id) {
+  const n = {
     1: "Factory Function Export",
     2: "Strict Dependency Injection",
     3: "Pure Imports",
@@ -1005,220 +1057,35 @@ function getGuardrailName(guardrailId) {
     15: "Notifier Factories",
     16: "Backend Event Logging",
     17: "User Consent for Monitoring",
-    0: "Other Issues"
+    0: "Other Issues",
   };
-
-  return names[guardrailId] || `Unknown Guardrail (${guardrailId})`;
+  return n[id] ?? `Unknown (${id})`;
 }
-
-/**
- * Get guardrail description by number
- */
-function getGuardrailDescription(guardrailId) {
-  const descriptions = {
-    1: "Export each module through a named factory (`createXyz`). Validate all dependencies at the top and expose a cleanup API. *No top‑level logic.*",
-    2: "Do **not** access `window`, `document`, `console`, or any global directly. Interact with the DOM and utilities only through injected abstractions.",
-    3: "Produce no side effects at import time; all initialization occurs inside the factory.",
-    4: "Register listeners with `eventHandlers.trackListener(..., { context })` and remove them with `eventHandlers.cleanupListeners({ context })`.",
-    5: "Supply a unique `context` string for every listener and notification.",
-    6: "Replace `console` or `alert` calls with the injected `notify` utility (or `notify.withContext`). Maintain consistent metadata.",
-    7: "Use `createDebugTools({ notify })` for performance timing and trace IDs; emit diagnostic messages through the same `notify` pipeline.",
-    8: "Capture errors with `errorReporter.capture(err, { module, method, … })`, never leaking tokens or PII.",
-    9: "Always call `sanitizer.sanitize()` before inserting user content into the DOM.",
-    10: "Wait for `DependencySystem.waitFor([...])` *or* the global `'app:ready'` event before interacting with app‑level resources.",
-    11: "Read global authentication and initialization flags from `app.state`; do **not** mutate them directly.",
-    12: "When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.",
-    13: "Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.",
-    14: "Make every network request through `apiClient`; centralize headers, CSRF, and error handling.",
-    15: "Create module‑scoped notifiers with `notify.withContext({ module, context })`. Always include module, context, and source properties in notifications.",
-    16: "Log critical client events with `backendLogger.log({ level, message, module, … })`.",
-    17: "Honor user opt‑out preferences before initializing analytics or error‑tracking SDKs.",
-    0: "Other issues not directly related to the 17 guardrails."
+function getGuardrailDescription(id) {
+  const d = {
+    1: "Export each module through a named factory (`createXyz`). Validate deps and expose cleanup.",
+    2: "Do **not** access globals directly; inject DOM helpers / utilities.",
+    3: "No side-effects on import; all init in factory.",
+    4: "Use eventHandlers.trackListener / cleanupListeners with context.",
+    5: "Every listener/notification must include a `context` tag.",
+    6: "Replace console/alert with notify (or notify.withContext).",
+    7: "Use createDebugTools({ notify }) for tracing.",
+    8: "errorReporter.capture(err, { module, source/method, … }) in every catch.",
+    9: "sanitizer.sanitize() before inserting user HTML.",
+    10: "Wait for DependencySystem.waitFor(...) or 'app:ready' before DOM/app usage.",
+    11: "Never mutate app.state or this.state directly.",
+    12: "Use a dedicated EventTarget for intra-module events.",
+    13: "All navigation via navigationService.navigateTo().",
+    14: "All network requests via apiClient.",
+    15: "Prefer notify.withContext({ module, context }). Each notify call must have module, context, source.",
+    16: "Log critical events via backendLogger.log(...).",
+    17: "Check user.hasConsent(...) before analytics/monitoring.",
+    0: "Miscellaneous / unknown pattern.",
   };
-
-  return descriptions[guardrailId] || "No description available.";
+  return d[id] ?? "";
 }
 
-/**
- * Simple string padding helper
- */
-function pad(str, length, padChar = ' ') {
-  return str + padChar.repeat(Math.max(0, length - str.length));
-}
-
-/**
- * Draw a simple box with ASCII characters
- */
-function drawBox(title, width = 80) {
-  const topBottom = '┌' + '─'.repeat(width - 2) + '┐';
-  const bottomLine = '└' + '─'.repeat(width - 2) + '┘';
-  const emptyLine = '│' + ' '.repeat(width - 2) + '│';
-
-  // Center the title
-  const titleStart = Math.floor((width - title.length - 2) / 2);
-  const titleLine = '│' + ' '.repeat(titleStart) + title + ' '.repeat(width - 2 - titleStart - title.length) + '│';
-
-  console.log(topBottom);
-  console.log(emptyLine);
-  console.log(titleLine);
-  console.log(emptyLine);
-  console.log(bottomLine);
-  console.log('');
-}
-
-/**
- * Simple table for the summary
- */
-function drawTable(rows, headers, colWidths) {
-  // Draw the table header
-  const headerRow = headers.map((header, i) => pad(header, colWidths[i])).join(' │ ');
-  const separator = colWidths.map(width => '─'.repeat(width)).join('─┼─');
-
-  console.log('┌─' + separator + '─┐');
-  console.log('│ ' + headerRow + ' │');
-  console.log('├─' + separator + '─┤');
-
-  // Draw the table rows
-  rows.forEach(row => {
-    const formattedRow = row.map((cell, i) => pad(cell, colWidths[i])).join(' │ ');
-    console.log('│ ' + formattedRow + ' │');
-  });
-
-  console.log('└─' + separator + '─┘');
-  console.log('');
-}
-
-/**
- * CLI Entry Point
- */
-function main() {
-  const files = process.argv.slice(2);
-  if (!files.length) {
-    console.log('\nFrontend Guardrails Checker\n');
-    console.log('Scans your JavaScript code for violations of frontend coding guardrails.\n');
-    console.log('Usage:');
-    console.log('  node guardrailChecker.js <file1.js> [file2.js...]\n');
-    console.log('Example:');
-    console.log('  node guardrailChecker.js src/**/*.js\n');
-    process.exit(0);
-  }
-
-  let totalErrors = 0;
-  let allFileErrors = [];
-
-  // First collect all errors
-  files.forEach((file) => {
-    const absPath = path.resolve(file);
-    const fileContent = readFileContent(absPath);
-    if (!fileContent) {
-      return;
-    }
-
-    const fileErrors = analyzeFile(absPath, fileContent);
-    if (fileErrors.length) {
-      totalErrors += fileErrors.length;
-      allFileErrors.push({ filePath: absPath, errors: fileErrors });
-    }
-  });
-
-  // Then format and output them
-  if (totalErrors > 0) {
-    allFileErrors.forEach(({ filePath, errors }) => {
-      const fileName = path.basename(filePath);
-
-      // Print file summary using ASCII art
-      const title = `${SYMBOLS.shield} Frontend Guardrails: ${fileName}`;
-      drawBox(title, 80);
-
-      // Group errors by guardrail
-      const errorsByGuardrail = groupErrorsByGuardrail(errors);
-
-      // Print summary
-      console.log('Summary');
-
-      // Prepare the table data
-      const tableHeaders = ['Guardrail', 'Violations'];
-      const colWidths = [50, 10];
-      const tableRows = Object.entries(errorsByGuardrail).map(([guardrailId, violations]) => {
-        return [getGuardrailName(guardrailId), violations.length.toString()];
-      });
-
-      // Draw the table
-      drawTable(tableRows, tableHeaders, colWidths);
-
-      // Print detailed violations
-      console.log('Detailed Violations\n');
-
-      Object.entries(errorsByGuardrail).forEach(([guardrailId, violations]) => {
-        const guardrailName = getGuardrailName(guardrailId);
-        const guardrailDescription = getGuardrailDescription(guardrailId);
-
-        console.log(`${SYMBOLS.lock} ${guardrailName}`);
-        console.log(guardrailDescription);
-        console.log('');
-
-        // Group violations by their rule type (extracted from the message)
-        const violationsByRule = {};
-        violations.forEach(violation => {
-          const typeMatch = violation.message.match(/\(([\w-]+)\)/);
-          const ruleType = typeMatch ? typeMatch[1] : 'unknown';
-
-          if (!violationsByRule[ruleType]) {
-            violationsByRule[ruleType] = [];
-          }
-          violationsByRule[ruleType].push(violation);
-        });
-
-        // Print each rule type with its violations
-        Object.entries(violationsByRule).forEach(([ruleType, ruleViolations]) => {
-          // If there are multiple violations, summarize them
-          if (ruleViolations.length > 1) {
-            console.log(`Found ${ruleViolations.length} violations of rule: ${ruleType}`);
-          }
-
-          // Show all violation locations
-          ruleViolations.forEach((violation, index) => {
-            console.log(`Line ${violation.line}: ${violation.actualLineContent}`);
-            console.log(`${SYMBOLS.error} Violation: ${violation.message.split('(')[0].trim()}`);
-
-            // Only show the hint/example once per rule type (for the first violation)
-            if (index === 0 && violation.hint) {
-              console.log(`${SYMBOLS.light} Pattern:`);
-              const hintLines = violation.hint.split('\n');
-              hintLines.forEach(line => {
-                console.log(`   ${line}`);
-              });
-            }
-
-            console.log(''); // Add a blank line between violations
-          });
-        });
-      });
-
-      // Check for module size issues
-      const highestLine = errors.reduce((max, err) =>
-        err.line > max ? err.line : max, 0);
-
-      if (highestLine > 600) {
-        const warningTitle = `${SYMBOLS.warning} Module Size Violation: ${highestLine} lines`;
-        drawBox(warningTitle, 80);
-
-        console.log(`${SYMBOLS.pointer} File ${fileName} exceeds the 600 line limit. Modules over 600 lines are banished!`);
-        console.log(`${SYMBOLS.pointer} Split this file into smaller modules to comply with the guardrails.`);
-        console.log('');
-      }
-    });
-
-    // Print summary of all files
-    const summaryTitle = `${SYMBOLS.alert} Found ${totalErrors} guardrail violation(s) across ${allFileErrors.length} file(s)!`;
-    drawBox(summaryTitle, 80);
-
-    process.exitCode = 1;
-  } else {
-    const successTitle = `${SYMBOLS.success} No guardrail violations found!`;
-    drawBox(successTitle, 60);
-  }
-}
-
-// Run the script
+////////////////////////////////////////////////////////////////////////////////
+// Run
+////////////////////////////////////////////////////////////////////////////////
 main();

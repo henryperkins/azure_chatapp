@@ -109,7 +109,29 @@ export function maybeCapture(errorReporter, err, meta = {}) {
     try {
       captureFn.call(errorReporter, err, meta);
     } catch (captureErr) {
-      // Silently swallow: error handling must never throw
+      // Guardrail: capture our own capture errors for observability, no leaking PII/tokens
+      if (errorReporter && typeof errorReporter.capture === "function" && captureErr !== err) {
+        try {
+          errorReporter.capture(captureErr, {
+            module: "notifications-helpers",
+            method: "maybeCapture",
+            originalError: captureErr,
+            context: meta?.context || undefined
+          });
+        } catch (finalCaptureErr) {
+          if (errorReporter && typeof errorReporter.capture === "function") {
+            try {
+              errorReporter.capture(finalCaptureErr, {
+                module: "notifications-helpers",
+                method: "maybeCapture-finalfallback",
+                originalError: finalCaptureErr,
+                context: meta?.context || undefined
+              });
+            } catch {/* absolute fail-safe: must not leak */}
+          }
+        }
+      }
+      // Silently swallow: error handling must never throw outward
     }
   }
 }
@@ -146,6 +168,15 @@ export async function wrapApi(apiFn, { notify, errorReporter }, endpoint, opts =
       endpoint,
       method: opts?.method
     });
+    if (errorReporter && typeof errorReporter.capture === 'function') {
+      errorReporter.capture(err, {
+        context: src,
+        module: 'notifications-helpers',
+        endpoint,
+        method: opts?.method,
+        from: 'wrapApi'
+      });
+    }
     throw err;
   }
 }
@@ -174,6 +205,43 @@ export function safeInvoker(fn, { notify, errorReporter }, ctx) {
         handler: fn.name || '(anonymous)',
         uncaughtCallback: true
       });
+
+      if (errorReporter && typeof errorReporter.capture === 'function') {
+        try {
+          errorReporter.capture(err, {
+            ...ctx,
+            module: ctx?.module || 'notifications-helpers',
+            handler: fn.name || '(anonymous)',
+            uncaughtCallback: true,
+            from: 'safeInvoker'
+          });
+        } catch (captureErr) {
+          // Final guardrail: capture our own error reporting failures if possible
+          if (errorReporter && typeof errorReporter.capture === "function" && captureErr !== err) {
+            try {
+              errorReporter.capture(captureErr, {
+                module: "notifications-helpers",
+                method: "safeInvoker",
+                handler: fn.name || '(anonymous)',
+                originalError: captureErr,
+                from: "safeInvoker-capture"
+              });
+            } catch (finalCaptureErr) {
+              if (errorReporter && typeof errorReporter.capture === "function") {
+                try {
+                  errorReporter.capture(finalCaptureErr, {
+                    module: "notifications-helpers",
+                    method: "safeInvoker-finalfallback",
+                    handler: fn.name || '(anonymous)',
+                    originalError: finalCaptureErr,
+                    from: "safeInvoker-capture-fallback"
+                  });
+                } catch {/* absolute fail-safe: must not leak */}
+              }
+            }
+          }
+        }
+      }
     }
   };
 }

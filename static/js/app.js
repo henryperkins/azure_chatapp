@@ -214,6 +214,18 @@ DependencySystem.register('debugTools', debugTools);
 const _dbg = debugTools;
 
 // ---------------------------------------------------------------------------
+// 7.5) Create backend logger (needed for event handlers)
+// ---------------------------------------------------------------------------
+import { createBackendLogger } from './utils/backendLogger.js';
+const backendLogger = createBackendLogger({
+  apiClient: apiRequest,
+  notify,
+  errorReporter: sentryManager,
+  DependencySystem
+});
+DependencySystem.register('backendLogger', backendLogger);
+
+// ---------------------------------------------------------------------------
 // 8) Create event handlers (needed by many components)
 // ---------------------------------------------------------------------------
 const eventHandlers = createEventHandlers({
@@ -222,6 +234,7 @@ const eventHandlers = createEventHandlers({
   browserService: browserServiceInstance,
   notify,
   errorReporter: sentryManager,
+  backendLogger,
   APP_CONFIG
 });
 DependencySystem.register('eventHandlers', eventHandlers);
