@@ -142,6 +142,9 @@ find . -name "*.py" -not -path "*/venv/*" | xargs pylint
 
 # CSS linting
 npm run lint:css
+
+# JavaScript linting
+npm run lint
 ```
 
 ## Database Management
@@ -154,7 +157,49 @@ alembic revision --autogenerate -m "description"
 
 # Apply migrations
 alembic upgrade head
+
+# Repair broken conversations
+python scripts/repair_broken_conversations.py
 ```
+
+## Frontend Development
+```bash
+# Build CSS only
+npm run build:css
+
+# Watch CSS changes during development
+npm run watch:css
+# or 
+npm run dev
+
+# Run JavaScript audit
+npm run audit
+
+# Apply code transformations
+npm run codemod
+```
+
+## Environment Configuration
+
+The application requires several environment variables to be set properly. Create a `.env` file based on `.env.example` with these key variables:
+
+### Core Application
+- `APP_NAME`, `APP_VERSION`, `ENV`, `DEBUG`
+- `SESSION_SECRET`, `JWT_SECRET`, `JWT_KEY_ID`
+- `DATABASE_URL`
+- `CORS_ORIGINS`, `COOKIE_DOMAIN`
+
+### AI API Keys
+- `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`
+- `OPENAI_API_KEY`
+- `CLAUDE_API_KEY`
+- `EMBEDDING_API`, `COHERE_API_KEY`
+
+### Sentry Integration
+- `SENTRY_DSN`, `SENTRY_ENABLED`
+- `SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_PROFILES_SAMPLE_RATE`
+
+See the config.py file for full details on all available environment variables.
 
 ## Project Structure
 ```
@@ -275,6 +320,63 @@ alembic upgrade head
 │   ├── sentry_utils.py
 │   └── serializers.py
 ```
+
+## Common Issues and Troubleshooting
+
+### Database Issues
+- If conversations are missing project associations: `python scripts/repair_broken_conversations.py`
+- For migration issues: `alembic upgrade head` or create a new migration
+- Database errors related to SSL: Check `PG_SSL_ALLOW_SELF_SIGNED` environment variable
+
+### Authentication Issues
+- JWT token problems: Check `TokenBlacklist` table and token expiration settings
+- Cookie domain mismatch: Ensure `COOKIE_DOMAIN` matches your deployment domain
+
+### Frontend Issues
+- Missing CSS: Run `npm run build:css` to generate required files
+- Missing event tracking: Review event handler registration with context
+- UI notifications not working: Check notification system registration
+
+### API Integration Issues
+- Azure OpenAI: Verify correct endpoint and API key configuration
+- Claude API: Check API key and extended thinking settings
+- Vector DB: Ensure storage path exists and is writable
+
+### Deployment Issues
+- Container deployment: Mount volumes for persistent storage
+- Environment configuration: Ensure all required variables in `.env`
+- Frontend assets: Build CSS files before deployment
+
+---
+
+## Frontend Code Guardrails (Pocket Reference)
+
+When working with JavaScript/TypeScript in this codebase, follow these strict guardrails:
+
+1. **Factory Functions**: Export modules through named factories (`createXyz`), validate dependencies at the top, and expose cleanup APIs.
+2. **Dependency Injection**: Never access globals directly (`window`, `document`, `console`); use injected dependencies.
+3. **No Import Side Effects**: Initialization happens inside factories, not at import time.
+4. **Event Handling**: Register with `eventHandlers.trackListener(..., { context })`, cleanup with `eventHandlers.cleanupListeners({ context })`.
+5. **Context Tags**: Supply unique `context` strings for listeners and notifications.
+6. **Notification System**: Use injected `notify` utility with metadata: `notify.info('Message', { module: 'MyModule', context: 'operation', source: 'function' })`.
+7. **Debug Tools**: Use `createDebugTools({ notify })` for performance timing and tracing.
+8. **Error Reporting**: Capture with `errorReporter.capture(err, { module, method, ... })`, never leak sensitive data.
+9. **HTML Sanitization**: Always use `sanitizer.sanitize()` before DOM insertion.
+10. **App Readiness**: Wait for `DependencySystem.waitFor([...])` or the `'app:ready'` event.
+11. **App State**: Read from `app.state`, don't mutate directly.
+12. **Event Bus**: Expose a dedicated `EventTarget` for module-specific events.
+13. **Navigation**: Use injected `navigationService.navigateTo(...)` for all routing.
+14. **API Client**: Make all network requests through `apiClient`.
+15. **Contextual Notifiers**: Create module-scoped notifiers with `notify.withContext({ module: 'MyModule' })`.
+16. **Backend Logging**: Use `backendLogger.log({ level, message, module, ... })`.
+17. **User Consent**: Honor opt-out preferences for monitoring and analytics.
+
+### Notification Best Practices
+- Always include context metadata: `module`, `context`, `source` properties
+- Create contextual notifiers at module level
+- Include original errors when catching exceptions
+- Use specialized methods for common scenarios
+- Group related notifications to prevent UI clutter
 
 ## Sentry Integration
 

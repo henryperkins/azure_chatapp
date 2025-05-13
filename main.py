@@ -39,16 +39,20 @@ from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
+
 # …
 # Dev helper: always deliver fresh JS/CSS/HTML – disables browser cache
 from fastapi.staticfiles import StaticFiles
 
+
 class NoCacheStatic(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
-        if response.status_code == 200 and path.endswith(('.js', '.css', '.html')):
-            response.headers['Cache-Control'] = 'no-store'
+        if response.status_code == 200 and path.endswith((".js", ".css", ".html")):
+            response.headers["Cache-Control"] = "no-store"
         return response
+
+
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.routing import APIRoute
@@ -77,7 +81,9 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             ]
         elif isinstance(allowed_origins, list):
             # Already a list, make sure all items are properly stripped strings
-            allowed_origins = [str(o).strip() for o in allowed_origins if str(o).strip()]
+            allowed_origins = [
+                str(o).strip() for o in allowed_origins if str(o).strip()
+            ]
         else:
             # Handle any other data type by converting to a single-item list
             allowed_origins = [str(allowed_origins).strip()]
@@ -243,6 +249,7 @@ logging.basicConfig(
 logging.getLogger("urllib3").setLevel(logging.INFO)  # suprime spam DEBUG
 logger = logging.getLogger(__name__)
 
+
 # -----------------------------------------------------------------------------
 # Suppress /api/log_notification and common vulnerability scan paths in access logs
 # -----------------------------------------------------------------------------
@@ -255,13 +262,19 @@ class SuppressUnwantedLogsFilter(logging.Filter):
 
         # Suppress common WordPress/PHP vulnerability scan paths
         unwanted_paths = [
-            "/wp-", ".php", "/wordpress", "/wp-admin", "/wp-content",
-            "/wp-includes", "/.well-known/acme-challenge"
+            "/wp-",
+            ".php",
+            "/wordpress",
+            "/wp-admin",
+            "/wp-content",
+            "/wp-includes",
+            "/.well-known/acme-challenge",
         ]
         if any(path in msg for path in unwanted_paths):
             return False
 
         return True
+
 
 # Apply the filter to all noisy access loggers
 for logname in ("uvicorn.access", "", "notification_system"):
@@ -414,7 +427,6 @@ app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 
 
-
 @app.get("/debug/routes", include_in_schema=False)
 async def debug_routes() -> list[Dict[str, Any]]:
     """List all registered routes for debugging."""
@@ -442,11 +454,13 @@ async def request_id_logging_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
 
-    logger.info("[%s] ↗ %s %s%s",
-                request_id,
-                request.method,
-                request.url.path,
-                f"?{request.url.query}" if request.url.query else "")
+    logger.info(
+        "[%s] ↗ %s %s%s",
+        request_id,
+        request.method,
+        request.url.path,
+        f"?{request.url.query}" if request.url.query else "",
+    )
 
     try:
         response = await call_next(request)
@@ -455,12 +469,15 @@ async def request_id_logging_middleware(request: Request, call_next):
         response = await generic_exception_handler(request, exc)
 
     response.headers["X-Request-ID"] = request_id
-    logger.info("[%s] ↘ %s %s – %s",
-                request_id,
-                response.status_code,
-                request.method,
-                request.url.path)
+    logger.info(
+        "[%s] ↘ %s %s – %s",
+        request_id,
+        response.status_code,
+        request.method,
+        request.url.path,
+    )
     return response
+
 
 # -----------------------------------------------------------------------------
 # DB Down Middleware (friendly error if DB unavailable)
@@ -468,10 +485,11 @@ async def request_id_logging_middleware(request: Request, call_next):
 @app.middleware("http")
 async def db_availability_middleware(request: Request, call_next):
     # Allow health, static, and root pages even if DB is down
-    allowed_paths = [
-        "/health", "/static", "/", "/login", "/modals", "/docs", "/redoc"
-    ]
-    if not DB_AVAILABLE and not any(request.url.path == p or request.url.path.startswith(p + "/") for p in allowed_paths):
+    allowed_paths = ["/health", "/static", "/", "/login", "/modals", "/docs", "/redoc"]
+    if not DB_AVAILABLE and not any(
+        request.url.path == p or request.url.path.startswith(p + "/")
+        for p in allowed_paths
+    ):
         return JSONResponse(
             status_code=503,
             content={
@@ -479,6 +497,7 @@ async def db_availability_middleware(request: Request, call_next):
             },
         )
     return await call_next(request)
+
 
 # -----------------------------------------------------------------------------
 # Exception Handlers
@@ -509,8 +528,9 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         scope.set_extra("query_params", dict(request.query_params))
         sentry_sdk.capture_exception(exc)
 
-    return JSONResponse(status_code=500,
-                        content={"detail": "Internal server error (insecure debug)"})
+    return JSONResponse(
+        status_code=500, content={"detail": "Internal server error (insecure debug)"}
+    )
 
 
 # -----------------------------------------------------------------------------
