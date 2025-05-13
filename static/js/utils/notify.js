@@ -6,13 +6,21 @@ import { getSessionId } from "./session.js";
  */
 export function createNotify({
   notificationHandler,
-  apiClient = null    // injected apiClient for backend logging, DI only
+  apiClient = null,    // injected apiClient for backend logging, DI only
+  DependencySystem = null
 } = {}) {
   if (!notificationHandler?.show) throw new Error('notificationHandler missing');
 
+  // Guardrail compliance: wait for app readiness before API use
+  let _appReady = Promise.resolve();
+  if (DependencySystem?.waitFor) {
+    _appReady = DependencySystem.waitFor(['app']).catch(() => {});
+  }
+
   const DURATION = { debug: 3000, info: 4000, success: 4000, warning: 6000, error: 0 };
 
-  const send = (msg, type = 'info', opts = {}) => {
+  const send = async (msg, type = 'info', opts = {}) => {
+    await _appReady;
     // Map 'warn' to 'warning'
     let _type = type === 'warn' ? 'warning' : type;
     if (!['debug', 'info', 'success', 'warning', 'error'].includes(_type)) _type = 'info';
@@ -53,7 +61,7 @@ export function createNotify({
     };
 
     // Show UI notification
-    notificationHandler.show(msg, _type, payload);
+    await notificationHandler.show(msg, _type, payload);
 
     // Prepare for backend logging (if DI apiClient provided)
     const logApiPayload = {
@@ -87,30 +95,32 @@ export function createNotify({
     if (!preset) throw new Error('notify.withContext requires a context/module/source preset');
     const { module, context, source } = preset;
     return {
-      debug: (msg, o = {}) => send(msg, 'debug', { module, context, source, ...defaults, ...o }),
-      info: (msg, o = {}) => send(msg, 'info', { module, context, source, ...defaults, ...o }),
-      success: (msg, o = {}) => send(msg, 'success', { module, context, source, ...defaults, ...o }),
-      warn: (msg, o = {}) => send(msg, 'warning', { module, context, source, ...defaults, ...o }),
-      error: (msg, o = {}) => send(msg, 'error', { module, context, source, ...defaults, ...o }),
-      apiError: (msg, o = {}) => send(msg, 'error', { group: true, context: context || 'apiRequest', module, source, ...defaults, ...o }),
-      authWarn: (msg, o = {}) => send(msg, 'warning', { group: true, context: context || 'auth', module, source, ...defaults, ...o })
+      debug: async (msg, o = {}) => send(msg, 'debug', { module, context, source, ...defaults, ...o }),
+      info: async (msg, o = {}) => send(msg, 'info', { module, context, source, ...defaults, ...o }),
+      success: async (msg, o = {}) => send(msg, 'success', { module, context, source, ...defaults, ...o }),
+      warn: async (msg, o = {}) => send(msg, 'warning', { module, context, source, ...defaults, ...o }),
+      error: async (msg, o = {}) => send(msg, 'error', { module, context, source, ...defaults, ...o }),
+      apiError: async (msg, o = {}) => send(msg, 'error', { group: true, context: context || 'apiRequest', module, source, ...defaults, ...o }),
+      authWarn: async (msg, o = {}) => send(msg, 'warning', { group: true, context: context || 'auth', module, source, ...defaults, ...o })
     };
   };
 
   // Create API
-  const api = (msg, type = 'info', opts = {}) => send(msg, type, opts);
+  const api = async (msg, type = 'info', opts = {}) => send(msg, type, opts);
 
   Object.assign(api, {
-    debug   : (m, o = {}) => send(m, 'debug',   o),
-    info    : (m, o = {}) => send(m, 'info',    o),
-    success : (m, o = {}) => send(m, 'success', o),
-    warn    : (m, o = {}) => send(m, 'warning', o),
-    error   : (m, o = {}) => send(m, 'error',   o),
-    apiError: (m, o = {}) => send(m, 'error',   { group: true, context: 'apiRequest', ...o }),
-    authWarn: (m, o = {}) => send(m, 'warning', { group: true, context: 'auth',       ...o }),
-    log     : (m, o = {}) => send(m, 'debug',   o),
+    debug   : async (m, o = {}) => send(m, 'debug',   o),
+    info    : async (m, o = {}) => send(m, 'info',    o),
+    success : async (m, o = {}) => send(m, 'success', o),
+    warn    : async (m, o = {}) => send(m, 'warning', o),
+    error   : async (m, o = {}) => send(m, 'error',   o),
+    apiError: async (m, o = {}) => send(m, 'error',   { group: true, context: 'apiRequest', ...o }),
+    authWarn: async (m, o = {}) => send(m, 'warning', { group: true, context: 'auth',       ...o }),
+    log     : async (m, o = {}) => send(m, 'debug',   o),
     withContext
   });
+
+  api.init = async () => _appReady;
 
   return api;
 }
