@@ -1470,15 +1470,3 @@ export function createAuthModule({
   return publicAuth;
 }
 
-// --- Context-rich error logging helper (rule 8) ---
-function captureError(error, contextData = {}) {
-  const appInstance = DependencySystem?.modules?.get('app');
-  if (appInstance?.state?.disableErrorTracking) return;      // Guard-rail #17
-  if (errorReporter && typeof errorReporter.capture === 'function') {
-    errorReporter.capture(error, {
-      module : MODULE,
-      context: `${MODULE}:${contextData.source || contextData.method || 'captureError'}`,
-      ...contextData
-    });
-  }
-}
