@@ -54,8 +54,6 @@ export function createEventHandlers({
   if (!backendLogger) {
     throw new Error(`[${MODULE}] backendLogger is required for backend event logging (guardrail #16)`);
   }
-  // Guardrail #16: Log module load (Backend Event Logging, rule 16)
-  backendLogger.log({ level: 'info', module: MODULE, message: 'EventHandler module loaded', source: 'factoryInit' });
 
   // Guardrail #10: All DOM/app wiring runs ONLY after DependencySystem.waitFor/waitForDepsAndDom inside .init()
   // Guardrail-compliance: This ensures no app/DOM logic runs before readiness.
@@ -72,9 +70,18 @@ export function createEventHandlers({
     if (errorReporter?.capture) {
       // Guardrail #8: Ensure context-rich error logging with context and module/source every time
       if (meta && (meta.module || meta.source || meta.context)) {
-        errorReporter.capture(error, { module: meta.module || MODULE, source: meta.source || 'unknown', ...meta });
+        errorReporter.capture(error, {
+          module : meta.module  || MODULE,
+          source : meta.source  || 'unknown',
+          context: meta.context || 'handler',
+          ...meta
+        });
       } else {
-        errorReporter.capture(error, { module: MODULE, source: 'unknown' });
+        errorReporter.capture(error, {
+          module : MODULE,
+          source : 'unknown',
+          context: 'handler'
+        });
       }
     }
   }
@@ -101,6 +108,7 @@ export function createEventHandlers({
       handlerNotify.warn('No navigation function available for redirect.', {
         module: MODULE,
         source: 'redirect',
+        context: 'redirect',
         extra: { url }
       });
     }
@@ -310,7 +318,8 @@ export function createEventHandlers({
     if (!toggleButton || !panel) {
       handlerNotify.warn(`Collapsible elements not found: ${toggleId} or ${panelId}`, {
         module: MODULE,
-        source: 'setupCollapsible'
+        source: 'setupCollapsible',
+        context: 'collapsible'
       });
       return;
     }
@@ -328,18 +337,26 @@ export function createEventHandlers({
         try {
           onExpand();
         } catch (err) {
-          captureError(err, { module: MODULE, source: 'setupCollapsible' });
+          captureError(err, { module: MODULE, source: 'setupCollapsible', context: 'collapsible' });
           handlerNotify.error('Error in onExpand callback for collapsible', {
             module: MODULE,
             source: 'setupCollapsible',
             group: true,
             originalError: err,
-            extra: { toggleId }
+            extra: { toggleId },
+            context: 'collapsible'
+          });
+          errorReporter.capture(err, {
+            module : MODULE,
+            source : 'setupCollapsible',
+            context: 'collapsible',
+            originalError: err
           });
           captureError(err, {
             module: MODULE,
             source: 'setupCollapsible',
-            originalError: err
+            originalError: err,
+            context: 'collapsible'
           });
         }
       }
@@ -348,17 +365,25 @@ export function createEventHandlers({
         try {
           storageBackend.setItem(`${toggleId}_expanded`, String(expand));
         } catch (err) {
-          captureError(err, { module: MODULE, source: 'setupCollapsible' });
+          captureError(err, { module: MODULE, source: 'setupCollapsible', context: 'collapsible' });
           handlerNotify.warn('Failed to save collapsible state', {
             module: MODULE,
             source: 'setupCollapsible',
             originalError: err,
-            extra: { toggleId }
+            extra: { toggleId },
+            context: 'collapsible'
+          });
+          errorReporter.capture(err, {
+            module : MODULE,
+            source : 'setupCollapsible',
+            context: 'collapsible',
+            originalError: err
           });
           captureError(err, {
             module: MODULE,
             source: 'setupCollapsible',
-            originalError: err
+            originalError: err,
+            context: 'collapsible'
           });
         }
       }
@@ -369,7 +394,13 @@ export function createEventHandlers({
       try {
         savedState = storageBackend.getItem(`${toggleId}_expanded`);
       } catch (err) {
-        captureError(err, { module: MODULE, source: 'setupCollapsible' });
+        captureError(err, { module: MODULE, source: 'setupCollapsible', context: 'collapsible' });
+        errorReporter.capture(err, {
+          module : MODULE,
+          source : 'setupCollapsible',
+          context: 'collapsible',
+          originalError: err
+        });
       }
     }
     togglePanel(savedState === 'true');
@@ -393,7 +424,8 @@ export function createEventHandlers({
     if (!modal) {
       handlerNotify.warn(`Modal element not found: ${modalId}`, {
         module: MODULE,
-        source: 'setupModal'
+        source: 'setupModal',
+        context: 'modal'
       });
       return { open: () => {}, close: () => {} };
     }
@@ -403,18 +435,26 @@ export function createEventHandlers({
         try {
           onOpen(modal);
         } catch (err) {
-          captureError(err, { module: MODULE, source: 'setupModal' });
+          captureError(err, { module: MODULE, source: 'setupModal', context: 'modal' });
           handlerNotify.error('Error in onOpen callback for modal', {
             module: MODULE,
             source: 'setupModal',
             group: true,
             originalError: err,
-            extra: { modalId }
+            extra: { modalId },
+            context: 'modal'
+          });
+          errorReporter.capture(err, {
+            module : MODULE,
+            source : 'setupModal',
+            context: 'modal',
+            originalError: err
           });
           captureError(err, {
             module: MODULE,
             source: 'setupModal',
-            originalError: err
+            originalError: err,
+            context: 'modal'
           });
         }
       }
@@ -441,18 +481,26 @@ export function createEventHandlers({
         try {
           onClose(modal);
         } catch (err) {
-          captureError(err, { module: MODULE, source: 'setupModal' });
+          captureError(err, { module: MODULE, source: 'setupModal', context: 'modal' });
           handlerNotify.error('Error in onClose callback for modal', {
             module: MODULE,
             source: 'setupModal',
             group: true,
             originalError: err,
-            extra: { modalId }
+            extra: { modalId },
+            context: 'modal'
+          });
+          errorReporter.capture(err, {
+            module : MODULE,
+            source : 'setupModal',
+            context: 'modal',
+            originalError: err
           });
           captureError(err, {
             module: MODULE,
             source: 'setupModal',
-            originalError: err
+            originalError: err,
+            context: 'modal'
           });
         }
       }
@@ -499,7 +547,8 @@ export function createEventHandlers({
     if (!form) {
       handlerNotify.warn(`Form element not found: ${formId}`, {
         module: MODULE,
-        source: 'setupForm'
+        source: 'setupForm',
+        context: 'form'
       });
       return;
     }
@@ -518,6 +567,7 @@ export function createEventHandlers({
             handlerNotify.warn('Form validation failed, reportValidity not available.', {
               module: MODULE,
               source: 'setupForm',
+              context: 'form',
               extra: { formId }
             });
           }
@@ -542,6 +592,7 @@ export function createEventHandlers({
         handlerNotify.info(`Form ${formId} submitted successfully.`, {
           module: MODULE,
           source: 'setupForm',
+          context: 'form',
           extra: { formId }
         });
       } catch (error) {
@@ -553,23 +604,37 @@ export function createEventHandlers({
           originalError: error,
           extra: { formId }
         });
-        captureError(error, { module: MODULE, source: 'setupForm', originalError: error });
+        errorReporter.capture(error, {
+          module : MODULE,
+          source : 'setupForm',
+          context: 'form',
+          originalError: error
+        });
+        captureError(error, { module: MODULE, source: 'setupForm', originalError: error, context: 'form' });
         if (options.onError) {
           try {
             options.onError(error);
           } catch (onErrorErr) {
-            captureError(onErrorErr, { module: MODULE, source: 'setupForm' });
+            captureError(onErrorErr, { module: MODULE, source: 'setupForm', context: 'form' });
             handlerNotify.error('Error in form onError callback', {
               module: MODULE,
               source: 'setupForm',
               group: true,
               originalError: onErrorErr,
-              extra: { formId }
+              extra: { formId },
+              context: 'form'
+            });
+            errorReporter.capture(onErrorErr, {
+              module : MODULE,
+              source : 'setupForm',
+              context: 'form',
+              originalError: onErrorErr
             });
             captureError(onErrorErr, {
               module: MODULE,
               source: 'setupForm',
-              originalError: onErrorErr
+              originalError: onErrorErr,
+              context: 'form'
             });
           }
         }
@@ -599,11 +664,16 @@ export function createEventHandlers({
   let initialized = false;
   async function init() {
     if (initialized) {
-      handlerNotify.info('EventHandler already initialized.', { module: MODULE, source: 'init' });
+      handlerNotify.info('EventHandler already initialized.', { module: MODULE, source: 'init', context: 'init' });
       return this; // Return API object early
     }
     const _t = debugTools?.start?.('EventHandler.init');
-    handlerNotify.info('Initializing event handlers...', { module: MODULE, source: 'init' });
+    handlerNotify.info('Initializing event handlers...', { module: MODULE, source: 'init', context: 'init' });
+
+    await DependencySystem.waitFor?.(['app', 'domAPI', 'notify']);
+    backendLogger.log({ level: 'info', module: MODULE,
+                        context: 'init', source: 'init',
+                        message: 'EventHandler module loaded (post-readiness)' });
 
     // Guardrail #10: wait for required modules
     await DependencySystem.waitFor?.([
@@ -663,11 +733,16 @@ export function createEventHandlers({
         if (!currentModalManager || typeof currentModalManager.show !== 'function') {
           handlerNotify.error('[EventHandler] modalManager is missing or invalid in bindAuthButtonDelegate', {
             module: MODULE,
-            source: 'bindAuthButtonDelegate'
+            source: 'bindAuthButtonDelegate',
+            context: 'auth'
           });
+          errorReporter.capture(
+            new Error('modalManager is missing or .show is not a function'),
+            { module: MODULE, source: 'bindAuthButtonDelegate', context: 'auth' }
+          );
           captureError(
             new Error('modalManager is missing or .show is not a function'),
-            { module: MODULE, source: 'bindAuthButtonDelegate' }
+            { module: MODULE, source: 'bindAuthButtonDelegate', context: 'auth' }
           );
           return;
         }
@@ -694,10 +769,17 @@ export function createEventHandlers({
                 module: MODULE,
                 originalError: error
               });
+              errorReporter.capture(error, {
+                module : MODULE,
+                source : 'DelegatedLoginButtonHandler',
+                context: 'auth',
+                originalError: error
+              });
               captureError(error, {
                 module: MODULE,
                 source: 'DelegatedLoginButtonHandler',
-                originalError: error
+                originalError: error,
+                context: 'auth'
               });
             }
           },
@@ -705,7 +787,8 @@ export function createEventHandlers({
         );
         handlerNotify.debug('Delegated click listener bound for #authButton', {
           module: MODULE,
-          source: 'bindAuthButtonDelegate'
+          source: 'bindAuthButtonDelegate',
+          context: 'auth'
         });
         authButtonDelegationBound = true;
       }
@@ -765,10 +848,11 @@ export function createEventHandlers({
       debugTools?.stop?.(_t, 'EventHandler.init');
       handlerNotify.info('EventHandler module initialized successfully.', {
         module: MODULE,
-        source: 'init'
+        source: 'init',
+        context: 'init'
       });
     } catch (err) {
-      captureError(err, { module: MODULE, source: 'init' });
+      captureError(err, { module: MODULE, source: 'init', context: 'init' });
       handlerNotify.error('EventHandler initialization failed', {
         group: true,
         context: 'initialization',
@@ -776,7 +860,13 @@ export function createEventHandlers({
         source: 'init',
         originalError: err
       });
-      captureError(err, { module: MODULE, source: 'init', originalError: err });
+      errorReporter.capture(err, {
+        module : MODULE,
+        source : 'init',
+        context: 'init',
+        originalError: err
+      });
+      captureError(err, { module: MODULE, source: 'init', originalError: err, context: 'init' });
       debugTools?.stop?.(_t, 'EventHandler.init-error');
       throw err;
     }
@@ -795,7 +885,8 @@ export function createEventHandlers({
           storageBackend.setItem('darkMode', isDark ? 'true' : 'false');
           handlerNotify.info(`Dark mode ${isDark ? 'enabled' : 'disabled'}`, {
             module: MODULE,
-            context: 'ui'
+            context: 'ui',
+            source: 'setupCommonElements'
           });
         },
         { description: 'Dark Mode Toggle', module: MODULE, context: 'ui' }
@@ -812,7 +903,8 @@ export function createEventHandlers({
     if (!pm) {
       handlerNotify.warn('ProjectManager not available for projectModalForm setup.', {
         module: MODULE,
-        source: 'setupProjectModalForm'
+        source: 'setupProjectModalForm',
+        context: 'projectModal'
       });
       return;
     }
@@ -834,7 +926,8 @@ export function createEventHandlers({
           handlerNotify.error('Project save failed.', {
             module: MODULE,
             context: 'projectModal',
-            originalError: err
+            originalError: err,
+            source: 'setupProjectModalForm'
           })
       }
     );
@@ -891,9 +984,16 @@ export function createEventHandlers({
       handlerNotify.warn('Error in untrackListener', {
         module: MODULE,
         source: 'untrackListener',
+        originalError: error,
+        context: 'untrackListener'
+      });
+      errorReporter.capture(error, {
+        module : MODULE,
+        source : 'untrackListener',
+        context: 'untrackListener',
         originalError: error
       });
-      captureError(error, { module: MODULE, source: 'untrackListener', originalError: error });
+      captureError(error, { module: MODULE, source: 'untrackListener', originalError: error, context: 'untrackListener' });
     }
   }
 
@@ -903,12 +1003,13 @@ export function createEventHandlers({
     if (cleanupContext && typeof cleanupContext === 'string') {
       handlerNotify.debug(`Cleaning up listeners for context: "${cleanupContext}"`, {
         module: MODULE,
-        source: 'cleanupListeners'
+        source: 'cleanupListeners',
+        context: 'cleanupListeners'
       });
     } else {
       handlerNotify.warn(
         'cleanupListeners called without a specific string context. This will remove ALL tracked listeners, which might be risky.',
-        { module: MODULE, source: 'cleanupListeners', extra: { providedOptions: options } }
+        { module: MODULE, source: 'cleanupListeners', extra: { providedOptions: options }, context: 'cleanupListeners' }
       );
     }
 
@@ -930,16 +1031,24 @@ export function createEventHandlers({
                 module: MODULE,
                 source: 'cleanupListeners',
                 originalError: error,
+                context: 'cleanupListeners',
                 extra: {
                   context: details.context,
                   description: details.options?.description,
                   elementId: element.id
                 }
               });
+              errorReporter.capture(error, {
+                module : MODULE,
+                source : 'cleanupListeners',
+                context: 'cleanupListeners',
+                originalError: error
+              });
               captureError(error, {
                 module: MODULE,
                 source: 'cleanupListeners',
-                originalError: error
+                originalError: error,
+                context: 'cleanupListeners'
               });
             }
           }
@@ -967,13 +1076,14 @@ export function createEventHandlers({
     if (!cleanupContext && trackedListeners.size > 0) {
       handlerNotify.warn(
         `trackedListeners map not empty after global cleanup. Possibly listeners were added during cleanup. Size: ${trackedListeners.size}.`,
-        { module: MODULE, source: 'cleanupListeners' }
+        { module: MODULE, source: 'cleanupListeners', context: 'cleanupListeners' }
       );
     }
 
     handlerNotify.debug(`Cleanup finished. Remaining tracked elements: ${trackedListeners.size}. Context: ${cleanupContext || 'GLOBAL'}.`, {
       module: MODULE,
-      source: 'cleanupListeners'
+      source: 'cleanupListeners',
+      context: 'cleanupListeners'
     });
   }
 
@@ -999,11 +1109,19 @@ export function createEventHandlers({
       handlerNotify.error('Login modal element #loginModal not found for tab setup. Tabs will not work.', {
         module: MODULE,
         source: 'setupLoginModalTabs',
-        group: true
+        group: true,
+        context: 'authTabs'
       });
       captureError(new Error('#loginModal not found for tab setup'), {
         module: MODULE,
-        source: 'setupLoginModalTabs'
+        source: 'setupLoginModalTabs',
+        context: 'authTabs'
+      });
+      errorReporter.capture(new Error('#loginModal not found for tab setup'), {
+        module : MODULE,
+        source : 'setupLoginModalTabs',
+        context: 'authTabs',
+        originalError: new Error('#loginModal not found for tab setup')
       });
       return;
     }
@@ -1018,6 +1136,13 @@ export function createEventHandlers({
         handlerNotify.warn('Failed to query login panel element', {
           module: MODULE,
           source: 'setupLoginModalTabs',
+          originalError: err,
+          context: 'authTabs'
+        });
+        errorReporter.capture(err, {
+          module : MODULE,
+          source : 'setupLoginModalTabs',
+          context: 'authTabs',
           originalError: err
         });
       }
@@ -1027,6 +1152,13 @@ export function createEventHandlers({
         handlerNotify.warn('Failed to query register panel element', {
           module: MODULE,
           source: 'setupLoginModalTabs',
+          originalError: err,
+          context: 'authTabs'
+        });
+        errorReporter.capture(err, {
+          module : MODULE,
+          source : 'setupLoginModalTabs',
+          context: 'authTabs',
           originalError: err
         });
       }
@@ -1037,19 +1169,28 @@ export function createEventHandlers({
           extra: {
             loginPanelFound: !!initialLoginPanel,
             registerPanelFound: !!initialRegisterPanel
-          }
+          },
+          context: 'authTabs'
         });
       }
     } catch (err) {
       handlerNotify.error('Error during login modal panels check', {
         module: MODULE,
         source: 'setupLoginModalTabs',
-        error: err
+        error: err,
+        context: 'authTabs'
+      });
+      errorReporter.capture(err, {
+        module : MODULE,
+        source : 'setupLoginModalTabs',
+        context: 'authTabs',
+        originalError: err
       });
       captureError(err, {
         module: MODULE,
         source: 'setupLoginModalTabs',
-        detail: 'Error during panel existence check'
+        detail: 'Error during panel existence check',
+        context: 'authTabs'
       });
     }
 
@@ -1073,12 +1214,18 @@ export function createEventHandlers({
             if (!registerTabElement || !loginPanel || !registerPanel) {
               handlerNotify.error('Required elements for Login tab action missing at click time.', {
                 module: MODULE,
-                source: 'setupLoginModalTabs_DelegatedClick',
+                source: 'setupLoginModalTabs',
                 context: 'authTabs'
+              });
+              errorReporter.capture(new Error('Elements missing for Login tab click'), {
+                module : MODULE,
+                source : 'setupLoginModalTabs',
+                context: 'authTabs',
+                originalError: new Error('Elements missing for Login tab click')
               });
               captureError(new Error('Elements missing for Login tab click'), {
                 module: MODULE,
-                source: 'setupLoginModalTabs_DelegatedClick',
+                source: 'setupLoginModalTabs',
                 context: 'authTabs'
               });
               return;
@@ -1142,26 +1289,50 @@ export function createEventHandlers({
               domAPI.addClass(tabElement, 'tab-active');
               domAPI.setAttribute(tabElement, 'aria-selected', 'true');
             } else {
-              handlerNotify.error('Register tabElement missing or invalid in register tab handler', { module: MODULE, context: 'authTabs' });
+              handlerNotify.error('Register tabElement missing or invalid in register tab handler', { module: MODULE, context: 'authTabs', source: 'setupLoginModalTabs' });
+              errorReporter.capture(new Error('Register tabElement missing or invalid in register tab handler'), {
+                module : MODULE,
+                source : 'setupLoginModalTabs',
+                context: 'authTabs',
+                originalError: new Error('Register tabElement missing or invalid in register tab handler')
+              });
               return;
             }
             if (loginTabElement && loginTabElement.classList) {
               domAPI.removeClass(loginTabElement, 'tab-active');
               domAPI.setAttribute(loginTabElement, 'aria-selected', 'false');
             } else {
-              handlerNotify.error('Register handler: loginTabElement missing or invalid', { module: MODULE, context: 'authTabs' });
+              handlerNotify.error('Register handler: loginTabElement missing or invalid', { module: MODULE, context: 'authTabs', source: 'setupLoginModalTabs' });
+              errorReporter.capture(new Error('Register handler: loginTabElement missing or invalid'), {
+                module : MODULE,
+                source : 'setupLoginModalTabs',
+                context: 'authTabs',
+                originalError: new Error('Register handler: loginTabElement missing or invalid')
+              });
               return;
             }
             if (registerPanel && registerPanel.classList) {
               domAPI.removeClass(registerPanel, 'hidden');
             } else {
-              handlerNotify.error('Register handler: registerPanel missing or invalid', { module: MODULE, context: 'authTabs' });
+              handlerNotify.error('Register handler: registerPanel missing or invalid', { module: MODULE, context: 'authTabs', source: 'setupLoginModalTabs' });
+              errorReporter.capture(new Error('Register handler: registerPanel missing or invalid'), {
+                module : MODULE,
+                source : 'setupLoginModalTabs',
+                context: 'authTabs',
+                originalError: new Error('Register handler: registerPanel missing or invalid')
+              });
               return;
             }
             if (loginPanel && loginPanel.classList) {
               domAPI.addClass(loginPanel, 'hidden');
             } else {
-              handlerNotify.error('Register handler: loginPanel missing or invalid', { module: MODULE, context: 'authTabs' });
+              handlerNotify.error('Register handler: loginPanel missing or invalid', { module: MODULE, context: 'authTabs', source: 'setupLoginModalTabs' });
+              errorReporter.capture(new Error('Register handler: loginPanel missing or invalid'), {
+                module : MODULE,
+                source : 'setupLoginModalTabs',
+                context: 'authTabs',
+                originalError: new Error('Register handler: loginPanel missing or invalid')
+              });
               return;
             }
           } catch (err) {
@@ -1176,13 +1347,19 @@ export function createEventHandlers({
             }
             handlerNotify.error(`Error in register tab click handler: ${extraErrorText}`, {
               module: MODULE,
-              source: 'setupLoginModalTabs_DelegatedClick',
+              source: 'setupLoginModalTabs',
               context: 'authTabs',
               error: err
             });
+            errorReporter.capture(err, {
+              module : MODULE,
+              source : 'setupLoginModalTabs',
+              context: 'authTabs',
+              originalError: err
+            });
             captureError(err, {
               module: MODULE,
-              source: 'setupLoginModalTabs_DelegatedClick',
+              source: 'setupLoginModalTabs',
               context: 'authTabs'
             });
           }
@@ -1192,18 +1369,27 @@ export function createEventHandlers({
 
       handlerNotify.info('Login/Register tab switching initialized using event delegation.', {
         module: MODULE,
-        source: 'setupLoginModalTabs'
+        source: 'setupLoginModalTabs',
+        context: 'authTabs'
       });
     } catch (err) {
       handlerNotify.error('Fatal error during login modal tab setup', {
         module: MODULE,
         source: 'setupLoginModalTabs',
-        error: err
+        error: err,
+        context: 'authTabs'
+      });
+      errorReporter.capture(err, {
+        module : MODULE,
+        source : 'setupLoginModalTabs',
+        context: 'authTabs',
+        originalError: err
       });
       captureError(err, {
         module: MODULE,
         source: 'setupLoginModalTabs',
-        detail: 'Fatal error during tab setup'
+        detail: 'Fatal error during tab setup',
+        context: 'authTabs'
       });
     }
   }
