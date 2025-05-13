@@ -40,6 +40,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 router = APIRouter()
 
+
 @router.get("/me")
 async def get_current_user_profile(
     request: Request,
@@ -64,6 +65,8 @@ async def get_current_user_profile(
         tb_str = traceback.format_exc()
         logger.error(f"Error in /api/user/me: {ex}\n{tb_str}")
         raise HTTPException(status_code=401, detail="Not authenticated") from ex
+
+
 __all__ = ["router", "create_default_user"]
 
 
@@ -81,16 +84,22 @@ class CookieSettings:
 
         # Production must have strict security
         if is_production and not scheme == "https":
-            logger.warning(f"Production environment detected but not using HTTPS: {hostname}")
+            logger.warning(
+                f"Production environment detected but not using HTTPS: {hostname}"
+            )
 
         # Force production settings for safety
         if is_production:
             return {
                 "secure": (True if self.env.lower() == "production" else False),
-                "domain": (self.cookie_domain if self.env.lower() == "production" and self.cookie_domain else None),
+                "domain": (
+                    self.cookie_domain
+                    if self.env.lower() == "production" and self.cookie_domain
+                    else None
+                ),
                 "samesite": "lax",
                 "httponly": True,
-                "path": "/"
+                "path": "/",
             }
 
         # Default for local development
@@ -106,7 +115,9 @@ class CookieSettings:
 cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
 
 
-def set_secure_cookie(response: Response, key: str, value: str, max_age: Optional[int], request: Request) -> None:
+def set_secure_cookie(
+    response: Response, key: str, value: str, max_age: Optional[int], request: Request
+) -> None:
     # Always use permissive cookie settings except in production
     env = (settings.ENV or "").lower()
     is_production = env == "production"
@@ -138,7 +149,9 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: Optiona
         if value == "":
             # Clear cookie
             # --- ADDED LOGGING ---
-            logger.info(f"[AUTH_COOKIE_CLEAR] Clearing cookie {key}, domain={domain}, path={path}")
+            logger.info(
+                f"[AUTH_COOKIE_CLEAR] Clearing cookie {key}, domain={domain}, path={path}"
+            )
             # --- END ADDED LOGGING ---
             if domain:
                 response.delete_cookie(key=key, path=path, domain=str(domain))
@@ -202,8 +215,7 @@ async def create_default_user() -> None:
             if not user_exists_q.scalars().first():
                 logger.info("No users found. Creating default admin user.")
                 hashed_pw = bcrypt.hashpw(
-                    DEFAULT_ADMIN["password"].encode("utf-8"),
-                    bcrypt.gensalt()
+                    DEFAULT_ADMIN["password"].encode("utf-8"), bcrypt.gensalt()
                 ).decode("utf-8")
                 admin_user = User(
                     username=DEFAULT_ADMIN["username"].lower(),
@@ -214,9 +226,16 @@ async def create_default_user() -> None:
                 )
                 session.add(admin_user)
                 await session.commit()
-                logger.info("[Insecure Debug] Default admin created: '%s'", DEFAULT_ADMIN["username"])
+                logger.info(
+                    "[Insecure Debug] Default admin created: '%s'",
+                    DEFAULT_ADMIN["username"],
+                )
                 if AUTH_DEBUG:
-                    logger.info("Dev credentials => %s / %s", DEFAULT_ADMIN["username"], DEFAULT_ADMIN["password"])
+                    logger.info(
+                        "Dev credentials => %s / %s",
+                        DEFAULT_ADMIN["username"],
+                        DEFAULT_ADMIN["password"],
+                    )
     except Exception as e:
         logger.error("Failed to create default user: %s", e)
 
@@ -254,15 +273,15 @@ def validate_password(password: str) -> None:
 
 
 async def get_user_and_claims_from_refresh_token(
-    token: str,
-    session: AsyncSession,
-    request: Request
+    token: str, session: AsyncSession, request: Request
 ) -> Tuple[User, dict[str, Any]]:
     decoded = await verify_token(token, "refresh", request, db_session=session)
     sub = decoded.get("sub")
     if not sub:
         raise HTTPException(status_code=401, detail="Missing 'sub' in refresh token.")
-    q = await session.execute(select(User).where(User.username == sub).with_for_update())
+    q = await session.execute(
+        select(User).where(User.username == sub).with_for_update()
+    )
     locked_user = q.scalars().first()
     if not locked_user:
         raise HTTPException(status_code=404, detail="User not found (refresh).")
@@ -273,6 +292,7 @@ async def get_user_and_claims_from_refresh_token(
     if decoded.get("version", 0) != locked_user.token_version:
         raise HTTPException(status_code=401, detail="Token version mismatch. Re-login.")
     return locked_user, decoded
+
 
 @router.post("/register", response_model=LoginResponse)
 async def register_user(
@@ -295,7 +315,9 @@ async def register_user(
         logger.warning("Registration blocked: user %s", user_lower)
         raise HTTPException(status_code=400, detail="Username taken.")
 
-    hashed_pw = bcrypt.hashpw(creds.password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    hashed_pw = bcrypt.hashpw(creds.password.encode("utf-8"), bcrypt.gensalt()).decode(
+        "utf-8"
+    )
     new_user = User(
         username=user_lower,
         password_hash=hashed_pw,
@@ -316,8 +338,20 @@ async def register_user(
     refresh_payload = build_jwt_payload(new_user, "refresh", refresh_expires)
     refresh_token = create_access_token(refresh_payload)
 
-    set_secure_cookie(response, "access_token", access_token, int(access_expires.total_seconds()), request)
-    set_secure_cookie(response, "refresh_token", refresh_token, int(refresh_expires.total_seconds()), request)
+    set_secure_cookie(
+        response,
+        "access_token",
+        access_token,
+        int(access_expires.total_seconds()),
+        request,
+    )
+    set_secure_cookie(
+        response,
+        "refresh_token",
+        refresh_token,
+        int(refresh_expires.total_seconds()),
+        request,
+    )
 
     logger.info("User registered => %s", user_lower)
     return LoginResponse(
@@ -347,7 +381,9 @@ async def login_user(
         logger.info(f"Login attempt for user: {masked_for_log}")
 
         async with session.begin():
-            result = await session.execute(select(User).where(User.username == name_lower).with_for_update())
+            result = await session.execute(
+                select(User).where(User.username == name_lower).with_for_update()
+            )
             db_user = result.scalars().first()
             if not db_user:
                 logger.warning("Login failed: unknown user => %s", masked_for_log)
@@ -359,15 +395,18 @@ async def login_user(
             start_time = datetime.now(timezone.utc)
             try:
                 valid_pw = await asyncio.get_event_loop().run_in_executor(
-                    None, bcrypt.checkpw,
+                    None,
+                    bcrypt.checkpw,
                     creds.password.encode("utf-8"),
-                    db_user.password_hash.encode("utf-8")
+                    db_user.password_hash.encode("utf-8"),
                 )
                 delta = (datetime.now(timezone.utc) - start_time).total_seconds()
                 logger.debug("Password check %.3fs => user=%s", delta, masked_for_log)
             except ValueError as exc:
                 logger.error("Corrupted password hash => user=%s", masked_for_log)
-                raise HTTPException(status_code=400, detail="Corrupted password hash.") from exc
+                raise HTTPException(
+                    status_code=400, detail="Corrupted password hash."
+                ) from exc
 
             if not valid_pw:
                 logger.warning("Wrong password => user=%s", masked_for_log)
@@ -387,8 +426,20 @@ async def login_user(
         ref_payload = build_jwt_payload(db_user, "refresh", refresh_expires)
         refresh_token = create_access_token(ref_payload)
 
-        set_secure_cookie(response, "access_token", access_token, int(access_expires.total_seconds()), request)
-        set_secure_cookie(response, "refresh_token", refresh_token, int(refresh_expires.total_seconds()), request)
+        set_secure_cookie(
+            response,
+            "access_token",
+            access_token,
+            int(access_expires.total_seconds()),
+            request,
+        )
+        set_secure_cookie(
+            response,
+            "refresh_token",
+            refresh_token,
+            int(refresh_expires.total_seconds()),
+            request,
+        )
 
         logger.info("Login succeeded for user: %s", masked_for_log)
         return LoginResponse(
@@ -406,19 +457,15 @@ async def login_user(
     except Exception as e:
         tb_str = traceback.format_exc()
         logger.error("Login fatal error: %s\n%s", e, tb_str)
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        ) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+
 
 DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 
 
 @router.post("/refresh", response_model=LoginResponse)
 async def refresh_token(
-    request: Request,
-    response: Response,
-    session: DBSessionDep
+    request: Request, response: Response, session: DBSessionDep
 ) -> LoginResponse:
     validate_csrf_token(request)
     # Refreshes the access token using a valid refresh cookie.
@@ -427,11 +474,15 @@ async def refresh_token(
         logger.debug("No refresh cookie => can't refresh.")
         set_secure_cookie(response, "access_token", "", 0, request)
         set_secure_cookie(response, "refresh_token", "", 0, request)
-        raise HTTPException(status_code=401, detail="No refresh token; please login again.")
+        raise HTTPException(
+            status_code=401, detail="No refresh token; please login again."
+        )
 
     locked_user = None
     try:
-        locked_user, _claims = await get_user_and_claims_from_refresh_token(refresh_cookie, session, request)
+        locked_user, _claims = await get_user_and_claims_from_refresh_token(
+            refresh_cookie, session, request
+        )
         locked_user.last_activity = aware_utc_now()
         await session.commit()
 
@@ -439,7 +490,13 @@ async def refresh_token(
         new_payload = build_jwt_payload(locked_user, "access", access_expires)
         new_access_token = create_access_token(new_payload)
 
-        set_secure_cookie(response, "access_token", new_access_token, int(access_expires.total_seconds()), request)
+        set_secure_cookie(
+            response,
+            "access_token",
+            new_access_token,
+            int(access_expires.total_seconds()),
+            request,
+        )
         logger.info("Token refreshed => %s", locked_user.username)
 
         return LoginResponse(
@@ -451,7 +508,7 @@ async def refresh_token(
         if ex.status_code in (401, 403):
             logger.warning(
                 "[REFRESH_VERSION_MISMATCH] user=%s detail=%s cookies=%s",
-                locked_user.username if locked_user else 'unknown',
+                locked_user.username if locked_user else "unknown",
                 ex.detail,
                 request.cookies,
             )
@@ -469,6 +526,7 @@ class UserProfileForVerify(BaseModel):
     token_version: Optional[int] = None
     project_ids: Optional[list[str]] = []
     conversation_ids: Optional[list[str]] = []
+
 
 class VerifyResponse(BaseModel):
     authenticated: bool
@@ -509,7 +567,10 @@ async def verify_auth_status(
     except HTTPException as ex:
         if ex.status_code in (401, 403):
             return VerifyResponse(authenticated=False, user=None)
-        logger.warning(f"Verify auth encountered non-401/403 HTTPException ({ex.status_code}): {ex.detail}", exc_info=True)
+        logger.warning(
+            f"Verify auth encountered non-401/403 HTTPException ({ex.status_code}): {ex.detail}",
+            exc_info=True,
+        )
         return VerifyResponse(authenticated=False, user=None)
     except Exception as e:
         logger.error("Verify auth general error => %s", e, exc_info=True)
@@ -548,7 +609,7 @@ async def get_csrf_token(request: Request, response: Response):
         httponly=False,  # Must be accessible to JavaScript
         samesite="lax",
         secure=request.url.scheme == "https",
-        path="/"
+        path="/",
     )
     if settings.ENV.lower() != "production" and settings.DEBUG:
         logger.debug("CSRF dev token => %s", csrf_token)
@@ -564,22 +625,24 @@ async def ignore_common_requests():
 
 @router.post("/set-cookies", include_in_schema=False)
 async def set_cookies_endpoint(
-    request: Request,
-    response: Response,
-    token_req: TokenRequest
+    request: Request, response: Response, token_req: TokenRequest
 ):
     validate_csrf_token(request)
 
     # Secure this endpoint even further: Only allowed in local env AND from localhost
     env = settings.ENV.lower()
-    client_host = request.client.host if (request.client and request.client.host) else "unknown"
+    client_host = (
+        request.client.host if (request.client and request.client.host) else "unknown"
+    )
 
     if env != "local":
-        raise HTTPException(status_code=403, detail="This endpoint is disabled in production")
+        raise HTTPException(
+            status_code=403, detail="This endpoint is disabled in production"
+        )
     if client_host not in ["localhost", "127.0.0.1"]:
         raise HTTPException(status_code=403, detail="Only available from localhost")
 
-    access_expires  = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN)
+    access_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN)
     refresh_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
     try:
@@ -622,7 +685,9 @@ async def logout_user(
                 current_user = await get_user_from_token(
                     access_cookie, session, request=request, expected_type="access"
                 )
-                logger.info("Logout user => from access cookie => %s", current_user.username)
+                logger.info(
+                    "Logout user => from access cookie => %s", current_user.username
+                )
             except HTTPException:
                 pass
 
@@ -631,7 +696,9 @@ async def logout_user(
                 current_user = await get_user_from_token(
                     refresh_cookie, session, request=request, expected_type="refresh"
                 )
-                logger.info("Logout user => from refresh cookie => %s", current_user.username)
+                logger.info(
+                    "Logout user => from refresh cookie => %s", current_user.username
+                )
             except HTTPException:
                 pass
 
@@ -647,11 +714,15 @@ async def logout_user(
                     )
                     if refresh_cookie:
                         try:
-                            dec = await verify_token(refresh_cookie, "refresh", request, db_session=session)
+                            dec = await verify_token(
+                                refresh_cookie, "refresh", request, db_session=session
+                            )
                             tid = dec.get("jti")
                             exp_val = dec.get("exp")
                             if tid and exp_val:
-                                dt_expirada = datetime.fromtimestamp(float(exp_val), tz=timezone.utc)
+                                dt_expirada = datetime.fromtimestamp(
+                                    float(exp_val), tz=timezone.utc
+                                )
                                 blackl = TokenBlacklist(
                                     jti=tid,
                                     expires=dt_expirada.replace(tzinfo=None),

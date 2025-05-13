@@ -26,7 +26,6 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
   await ctx.DependencySystem.waitFor?.([
     "app", "projectManager", "notify", "eventHandlers", "domAPI"
   ]);
-  if (!ctx.errorReporter) throw new Error(`[${MODULE}] errorReporter must be provided in ctx for error capture`);
 
   // Always use module-scoped contextual notifier
   const notify = ctx.notify.withContext({ module: MODULE, context: "searchHandler" });
@@ -50,7 +49,7 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
 
     const pid = ctx._getCurrentProjectId();
     if (!pid) {
-      notify.error("No valid project selected for KB search", { module: MODULE, context: "search", source: "searchKnowledgeBase" });
+      notify.error("No valid project selected for KB search", { context: "search", source: "searchKnowledgeBase" });
       return;
     }
 
@@ -82,8 +81,8 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
         _showNoResults();
       }
     } catch (err) {
-      notify.error("Search failed. Please try again.", { module: MODULE, context: "search", source: "searchKnowledgeBase", originalError: err });
-      ctx.errorReporter.capture?.(err, { module: MODULE, source: "searchKnowledgeBase", context: "search", originalError: err });
+      notify.error("Search failed. Please try again.", { context: "search", source: "searchKnowledgeBase", originalError: err });
+      ctx.errorReporter.capture?.(err, { source: "searchKnowledgeBase", context: "search", originalError: err });
     } finally {
       ctx.state.isSearching = false;
       _hideSearchLoading();
@@ -197,7 +196,7 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
   function _showResultDetail(result) {
     const modal = ctx.elements.resultModal;
     if (!modal || typeof modal.showModal !== "function") {
-      notify.error("Result detail modal not found or invalid.", { module: MODULE, context: "searchDetail", source: "_showResultDetail" });
+      notify.error("Result detail modal not found or invalid.", { context: "searchDetail", source: "_showResultDetail" });
       return;
     }
     _populateResultDetail(result);

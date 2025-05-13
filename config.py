@@ -46,7 +46,7 @@ class Settings:
 
     # Application Version
     APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
-    APP_NAME = os.getenv("APP_NAME", "azure-chatapp") # Added APP_NAME
+    APP_NAME = os.getenv("APP_NAME", "azure-chatapp")  # Added APP_NAME
 
     # Debug/Environment
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
@@ -69,7 +69,9 @@ class Settings:
         os.getenv("SENTRY_MCP_SERVER_ENABLED", "False").lower() == "true"
     )
     SENTRY_MCP_SERVER_URL = os.getenv("SENTRY_MCP_SERVER_URL", "http://localhost:8001")
-    SENTRY_SQLA_ASYNC_ENABLED = os.getenv("SENTRY_SQLA_ASYNC_ENABLED", "False").lower() == "true"
+    SENTRY_SQLA_ASYNC_ENABLED = (
+        os.getenv("SENTRY_SQLA_ASYNC_ENABLED", "False").lower() == "true"
+    )
 
     # Session secret (insecure default)
     SESSION_SECRET = os.getenv("SESSION_SECRET", "dev_insecure_key")
