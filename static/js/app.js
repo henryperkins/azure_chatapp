@@ -636,8 +636,13 @@ async function initializeCoreSystems() {
   try {
     notify.debug('[App] Initializing core systems...');
 
-    // Ensure DOM is ready
-    await waitForDepsAndDom({ DependencySystem, domAPI });
+    // Ensure the DOM and the early-boot services we have so far are ready.
+    await waitForDepsAndDom({
+      DependencySystem,
+      domAPI,
+      deps: ['domAPI', 'notify'],   // modules that exist at this moment
+      domSelectors: ['body']        // keep body-ready check
+    });
 
     // Create and initialize modal manager
     const modalManager = createModalManager({
