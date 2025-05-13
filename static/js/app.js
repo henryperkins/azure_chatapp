@@ -96,6 +96,9 @@ const DependencySystem = browserAPI.getDependencySystem();
 if (!DependencySystem?.modules?.get) {
     throw new Error('[App] DependencySystem not present – bootstrap aborted');
 }
+// Dedicated App Event Bus
+const AppBus = new EventTarget();
+DependencySystem.register('AppBus', AppBus);
 
 // ---------------------------------------------------------------------------
 // 3) Register base services in DependencySystem
@@ -118,7 +121,7 @@ const globalUtils = {
 DependencySystem.register('globalUtils', globalUtils);
 
 // Register sanitizer (DOMPurify)
-const sanitizer = (typeof window !== 'undefined' && window.DOMPurify) ? window.DOMPurify : undefined;
+const sanitizer = browserAPI.getWindow()?.DOMPurify;
 if (!sanitizer) {
     throw new Error('[App] DOMPurify sanitizer not found. Please ensure DOMPurify is loaded before app.js.');
 }
@@ -162,6 +165,8 @@ const notify = createNotify({
   DependencySystem
 });
 DependencySystem.register('notify', notify);
+// STEP 5: Create module-scoped notifier for App
+const appNotify = notify.withContext({ module: 'App', context: 'bootstrap' });
 
 // Register logger that uses notify
 const loggerInstance = {
@@ -394,10 +399,11 @@ const app = {
   navigateToConversation: async (chatId) => {
     const chatMgr = DependencySystem.modules.get('chatManager');
     if (chatMgr?.loadConversation) return chatMgr.loadConversation(chatId);
-    notify.warn('[App] chatManager not available for navigateToConversation');
+    appNotify.warn('chatManager not available for navigateToConversation', { source: 'app.navigateToConversation' });
     return false;
   },
-  validateUUID: (id) => isValidProjectId(id)
+  validateUUID: (id) => isValidProjectId(id),
+  setCurrentUser: (user) => { app.state.currentUser = user; }
 };
 
 // Make the DependencySystem accessible to all components that receive `app`
@@ -414,25 +420,25 @@ DependencySystem.register('app', app);
 
 // Register currentUser initially as null
 DependencySystem.register('currentUser', null);
-notify.info('[App] "currentUser" initially registered as null in DI.');
+appNotify.info('"currentUser" initially registered as null in DI.', { source: 'bootstrap' });
 // ---------------------------------------------------------------------------
 // 14) Main initialization function
 // ---------------------------------------------------------------------------
 export async function init() {
   const _trace = _dbg.start?.('App.init');
   if (_globalInitCompleted || _globalInitInProgress) {
-    notify.warn('[App] Duplicate initialization attempt blocked');
+    appNotify.warn('Duplicate initialization attempt blocked', { source: 'init.duplicateCheck' });
     return _globalInitCompleted;
   }
   if (appState.initialized || appState.initializing) {
-    notify.info('[App] Initialization attempt skipped (already done or in progress).');
+    appNotify.info('Initialization attempt skipped (already done or in progress).', { source: 'init.alreadyDone' });
     return appState.initialized;
   }
 
   _globalInitInProgress = true;
   appState.initializing = true;
   appState.currentPhase = 'starting_init_process';
-  notify.debug('[App] START init()');
+  appNotify.debug('START init()', { source: 'init.start' });
 
   // Show loading spinner
   toggleLoadingSpinner(true);
@@ -449,7 +455,8 @@ export async function init() {
         APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
       );
     } catch (err) {
-      notify.error('[App] Critical deps not met', { error: err });
+      appNotify.error('Critical deps not met', { error: err, source: 'init.waitForDeps' });
+      maybeCapture(errorReporter, err, { module: 'App', method: 'init', source: 'waitForDeps' });
       throw err;
     }
 
@@ -461,9 +468,9 @@ export async function init() {
       const user = await fetchCurrentUser();
       if (user) {
         currentUser = user;
-        app.state.currentUser = user;
+        app.setCurrentUser(user);
         browserAPI.setCurrentUser(user);
-        notify.info(`[App] User fetched in init. app.state.currentUser updated. User ID: ${user.id}`);
+        appNotify.info(`User fetched in init. app.state.currentUser updated. User ID: ${user.id}`, { source: 'init.fetchCurrentUser' });
         renderAuthHeader();
       }
     }
@@ -474,9 +481,10 @@ export async function init() {
     // Initialize event handlers
     try {
       await eventHandlers.init();
-      notify.info('EventHandlers initialized successfully');
+      appNotify.info('EventHandlers initialized successfully', { source: 'init.eventHandlers' });
     } catch (ehErr) {
-      notify.error('[App] Error initializing eventHandlers', { error: ehErr });
+      appNotify.error('Error initializing eventHandlers', { error: ehErr, source: 'init.eventHandlers' });
+      maybeCapture(errorReporter, ehErr, { module: 'App', method: 'init', source: 'eventHandlers' });
     }
 
     // Initialize model config
@@ -486,7 +494,8 @@ export async function init() {
         mc.initializeUI();
       }
     } catch (mcErr) {
-      notify.warn('[App] Error initializing modelConfig UI', { error: mcErr });
+      appNotify.warn('Error initializing modelConfig UI', { error: mcErr, source: 'init.modelConfig' });
+      maybeCapture(errorReporter, mcErr, { module: 'App', method: 'init', source: 'modelConfig' });
     }
 
     // Register app listeners
@@ -498,7 +507,7 @@ export async function init() {
       const navService = DependencySystem.modules.get('navigationService');
 
       if (!navService) {
-        notify.error('[App] NavigationService not found in DependencySystem. Re-registering...');
+        appNotify.error('NavigationService not found in DependencySystem. Re-registering...', { source: 'init.navigationService' });
         // Try to re-create and register it if missing
         const recreatedNavService = createNavigationService({
           domAPI,
@@ -510,20 +519,20 @@ export async function init() {
         });
 
         DependencySystem.register('navigationService', recreatedNavService);
-        notify.info('[App] NavigationService re-registered successfully');
+        appNotify.info('NavigationService re-registered successfully', { source: 'init.navigationService' });
 
         // Update local reference
         navigationService = recreatedNavService;
       } else if (navService !== navigationService) {
         // Update local reference if DI instance is different
         navigationService = navService;
-        notify.info('[App] Synchronized navigationService with DependencySystem');
+        appNotify.info('Synchronized navigationService with DependencySystem', { source: 'init.navigationService' });
       }
 
       // Now try to initialize navigationService
       if (navigationService?.init) {
         await navigationService.init();
-        notify.info('[App] NavigationService initialized successfully');
+        appNotify.info('NavigationService initialized successfully', { source: 'init.navigationService' });
 
         // Register default views if they haven't been registered yet
         const projectDashboard = DependencySystem.modules.get('projectDashboard');
@@ -551,7 +560,7 @@ export async function init() {
               }
             });
 
-            notify.info('[App] Registered projectList view with NavigationService');
+            appNotify.info('Registered projectList view with NavigationService', { source: 'init.navigationService' });
           }
 
           if (projectDetails && !navigationService.getCurrentView()) {
@@ -572,18 +581,20 @@ export async function init() {
               }
             });
 
-            notify.info('[App] Registered projectDetails view with NavigationService');
+            appNotify.info('Registered projectDetails view with NavigationService', { source: 'init.navigationService' });
           }
         }
       } else {
-        notify.error('[App] NavigationService does not have init method.');
+        appNotify.error('NavigationService does not have init method.', { source: 'init.navigationService' });
       }
     } catch (navErr) {
-      notify.error('[App] Error initializing NavigationService', {
+      appNotify.error('Error initializing NavigationService', {
         error: navErr,
         critical: true,
-        extra: { phase: 'navigationService.init' }
+        extra: { phase: 'navigationService.init' },
+        source: 'init.navigationService'
       });
+      maybeCapture(errorReporter, navErr, { module: 'App', method: 'init', source: 'navigationService' });
 
       if (errorReporter?.capture) {
         errorReporter.capture(navErr, {
@@ -597,26 +608,27 @@ export async function init() {
     // Mark app as initialized
     appState.initialized = true;
     _globalInitCompleted = true;
-    notify.info('[App] Initialization complete.', { authenticated: appState.isAuthenticated });
+    appNotify.info('Initialization complete.', { authenticated: appState.isAuthenticated, source: 'init.complete' });
+
+    // Backend event logging
+    const backendLogger = DependencySystem.modules.get('backendLogger');
+    backendLogger?.log?.({
+      level: 'info',
+      module: 'App',
+      message: 'initialized'
+    });
 
     // Dispatch app:ready event
-    if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
-      domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('app:ready', { detail: { success: true } }));
-    } else {
-      document.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
-    }
+    AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
 
     return true;
   } catch (err) {
-    notify.error(`[App] Initialization failed: ${err?.message}`, { error: err });
+    appNotify.error(`Initialization failed: ${err?.message}`, { error: err, source: 'init.catch' });
+    maybeCapture(errorReporter, err, { module: 'App', method: 'init', source: 'catch' });
     handleInitError(err);
 
     // Dispatch app:ready event with error
-    if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
-      domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent('app:ready', { detail: { success: false, error: err } }));
-    } else {
-      document.dispatchEvent(new CustomEvent('app:ready', { detail: { success: false, error: err } }));
-    }
+    AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: false, error: err } }));
 
     return false;
   } finally {
@@ -634,7 +646,7 @@ export async function init() {
 async function initializeCoreSystems() {
   const _t = _dbg.start?.('initializeCoreSystems');
   try {
-    notify.debug('[App] Initializing core systems...');
+    appNotify.debug('Initializing core systems...', { source: 'initializeCoreSystems' });
 
     // Ensure the DOM and the early-boot services we have so far are ready.
     await waitForDepsAndDom({
@@ -729,11 +741,13 @@ async function initializeCoreSystems() {
         (e) => {
           modalsLoadedSuccess = !!(e?.detail?.success);
           if (!modalsLoadedSuccess) {
-            notify.error('[App] modalsLoaded event fired but modals failed to load', {
-              error: e?.detail?.error
+            appNotify.error('modalsLoaded event fired but modals failed to load', {
+              error: e?.detail?.error,
+              source: 'initializeCoreSystems.modalsLoaded'
             });
+            maybeCapture(errorReporter, e?.detail?.error, { module: 'App', method: 'initializeCoreSystems', source: 'modalsLoaded' });
           } else {
-            notify.info('[App] modalsLoaded event fired: modals injected successfully');
+            appNotify.info('modalsLoaded event fired: modals injected successfully', { source: 'initializeCoreSystems.modalsLoaded' });
           }
           res(true);
         },
@@ -742,16 +756,17 @@ async function initializeCoreSystems() {
     });
 
     if (!modalsLoadedSuccess) {
-      notify.error('[App] Modal HTML failed to load. Login modal and others will not function.');
+      appNotify.error('Modal HTML failed to load. Login modal and others will not function.', { source: 'initializeCoreSystems.modalsLoaded' });
     }
 
     // Initialize modal manager
     if (modalManager.init) {
       try {
         await modalManager.init();
-        notify.info('[App] modalManager.init() completed successfully');
+        appNotify.info('modalManager.init() completed successfully', { source: 'initializeCoreSystems.modalManager' });
       } catch (err) {
-        notify.error('[App] modalManager.init() failed', { error: err });
+        appNotify.error('modalManager.init() failed', { error: err, source: 'initializeCoreSystems.modalManager' });
+        maybeCapture(errorReporter, err, { module: 'App', method: 'initializeCoreSystems', source: 'modalManager' });
       }
     }
 
@@ -759,19 +774,20 @@ async function initializeCoreSystems() {
     if (eventHandlers?.init) {
       try {
         await eventHandlers.init();
-        notify.info('[App] eventHandlers.init() completed (rebinding login delegation)');
+        appNotify.info('eventHandlers.init() completed (rebinding login delegation)', { source: 'initializeCoreSystems.eventHandlers' });
       } catch (err) {
-        notify.error('[App] eventHandlers.init() failed', { error: err });
+        appNotify.error('eventHandlers.init() failed', { error: err, source: 'initializeCoreSystems.eventHandlers' });
+        maybeCapture(errorReporter, err, { module: 'App', method: 'initializeCoreSystems', source: 'eventHandlers' });
       }
     }
 
     // Wait for HTML templates to be loaded before creating UI components
-    notify.debug('[App] Waiting for HTML templates to be loaded before creating UI components...');
+    appNotify.debug('Waiting for HTML templates to be loaded before creating UI components...', { source: 'initializeCoreSystems.templates' });
     try {
       // Check if project details template is already loaded
       const projectDetailsLoaded = domAPI.getElementById('projectDetailsView')?.querySelector('#projectTitle');
       if (!projectDetailsLoaded) {
-        notify.debug('[App] Project details template not yet loaded, waiting...');
+        appNotify.debug('Project details template not yet loaded, waiting...', { source: 'initializeCoreSystems.templates' });
         await new Promise((resolve) => {
           const listener = () => {
             domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
@@ -783,26 +799,27 @@ async function initializeCoreSystems() {
           // Set a timeout in case the event never fires
           setTimeout(() => {
             domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
-            notify.warn('[App] Timed out waiting for project details template in initializeCoreSystems');
+            appNotify.warn('Timed out waiting for project details template in initializeCoreSystems', { source: 'initializeCoreSystems.templates' });
             resolve();
           }, 10000);
         });
       }
     } catch (err) {
-      notify.error('[App] Error waiting for HTML templates in initializeCoreSystems', { error: err });
+      appNotify.error('Error waiting for HTML templates in initializeCoreSystems', { error: err, source: 'initializeCoreSystems.templates' });
+      maybeCapture(errorReporter, err, { module: 'App', method: 'initializeCoreSystems', source: 'templates' });
     }
 
     // Initialize UI components
     createAndRegisterUIComponents();
 
-    notify.debug('[App] Core systems initialized.');
+    appNotify.debug('Core systems initialized.', { source: 'initializeCoreSystems.complete' });
     return true;
   } catch (err) {
     maybeCapture(DependencySystem.modules.get('errorReporter'), err, {
       module: 'app',
       method: 'initializeCoreSystems'
     });
-    notify.error('[App] Core systems initialization failed.', {
+    appNotify.error('Core systems initialization failed.', {
       error: err,
       module: 'app',
       source: 'initializeCoreSystems'
@@ -824,13 +841,13 @@ function createAndRegisterUIComponents() {
   const backBtnElement = domAPI.getElementById('backToProjectsBtn');
 
   if (!projectListElement) {
-    notify.error('[App] #projectList element not found, cannot create ProjectListComponent', {
+    appNotify.error('#projectList element not found, cannot create ProjectListComponent', {
       source: 'createAndRegisterUIComponents'
     });
   }
 
   if (!projectDetailsElement || !projectTitleElement || !projectDescriptionElement || !backBtnElement) {
-    notify.error('[App] Project details elements not found, cannot create ProjectDetailsComponent', {
+    appNotify.error('Project details elements not found, cannot create ProjectDetailsComponent', {
       source: 'createAndRegisterUIComponents',
       detail: {
         projectDetailsFound: !!projectDetailsElement,
@@ -893,7 +910,7 @@ function createAndRegisterUIComponents() {
     });
     DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
   } else {
-    notify.warn('[App] Skipping ProjectDetailsComponent creation due to missing DOM elements', {
+    appNotify.warn('Skipping ProjectDetailsComponent creation due to missing DOM elements', {
       source: 'createAndRegisterUIComponents'
     });
   }
@@ -914,14 +931,15 @@ function createAndRegisterUIComponents() {
       projectDashboardInstance.components.projectList = projectListComponent;
     }
 
-    notify.debug('[App CoreSys] ProjectDashboard components updated with instances from DependencySystem.', {
+    appNotify.debug('ProjectDashboard components updated with instances from DependencySystem.', {
       detail: {
         projectDetailsFound: !!projectDetailsComponent,
         projectListFound: !!projectListComponent
-      }
+      },
+      source: 'createAndRegisterUIComponents'
     });
   } else {
-    notify.warn('[App CoreSys] ProjectDashboard instance or its components property not found for update.');
+    appNotify.warn('ProjectDashboard instance or its components property not found for update.', { source: 'createAndRegisterUIComponents' });
   }
 }
 
@@ -963,7 +981,8 @@ async function initializeAuthSystem() {
     return true;
   } catch (err) {
     appState.isAuthenticated = false;
-    notify.error('[App] Auth system initialization failed.', { error: err });
+    appNotify.error('Auth system initialization failed.', { error: err, source: 'initializeAuthSystem' });
+    maybeCapture(errorReporter, err, { module: 'App', method: 'initializeAuthSystem', source: 'initializeAuthSystem' });
     throw err;
   }
 }
@@ -976,27 +995,28 @@ async function initializeUIComponents() {
 
   try {
     if (_uiInitialized) {
-      notify.warn('[App] initializeUIComponents called again; skipping.');
+      appNotify.warn('initializeUIComponents called again; skipping.', { source: 'initializeUIComponents' });
       return;
     }
 
-    notify.debug('[App] Initializing UI components...');
+    appNotify.debug('Initializing UI components...', { source: 'initializeUIComponents' });
 
     // Wait for HTML templates to be loaded
-    notify.debug('[App] Waiting for HTML templates to be loaded...');
+    appNotify.debug('Waiting for HTML templates to be loaded...', { source: 'initializeUIComponents' });
     try {
       // Wait for project details template
       await new Promise((resolve) => {
         const alreadyLoaded = domAPI.getElementById('projectDetailsView')?.querySelector('#projectTitle');
         if (alreadyLoaded) {
-          notify.debug('[App] Project details template already loaded');
+          appNotify.debug('Project details template already loaded', { source: 'initializeUIComponents' });
           resolve();
           return;
         }
 
         const listener = (e) => {
-          notify.debug('[App] Project details template loaded event received', {
-            success: e.detail?.success
+          appNotify.debug('Project details template loaded event received', {
+            success: e.detail?.success,
+            source: 'initializeUIComponents'
           });
           domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
           resolve();
@@ -1007,7 +1027,7 @@ async function initializeUIComponents() {
         // Set a timeout in case the event never fires
         setTimeout(() => {
           domAPI.removeEventListener(domAPI.getDocument(), 'projectDetailsTemplateLoaded', listener);
-          notify.warn('[App] Timed out waiting for project details template to load');
+          appNotify.warn('Timed out waiting for project details template to load', { source: 'initializeUIComponents' });
           resolve();
         }, 10000);
       });
@@ -1016,14 +1036,15 @@ async function initializeUIComponents() {
       await new Promise((resolve) => {
         const alreadyLoaded = domAPI.getElementById('modalsContainer')?.querySelector('.modal');
         if (alreadyLoaded) {
-          notify.debug('[App] Modals already loaded');
+          appNotify.debug('Modals already loaded', { source: 'initializeUIComponents' });
           resolve();
           return;
         }
 
         const listener = (e) => {
-          notify.debug('[App] Modals loaded event received', {
-            success: e.detail?.success
+          appNotify.debug('Modals loaded event received', {
+            success: e.detail?.success,
+            source: 'initializeUIComponents'
           });
           domAPI.removeEventListener(domAPI.getDocument(), 'modalsLoaded', listener);
           resolve();
@@ -1034,12 +1055,13 @@ async function initializeUIComponents() {
         // Set a timeout in case the event never fires
         setTimeout(() => {
           domAPI.removeEventListener(domAPI.getDocument(), 'modalsLoaded', listener);
-          notify.warn('[App] Timed out waiting for modals to load');
+          appNotify.warn('Timed out waiting for modals to load', { source: 'initializeUIComponents' });
           resolve();
         }, 10000);
       });
     } catch (err) {
-      notify.error('[App] Error waiting for HTML templates', { error: err });
+      appNotify.error('Error waiting for HTML templates', { error: err, source: 'initializeUIComponents' });
+      maybeCapture(errorReporter, err, { module: 'App', method: 'initializeUIComponents', source: 'initializeUIComponents' });
     }
 
     // Ensure DOM elements exist
@@ -1076,14 +1098,17 @@ async function initializeUIComponents() {
           try {
             await chatManager.loadConversation(conversationId);
           } catch (err) {
-            notify.error('[App] Failed to load conversation from uiRenderer selection.', {
+            appNotify.error('Failed to load conversation from uiRenderer selection.', {
               error: err,
-              conversationId
+              conversationId,
+              source: 'initializeUIComponents.uiRenderer.onConversationSelect'
             });
+            maybeCapture(errorReporter, err, { module: 'App', method: 'initializeUIComponents', source: 'uiRenderer.onConversationSelect' });
           }
         } else {
-          notify.error('[App] chatManager not available for onConversationSelect.', {
-            conversationId
+          appNotify.error('chatManager not available for onConversationSelect.', {
+            conversationId,
+            source: 'initializeUIComponents.uiRenderer.onConversationSelect'
           });
         }
       },
@@ -1093,14 +1118,17 @@ async function initializeUIComponents() {
           try {
             await projectDashboardDep.showProjectDetails(projectId);
           } catch (err) {
-            notify.error('[App] Failed to show project details from uiRenderer selection.', {
+            appNotify.error('Failed to show project details from uiRenderer selection.', {
               error: err,
-              projectId
+              projectId,
+              source: 'initializeUIComponents.uiRenderer.onProjectSelect'
             });
+            maybeCapture(errorReporter, err, { module: 'App', method: 'initializeUIComponents', source: 'uiRenderer.onProjectSelect' });
           }
         } else {
-          notify.error('[App] projectDashboard not available for onProjectSelect.', {
-            projectId
+          appNotify.error('projectDashboard not available for onProjectSelect.', {
+            projectId,
+            source: 'initializeUIComponents.uiRenderer.onProjectSelect'
           });
         }
       }
@@ -1136,7 +1164,8 @@ async function initializeUIComponents() {
     if (appState.isAuthenticated) {
       const pm = DependencySystem.modules.get('projectManager');
       pm?.loadProjects?.('all').catch(err => {
-        notify.error('[App] Failed to load projects in UI init', { error: err });
+        appNotify.error('Failed to load projects in UI init', { error: err, source: 'initializeUIComponents' });
+        maybeCapture(errorReporter, err, { module: 'App', method: 'initializeUIComponents', source: 'initializeUIComponents' });
       });
     }
 
@@ -1153,11 +1182,12 @@ async function initializeUIComponents() {
       module: 'app',
       method: 'initializeUIComponents'
     });
-    notify.error('[App] UI components initialization failed.', {
+    appNotify.error('UI components initialization failed.', {
       error: err,
       module: 'app',
       source: 'initializeUIComponents'
     });
+    maybeCapture(errorReporter, err, { module: 'App', method: 'initializeUIComponents', source: 'initializeUIComponents' });
     throw err;
   } finally {
     _dbg.stop?.(_t, 'initializeUIComponents');
@@ -1203,7 +1233,7 @@ function handleAuthStateChange(event) {
   });
 
   appState.isAuthenticated = isAuthenticated;
-  app.state.currentUser = user;
+  app.setCurrentUser(user);
   currentUser = user;
 
   renderAuthHeader();
@@ -1223,7 +1253,8 @@ function handleAuthStateChange(event) {
   // If authenticated, load projects
   if (isAuthenticated && projectManager && typeof projectManager.loadProjects === 'function') {
     projectManager.loadProjects('all').catch(err => {
-      notify.error('[App] Failed to load projects after auth change', { error: err });
+      appNotify.error('Failed to load projects after auth change', { error: err, source: 'handleAuthStateChange' });
+      maybeCapture(errorReporter, err, { module: 'App', method: 'handleAuthStateChange', source: 'handleAuthStateChange' });
     });
   }
 }
@@ -1296,7 +1327,8 @@ function renderAuthHeader() {
       );
     }
   } catch (err) {
-    notify.error('[App] Error rendering auth header.', { error: err });
+    appNotify.error('Error rendering auth header.', { error: err, source: 'renderAuthHeader' });
+    maybeCapture(errorReporter, err, { module: 'App', method: 'renderAuthHeader', source: 'renderAuthHeader' });
   }
 }
 
@@ -1304,7 +1336,7 @@ async function fetchCurrentUser() {
   try {
     const authModule = DependencySystem.modules.get('auth');
     if (!authModule) {
-      notify.error('[App] Auth module not available in fetchCurrentUser.');
+      appNotify.error('Auth module not available in fetchCurrentUser.', { source: 'fetchCurrentUser' });
       return null;
     }
 
@@ -1338,10 +1370,11 @@ async function fetchCurrentUser() {
       notify.warn('[App] fetchCurrentUser (from authModule.getCurrentUserAsync) did not return a valid user object with ID.', { userObjAsync });
     }
 
-    notify.error('[App] fetchCurrentUser: Could not retrieve a valid user object with ID from auth module using any available method.');
+    appNotify.error('fetchCurrentUser: Could not retrieve a valid user object with ID from auth module using any available method.', { source: 'fetchCurrentUser' });
     return null;
   } catch (error) {
-    notify.error('[App] Failed to fetch current user during fetchCurrentUser execution.', { error });
+    appNotify.error('Failed to fetch current user during fetchCurrentUser execution.', { error, source: 'fetchCurrentUser' });
+    maybeCapture(errorReporter, error, { module: 'App', method: 'fetchCurrentUser', source: 'fetchCurrentUser' });
     return null;
   }
 }
@@ -1356,7 +1389,8 @@ function registerAppListeners() {
       setupChatInitializationTrigger();
     })
     .catch(err => {
-      notify.error('[App] Error waiting for dependencies in registerAppListeners', { error: err });
+      appNotify.error('Error waiting for dependencies in registerAppListeners', { error: err, source: 'registerAppListeners' });
+      maybeCapture(errorReporter, err, { module: 'App', method: 'registerAppListeners', source: 'registerAppListeners' });
     });
 }
 
@@ -1366,7 +1400,7 @@ function setupChatInitializationTrigger() {
   const auth = DependencySystem.modules.get('auth');
 
   if (!projectManager || !chatManager || !auth) {
-    notify.warn('[App] Missing dependencies for setupChatInitializationTrigger');
+    appNotify.warn('Missing dependencies for setupChatInitializationTrigger', { source: 'setupChatInitializationTrigger' });
     return;
   }
 
@@ -1382,7 +1416,8 @@ function setupChatInitializationTrigger() {
           await chatManager.initialize({ projectId });
           notify.debug('[App] ChatManager initialized for project', { projectId });
         } catch (err) {
-          notify.error('[App] Failed to initialize ChatManager for project', { error: err, projectId });
+          appNotify.error('Failed to initialize ChatManager for project', { error: err, projectId, source: 'setupChatInitializationTrigger' });
+          maybeCapture(errorReporter, err, { module: 'App', method: 'setupChatInitializationTrigger', source: 'setupChatInitializationTrigger' });
         }
       }
     },
@@ -1391,7 +1426,7 @@ function setupChatInitializationTrigger() {
 }
 
 function handleInitError(err) {
-  notify.error('[App] Initialization error', { error: err });
+  appNotify.error('Initialization error', { error: err, source: 'handleInitError' });
 
   // Try to show error in UI
   try {
@@ -1401,8 +1436,14 @@ function handleInitError(err) {
       domAPI.removeClass(errorContainer, 'hidden');
     }
   } catch (displayErr) {
-    // Last resort: console error
-    console.error('[App] Failed to display initialization error', displayErr, err);
+    appNotify.error('Failed to display initialization error', {
+      source : 'handleInitError',
+      error  : displayErr,
+      extra  : { originalError: err }
+    });
+    maybeCapture(errorReporter, displayErr, {
+      module: 'App', method: 'handleInitError', source: 'displayFail'
+    });
   }
 }
 
@@ -1457,8 +1498,12 @@ function createOrGetChatManager() {
 // Initialize the application
 if (typeof window !== 'undefined') {
   // Wait for DOM to be ready
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+  const doc = browserAPI.getDocument();
+  if (doc.readyState === 'loading') {
+    eventHandlers.trackListener(
+      doc, 'DOMContentLoaded', init,
+      { context: 'app-bootstrap', description: 'DOMContentLoaded init' }
+    );
   } else {
     // DOM already loaded, initialize immediately
     setTimeout(init, 0);
