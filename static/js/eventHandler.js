@@ -55,6 +55,9 @@ export function createEventHandlers({
     throw new Error(`[${MODULE}] backendLogger is required for backend event logging (guardrail #16)`);
   }
 
+  // Guardrail #10: ensure app/DOM readiness early
+  DependencySystem?.waitFor?.(['app', 'domAPI', 'notify']).catch(() => { /* noop – fire-and-forget */ });
+
   // Ensure core app/DOM modules are ready before any execution paths touch them
   DependencySystem?.waitFor?.(['app', 'domAPI', 'notify']);
 
@@ -298,6 +301,19 @@ export function createEventHandlers({
         module: MODULE,
         originalError: err,
         extra: { type, description }
+      });
+      // Add context-rich error capture (Guardrail #8)
+      captureError(err, {
+        module: MODULE,
+        source: listenerSource,
+        context: listenerContext,
+        originalError: err
+      });
+      errorReporter.capture?.(err, {
+        module : MODULE,
+        source : listenerSource,
+        context: listenerContext,
+        originalError: err
       });
       return undefined;
     }
@@ -921,6 +937,19 @@ export function createEventHandlers({
         source: 'setupProjectModalForm',
         context: 'projectModal'
       });
+      // Add context-rich error capture (Guardrail #8)
+      captureError(new Error('ProjectManager not available for projectModalForm setup.'), {
+        module: MODULE,
+        source: 'setupProjectModalForm',
+        context: 'projectModal',
+        originalError: new Error('ProjectManager not available for projectModalForm setup.')
+      });
+      errorReporter.capture?.(new Error('ProjectManager not available for projectModalForm setup.'), {
+        module : MODULE,
+        source : 'setupProjectModalForm',
+        context: 'projectModal',
+        originalError: new Error('ProjectManager not available for projectModalForm setup.')
+      });
       return;
     }
     setupForm(
@@ -1133,6 +1162,19 @@ export function createEventHandlers({
         context: 'authTabs'
       });
       errorReporter.capture(new Error('#loginModal not found for tab setup'), {
+        module : MODULE,
+        source : 'setupLoginModalTabs',
+        context: 'authTabs',
+        originalError: new Error('#loginModal not found for tab setup')
+      });
+      // Add context-rich error capture (Guardrail #8)
+      captureError(new Error('#loginModal not found for tab setup'), {
+        module: MODULE,
+        source: 'setupLoginModalTabs',
+        context: 'authTabs',
+        originalError: new Error('#loginModal not found for tab setup')
+      });
+      errorReporter.capture?.(new Error('#loginModal not found for tab setup'), {
         module : MODULE,
         source : 'setupLoginModalTabs',
         context: 'authTabs',
@@ -1433,7 +1475,8 @@ export function createEventHandlers({
         : newNotify;
       handlerNotify?.debug?.('[eventHandler] Notifier updated via setNotifier', {
         module: MODULE,
-        source: 'setNotifier'
+        source: 'setNotifier',
+        context: 'setNotifier'
       });
     },
     setProjectManager: (pm) => {
