@@ -191,6 +191,38 @@ export function createNavigationService({
         source: 'activateView',
         extra: { viewId, registeredViews: Array.from(state.registeredViews.keys()) }
       });
+
+      // Try to recover by registering a stub view handler
+      try {
+        navNotify.warn(`Attempting to register stub view handler for: ${viewId}`, {
+          source: 'activateView_recovery'
+        });
+        registerView(viewId, {
+          show: async () => {
+            navNotify.info(`Stub show handler for ${viewId}`, { source: 'stubViewHandler' });
+            return true;
+          },
+          hide: async () => {
+            navNotify.info(`Stub hide handler for ${viewId}`, { source: 'stubViewHandler' });
+            return true;
+          }
+        });
+
+        // If registration succeeded, try activation again
+        if (state.registeredViews.has(viewId)) {
+          navNotify.info(`Successfully registered stub handler for ${viewId}, retrying activation`, {
+            source: 'activateView_recovery'
+          });
+          return activateView(viewId, params);
+        }
+      } catch (regErr) {
+        navNotify.error(`Recovery attempt failed for view: ${viewId}`, {
+          group: true,
+          source: 'activateView_recovery',
+          originalError: regErr
+        });
+      }
+
       return false;
     }
 
@@ -198,11 +230,43 @@ export function createNavigationService({
     const previousViewId = state.currentView;
 
     try {
+      // First, ensure login message is hidden and main content is visible
+      try {
+        const domAPI = DependencySystem?.modules?.get('domAPI');
+        if (domAPI) {
+          const loginMessage = domAPI.getElementById('loginRequiredMessage');
+          const mainContent = domAPI.getElementById('mainContent');
+
+          if (loginMessage) loginMessage.classList.add('hidden');
+          if (mainContent) mainContent.classList.remove('hidden');
+
+          navNotify.debug('Ensured login message hidden and main content visible', {
+            source: 'activateView_domPrep'
+          });
+        }
+      } catch (domErr) {
+        navNotify.warn('Error ensuring DOM visibility in activateView', {
+          source: 'activateView_domPrep',
+          originalError: domErr
+        });
+      }
+
       // Hide previous view if different
       if (previousViewId && previousViewId !== viewId) {
         const prevHandlers = state.registeredViews.get(previousViewId);
         if (prevHandlers && typeof prevHandlers.hide === 'function') {
-          await prevHandlers.hide();
+          try {
+            await prevHandlers.hide();
+            navNotify.debug(`Previous view "${previousViewId}" hidden successfully`, {
+              source: 'activateView'
+            });
+          } catch (hideErr) {
+            navNotify.warn(`Error hiding previous view "${previousViewId}"`, {
+              source: 'activateView',
+              originalError: hideErr
+            });
+            // Continue despite hide error
+          }
         }
       }
 
@@ -210,7 +274,16 @@ export function createNavigationService({
       state.viewParams.set(viewId, params);
 
       // Show the new view
-      await viewHandlers.show(params);
+      try {
+        await viewHandlers.show(params);
+      } catch (showErr) {
+        navNotify.error(`Error in view "${viewId}" show handler`, {
+          group: true,
+          source: 'activateView',
+          originalError: showErr
+        });
+        throw showErr; // Re-throw to be caught by outer try/catch
+      }
 
       // Update state
       state.previousView = previousViewId;

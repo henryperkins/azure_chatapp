@@ -10,7 +10,6 @@ Consolidated routes for knowledge base management with improved:
 """
 
 import logging
-import uuid
 from uuid import UUID
 from typing import Any, Optional, Dict, List
 

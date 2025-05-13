@@ -529,11 +529,11 @@ export function createKnowledgeBaseManager(ctx) {
           return;
       }
 
-      const ul = document.createElement("ul");
+      const ul = ctx.domAPI.createElement("ul");
       ul.className = "space-y-2";
 
       filesData.files.forEach(file => {
-          const li = document.createElement("li");
+          const li = ctx.domAPI.createElement("li");
           li.className = "flex items-center justify-between p-2 bg-base-200 rounded-md hover:bg-base-300 transition-colors";
 
           const processingStatus = file.config?.search_processing?.status || 'unknown';
@@ -737,11 +737,11 @@ export function createKnowledgeBaseManager(ctx) {
       if (!warning) {
         const labelDiv = parent.querySelector(".label:last-of-type") || parent.querySelector("p.text-xs.text-base-content\\/70.mt-1")?.previousElementSibling;
         if (labelDiv) {
-          warning = document.createElement("span");
+          warning = ctx.domAPI.createElement("span");
           warning.className = "label-text-alt text-error model-error";
           labelDiv.appendChild(warning);
         } else { // Fallback if specific label structure not found
-          warning = document.createElement("div");
+          warning = ctx.domAPI.createElement("div");
           warning.className = "text-error text-xs mt-1 model-error";
           sel.insertAdjacentElement("afterend", warning);
         }
@@ -760,7 +760,7 @@ export function createKnowledgeBaseManager(ctx) {
    * @param {string|null} currentModel
    */
   function _updateModelSelection(currentModel) {
-      const selectEl = ctx.elements.modelSelect || document.getElementById("embeddingModelSelect"); // Fallback ID
+      const selectEl = ctx.elements.modelSelect || ctx.domAPI.getElementById("embeddingModelSelect"); // Fallback ID
       if (!selectEl) return;
 
       if (currentModel) {

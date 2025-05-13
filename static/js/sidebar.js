@@ -7,6 +7,8 @@
 
 import { safeParseJSON } from './utils/globalUtils.js';
 import { safeInvoker } from './utils/notifications-helpers.js';
+import { createSidebarAuth } from './sidebar-auth.js';
+import { createSidebarEvents } from './sidebar-events.js';
 
 const MODULE = "Sidebar";
 
@@ -76,11 +78,15 @@ export function createSidebar({
   let sidebarProjectSearchInputEl = null;
 
   // For inline auth form
-  let isRegisterMode = false;
-  let sidebarAuthFormContainerEl, sidebarAuthFormTitleEl, sidebarAuthFormEl,
-      sidebarUsernameContainerEl, sidebarUsernameInputEl,
-      sidebarEmailInputEl, sidebarPasswordInputEl, sidebarConfirmPasswordContainerEl,
-      sidebarConfirmPasswordInputEl, sidebarAuthBtnEl, sidebarAuthErrorEl, sidebarAuthToggleEl;
+  // Inline auth state and handlers are now delegated to sidebarAuth
+  const sidebarAuth = createSidebarAuth({
+    DependencySystem,
+    domAPI,
+    eventHandlers,
+    notify,
+    accessibilityUtils,
+    MODULE
+  });
 
   const sidebarNotify = notify.withContext({ module: MODULE, context: 'inlineAuth' });
 
@@ -88,13 +94,39 @@ export function createSidebar({
     safeParseJSON(storageAPI.getItem('starredConversations'), [])
   );
 
+  // Set up sidebar events
+  const sidebarEvents = createSidebarEvents({
+    eventHandlers,
+    DependencySystem,
+    domAPI,
+    uiRenderer,
+    notify,
+    MODULE,
+    chatSearchInputEl,
+    sidebarProjectSearchInputEl,
+    _handleChatSearch,
+    _handleProjectSearch,
+    activateTab,
+    handleResize,
+    isConversationStarred,
+    toggleStarConversation,
+    storageAPI,
+    accessibilityUtils,
+    showSidebar,
+    closeSidebar,
+    ensureProjectDashboard,
+    togglePin,
+    handleGlobalAuthStateChangeForSidebar
+  });
+
   async function init() {
     notify.debug('[sidebar] init() called', { group: true, context: 'sidebar', module: MODULE, source: 'init' });
     try {
       findDom();
-      setupInlineAuthForm();
+      sidebarAuth.initAuthDom();
+      sidebarAuth.setupInlineAuthForm();
       restorePersistentState();
-      bindDomEvents();
+      sidebarEvents.bindDomEvents();
       if (app && typeof app.getInitialSidebarContext === 'function') {
         const { projectId } = app.getInitialSidebarContext() || {};
         if (projectId && projectManager && typeof projectManager.setCurrentProjectId === 'function') {
@@ -138,6 +170,7 @@ export function createSidebar({
         eventHandlers.cleanupListeners({ context: 'inlineAuth' });
          notify.debug(`[sidebar] Called eventHandlers.cleanupListeners for context: inlineAuth`, { source: 'destroy' });
     }
+    // No explicit cleanup needed for sidebarAuth since all event listeners are tracked by context 'inlineAuth'
     // trackedEvents = []; // Already removed
     if (backdrop) { backdrop.remove(); backdrop = null; }
     pinned = false; visible = false;
@@ -154,20 +187,7 @@ export function createSidebar({
     chatSearchInputEl = domAPI.getElementById('chatSearchInput');
     sidebarProjectSearchInputEl = domAPI.getElementById('sidebarProjectSearch');
 
-    // DOM elements for inline auth form
-    sidebarAuthFormContainerEl = domAPI.getElementById('sidebarAuthFormContainer');
-    sidebarAuthFormTitleEl = domAPI.getElementById('sidebarAuthFormTitle');
-    sidebarAuthFormEl = domAPI.getElementById('sidebarAuthForm');
-    sidebarUsernameContainerEl = domAPI.getElementById('sidebarUsernameContainer');
-    sidebarUsernameInputEl = domAPI.getElementById('sidebarUsername');
-    sidebarEmailInputEl = domAPI.getElementById('sidebarEmail');
-    sidebarPasswordInputEl = domAPI.getElementById('sidebarPassword');
-    sidebarConfirmPasswordContainerEl = domAPI.getElementById('sidebarConfirmPasswordContainer');
-    sidebarConfirmPasswordInputEl = domAPI.getElementById('sidebarConfirmPassword');
-    sidebarAuthBtnEl = domAPI.getElementById('sidebarAuthBtn');
-    sidebarAuthErrorEl = domAPI.getElementById('sidebarAuthError');
-    sidebarAuthToggleEl = domAPI.getElementById('sidebarAuthToggle');
-
+    // Auth form DOM is initialized in sidebarAuth.initAuthDom(), not here
 
     if (!el || !btnToggle) {
       notify.error('sidebar: critical DOM nodes missing (#mainSidebar or #navToggleBtn)', {
@@ -242,93 +262,7 @@ export function createSidebar({
     }
   }
 
-  function bindDomEvents() {
-    const track = (element, evtType, originalHandlerCallback, description, sourceOverride) => {
-      if (!element) return;
-      const contextualHandler = safeInvoker(
-        originalHandlerCallback,
-        { notify },
-        { context: 'sidebar', module: MODULE, source: sourceOverride || description }
-      );
-      const wrappedHandler = eventHandlers.trackListener(element, evtType, contextualHandler, { description, context: MODULE });
-      // trackedEvents logic can be kept or removed if context cleanup is fully relied upon
-    };
-    track(btnToggle, 'click', () => toggleSidebar(), 'Sidebar toggle', 'toggleSidebar');
-    track(btnClose, 'click', () => closeSidebar(), 'Sidebar close', 'closeSidebar');
-    track(btnPin, 'click', () => togglePin(), 'Sidebar pin', 'togglePin');
-    if (viewportAPI && viewportAPI.onResize) {
-      track(viewportAPI, 'resize', handleResize, 'Sidebar resize', 'handleResize');
-    }
-    [
-      { name: 'recent', id: 'recentChatsTab' },
-      { name: 'starred', id: 'starredChatsTab' },
-      { name: 'projects', id: 'projectsTab' },
-    ].forEach(({ name, id }) => {
-      const btn = domAPI.getElementById(id);
-      track(btn, 'click', () => activateTab(name), `Sidebar tab ${name}`, 'activateTab');
-    });
-
-    track(chatSearchInputEl, 'input', _handleChatSearch, 'Chat search filter input', 'handleChatSearch');
-    track(sidebarProjectSearchInputEl, 'input', _handleProjectSearch, 'Project search filter input', 'handleProjectSearch');
-
-    const authModule = DependencySystem.modules.get('auth');
-    const eventTargetForAuth = authModule?.AuthBus || domAPI.getDocument();
-
-    track(eventTargetForAuth, 'authStateChanged', handleGlobalAuthStateChangeForSidebar, 'Sidebar AuthStateChange Global Listener', 'handleGlobalAuthStateChangeForSidebar');
-    if (authModule?.AuthBus) {
-        track(authModule.AuthBus, 'authReady', handleGlobalAuthStateChangeForSidebar, 'Sidebar AuthReady Global Listener', 'handleGlobalAuthStateChangeForSidebar');
-    }
-
-    // Refresh sidebar when projects arrive
-    eventHandlers.trackListener(
-      domAPI.getDocument(),
-      'projectsLoaded',
-      (e) => {
-        const list = e.detail?.projects ?? [];
-        if (uiRenderer?.renderProjects) uiRenderer.renderProjects(list);
-      },
-      { description: 'Sidebar projectsLoaded refresh', context: MODULE }
-    );
-
-    if (el) {
-      const errorHandler = safeInvoker(
-        (e) => {
-          notify.error('[sidebar] Widget error: ' + (e && e.detail && e.detail.message ? e.detail.message : String(e)), {
-            group: true,
-            context: 'sidebar',
-            module: MODULE,
-            source: 'childWidgetError',
-            originalError: e?.detail?.error || e?.error || e
-          });
-        },
-        { notify },
-        { context: 'sidebar', module: MODULE, source: 'childWidgetError' }
-      );
-      eventHandlers.trackListener(el, 'error', errorHandler, { description: 'Sidebar child widget error', context: MODULE });
-    }
-
-    // Listen for new conversations being created
-    const chatCreatedHandler = (e) => {
-      // Use the 'notify' instance from the factory function's scope
-      notify.info('[sidebar] chat:conversationCreated event received', { detail: e.detail, module: MODULE, source: 'bindDomEvents.chatCreatedHandler' });
-      const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-      if (activeTab === 'recent') {
-        _handleChatSearch();
-      }
-      // ... (any other logic for this event)
-    };
-
-    eventHandlers.trackListener(
-      domAPI.getDocument(),
-      'chat:conversationCreated',
-      safeInvoker(
-        chatCreatedHandler,
-        { notify }, // Pass the notify instance from createSidebar's scope
-        { context: MODULE, source: 'onChatConversationCreatedInvoker' } // Context for safeInvoker's logging
-      ),
-      { description: 'Sidebar chat:conversationCreated listener', context: MODULE } // Options for trackListener
-    );
-  }
+  // Event binding logic is now handled by sidebarEvents.bindDomEvents()
 
   async function activateTab(name = 'recent') {
     try {
@@ -359,7 +293,7 @@ export function createSidebar({
 
       if (name === 'recent' || name === 'starred') {
         if (!projectId) {
-          notify.info(`No project selected. Cannot load ${name} conversations.`, { module: MODULE, source: 'activateTab' });
+          notify.info(`No project selected. Cannot load ${name} conversations.`, { module: MODULE, context: 'sidebar', source: 'activateTab' });
           // Explicitly tell renderer to show empty state for the active tab
           const currentSearchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "";
           if (name === 'recent') {
@@ -435,40 +369,9 @@ export function createSidebar({
     uiRenderer?.renderStarredConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
+  // Delegate auth state changes to sidebarAuth
   function handleGlobalAuthStateChangeForSidebar(event) {
-    const authModule = DependencySystem.modules.get('auth');
-    const eventAuthDetail = event?.detail?.authenticated;
-    const moduleAuthStatus = authModule?.isAuthenticated?.();
-    const isAuthenticated = eventAuthDetail ?? moduleAuthStatus;
-
-    sidebarNotify.info('Sidebar: handleGlobalAuthStateChangeForSidebar triggered.', { // Changed to info for better visibility
-        source: 'handleGlobalAuthStateChangeForSidebar',
-        eventType: event?.type,
-        eventDetailAuthenticated: eventAuthDetail,
-        authModuleIsAuthenticated: moduleAuthStatus,
-        finalIsAuthenticated: isAuthenticated,
-        eventDetailUser: event?.detail?.user // Log user from event
-    });
-
-    if (sidebarAuthFormContainerEl) {
-        domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', !!isAuthenticated);
-        if (!isAuthenticated) {
-            if (isRegisterMode) {
-                updateAuthFormUI(false);
-            }
-            clearAuthForm();
-        } else {
-            // If authenticated, ensure the form is hidden and potentially clear it
-            // (though hiding should be sufficient)
-            sidebarNotify.debug('Sidebar: User is authenticated, ensuring inline auth form is hidden.', {
-                source: 'handleGlobalAuthStateChangeForSidebar'
-            });
-        }
-    } else {
-        sidebarNotify.warn('Sidebar: sidebarAuthFormContainerEl not found, cannot update visibility.', {
-            source: 'handleGlobalAuthStateChangeForSidebar'
-        });
-    }
+    sidebarAuth.handleGlobalAuthStateChange(event);
   }
 
   function togglePin(force) {
@@ -640,13 +543,17 @@ export function createSidebar({
     if (doc && typeof doc.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
       doc.dispatchEvent(new CustomEvent(name, { detail }));
     } else {
-      notify.warn(`[sidebar] Cannot dispatch event "${name}". domAPI.getDocument().dispatchEvent is not available or CustomEvent is undefined.`, {
-        module: MODULE,
-        source: 'dispatch',
-        hasDoc: !!doc,
-        hasDispatchEvent: !!(doc && typeof doc.dispatchEvent === 'function'),
-        hasCustomEvent: typeof CustomEvent !== 'undefined'
-      });
+      notify.warn(
+  `[sidebar] Cannot dispatch event "${name}". domAPI.getDocument().dispatchEvent is not available or CustomEvent is undefined.`,
+  {
+    module: MODULE,
+    context: "sidebar",
+    source: "dispatch",
+    hasDoc: !!doc,
+    hasDispatchEvent: !!(doc && typeof doc.dispatchEvent === "function"),
+    hasCustomEvent: typeof CustomEvent !== "undefined",
+  }
+);
     }
   }
 
@@ -662,114 +569,5 @@ export function createSidebar({
     toggleStarConversation,
   };
 
-  function clearAuthForm() {
-    if (sidebarAuthFormEl) sidebarAuthFormEl.reset();
-    if (sidebarAuthErrorEl) domAPI.setTextContent(sidebarAuthErrorEl, '');
-    sidebarNotify.debug('Inline auth form cleared.', { source: 'clearAuthForm' });
-  }
-
-  function updateAuthFormUI(isRegister) {
-    isRegisterMode = isRegister;
-
-    if (!sidebarAuthFormTitleEl || !sidebarAuthBtnEl || !sidebarConfirmPasswordContainerEl || !sidebarAuthToggleEl || !sidebarUsernameContainerEl || !sidebarEmailInputEl) {
-      sidebarNotify.warn('Cannot update auth form UI, some elements are missing.', { source: 'updateAuthFormUI' });
-      return;
-    }
-
-    const emailContainer = sidebarEmailInputEl.parentElement;
-
-    if (isRegister) {
-      domAPI.setTextContent(sidebarAuthFormTitleEl, 'Register');
-      domAPI.setTextContent(sidebarAuthBtnEl, 'Register');
-      domAPI.removeClass(sidebarUsernameContainerEl, 'hidden');
-      domAPI.setAttribute(sidebarUsernameInputEl, 'required', 'true');
-      if(emailContainer) domAPI.removeClass(emailContainer, 'hidden'); // Show email for register
-      domAPI.setAttribute(sidebarEmailInputEl, 'required', 'true'); // Email required for register
-      domAPI.removeClass(sidebarConfirmPasswordContainerEl, 'hidden');
-      domAPI.setAttribute(sidebarConfirmPasswordInputEl, 'required', 'true');
-      domAPI.setTextContent(sidebarAuthToggleEl, 'Already have an account? Login');
-    } else { // Login mode
-      domAPI.setTextContent(sidebarAuthFormTitleEl, 'Login');
-      domAPI.setTextContent(sidebarAuthBtnEl, 'Login');
-      domAPI.removeClass(sidebarUsernameContainerEl, 'hidden'); // Username shown for login
-      domAPI.setAttribute(sidebarUsernameInputEl, 'required', 'true');
-      if(emailContainer) domAPI.addClass(emailContainer, 'hidden'); // Hide email for login
-      domAPI.removeAttribute(sidebarEmailInputEl, 'required'); // Email not required for login
-      domAPI.addClass(sidebarConfirmPasswordContainerEl, 'hidden');
-      domAPI.removeAttribute(sidebarConfirmPasswordInputEl, 'required');
-      domAPI.setTextContent(sidebarAuthToggleEl, 'Need an account? Register');
-    }
-    clearAuthForm();
-    sidebarNotify.debug(`Auth form UI updated to ${isRegister ? 'Register' : 'Login'} mode.`, { source: 'updateAuthFormUI' });
-  }
-
-  function setupInlineAuthForm() {
-    sidebarNotify.debug('Setting up inline auth form.', { source: 'setupInlineAuthForm' });
-
-    if (!sidebarAuthFormContainerEl || !sidebarAuthFormEl || !sidebarAuthToggleEl /* ... other elements */) {
-      // Simplified check for brevity, assume all elements are checked as in original
-      sidebarNotify.error('One or more sidebar auth form elements are missing. Inline auth will not function.', { source: 'setupInlineAuthForm', group: true });
-      return;
-    }
-
-    eventHandlers.trackListener(sidebarAuthToggleEl, 'click', (e) => {
-      e.preventDefault();
-      updateAuthFormUI(!isRegisterMode);
-    }, { description: 'Toggle Sidebar Auth Mode', module: MODULE, context: 'inlineAuth' });
-
-    eventHandlers.trackListener(sidebarAuthFormEl, 'submit', async (e) => {
-      e.preventDefault();
-      domAPI.setTextContent(sidebarAuthErrorEl, '');
-      const username = sidebarUsernameInputEl.value.trim(); // Use username field
-      const email = sidebarEmailInputEl.value.trim();
-      const password = sidebarPasswordInputEl.value;
-      const authModule = DependencySystem.modules.get('auth');
-
-      if (!authModule) {
-        sidebarNotify.error('Auth module not available.', { source: 'sidebarAuthSubmit', group: true });
-        domAPI.setTextContent(sidebarAuthErrorEl, 'Authentication service unavailable.');
-        return;
-      }
-
-      domAPI.setProperty(sidebarAuthBtnEl, 'disabled', true);
-      domAPI.addClass(sidebarAuthBtnEl, 'loading');
-
-      try {
-        if (isRegisterMode) {
-          const confirmPassword = sidebarConfirmPasswordInputEl.value;
-          if (!username) { /* ... username validation ... */ throw new Error('Username is required.'); }
-          if (!email) { /* ... email validation ... */ throw new Error('Email is required.'); }
-          if (password !== confirmPassword) { /* ... password match ... */ throw new Error('Passwords do not match.'); }
-
-          sidebarNotify.info('Attempting registration via sidebar.', { source: 'sidebarAuthSubmit', extra: { username, email } });
-          await authModule.register({ username, email, password }); // Pass object
-          sidebarNotify.success('Registration successful. Please login.', { source: 'sidebarAuthSubmit', extra: { username } });
-          updateAuthFormUI(false); // Switch to login
-          domAPI.setTextContent(sidebarAuthErrorEl, 'Registration successful! Please login.');
-
-        } else { // Login mode
-          if (!username) { /* ... username validation ... */ throw new Error('Username is required.'); }
-          sidebarNotify.info('Attempting login via sidebar.', { source: 'sidebarAuthSubmit', extra: { username } });
-          await authModule.login(username, password); // Login with username
-          sidebarNotify.success('Login successful via sidebar.', { source: 'sidebarAuthSubmit', extra: { username } });
-        }
-      } catch (error) {
-        const errorMessage = error?.message || (isRegisterMode ? 'Registration failed.' : 'Login failed.');
-        sidebarNotify.error(`Sidebar auth failed: ${errorMessage}`, { source: 'sidebarAuthSubmit', originalError: error });
-        domAPI.setTextContent(sidebarAuthErrorEl, errorMessage);
-      } finally {
-        domAPI.setProperty(sidebarAuthBtnEl, 'disabled', false);
-        domAPI.removeClass(sidebarAuthBtnEl, 'loading');
-      }
-    }, { description: 'Sidebar Auth Form Submit', module: MODULE, context: 'inlineAuth' });
-
-    const auth = DependencySystem.modules.get('auth');
-    const initiallyAuthenticated = auth?.isAuthenticated?.();
-    domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', !!initiallyAuthenticated);
-    if (!initiallyAuthenticated) {
-      updateAuthFormUI(false); // Default to login mode
-    } else {
-      sidebarNotify.debug('User already authenticated, inline auth form hidden initially.', { source: 'setupInlineAuthForm' });
-    }
-  }
+  // Auth form UI/control methods now come from sidebarAuth
 }

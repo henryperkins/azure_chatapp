@@ -3,12 +3,13 @@ import logging
 import os
 import uuid
 import bcrypt
+import traceback
+from utils.auth_utils import validate_csrf_token
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional, Annotated, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # NOTE: This auth.py is intended for local debugging only. Remove insecure logic before production use.
 
-AUTH_DEBUG = (settings.ENV.lower() == "local")
+AUTH_DEBUG = settings.ENV.lower() == "local"
 DEFAULT_ADMIN = {
     "username": os.getenv("DEFAULT_ADMIN_USERNAME", "hperkins"),
     "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "Twiohmld1234!"),
@@ -42,7 +43,6 @@ router = APIRouter()
 @router.get("/me")
 async def get_current_user_profile(
     request: Request,
-    session: AsyncSession = Depends(get_async_session),
 ):
     """
     Get the current user's profile and preferences for frontend bootstrapping.
@@ -61,10 +61,9 @@ async def get_current_user_profile(
         }
         return {"user": profile}
     except Exception as ex:
-        import traceback
         tb_str = traceback.format_exc()
         logger.error(f"Error in /api/user/me: {ex}\n{tb_str}")
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        raise HTTPException(status_code=401, detail="Not authenticated") from ex
 __all__ = ["router", "create_default_user"]
 
 
@@ -159,7 +158,7 @@ def set_secure_cookie(response: Response, key: str, value: str, max_age: Optiona
         )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
-        raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}") from e
 
 
 def rate_limit_login(_: Request, __: str) -> None:
@@ -258,7 +257,7 @@ async def get_user_and_claims_from_refresh_token(
     token: str,
     session: AsyncSession,
     request: Request
-) -> Tuple[User, dict]:
+) -> Tuple[User, dict[str, Any]]:
     decoded = await verify_token(token, "refresh", request, db_session=session)
     sub = decoded.get("sub")
     if not sub:
@@ -282,7 +281,6 @@ async def register_user(
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
-    from utils.auth_utils import validate_csrf_token
     validate_csrf_token(request)
     user_lower = creds.username.strip().lower()
     if not user_lower:
@@ -290,7 +288,7 @@ async def register_user(
     try:
         validate_password(creds.password)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     existing_q = await session.execute(select(User).where(User.username == user_lower))
     if existing_q.scalars().first():
@@ -338,11 +336,8 @@ async def login_user(
     creds: UserCredentials,
     session: AsyncSession = Depends(get_async_session),
 ) -> LoginResponse:
-    from utils.auth_utils import validate_csrf_token
     validate_csrf_token(request)
-    """
-    Login user, set cookies for access/refresh tokens.
-    """
+    # Login user, set cookies for access/refresh tokens.
     try:
         rate_limit_login(request, creds.username)
         name_lower = creds.username.strip().lower()
@@ -370,9 +365,9 @@ async def login_user(
                 )
                 delta = (datetime.now(timezone.utc) - start_time).total_seconds()
                 logger.debug("Password check %.3fs => user=%s", delta, masked_for_log)
-            except ValueError:
+            except ValueError as exc:
                 logger.error("Corrupted password hash => user=%s", masked_for_log)
-                raise HTTPException(status_code=400, detail="Corrupted password hash.")
+                raise HTTPException(status_code=400, detail="Corrupted password hash.") from exc
 
             if not valid_pw:
                 logger.warning("Wrong password => user=%s", masked_for_log)
@@ -409,13 +404,12 @@ async def login_user(
 
     # ----- all other unexpected errors become 500 -----
     except Exception as e:
-        import traceback
         tb_str = traceback.format_exc()
         logger.error("Login fatal error: %s\n%s", e, tb_str)
         raise HTTPException(
             status_code=500,
             detail="Internal server error"
-        )
+        ) from e
 
 DBSessionDep = Annotated[AsyncSession, Depends(get_async_session)]
 
@@ -426,11 +420,8 @@ async def refresh_token(
     response: Response,
     session: DBSessionDep
 ) -> LoginResponse:
-    from utils.auth_utils import validate_csrf_token
     validate_csrf_token(request)
-    """
-    Refreshes the access token using a valid refresh cookie.
-    """
+    # Refreshes the access token using a valid refresh cookie.
     refresh_cookie = request.cookies.get("refresh_token")
     if not refresh_cookie:
         logger.debug("No refresh cookie => can't refresh.")
@@ -469,7 +460,7 @@ async def refresh_token(
         raise
     except Exception as e:
         logger.error("Token refresh error => %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Error refreshing token.")
+        raise HTTPException(status_code=500, detail="Error refreshing token.") from e
 
 
 class UserProfileForVerify(BaseModel):
@@ -489,10 +480,8 @@ async def verify_auth_status(
     request: Request,
     session: AsyncSession = Depends(get_async_session),
 ) -> VerifyResponse:
-    """
-    Verifies the current access token, returns user info if valid.
-    Enhanced: includes request context for debugging.
-    """
+    # Verifies the current access token, returns user info if valid.
+    # Enhanced: includes request context for debugging.
     try:
         user_obj, _tok = await get_current_user_and_token(request)
 
@@ -579,7 +568,6 @@ async def set_cookies_endpoint(
     response: Response,
     token_req: TokenRequest
 ):
-    from utils.auth_utils import validate_csrf_token
     validate_csrf_token(request)
 
     # Secure this endpoint even further: Only allowed in local env AND from localhost
@@ -623,7 +611,6 @@ async def logout_user(
     response: Response,
     session: AsyncSession = Depends(get_async_session),
 ):
-    from utils.auth_utils import validate_csrf_token
     validate_csrf_token(request)
     current_user = None
     access_cookie = request.cookies.get("access_token")

@@ -1,30 +1,36 @@
+// static/js/utils/notifications-helpers.js
 /**
  * Notification & Error Observability Helpers.
  * Provides utilities for standardized error handling,
  * API-wrapping, DI-driven feedback hooks, debug/trace, and backend notification logging.
- *
- * @param {Object} deps - All dependencies must be injected, not imported or globalized.
- *   Expected keys: notify, errorReporter
- * @returns {Object} Helper API - { wrapApi, safeInvoker, emitReady, createDebugTools, logEventToServer }
  */
 
 /**
- * Debug/trace tool: Lightweight stopwatch, traceId, trace logging.
- * Usage:
- *   import { createDebugTools } from './notifications-helpers.js';
- *   const debugTools = createDebugTools({ notify });
- *   const traceId = debugTools.start('SomeOperation');
- *   // ... do work
- *   debugTools.stop(traceId, 'SomeOperation');
+ * Notification & Error Observability Helpers.
+ * Provides utilities for standardized error handling,
+ * API-wrapping, DI-driven feedback hooks, debug/trace, and backend notification logging.
+ * NOTE: All utilities now require module/context scoping via .withContext whenever possible.
+ * All errors are reported via errorReporter.capture if provided.
+ * All fetch-calls use injected apiClient.
  */
-export function createDebugTools({ notify } = {}) {
+
+// Debug/trace tool
+export function createDebugTools({ notify, errorReporter } = {}) {
   const _active = new Map();
-  const _uuid   = () =>
+  const _uuid = () =>
     (typeof crypto !== "undefined" && crypto.randomUUID)
       ? crypto.randomUUID()
       : `trace-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const _log    = (...args) =>
-    (notify?.debug ? notify.debug : window?.console?.debug?.bind(console) || (() => {}))(...args);
+
+  // Always use notify in context
+  const dbgNotify = notify?.withContext
+    ? notify.withContext({ module: 'notifications-helpers', context: 'debugTools' })
+    : notify;
+
+  const _log = (...args) => {
+    if (dbgNotify?.debug) dbgNotify.debug('[DebugTools]', { extra: args });
+    // No console allowed per guardrails
+  };
 
   function start(label = '') {
     const id = _uuid();
@@ -32,28 +38,28 @@ export function createDebugTools({ notify } = {}) {
     _log(`[trace:start] ${label}`, { traceId: id, label });
     return id;
   }
+
   function stop(id, label = '') {
     const t0 = _active.get(id);
     if (t0 == null) return null;
     const dur = +(performance.now() - t0).toFixed(1);
     _active.delete(id);
-    _log(`[trace:stop ] ${label} (${dur} ms)`, { traceId: id, label, duration: dur });
+    _log(`[trace:stop] ${label} (${dur} ms)`, { traceId: id, label, duration: dur });
     return dur;
   }
+
   return { start, stop, newTraceId: _uuid };
 }
 
-/**
- * Backend event logger. Used by notify/apiClient to ship important notification events to the backend for persistent logging.
- * Only sends 'warning' and 'error' types (by default).
- *
- * @param {string} type - One of 'debug','info','success','warning','error'
- * @param {string} message - The message to send
- * @param {Object} opts - Additional context
- */
-export function logEventToServer(type, message, opts = {}) {
+// Backend event logger (now requires injected apiClient)
+export async function logEventToServer(type, message, opts = {}, { apiClient, notify, errorReporter } = {}) {
   const ALLOWED_LEVELS = new Set(['warning', 'error']);
   if (!ALLOWED_LEVELS.has(type)) return;
+
+  const logNotify = notify?.withContext
+    ? notify.withContext({ module: 'notifications-helpers', context: 'backendLogger' })
+    : notify;
+
   try {
     const fullPayload = {
       type,
@@ -62,112 +68,124 @@ export function logEventToServer(type, message, opts = {}) {
       ...opts,
       _clientLogSource: "notifications-helpers.js",
     };
-    fetch("/api/log_notification", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(fullPayload),
-      keepalive: true,
-    }).catch(() => {});
-  } catch {
-    // Silent fallback
+    if (apiClient) {
+      await apiClient.post('/api/log_notification', fullPayload); // .post required
+    } else {
+      // fallback: must warn, per guardrails
+      if (logNotify?.warn) {
+        logNotify.warn('No apiClient injected for backend event logging', {
+          module: 'notifications-helpers',
+          context: 'backendLogger'
+        });
+      }
+    }
+  } catch (err) {
+    if (logNotify?.error) {
+      logNotify.error('Failed to send log to server', {
+        module: 'notifications-helpers',
+        context: 'backendLogger',
+        originalError: err,
+        message
+      });
+    }
+    if (errorReporter?.capture) {
+      errorReporter.capture(err, {
+        module: 'notifications-helpers',
+        method: 'logEventToServer',
+        originalError: err,
+        message
+      });
+    }
+    // No console fallback per codebase rules.
   }
 }
 
-/**
- * Wraps an API request function and pipes errors to notify.apiError.
- *
- * @param {Function} apiFn - Async function performing the API call.
- * @param {Object} deps - { notify, errorReporter, ...} All must be DI'd.
- * @param {string} endpoint - API endpoint string.
- * @param {Object} opts - API request options (method, payload, etc).
- * @param {string} [src] - Optional logical source, like 'projectManager'.
- * @returns {Promise<any>} API response if successful; pipes error otherwise.
- */
-/**
- * Returns an apiNotify instance with preregistered context/module for wrapped API error reporting.
- * Use this at top-level before calling wrapApi.
- */
+// Error capture helper
 export function maybeCapture(errorReporter, err, meta = {}) {
   if (!errorReporter) return;
 
-  // Accepts both capture and captureException
-  const captureFn =
-    (typeof errorReporter.capture === 'function'
-      ? errorReporter.capture
-      : (typeof errorReporter.captureException === 'function'
-          ? errorReporter.captureException
-          : null));
-
-  if (captureFn) captureFn.call(errorReporter, err, meta);
+  const captureFn = errorReporter.capture || errorReporter.captureException;
+  if (captureFn) {
+    try {
+      captureFn.call(errorReporter, err, meta);
+    } catch (captureErr) {
+      // Silently swallow: error handling must never throw
+    }
+  }
 }
 
+// Get API notify instance
 export function getApiNotify(notify) {
   return notify.withContext({ context: 'apiRequest', module: 'api' });
 }
 
-// ─── Shared helper: build deterministic notification group key ──
+// Compute notification group key
 export function computeGroupKey({ type, context, module, source } = {}) {
   return [type, module || '', source || '', context || ''].join('|');
 }
 
+// API wrapper
 export async function wrapApi(apiFn, { notify, errorReporter }, endpoint, opts = {}, src = 'api') {
   const apiNotify = notify.withContext
     ? notify.withContext({ context: 'apiRequest', module: 'api' })
     : notify;
+
   try {
     return await apiFn(endpoint, opts);
   } catch (err) {
-    apiNotify.error(`API call failed: ${endpoint}`, { endpoint, method: opts && opts.method, originalError: err });
-    maybeCapture(errorReporter, err, {
-      context : src,
-      module  : src,
+    apiNotify.error(`API call failed: ${endpoint}`, {
       endpoint,
-      method  : opts && opts.method
+      method: opts?.method,
+      originalError: err,
+      module: 'notifications-helpers',
+      context: src
+    });
+    maybeCapture(errorReporter, err, {
+      context: src,
+      module: 'notifications-helpers',
+      endpoint,
+      method: opts?.method
     });
     throw err;
   }
 }
 
-/**
- * Creates a callback invoker that wraps the original fn,
- * catches all errors, and notifies with context.
- *
- * @param {Function} fn - The actual callback.
- * @param {Object} deps - { notify, errorReporter, ... } - DI only!
- * @param {Object} ctx - Additional context for grouping/logging.
- * @returns {Function} Wrapped callback function.
- */
+// Safe invoker
 export function safeInvoker(fn, { notify, errorReporter }, ctx) {
+  const safeNotify = notify?.withContext
+    ? notify.withContext({ module: ctx?.module || 'notifications-helpers', context: ctx?.context || 'safeInvoker' })
+    : notify;
+
   return function (...args) {
     try {
       return fn.apply(this, args);
     } catch (err) {
-      const contextObj = {
-        ...ctx,
-        originalError: err
-      };
-      notify.error('Uncaught callback error', {
+      safeNotify?.error('Uncaught callback error', {
         group: true,
-        ...contextObj
+        ...ctx,
+        module: ctx?.module || 'notifications-helpers',
+        context: ctx?.context || 'callbackError',
+        originalError: err
       });
+
       maybeCapture(errorReporter, err, {
         ...ctx,
-        module : ctx && ctx.module,
+        module: ctx?.module || 'notifications-helpers',
         handler: fn.name || '(anonymous)',
         uncaughtCallback: true
       });
-      // Silent: rethrow only for debugging, not production
     }
   };
 }
 
-/**
- * Emits a standard, grouped "ready" notification for DI lifecycle events.
- * Usage: Call from end of initialize() to confirm module wiring.
- *
- * @param {Object} deps - { notify, ... } Must be injected.
- * @param {string} who - Logical subsystem or feature (e.g., 'ChatManager').
- */
+// Ready notification
 export function emitReady({ notify }, who) {
-  notify.info(`${who} ready`, { group: true, context: who.toLowerCase() });
+  const readyNotify = notify?.withContext
+    ? notify.withContext({ module: 'notifications-helpers', context: 'emitReady' })
+    : notify;
+  readyNotify.info(`${who} ready`, {
+    group: true,
+    context: who.toLowerCase(),
+    module: 'notifications-helpers'
+  });
 }
