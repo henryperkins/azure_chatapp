@@ -206,6 +206,7 @@ sentryManager.initialize();
 // Create a local alias so linting rules can detect the symbol
 const errorReporter = sentryManager;
 
+
 // ---------------------------------------------------------------------------
 // 7) Create debug tools
 // ---------------------------------------------------------------------------
@@ -1088,7 +1089,7 @@ async function initializeUIComponents() {
     const chatExtensionsInstance = createChatExtensions({
       DependencySystem,
       eventHandlers,
-      notificationHandler: notify
+      notify
     });
     DependencySystem.register('chatExtensions', chatExtensionsInstance);
 
