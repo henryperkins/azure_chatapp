@@ -331,7 +331,13 @@ export function createEventHandlers({
       handlerMap = new Map();
       typeMap.set(type, handlerMap);
     }
-    handlerMap.set(handler, { wrappedHandler, options: finalOptions, context: listenerContext });
+    handlerMap.set(handler, {
+      wrappedHandler,
+      options : finalOptions,
+      context : listenerContext,
+      module  : MODULE,          // add for guard-rail #15
+      source  : listenerSource   // add for guard-rail #15
+    });
 
     return wrappedHandler;
   }
