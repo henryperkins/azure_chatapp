@@ -30,6 +30,10 @@ export function createApiClient({
 }) {
   /* strict no-op fall-backs                                    */
   notify        = notify        || { debug(){}, info(){}, warn(){}, error(){} };
+  // Guard-rail #15 – contextual notifier for every subsequent call
+  const apiNotify = (notify?.withContext)
+    ? notify.withContext({ module: 'ApiClient', context: 'apiRequest' })
+    : notify;
   errorReporter = errorReporter || null;
   const pending = new Map();
   const BASE_URL = APP_CONFIG?.BASE_API_URL || '';
@@ -82,7 +86,7 @@ export function createApiClient({
     const key = `${method}-${normUrl}-${bodyKey}`;
 
     if (!skipCache && method === "GET" && pending.has(key)) {
-      if (APP_CONFIG.DEBUG) notify.debug(`[API] Dedup hit: ${key}`);
+      if (APP_CONFIG.DEBUG) apiNotify.debug(`[API] Dedup hit: ${key}`, { module: 'ApiClient', source:'dedup' });
       return pending.get(key);
     }
 
@@ -92,7 +96,7 @@ export function createApiClient({
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       const csrf = auth.getCSRFToken();
       if (csrf) opts.headers["X-CSRF-Token"] = csrf;
-      else if (APP_CONFIG.DEBUG) notify.warn(`[API] No CSRF for ${method} ${normUrl}`);
+      else if (APP_CONFIG.DEBUG) apiNotify.warn(`[API] No CSRF for ${method} ${normUrl}`, { module: 'ApiClient', source:'csrf' });
     }
 
     // JSON stringify body if plain object (not FormData)
@@ -102,11 +106,11 @@ export function createApiClient({
         try {
           opts.body = JSON.stringify(opts.body);
         } catch (err) {
-          notify.error("[API] Failed to stringify body", {
+          apiNotify.error("[API] Failed to stringify body", {
             originalError: err,
             module: 'ApiClient',
             context: 'apiClient',
-            source: 'apiRequest'
+            source: 'stringifyBody'
           });
           if (errorReporter?.capture) {
             errorReporter.capture(err, {
@@ -134,10 +138,10 @@ export function createApiClient({
     const p = (async () => {
       try {
         if (APP_CONFIG.DEBUG)
-          notify.debug(`[API] ${method} ${normUrl}`, {
+          apiNotify.debug(`[API] ${method} ${normUrl}`, {
             context: 'api',
             module: 'ApiClient',
-            source: 'apiRequest',
+            source: 'request',
             /* trace helpers removed to avoid hidden globals */
             extra: { hasBody: !!opts.body }
           });
@@ -154,14 +158,14 @@ export function createApiClient({
             else body = await clone.text();
             const headersObj = {};
             for (const [k, v] of clone.headers.entries()) headersObj[k] = v;
-            notify.debug("[AUTH DEBUG] /api/auth/verify response", { extra: body });
-            notify.debug("[AUTH DEBUG] /api/auth/verify headers",  { extra: headersObj });
+            apiNotify.debug("[AUTH DEBUG] /api/auth/verify response", { module: 'ApiClient', source: 'authDebug', extra: body });
+            apiNotify.debug("[AUTH DEBUG] /api/auth/verify headers",  { module: 'ApiClient', source: 'authDebug', extra: headersObj });
           } catch (e) {
-            notify.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", {
+            apiNotify.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", {
               originalError: e,
               module: 'ApiClient',
               context: 'authDebug',
-              source: 'apiRequest'
+              source: 'authDebug'
             });
             if (errorReporter?.capture) {
               errorReporter.capture(e, {
@@ -194,11 +198,11 @@ export function createApiClient({
             try {
               errPayload.raw = await resp.text();
             } catch (e) {
-              notify.warn("[apiClient] (fallback) Failed to read response text", {
+              apiNotify.warn("[apiClient] (fallback) Failed to read response text", {
                 originalError: e,
                 module: 'ApiClient',
                 context: 'errorReadFallback',
-                source: 'apiRequest'
+                source: 'errorReadFallback'
               });
               if (errorReporter?.capture) {
                 errorReporter.capture(e, {
@@ -251,4 +255,12 @@ export function createApiClient({
     if (!skipCache && method === "GET") pending.set(key, p);
     return p;
   };
+
+  // Convenience verbs required by BackendLogger / other callers
+  apiRequest.post = (url, body = {}, opts = {}, skip = true) =>
+    apiRequest(url, { ...opts, method: 'POST', body }, skip);
+  apiRequest.get = (url, params = {}, opts = {}, skip = false) =>
+    apiRequest(url, { ...opts, method: 'GET',  params }, skip);
+
+  return apiRequest;
 }
