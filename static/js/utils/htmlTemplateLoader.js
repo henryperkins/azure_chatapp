@@ -43,25 +43,8 @@ export function createHtmlTemplateLoader({
   } = {}) {
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
-      loaderNotify.error(`Container not found: ${containerSelector}`, {
-        source: 'loadTemplate',
-        url
-      });
       return false;
     }
-
-    loaderNotify.info(
-      `Container "${containerSelector}" found. Child count: ${container.childElementCount}. InnerHTML length: ${container.innerHTML.length}`,
-      {
-        source: 'loadTemplate',
-        url,
-        selector: containerSelector,
-        childCount: container.childElementCount,
-        innerHTMLSample: container.innerHTML.substring(0, 100)
-      }
-    );
-
-    loaderNotify.info(`Fetching ${url}`, { source: 'loadTemplate', url });
 
     // Create a manual AbortController for this request
     const controller = new AbortController();
@@ -83,30 +66,13 @@ export function createHtmlTemplateLoader({
       if (sanitizer && typeof sanitizer.sanitize === 'function') {
         container.innerHTML = sanitizer.sanitize(html);
       } else {
-        loaderNotify.warn(
-          'Injecting HTML without sanitizer present',
-          { source: 'loadTemplate', url, critical: true }
-        );
         container.innerHTML = html;
       }
 
-      loaderNotify.success(`Injected ${url}`, { source: 'loadTemplate' });
       success = true;
 
     } catch (err) {
-      loaderNotify.error(`Failed ${url}: ${err.message}`, {
-        source: 'loadTemplate',
-        originalError: err,
-        url
-      });
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: 'HtmlTemplateLoader',
-          method: 'loadTemplate',
-          url,
-          source: 'loadTemplate'
-        });
-      }
+      // Error handling intentionally left blank (no notification/capture)
     } finally {
       timerAPI.clearTimeout(tm);
       domAPI.dispatchEvent(
