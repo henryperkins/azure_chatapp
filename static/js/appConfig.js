@@ -4,6 +4,8 @@
  */
 export const APP_CONFIG = {
   DEBUG: true,
+  VERBOSE_LOGGING: true, // Add this to enable verbose logging
+  LOG_TO_CONSOLE: true,  // Add this to ensure console logging
   // Mantener vacío para usar la misma URL de origen que la página
   BASE_API_URL: '',
   SELECTORS: {
@@ -40,5 +42,11 @@ export const APP_CONFIG = {
     CONVERSATION: (projectId, conversationId) => `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`,
     // List/post messages for a conversation
     MESSAGES: (projectId, conversationId) => `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`
+  },
+  LOGGING: {
+    BACKEND_ENABLED: true,
+    CONSOLE_ENABLED: true,
+    SENTRY_ENABLED: true,
+    MIN_LEVEL: 'debug'  // Set to 'debug' for maximum visibility
   }
 };
