@@ -16,7 +16,6 @@
  *   • modalManager              : obj – confirmAction(opts)
  *   • FileUploadComponentClass  : class – debe implementar init()/initialize()
  *   • router                    : obj – getURL(), navigate(url)
- *   • notify                    : obj – .withContext() → {debug,info,success,warn,error}
  *   • sanitizer                 : obj – sanitize(html)
  *   • domAPI                    : obj – getElementById, querySelector/All, getDocument,
  *                                    dispatchEvent, ownerDocument, add/removeEventListener…
@@ -30,9 +29,6 @@
  *
  * Import externo:
  *   • waitForDepsAndDom         de './utils/globalUtils.js'
- *
- * Todas las notificaciones incluyen automáticamente:
- *   { group, context, module:"ProjectDetailsComponent", source, detail, originalError? }.
  */
 
 import { waitForDepsAndDom } from './utils/globalUtils.js';
@@ -455,9 +451,6 @@ class ProjectDetailsComponent {
 
   switchTab(tabName) {
     if (!this.state.initialized) {
-      this.notify.warn("[ProjectDetailsComponent] switchTab before init.", {
-        group: true, source: "switchTab_notInitialized"
-      });
       return;
     }
 
@@ -704,10 +697,6 @@ class ProjectDetailsComponent {
           const kb = this.state.currentProject?.knowledge_base;
           Promise.resolve().then(() => this.knowledgeBaseComponent.initialize(true, kb, pid))
             .catch(e => {
-              this.notify.error("[ProjectDetailsComponent] KB init failed: " + (e?.message || e), {
-                group: true, source: "_loadTabContent_kbInitFail", originalError: e, timeout: 0 // context and module are auto-applied
-              });
-              this.errorReporter.capture(e, { module: MODULE, source: "_loadTabContent", originalError: e });
             });
         }
         break;
@@ -721,7 +710,6 @@ class ProjectDetailsComponent {
     try {
       await asyncFn();
     } catch (err) {
-      // No notification or error reporting
     } finally {
       this.state.isLoading[section] = false;
       this._toggleIndicator(section, false);
@@ -880,7 +868,6 @@ class ProjectDetailsComponent {
         this.router.navigate(url.toString());
       }
     } catch (error) {
-      // No notification or error reporting
     }
   }
 }

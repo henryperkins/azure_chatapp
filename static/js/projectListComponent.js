@@ -89,15 +89,6 @@ export class ProjectListComponent {
         this.backendLogger = backendLogger;
         this.eventBus      = new EventTarget();   // ← dedicated intra-module bus
 
-        // Backend event: module loaded
-        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
-          this.backendLogger.log({
-            level  : 'info',
-            module : 'ProjectListComponent',
-            message: 'loaded'
-          });
-        }
-
         if (!domAPI) throw new Error("[ProjectListComponent] domAPI injection is mandatory.");
         this.domAPI  = domAPI;
         this._doc    = null;     // set after app-ready in initialize()
@@ -106,8 +97,6 @@ export class ProjectListComponent {
         this.navigationService = this.DependencySystem?.modules?.get('navigationService');
 
 
-        // DI notify: use context/group everywhere; see notification-system.md
-        this.notify = notify.withContext({ context: 'projectListComponent', module: 'ProjectListComponent' });
         this.apiClient = apiClient;
 
         this.storage = storage;
@@ -158,13 +147,6 @@ export class ProjectListComponent {
         this.element = null;
     }
 
-    _captureError(err, source){
-      this.errorReporter?.capture?.(err, {
-        module : 'ProjectListComponent',
-        context: 'projectListComponent',
-        source
-      });
-    }
 
     _setState(partial){
       this.state = { ...this.state, ...partial };
@@ -247,20 +229,7 @@ export class ProjectListComponent {
 
         this._doc = this.domAPI.getDocument?.();
         // --- DI-logged initialization ---
-        if (this.app?.config?.debug) {
-            this.notify.info('[ProjectListComponent] INITIALIZE called', {
-                group: true, context: 'projectListComponent', stack: (new Error()).stack
-            });
-        } else {
-            this.notify.info('[ProjectListComponent] INITIALIZE called', {
-                group: true, context: 'projectListComponent'
-            });
-        }
         if (this.state.initialized) {
-            if (this.app?.config?.debug) {
-                this.notify.info('[ProjectListComponent] Already initialized.', { group: true, context: 'projectListComponent' });
-            }
-            this.notify.info('Project list is already initialized.', { group: true, context: 'projectListComponent' });
             return;
         }
 
@@ -271,15 +240,9 @@ export class ProjectListComponent {
             : this._doc.getElementById(this.elementId);
 
         if (!this.element) {
-            this.notify.error(
-                `[ProjectListComponent] Main element #${this.elementId} not found. Initialization cannot proceed.`,
-                { group: true, context: 'projectListComponent', source: 'initialize_findElement' }
-            );
             throw new Error(
                 `[ProjectListComponent] Element #${this.elementId} not found. Cannot initialize.`
             );
-        } else {
-            this.notify.info(`[ProjectListComponent] Main element #${this.elementId} found.`, { group: true, context: 'projectListComponent', source: 'initialize_findElement' });
         }
 
         // Use the root element itself as the grid if it has the .grid class
@@ -292,13 +255,7 @@ export class ProjectListComponent {
         }
 
         if (!this.gridElement) {
-            this.notify.error(
-                `[ProjectListComponent.INIT] '.grid' container not found inside #${this.elementId}. Element HTML might be: ${this.element.innerHTML.substring(0,100)}. Initialization cannot proceed.`,
-                { group: true, context: 'projectListComponent', source: 'initialize_findGridElement' }
-            );
             throw new Error(`'.grid' container not found within #${this.elementId}.`);
-        } else {
-            this.notify.info('[ProjectListComponent] gridElement found successfully.', { group: true, context: 'projectListComponent', source: 'initialize_findGridElement' });
         }
 
         // Wait for critical internal/sibling DOM elements to be ready
@@ -314,11 +271,6 @@ export class ProjectListComponent {
             retryButton: !!this.domAPI.getElementById('retryButton')
         };
 
-        this.notify.debug('[ProjectListComponent] Critical DOM elements status', {
-            source: 'initialize',
-            context: MODULE_CONTEXT,
-            criticalElements
-        });
         // A more robust solution might involve checking for their containers if the elements themselves are dynamic.
         const essentialSelectors = ['#projectFilterTabs', '#projectListCreateBtn'];
 
@@ -333,15 +285,11 @@ export class ProjectListComponent {
                 domAPI: docAPI, // Pass the injected domAPI
                 source: 'ProjectListComponent_InternalDOMWait'
             });
-            this.notify.info('[ProjectListComponent] Essential internal DOM elements ready.', { group: true, context: 'projectListComponent', selectors: essentialSelectors });
         } catch (err) {
             this.errorReporter?.capture?.(err, {
               module : 'ProjectListComponent',
               source : 'initialize',
               context: MODULE_CONTEXT
-            });
-            this.notify.error('[ProjectListComponent] Timeout or error waiting for essential internal DOM elements. Component initialization will halt.', {
-                group: true, context: 'projectListComponent', originalError: err, selectors: essentialSelectors
             });
             // If essential selectors are not found, the component cannot initialize correctly.
             throw err; // Re-throw the error to stop initialization.
@@ -356,21 +304,6 @@ export class ProjectListComponent {
         // Log successful initialization
         const initEndTime = Date.now();
         const initDuration = initEndTime - (this._initStartTime || initEndTime);
-
-        this.notify.info('[ProjectListComponent] Initialized successfully', {
-            group: true,
-            context: MODULE_CONTEXT,
-            source: 'initialize',
-            duration: initDuration,
-            timestamp: initEndTime,
-            traceId: this.DependencySystem?.getCurrentTraceIds?.()?.traceId || `trace-${Date.now()}`
-        });
-
-        this.notify.success('Project list component ready', {
-            group: true,
-            context: MODULE_CONTEXT,
-            source: 'initialize'
-        });
 
         // --- Standardized "projectlistcomponent:initialized" event ---
         this.eventBus.dispatchEvent(new CustomEvent('initialized', {
@@ -394,43 +327,9 @@ export class ProjectListComponent {
                 }));
             }
         } catch (err) {
-            this.notify.warn('[ProjectListComponent] Error dispatching DOM event', {
-                source: 'initialize',
-                context: MODULE_CONTEXT,
-                originalError: err
-            });
-        }
-
-        // Log to backend
-        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
-          this.backendLogger.log({
-            level: 'info',
-            module: 'ProjectListComponent',
-            message: 'initialized',
-            metadata: {
-              timestamp: initEndTime,
-              duration: initDuration,
-              domElementsFound: {
-                element: !!this.element,
-                gridElement: !!this.gridElement,
-                projectFilterTabs: !!this.domAPI.getElementById('projectFilterTabs'),
-                projectListCreateBtn: !!this.domAPI.getElementById('projectListCreateBtn')
-              }
-            }
-          });
-        }
-
-        // Stop the trace if it was started
-        const debugTools = this.DependencySystem?.modules?.get('debugTools');
-        if (debugTools?.stop) {
-            debugTools.stop(initTrace, 'ProjectListComponent.initialize');
         }
 
         // Load projects
-        this.notify.info('[ProjectListComponent] Loading projects after initialization', {
-            source: 'initialize',
-            context: MODULE_CONTEXT
-        });
         this._loadProjects();
     }
 
@@ -1098,7 +997,6 @@ export class ProjectListComponent {
             }
         }, 150);
 
-        this.notify.info('Project list is now visible.', { group: true, context: 'projectListComponent' });
     }
 
     /** Hide the list container */
@@ -1116,58 +1014,20 @@ export class ProjectListComponent {
             listViewContainer.classList.add("hidden");
             listViewContainer.style.display = "none";
         }
-        this.notify.info("Project list is now hidden.", { group: true, context: 'projectListComponent' });
     }
 
     /** Load projects via manager */
     async _loadProjects() {
         if (this.state.loading) return;
         if (!this.projectManager?.loadProjects) {
-            this.notify.warn(
-                "[ProjectListComponent] projectManager.loadProjects is missing.",
-                { group: true, context: 'projectListComponent' }
-            );
             return;
         }
         this._setState({ loading: true });
         this._showLoadingState();
         try {
             await this.projectManager.loadProjects(this.state.filter);
-            this.notify.success("Projects loaded successfully.", { group: true, context: 'projectListComponent' });
         } catch (error) {
-            this.errorReporter?.capture?.(error, {
-              module : 'ProjectListComponent',
-              source : '_loadProjects',
-              context: MODULE_CONTEXT
-            });
-            // Enhanced error reporting with source, method, endpoint, and server details
-            const status = error?.status || error?.response?.status;
-            const detail = error?.detail || error?.response?.data?.detail || error?.response?.detail;
-            const endpoint = this.projectManager?._CONFIG?.PROJECTS || '';
-            let fullMsg = "[ProjectListComponent] _loadProjects error: " + (error?.message || error);
-            if (endpoint || status || detail) {
-                fullMsg += " |";
-                if (endpoint) fullMsg += ` endpoint: ${endpoint};`;
-                if (status) fullMsg += ` HTTP ${status};`;
-                if (detail) fullMsg += ` detail: ${detail};`;
-            }
-            this.notify.error(fullMsg, {
-                group: true,
-                context: 'projectListComponent',
-                source: 'ProjectListComponent',
-                method: '_loadProjects',
-                endpoint,
-                status,
-                detail,
-                originalError: error
-            });
             this._showErrorState("Failed to load projects");
-            this.notify.error("Failed to load projects.", {
-                group: true,
-                context: 'projectListComponent',
-                source: 'ProjectListComponent',
-                method: '_loadProjects'
-            });
         } finally {
             this._setState({ loading: false });
         }
@@ -1179,9 +1039,6 @@ export class ProjectListComponent {
           (p) => String(this._getProjectId(p)) === projectId
         );
         if (!project) {
-            this.notify.warn(`[ProjectListComponent] Project not found: ${projectId}`, {
-                group: true, context: 'projectListComponent'
-            });
             return;
         }
         switch (action) {
@@ -1196,9 +1053,6 @@ export class ProjectListComponent {
                 this._confirmDelete(project);
                 break;
             default:
-                this.notify.warn(`[ProjectListComponent] Unknown action: ${action}`, {
-                    group: true, context: 'projectListComponent'
-                });
         }
     }
 
@@ -1212,7 +1066,6 @@ export class ProjectListComponent {
 
         const projectId = projectCard.dataset.projectId;
         if (!projectId) {
-            this.notify.error("[ProjectListComponent] Clicked a card without a valid projectId.", { group: true, context: "projectListComponent" });
             return;
         }
 
@@ -1221,7 +1074,6 @@ export class ProjectListComponent {
         const actionBtn = e.target.closest("[data-action]");
         if (actionBtn) {
             e.stopPropagation(); // Prevent card's own click (navigation) if an action button was clicked.
-            this.notify.debug(`Action button '${actionBtn.dataset.action}' clicked for project ${projectId}. Handler attached directly to button.`, { group: true, context: 'projectListComponent' });
             return; // Let the button's own event listener handle the action.
         }
 
@@ -1231,14 +1083,6 @@ export class ProjectListComponent {
             return;
         }
 
-        this.notify.info(`Project card (not an action button) clicked for project: ${projectId}. Navigating...`, { group: true, context: 'projectListComponent' });
-        // const appState = this.app?.state; // OLD
-        // if (appState?.isAuthenticated && appState?.currentUser) { // OLD
-        //     this.onViewProject(projectId); // OLD
-        // } else { // OLD
-        //     this.notify.warn("[ProjectListComponent] Ignoring card click for navigation: user not authenticated or currentUser not loaded.", { group: true, context: "projectListComponent" }); // OLD
-        // } // OLD
-
         // NEW: Use auth module directly via DependencySystem
         const auth = this.DependencySystem?.modules?.get?.('auth') ?? null;
 
@@ -1246,8 +1090,6 @@ export class ProjectListComponent {
             // Optionally, also check for auth.getCurrentUserObject() if needed for onViewProject
             this.onViewProject(projectId);
         } else {
-            this.notify.warn("[ProjectListComponent] Ignoring card click for navigation: user not authenticated (checked via auth module).", { group: true, context: "projectListComponent" });
-            // Optionally, dispatch 'requestLogin' or similar to trigger login modal
             this.eventBus.dispatchEvent(new CustomEvent("requestLogin"));
         }
     }
@@ -1275,10 +1117,6 @@ export class ProjectListComponent {
     _bindCreateProjectButtons() {
         if (!this.modalManager) return;
         if (!this.eventHandlers?.trackListener) {
-            this.notify.error(
-                "[ProjectListComponent] eventHandlers.trackListener is required for button events.",
-                { group: true, context: "projectListComponent" }
-            );
             throw new Error(
                 "[ProjectListComponent] eventHandlers.trackListener is required for button events."
             );
@@ -1295,10 +1133,6 @@ export class ProjectListComponent {
 
     _openNewProjectModal() {
         if (!this.modalManager?.show) {
-            this.notify.error(
-                "[ProjectListComponent] modalManager.show is unavailable for new project modal.",
-                { group: true, context: "projectListComponent" }
-            );
             return;
         }
         this.modalManager.show("project");
@@ -1306,10 +1140,6 @@ export class ProjectListComponent {
 
     _openEditModal(project) {
         if (!this.modalManager?.show) {
-            this.notify.error(
-                "[ProjectListComponent] modalManager.show is unavailable for edit modal.",
-                { group: true, context: "projectListComponent" }
-            );
             return;
         }
         this.modalManager.show("project", {
@@ -1337,39 +1167,17 @@ export class ProjectListComponent {
                 });
             });
             if (ok) this._executeDelete(project.id);
-        } else {
-            this.notify.error(
-                "[ProjectListComponent] No DI modalManager.confirmAction available for confirmation. Delete action cancelled.",
-                { group: true, context: 'projectListComponent' }
-            );
         }
     }
 
     async _executeDelete(projectId) {
         if (!this.projectManager?.deleteProject) {
-            this.notify.error(
-                "[ProjectListComponent] projectManager.deleteProject is not available.",
-                { group: true, context: 'projectListComponent' }
-            );
-            this.notify.error("Critical: Delete not available.", {
-                group: true, context: 'projectListComponent'
-            });
             return;
         }
         try {
             await this.projectManager.deleteProject(projectId);
-            this.notify.success("Project deleted", { group: true, context: 'projectListComponent' });
             this._loadProjects();
         } catch (err) {
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : '_executeDelete',
-              context: MODULE_CONTEXT
-            });
-            this.notify.error("[ProjectListComponent] Failed to delete project: " + (err?.message || err), {
-                group: true, context: 'projectListComponent'
-            });
-            this.notify.error("Failed to delete project", { group: true, context: 'projectListComponent' });
         }
     }
 
@@ -1686,11 +1494,6 @@ export class ProjectListComponent {
             const date = new Date(dateString);
             return date.toLocaleDateString();
         } catch (err) {
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : '_formatDate',
-              context: MODULE_CONTEXT
-            });
             return dateString;
         }
     }
@@ -1703,11 +1506,6 @@ export class ProjectListComponent {
                 ? JSON.parse(saved)
                 : this._getDefaultCustomization();
         } catch (err) {
-            this.errorReporter?.capture?.(err, {
-              module : 'ProjectListComponent',
-              source : '_loadCustomization',
-              context: MODULE_CONTEXT
-            });
             return this._getDefaultCustomization();
         }
     }
@@ -1722,12 +1520,8 @@ export class ProjectListComponent {
     }
 
     destroy() {
-        this.notify.info('[ProjectListComponent] destroy() called', { group: true, context: 'projectListComponent', module: 'ProjectListComponent', source: 'destroy' });
         if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
             this.eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
-            this.notify.debug(`[ProjectListComponent] Called eventHandlers.cleanupListeners for context: ${MODULE_CONTEXT}`, { source: 'destroy' });
-        } else {
-            this.notify.warn('[ProjectListComponent] eventHandlers.cleanupListeners not available. Listeners may not be cleaned up.', { source: 'destroy' });
         }
         this._setState({ initialized: false });
         // Optionally, clear other state or DOM references if necessary
