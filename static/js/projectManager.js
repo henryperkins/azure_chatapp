@@ -131,10 +131,6 @@ class ProjectManager {
       throw new Error('apiEndpoints required');
     }
 
-    // Always use notify.withContext for context-rich notifications
-    this.pmNotify = (notify?.withContext)
-      ? notify.withContext({ module: MODULE, context: 'projectManager' })
-      : notify;
     this.app = app ?? DependencySystem.modules.get('app');
     this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
@@ -212,7 +208,7 @@ class ProjectManager {
   async _req(url, opts = {}, src = MODULE) {
     return wrapApi(
       this.apiRequest,
-      { notify: this.notify, errorReporter: this.errorReporter },
+      { notify: this.notify, errorReporter: this.errorReporter, module: MODULE },
       url,
       opts,
       src
