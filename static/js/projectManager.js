@@ -63,6 +63,7 @@ async function retryWithBackoff(fn, maxRetries, timer, notify, errorReporter) {
     try {
       return await fn();
     } catch (err) {
+      errorReporter?.capture?.(err, { module: MODULE, method: 'retryWithBackoff' });
       _capture(err, { module: MODULE, method: "retryWithBackoff" }, errorReporter);
       if (err && err.status && ((err.status >= 400 && err.status < 500 && err.status !== 429) || err.status === 405)) {
         throw err;
@@ -102,6 +103,8 @@ class ProjectManager {
     apiRequest = null,
     errorReporter = null,
     debugTools = null,
+    backendLogger = null,          // NEW
+    browserService = null,         // NEW
     domAPI = null
   } = {}) {
     if (!DependencySystem) {
@@ -123,10 +126,12 @@ class ProjectManager {
     this.notify = notify ?? DependencySystem.modules.get?.('notify');
     this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
     this.debugTools = debugTools || DependencySystem.modules.get?.('debugTools') || null;
+    this.backendLogger = backendLogger ?? DependencySystem.modules.get?.('backendLogger') ?? null;  // NEW
     this.timer = timer;
     this.storage = storage;
     this.apiRequest = apiRequest ?? app?.apiRequest;
-    this.domAPI = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
+    this.browserService = browserService ?? DependencySystem.modules.get?.('browserService') ?? null; // NEW
+    this.domAPI       = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
     // Fallback: wrap raw handler if notify util isn't injected yet
     if (!this.notify && notificationHandler?.show) {
@@ -179,6 +184,14 @@ class ProjectManager {
       extra: { config: JSON.parse(JSON.stringify(this._CONFIG)) }
     });
     this.pmNotify?.info?.('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
+
+    // ▸ backend audit trail
+    this.backendLogger?.log?.({
+      level  : 'info',
+      module : MODULE,
+      context: 'constructor',
+      message: 'initialized'
+    });
   }
 
   async _req(url, opts = {}, src = MODULE) {
@@ -263,7 +276,8 @@ class ProjectManager {
             this.pmNotify?.warn?.(`[ProjectManager] Base URL for PROJECTS (${baseUrl}) is missing a trailing slash. Adding one.`, { source: 'loadProjects_debounced' });
             baseUrl += '/';
           }
-          const urlObj = new URL(baseUrl, location.origin);
+          const origin = this.browserService?.getLocation?.().origin || '';
+          const urlObj = new URL(baseUrl, origin);
           urlObj.searchParams.set('filter', filter);
           const res = await this._req(String(urlObj), undefined, "loadProjects");
           const list = extractResourceList(res, ['projects']);
@@ -273,6 +287,7 @@ class ProjectManager {
           this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_success');
           resolve(list);
         } catch (err) {
+          this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjects' });
           _capture(err, { module: MODULE, method: "loadProjects" }, this.errorReporter);
           this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_error');
           resolve(this._handleErr('projectsLoaded', err, []));
@@ -341,6 +356,7 @@ class ProjectManager {
         const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
         this.currentProject = normalizeProjectResponse(detailRes);
       } catch (err) {
+        this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectDetails' });
         _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
         this.pmNotify?.error?.("[ProjectManager] loadProjectDetails error", {
           source: "loadProjectDetails",
@@ -409,6 +425,7 @@ class ProjectManager {
       this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return { ...this.currentProject };
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectDetails' });
       _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
       const userId = this.app?.state?.currentUser?.id || null;
       const status = err?.status || err?.response?.status;
@@ -459,6 +476,7 @@ class ProjectManager {
         return kb;
       }
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectKnowledgeBase' });
       _capture(err, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
       this.pmNotify?.error(`[ProjectManager] Error loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
         group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
@@ -475,6 +493,7 @@ class ProjectManager {
       this._emit('projectStatsLoaded', { id, ...stats });
       return stats;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectStats' });
       _capture(err, { module: MODULE, method: "loadProjectStats" }, this.errorReporter);
       return this._handleErr('projectStatsError', err, {});
     }
@@ -486,6 +505,7 @@ class ProjectManager {
       this._emit('projectFilesLoaded', { id, files });
       return files;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectFiles' });
       _capture(err, { module: MODULE, method: "loadProjectFiles" }, this.errorReporter);
       return this._handleErr('projectFilesError', err, []);
     }
@@ -497,6 +517,7 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id, conversations });
       return conversations;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectConversations' });
       _capture(err, { module: MODULE, method: "loadProjectConversations" }, this.errorReporter);
       return this._handleErr('projectConversationsError', err, []);
     }
@@ -508,6 +529,7 @@ class ProjectManager {
       this._emit('projectArtifactsLoaded', { id, artifacts });
       return artifacts;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectArtifacts' });
       _capture(err, { module: MODULE, method: "loadProjectArtifacts" }, this.errorReporter);
       return this._handleErr('projectArtifactsError', err, []);
     }
@@ -529,6 +551,7 @@ class ProjectManager {
       );
       return proj;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'saveProject' });
       _capture(err, { module: MODULE, method: "saveProject" }, this.errorReporter);
       this._handleErr('projectSaveError', err, null, { method: 'saveProject', endpoint: url });
       throw err;
@@ -542,6 +565,7 @@ class ProjectManager {
       this._emit('projectDeleted', { id });
       this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProject', detail: { id } });
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'deleteProject' });
       _capture(err, { module: MODULE, method: "deleteProject" }, this.errorReporter);
       this._handleErr('projectDeleteError', err, null, { method: 'deleteProject', endpoint: this._CONFIG.DETAIL.replace('{id}', id) });
       throw err;
@@ -555,6 +579,7 @@ class ProjectManager {
       this.notify.success(`[ProjectManager] Project ${id} archive toggled`, { group: true, context: 'projectManager', module: MODULE, source: 'toggleArchiveProject', detail: { id, archived: res?.archived } });
       return res;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'toggleArchiveProject' });
       _capture(err, { module: MODULE, method: "toggleArchiveProject" }, this.errorReporter);
       this._handleErr('projectArchiveToggled', err, null, { method: 'toggleArchiveProject', endpoint: this._CONFIG.ARCHIVE.replace('{id}', id) });
       throw err;
@@ -566,6 +591,7 @@ class ProjectManager {
       this.storage.setItem?.('selectedProjectId', projectId);
       return await this.chatManager.createNewConversation(projectId, opts);
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'createConversation' });
       _capture(err, { module: MODULE, method: "createConversation" }, this.errorReporter);
       this._handleErr('conversationCreateError', err, null, { source: 'createConversation', detail: { projectId } });
       throw err;
@@ -586,6 +612,7 @@ class ProjectManager {
       this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
       return convo;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'getConversation' });
       _capture(err, { module: MODULE, method: "getConversation" }, this.errorReporter);
       this._handleErr(`conversationLoadError`, err, null, { source: 'getConversation', detail: { conversationId, projectId } });
       throw err;
@@ -598,6 +625,7 @@ class ProjectManager {
       this.notify.success(`[ProjectManager] Conversation ${conversationId} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       return true;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'deleteProjectConversation' });
       _capture(err, { module: MODULE, method: "deleteProjectConversation" }, this.errorReporter);
       this._handleErr('deleteProjectConversationError', err, null, { source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       throw err;
@@ -631,15 +659,20 @@ class ProjectManager {
   async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
     return retryWithBackoff(
       async () => {
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('projectId', projectId);
-        await this._req(`/api/projects/${projectId}/files/`, {
-          method: 'POST',
-          body: formData
-        }, "uploadFileWithRetry");
-        this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
-        return true;
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('projectId', projectId);
+          await this._req(`/api/projects/${projectId}/files/`, {
+            method: 'POST',
+            body: formData
+          }, "uploadFileWithRetry");
+          this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
+          return true;
+        } catch (err) {
+          this.errorReporter?.capture?.(err, { module: MODULE, method: 'uploadFileWithRetry' });
+          throw err;
+        }
       },
       maxRetries,
       this.timer,
@@ -672,6 +705,7 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'createProject' });
       _capture(err, { module: MODULE, method: "createProject" }, this.errorReporter);
       const endpoint = this._CONFIG.PROJECTS;
       const status = err?.status || err?.response?.status;
@@ -707,6 +741,7 @@ class ProjectManager {
       this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id, { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId, conversationId: conversation.id } });
       return conversation;
     } catch (err) {
+      this.errorReporter?.capture?.(err, { module: MODULE, method: 'createDefaultConversation' });
       _capture(err, { module: MODULE, method: "createDefaultConversation" }, this.errorReporter);
       this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId }, originalError: err });
       return null;
@@ -762,7 +797,12 @@ function _readyWrapper(deps) {
 /* Factory export – always returns a NEW instance */
 
 export function createProjectManager(deps = {}) {
-  return _readyWrapper(deps);
+  const ds = deps.DependencySystem || globalThis.DependencySystem;
+  if (!ds) throw new Error('[createProjectManager] DependencySystem required');
+
+  const instance = new ProjectManager({ ...deps, DependencySystem: ds });
+  ds.register?.('projectManager', instance);
+  return instance;            // returns a fresh instance (not a Promise)
 }
 
 export { isValidProjectId, extractResourceList, normalizeProjectResponse, retryWithBackoff };
