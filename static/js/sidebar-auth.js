@@ -9,14 +9,12 @@ export function createSidebarAuth({
   DependencySystem,
   domAPI,
   eventHandlers,
-  notify,
   accessibilityUtils,
   MODULE = "Sidebar"
 } = {}) {
   if (!DependencySystem) throw new Error("[sidebar-auth] DependencySystem required.");
   if (!domAPI) throw new Error("[sidebar-auth] domAPI is required.");
   if (!eventHandlers) throw new Error("[sidebar-auth] eventHandlers is required.");
-  if (!notify) throw new Error("[sidebar-auth] notify is required.");
 
   // Element references
   let sidebarAuthFormContainerEl, sidebarAuthFormTitleEl, sidebarAuthFormEl,
@@ -25,7 +23,6 @@ export function createSidebarAuth({
     sidebarConfirmPasswordInputEl, sidebarAuthBtnEl, sidebarAuthErrorEl, sidebarAuthToggleEl;
 
   let isRegisterMode = false;
-  const sidebarNotify = notify.withContext({ module: MODULE, context: "inlineAuth" });
 
   function initAuthDom() {
     sidebarAuthFormContainerEl = domAPI.getElementById("sidebarAuthFormContainer");
@@ -45,13 +42,11 @@ export function createSidebarAuth({
   function clearAuthForm() {
     if (sidebarAuthFormEl) sidebarAuthFormEl.reset();
     if (sidebarAuthErrorEl) domAPI.setTextContent(sidebarAuthErrorEl, "");
-    sidebarNotify.debug("Inline auth form cleared.", { source: "clearAuthForm" });
   }
 
   function updateAuthFormUI(isRegister) {
     isRegisterMode = isRegister;
     if (!sidebarAuthFormTitleEl || !sidebarAuthBtnEl || !sidebarConfirmPasswordContainerEl || !sidebarAuthToggleEl || !sidebarUsernameContainerEl || !sidebarEmailInputEl) {
-      sidebarNotify.warn("Cannot update auth form UI, some elements are missing.", { source: "updateAuthFormUI" });
       return;
     }
     const emailContainer = sidebarEmailInputEl.parentElement;
@@ -77,17 +72,14 @@ export function createSidebarAuth({
       domAPI.setTextContent(sidebarAuthToggleEl, "Need an account? Register");
     }
     clearAuthForm();
-    sidebarNotify.debug(`Auth form UI updated to ${isRegister ? "Register" : "Login"} mode.`, { source: "updateAuthFormUI" });
   }
 
   function setupInlineAuthForm() {
-    sidebarNotify.debug("Setting up inline auth form.", { source: "setupInlineAuthForm" });
     if (
       !sidebarAuthFormContainerEl ||
       !sidebarAuthFormEl ||
       !sidebarAuthToggleEl
     ) {
-      sidebarNotify.error("One or more sidebar auth form elements are missing. Inline auth will not function.", { source: "setupInlineAuthForm", group: true });
       return;
     }
 
@@ -113,7 +105,6 @@ export function createSidebarAuth({
         const authModule = DependencySystem.modules.get("auth");
 
         if (!authModule) {
-          sidebarNotify.error("Auth module not available.", { source: "sidebarAuthSubmit", group: true });
           domAPI.setTextContent(sidebarAuthErrorEl, "Authentication service unavailable.");
           return;
         }
@@ -127,20 +118,15 @@ export function createSidebarAuth({
             if (!username) throw new Error("Username is required.");
             if (!email) throw new Error("Email is required.");
             if (password !== confirmPassword) throw new Error("Passwords do not match.");
-            sidebarNotify.info("Attempting registration via sidebar.", { source: "sidebarAuthSubmit", extra: { username, email } });
             await authModule.register({ username, email, password });
-            sidebarNotify.success("Registration successful. Please login.", { source: "sidebarAuthSubmit", extra: { username } });
             updateAuthFormUI(false);
             domAPI.setTextContent(sidebarAuthErrorEl, "Registration successful! Please login.");
           } else {
             if (!username) throw new Error("Username is required.");
-            sidebarNotify.info("Attempting login via sidebar.", { source: "sidebarAuthSubmit", extra: { username } });
             await authModule.login(username, password);
-            sidebarNotify.success("Login successful via sidebar.", { source: "sidebarAuthSubmit", extra: { username } });
           }
         } catch (error) {
           const errorMessage = error?.message || (isRegisterMode ? "Registration failed." : "Login failed.");
-          sidebarNotify.error(`Sidebar auth failed: ${errorMessage}`, { source: "sidebarAuthSubmit", originalError: error });
           domAPI.setTextContent(sidebarAuthErrorEl, errorMessage);
         } finally {
           domAPI.setProperty(sidebarAuthBtnEl, "disabled", false);
@@ -156,7 +142,6 @@ export function createSidebarAuth({
     if (!initiallyAuthenticated) {
       updateAuthFormUI(false);
     } else {
-      sidebarNotify.debug("User already authenticated, inline auth form hidden initially.", { source: "setupInlineAuthForm" });
     }
   }
 
@@ -167,25 +152,12 @@ export function createSidebarAuth({
     const moduleAuthStatus = authModule?.isAuthenticated?.();
     const isAuthenticated = eventAuthDetail ?? moduleAuthStatus;
 
-    sidebarNotify.info("Sidebar: handleGlobalAuthStateChange triggered.", {
-      source: "handleGlobalAuthStateChange",
-      eventType: event?.type,
-      eventDetailAuthenticated: eventAuthDetail,
-      authModuleIsAuthenticated: moduleAuthStatus,
-      finalIsAuthenticated: isAuthenticated,
-      eventDetailUser: event?.detail?.user,
-    });
-
     if (sidebarAuthFormContainerEl) {
       domAPI.toggleClass(sidebarAuthFormContainerEl, "hidden", !!isAuthenticated);
       if (!isAuthenticated) {
         if (isRegisterMode) updateAuthFormUI(false);
         clearAuthForm();
-      } else {
-        sidebarNotify.debug("Sidebar: User is authenticated, inline auth form is hidden.", { source: "handleGlobalAuthStateChange" });
       }
-    } else {
-      sidebarNotify.warn("Sidebar: sidebarAuthFormContainerEl not found, cannot update visibility.", { source: "handleGlobalAuthStateChange" });
     }
   }
 
