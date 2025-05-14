@@ -133,11 +133,6 @@ class ProjectDashboard {
     // Store initialization start time for duration calculation
     this._initStartTime = Date.now();
 
-    // Generate a unique trace ID for this initialization
-    const DependencySystem = this.getModule?.('DependencySystem') || null;
-    const traceId = DependencySystem?.getCurrentTraceIds?.()?.traceId || `trace-${this._initStartTime}`;
-    const transactionId = DependencySystem?.generateTransactionId?.() || `txn-${this._initStartTime}`;
-
     if (this.state.initialized) {
       return true;
     }
@@ -251,8 +246,6 @@ class ProjectDashboard {
             success: true,
             timestamp: initEndTime,
             duration: initDuration,
-            traceId,
-            transactionId
           }
         })
       );
@@ -276,8 +269,6 @@ class ProjectDashboard {
             errorMessage: error?.message,
             timestamp: initEndTime,
             duration: initDuration,
-            traceId,
-            transactionId
           }
         })
       );
@@ -346,12 +337,6 @@ class ProjectDashboard {
     let projectId = null;
     let currentLoadId = Symbol('loadId');
     this._lastLoadId = currentLoadId;
-
-    // Generate trace/transaction context for troubleshooting
-    const DependencySystem = this.getModule?.('DependencySystem') || null;
-    const traceId = DependencySystem?.getCurrentTraceIds?.().traceId
-      ?? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.floor(Math.random() * 10000)}`);
-    const transactionId = DependencySystem?.generateTransactionId?.() ?? `txn-${Date.now()}`;
 
     // Determine if argument is an object (project) or string (id)
     if (
