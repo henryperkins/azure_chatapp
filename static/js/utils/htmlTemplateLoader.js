@@ -185,7 +185,7 @@ export function createHtmlTemplateLoader({
         });
 
         results.push({
-          url,
+          url: config.url,
           success,
           eventNameEmitted: eventName
         });
