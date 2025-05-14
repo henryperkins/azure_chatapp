@@ -239,6 +239,11 @@ export function createAuthModule({
     const current = readCookie('csrf_token');
     if (current && current !== csrfToken) {
       csrfToken = current; // keep variable and cookie in sync
+      authNotify.debug(`[Auth] CSRF token found in cookie: ${csrfToken.substring(0, 5)}...`,
+        meta('getCSRFToken', { source: 'cookieRead' }));
+    } else if (!current) {
+      authNotify.debug(`[Auth] No CSRF token in cookie, will need to fetch one`,
+        meta('getCSRFToken', { source: 'cookieEmpty' }));
     }
     return csrfToken;
   }
@@ -278,20 +283,50 @@ export function createAuthModule({
 
   async function getCSRFTokenAsync(forceFetch = false) {
     const cookieVal = readCookie('csrf_token');
+
+    // Log the current state for debugging
+    authNotify.debug(`[Auth] getCSRFTokenAsync called with forceFetch=${forceFetch}`,
+      meta('getCSRFTokenAsync', {
+        cookieVal: cookieVal ? `${cookieVal.substring(0, 5)}...` : 'null',
+        currentToken: csrfToken ? `${csrfToken.substring(0, 5)}...` : 'null',
+        hasPromise: !!csrfTokenPromise
+      }));
+
     if (!forceFetch && cookieVal) {
       csrfToken = cookieVal;
+      authNotify.debug(`[Auth] Using CSRF token from cookie`,
+        meta('getCSRFTokenAsync', { source: 'cookieValue' }));
       return csrfToken;
     }
-    if (csrfToken && !forceFetch) return csrfToken;
-    if (csrfTokenPromise) return csrfTokenPromise;
+
+    if (csrfToken && !forceFetch) {
+      authNotify.debug(`[Auth] Using existing CSRF token`,
+        meta('getCSRFTokenAsync', { source: 'existingToken' }));
+      return csrfToken;
+    }
+
+    if (csrfTokenPromise) {
+      authNotify.debug(`[Auth] Using existing CSRF token promise`,
+        meta('getCSRFTokenAsync', { source: 'existingPromise' }));
+      return csrfTokenPromise;
+    }
+
+    authNotify.debug(`[Auth] Fetching new CSRF token`,
+      meta('getCSRFTokenAsync', { source: 'newFetch' }));
 
     csrfTokenPromise = (async () => {
       try {
         const token = await fetchCSRFToken();
-        if (token) csrfToken = token;
+        if (token) {
+          csrfToken = token;
+          authNotify.info(`[Auth] Successfully fetched new CSRF token: ${token.substring(0, 5)}...`,
+            meta('getCSRFTokenAsync', { source: 'fetchSuccess' }));
+        }
         return token;
       } catch (error) {
         captureError(error, { source: 'getCSRFTokenAsync', method: 'getCSRFTokenAsync' });
+        authNotify.error(`[Auth] Failed to fetch CSRF token: ${error.message || error}`,
+          meta('getCSRFTokenAsync', { source: 'fetchError', originalError: error }));
         throw error;
       } finally {
         csrfTokenPromise = null;
@@ -1104,17 +1139,21 @@ export function createAuthModule({
     }
 
     try {
-      // Get CSRF token
+      // Get CSRF token - force fetch a new one
       try {
-        await getCSRFTokenAsync();
-        authNotify.debug(
-          '[Auth] CSRF token obtained successfully',
+        authNotify.info(
+          '[Auth] Forcing CSRF token fetch during initialization',
+          meta('init', { group: true })
+        );
+        await getCSRFTokenAsync(true); // Force fetch a new token
+        authNotify.info(
+          '[Auth] CSRF token obtained successfully during initialization',
           meta('init', { group: true })
         );
       } catch (csrfErr) {
         captureError(csrfErr, { source: 'init', method: 'init', message: 'Failed to get CSRF token' });
-        authNotify.warn(
-          '[Auth] Failed to get CSRF token, continuing initialization',
+        authNotify.error(
+          '[Auth] Failed to get CSRF token during initialization, continuing anyway',
           meta('init', { error: csrfErr, group: true })
         );
       }

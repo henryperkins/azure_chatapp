@@ -182,21 +182,52 @@ DependencySystem.register('app', app);
 // ---------------------------------------------------------------------------
 // NotificationHandler -> real `notify`
 // ---------------------------------------------------------------------------
+// Create notification handler with forced logging
+console.log('[APP] Creating notification handler...');
 const notificationHandler = createNotificationHandler({
   DependencySystem,
   domAPI,
   sanitizer: DependencySystem.modules.get('sanitizer'),
-  logToConsole: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? APP_CONFIG.LOG_TO_CONSOLE ?? true,
-  verboseLogging: APP_CONFIG.VERBOSE_LOGGING ?? false
+  logToConsole: true, // Force console logging
+  verboseLogging: true // Force verbose logging
 });
-DependencySystem.register('notificationHandler', notificationHandler);
-await notificationHandler.init();
 
+// Register notification handler
+console.log('[APP] Registering notification handler...');
+DependencySystem.register('notificationHandler', notificationHandler);
+
+// Initialize notification handler
+console.log('[APP] Initializing notification handler...');
+try {
+  await notificationHandler.init();
+  console.log('[APP] Notification handler initialized successfully');
+} catch (error) {
+  console.error('[APP] Error initializing notification handler:', error);
+}
+
+// Create notify system
+console.log('[APP] Creating notify system...');
 const notify = createNotify({
   notificationHandler,
   DependencySystem
 });
+
+// Register notify system
+console.log('[APP] Registering notify system...');
 DependencySystem.register('notify', notify);
+
+// Test notification
+console.log('[APP] Testing notification system...');
+try {
+  notify.info('Notification system initialized', {
+    module: 'App',
+    context: 'bootstrap',
+    source: 'notificationSetup'
+  });
+  console.log('[APP] Test notification sent successfully');
+} catch (error) {
+  console.error('[APP] Error sending test notification:', error);
+}
 
 const appNotify = notify.withContext({ module: 'App', context: 'bootstrap' });
 
@@ -259,11 +290,28 @@ const backendLogger = createBackendLogger({
 DependencySystem.register('backendLogger', backendLogger);
 
 // Immediately log that app.js has loaded
-backendLogger.log({
-  level: 'info',
-  module: 'App',
-  message: 'app.js loaded at import'
-});
+try {
+  backendLogger.log({
+    level: 'info',
+    module: 'App',
+    message: 'app.js loaded at import'
+  });
+
+  // Add additional debug logs to verify notification system is working
+  notify.info('app.js loaded at import', {
+    module: 'App',
+    context: '',
+    source: ''
+  });
+
+  // Force console logging for debugging
+  console.log('[DEBUG] app.js loaded - notification system test');
+  console.log('[DEBUG] notificationHandler initialized:', !!notificationHandler);
+  console.log('[DEBUG] notify initialized:', !!notify);
+  console.log('[DEBUG] backendLogger initialized:', !!backendLogger);
+} catch (err) {
+  console.error('[CRITICAL] Failed to log app.js loaded:', err);
+}
 
 // ---------------------------------------------------------------------------
 // Create eventHandlers
@@ -1938,11 +1986,58 @@ function createOrGetChatManager() {
 // Boot if in browser
 // ---------------------------------------------------------------------------
 if (typeof window !== 'undefined') {
+  // Add global error handler to catch and log any errors
+  window.onerror = function(message, source, lineno, colno, error) {
+    console.error('[GLOBAL ERROR]', message, 'at', source, lineno, colno, error);
+
+    // Try to use notification system if available
+    try {
+      if (notify) {
+        notify.error('Uncaught error: ' + message, {
+          module: 'App',
+          context: 'globalErrorHandler',
+          source: source,
+          originalError: error
+        });
+      }
+    } catch (notifyError) {
+      console.error('[NOTIFICATION ERROR]', notifyError);
+    }
+
+    return false; // Let default error handling continue
+  };
+
+  // Add unhandled promise rejection handler
+  window.addEventListener('unhandledrejection', function(event) {
+    console.error('[UNHANDLED PROMISE REJECTION]', event.reason);
+
+    // Try to use notification system if available
+    try {
+      if (notify) {
+        notify.error('Unhandled promise rejection', {
+          module: 'App',
+          context: 'unhandledRejection',
+          source: 'window',
+          originalError: event.reason
+        });
+      }
+    } catch (notifyError) {
+      console.error('[NOTIFICATION ERROR]', notifyError);
+    }
+  });
+
+  console.log('[APP] Starting initialization...');
+
   const doc = browserAPI.getDocument();
   if (doc.readyState === 'loading') {
     // Use plain addEventListener so we don't rely on eventHandlers before init
-    doc.addEventListener('DOMContentLoaded', init, { once: true });
+    console.log('[APP] Document still loading, waiting for DOMContentLoaded');
+    doc.addEventListener('DOMContentLoaded', function() {
+      console.log('[APP] DOMContentLoaded fired, calling init()');
+      init();
+    }, { once: true });
   } else {
+    console.log('[APP] Document already loaded, calling init() immediately');
     setTimeout(init, 0);
   }
 }

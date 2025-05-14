@@ -200,10 +200,30 @@ export function createSidebar({
 
   function restorePersistentState() {
     pinned = storageAPI.getItem('sidebarPinned') === 'true';
-    if (pinned) {
-      el.classList.add('sidebar-pinned', 'translate-x-0');
+
+    // Always make the sidebar visible on desktop
+    const isDesktop = viewportAPI.getInnerWidth() >= 768;
+
+    if (pinned || isDesktop) {
+      el.classList.add('sidebar-pinned');
+      el.classList.remove('-translate-x-full');
+      el.classList.add('translate-x-0');
       visible = true;
+
+      // Set aria-hidden to false to make it accessible
+      el.setAttribute('aria-hidden', 'false');
+
+      // Set the toggle button to expanded
+      if (btnToggle) {
+        btnToggle.setAttribute('aria-expanded', 'true');
+      }
+
+      notify.info('[sidebar] Sidebar made visible on initialization', {
+        group: true, context: 'sidebar', module: MODULE, source: 'restorePersistentState',
+        detail: { pinned, isDesktop, viewportWidth: viewportAPI.getInnerWidth() }
+      });
     }
+
     updatePinButtonVisual();
   }
 
@@ -423,21 +443,55 @@ export function createSidebar({
   function showSidebar() {
     if (visible) return;
     visible = true;
+
+    // Remove the transform that hides the sidebar
     el.classList.remove('-translate-x-full');
+    el.classList.add('translate-x-0');
+
+    // Remove inert attribute if it was set
+    if ('inert' in HTMLElement.prototype && el.inert) {
+      el.inert = false;
+      sidebarNotify.debug('Removed inert attribute from sidebar', { source: 'showSidebar' });
+    }
+
+    // Set aria-hidden to false to make it accessible
     el.setAttribute('aria-hidden', 'false');
-    btnToggle.setAttribute('aria-expanded', 'true');
+
+    // Update toggle button state
+    if (btnToggle) {
+      btnToggle.setAttribute('aria-expanded', 'true');
+    }
+
+    // Create backdrop for mobile
     createBackdrop();
+
+    // Add class to body for styling
     if (domAPI.body && !domAPI.body.classList.contains('with-sidebar-open')) {
       domAPI.body.classList.add('with-sidebar-open');
     }
+
+    // Handle active tab
     const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
     if (activeTab === 'projects') {
       ensureProjectDashboard(); // Ensure projects are loaded/rendered
       const projSearch = domAPI.getElementById('sidebarProjectSearch');
       if (projSearch) projSearch.focus();
     }
+
+    // Dispatch event
     dispatch('sidebarVisibilityChanged', { visible });
-    notify.info('[sidebar] shown', { group: true, context: 'sidebar', module: MODULE, source: 'showSidebar' });
+
+    // Log
+    notify.info('[sidebar] shown', {
+      group: true,
+      context: 'sidebar',
+      module: MODULE,
+      source: 'showSidebar',
+      detail: {
+        activeTab,
+        viewportWidth: viewportAPI.getInnerWidth?.()
+      }
+    });
   }
 
   function closeSidebar() {
@@ -473,27 +527,48 @@ export function createSidebar({
 
     visible = false;
     el.classList.add('-translate-x-full');
-    // Log active element before setting aria-hidden to assist debugging focus trap issues
-    const activeElementBeforeAriaHidden = domAPI.getActiveElement();
-    sidebarNotify.debug(
-      `Active element just before setting aria-hidden: ${activeElementBeforeAriaHidden?.id || activeElementBeforeAriaHidden?.tagName}`,
-      {
-        source: 'closeSidebar',
-        isSidebarDescendant: el.contains(activeElementBeforeAriaHidden)
+
+    // IMPORTANT: Do NOT set aria-hidden="true" when there are focusable elements inside
+    // This causes accessibility issues. Instead, use inert attribute if supported
+    // or just rely on the visual hiding via CSS transform
+
+    // Check if any element inside the sidebar has focus
+    const hasFocusableElements = el.querySelector('button, input, a, [tabindex]:not([tabindex="-1"])');
+
+    if (hasFocusableElements) {
+      sidebarNotify.debug(
+        'Sidebar contains focusable elements, not setting aria-hidden to avoid accessibility issues',
+        { source: 'closeSidebar' }
+      );
+
+      // Use inert attribute if supported by the browser
+      if ('inert' in HTMLElement.prototype) {
+        el.inert = true;
+        sidebarNotify.debug('Using inert attribute instead of aria-hidden', { source: 'closeSidebar' });
       }
-    );
-    el.setAttribute('aria-hidden', 'true');
+    } else {
+      // Only set aria-hidden if there are no focusable elements
+      el.setAttribute('aria-hidden', 'true');
+    }
+
     if (btnToggle) { // Ensure btnToggle exists before updating its ARIA attribute
       btnToggle.setAttribute('aria-expanded', 'false');
     }
+
     removeBackdrop();
     if (domAPI.body && domAPI.body.classList.contains('with-sidebar-open')) {
       domAPI.body.classList.remove('with-sidebar-open');
     }
+
     dispatch('sidebarVisibilityChanged', { visible });
     notify.info('[sidebar] closed', {
-      group: true, context: 'sidebar', module: MODULE, source: 'closeSidebar', focusMovedToToggle: focusSuccessfullyMoved
-    }); // Updated log to use the correct variable
+      group: true,
+      context: 'sidebar',
+      module: MODULE,
+      source: 'closeSidebar',
+      focusMovedToToggle: focusSuccessfullyMoved,
+      hasFocusableElements: !!hasFocusableElements
+    });
   }
 
   function handleResize() {
