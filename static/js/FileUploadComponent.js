@@ -276,8 +276,6 @@ export class FileUploadComponent {
   /** Upload a single file (Guideline #4, #5) */
   async _uploadFile(projectId, file) {
     const { projectManager } = this;
-    const trace = this.app.DependencySystem?.getCurrentTraceIds?.() || {}; // Get trace info if possible
-    const transactionId = trace.transactionId || this.app.DependencySystem?.generateTransactionId?.();
 
     try {
       if (typeof projectManager.uploadFileWithRetry !== "function") {
@@ -288,7 +286,6 @@ export class FileUploadComponent {
 
       this._updateUploadProgress(1, 0);
     } catch (error) {
-      const errorMsg = this._getUploadErrorMessage(error);
       this._updateUploadProgress(0, 1);
     }
   }
