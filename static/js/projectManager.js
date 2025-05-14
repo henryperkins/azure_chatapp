@@ -50,7 +50,7 @@ function extractResourceList(res, keys = ['projects', 'conversations', 'files', 
   return [];
 }
 
-async function retryWithBackoff(fn, maxRetries, timer, _notify, _errorReporter) {
+async function retryWithBackoff(fn, maxRetries, timer) {
   let attempt = 0;
   while (true) {
     try {
@@ -143,11 +143,9 @@ class ProjectManager {
   }
 
   _emit(event, detail) {
-    if (this.domAPI && typeof this.domAPI.dispatchEvent === 'function') {
-      this.domAPI.dispatchEvent(this.domAPI.getDocument(), new CustomEvent(event, { detail }));
-    } else {
-      globalThis.document?.dispatchEvent(new CustomEvent(event, { detail }));
-    }
+    if (!this.domAPI?.dispatchEvent || !this.domAPI?.getDocument) return;
+    const doc = this.domAPI.getDocument();
+    if (doc) this.domAPI.dispatchEvent(doc, new CustomEvent(event, { detail }));
   }
   _authOk(failEvent, extraDetail = {}) {
     if (this.app?.state?.isAuthenticated) return true;
@@ -165,15 +163,11 @@ class ProjectManager {
     }
     return new Promise((resolve) => {
       this._loadProjectsDebounceTimer = this.timer.call(null, async () => {
-        const _t = this.debugTools?.start?.('ProjectManager.loadProjects_debounced');
         if (this._loadingProjects) {
-          this.notify.info('[ProjectManager] loadProjects already running (debounced call skipped)', { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects' });
-          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_busy');
           resolve(this.projects || []);
           return;
         }
         if (!this._authOk('projectsLoaded', { filter })) {
-          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_auth_fail');
           resolve([]);
           return;
         }
@@ -184,7 +178,6 @@ class ProjectManager {
             ? this.apiEndpoints.PROJECTS()
             : this.apiEndpoints.PROJECTS || this._CONFIG.PROJECTS;
           if (typeof baseUrl === 'string' && !baseUrl.endsWith('/') && !baseUrl.includes('?')) {
-            this.pmNotify?.warn?.(`[ProjectManager] Base URL for PROJECTS (${baseUrl}) is missing a trailing slash. Adding one.`, { source: 'loadProjects_debounced' });
             baseUrl += '/';
           }
           const origin = this.browserService?.getLocation?.().origin || '';
@@ -193,14 +186,9 @@ class ProjectManager {
           const res = await this._req(String(urlObj), undefined, "loadProjects");
           const list = extractResourceList(res, ['projects']);
           this.projects = list;
-          this.notify.success(`[ProjectManager] ${list.length} projects (debounced)`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjects', detail: { filter } });
           this._emit('projectsLoaded', { projects: list, filter });
-          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_success');
           resolve(list);
         } catch (err) {
-          if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjects' });
-          _capture(err, { module: MODULE, method: "loadProjects" }, this.errorReporter);
-          this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_error');
           resolve(this._handleErr('projectsLoaded', err, []));
         } finally {
           this._loadingProjects = false;
@@ -210,32 +198,14 @@ class ProjectManager {
   }
 
   async loadProjectDetails(id) {
-    const _t = this.debugTools?.start?.('ProjectManager.loadProjectDetails');
-    this.pmNotify?.debug?.("[ProjectManager] Entered loadProjectDetails with id", {
-      source: "loadProjectDetails",
-      extra: { id }
-    });
     if (!isValidProjectId(id)) {
-      this.pmNotify?.warn?.("[ProjectManager] Invalid projectId, returning early", {
-        source: "loadProjectDetails",
-        extra: { id }
-      });
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       throw new Error('Invalid projectId');
     }
     if (!this.app || !this.app.state || !this.app.state.currentUser) {
-      this.pmNotify?.warn?.("[ProjectManager] Missing app state or currentUser, returning early", {
-        source: "loadProjectDetails"
-      });
       this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return null;
     }
     if (!this._authOk('projectDetailsError', { id })) {
-      this.pmNotify?.warn?.("[ProjectManager] _authOk returned false, returning early", {
-        source: "loadProjectDetails"
-      });
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return null;
     }
     let detailUrlTemplate = typeof this.apiEndpoints.DETAIL === 'function'
@@ -246,20 +216,14 @@ class ProjectManager {
       if (detailUrlTemplate.includes('{id}') &&
           !detailUrlTemplate.endsWith('/') &&
           detailUrlTemplate.substring(detailUrlTemplate.indexOf('{id}') + '{id}'.length).length === 0) {
-        this.pmNotify?.warn?.(`[ProjectManager] Detail URL template (${detailUrlTemplate}) for project ID ${id} is missing a trailing slash after {id}. Adding one.`, { source: 'loadProjectDetails' });
         detailUrlTemplate += '/';
       }
       detailUrl = detailUrlTemplate.replace('{id}', id);
     } else if (typeof this.apiEndpoints.DETAIL === 'function') {
       detailUrl = this.apiEndpoints.DETAIL(id);
     } else {
-      this.pmNotify?.error?.('[ProjectManager] Invalid DETAIL endpoint configuration.', { source: 'loadProjectDetails' });
       throw new Error('Invalid DETAIL endpoint configuration');
     }
-    this.pmNotify?.debug?.("[ProjectManager] Fetching project details from", {
-      source: "loadProjectDetails",
-      extra: { detailUrl }
-    });
     this.currentProject = null;
 
     try {
@@ -267,23 +231,12 @@ class ProjectManager {
         const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
         this.currentProject = normalizeProjectResponse(detailRes);
       } catch (err) {
-        if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectDetails' });
-        _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
-        this.pmNotify?.error?.("[ProjectManager] loadProjectDetails error", {
-          source: "loadProjectDetails",
-          extra: {
-            url: detailUrl,
-            error: err,
-            detailRes: err?.response || err?.data || null
-          }
-        });
         throw err;
       }
       this._emit('projectLoaded', this.currentProject);
 
       if (this.currentProject.archived) {
         this._emit('projectArchivedNotice', { id: this.currentProject.id });
-        this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
         return { ...this.currentProject };
       }
 
@@ -293,19 +246,9 @@ class ProjectManager {
           const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
           kbLoadResult = { status: 'fulfilled', value: kbValue };
         } catch (kbError) {
-          if (this.errorReporter) this.errorReporter.capture(kbError, { module: MODULE, method: 'loadProjectKnowledgeBase' });
-          _capture(kbError, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
           kbLoadResult = { status: 'rejected', reason: kbError };
-          this.pmNotify?.error?.(`[ProjectManager] Failed to load knowledge base details for KB ID ${this.currentProject.knowledge_base_id}`, {
-            source: "loadProjectDetails",
-            extra: { projectId: id, knowledgeBaseId: this.currentProject.knowledge_base_id, error: kbError }
-          });
         }
       } else {
-        this.pmNotify?.info?.(`[ProjectManager] No knowledge_base_id found on project ${id}, skipping dedicated KB load.`, {
-          source: "loadProjectDetails",
-          extra: { projectId: id }
-        });
         this._emit('projectKnowledgeBaseLoaded', { id, knowledgeBase: null });
       }
 
@@ -324,21 +267,13 @@ class ProjectManager {
         .map(r => r.reason);
 
       if (criticalErrors.length > 0) {
-        this.notify.error(
-          `[ProjectManager] Some project sub-resources failed to load: ${criticalErrors.map(e => e?.message || String(e)).join(', ')}`,
-          { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id, failed: criticalErrors } }
-        );
         this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
-      this.notify.success(`[ProjectManager] Project ${id} and its sub-resources processed.`, { group: true, context: 'projectManager', module: MODULE, source: 'loadProjectDetails', detail: { id } });
 
       this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
 
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return { ...this.currentProject };
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectDetails' });
-      _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
       const userId = this.app?.state?.currentUser?.id || null;
       const status = err?.status || err?.response?.status;
       const endpoint = detailUrl;
@@ -352,47 +287,29 @@ class ProjectManager {
         originalError: err
       });
       if (status === 404) this._emit('projectNotFound', { id });
-      this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails-error');
       return null;
     }
   }
 
   async loadProjectKnowledgeBase(projectId, knowledgeBaseId) {
     if (!knowledgeBaseId) {
-      this.pmNotify?.info(`[ProjectManager] No knowledgeBaseId provided for project ${projectId}. Assuming no specific KB to load.`, {
-        group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId }
-      });
       this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
       return null;
     }
     try {
-      this.pmNotify?.info(`[ProjectManager] Loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId})...`, {
-        group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }
-      });
       const url = this._CONFIG.KB_DETAIL_URL_TEMPLATE
         .replace('{id}', projectId)
         .replace('{kb_id}', knowledgeBaseId);
       const res = await this._req(url, undefined, "loadProjectKnowledgeBase");
       const kb = res?.data || res;
       if (!kb || !kb.id) {
-        this.pmNotify?.warn(`[ProjectManager] No valid knowledge base data returned for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
-          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId, response: res }
-        });
         this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
         return null;
       } else {
-        this.pmNotify?.success(`[ProjectManager] Knowledge base details loaded for KB ID ${kb.id} (Project ${projectId}).`, {
-          group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, kbId: kb.id }
-        });
         this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: kb });
         return kb;
       }
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectKnowledgeBase' });
-      _capture(err, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
-      this.pmNotify?.error(`[ProjectManager] Error loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
-        group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
-      });
       this._emit('projectKnowledgeBaseLoaded', { id: projectId, knowledgeBase: null });
       throw err;
     }
@@ -405,8 +322,6 @@ class ProjectManager {
       this._emit('projectStatsLoaded', { id, ...stats });
       return stats;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectStats' });
-      _capture(err, { module: MODULE, method: "loadProjectStats" }, this.errorReporter);
       return this._handleErr('projectStatsError', err, {});
     }
   }
@@ -417,8 +332,6 @@ class ProjectManager {
       this._emit('projectFilesLoaded', { id, files });
       return files;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectFiles' });
-      _capture(err, { module: MODULE, method: "loadProjectFiles" }, this.errorReporter);
       return this._handleErr('projectFilesError', err, []);
     }
   }
@@ -429,8 +342,6 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id, conversations });
       return conversations;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectConversations' });
-      _capture(err, { module: MODULE, method: "loadProjectConversations" }, this.errorReporter);
       return this._handleErr('projectConversationsError', err, []);
     }
   }
@@ -441,8 +352,6 @@ class ProjectManager {
       this._emit('projectArtifactsLoaded', { id, artifacts });
       return artifacts;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectArtifacts' });
-      _capture(err, { module: MODULE, method: "loadProjectArtifacts" }, this.errorReporter);
       return this._handleErr('projectArtifactsError', err, []);
     }
   }
@@ -457,14 +366,8 @@ class ProjectManager {
       const res = await this._req(url, { method, body: payload }, "saveProject");
       const proj = res?.data ?? res;
       this._emit(isUpdate ? 'projectUpdated' : 'projectCreated', proj);
-      this.notify.success(
-        `[ProjectManager] Project ${isUpdate ? 'updated' : 'created'}: ${proj.id}`,
-        { group: true, context: 'projectManager', module: MODULE, source: 'saveProject', endpoint: url, method, detail: { id: proj.id } }
-      );
       return proj;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'saveProject' });
-      _capture(err, { module: MODULE, method: "saveProject" }, this.errorReporter);
       this._handleErr('projectSaveError', err, null, { method: 'saveProject', endpoint: url });
       throw err;
     }
@@ -475,10 +378,7 @@ class ProjectManager {
       await this._req(this._CONFIG.DETAIL.replace('{id}', id), { method: 'DELETE' }, "deleteProject");
       if (this.currentProject?.id === id) this.currentProject = null;
       this._emit('projectDeleted', { id });
-      this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProject', detail: { id } });
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'deleteProject' });
-      _capture(err, { module: MODULE, method: "deleteProject" }, this.errorReporter);
       this._handleErr('projectDeleteError', err, null, { method: 'deleteProject', endpoint: this._CONFIG.DETAIL.replace('{id}', id) });
       throw err;
     }
@@ -488,11 +388,8 @@ class ProjectManager {
     try {
       const res = await this._req(this._CONFIG.ARCHIVE.replace('{id}', id), { method: "PATCH" }, "toggleArchiveProject");
       this._emit('projectArchiveToggled', { id, archived: res?.archived ?? !this.currentProject?.archived });
-      this.notify.success(`[ProjectManager] Project ${id} archive toggled`, { group: true, context: 'projectManager', module: MODULE, source: 'toggleArchiveProject', detail: { id, archived: res?.archived } });
       return res;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'toggleArchiveProject' });
-      _capture(err, { module: MODULE, method: "toggleArchiveProject" }, this.errorReporter);
       this._handleErr('projectArchiveToggled', err, null, { method: 'toggleArchiveProject', endpoint: this._CONFIG.ARCHIVE.replace('{id}', id) });
       throw err;
     }
@@ -503,8 +400,6 @@ class ProjectManager {
       this.storage.setItem?.('selectedProjectId', projectId);
       return await this.chatManager.createNewConversation(projectId, opts);
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'createConversation' });
-      _capture(err, { module: MODULE, method: "createConversation" }, this.errorReporter);
       this._handleErr('conversationCreateError', err, null, { source: 'createConversation', detail: { projectId } });
       throw err;
     }
@@ -513,7 +408,6 @@ class ProjectManager {
     if (!this._authOk('conversationLoadError', { conversationId })) throw new Error('auth');
     const projectId = this.currentProject?.id;
     if (!isValidProjectId(projectId)) {
-      this.notify.error('[ProjectManager] No valid current project ID', { group: true, context: 'projectManager', module: MODULE, source: 'getConversation' });
       throw new Error('No valid project context');
     }
     try {
@@ -521,11 +415,8 @@ class ProjectManager {
       const res = await this._req(endpoint, undefined, "getConversation");
       const convo = res?.conversation;
       if (!convo || !convo.id) throw new Error('Invalid conversation data received');
-      this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
       return convo;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'getConversation' });
-      _capture(err, { module: MODULE, method: "getConversation" }, this.errorReporter);
       this._handleErr(`conversationLoadError`, err, null, { source: 'getConversation', detail: { conversationId, projectId } });
       throw err;
     }
@@ -534,11 +425,8 @@ class ProjectManager {
     try {
       this.storage.setItem?.('selectedProjectId', projectId);
       await this.chatManager.deleteConversation(conversationId);
-      this.notify.success(`[ProjectManager] Conversation ${conversationId} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       return true;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'deleteProjectConversation' });
-      _capture(err, { module: MODULE, method: "deleteProjectConversation" }, this.errorReporter);
       this._handleErr('deleteProjectConversationError', err, null, { source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       throw err;
     }
@@ -549,7 +437,6 @@ class ProjectManager {
   }
   setCurrentProject(project) {
     if (!project || !project.id) {
-      this.notify.error('[ProjectManager] Cannot set invalid project as current', { group: true, context: 'projectManager', module: MODULE, source: 'setCurrentProject' });
       return;
     }
     const previous = this.currentProject;
@@ -616,7 +503,6 @@ class ProjectManager {
       }, "createProject");
       const project = response.data || response;
       if (!project || !project.id) throw new Error('Invalid project response');
-      this.notify.success('[ProjectManager] Project created: ' + project.id, { group: true, context: 'projectManager', module: MODULE, source: 'createProject' });
       const ensureConversation = async () => {
         const hasConvo = (Array.isArray(project.conversations) && project.conversations.length > 0)
           || Number(project.conversation_count) > 0;
@@ -632,18 +518,6 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'createProject' });
-      _capture(err, { module: MODULE, method: "createProject" }, this.errorReporter);
-      const endpoint = this._CONFIG.PROJECTS;
-      const status = err?.status || err?.response?.status;
-      const detail = err?.detail || err?.response?.data?.detail || err?.response?.detail;
-      let message = '[ProjectManager] Error creating project: ' + (err?.message || err);
-      if (status || detail) {
-        message += ` |`;
-        if (status) message += ` HTTP ${status};`;
-        if (detail) message += ` detail: ${detail}`;
-      }
-      this.notify.error(message, { context: "projectManager", group: true, module: MODULE, source: "createProject", endpoint, status, detail, originalError: err });
       throw err;
     }
   }
@@ -665,12 +539,8 @@ class ProjectManager {
         response?.conversation ||
         response;
       if (!conversation || !conversation.id) throw new Error('Failed to create default conversation');
-      this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id, { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId, conversationId: conversation.id } });
       return conversation;
     } catch (err) {
-      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'createDefaultConversation' });
-      _capture(err, { module: MODULE, method: "createDefaultConversation" }, this.errorReporter);
-      this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId }, originalError: err });
       return null;
     }
   }
@@ -679,30 +549,10 @@ class ProjectManager {
     return retryWithBackoff(fn, maxRetries, this.timer);
   }
 
-  async initialize() {
-    this.pmNotify.info('[ProjectManager] initialize() called', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
-    this.pmNotify.debug('[ProjectManager] Dependencies status:', {
-      source: 'initialize',
-      extra: {
-        appAvailable: !!this.app,
-        chatManagerAvailable: !!this.chatManager,
-        apiRequestAvailable: !!this.apiRequest,
-        notifyAvailable: !!this.notify
-      }
-    });
-
-    this.pmNotify.info('[ProjectManager] initialize() completed successfully.', { group: true, context: 'projectManager', module: MODULE, source: 'initialize' });
-    return true;
-  }
+  async initialize() { return true; }
 
   destroy() {
-    this.pmNotify?.info?.('[ProjectManager] destroy() called', { group: true, context: 'projectManager', module: MODULE, source: 'destroy' });
-    if (this.listenerTracker && typeof this.listenerTracker.remove === 'function') {
-      this.listenerTracker.remove();
-      this.pmNotify?.debug?.('[ProjectManager] Listener cleanup requested via listenerTracker.', { source: 'destroy' });
-    } else {
-      this.pmNotify?.warn?.('[ProjectManager] listenerTracker.remove is not available. Listeners may not be cleaned up.', { source: 'destroy' });
-    }
+    this.listenerTracker?.remove?.();
   }
 }
 
