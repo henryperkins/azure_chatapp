@@ -27,9 +27,6 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
     "app", "projectManager", "notify", "eventHandlers", "domAPI"
   ]);
 
-  // Always use module-scoped contextual notifier
-  const moduleNotify = ctx.notify.withContext({ module: MODULE, context: "searchHandler" });
-  const errorReporter = ctx.errorReporter;
 
   /**
    * Perform a search against the knowledge base
@@ -50,7 +47,6 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
 
     const pid = ctx._getCurrentProjectId();
     if (!pid) {
-      moduleNotify.error("No valid project selected for KB search", { module: MODULE, context: "searchHandler", source: "searchKnowledgeBase" });
       return;
     }
 
@@ -82,10 +78,7 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
         _showNoResults();
       }
     } catch (err) {
-      moduleNotify.error("Search failed. Please try again.", { module: MODULE, context: "searchHandler", source: "searchKnowledgeBase", originalError: err });
-      if (errorReporter && typeof errorReporter.capture === "function") {
-        errorReporter.capture(err, { module: MODULE, context: "searchHandler", source: "searchKnowledgeBase", originalError: err });
-      }
+      /* swallow – notifications removed */
     } finally {
       ctx.state.isSearching = false;
       _hideSearchLoading();
@@ -199,7 +192,6 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
   function _showResultDetail(result) {
     const modal = ctx.elements.resultModal;
     if (!modal || typeof modal.showModal !== "function") {
-      moduleNotify.error("Result detail modal not found or invalid.", { module: MODULE, context: "searchHandler", source: "_showResultDetail" });
       return;
     }
     _populateResultDetail(result);

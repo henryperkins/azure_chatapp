@@ -31,59 +31,21 @@ export function createKnowledgeBaseManager(ctx) {
   /* ------------------------------------------------------------------
    * Guardrail #1 – Factory Function Export - Validate dependencies
    * ------------------------------------------------------------------ */
-  const REQUIRED_DEPS = ["notify", "apiRequest", "eventHandlers", "domAPI"];
+  const REQUIRED_DEPS = ["apiRequest", "eventHandlers", "domAPI"];
   for (const dep of REQUIRED_DEPS) {
     if (!ctx?.[dep]) {
       throw new Error(`[${MODULE}] Missing required dependency '${dep}'`);
     }
   }
 
-  /* ------------------------------------------------------------------
-   * Guardrail #15 – Notifier Factories - Create module-scoped notifier
-   * ------------------------------------------------------------------ */
-  const notify = ctx.notify.withContext({ module: MODULE, context: "core" });
-
-  /* ------------------------------------------------------------------
-   * Guardrail #8 – Context-Rich Error Logging - Get errorReporter
-   * ------------------------------------------------------------------ */
-  const errorReporter = ctx.getDep ? ctx.getDep("errorReporter") : null;
-
-  /* ------------------------------------------------------------------
-   * Guardrail #10 – App Readiness - Wait for app to be ready
-   * ------------------------------------------------------------------ */
   const DependencySystem = ctx.getDep ? ctx.getDep("DependencySystem") : null;
   let appReadyPromise = Promise.resolve(); // Default to resolved promise if no DependencySystem
 
   if (DependencySystem?.waitFor) {
     appReadyPromise = DependencySystem.waitFor(["app"]).catch(err => {
-      notify.warn("App readiness check failed, proceeding anyway", {
-        context: "init",
-        source: "createKnowledgeBaseManager",
-        originalError: err
-      });
-
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: MODULE,
-          method: "createKnowledgeBaseManager",
-          context: "init",
-          extra: { error: "App readiness check failed" }
-        });
-      }
+      /* swallow – notifications removed */
     });
   }
-
-  /* ------------------------------------------------------------------
-   * Guardrail #16 – Backend Event Logging - Log module initialization
-   * ------------------------------------------------------------------ */
-  const backendLogger = ctx.getDep?.("backendLogger");
-  backendLogger?.log?.({
-    level: "info",
-    module: MODULE,
-    message: "KnowledgeBaseManager module initialized",
-    context: "init",
-    source: "createKnowledgeBaseManager"
-  });
 
   /**
    * Toggle knowledge base activation
@@ -96,10 +58,6 @@ export function createKnowledgeBaseManager(ctx) {
 
     const pid = ctx._getCurrentProjectId();
     if (!pid) {
-      notify.error("No valid project selected for Knowledge Base toggle", {
-        context: "activation",
-        source: "toggleKnowledgeBase"
-      });
       return;
     }
 
@@ -128,22 +86,7 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Failed to toggle knowledge base status.");
       }
     } catch(err) {
-      notify.error(`Failed to toggle knowledge base: ${err.message}`, {
-        context: "activation",
-        source: "toggleKnowledgeBase",
-        originalError: err
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: MODULE,
-          method: "toggleKnowledgeBase",
-          context: "activation",
-          extra: { projectId: pid, enabled }
-        });
-      }
-
+      /* swallow – notifications removed */
       // Revert UI if toggle failed
       if (ctx.elements.kbToggle) ctx.elements.kbToggle.checked = !enabled;
       ctx._updateStatusIndicator(!enabled);
@@ -160,10 +103,6 @@ export function createKnowledgeBaseManager(ctx) {
     await appReadyPromise;
 
     if (!ctx.validateUUID(projectId)) {
-      notify.error("No valid project selected for reprocessing", {
-        context: "processing",
-        source: "reprocessFiles"
-      });
       return;
     }
     const btn = ctx.elements.reprocessButton;
@@ -175,10 +114,6 @@ export function createKnowledgeBaseManager(ctx) {
         { method: "POST", body: { force: true } },
       );
       if (resp.success) {
-        notify.success("Files queued for reprocessing", {
-          context: "processing",
-          source: "reprocessFiles"
-        });
         if (ctx.projectManager.loadProjectDetails) {
           const [project] = await Promise.all([
             ctx.projectManager.loadProjectDetails(projectId),
@@ -193,21 +128,7 @@ export function createKnowledgeBaseManager(ctx) {
          throw new Error(resp.message || "Reprocessing request failed.");
       }
     } catch(err) {
-      notify.error(`Failed to reprocess files: ${err.message}`, {
-        context: "processing",
-        source: "reprocessFiles",
-        originalError: err
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: MODULE,
-          method: "reprocessFiles",
-          context: "processing",
-          extra: { projectId }
-        });
-      }
+      /* swallow – notifications removed */
     } finally {
       ctx._setButtonLoading(btn, false);
     }
@@ -222,10 +143,6 @@ export function createKnowledgeBaseManager(ctx) {
     const form = e.target;
     const projectId = form.dataset.projectId || ctx._getCurrentProjectId();
     if (!ctx.validateUUID(projectId)) {
-      notify.error("Cannot save settings: Project ID missing or invalid.", {
-        context: "settings",
-        source: "handleKnowledgeBaseFormSubmit"
-      });
       return;
     }
 
@@ -241,17 +158,9 @@ export function createKnowledgeBaseManager(ctx) {
     }
 
     if (!payload.name?.trim()) {
-      notify.error("Knowledge Base name is required.", {
-        context: "settings",
-        source: "handleKnowledgeBaseFormSubmit"
-      });
       return;
     }
     if (!payload.embedding_model) {
-      notify.error("Embedding model must be selected.", {
-        context: "settings",
-        source: "handleKnowledgeBaseFormSubmit"
-      });
       return;
     }
 
@@ -272,24 +181,9 @@ export function createKnowledgeBaseManager(ctx) {
   async function _submitKnowledgeBaseForm(projectId, payload) {
     await appReadyPromise;
 
-    notify.info("Enter _submitKnowledgeBaseForm. Current KB state from ctx:", {
-      context: "settings",
-      source: "_submitKnowledgeBaseForm",
-      extra: {
-        kbIdFromState: ctx.state.knowledgeBase?.id,
-        kbExists: !!ctx.state.knowledgeBase?.id,
-        knowledgeBaseSummary: ctx.state.knowledgeBase ? { id: ctx.state.knowledgeBase.id, name: ctx.state.knowledgeBase.name, is_active: ctx.state.knowledgeBase.is_active } : null
-      }
-    });
-
     try {
       const kbId = ctx.state.knowledgeBase?.id;
       const isUpdating = !!kbId;
-      notify.info(`_submitKnowledgeBaseForm: Determined action based on kbId='${kbId}'`, {
-        context: "settings",
-        source: "_submitKnowledgeBaseForm",
-        extra: { projectId, isUpdatingAction: isUpdating ? 'UPDATE (PATCH)' : 'CREATE (POST)' }
-      });
 
       const method = isUpdating ? "PATCH" : "POST";
       const url = isUpdating
@@ -302,10 +196,6 @@ export function createKnowledgeBaseManager(ctx) {
 
       if (responseData?.id || resp.success) {
         hideKnowledgeBaseModal();
-        notify.success("Knowledge Base settings saved.", {
-          context: "settings",
-          source: "_submitKnowledgeBaseForm"
-        });
 
         if (ctx.projectManager.loadProjectDetails) {
           const project = await ctx.projectManager.loadProjectDetails(projectId);
@@ -322,22 +212,6 @@ export function createKnowledgeBaseManager(ctx) {
       }
     } catch (err) {
       if (err.status === 409) { // HTTP 409 Conflict
-        notify.warn(`Project already has a knowledge base. Refreshing settings.`, {
-          context: "settings",
-          source: '_submitKnowledgeBaseForm',
-          originalError: err,
-          extra: { projectId }
-        });
-
-        // Guardrail #8: Context-rich error logging
-        if (errorReporter?.capture) {
-          errorReporter.capture(err, {
-            module: MODULE,
-            method: "_submitKnowledgeBaseForm",
-            context: "settings",
-            extra: { projectId, status: err.status, message: "Conflict - KB already exists" }
-          });
-        }
 
         // Attempt to refresh the project details and re-render the KB info
         if (ctx.projectManager.loadProjectDetails) {
@@ -346,40 +220,11 @@ export function createKnowledgeBaseManager(ctx) {
             ctx.renderKnowledgeBaseInfo(project?.knowledge_base, projectId);
             hideKnowledgeBaseModal(); // Close modal as the "create" action is invalid
           } catch (refreshError) {
-            notify.error(`Failed to refresh project details after KB conflict: ${refreshError.message}`, {
-              context: "settings",
-              source: '_submitKnowledgeBaseForm',
-              originalError: refreshError
-            });
-
-            // Guardrail #8: Context-rich error logging
-            if (errorReporter?.capture) {
-              errorReporter.capture(refreshError, {
-                module: MODULE,
-                method: "_submitKnowledgeBaseForm",
-                context: "settings",
-                extra: { projectId, action: "refresh_after_conflict" }
-              });
-            }
+            /* swallow – notifications removed */
           }
         }
       } else {
-        notify.error(`Failed to save settings: ${err.message || 'Unknown error'}`, {
-          context: "settings",
-          source: '_submitKnowledgeBaseForm',
-          originalError: err,
-          extra: { status: err.status }
-        });
-
-        // Guardrail #8: Context-rich error logging
-        if (errorReporter?.capture) {
-          errorReporter.capture(err, {
-            module: MODULE,
-            method: "_submitKnowledgeBaseForm",
-            context: "settings",
-            extra: { projectId, payload }
-          });
-        }
+        /* swallow – notifications removed */
       }
     }
   }
@@ -394,10 +239,6 @@ export function createKnowledgeBaseManager(ctx) {
     const kbId = ctx.state.knowledgeBase?.id;
 
     if (!projectId || !kbId) {
-      notify.error("Cannot delete: Project or Knowledge Base ID missing.", {
-        context: "deletion",
-        source: "handleDeleteKnowledgeBase"
-      });
       return;
     }
 
@@ -420,10 +261,6 @@ export function createKnowledgeBaseManager(ctx) {
       );
 
       if (resp.success || resp.data?.deleted_id) {
-        notify.success("Knowledge Base deleted successfully.", {
-          context: "deletion",
-          source: "handleDeleteKnowledgeBase"
-        });
         hideKnowledgeBaseModal();
         ctx._showInactiveState(); // This should also clear files and update buttons
         if (ctx.projectManager.loadProjectDetails) {
@@ -434,21 +271,7 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Failed to delete knowledge base.");
       }
     } catch (err) {
-      notify.error(`Failed to delete Knowledge Base: ${err.message || 'Unknown error'}`, {
-        context: "deletion",
-        source: 'handleDeleteKnowledgeBase',
-        originalError: err
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: MODULE,
-          method: "handleDeleteKnowledgeBase",
-          context: "deletion",
-          extra: { projectId, kbId }
-        });
-      }
+      /* swallow – notifications removed */
     } finally {
       ctx._setButtonLoading(deleteButton, false);
     }
@@ -462,79 +285,27 @@ export function createKnowledgeBaseManager(ctx) {
 
     const modal = ctx.elements.settingsModal;
     if (!modal || typeof modal.showModal !== "function") {
-      notify.error("Settings modal not found or invalid.", {
-        context: "modal",
-        source: "showKnowledgeBaseModal"
-      });
       return;
     }
 
     const projectId = ctx._getCurrentProjectId(); // Get projectId early
     if (!projectId) {
-      notify.error("Project ID not available. Cannot show KB settings.", {
-        context: "modal",
-        source: "showKnowledgeBaseModal"
-      });
       return;
     }
 
     // Attempt to refresh KB state before populating the form
     try {
       if (ctx.projectManager.loadProjectDetails) {
-        notify.info("Refreshing project details before showing KB modal...", {
-          context: "modal",
-          source: "showKnowledgeBaseModal"
-        });
         const projectDetails = await ctx.projectManager.loadProjectDetails(projectId);
         // The projectDetailsLoaded event (and sub-events like projectKnowledgeBaseLoaded)
         // should trigger KnowledgeBaseComponent.renderKnowledgeBaseInfo, which updates ctx.state.knowledgeBase.
         // For robustness, we can also try a direct update if the event system is slow or has issues.
         if (projectDetails && typeof projectDetails.knowledge_base !== 'undefined') {
           ctx.state.knowledgeBase = projectDetails.knowledge_base; // Direct update
-          notify.info("KB state directly updated from refreshed project details.", {
-            context: "modal",
-            source: "showKnowledgeBaseModal",
-            extra: { kbExists: !!projectDetails.knowledge_base, kbId: projectDetails.knowledge_base?.id }
-          });
         } else if (projectDetails === null) { // Project load failed
-          notify.warn("Project details failed to load; KB state might be inaccurate for modal.", {
-            context: "modal",
-            source: "showKnowledgeBaseModal"
-          });
         }
-        // Log the state of ctx.state.knowledgeBase AFTER the refresh attempt
-        notify.debug("ctx.state.knowledgeBase after refresh in showKnowledgeBaseModal:", {
-          context: "modal",
-          source: "showKnowledgeBaseModal",
-          extra: {
-            kbStateSummary: ctx.state.knowledgeBase ? {id: ctx.state.knowledgeBase.id, name: ctx.state.knowledgeBase.name, is_active: ctx.state.knowledgeBase.is_active} : null
-          }
-        });
       }
     } catch (err) {
-      notify.error("Failed to refresh project details before showing KB modal. State may be stale.", {
-        context: "modal",
-        source: "showKnowledgeBaseModal",
-        originalError: err
-      });
-
-      notify.debug("ctx.state.knowledgeBase (after failed refresh) in showKnowledgeBaseModal:", {
-        context: "modal",
-        source: "showKnowledgeBaseModal",
-        extra: {
-          kbStateSummary: ctx.state.knowledgeBase ? {id: ctx.state.knowledgeBase.id, name: ctx.state.knowledgeBase.name, is_active: ctx.state.knowledgeBase.is_active} : null
-        }
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: MODULE,
-          method: "showKnowledgeBaseModal",
-          context: "modal",
-          extra: { projectId, action: "refresh_project_details" }
-        });
-      }
       // Continue with potentially stale state, or decide to block/warn user
     }
 
@@ -683,21 +454,6 @@ export function createKnowledgeBaseManager(ctx) {
       }
       return healthResp?.data || null;
     } catch(err) {
-      notify.error("Could not verify knowledge base health", {
-        context: "health",
-        source: "loadKnowledgeBaseHealth",
-        originalError: err
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: MODULE,
-          method: "loadKnowledgeBaseHealth",
-          context: "health",
-          extra: { kbId }
-        });
-      }
       // Potentially show a more persistent error in UI if needed via _showStatusAlert
       return null;
     }
@@ -726,30 +482,10 @@ export function createKnowledgeBaseManager(ctx) {
         _renderKnowledgeBaseFiles(response.data);
         ctx.elements.knowledgeBaseFilesSection?.classList.toggle("hidden", response.data.files.length === 0);
       } else {
-        notify.error("Failed to load knowledge base files.", {
-          context: "files",
-          source: "loadKnowledgeBaseFiles"
-        });
         _renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
         ctx.elements.knowledgeBaseFilesSection?.classList.add("hidden");
       }
     } catch (error) {
-      notify.error(`Error loading knowledge base files: ${error.message}`, {
-        context: "files",
-        source: "loadKnowledgeBaseFiles",
-        originalError: error
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(error, {
-          module: MODULE,
-          method: "loadKnowledgeBaseFiles",
-          context: "files",
-          extra: { projectId, kbId }
-        });
-      }
-
       _renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
       ctx.elements.knowledgeBaseFilesSection?.classList.add("hidden");
     }
@@ -838,10 +574,6 @@ export function createKnowledgeBaseManager(ctx) {
       );
 
       if (response.success) {
-        notify.success(`File "${filename}" removed from Knowledge Base.`, {
-          context: "file-deletion",
-          source: "_handleDeleteKnowledgeBaseFile"
-        });
         const kbId = ctx.state.knowledgeBase?.id;
         if (kbId) {
           loadKnowledgeBaseFiles(projectId, kbId); // Refresh file list
@@ -854,21 +586,7 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(response.message || "Failed to delete file from KB.");
       }
     } catch (error) {
-      notify.error(`Error deleting file "${filename}" from KB: ${error.message}`, {
-        context: "file-deletion",
-        source: "_handleDeleteKnowledgeBaseFile",
-        originalError: error
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(error, {
-          module: MODULE,
-          method: "_handleDeleteKnowledgeBaseFile",
-          context: "file-deletion",
-          extra: { projectId, fileId, filename }
-        });
-      }
+      /* swallow – notifications removed */
     }
   }
 
@@ -882,10 +600,6 @@ export function createKnowledgeBaseManager(ctx) {
     const kbId = ctx.state.knowledgeBase?.id;
 
     if (!projectId || !kbId) {
-      notify.error("Project or Knowledge Base not properly initialized for GitHub attachment.", {
-        context: "github",
-        source: "handleAttachGitHubRepo"
-      });
       return;
     }
 
@@ -895,29 +609,11 @@ export function createKnowledgeBaseManager(ctx) {
     const filePaths = filePathsRaw ? filePathsRaw.split('\n').map(p => p.trim()).filter(p => p) : null;
 
     if (!repoUrl) {
-      notify.error("Repository URL is required.", {
-        context: "github",
-        source: "handleAttachGitHubRepo"
-      });
       return;
     }
     try {
       new URL(repoUrl); // Basic URL validation
     } catch (_) {
-      notify.error("Invalid Repository URL format.", {
-        context: "github",
-        source: "handleAttachGitHubRepo"
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(new Error("Invalid Repository URL format"), {
-          module: MODULE,
-          method: "handleAttachGitHubRepo",
-          context: "github",
-          extra: { projectId, kbId, repoUrl }
-        });
-      }
       return;
     }
 
@@ -936,10 +632,6 @@ export function createKnowledgeBaseManager(ctx) {
       );
 
       if (response.success && response.data) {
-        notify.success(`GitHub repository "${response.data.repo_url}" attached. ${response.data.files_processed} files are being processed.`, {
-          context: "github",
-          source: "handleAttachGitHubRepo"
-        });
         if (ctx.state.knowledgeBase) {
           ctx.state.knowledgeBase.repo_url = response.data.repo_url;
           ctx.state.knowledgeBase.branch = branch;
@@ -952,27 +644,7 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(response.message || "Failed to attach GitHub repository.");
       }
     } catch (error) {
-      notify.error(`Error attaching GitHub repository: ${error.message}`, {
-        context: "github",
-        source: "handleAttachGitHubRepo",
-        originalError: error
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(error, {
-          module: MODULE,
-          method: "handleAttachGitHubRepo",
-          context: "github",
-          extra: {
-            projectId,
-            kbId,
-            repoUrl,
-            branch,
-            hasFilePaths: filePaths && filePaths.length > 0
-          }
-        });
-      }
+      /* swallow – notifications removed */
     } finally {
       ctx._setButtonLoading(attachButton, false);
     }
@@ -989,10 +661,6 @@ export function createKnowledgeBaseManager(ctx) {
     const repoUrl = ctx.state.knowledgeBase?.repo_url;
 
     if (!projectId || !kbId || !repoUrl) {
-      notify.error("No repository attached or KB not initialized.", {
-        context: "github",
-        source: "handleDetachGitHubRepo"
-      });
       return;
     }
 
@@ -1013,10 +681,6 @@ export function createKnowledgeBaseManager(ctx) {
       );
 
       if (response.success && response.data) {
-        notify.success(`GitHub repository "${response.data.repo_url}" detached. ${response.data.files_removed} files are being removed.`, {
-          context: "github",
-          source: "handleDetachGitHubRepo"
-        });
         if (ctx.state.knowledgeBase) {
           delete ctx.state.knowledgeBase.repo_url;
           delete ctx.state.knowledgeBase.branch;
@@ -1029,21 +693,7 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(response.message || "Failed to detach GitHub repository.");
       }
     } catch (error) {
-      notify.error(`Error detaching GitHub repository: ${error.message}`, {
-        context: "github",
-        source: "handleDetachGitHubRepo",
-        originalError: error
-      });
-
-      // Guardrail #8: Context-rich error logging
-      if (errorReporter?.capture) {
-        errorReporter.capture(error, {
-          module: MODULE,
-          method: "handleDetachGitHubRepo",
-          context: "github",
-          extra: { projectId, kbId, repoUrl }
-        });
-      }
+      /* swallow – notifications removed */
     } finally {
       ctx._setButtonLoading(detachButton, false);
     }
@@ -1102,10 +752,6 @@ export function createKnowledgeBaseManager(ctx) {
         const newOption = new Option(`${currentModel} (Current)`, currentModel, false, true); // text, value, defaultSelected, selected
         selectEl.add(newOption);
         selectEl.value = currentModel; // Ensure it's selected
-        notify.info(`Current embedding model "${currentModel}" was not in the default list. It has been added.`, {
-          context: "models",
-          source: '_updateModelSelection'
-        });
       }
     } else {
       selectEl.selectedIndex = 0; // Default to the first option if no current model
@@ -1118,10 +764,6 @@ export function createKnowledgeBaseManager(ctx) {
     // Clean up any event listeners, intervals, etc.
     ctx.eventHandlers.cleanupListeners({ context: "file-deletion" });
 
-    notify.debug("Knowledge Base Manager cleanup complete", {
-      context: "cleanup",
-      source: "cleanup"
-    });
   }
 
   return {

@@ -107,8 +107,6 @@ function bindEditButton(deps) {
     const pm = DependencySystem?.modules?.get?.('projectModal');
     if (currentProject && pm?.openModal) {
       pm.openModal(currentProject);
-    } else {
-      // silently ignore
     }
   };
   eventHandlers.trackListener(editBtn, 'click', handler, {
@@ -126,14 +124,11 @@ function bindPinButton(deps) {
   const handler = async () => {
     const currentProject = projectManager?.currentProject;
     if (!currentProject?.id || !projectManager?.togglePinProject) {
-      // silently ignore
       return;
     }
     try {
       await projectManager.togglePinProject(currentProject.id);
-      // silently ignore success
     } catch (error) {
-      // silently ignore error
     }
   };
   eventHandlers.trackListener(pinBtn, 'click', handler, {
@@ -151,7 +146,6 @@ function bindArchiveButton(deps) {
   const handler = async () => {
     const currentProject = projectManager?.currentProject;
     if (!currentProject?.id || !projectManager?.toggleArchiveProject || !modalManager?.confirmAction) {
-      // silently ignore
       return;
     }
     modalManager.confirmAction({
@@ -166,7 +160,6 @@ function bindArchiveButton(deps) {
           await projectManager.toggleArchiveProject(currentProject.id);
           projectManager.loadProjects?.();
         } catch (error) {
-          // silently ignore error
         }
       },
     });

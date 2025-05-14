@@ -123,9 +123,9 @@ class ProjectDashboard {
     const eventTarget = authBus && typeof authBus.addEventListener === 'function' ? authBus : document;
     const description =
       eventTarget === authBus
-        ? 'ProjectDashboard: authStateChanged (AuthBus)'
-        : 'ProjectDashboard: authStateChanged (doc)';
-    this.eventHandlers.trackListener(eventTarget, 'authStateChanged', handler, { description, context: 'projectDashboard' });
+        ? ''
+        : '';
+    this.eventHandlers.trackListener(eventTarget, 'authStateChanged', handler, { context: 'projectDashboard' });
     this._unsubs.push(() => eventTarget.removeEventListener('authStateChanged', handler));
   }
 
