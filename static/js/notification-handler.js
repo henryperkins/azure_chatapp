@@ -19,48 +19,40 @@ export function createNotificationHandler({
   if (!domAPI) throw new Error('notificationHandler: domAPI is required');
 
   const logToConsoleImpl = (message, type, opts = {}) => {
-    if (!logToConsole) return;
+    // Always log to console for debugging, ignoring logToConsole setting
+    // if (!logToConsole) return;
 
     const { module, context, source, originalError, ...restOpts } = opts;
     const prefix = [module, context, source].filter(Boolean).join(':') || 'Notification';
     const logMessage = `[${prefix}] ${message || '(empty message)'}`;
 
+    // Force verbose logging for debugging
+    const forceVerbose = true;
+
+    // Add timestamp to all logs
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] NOTIFICATION SYSTEM ACTIVE`);
+
     switch (type) {
       case 'debug':
-        if (verboseLogging) {
-          console.debug(logMessage, { originalError, ...restOpts });
-        } else {
-          console.debug(logMessage, originalError || '');
-        }
+        console.debug(`[${timestamp}] ${logMessage}`, { originalError, ...restOpts });
         break;
       case 'info':
       case 'success':
-        if (verboseLogging && Object.keys(restOpts).length > 0) {
-          console.info(logMessage, { originalError, ...restOpts });
-        } else {
-          console.info(logMessage, originalError || '');
-        }
+        console.info(`[${timestamp}] ${logMessage}`, { originalError, ...restOpts });
         break;
       case 'warning':
-        if (verboseLogging && Object.keys(restOpts).length > 0) {
-          console.warn(logMessage, { originalError, ...restOpts });
-        } else {
-          console.warn(logMessage, originalError || '');
-        }
+        console.warn(`[${timestamp}] ${logMessage}`, { originalError, ...restOpts });
         break;
       case 'error':
         // Errors should always log more details if available
-        console.error(logMessage, { originalError, ...restOpts });
-        if (originalError?.stack && verboseLogging) {
-          console.error("Stack trace:", originalError.stack);
+        console.error(`[${timestamp}] ${logMessage}`, { originalError, ...restOpts });
+        if (originalError?.stack) {
+          console.error(`[${timestamp}] Stack trace:`, originalError.stack);
         }
         break;
       default: // Should not happen if type is validated in show()
-        if (verboseLogging) {
-          console.log(`[${prefix}] (${type}) ${message}`, { originalError, ...restOpts });
-        } else {
-          console.log(`[${prefix}] (${type}) ${message}`, originalError || '');
-        }
+        console.log(`[${timestamp}] [${prefix}] (${type}) ${message}`, { originalError, ...restOpts });
         break;
     }
   };
@@ -80,37 +72,82 @@ export function createNotificationHandler({
   let container = null;
 
   async function ensureContainer() {
-    await _eventHandlersReady;
-    if (container) return container;
-    container = domAPI.getElementById(CONTAINER_ID);
-    if (!container) {
-      container = domAPI.createElement("div");
-      container.id = CONTAINER_ID;
-      container.setAttribute("role", "region");
-      container.setAttribute("aria-label", "Notifications");
+    try {
+      console.log('[NOTIFICATION] ensureContainer called');
+      await _eventHandlersReady;
 
-      // Apply styles
-      Object.assign(container.style, {
-        position: "fixed",
-        zIndex: 10000,
-        maxWidth: "28rem",
-        width: "calc(100vw - 2rem)",
-        pointerEvents: "none",
-        display: "flex",
-        flexDirection: position.startsWith("bottom") ? "column-reverse" : "column",
-        gap: "0.5rem",
-      });
+      if (container) {
+        console.log('[NOTIFICATION] Container already exists:', container);
+        return container;
+      }
 
-      // Position based on config
-      const [v, h] = position.split("-");
-      container.style[v] = "1rem";
-      container.style[h] = "1rem";
+      container = domAPI.getElementById(CONTAINER_ID);
+      console.log('[NOTIFICATION] Container from getElementById:', container);
 
-      // Append to body
-      const body = domAPI.getBody();
-      if (body) body.appendChild(container);
+      if (!container) {
+        console.log('[NOTIFICATION] Creating new container');
+        container = domAPI.createElement("div");
+        container.id = CONTAINER_ID;
+        container.setAttribute("role", "region");
+        container.setAttribute("aria-label", "Notifications");
+
+        // Apply styles
+        Object.assign(container.style, {
+          position: "fixed",
+          zIndex: 10000,
+          maxWidth: "28rem",
+          width: "calc(100vw - 2rem)",
+          pointerEvents: "none",
+          display: "flex",
+          flexDirection: position.startsWith("bottom") ? "column-reverse" : "column",
+          gap: "0.5rem",
+          backgroundColor: "rgba(0,0,0,0.1)", // Add slight background for visibility during debugging
+        });
+
+        // Position based on config
+        const [v, h] = position.split("-");
+        container.style[v] = "1rem";
+        container.style[h] = "1rem";
+
+        // Append to body
+        const body = domAPI.getBody();
+        console.log('[NOTIFICATION] Body element:', body);
+
+        if (body) {
+          body.appendChild(container);
+          console.log('[NOTIFICATION] Container appended to body');
+        } else {
+          console.error('[NOTIFICATION] Body element not found!');
+          // Fallback to document.body if domAPI.getBody() fails
+          try {
+            document.body.appendChild(container);
+            console.log('[NOTIFICATION] Container appended to document.body as fallback');
+          } catch (docErr) {
+            console.error('[NOTIFICATION] Failed to append to document.body:', docErr);
+          }
+        }
+      }
+
+      console.log('[NOTIFICATION] Final container:', container);
+      return container;
+    } catch (error) {
+      console.error('[NOTIFICATION] Error in ensureContainer:', error);
+      // Create a fallback container directly with document if all else fails
+      try {
+        const fallbackContainer = document.createElement('div');
+        fallbackContainer.id = CONTAINER_ID + '-fallback';
+        fallbackContainer.style.position = 'fixed';
+        fallbackContainer.style.top = '1rem';
+        fallbackContainer.style.right = '1rem';
+        fallbackContainer.style.zIndex = '10000';
+        document.body.appendChild(fallbackContainer);
+        console.log('[NOTIFICATION] Created fallback container:', fallbackContainer);
+        return fallbackContainer;
+      } catch (fallbackErr) {
+        console.error('[NOTIFICATION] Even fallback container creation failed:', fallbackErr);
+        return null;
+      }
     }
-    return container;
   }
 
   // Utility: fade in/out
@@ -200,36 +237,49 @@ export function createNotificationHandler({
     // Log to console first (always works even if UI fails)
     logToConsoleImpl(message, type, opts);
 
+    // Force console log for debugging
+    console.log(`[NOTIFICATION] show() called with message: "${message}", type: ${type}`, opts);
+
     if (!message) message = "Notification without message";
 
     // Validate type
     const _type = ['info', 'success', 'warning', 'error', 'debug'].includes(type) ? type : 'info';
 
-    // Create banner
-    const banner = await buildBanner(_type, { message, ...opts });
-    const container = await ensureContainer();
+    try {
+      // Create banner
+      const banner = await buildBanner(_type, { message, ...opts });
+      const container = await ensureContainer();
 
-    // Remove excess banners
-    while (container.children.length >= maxVisible) {
-      const victimIndex = position.startsWith("bottom") ? container.children.length - 1 : 0;
-      const victim = container.children[victimIndex];
-      if (victim) victim.remove();
+      console.log(`[NOTIFICATION] Container created:`, container);
+      console.log(`[NOTIFICATION] Container children:`, container.children.length);
+
+      // Remove excess banners
+      while (container.children.length >= maxVisible) {
+        const victimIndex = position.startsWith("bottom") ? container.children.length - 1 : 0;
+        const victim = container.children[victimIndex];
+        if (victim) victim.remove();
+      }
+
+      // Add the new banner
+      if (position.startsWith("bottom")) {
+        container.appendChild(banner);
+      } else {
+        container.prepend(banner);
+      }
+
+      console.log(`[NOTIFICATION] Banner added to container`);
+
+      // Set timeout for auto-dismiss
+      const timeout = typeof opts.timeout === "number" ? opts.timeout : DEFAULT_TIMEOUT;
+      if (timeout > 0) {
+        setTimeout(() => fadeOut(banner), timeout);
+      }
+
+      return banner;
+    } catch (error) {
+      console.error(`[NOTIFICATION] Error in show():`, error);
+      return null;
     }
-
-    // Add the new banner
-    if (position.startsWith("bottom")) {
-      container.appendChild(banner);
-    } else {
-      container.prepend(banner);
-    }
-
-    // Set timeout for auto-dismiss
-    const timeout = typeof opts.timeout === "number" ? opts.timeout : DEFAULT_TIMEOUT;
-    if (timeout > 0) {
-      setTimeout(() => fadeOut(banner), timeout);
-    }
-
-    return banner;
   }
 
   // Clear all notifications

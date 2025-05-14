@@ -98,8 +98,17 @@ export function createApiClient({
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       const csrf = auth.getCSRFToken();
-      if (csrf) opts.headers["X-CSRF-Token"] = csrf;
-      else if (APP_CONFIG.DEBUG) apiNotify.warn(`[API] No CSRF for ${method} ${normUrl}`, { source:'csrfTokenMissing' });
+      if (csrf) {
+        opts.headers["X-CSRF-Token"] = csrf;
+      } else if (
+        APP_CONFIG.DEBUG &&
+        // Suppress noisy CSRF warnings for /api/log_notification and /api/log_notification_batch (these endpoints are exempt from CSRF by backend policy)
+        !/^\/api\/log_notification(_batch)?$/.test(
+          new URL(normUrl, window.location.origin).pathname
+        )
+      ) {
+        apiNotify.warn(`[API] No CSRF for ${method} ${normUrl}`, { source:'csrfTokenMissing' });
+      }
     }
 
     // JSON stringify body if plain object (not FormData)
