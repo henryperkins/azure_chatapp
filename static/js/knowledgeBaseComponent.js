@@ -14,7 +14,6 @@ export function createKnowledgeBaseComponent(options = {}) {
   const getDep = (name) => name in options ? options[name] : DS.modules.get(name);
 
   const sanitizer = getDep("sanitizer");
-  const notifyDep = getDep("notify");
   const app = getDep("app");
   const projectManager = getDep("projectManager");
   const eventHandlers = getDep("eventHandlers");
