@@ -7,7 +7,6 @@
  * @param {Object} options.app - Required. App core utilities (validateUUID).
  * @param {Object} options.eventHandlers - Required. Event listener management (trackListener).
  * @param {Object} options.projectManager - Required. Handles the actual file upload API calls.
- * @param {Object} options.notify - Required. Context-aware notification utility.
  * @param {Object} options.domAPI - Required. DOM manipulation abstraction.
  * @param {Object} [options.scheduler] - Optional. Timing utilities (setTimeout, clearTimeout).
  * @param {string} [options.projectId] - Optional initial project ID.
@@ -36,13 +35,6 @@ export class FileUploadComponent {
     this.eventHandlers = getDep('eventHandlers');
     this.projectManager = getDep('projectManager');
     this.domAPI = getDep('domAPI'); // Inject domAPI
-    const notifyRaw = getDep('notify');
-
-    // Guideline #4: Use notify.withContext()
-    this.notify = notifyRaw.withContext({
-      module: 'FileUploadComponent', // This is for notification system's module field
-      context: 'fileUpload' // This is for notification system's context field
-    });
 
     // Deterministic timers (DI-friendly)
     this.scheduler = getDep('scheduler', false) || { setTimeout, clearTimeout }; // Optional dep
@@ -85,7 +77,6 @@ export class FileUploadComponent {
    */
   setProjectId(projectId) {
     this.projectId = projectId;
-    this.notify.info('Project context set for uploads.', { source: 'setProjectId', extra: { projectId } });
   }
 
   /**
@@ -93,18 +84,12 @@ export class FileUploadComponent {
    * Should be called only when the DOM context (e.g., project details view) is ready.
    */
   init() {
-    this.notify.info("Initializing file upload component...", { source: 'init' });
     if (this._handlersBound) return;
     if (!this._findElements()) {
-      this.notify.error("Initialization failed: Could not find required DOM elements for file upload.", {
-        source: 'init',
-        group: true // Group critical init errors
-      });
       return;
     }
     this._bindEvents();
     this._handlersBound = true;
-    this.notify.info("File upload component initialized.", { source: 'init' });
 
     // --- Standardized "fileuploadcomponent:initialized" event ---
     const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
@@ -148,14 +133,6 @@ export class FileUploadComponent {
         els[key] = this.domAPI.querySelector(value);
       } else {
         // Unexpected type
-        this.notify.error(
-          `Invalid source for DOM element '${key}'. Expected DOM element or selector string.`,
-          {
-            source: "_findElements",
-            group: true,
-            extra: { key, receivedSourceType: typeof value }
-          }
-        );
         els[key] = null;
       }
     }
@@ -171,21 +148,6 @@ export class FileUploadComponent {
         els.uploadStatus
       )
     ) {
-      this.notify.warn(
-        "Not all DOM elements for FileUploadComponent were found or resolved.",
-        {
-          source: "_findElements",
-          group: true,
-          extra: {
-            fileInputFound: !!els.fileInput,
-            uploadBtnFound: !!els.uploadBtn,
-            dragZoneFound: !!els.dragZone,
-            uploadProgressFound: !!els.uploadProgress,
-            progressBarFound: !!els.progressBar,
-            uploadStatusFound: !!els.uploadStatus
-          }
-        }
-      );
       return false;
     }
     return true;
@@ -243,18 +205,9 @@ export class FileUploadComponent {
 
   /** Cleanup listeners (Guideline #3) */
   destroy() {
-    this.notify.info("Destroying FileUploadComponent, removing listeners.", { source: 'destroy' });
     if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
       this.eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
-      this.notify.debug(`[FileUploadComponent] Called eventHandlers.cleanupListeners for context: ${MODULE_CONTEXT}`, { source: 'destroy' });
-    } else {
-      this.notify.warn('[FileUploadComponent] eventHandlers.cleanupListeners not available. Listeners may not be cleaned up.', { source: 'destroy' });
     }
-    // this._listeners = []; // No longer needed
-    // if (this._unsubs) { // No longer needed
-    //   this._unsubs.forEach(fn => typeof fn === 'function' && fn());
-    //   this._unsubs.length = 0;
-    // }
     this._handlersBound = false;
   }
 
@@ -293,36 +246,19 @@ export class FileUploadComponent {
   async _uploadFiles(files) {
     const projectId = this.projectId || this.app.getProjectId?.();
     if (!projectId || !this.app.validateUUID?.(projectId)) {
-      // Guideline #4: Structured notification
-      this.notify.error('Cannot upload: No valid project selected.', {
-        source: '_uploadFiles',
-        group: true
-      });
       return;
     }
 
     const { validFiles, invalidFiles } = this._validateFiles(files);
 
     invalidFiles.forEach(({ file, error }) => {
-      // Guideline #4: Structured notification
-      this.notify.error(`Skipped File: ${error}`, {
-        source: '_uploadFiles',
-        group: true, // Group validation errors
-        extra: { fileName: file.name, fileSize: file.size }
-      });
     });
 
     if (validFiles.length === 0) {
-      this.notify.info('No valid files selected for upload.', { source: '_uploadFiles' });
       return;
     }
 
     this._setupUploadProgress(validFiles.length);
-    this.notify.info(`Starting upload of ${validFiles.length} file(s).`, {
-      source: '_uploadFiles',
-      extra: { count: validFiles.length, projectId }
-    });
-
 
     // Batching logic remains the same
     const BATCH_SIZE = 3;
@@ -330,11 +266,6 @@ export class FileUploadComponent {
       const batch = validFiles.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(file => this._uploadFile(projectId, file)));
     }
-
-    this.notify.info(`Upload process finished for ${validFiles.length} file(s).`, {
-      source: '_uploadFiles',
-      extra: { completed: this.uploadState.completed, failed: this.uploadState.failed }
-    });
 
     // Check if onUploadComplete is a function before calling
     if (typeof this.onUploadComplete === 'function') {
@@ -356,25 +287,9 @@ export class FileUploadComponent {
       await projectManager.uploadFileWithRetry(projectId, { file });
 
       this._updateUploadProgress(1, 0);
-      // Guideline #4: Structured notification
-      this.notify.success(`Uploaded: ${file.name}`, {
-        source: '_uploadFile',
-        group: false, // Individual success messages are often better
-        extra: { fileName: file.name, fileSize: file.size, projectId }
-      });
     } catch (error) {
-      // Guideline #5: Rich error context
       const errorMsg = this._getUploadErrorMessage(error);
-      this.notify.error(`Upload Failed: ${file.name} - ${errorMsg}`, {
-        source: '_uploadFile',
-        group: true, // Group upload errors
-        originalError: error, // Include original error
-        traceId: trace.traceId,
-        transactionId: transactionId,
-        extra: { fileName: file.name, fileSize: file.size, projectId }
-      });
       this._updateUploadProgress(0, 1);
-      // No need for a second user-facing notification here, the error above is sufficient.
     }
   }
 
@@ -472,7 +387,6 @@ export class FileUploadComponent {
     }
 
     if (completed === total && uploadProgress) {
-      this.notify.info(`Upload complete. ${this.uploadState.completed - this.uploadState.failed}/${total} succeeded.`, { source: '_updateUploadProgress' });
       // Delay hiding the upload progress bar to allow users to see the completion status before it disappears.
       // This ensures the UI feedback is not too abrupt after the upload finishes.
       this.scheduler.setTimeout(() => {
@@ -495,5 +409,4 @@ export class FileUploadComponent {
   }
 }
 
-// Guideline #1: Factory function export
 export const createFileUploadComponent = (opts) => new FileUploadComponent(opts);
