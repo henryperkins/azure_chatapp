@@ -1,4 +1,11 @@
-// modelConfig.js (Revised to address checklist issues and enforce modularity)
+/**
+ * modelConfig.js (Revised to address checklist issues and enforce modularity)
+ *
+ * IMPORTANT: To guarantee compliance: You **MUST** always use `initWithReadiness()` for any UI logic.
+ * No UI/DOM entrypoint should be called before app + domAPI + notify are ready.
+ *
+ * Backend event logging is included in the main factory (never at file load, to avoid global reach).
+ */
 //
 // ---------------------------------------------------------------------------------------------
 // This module provides factory-based configuration management for models, with dependency
@@ -39,13 +46,26 @@ export function createModelConfig({
   notificationHandler,
   storageHandler,
   sanitizer,
-  scheduleTask
+  scheduleTask,
+  errorReporter,
+  backendLogger
 } = {}) {
+  // ----- Guardrail: Dependency validation at top -----
+  if (!dependencySystem) throw new Error('[ModelConfig] dependencySystem is required');
+  if (!notificationHandler) throw new Error('[ModelConfig] notificationHandler/notify is required');
+  if (!eventHandler) throw new Error('[ModelConfig] eventHandler is required');
+  if (!storageHandler) throw new Error('[ModelConfig] storageHandler is required');
+  if (!sanitizer || typeof sanitizer.sanitize !== 'function') throw new Error('[ModelConfig] sanitizer with sanitize() is required');
+  if (!errorReporter || typeof errorReporter.capture !== 'function') throw new Error('[ModelConfig] errorReporter with capture() is required');
+  if (!backendLogger || typeof backendLogger.log !== 'function') {
+    notificationHandler.warn('[ModelConfig] backendLogger is recommended for event logging, but not provided.', { module: MODULE_CONTEXT, source: 'factory' });
+  }
+
   // -------------------------------------------------------------------------
   // 1) Setup Dependencies & Fallbacks (All < 40 lines)
   // -------------------------------------------------------------------------
   function setupDependencies() {
-    const ds = dependencySystem || {};
+    const ds = dependencySystem;
     const fallbackEventHandler = {
       trackListener: () => {},
       untrackListener: () => {}
@@ -136,7 +156,9 @@ export function createModelConfig({
   // 3) updateModelConfig (One of the original big functions, now < 40 lines)
   // -------------------------------------------------------------------------
   function updateModelConfig(api, state, config) {
-    const loadingEl = document.getElementById('modelConfigLoading');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    const loadingEl = domAPI && typeof domAPI.getElementById === 'function'
+      ? domAPI.getElementById('modelConfigLoading') : null;
     if (loadingEl) loadingEl.classList.remove('hidden');
 
     setStateFromConfig(state, config); // Updates the internal state object
@@ -220,9 +242,10 @@ export function createModelConfig({
     const domAPI = api.ds?.modules?.get?.('domAPI');
     if (domAPI && typeof domAPI.dispatchEvent === 'function' && typeof domAPI.getDocument === 'function') {
       domAPI.dispatchEvent(domAPI.getDocument(), new CustomEvent(eventName, { detail: detailObj }));
-    } else if (typeof document !== 'undefined' && document.dispatchEvent) {
-      const ev = new CustomEvent(eventName, { detail: detailObj });
-      document.dispatchEvent(ev);
+    } else {
+      api.notify.warn(`[${MODULE_CONTEXT}] dispatchGlobalEvent: domAPI.dispatchEvent or getDocument missing for event '${eventName}'`, {
+        source: 'dispatchGlobalEvent', module: MODULE_CONTEXT
+      });
     }
   }
 
@@ -286,37 +309,73 @@ export function createModelConfig({
   // 5) UI Initialization (initializeUI)
   // -------------------------------------------------------------------------
   function initializeUI(api, state) {
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) {
+      api.notify.error(`[${MODULE_CONTEXT}] domAPI not available in initializeUI. Aborting UI init.`, {
+        module: MODULE_CONTEXT,
+        source: 'initializeUI'
+      });
+      return;
+    }
     api.notify.notify(`[${MODULE_CONTEXT}] initializeUI() called`);
+    const logger = api.ds?.modules?.get?.('backendLogger') || backendLogger;
+    if (logger && typeof logger.log === 'function') {
+      logger.log({
+        level: 'info',
+        module: MODULE_CONTEXT,
+        context: 'init',
+        message: 'initializeUI invoked'
+      });
+    }
     try {
       setupModelDropdown(api, state);
       setupMaxTokensUI(api, state);
       setupVisionUI(api, state);
-      setupExtendedThinkingUI(api, state); // New
-      setupCustomInstructionsUI(api, state); // New
-      updateModelDisplay(api, state); // New: Initial display update
+      setupExtendedThinkingUI(api, state);
+      setupCustomInstructionsUI(api, state);
+      updateModelDisplay(api, state);
 
       api.notify.notify(`[${MODULE_CONTEXT}] initializeUI successful`);
-
+      if (logger && typeof logger.log === 'function') {
+        logger.log({
+          level: 'info',
+          module: MODULE_CONTEXT,
+          context: 'init',
+          message: 'initializeUI completed successfully'
+        });
+      }
       dispatchGlobalEvent(api, 'modelconfig:initialized', { success: true });
-
     } catch (err) {
       api.notify.error(`[${MODULE_CONTEXT}] initializeUI failed: ` + (err && err.message ? err.message : err), {
         module: MODULE_CONTEXT,
         source: 'initializeUI',
         originalError: err
       });
+      if (typeof errorReporter?.capture === 'function') {
+        errorReporter.capture(err, { module: MODULE_CONTEXT, source: 'initializeUI', context: 'init' });
+      }
+      if (logger && typeof logger.log === 'function') {
+        logger.log({
+          level: 'error',
+          module: MODULE_CONTEXT,
+          context: 'init',
+          message: 'initializeUI failed',
+          error: err?.message,
+        });
+      }
     }
   }
 
   function setupModelDropdown(api, state) {
-    if (typeof document === 'undefined' || !document.getElementById) return;
-    const sel = document.getElementById('modelSelect');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const sel = domAPI.getElementById('modelSelect');
     if (!sel) return;
 
-    sel.textContent = ''; // clear safely
+    sel.textContent = '';
     const opts = getModelOptions();
     opts.forEach((m) => {
-      const opt = document.createElement('option');
+      const opt = domAPI.createElement('option');
       opt.value = m.id;
       opt.textContent = m.name;
       sel.appendChild(opt);
@@ -326,26 +385,26 @@ export function createModelConfig({
     registerListener(api, sel, 'change', () => {
       const selectedModel = getModelOptions().find(m => m.id === sel.value);
       updateModelConfig(api, state, { modelName: sel.value, provider: selectedModel?.provider || 'unknown' });
-      // Vision UI might need to be re-rendered if model's vision support changes
       setupVisionUI(api, state);
-      updateModelDisplay(api, state); // Update display after model change
+      updateModelDisplay(api, state);
     }, { description: 'model dropdown change' });
   }
 
   function setupMaxTokensUI(api, state) {
-    if (typeof document === 'undefined') return;
-    const container = document.getElementById('maxTokensContainer');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const container = domAPI.getElementById('maxTokensContainer');
     if (!container) return;
 
     const currentVal = state.maxTokens || 4096;
-    const slider = document.createElement('input');
+    const slider = domAPI.createElement('input');
     slider.type = 'range';
     slider.min = '100';
     slider.max = '100000'; // This should ideally be dynamic based on selected model
     slider.value = currentVal;
     slider.className = 'w-full mt-2 range range-xs'; // Added DaisyUI range classes
 
-    const display = document.createElement('div');
+    const display = domAPI.createElement('div');
     display.className = 'text-sm text-gray-600 dark:text-gray-400';
     display.textContent = `${currentVal} tokens`;
 
@@ -361,33 +420,33 @@ export function createModelConfig({
   }
 
   function setupVisionUI(api, state) {
-    if (typeof document === 'undefined') return;
-    const panel = document.getElementById('visionPanel');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const panel = domAPI.getElementById('visionPanel');
     if (!panel) return;
 
     const name = state.modelName;
     const supports = getModelOptions().find((m) => m.id === name)?.supportsVision;
     panel.classList.toggle('hidden', !supports);
     if (!supports) {
-        panel.textContent = ''; // Clear if not supported
+        panel.textContent = '';
         return;
     }
 
-    // Clear previous content before rebuilding
     panel.textContent = '';
 
-    const toggle = document.createElement('input');
+    const toggle = domAPI.createElement('input');
     toggle.type = 'checkbox';
-    toggle.id = 'visionToggle'; // Ensure ID is unique if this function is called multiple times
-    toggle.className = 'toggle toggle-sm mr-2'; // DaisyUI toggle
+    toggle.id = 'visionToggle';
+    toggle.className = 'toggle toggle-sm mr-2';
     toggle.checked = state.visionEnabled;
 
-    const label = document.createElement('label');
+    const label = domAPI.createElement('label');
     label.htmlFor = 'visionToggle';
     label.className = 'text-sm cursor-pointer';
     label.textContent = 'Enable Vision';
 
-    const wrapper = document.createElement('div');
+    const wrapper = domAPI.createElement('div');
     wrapper.className = 'flex items-center';
     wrapper.append(toggle, label);
 
@@ -400,10 +459,11 @@ export function createModelConfig({
 
   // NEW: Function to setup Extended Thinking UI
   function setupExtendedThinkingUI(api, state) {
-    if (typeof document === 'undefined') return;
-    const toggle = document.getElementById('extendedThinkingToggle');
-    const budgetSelect = document.getElementById('thinkingBudget');
-    const panel = document.getElementById('extendedThinkingPanel');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const toggle = domAPI.getElementById('extendedThinkingToggle');
+    const budgetSelect = domAPI.getElementById('thinkingBudget');
+    const panel = domAPI.getElementById('extendedThinkingPanel');
 
     if (!toggle || !budgetSelect || !panel) {
       api.notify.warn(`[${MODULE_CONTEXT}] Extended thinking UI elements not found.`, { source: 'setupExtendedThinkingUI' });
@@ -427,9 +487,10 @@ export function createModelConfig({
 
   // NEW: Function to setup Custom Instructions UI
   function setupCustomInstructionsUI(api, state) {
-    if (typeof document === 'undefined') return;
-    const textarea = document.getElementById('globalCustomInstructions');
-    const saveButton = document.getElementById('saveGlobalInstructions');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const textarea = domAPI.getElementById('globalCustomInstructions');
+    const saveButton = domAPI.getElementById('saveGlobalInstructions');
 
     if (!textarea || !saveButton) {
       api.notify.warn(`[${MODULE_CONTEXT}] Custom instructions UI elements not found.`, { source: 'setupCustomInstructionsUI' });
@@ -446,11 +507,12 @@ export function createModelConfig({
 
   // NEW: Function to update the model configuration display area
   function updateModelDisplay(api, state) {
-    if (typeof document === 'undefined') return;
-    const modelNameEl = document.getElementById('currentModelName');
-    const maxTokensEl = document.getElementById('currentMaxTokens');
-    const reasoningEl = document.getElementById('currentReasoning'); // Assuming this ID exists
-    const visionStatusEl = document.getElementById('visionEnabledStatus'); // Assuming this ID exists
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const modelNameEl = domAPI.getElementById('currentModelName');
+    const maxTokensEl = domAPI.getElementById('currentMaxTokens');
+    const reasoningEl = domAPI.getElementById('currentReasoning');
+    const visionStatusEl = domAPI.getElementById('visionEnabledStatus');
 
     if (modelNameEl) {
       const modelOption = getModelOptions().find(m => m.id === state.modelName);
@@ -460,9 +522,6 @@ export function createModelConfig({
       maxTokensEl.textContent = state.maxTokens.toString();
     }
     if (reasoningEl) {
-      // This needs to map to a state property, e.g., state.reasoningEffort or similar
-      // For now, let's assume it's state.reasoningEffort.
-      // You might need a more descriptive mapping (e.g., "low" -> "Basic Reasoning")
       reasoningEl.textContent = state.reasoningEffort || 'N/A';
     }
     if (visionStatusEl) {
@@ -483,6 +542,16 @@ export function createModelConfig({
     if (!container) return;
     api.notify.notify(`[${MODULE_CONTEXT}] Rendering quick config in container: ${container.id || "unnamed"}`);
 
+    const logger = api.ds?.modules?.get?.('backendLogger') || backendLogger;
+    if (logger && typeof logger.log === 'function') {
+      logger.log({
+        level: 'info',
+        module: MODULE_CONTEXT,
+        context: 'quickConfig',
+        message: 'renderQuickConfig started'
+      });
+    }
+
     container.textContent = ''; // Clear safely
 
     api.delayed(() => {
@@ -491,12 +560,36 @@ export function createModelConfig({
         buildMaxTokensUI(api, state, container);   // Reuses
         buildVisionToggleIfNeeded(api, state, container); // Reuses
         api.notify.notify(`[${MODULE_CONTEXT}] Quick config panel rendered successfully`);
+        if (logger && typeof logger.log === 'function') {
+          logger.log({
+            level: 'info',
+            module: MODULE_CONTEXT,
+            context: 'quickConfig',
+            message: 'renderQuickConfig rendered successfully'
+          });
+        }
         dispatchGlobalEvent(api, 'modelConfigRendered', { containerId: container.id });
       } catch (error) {
         api.notify.error(`[${MODULE_CONTEXT}] Error rendering quick config: ${error.message}`, { originalError: error });
+        if (typeof errorReporter?.capture === 'function') {
+          errorReporter.capture(error, { module: MODULE_CONTEXT, source: 'renderQuickConfig', context: 'quickConfig' });
+        }
         const fallbackHTML = `<div class="p-2 text-xs">Error loading config.</div>`;
         container.textContent = '';
-        container.insertAdjacentHTML('afterbegin', api.safe(fallbackHTML));
+        // Ensure sanitizer is always run inline (per linter pattern).
+        container.insertAdjacentHTML(
+          'beforeend',
+          sanitizer.sanitize(fallbackHTML)
+        );
+        if (logger && typeof logger.log === 'function') {
+          logger.log({
+            level: 'error',
+            module: MODULE_CONTEXT,
+            context: 'quickConfig',
+            message: 'renderQuickConfig failed',
+            error: error?.message,
+          });
+        }
         dispatchGlobalEvent(api, 'modelConfigRendered', { containerId: container.id, error: true });
       }
     }, 0);
@@ -508,17 +601,19 @@ export function createModelConfig({
   // For now, we assume quick config uses the same UI elements or similar structure.
 
   function buildModelSelectUI(api, state, container) { // Used by quickConfig
-    const modelLabel = document.createElement('label');
-    modelLabel.htmlFor = `quickModelSelect-${container.id}`; // Unique ID
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const modelLabel = domAPI.createElement('label');
+    modelLabel.htmlFor = `quickModelSelect-${container.id}`;
     modelLabel.className = 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1';
     modelLabel.textContent = 'Model:';
 
-    const modelSelect = document.createElement('select');
+    const modelSelect = domAPI.createElement('select');
     modelSelect.id = `quickModelSelect-${container.id}`;
-    modelSelect.className = 'select select-bordered select-sm w-full mb-2'; // DaisyUI
+    modelSelect.className = 'select select-bordered select-sm w-full mb-2';
 
     getModelOptions().forEach((opt) => {
-      const option = document.createElement('option');
+      const option = domAPI.createElement('option');
       option.value = opt.id;
       option.text = opt.name;
       modelSelect.appendChild(option);
@@ -528,11 +623,10 @@ export function createModelConfig({
     registerListener(api, modelSelect, 'change', () => {
       const selectedModel = getModelOptions().find(m => m.id === modelSelect.value);
       updateModelConfig(api, state, { modelName: modelSelect.value, provider: selectedModel?.provider || 'unknown' });
-      // Re-render vision toggle if needed for quick config
       const visionContainer = container.querySelector('.quick-vision-container');
       if (visionContainer) {
-        visionContainer.remove(); // Remove old one
-        buildVisionToggleIfNeeded(api, state, container); // Rebuild
+        visionContainer.remove();
+        buildVisionToggleIfNeeded(api, state, container);
       }
     }, { description: `quick config model select for ${container.id}` });
 
@@ -541,25 +635,27 @@ export function createModelConfig({
   }
 
   function buildMaxTokensUI(api, state, container) { // Used by quickConfig
-    const maxTokensDiv = document.createElement('div');
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
+    const maxTokensDiv = domAPI.createElement('div');
     maxTokensDiv.className = 'my-2 flex flex-col';
 
-    const maxTokensLabel = document.createElement('label');
+    const maxTokensLabel = domAPI.createElement('label');
     maxTokensLabel.htmlFor = `quickMaxTokens-${container.id}`;
     maxTokensLabel.className = 'text-xs font-medium text-gray-700 dark:text-gray-300 mb-1';
     maxTokensLabel.textContent = 'Max Tokens:';
 
-    const maxTokensValue = document.createElement('span');
+    const maxTokensValue = domAPI.createElement('span');
     maxTokensValue.className = 'ml-1 text-xs text-gray-500 dark:text-gray-400';
     maxTokensValue.textContent = state.maxTokens;
 
-    const maxTokensInput = document.createElement('input');
+    const maxTokensInput = domAPI.createElement('input');
     maxTokensInput.id = `quickMaxTokens-${container.id}`;
     maxTokensInput.type = 'range';
     maxTokensInput.min = '100';
-    maxTokensInput.max = '100000'; // Adjust dynamically based on model if possible
+    maxTokensInput.max = '100000';
     maxTokensInput.value = state.maxTokens;
-    maxTokensInput.className = 'range range-xs'; // DaisyUI
+    maxTokensInput.className = 'range range-xs';
 
     registerListener(api, maxTokensInput, 'input', (e) => {
       const val = parseInt(e.target.value, 10);
@@ -567,7 +663,7 @@ export function createModelConfig({
       updateModelConfig(api, state, { maxTokens: val });
     }, { description: `quick config maxTokens slider for ${container.id}` });
 
-    const labelAndValue = document.createElement('div');
+    const labelAndValue = domAPI.createElement('div');
     labelAndValue.className = 'flex justify-between items-center';
     labelAndValue.append(maxTokensLabel, maxTokensValue);
 
@@ -576,19 +672,21 @@ export function createModelConfig({
   }
 
   function buildVisionToggleIfNeeded(api, state, container) { // Used by quickConfig
+    const domAPI = api.ds?.modules?.get?.('domAPI');
+    if (!domAPI) return;
     const model = getModelOptions().find((m) => m.id === state.modelName);
     if (!model?.supportsVision) return;
 
-    const visionDiv = document.createElement('div');
-    visionDiv.className = 'mt-2 flex items-center quick-vision-container'; // Added class for easy removal/update
+    const visionDiv = domAPI.createElement('div');
+    visionDiv.className = 'mt-2 flex items-center quick-vision-container';
 
-    const toggle = document.createElement('input');
+    const toggle = domAPI.createElement('input');
     toggle.type = 'checkbox';
     toggle.id = `quickVisionToggle-${container.id}`;
-    toggle.className = 'toggle toggle-xs mr-2'; // DaisyUI
+    toggle.className = 'toggle toggle-xs mr-2';
     toggle.checked = state.visionEnabled;
 
-    const toggleLabel = document.createElement('label');
+    const toggleLabel = domAPI.createElement('label');
     toggleLabel.htmlFor = `quickVisionToggle-${container.id}`;
     toggleLabel.className = 'text-xs cursor-pointer';
     toggleLabel.textContent = 'Enable Vision';
@@ -604,19 +702,49 @@ export function createModelConfig({
   // -------------------------------------------------------------------------
   // Final assembled factory function (createModelConfig) < 40 lines
   // -------------------------------------------------------------------------
-  return (function buildModule() {
+  // (No backend logger on file load: only in the DI-provided factory context.)
+
+  const moduleBuild = (function buildModule() {
     const api = setupDependencies();
     const state = buildState(api);
 
     // Public module API
-    return {
+    const modelApi = {
       getConfig: () => getConfig(state),
       updateConfig: (cfg) => updateModelConfig(api, state, cfg),
       getModelOptions,
       onConfigChange: (cb) => onConfigChange(api, cb),
+      /**
+       * IMPORTANT: Always wait for readiness by using initWithReadiness() before any DOM/app usage.
+       */
       initializeUI: () => initializeUI(api, state),
       renderQuickConfig: (container) => renderQuickConfig(api, state, container),
-      cleanup: () => cleanup(api)
+      cleanup: () => cleanup(api),
+      /**
+       * Readiness-gated UI initializer: waits for app+DOM/notify before proceeding.
+       * Example for consumers:
+       *    modelConfig.initWithReadiness().then(() => ...);
+       */
+      initWithReadiness: async () => {
+        const ds = api.ds;
+        if (!ds?.waitFor) throw new Error('[ModelConfig] DependencySystem.waitFor is required for readiness gating.');
+        await ds.waitFor(['app', 'domAPI', 'notify']);
+        initializeUI(api, state);
+      }
     };
+
+    // Explicit backend event logging at module factory build (as recommended by the pattern checker)
+    const logger = api.ds?.modules?.get?.('backendLogger') || backendLogger;
+    if (logger && typeof logger.log === 'function') {
+      logger.log({
+        level: 'info',
+        module: MODULE_CONTEXT,
+        context: 'factory',
+        message: 'ModelConfig module loaded and API returned'
+      });
+    }
+
+    return modelApi;
   }());
+  return moduleBuild;
 }

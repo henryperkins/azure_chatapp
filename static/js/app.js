@@ -215,7 +215,20 @@ DependencySystem.register('debugTools', debugTools);
 const _dbg = debugTools;
 
 // ---------------------------------------------------------------------------
-// 7.5) Create backend logger (needed for event handlers)
+// 7.5) Create API client (needed by backend logger and many modules)
+// ---------------------------------------------------------------------------
+const apiRequest = createApiClient({
+  APP_CONFIG,
+  globalUtils: { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl },
+  notify,
+  errorReporter: sentryManager,
+  getAuthModule: () => DependencySystem.modules.get('auth'),
+  browserService: browserServiceInstance
+});
+DependencySystem.register('apiRequest', apiRequest);
+
+// ---------------------------------------------------------------------------
+// 7.6) Create backend logger (needed for event handlers)
 // ---------------------------------------------------------------------------
 import { createBackendLogger } from './utils/backendLogger.js';
 const backendLogger = createBackendLogger({
@@ -379,15 +392,7 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
 // ---------------------------------------------------------------------------
 // 12) Create API client
 // ---------------------------------------------------------------------------
-const apiRequest = createApiClient({
-  APP_CONFIG,
-  globalUtils: { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl },
-  notify,
-  errorReporter: sentryManager,
-  getAuthModule: () => DependencySystem.modules.get('auth'),
-  browserService: browserServiceInstance
-});
-DependencySystem.register('apiRequest', apiRequest);
+// (removed – initialization occurs above in 7.5 section)
 
 // ---------------------------------------------------------------------------
 // 13) Create app object and state
