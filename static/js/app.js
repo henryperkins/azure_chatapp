@@ -545,7 +545,7 @@ export async function init() {
       if (projectDashboard?.components) {
 
         // Enhanced projectList view registration with dependency waiting
-        if (!navigationService.getCurrentView()) {
+        if (!navigationService.hasView('projectList')) {
           navigationService.registerView('projectList', {
             show: async () => {
               appNotify.info('NavigationService: showing projectList view', {
@@ -644,7 +644,7 @@ export async function init() {
         }
 
         // Enhanced projectDetails view registration with dependency waiting
-        if (!navigationService.getCurrentView('projectDetails')) {
+        if (!navigationService.hasView('projectDetails')) {
           navigationService.registerView('projectDetails', {
             show: async (params) => {
               appNotify.info('NavigationService: showing projectDetails view', {
