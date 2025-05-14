@@ -178,7 +178,7 @@ export function createApiClient({
         return resp;
       } finally {
         clearTimeout(timer);
-        if (!skipCache && method === "GET") pending.delete(key);
+        if (method === "GET") pending.delete(key);
       }
     })();
 

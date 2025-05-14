@@ -868,7 +868,7 @@ class ProjectDetailsComponent {
     // const currentUser = this.app?.state?.currentUser; // OLD
 
     // NEW: Use auth module directly via DependencySystem
-    const auth = this.DependencySystem?.modules?.get?.('auth') ?? null;
+    const auth = this.eventHandlers?.DependencySystem?.modules?.get('auth');
     const currentUser = auth?.getCurrentUserObject?.() ?? null; // NEW
 
     if (!currentUser || !currentUser.id) {
@@ -912,7 +912,7 @@ class ProjectDetailsComponent {
 
     // NEW: Use auth module directly via DependencySystem
     // Assuming this.DependencySystem is available as per app.js setup
-    const auth = this.DependencySystem?.modules?.get?.('auth') ?? null;
+    const auth = this.eventHandlers?.DependencySystem?.modules?.get('auth');
     const userIsReady = !!auth?.isAuthenticated?.(); // NEW
 
     if (projectReady && userIsReady) {
