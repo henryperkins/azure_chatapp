@@ -24,10 +24,6 @@ export { createApiClient } from './apiClient.js';
  */
 export { createStorageService } from './storageService.js';
 
-/**
- * @deprecated Use createDebugTools from './notifications-helpers.js'
- */
-export { createDebugTools } from './notifications-helpers.js';
 
 /**
  * @deprecated Use createBrowserService from './browserService.js'
@@ -36,7 +32,6 @@ export { createBrowserService } from './browserService.js';
 
 // General-purpose helper functions
 import { isValidProjectId as rawIsValidProjectId } from "../projectManager.js";
-import { maybeCapture } from './notifications-helpers.js';
 export const isValidProjectId = rawIsValidProjectId;
 
 /* Only keep one implementation of each helper below (NO duplicates) */
@@ -235,16 +230,12 @@ export async function waitForDepsAndDom({
 
 /**
  * @deprecated Use apiClient + proper .get/.post signature for this
+ * (errorReporter/maybeCapture removed)
  */
-export async function fetchData({ apiClient, errorReporter }, id) {
+export async function fetchData({ apiClient }, id) {
   try {
     return await apiClient.get(`/item/${id}`);
   } catch (err) {
-    maybeCapture(errorReporter, err, {
-      module: "projectManager",
-      method: "fetchData",
-      itemId: id,
-    });
     throw err;
   }
 }
