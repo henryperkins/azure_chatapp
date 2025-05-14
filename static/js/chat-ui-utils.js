@@ -308,12 +308,8 @@ export function attachChatUI(chatMgr, deps) {
   }
 
   function toggleMinimize() {
-    if (!chatMgr.container || !chatMgr.messageContainer || !chatMgr.inputField) {
-      notify.warn('Cannot toggle minimize: core UI elements not found.', { source: 'toggleMinimize' });
-      return;
-    }
+    if (!chatMgr.container || !chatMgr.messageContainer || !chatMgr.inputField) return;
     chatMgr.container.classList.toggle('chat-minimized');
-    notify.info(`Chat UI minimized state toggled. Now: ${chatMgr.container.classList.contains('chat-minimized') ? 'minimized' : 'expanded'}`, { source: 'toggleMinimize' });
   }
 
   Object.assign(chatMgr, {
