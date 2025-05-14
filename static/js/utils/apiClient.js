@@ -136,7 +136,9 @@ export function createApiClient({
     }
 
     // Timeout via AbortController (browserService/DI if available)
-    const AbortControllerImpl = browserService?.windowObject?.AbortController || AbortController;
+    const AbortControllerImpl =
+      (browserService?.getWindow?.() || browserService?.windowObject)?.AbortController
+      || AbortController;
     const abortCtl = new AbortControllerImpl();
     opts.signal = abortCtl.signal;
     const apiTimeout = APP_CONFIG?.TIMEOUTS?.API_REQUEST || 15000;
