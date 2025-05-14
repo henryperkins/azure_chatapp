@@ -104,9 +104,12 @@ export function createBrowserService({ windowObject } = {}) {
     removeSearchParam: (k) => windowObject.history.replaceState({}, '', _buildUrl({ [k]: '' })),
 
     // Storage helpers
-    getItem: (k) => windowObject.localStorage.getItem(k),
-    setItem: (k, v) => windowObject.localStorage.setItem(k, v),
+    getItem   : (k) => windowObject.localStorage.getItem(k),
+    setItem   : (k, v) => windowObject.localStorage.setItem(k, v),
     removeItem: (k) => windowObject.localStorage.removeItem(k),
+    clear     : () => windowObject.localStorage.clear(),
+    key       : (n) => windowObject.localStorage.key(n),
+    get length() { return windowObject.localStorage.length; },
 
     // Timing helpers
     setTimeout: windowObject.setTimeout.bind(windowObject),
