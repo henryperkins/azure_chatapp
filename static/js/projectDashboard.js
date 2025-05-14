@@ -175,15 +175,60 @@ class ProjectDashboard {
   }
 
   async initialize() {
-    const traceId = this.debugTools?.start?.('ProjectDashboard.initialize');
-    this.dashboardNotify.info('[ProjectDashboard] initialize() called', { source: 'initialize' });
+    // Store initialization start time for duration calculation
+    this._initStartTime = Date.now();
+
+    // Generate a unique trace ID for this initialization
+    const DependencySystem = this.getModule?.('DependencySystem') || null;
+    const traceId = DependencySystem?.getCurrentTraceIds?.()?.traceId || `trace-${this._initStartTime}`;
+    const transactionId = DependencySystem?.generateTransactionId?.() || `txn-${this._initStartTime}`;
+
+    // Start performance trace if debug tools available
+    const debugTraceId = this.debugTools?.start?.('ProjectDashboard.initialize');
+
+    this.dashboardNotify.info('[ProjectDashboard] initialize() called', {
+      source: 'initialize',
+      timestamp: this._initStartTime,
+      traceId,
+      transactionId
+    });
+
+    // Log initialization attempt to backend
+    if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+      this.backendLogger.log({
+        level: 'info',
+        module: 'ProjectDashboard',
+        message: 'initialization_started',
+        metadata: {
+          timestamp: this._initStartTime,
+          initialized: this.state?.initialized || false,
+          traceId,
+          transactionId
+        }
+      });
+    }
+
     if (this.state.initialized) {
-      this.logger.info('[ProjectDashboard] Already initialized.', { context: 'ProjectDashboard' });
-      this.dashboardNotify.info('Project dashboard is already initialized.', { source: 'initialize' });
-      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
+      this.logger.info('[ProjectDashboard] Already initialized.', {
+        context: 'ProjectDashboard',
+        traceId,
+        transactionId
+      });
+      this.dashboardNotify.info('Project dashboard is already initialized.', {
+        source: 'initialize',
+        traceId,
+        transactionId
+      });
+      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize');
       return true;
     }
-    this.logger.info('[ProjectDashboard] Initializing...', { context: 'ProjectDashboard' });
+
+    this.logger.info('[ProjectDashboard] Initializing...', {
+      context: 'ProjectDashboard',
+      traceId,
+      transactionId,
+      timestamp: this._initStartTime
+    });
 
     try {
       const authModule = this.getModule('auth');
@@ -302,27 +347,137 @@ class ProjectDashboard {
         this.dashboardNotify.error('NavigationService not available for view registration.');
       }
 
+      // Mark as initialized
       this.state.initialized = true;
+
+      // Calculate initialization duration
+      const initEndTime = Date.now();
+      const initDuration = initEndTime - (this._initStartTime || initEndTime);
+
+      // Dispatch initialization event with detailed metadata
       this.domAPI.dispatchEvent(
         this.domAPI.getDocument(),
-        new CustomEvent('projectDashboardInitialized', { detail: { success: true } })
+        new CustomEvent('projectDashboardInitialized', {
+          detail: {
+            success: true,
+            timestamp: initEndTime,
+            duration: initDuration,
+            traceId,
+            transactionId
+          }
+        })
       );
-      this.logger.info('[ProjectDashboard] Initialization complete.', { context: 'ProjectDashboard' });
-      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
+
+      // Log successful initialization
+      this.logger.info('[ProjectDashboard] Initialization complete.', {
+        context: 'ProjectDashboard',
+        duration: initDuration,
+        timestamp: initEndTime,
+        traceId,
+        transactionId
+      });
+
+      // Log to backend
+      if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+        this.backendLogger.log({
+          level: 'info',
+          module: 'ProjectDashboard',
+          message: 'initialization_complete',
+          metadata: {
+            timestamp: initEndTime,
+            duration: initDuration,
+            traceId,
+            transactionId,
+            componentsStatus: {
+              projectList: !!this.components.projectList,
+              projectDetails: !!this.components.projectDetails,
+              projectListInitialized: this.components.projectList?.state?.initialized || false,
+              projectDetailsInitialized: this.components.projectDetails?.state?.initialized || false
+            }
+          }
+        });
+      }
+
+      // Stop the trace if it was started
+      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize');
       return true;
     } catch (error) {
-      this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'initialize' });
-      this.logger.error('[ProjectDashboard] Initialization failed:', error);
-      this.dashboardNotify.error('Dashboard initialization failed', { source: 'initialize', originalError: error });
+      // Calculate initialization duration even for failed attempts
+      const initEndTime = Date.now();
+      const initDuration = initEndTime - (this._initStartTime || initEndTime);
+
+      // Capture error with detailed context
+      this.errorReporter.capture(error, {
+        module: 'ProjectDashboard',
+        source: 'initialize',
+        traceId,
+        transactionId,
+        duration: initDuration
+      });
+
+      // Log detailed error information
+      this.logger.error('[ProjectDashboard] Initialization failed:', {
+        error,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+        traceId,
+        transactionId,
+        duration: initDuration
+      });
+
+      // Notify user with error details
+      this.dashboardNotify.error('Dashboard initialization failed', {
+        source: 'initialize',
+        originalError: error,
+        traceId,
+        transactionId
+      });
+
+      // Mark as not initialized
       this.state.initialized = false;
+
+      // Dispatch failure event with detailed metadata
       this.domAPI.dispatchEvent(
         this.domAPI.getDocument(),
-        new CustomEvent('projectDashboardInitialized', { detail: { success: false, error } })
+        new CustomEvent('projectDashboardInitialized', {
+          detail: {
+            success: false,
+            error,
+            errorMessage: error?.message,
+            timestamp: initEndTime,
+            duration: initDuration,
+            traceId,
+            transactionId
+          }
+        })
       );
-      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize (error)');
+
+      // Log to backend
+      if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+        this.backendLogger.log({
+          level: 'error',
+          module: 'ProjectDashboard',
+          message: 'initialization_failed',
+          metadata: {
+            timestamp: initEndTime,
+            duration: initDuration,
+            traceId,
+            transactionId,
+            error: error?.message,
+            componentsStatus: {
+              projectList: !!this.components.projectList,
+              projectDetails: !!this.components.projectDetails
+            }
+          }
+        });
+      }
+
+      // Stop the trace if it was started
+      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize (error)');
       return false;
     } finally {
-      this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
+      // Always stop the trace in finally block to ensure it's stopped
+      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize');
     }
   }
 
@@ -970,7 +1125,7 @@ class ProjectDashboard {
     // First, wait for project details template to be loaded
     this.logger.info('[ProjectDashboard] Waiting for project details template...');
     try {
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         // First check if the template has already been loaded
         const doc = this.domAPI.getDocument();
         const detailsView = this.domAPI.getElementById('projectDetailsView');
@@ -1047,7 +1202,7 @@ class ProjectDashboard {
     } else {
       this.logger.info('[ProjectDashboard] Waiting for project list template...');
       try {
-        await new Promise((resolve, reject) => {
+        await new Promise((resolve) => {
           const eventTarget = this.domAPI.getDocument();
 
           // Set up timeout

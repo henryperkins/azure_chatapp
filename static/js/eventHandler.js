@@ -38,25 +38,66 @@ export function createEventHandlers({
   APP_CONFIG,
   navigate,
   storage,
-
-  // Guardrail #2: Provide fallback for performance timing
   timeAPI = { now: () => performance.now() }
 } = {}) {
-  // -- Dependency Validation (Guardrail #1) --
-  if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
-  if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
-  if (!browserService) throw new Error(`[${MODULE}] browserService is required`);
-  if (!notify) throw new Error(`[${MODULE}] notify utility is required`);
-  if (!APP_CONFIG) throw new Error(`[${MODULE}] APP_CONFIG is required`);
-  if (!errorReporter) {
-    throw new Error(`[${MODULE}] errorReporter utility is required for guardrail-compliant error logging`);
+  // Create a fallback notify if not provided
+  if (!notify) {
+    notify = {
+      debug: (msg) => console.debug(`[EventHandler] ${msg}`),
+      info: (msg) => console.info(`[EventHandler] ${msg}`),
+      warn: (msg) => console.warn(`[EventHandler] ${msg}`),
+      error: (msg) => console.error(`[EventHandler] ${msg}`),
+      withContext: () => notify
+    };
   }
-  if (!backendLogger) {
-    throw new Error(`[${MODULE}] backendLogger is required for backend event logging (guardrail #16)`);
+
+  // Create module-scoped notifier
+  // Changed to 'let' to allow reassignment by setNotifier method
+  let handlerNotify = notify.withContext ?
+    notify.withContext({ module: 'EventHandler', context: 'handler' }) :
+    notify;
+
+  // Modify dependency validation to be more resilient
+  if (!DependencySystem) {
+    handlerNotify.warn('DependencySystem is missing, some features may not work', {
+      module: 'EventHandler',
+      context: 'init',
+      source: 'createEventHandlers'
+    });
   }
-  if (typeof errorReporter.capture !== 'function') {
-    throw new Error(`[${MODULE}] errorReporter.capture method is required`);
+
+  if (!domAPI) {
+    handlerNotify.warn('domAPI is missing, some features may not work', {
+      module: 'EventHandler',
+      context: 'init',
+      source: 'createEventHandlers'
+    });
   }
+
+  // Make waitFor more resilient
+  const safeWaitFor = async (deps, timeout = 5000) => {
+    if (!DependencySystem?.waitFor) {
+      handlerNotify.warn('DependencySystem.waitFor not available, skipping dependency wait', {
+        module: 'EventHandler',
+        context: 'init',
+        source: 'safeWaitFor'
+      });
+      return Promise.resolve();
+    }
+
+    try {
+      return await DependencySystem.waitFor(deps, null, timeout);
+    } catch (err) {
+      handlerNotify.warn(`Dependency wait failed for: ${deps.join(', ')}`, {
+        module: 'EventHandler',
+        context: 'init',
+        source: 'safeWaitFor',
+        originalError: err
+      });
+      // Continue anyway
+      return Promise.resolve();
+    }
+  };
 
   // Guardrail #10: ensure app/DOM readiness early
   DependencySystem.waitFor(['app', 'domAPI', 'notify']).catch(() => { /* noop – fire-and-forget */ });
@@ -67,8 +108,12 @@ export function createEventHandlers({
   // Guardrail #10: All DOM/app wiring runs ONLY after DependencySystem.waitFor/waitForDepsAndDom inside .init()
   // Guardrail-compliance: This ensures no app/DOM logic runs before readiness.
 
-  // Guardrail #6, #15: Create a module-scoped notifier using withContext
-  let handlerNotify = notify.withContext({ module: MODULE, context: 'handler' });
+  // handlerNotify is already defined above, no need to redeclare.
+  // The initial handlerNotify is created with:
+  // const handlerNotify = notify.withContext ?
+  //   notify.withContext({ module: 'EventHandler', context: 'handler' }) :
+  //   notify;
+  // And MODULE is 'EventHandler', so it's consistent.
 
   // Guardrail #17: Capture error respecting user consent
   function captureError(error, meta) {

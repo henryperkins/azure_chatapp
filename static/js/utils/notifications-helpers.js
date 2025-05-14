@@ -27,15 +27,15 @@ export function createDebugTools({ notify, errorReporter } = {}) {
     ? notify.withContext({ module: 'notifications-helpers', context: 'debugTools' })
     : notify;
 
-  const _log = (...args) => {
-    if (dbgNotify?.debug) dbgNotify.debug('[DebugTools]', { extra: args });
+  const _log = (message, source, details = {}) => {
+    if (dbgNotify?.debug) dbgNotify.debug(message, { source, ...details });
     // No console allowed per guardrails
   };
 
   function start(label = '') {
     const id = _uuid();
     _active.set(id, performance.now());
-    _log(`[trace:start] ${label}`, { traceId: id, label });
+    _log(`[trace:start] ${label}`, 'start', { traceId: id, label });
     return id;
   }
 
@@ -44,7 +44,7 @@ export function createDebugTools({ notify, errorReporter } = {}) {
     if (t0 == null) return null;
     const dur = +(performance.now() - t0).toFixed(1);
     _active.delete(id);
-    _log(`[trace:stop] ${label} (${dur} ms)`, { traceId: id, label, duration: dur });
+    _log(`[trace:stop] ${label} (${dur} ms)`, 'stop', { traceId: id, label, duration: dur });
     return dur;
   }
 
@@ -74,18 +74,18 @@ export async function logEventToServer(type, message, opts = {}, { apiClient, no
       // fallback: must warn, per guardrails
       if (logNotify?.warn) {
         logNotify.warn('No apiClient injected for backend event logging', {
-          module: 'notifications-helpers',
-          context: 'backendLogger'
+          source: 'logEventToServer-missingApiClient'
+          // module & context are from logNotify
         });
       }
     }
   } catch (err) {
     if (logNotify?.error) {
       logNotify.error('Failed to send log to server', {
-        module: 'notifications-helpers',
-        context: 'backendLogger',
+        source: 'logEventToServer-apiClientError',
         originalError: err,
-        message
+        message // keep original message for context
+        // module & context are from logNotify
       });
     }
     if (errorReporter?.capture) {
@@ -93,7 +93,8 @@ export async function logEventToServer(type, message, opts = {}, { apiClient, no
         module: 'notifications-helpers',
         method: 'logEventToServer',
         originalError: err,
-        message
+        message,
+        details: 'Error during apiClient.post to /api/log_notification'
       });
     }
     // No console fallback per codebase rules.
@@ -156,25 +157,22 @@ export async function wrapApi(apiFn, { notify, errorReporter }, endpoint, opts =
     return await apiFn(endpoint, opts);
   } catch (err) {
     apiNotify.error(`API call failed: ${endpoint}`, {
+      source: src, // Use 'src' as the source of the API call
       endpoint,
       method: opts?.method,
-      originalError: err,
-      module: 'notifications-helpers',
-      context: src
+      originalError: err
+      // module & context 'apiRequest' are from apiNotify
     });
-    maybeCapture(errorReporter, err, {
-      context: src,
-      module: 'notifications-helpers',
-      endpoint,
-      method: opts?.method
-    });
+    // maybeCapture is already called by the more specific errorReporter.capture below
     if (errorReporter && typeof errorReporter.capture === 'function') {
       errorReporter.capture(err, {
-        context: src,
-        module: 'notifications-helpers',
+        module: 'notifications-helpers', // Module where wrapApi lives
+        method: 'wrapApi', // The helper method itself
+        context: src, // The specific context/source of the API call
         endpoint,
-        method: opts?.method,
-        from: 'wrapApi'
+        httpMethod: opts?.method, // Consistent naming with other error captures
+        originalError: err,
+        fromUtils: true // Indicates error captured within a utility
       });
     }
     throw err;
@@ -191,29 +189,25 @@ export function safeInvoker(fn, { notify, errorReporter }, ctx) {
     try {
       return fn.apply(this, args);
     } catch (err) {
+      const sourceName = fn.name || (ctx?.source) || 'anonymousCallback';
       safeNotify?.error('Uncaught callback error', {
-        group: true,
-        ...ctx,
-        module: ctx?.module || 'notifications-helpers',
-        context: ctx?.context || 'callbackError',
-        originalError: err
+        source: sourceName, // module & context are from safeNotify
+        group: true, // Keep grouping if desired
+        originalError: err,
+        extraContext: ctx // Pass along original ctx if needed
       });
 
-      maybeCapture(errorReporter, err, {
-        ...ctx,
-        module: ctx?.module || 'notifications-helpers',
-        handler: fn.name || '(anonymous)',
-        uncaughtCallback: true
-      });
-
+      // maybeCapture is already called by the more specific errorReporter.capture below
       if (errorReporter && typeof errorReporter.capture === 'function') {
         try {
           errorReporter.capture(err, {
-            ...ctx,
-            module: ctx?.module || 'notifications-helpers',
-            handler: fn.name || '(anonymous)',
+            module: ctx?.module || 'notifications-helpers', // Module where safeInvoker is used or helper itself
+            method: 'safeInvoker', // The helper method
+            context: ctx?.context || 'callbackError', // Original context
+            handlerName: fn.name || '(anonymous)',
+            originalError: err,
             uncaughtCallback: true,
-            from: 'safeInvoker'
+            fromUtils: true // Indicates error captured within a utility
           });
         } catch (captureErr) {
           // Final guardrail: capture our own error reporting failures if possible
@@ -221,23 +215,12 @@ export function safeInvoker(fn, { notify, errorReporter }, ctx) {
             try {
               errorReporter.capture(captureErr, {
                 module: "notifications-helpers",
-                method: "safeInvoker",
-                handler: fn.name || '(anonymous)',
+                method: "safeInvoker-captureErr",
                 originalError: captureErr,
-                from: "safeInvoker-capture"
+                details: "Error while trying to report an error from safeInvoker"
               });
             } catch (finalCaptureErr) {
-              if (errorReporter && typeof errorReporter.capture === "function") {
-                try {
-                  errorReporter.capture(finalCaptureErr, {
-                    module: "notifications-helpers",
-                    method: "safeInvoker-finalfallback",
-                    handler: fn.name || '(anonymous)',
-                    originalError: finalCaptureErr,
-                    from: "safeInvoker-capture-fallback"
-                  });
-                } catch {/* absolute fail-safe: must not leak */}
-              }
+              // Absolute fail-safe, do nothing to prevent infinite loops
             }
           }
         }
@@ -249,11 +232,11 @@ export function safeInvoker(fn, { notify, errorReporter }, ctx) {
 // Ready notification
 export function emitReady({ notify }, who) {
   const readyNotify = notify?.withContext
-    ? notify.withContext({ module: 'notifications-helpers', context: 'emitReady' })
+    ? notify.withContext({ module: 'notifications-helpers', context: 'emitReady' }) // Base context
     : notify;
   readyNotify.info(`${who} ready`, {
-    group: true,
-    context: who.toLowerCase(),
-    module: 'notifications-helpers'
+    source: `emitReady-${who.toLowerCase().replace(/\s+/g, '-')}`, // Specific source for this emission
+    group: true
+    // module & context 'emitReady' are from readyNotify
   });
 }

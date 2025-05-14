@@ -177,17 +177,71 @@ export class ProjectListComponent {
 
     /** Initialize component once DOM has #projectList */
     async initialize() { // Changed to async
+        // Store initialization start time for duration calculation
+        this._initStartTime = Date.now();
+
+        // Start performance trace if debug tools available
+        const initTrace = this.DependencySystem?.modules?.get('debugTools')?.start?.('ProjectListComponent.initialize');
+
+        this.notify.info('[ProjectListComponent] Starting initialization', {
+            source: 'initialize',
+            context: MODULE_CONTEXT,
+            timestamp: this._initStartTime,
+            traceId: this.DependencySystem?.getCurrentTraceIds?.()?.traceId || `trace-${this._initStartTime}`
+        });
+
+        // Log initialization attempt to backend
+        if (this.backendLogger && typeof this.backendLogger.log === 'function') {
+          this.backendLogger.log({
+            level: 'info',
+            module: 'ProjectListComponent',
+            message: 'initialization_started',
+            metadata: {
+              timestamp: Date.now(),
+              initialized: this.state?.initialized || false
+            }
+          });
+        }
+
         const { DependencySystem } = this;
-        if (DependencySystem?.waitFor) {
-          await DependencySystem.waitFor(['app:ready']);
+        try {
+            if (DependencySystem?.waitFor) {
+                this.notify.debug('[ProjectListComponent] Waiting for app:ready event', {
+                    source: 'initialize',
+                    context: MODULE_CONTEXT
+                });
+
+                await DependencySystem.waitFor(['app:ready']);
+
+                this.notify.debug('[ProjectListComponent] app:ready event received', {
+                    source: 'initialize',
+                    context: MODULE_CONTEXT
+                });
+            } else {
+                this.notify.warn('[ProjectListComponent] DependencySystem.waitFor not available, skipping app:ready wait', {
+                    source: 'initialize',
+                    context: MODULE_CONTEXT
+                });
+            }
+        } catch (err) {
+            this.notify.error('[ProjectListComponent] Error waiting for app:ready', {
+                source: 'initialize',
+                context: MODULE_CONTEXT,
+                originalError: err
+            });
+            this._captureError(err, 'initialize_waitForAppReady');
+            // Continue despite error to attempt recovery
         }
 
         // ✅ Backend event log after readiness
         if (this.backendLogger && typeof this.backendLogger.log === 'function') {
           this.backendLogger.log({
-            level  : 'info',
-            module : 'ProjectListComponent',
-            message: 'loaded'
+            level: 'info',
+            module: 'ProjectListComponent',
+            message: 'app_ready_received',
+            metadata: {
+              timestamp: Date.now()
+            }
           });
         }
 
@@ -250,10 +304,21 @@ export class ProjectListComponent {
         // Wait for critical internal/sibling DOM elements to be ready
         // These are elements ProjectListComponent itself needs to bind to directly.
         // Assumes this.element (#projectList) is already confirmed by app.js's waitForDepsAndDom
-        const criticalSelectors = ['#projectFilterTabs', '#projectListCreateBtn', '#emptyStateCreateBtn', '#loginButton', '#retryButton'];
-        // Filter out selectors for elements that might not always be present (e.g., conditional UI)
-        // For now, let's assume #projectFilterTabs and #projectListCreateBtn are essential for basic operation.
-        // Others like #emptyStateCreateBtn are conditional.
+
+        // Log DOM element status for debugging
+        const criticalElements = {
+            projectFilterTabs: !!this.domAPI.getElementById('projectFilterTabs'),
+            projectListCreateBtn: !!this.domAPI.getElementById('projectListCreateBtn'),
+            emptyStateCreateBtn: !!this.domAPI.getElementById('emptyStateCreateBtn'),
+            loginButton: !!this.domAPI.getElementById('loginButton'),
+            retryButton: !!this.domAPI.getElementById('retryButton')
+        };
+
+        this.notify.debug('[ProjectListComponent] Critical DOM elements status', {
+            source: 'initialize',
+            context: MODULE_CONTEXT,
+            criticalElements
+        });
         // A more robust solution might involve checking for their containers if the elements themselves are dynamic.
         const essentialSelectors = ['#projectFilterTabs', '#projectListCreateBtn'];
 
@@ -283,23 +348,87 @@ export class ProjectListComponent {
         this._bindEventListeners();
         this._bindCreateProjectButtons();
 
+        // Mark as initialized
         this._setState({ initialized: true });
-        if (this.app?.config?.debug) {
-            this.notify.info('[ProjectListComponent] Initialized successfully.', { group: true, context: 'projectListComponent' });
-        }
-        this.notify.success('Project list loaded.', { group: true, context: 'projectListComponent' });
+
+        // Log successful initialization
+        const initEndTime = Date.now();
+        const initDuration = initEndTime - (this._initStartTime || initEndTime);
+
+        this.notify.info('[ProjectListComponent] Initialized successfully', {
+            group: true,
+            context: MODULE_CONTEXT,
+            source: 'initialize',
+            duration: initDuration,
+            timestamp: initEndTime,
+            traceId: this.DependencySystem?.getCurrentTraceIds?.()?.traceId || `trace-${Date.now()}`
+        });
+
+        this.notify.success('Project list component ready', {
+            group: true,
+            context: MODULE_CONTEXT,
+            source: 'initialize'
+        });
 
         // --- Standardized "projectlistcomponent:initialized" event ---
-        this.eventBus.dispatchEvent(new CustomEvent('initialized', { detail: { success: true } }));
+        this.eventBus.dispatchEvent(new CustomEvent('initialized', {
+            detail: {
+                success: true,
+                timestamp: initEndTime,
+                duration: initDuration
+            }
+        }));
 
+        // Dispatch DOM event for other components to listen for
+        try {
+            const doc = this.domAPI.getDocument();
+            if (doc) {
+                this.domAPI.dispatchEvent(doc, new CustomEvent('projectListComponentInitialized', {
+                    detail: {
+                        success: true,
+                        timestamp: initEndTime,
+                        duration: initDuration
+                    }
+                }));
+            }
+        } catch (err) {
+            this.notify.warn('[ProjectListComponent] Error dispatching DOM event', {
+                source: 'initialize',
+                context: MODULE_CONTEXT,
+                originalError: err
+            });
+        }
+
+        // Log to backend
         if (this.backendLogger && typeof this.backendLogger.log === 'function') {
           this.backendLogger.log({
-            level  : 'info',
-            module : 'ProjectListComponent',
-            message: 'initialized'
+            level: 'info',
+            module: 'ProjectListComponent',
+            message: 'initialized',
+            metadata: {
+              timestamp: initEndTime,
+              duration: initDuration,
+              domElementsFound: {
+                element: !!this.element,
+                gridElement: !!this.gridElement,
+                projectFilterTabs: !!this.domAPI.getElementById('projectFilterTabs'),
+                projectListCreateBtn: !!this.domAPI.getElementById('projectListCreateBtn')
+              }
+            }
           });
         }
 
+        // Stop the trace if it was started
+        const debugTools = this.DependencySystem?.modules?.get('debugTools');
+        if (debugTools?.stop) {
+            debugTools.stop(initTrace, 'ProjectListComponent.initialize');
+        }
+
+        // Load projects
+        this.notify.info('[ProjectListComponent] Loading projects after initialization', {
+            source: 'initialize',
+            context: MODULE_CONTEXT
+        });
         this._loadProjects();
     }
 
@@ -407,18 +536,65 @@ export class ProjectListComponent {
                 });
 
                 if (authenticated) {
-                    // Make sure the component is visible
-                    this.show();
+                    this.notify.info('[ProjectListComponent] Authentication state changed to authenticated', {
+                        source: 'authStateChanged',
+                        userId: user?.id
+                    });
 
-                    // Load projects with a small delay to ensure auth state is fully processed
-                    setTimeout(() => {
-                        this._loadProjects();
-                        this.notify.info('[ProjectListComponent] Loading projects after authentication state change');
-                    }, 100);
+                    // First ensure the component is initialized
+                    if (!this.state.initialized) {
+                        this.notify.info('[ProjectListComponent] Component not initialized yet, initializing now', {
+                            source: 'authStateChanged'
+                        });
+
+                        try {
+                            // Initialize if needed
+                            this.initialize().then(() => {
+                                // Make sure the component is visible
+                                this.show();
+
+                                // Load projects after initialization
+                                this._loadProjects();
+                                this.notify.info('[ProjectListComponent] Loading projects after initialization and auth change', {
+                                    source: 'authStateChanged'
+                                });
+                            }).catch(err => {
+                                this.notify.error('[ProjectListComponent] Failed to initialize after auth change', {
+                                    source: 'authStateChanged',
+                                    originalError: err
+                                });
+                                this._captureError(err, 'authStateChanged_initialize');
+                            });
+                        } catch (err) {
+                            this.notify.error('[ProjectListComponent] Error during initialization after auth change', {
+                                source: 'authStateChanged',
+                                originalError: err
+                            });
+                            this._captureError(err, 'authStateChanged_initialize');
+                        }
+                    } else {
+                        // Component already initialized, just show and load
+                        this.notify.info('[ProjectListComponent] Component already initialized, showing and loading projects', {
+                            source: 'authStateChanged'
+                        });
+
+                        // Make sure the component is visible
+                        this.show();
+
+                        // Load projects with a small delay to ensure auth state is fully processed
+                        setTimeout(() => {
+                            this._loadProjects();
+                            this.notify.info('[ProjectListComponent] Loading projects after authentication state change', {
+                                source: 'authStateChanged'
+                            });
+                        }, 100);
+                    }
                 } else {
                     // If not authenticated, show login required
                     this._showLoginRequired();
-                    this.notify.info('[ProjectListComponent] Showing login required after authentication state change');
+                    this.notify.info('[ProjectListComponent] Showing login required after authentication state change', {
+                        source: 'authStateChanged'
+                    });
                 }
             },
             { description: "ProjectList: authStateChanged", context: MODULE_CONTEXT }
@@ -638,22 +814,69 @@ export class ProjectListComponent {
      */
     _makeVisible() {
         const docAPI = this.domAPI;
+
         // Make the grid element visible
         if (this.gridElement) {
             this.gridElement.classList.remove("hidden");
+            this.gridElement.style.display = ""; // Ensure display is reset
+
+            this.notify.debug("[ProjectListComponent._makeVisible] Made gridElement visible", {
+                group: true,
+                context: "projectListComponent",
+                source: "_makeVisible",
+                gridClasses: this.gridElement.className,
+                gridDisplay: this.gridElement.style.display
+            });
         }
 
         // Make the main element visible
         if (this.element) { // This is #projectList
             this.element.classList.remove("hidden", "opacity-0"); // Ensure opacity-0 is also removed
             this.element.style.opacity = '1'; // Explicitly set opacity
+            this.element.style.display = ""; // Ensure display is reset
+
+            this.notify.debug("[ProjectListComponent._makeVisible] Made element visible", {
+                group: true,
+                context: "projectListComponent",
+                source: "_makeVisible",
+                elementClasses: this.element.className,
+                elementDisplay: this.element.style.display
+            });
         }
 
         // Ensure the main container #projectListView is also visible and opacity is reset
-        const listViewContainer = docAPI?.getElementById("projectListView") || docAPI.getElementById("projectListView");
+        const listViewContainer = docAPI?.getElementById("projectListView");
         if (listViewContainer) {
             listViewContainer.classList.remove("hidden", "opacity-0");
             listViewContainer.style.display = "";
+            listViewContainer.style.visibility = "visible"; // Explicitly set visibility
+            listViewContainer.style.opacity = "1"; // Ensure opacity is set to visible
+
+            // Also ensure the parent container is visible
+            const projectManagerPanel = docAPI?.getElementById("projectManagerPanel");
+            if (projectManagerPanel) {
+                projectManagerPanel.classList.remove("hidden");
+                projectManagerPanel.style.display = "";
+            }
+
+            // Also ensure the projectDetailsView is hidden to avoid conflicts
+            const projectDetailsView = docAPI?.getElementById("projectDetailsView");
+            if (projectDetailsView) {
+                projectDetailsView.classList.add("hidden");
+                projectDetailsView.style.display = "none";
+            }
+
+            // Ensure login message is hidden
+            const loginMessage = docAPI?.getElementById("loginRequiredMessage");
+            if (loginMessage) {
+                loginMessage.classList.add("hidden");
+            }
+
+            // Ensure main content is visible
+            const mainContent = docAPI?.getElementById("mainContent");
+            if (mainContent) {
+                mainContent.classList.remove("hidden");
+            }
 
             // Force a reflow to ensure CSS transitions apply
             void listViewContainer.offsetHeight;
@@ -661,13 +884,17 @@ export class ProjectListComponent {
             this.notify.debug("[ProjectListComponent._makeVisible] Made listViewContainer visible", {
                 group: true,
                 context: "projectListComponent",
+                source: "_makeVisible",
                 listViewClasses: listViewContainer.className,
-                listViewDisplay: listViewContainer.style.display
+                listViewDisplay: listViewContainer.style.display,
+                listViewVisibility: listViewContainer.style.visibility,
+                listViewOpacity: listViewContainer.style.opacity
             });
         } else {
             this.notify.warn("[ProjectListComponent._makeVisible] listViewContainer not found", {
                 group: true,
-                context: "projectListComponent"
+                context: "projectListComponent",
+                source: "_makeVisible"
             });
         }
     }
@@ -697,7 +924,7 @@ export class ProjectListComponent {
         return [];
     }
 
-    /** Show the list container */
+    /** Show the list container with enhanced visibility checks */
     show() {
         const docAPI = this.domAPI;
         // Track if we're already in a show/render cycle to prevent recursive loops
@@ -715,14 +942,51 @@ export class ProjectListComponent {
             group: true,
             context: "projectListComponent",
             hasGridElement: !!this.gridElement,
-            hasElement: !!this.element
+            hasElement: !!this.element,
+            initialized: this.state.initialized
         });
+
+        // Ensure component is initialized
+        if (!this.state.initialized) {
+            this.notify.warn("[ProjectListComponent.show] Component not initialized, initializing first", {
+                group: true,
+                context: "projectListComponent",
+                source: "show"
+            });
+
+            try {
+                // Initialize and then show
+                this.initialize().then(() => {
+                    // Call show again after initialization
+                    this.show();
+                }).catch(err => {
+                    this.notify.error("[ProjectListComponent.show] Failed to initialize", {
+                        group: true,
+                        context: "projectListComponent",
+                        source: "show",
+                        originalError: err
+                    });
+                    this._captureError(err, 'show_initialize');
+                });
+                return; // Exit early, we'll call show again after initialization
+            } catch (err) {
+                this.notify.error("[ProjectListComponent.show] Error during initialization", {
+                    group: true,
+                    context: "projectListComponent",
+                    source: "show",
+                    originalError: err
+                });
+                this._captureError(err, 'show_initialize');
+                // Continue with show attempt despite initialization error
+            }
+        }
 
         // Check if the grid element exists
         if (!this.gridElement) {
             this.notify.warn("[ProjectListComponent.show] grid element not found.", {
                 group: true,
-                context: "projectListComponent"
+                context: "projectListComponent",
+                source: "show"
             });
 
             // Try to find or create the grid element
@@ -735,7 +999,8 @@ export class ProjectListComponent {
                 if (!this.gridElement) {
                     this.notify.info("[ProjectListComponent.show] Creating missing grid element", {
                         group: true,
-                        context: "projectListComponent"
+                        context: "projectListComponent",
+                        source: "show"
                     });
 
                     const grid = docAPI?.createElement ?
@@ -754,7 +1019,8 @@ export class ProjectListComponent {
             } else {
                 this.notify.error("[ProjectListComponent.show] Cannot find or create grid element - parent element not found", {
                     group: true,
-                    context: "projectListComponent"
+                    context: "projectListComponent",
+                    source: "show"
                 });
                 return;
             }
@@ -762,6 +1028,23 @@ export class ProjectListComponent {
 
         // Make the component visible using the shared helper
         this._makeVisible();
+
+        // Additional visibility check for the parent container
+        const projectListView = docAPI?.getElementById("projectListView");
+        if (projectListView) {
+            projectListView.classList.remove("hidden", "opacity-0");
+            projectListView.style.display = "";
+            projectListView.style.visibility = "visible";
+            projectListView.style.opacity = "1";
+
+            this.notify.debug("[ProjectListComponent.show] Ensured projectListView container is visible", {
+                group: true,
+                context: "projectListComponent",
+                source: "show",
+                classes: projectListView.className,
+                display: projectListView.style.display
+            });
+        }
 
         // If we have projects, render them - but only if we're not already rendering
         if (this.state.projects && this.state.projects.length > 0 && !this._isRendering) {
@@ -784,6 +1067,45 @@ export class ProjectListComponent {
             // If no projects, try to load them
             this._loadProjects();
         }
+
+        // Final visibility check with a delay to catch any race conditions
+        setTimeout(() => {
+            const finalListView = docAPI?.getElementById("projectListView");
+            const finalElement = this.element || docAPI?.getElementById(this.elementId);
+            const finalGridElement = this.gridElement;
+
+            if (finalListView && (finalListView.classList.contains("hidden") || finalListView.style.display === "none")) {
+                this.notify.warn("[ProjectListComponent.show] Final check: projectListView still hidden, forcing visibility", {
+                    group: true,
+                    context: "projectListComponent",
+                    source: "show_finalCheck"
+                });
+                finalListView.classList.remove("hidden", "opacity-0");
+                finalListView.style.display = "";
+                finalListView.style.visibility = "visible";
+                finalListView.style.opacity = "1";
+            }
+
+            if (finalElement && (finalElement.classList.contains("hidden") || finalElement.style.display === "none")) {
+                this.notify.warn("[ProjectListComponent.show] Final check: element still hidden, forcing visibility", {
+                    group: true,
+                    context: "projectListComponent",
+                    source: "show_finalCheck"
+                });
+                finalElement.classList.remove("hidden", "opacity-0");
+                finalElement.style.display = "";
+            }
+
+            if (finalGridElement && (finalGridElement.classList.contains("hidden") || finalGridElement.style.display === "none")) {
+                this.notify.warn("[ProjectListComponent.show] Final check: gridElement still hidden, forcing visibility", {
+                    group: true,
+                    context: "projectListComponent",
+                    source: "show_finalCheck"
+                });
+                finalGridElement.classList.remove("hidden");
+                finalGridElement.style.display = "";
+            }
+        }, 150);
 
         this.notify.info('Project list is now visible.', { group: true, context: 'projectListComponent' });
     }

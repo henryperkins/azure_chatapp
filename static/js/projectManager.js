@@ -102,13 +102,29 @@ class ProjectManager {
     apiRequest = null,
     errorReporter = null,
     debugTools = null,
-    backendLogger = null,          // NEW
-    browserService = null,         // NEW
+    backendLogger = null,
+    browserService = null,
     domAPI = null
   } = {}) {
     if (!DependencySystem) {
       if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
       throw new Error('DependencySystem required');
+    }
+
+    // Create module-scoped notifier per guardrail #15
+    this.pmNotify = notify?.withContext
+      ? notify.withContext({ module: 'ProjectManager', context: 'operations' })
+      : notify;
+
+    // Log initialization
+    this.pmNotify?.info('ProjectManager initializing', { source: 'constructor' });
+    if (backendLogger?.log) {
+      backendLogger.log({
+        level: 'info',
+        module: 'ProjectManager',
+        context: 'init',
+        message: 'ProjectManager initializing'
+      });
     }
     if (!apiEndpoints) {
       if (notify) notify.error('[ProjectManager] apiEndpoints required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
@@ -125,11 +141,11 @@ class ProjectManager {
     this.notify = notify ?? DependencySystem.modules.get?.('notify');
     this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
     this.debugTools = debugTools || DependencySystem.modules.get?.('debugTools') || null;
-    this.backendLogger = backendLogger ?? DependencySystem.modules.get?.('backendLogger') ?? null;  // NEW
+    this.backendLogger = backendLogger ?? DependencySystem.modules.get?.('backendLogger') ?? null;
     this.timer = timer;
     this.storage = storage;
     this.apiRequest = apiRequest ?? app?.apiRequest;
-    this.browserService = browserService ?? DependencySystem.modules.get?.('browserService') ?? null; // NEW
+    this.browserService = browserService ?? DependencySystem.modules.get?.('browserService') ?? null;
     this.domAPI       = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
     // Fallback: wrap raw handler if notify util isn't injected yet
