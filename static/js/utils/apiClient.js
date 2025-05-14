@@ -26,19 +26,22 @@ export function createApiClient({
   getAuthModule,
   browserService,
   notify,
-  errorReporter         // ← new DI param
+  errorReporter,
+  backendLogger         // Add backendLogger parameter
 }) {
-  /* strict no-op fall-backs                                    */
-  notify        = notify        || { debug(){}, info(){}, warn(){}, error(){} };
+  /* strict no-op fall-backs */
+  notify = notify || { debug(){}, info(){}, warn(){}, error(){} };
   // Guard-rail #15 – contextual notifier for every subsequent call
   const apiNotify = (notify?.withContext)
     ? notify.withContext({ module: 'ApiClient', context: 'apiRequest' })
     : notify;
   errorReporter = errorReporter || null;
+  backendLogger = backendLogger || null; // Add fallback
   const pending = new Map();
   const BASE_URL = APP_CONFIG?.BASE_API_URL || '';
 
-  return async function apiRequest(url, opts = {}, skipCache = false) {
+  // Define the main request function
+  const mainApiRequest = async function apiRequest(url, opts = {}, skipCache = false) {
     const method = (opts.method || "GET").toUpperCase();
 
     if (!skipCache && method === "GET" && globalUtils.shouldSkipDedup(url)) {
@@ -65,8 +68,8 @@ export function createApiClient({
       // Fallback or error handling if normaliseUrl itself throws, though it has its own try/catch.
       normUrl = fullUrl; // Fallback to fullUrl if normalization fails catastrophically
       if (APP_CONFIG?.DEBUG) {
-        notify.warn(`[API] URL normalization failed for "${fullUrl}", using raw URL.`, {
-          context: 'apiClient', module: 'ApiClient', source: 'apiRequest', originalError: err
+        apiNotify.warn(`[API] URL normalization failed for "${fullUrl}", using raw URL.`, {
+          source: 'urlNormalizationFailure', originalError: err
         });
       }
       if (errorReporter?.capture) {
@@ -86,7 +89,7 @@ export function createApiClient({
     const key = `${method}-${normUrl}-${bodyKey}`;
 
     if (!skipCache && method === "GET" && pending.has(key)) {
-      if (APP_CONFIG.DEBUG) apiNotify.debug(`[API] Dedup hit: ${key}`, { module: 'ApiClient', source:'dedup' });
+      if (APP_CONFIG.DEBUG) apiNotify.debug(`[API] Dedup hit: ${key}`, { source:'dedupHit' });
       return pending.get(key);
     }
 
@@ -96,7 +99,7 @@ export function createApiClient({
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       const csrf = auth.getCSRFToken();
       if (csrf) opts.headers["X-CSRF-Token"] = csrf;
-      else if (APP_CONFIG.DEBUG) apiNotify.warn(`[API] No CSRF for ${method} ${normUrl}`, { module: 'ApiClient', source:'csrf' });
+      else if (APP_CONFIG.DEBUG) apiNotify.warn(`[API] No CSRF for ${method} ${normUrl}`, { source:'csrfTokenMissing' });
     }
 
     // JSON stringify body if plain object (not FormData)
@@ -108,9 +111,7 @@ export function createApiClient({
         } catch (err) {
           apiNotify.error("[API] Failed to stringify body", {
             originalError: err,
-            module: 'ApiClient',
-            context: 'apiClient',
-            source: 'stringifyBody'
+            source: 'stringifyBodyFailure'
           });
           if (errorReporter?.capture) {
             errorReporter.capture(err, {
@@ -139,113 +140,33 @@ export function createApiClient({
       try {
         if (APP_CONFIG.DEBUG)
           apiNotify.debug(`[API] ${method} ${normUrl}`, {
-            context: 'api',
-            module: 'ApiClient',
-            source: 'request',
-            /* trace helpers removed to avoid hidden globals */
-            extra: { hasBody: !!opts.body }
+            source: 'requestInitiated',
+            extra: { httpMethod: method, url: normUrl, hasBody: !!opts.body }
           });
 
         const resp = await (browserService?.fetch || fetch)(normUrl, opts);
 
-        // Debug log for /api/auth/verify
-        if (normUrl.includes('/api/auth/verify')) {
-          try {
-            const clone = resp.clone();
-            const cType = clone.headers.get("content-type") || "";
-            let body;
-            if (cType.includes("application/json")) body = await clone.json();
-            else body = await clone.text();
-            const headersObj = {};
-            for (const [k, v] of clone.headers.entries()) headersObj[k] = v;
-            apiNotify.debug("[AUTH DEBUG] /api/auth/verify response", { module: 'ApiClient', source: 'authDebug', extra: body });
-            apiNotify.debug("[AUTH DEBUG] /api/auth/verify headers",  { module: 'ApiClient', source: 'authDebug', extra: headersObj });
-          } catch (e) {
-            apiNotify.warn("[AUTH DEBUG] Failed to log /api/auth/verify response", {
-              originalError: e,
-              module: 'ApiClient',
-              context: 'authDebug',
-              source: 'authDebug'
-            });
-            if (errorReporter?.capture) {
-              errorReporter.capture(e, {
-                module: 'ApiClient',
-                method: 'apiRequest',
-                source: 'authDebug',
-                originalError: e
-              });
-            }
-          }
-        }
-
+        // Log failed responses
         if (!resp.ok) {
-          let errPayload = { message: `API Error: ${resp.status} ${resp.statusText}` };
-          try {
-            const json = await resp.clone().json();
-            const detail = json.detail || json.message;
-            if (detail)
-              errPayload.message = typeof detail === "string" ? detail : JSON.stringify(detail);
-            Object.assign(errPayload, json);
-          } catch (jsonErr) {
-            if (errorReporter?.capture) {
-              errorReporter.capture(jsonErr, {
-                module: 'ApiClient',
-                method: 'apiRequest',
-                source: 'parseErrorPayloadJson',
-                originalError: jsonErr
-              });
-            }
-            try {
-              errPayload.raw = await resp.text();
-            } catch (e) {
-              apiNotify.warn("[apiClient] (fallback) Failed to read response text", {
-                originalError: e,
-                module: 'ApiClient',
-                context: 'errorReadFallback',
-                source: 'errorReadFallback'
-              });
-              if (errorReporter?.capture) {
-                errorReporter.capture(e, {
-                  module: 'ApiClient',
-                  method: 'apiRequest',
-                  source: 'errorReadFallback',
-                  originalError: e
-                });
-              }
-            }
-          }
-          const e = new Error(errPayload.message);
-          e.status = resp.status;
-          e.data = errPayload;
-          logEventToServer('error', errPayload.message, { status: resp.status, ...errPayload });
-          maybeCapture(errorReporter, e, { url: normUrl, method });
-          throw e;
-        }
+          const errorText = await resp.text().catch(() => 'Failed to read error response');
+          apiNotify.error(`API error: ${resp.status} ${resp.statusText}`, {
+            source: 'requestFailed',
+            extra: { url: normUrl, status: resp.status, responseText: errorText, httpMethod: method }
+          });
 
-        if (resp.status === 204 || resp.headers.get("content-length") === "0") return undefined;
-
-        const cType = resp.headers.get("content-type") || "";
-        if (cType.includes("application/json")) {
-          const json = await resp.json();
-          return json?.status === "success" && "data" in json ? json.data : json;
-        }
-
-        const rawText = await resp.text();
-        try {
-          const json = JSON.parse(rawText);
-          return json?.status === "success" && "data" in json ? json.data : json;
-        } catch (parseErr) {
-          /* not JSON */
-          if (errorReporter?.capture) {
-            errorReporter.capture(parseErr, {
+          // Log to backend
+          if (backendLogger?.log) {
+            backendLogger.log({
+              level: 'error',
               module: 'ApiClient',
-              method: 'apiRequest',
-              source: 'parseRawText',
-              originalError: parseErr
+              context: 'apiRequest',
+              message: `API error: ${resp.status} ${resp.statusText}`,
+              extra: { url: normUrl, status: resp.status }
             });
           }
         }
-        return rawText;
+
+        return resp;
       } finally {
         clearTimeout(timer);
         if (!skipCache && method === "GET") pending.delete(key);
@@ -257,10 +178,10 @@ export function createApiClient({
   };
 
   // Convenience verbs required by BackendLogger / other callers
-  apiRequest.post = (url, body = {}, opts = {}, skip = true) =>
-    apiRequest(url, { ...opts, method: 'POST', body }, skip);
-  apiRequest.get = (url, params = {}, opts = {}, skip = false) =>
-    apiRequest(url, { ...opts, method: 'GET',  params }, skip);
+  mainApiRequest.post = (url, body = {}, opts = {}, skip = true) =>
+    mainApiRequest(url, { ...opts, method: 'POST', body }, skip);
+  mainApiRequest.get = (url, params = {}, opts = {}, skip = false) =>
+    mainApiRequest(url, { ...opts, method: 'GET',  params }, skip);
 
-  return apiRequest;
+  return mainApiRequest;
 }

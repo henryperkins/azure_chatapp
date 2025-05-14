@@ -13,8 +13,57 @@ export function createNotificationHandler({
     warning: "#D97706",
     error  : "#DC2626",
   },
+  logToConsole = true, // Default to true if not provided by APP_CONFIG
+  verboseLogging = false // Default to false if not provided by APP_CONFIG
 } = {}) {
   if (!domAPI) throw new Error('notificationHandler: domAPI is required');
+
+  const logToConsoleImpl = (message, type, opts = {}) => {
+    if (!logToConsole) return;
+
+    const { module, context, source, originalError, ...restOpts } = opts;
+    const prefix = [module, context, source].filter(Boolean).join(':') || 'Notification';
+    const logMessage = `[${prefix}] ${message || '(empty message)'}`;
+
+    switch (type) {
+      case 'debug':
+        if (verboseLogging) {
+          console.debug(logMessage, { originalError, ...restOpts });
+        } else {
+          console.debug(logMessage, originalError || '');
+        }
+        break;
+      case 'info':
+      case 'success':
+        if (verboseLogging && Object.keys(restOpts).length > 0) {
+          console.info(logMessage, { originalError, ...restOpts });
+        } else {
+          console.info(logMessage, originalError || '');
+        }
+        break;
+      case 'warning':
+        if (verboseLogging && Object.keys(restOpts).length > 0) {
+          console.warn(logMessage, { originalError, ...restOpts });
+        } else {
+          console.warn(logMessage, originalError || '');
+        }
+        break;
+      case 'error':
+        // Errors should always log more details if available
+        console.error(logMessage, { originalError, ...restOpts });
+        if (originalError?.stack && verboseLogging) {
+          console.error("Stack trace:", originalError.stack);
+        }
+        break;
+      default: // Should not happen if type is validated in show()
+        if (verboseLogging) {
+          console.log(`[${prefix}] (${type}) ${message}`, { originalError, ...restOpts });
+        } else {
+          console.log(`[${prefix}] (${type}) ${message}`, originalError || '');
+        }
+        break;
+    }
+  };
 
   // Guardrail #10 – wait for eventHandlers readiness before DOM work
   let _eventHandlersReady = Promise.resolve();
@@ -148,6 +197,9 @@ export function createNotificationHandler({
 
   // Show notification
   async function show(message, type = "info", opts = {}) {
+    // Log to console first (always works even if UI fails)
+    logToConsoleImpl(message, type, opts);
+
     if (!message) message = "Notification without message";
 
     // Validate type

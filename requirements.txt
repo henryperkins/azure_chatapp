@@ -1,4 +1,4 @@
-fastapialembic>=1.7.0
+fastapi[alembic]
 alembic>=1.7.0
 gitpython>=3.1.0
 uvicorn
