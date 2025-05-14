@@ -325,7 +325,9 @@ export class ProjectListComponent {
         try {
             await this.globalUtils.waitForDepsAndDom({
                 DependencySystem: this.app?.DependencySystem || this.eventHandlers?.DependencySystem,
-                domSelectors: essentialSelectors,
+                domSelectors: ['#projectList', '#projectListView', '#projectDetailsView',
+                              '#projectTitle', '#projectDescription', '#backToProjectsBtn',
+                              '#projectFilterTabs'],
                 timeout: 10000, // Increased timeout
                 notify: this.notify,
                 domAPI: docAPI, // Pass the injected domAPI
@@ -925,7 +927,7 @@ export class ProjectListComponent {
     }
 
     /** Show the list container with enhanced visibility checks */
-    show() {
+    async show() {
         const docAPI = this.domAPI;
         // Track if we're already in a show/render cycle to prevent recursive loops
         if (this._isRendering) {
@@ -955,20 +957,9 @@ export class ProjectListComponent {
             });
 
             try {
-                // Initialize and then show
-                this.initialize().then(() => {
-                    // Call show again after initialization
-                    this.show();
-                }).catch(err => {
-                    this.notify.error("[ProjectListComponent.show] Failed to initialize", {
-                        group: true,
-                        context: "projectListComponent",
-                        source: "show",
-                        originalError: err
-                    });
-                    this._captureError(err, 'show_initialize');
-                });
-                return; // Exit early, we'll call show again after initialization
+                // Initialize and then continue in show after initialization
+                await this.initialize();
+                // After initialization, continue with show logic
             } catch (err) {
                 this.notify.error("[ProjectListComponent.show] Error during initialization", {
                     group: true,
@@ -1293,19 +1284,13 @@ export class ProjectListComponent {
             );
         }
         const docAPI = this.domAPI;
-        const buttonIds = [
-            "projectListCreateBtn",
-            "sidebarNewProjectBtn",
-            "emptyStateCreateBtn"
-        ];
-        buttonIds.forEach((id) => {
-            const btn = docAPI.getElementById(id);
-            if (!btn) return;
-            const handler = () => this._openNewProjectModal();
-            this.eventHandlers.trackListener(btn, "click", handler, {
-                description: `Open New Project Modal (${id})`, context: MODULE_CONTEXT
-            });
-        });
+        this.eventHandlers.delegate(
+            docAPI.getDocument(),
+            'click',
+            '#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn',
+            () => this._openNewProjectModal(),
+            { description:'Open New Project Modal (delegated)', context:MODULE_CONTEXT }
+        );
     }
 
     _openNewProjectModal() {

@@ -40,7 +40,8 @@ export function normaliseUrl(u = '', errorReporter = null) {
   try {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
     // url.search already includes '?' if params exist, or is empty string otherwise.
-    return url.pathname.replace(/\/+$/, '') + url.search + url.hash;
+    const path = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+    return path || '/' + url.search + url.hash;
   } catch (err) {
     if (errorReporter?.capture) {
       errorReporter.capture(err, {
@@ -137,6 +138,7 @@ export function createBrowserService({ windowObject } = {}) {
 
     replaceState: (state = {}, title = '', url = '') =>
       windowObject.history.replaceState(state, title, url),
+    clearTimeout : (...a) => windowObject.clearTimeout(...a),
 
     /* new accessors required by app.js */
     getWindow           : () => windowObject,

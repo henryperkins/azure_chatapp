@@ -178,6 +178,8 @@ export function createNavigationService({
     });
   }
 
+  function hasView(viewId){ return state.registeredViews.has(viewId); }
+
   /**
    * Activate a registered view and deactivate others
    * @param {string} viewId - View to activate
