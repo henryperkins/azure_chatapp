@@ -227,6 +227,9 @@ class ProjectDetailsComponent {
 
     this._backBtnHandler = null;
     this._tabClickHandler = null;
+
+    // Asegura que debugTools esté disponible
+    this.debugTools = this.DependencySystem?.modules?.get?.('debugTools') || null;
   }
   _setState(patch = {}, caller = '_setState') {
     this.state = { ...this.state, ...patch };

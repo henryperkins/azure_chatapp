@@ -187,7 +187,10 @@ class ProjectManager {
       ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
       KB_LIST_URL_TEMPLATE: apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/',
       KB_DETAIL_URL_TEMPLATE: apiEndpoints.KB_DETAIL_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/{kb_id}/',
-      ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/'
+      ARCHIVE: apiEndpoints.ARCHIVE || '/api/projects/{id}/archive/',
+      FILE_DETAIL        : apiEndpoints.FILE_DETAIL        || '/api/projects/{id}/files/{file_id}/',
+      FILE_DOWNLOAD      : apiEndpoints.FILE_DOWNLOAD      || '/api/projects/{id}/files/{file_id}/download/',
+      ARTIFACT_DOWNLOAD  : apiEndpoints.ARTIFACT_DOWNLOAD  || '/api/projects/{id}/artifacts/{artifact_id}/download/',
     };
 
     this.pmNotify?.debug?.('[ProjectManager] Configured API Endpoints:', {
@@ -691,6 +694,25 @@ class ProjectManager {
       this.notify,
       this.errorReporter
     );
+  }
+
+  /* ---------- NUEVAS utilidades de ficheros / artefactos ---------- */
+  async deleteFile(projectId, fileId) {
+    if (!this._authOk('projectFileDeleteError', { projectId, fileId })) throw new Error('auth');
+    const url = this._CONFIG.FILE_DETAIL.replace('{id}', projectId).replace('{file_id}', fileId);
+    return this._req(url, { method: 'DELETE' }, 'deleteFile');
+  }
+
+  async downloadFile(projectId, fileId) {
+    const url = this._CONFIG.FILE_DOWNLOAD.replace('{id}', projectId).replace('{file_id}', fileId);
+    return this._req(url, undefined, 'downloadFile');
+  }
+
+  async downloadArtifact(projectId, artifactId) {
+    const url = this._CONFIG.ARTIFACT_DOWNLOAD
+      .replace('{id}', projectId)
+      .replace('{artifact_id}', artifactId);
+    return this._req(url, undefined, 'downloadArtifact');
   }
 
   async createProject(projectData) {
