@@ -9,19 +9,11 @@
  * Refactored for strict dependency injection — no global window.
  * If you need app-level location, inject windowObject and call createBrowserService({ windowObject }).
  * The standalone helpers below now require explicit baseHref/location.
- * Optionally pass errorReporter for context-rich error logging.
  */
 
 // --- shared URL helpers -------------------------------------------------
-export function buildUrl(params = {}, baseHref, errorReporter = null) {
+export function buildUrl(params = {}, baseHref) {
   if (!baseHref) {
-    if (errorReporter?.capture) {
-      errorReporter.capture(new Error('buildUrl called without baseHref'), {
-        module: 'browserService',
-        method: 'buildUrl',
-        source: 'param_check'
-      });
-    }
     throw new Error('buildUrl requires baseHref (no global window access allowed)');
   }
   const url = new URL(baseHref, baseHref.startsWith('http') ? undefined : 'http://_');
@@ -36,7 +28,7 @@ export function buildUrl(params = {}, baseHref, errorReporter = null) {
   return url.pathname + (url.search ? `?${url.search}` : '');
 }
 
-export function normaliseUrl(u = '', errorReporter = null) {
+export function normaliseUrl(u = '') {
   try {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
     // url.search already includes '?' if params exist, or is empty string otherwise.
@@ -44,14 +36,6 @@ export function normaliseUrl(u = '', errorReporter = null) {
     const fixed = (path || '/');
     return fixed + url.search + url.hash;
   } catch (err) {
-    if (errorReporter?.capture) {
-      errorReporter.capture(err, {
-        module: 'browserService',
-        method: 'normaliseUrl',
-        source: 'invalid_url',
-        originalError: err
-      });
-    }
     return u;
   }
 }

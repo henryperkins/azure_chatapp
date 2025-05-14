@@ -1,15 +1,10 @@
 /**
- * apiClient.js — Extracted from globalUtils, dependency-injected, and logs via notify.js.
- * Handles deduplication, timeout, CSRF, JSON, and error reporting. No hardcoded route filter.
+ * apiClient.js — Handles API requests with deduplication, timeouts, CSRF, and JSON handling.
  *
  * Usage:
  *   import { createApiClient } from './apiClient.js';
  *   const apiClient = createApiClient({ ... });
  */
-
-import { logEventToServer, maybeCapture } from './notifications-helpers.js';
-import { normaliseUrl as browserServiceNormaliseUrl } from './browserService.js'; // Import corrected function
-// NOTE: notify must be injected, not imported. Remove this import to avoid hidden coupling.
 
 /**
  * createApiClient
@@ -24,19 +19,8 @@ export function createApiClient({
   APP_CONFIG,
   globalUtils,
   getAuthModule,
-  browserService,
-  notify,
-  errorReporter,
-  backendLogger         // Add backendLogger parameter
+  browserService
 }) {
-  /* strict no-op fall-backs */
-  notify = notify || { debug(){}, info(){}, warn(){}, error(){} };
-  // Guard-rail #15 – contextual notifier for every subsequent call
-  const apiNotify = (notify?.withContext)
-    ? notify.withContext({ module: 'ApiClient', context: 'apiRequest' })
-    : notify;
-  errorReporter = errorReporter || null;
-  backendLogger = backendLogger || null; // Add fallback
   const pending = new Map();
   const BASE_URL = APP_CONFIG?.BASE_API_URL || '';
 
@@ -61,25 +45,9 @@ export function createApiClient({
 
     let normUrl;
     try {
-      // Use the imported normaliseUrl from browserService.js
-      // It takes only one argument.
-      normUrl = browserServiceNormaliseUrl(fullUrl);
+      normUrl = globalUtils.normaliseUrl(fullUrl);
     } catch (err) {
-      // Fallback or error handling if normaliseUrl itself throws, though it has its own try/catch.
-      normUrl = fullUrl; // Fallback to fullUrl if normalization fails catastrophically
-      if (APP_CONFIG?.DEBUG) {
-        apiNotify.warn(`[API] URL normalization failed for "${fullUrl}", using raw URL.`, {
-          source: 'urlNormalizationFailure', originalError: err
-        });
-      }
-      if (errorReporter?.capture) {
-        errorReporter.capture(err, {
-          module: 'ApiClient',
-          method: 'apiRequest',
-          source: 'urlNormalization',
-          originalError: err
-        });
-      }
+      normUrl = fullUrl; // Fallback to fullUrl if normalization fails
     }
 
     const bodyKey =
@@ -89,7 +57,6 @@ export function createApiClient({
     const key = `${method}-${normUrl}-${bodyKey}`;
 
     if (!skipCache && method === "GET" && pending.has(key)) {
-      if (APP_CONFIG.DEBUG) apiNotify.debug(`[API] Dedup hit: ${key}`, { source:'dedupHit' });
       return pending.get(key);
     }
 
@@ -100,14 +67,6 @@ export function createApiClient({
       const csrf = auth.getCSRFToken();
       if (csrf) {
         opts.headers["X-CSRF-Token"] = csrf;
-      } else if (
-        APP_CONFIG.DEBUG &&
-        // Suppress noisy CSRF warnings for /api/log_notification and /api/log_notification_batch (these endpoints are exempt from CSRF by backend policy)
-        !/^\/api\/log_notification(_batch)?$/.test(
-          new URL(normUrl, window.location.origin).pathname
-        )
-      ) {
-        apiNotify.warn(`[API] No CSRF for ${method} ${normUrl}`, { source:'csrfTokenMissing' });
       }
     }
 
@@ -118,18 +77,6 @@ export function createApiClient({
         try {
           opts.body = JSON.stringify(opts.body);
         } catch (err) {
-          apiNotify.error("[API] Failed to stringify body", {
-            originalError: err,
-            source: 'stringifyBodyFailure'
-          });
-          if (errorReporter?.capture) {
-            errorReporter.capture(err, {
-              module: 'ApiClient',
-              method: 'apiRequest',
-              source: 'stringifyBody',
-              originalError: err
-            });
-          }
           return Promise.reject(new Error("Failed to serialize request body."));
         }
       }
@@ -149,34 +96,7 @@ export function createApiClient({
 
     const p = (async () => {
       try {
-        if (APP_CONFIG.DEBUG)
-          apiNotify.debug(`[API] ${method} ${normUrl}`, {
-            source: 'requestInitiated',
-            extra: { httpMethod: method, url: normUrl, hasBody: !!opts.body }
-          });
-
         const resp = await (browserService?.fetch || fetch)(normUrl, opts);
-
-        // Log failed responses
-        if (!resp.ok) {
-          const errorText = await resp.text().catch(() => 'Failed to read error response');
-          apiNotify.error(`API error: ${resp.status} ${resp.statusText}`, {
-            source: 'requestFailed',
-            extra: { url: normUrl, status: resp.status, responseText: errorText, httpMethod: method }
-          });
-
-          // Log to backend
-          if (backendLogger?.log) {
-            backendLogger.log({
-              level: 'error',
-              module: 'ApiClient',
-              context: 'apiRequest',
-              message: `API error: ${resp.status} ${resp.statusText}`,
-              extra: { url: normUrl, status: resp.status }
-            });
-          }
-        }
-
         return resp;
       } finally {
         clearTimeout(timer);
@@ -188,7 +108,7 @@ export function createApiClient({
     return p;
   };
 
-  // Convenience verbs required by BackendLogger / other callers
+  // Convenience verbs required by other callers
   mainApiRequest.post = (url, body = {}, opts = {}, skip = true) =>
     mainApiRequest(url, { ...opts, method: 'POST', body }, skip);
   mainApiRequest.get = (url, params = {}, opts = {}, skip = false) =>

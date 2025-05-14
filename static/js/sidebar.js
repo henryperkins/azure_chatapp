@@ -1,12 +1,10 @@
 /**
- * sidebar.js – Strict DI/DependencySystem, context-rich notifications (2025-05)
+ * sidebar.js – Strict DI/DependencySystem (notifications removed)
  *
- * All notify.* calls provide: group, context, module ("Sidebar"), source (function), dynamic detail, originalError as needed.
- * This enables rapid troubleshooting, Sentry correlation, and support for all user/system events.
+ * Core sidebar functionality remains, while all logging/debugging/notify calls have been removed.
  */
 
 import { safeParseJSON } from './utils/globalUtils.js';
-import { safeInvoker } from './utils/notifications-helpers.js';
 import { createSidebarAuth } from './sidebar-auth.js';
 import { createSidebarEvents } from './sidebar-events.js';
 
@@ -19,51 +17,65 @@ export function createSidebar({
   projectManager,
   uiRenderer,
   DependencySystem,
-  notify,
   storageAPI,
   viewportAPI,
   domAPI,
-  accessibilityUtils // Added for accessibility announcements
+  accessibilityUtils
 } = {}) {
-  if (!DependencySystem) throw new Error('[sidebar] DependencySystem is required.');
-  if (!eventHandlers) throw new Error('[sidebar] eventHandlers is required.');
-  if (!storageAPI) throw new Error('[sidebar] storageAPI (getItem/setItem) must be injected.');
-  if (!viewportAPI) throw new Error('[sidebar] viewportAPI (getInnerWidth) must be injected.');
-  if (!domAPI) throw new Error('[sidebar] domAPI (getElementById/createElement/querySelector/body/getActiveElement/ownerDocument) must be injected.');
-  if (typeof domAPI.getActiveElement !== 'function') {
-    throw new Error('[sidebar] domAPI.getActiveElement() must be provided to avoid using document.activeElement');
+  // Basic validations
+  if (!DependencySystem) {
+    throw new Error('[sidebar] DependencySystem is required.');
   }
-  if (!domAPI.ownerDocument || typeof domAPI.ownerDocument.dispatchEvent !== 'function') { // This check seems to refer to a specific DI pattern
-    // Let's ensure getDocument() and its dispatchEvent are the primary focus for eventing as per Pattern 10 usage example
-    // throw new Error('[sidebar] domAPI.ownerDocument with dispatchEvent() must be provided to avoid using window/document globals');
+  if (!eventHandlers) {
+    throw new Error('[sidebar] eventHandlers is required.');
+  }
+  if (!storageAPI) {
+    throw new Error('[sidebar] storageAPI (getItem/setItem) must be injected.');
+  }
+  if (!viewportAPI) {
+    throw new Error('[sidebar] viewportAPI (getInnerWidth) must be injected.');
+  }
+  if (!domAPI) {
+    throw new Error('[sidebar] domAPI is required.');
+  }
+  if (typeof domAPI.getActiveElement !== 'function') {
+    throw new Error('[sidebar] domAPI.getActiveElement() must be provided.');
   }
   if (typeof domAPI.getDocument !== 'function') {
     throw new Error('[sidebar] domAPI.getDocument() must be a function.');
   }
-  // Deferring dispatchEvent check until we get the document object from domAPI.getDocument()
-  if (!accessibilityUtils || typeof accessibilityUtils.announce !== 'function') { // Added check
+  if (!accessibilityUtils || typeof accessibilityUtils.announce !== 'function') {
     throw new Error('[sidebar] accessibilityUtils with an announce method is required.');
   }
+
+  // Resolve optional dependencies if not provided
   app = app || resolveDep('app');
   projectDashboard = projectDashboard || resolveDep('projectDashboard');
   projectManager = projectManager || resolveDep('projectManager');
-  // uiRenderer is now a direct, required dependency.
-  if (!uiRenderer ||
-      typeof uiRenderer.renderConversations !== 'function' ||
-      typeof uiRenderer.renderStarredConversations !== 'function' ||
-      typeof uiRenderer.renderProjects !== 'function') {
-    throw new Error('[sidebar] uiRenderer with renderConversations, renderStarredConversations, and renderProjects methods is required.');
-  }
-  if (!notify) throw new Error('[sidebar] notify util (from DI) is required');
 
-  // Fallback renderer removed. Sidebar now relies on an injected uiRenderer.
+  // Validate uiRenderer
+  if (
+    !uiRenderer ||
+    typeof uiRenderer.renderConversations !== 'function' ||
+    typeof uiRenderer.renderStarredConversations !== 'function' ||
+    typeof uiRenderer.renderProjects !== 'function'
+  ) {
+    throw new Error(
+      '[sidebar] uiRenderer with renderConversations, renderStarredConversations, and renderProjects is required.'
+    );
+  }
 
   function resolveDep(name) {
-    if (DependencySystem?.modules?.get) return DependencySystem.modules.get(name);
-    if (DependencySystem?.get) return DependencySystem.get(name);
+    if (DependencySystem?.modules?.get) {
+      return DependencySystem.modules.get(name);
+    }
+    if (DependencySystem?.get) {
+      return DependencySystem.get(name);
+    }
     return undefined;
   }
 
+  // DOM references
   let el = null;
   let btnToggle = null;
   let btnClose = null;
@@ -71,36 +83,31 @@ export function createSidebar({
   let backdrop = null;
   let pinned = false;
   let visible = false;
-  // let trackedEvents = []; // Removed as cleanup is context-based
 
   // Search input elements
   let chatSearchInputEl = null;
   let sidebarProjectSearchInputEl = null;
 
-  // For inline auth form
-  // Inline auth state and handlers are now delegated to sidebarAuth
+  // Inline auth state and logic
   const sidebarAuth = createSidebarAuth({
     DependencySystem,
     domAPI,
     eventHandlers,
-    notify,
     accessibilityUtils,
     MODULE
   });
 
-  const sidebarNotify = notify.withContext({ module: MODULE, context: 'inlineAuth' });
-
+  // Track starred conversations via local storage
   const starred = new Set(
     safeParseJSON(storageAPI.getItem('starredConversations'), [])
   );
 
-  // Set up sidebar events
+  // Set up sidebar events (no logging)
   const sidebarEvents = createSidebarEvents({
     eventHandlers,
     DependencySystem,
     domAPI,
     uiRenderer,
-    notify,
     MODULE,
     chatSearchInputEl,
     sidebarProjectSearchInputEl,
@@ -119,190 +126,182 @@ export function createSidebar({
     handleGlobalAuthStateChangeForSidebar
   });
 
+  /**
+   * Initialize the sidebar: find DOM elements, set up auth, restore state, etc.
+   */
   async function init() {
-    notify.debug('[sidebar] init() called', { group: true, context: 'sidebar', module: MODULE, source: 'init' });
     try {
       findDom();
       sidebarAuth.initAuthDom();
       sidebarAuth.setupInlineAuthForm();
       restorePersistentState();
       sidebarEvents.bindDomEvents();
+
       if (app && typeof app.getInitialSidebarContext === 'function') {
         const { projectId } = app.getInitialSidebarContext() || {};
         if (projectId && projectManager && typeof projectManager.setCurrentProjectId === 'function') {
           projectManager.setCurrentProjectId(projectId);
         }
       }
+
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-      await activateTab(activeTab); // This will also call rendering functions
-      notify.info('[sidebar] initialized successfully', { group: true, context: 'sidebar', module: MODULE, source: 'init', activeTab });
+      await activateTab(activeTab);
 
-      // Removed dispatch of 'sidebar:initialized' event to align with Pattern 10.
-      // Application readiness should be coordinated via app:ready or DependencySystem.waitFor.
-
-      // Validate that the document object obtained from domAPI.getDocument() has dispatchEvent
+      // Validate that the document supports dispatchEvent
       const docForValidation = domAPI.getDocument();
       if (!docForValidation || typeof docForValidation.dispatchEvent !== 'function') {
-        throw new Error('[sidebar] Document object from domAPI.getDocument() must have a dispatchEvent method.');
+        throw new Error(
+          '[sidebar] Document object from domAPI.getDocument() must have a dispatchEvent method.'
+        );
       }
 
       return true;
-    } catch (err) {
-      notify.error('[sidebar] Initialization failed: ' + (err && err.message ? err.message : err), {
-        group: true, context: 'sidebar', module: MODULE, source: 'init', originalError: err
-      });
+    } catch {
+      // Return false on error (no logging)
       return false;
     }
   }
 
+  /**
+   * Clean up any listeners, DOM references, etc.
+   */
   function destroy() {
-    notify.info('[sidebar] destroy() called', { group: true, context: 'sidebar', module: MODULE, source: 'destroy' });
     if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
-        DependencySystem.cleanupModuleListeners(MODULE);
-        notify.debug(`[sidebar] Called DependencySystem.cleanupModuleListeners for context: ${MODULE}`, { source: 'destroy' });
+      DependencySystem.cleanupModuleListeners(MODULE);
     } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-        eventHandlers.cleanupListeners({ context: MODULE });
-        notify.debug(`[sidebar] Called eventHandlers.cleanupListeners for context: ${MODULE}`, { source: 'destroy' });
-    } else {
-        notify.warn('[sidebar] cleanupListeners not available on eventHandlers or DependencySystem.', { source: 'destroy' });
+      eventHandlers.cleanupListeners({ context: MODULE });
     }
     if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-        eventHandlers.cleanupListeners({ context: 'inlineAuth' });
-         notify.debug(`[sidebar] Called eventHandlers.cleanupListeners for context: inlineAuth`, { source: 'destroy' });
+      eventHandlers.cleanupListeners({ context: 'inlineAuth' });
     }
-    // No explicit cleanup needed for sidebarAuth since all event listeners are tracked by context 'inlineAuth'
-    // trackedEvents = []; // Already removed
-    if (backdrop) { backdrop.remove(); backdrop = null; }
-    pinned = false; visible = false;
-    notify.info('[sidebar] destroyed', { group: true, context: 'sidebar', module: MODULE, source: 'destroy' });
+    if (backdrop) {
+      backdrop.remove();
+      backdrop = null;
+    }
+    pinned = false;
+    visible = false;
   }
 
+  /**
+   * Find key DOM elements.
+   */
   function findDom() {
     el = domAPI.getElementById('mainSidebar');
     btnToggle = domAPI.getElementById('navToggleBtn');
     btnClose = domAPI.getElementById('closeSidebarBtn');
     btnPin = domAPI.getElementById('pinSidebarBtn');
-
-    // Search inputs
     chatSearchInputEl = domAPI.getElementById('chatSearchInput');
     sidebarProjectSearchInputEl = domAPI.getElementById('sidebarProjectSearch');
 
-    // Auth form DOM is initialized in sidebarAuth.initAuthDom(), not here
-
     if (!el || !btnToggle) {
-      notify.error('sidebar: critical DOM nodes missing (#mainSidebar or #navToggleBtn)', {
-        group: true, context: 'sidebar', module: MODULE, source: 'findDom',
-        detail: { elFound: !!el, btnToggleFound: !!btnToggle }
-      });
-      throw new Error('sidebar: critical DOM nodes missing (#mainSidebar or #navToggleBtn)');
+      throw new Error(
+        'sidebar: critical DOM nodes missing (#mainSidebar or #navToggleBtn)'
+      );
     }
   }
 
+  /**
+   * Restore pinned/visibility state from localStorage and adjust DOM.
+   */
   function restorePersistentState() {
     pinned = storageAPI.getItem('sidebarPinned') === 'true';
-
-    // Always make the sidebar visible on desktop
     const isDesktop = viewportAPI.getInnerWidth() >= 768;
-
     if (pinned || isDesktop) {
       el.classList.add('sidebar-pinned');
       el.classList.remove('-translate-x-full');
       el.classList.add('translate-x-0');
       visible = true;
-
-      // Set aria-hidden to false to make it accessible
       el.setAttribute('aria-hidden', 'false');
-
-      // Set the toggle button to expanded
       if (btnToggle) {
         btnToggle.setAttribute('aria-expanded', 'true');
       }
-
-      notify.info('[sidebar] Sidebar made visible on initialization', {
-        group: true, context: 'sidebar', module: MODULE, source: 'restorePersistentState',
-        detail: { pinned, isDesktop, viewportWidth: viewportAPI.getInnerWidth() }
-      });
     }
-
     updatePinButtonVisual();
   }
 
+  /**
+   * Handle conversation search input.
+   */
   function _handleChatSearch() {
     if (!chatSearchInputEl || !uiRenderer) return;
     const searchTerm = chatSearchInputEl.value.trim().toLowerCase();
     const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
 
-    notify.debug(`Chat search initiated. Term: "${searchTerm}", Active Tab: "${activeTab}"`, {
-        module: MODULE, source: '_handleChatSearch', context: 'sidebarSearch'
-    });
-
-    // Get the current project ID
-    const currentProject = projectManager.getCurrentProject();
+    const currentProject = projectManager.getCurrentProject?.();
     const projectId = currentProject?.id;
 
-    // if (!projectId && (activeTab === 'recent' || activeTab === 'starred')) {
-    //   notify.warn(`[sidebar] No active project ID available for ${activeTab} tab search.`, {
-    //       module: MODULE, source: '_handleChatSearch', context: 'sidebarSearch'
-    //   });
-    //   // Optionally clear the list or show a message if no project is selected
-    //   // For now, uiRenderer itself handles the "no projectId" case by showing a message.
-    // }
-
     if (activeTab === 'recent') {
-        uiRenderer.renderConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
-        if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
-            accessibilityUtils.announce(`Recent conversations filtered for "${searchTerm || 'all'}".`);
-        }
+      uiRenderer.renderConversations(
+        projectId,
+        searchTerm,
+        isConversationStarred,
+        toggleStarConversation
+      );
+      if (accessibilityUtils?.announce) {
+        accessibilityUtils.announce(`Recent conversations filtered for "${searchTerm || 'all'}".`);
+      }
     } else if (activeTab === 'starred') {
-        uiRenderer.renderStarredConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
-        if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
-            accessibilityUtils.announce(`Starred conversations filtered for "${searchTerm || 'all'}".`);
-        }
+      uiRenderer.renderStarredConversations(
+        projectId,
+        searchTerm,
+        isConversationStarred,
+        toggleStarConversation
+      );
+      if (accessibilityUtils?.announce) {
+        accessibilityUtils.announce(`Starred conversations filtered for "${searchTerm || 'all'}".`);
+      }
     }
   }
 
+  /**
+   * Handle project search input.
+   */
   function _handleProjectSearch() {
     if (!sidebarProjectSearchInputEl || !projectManager || !uiRenderer) return;
     const searchTerm = sidebarProjectSearchInputEl.value.trim().toLowerCase();
 
-    notify.debug(`Project search initiated. Term: "${searchTerm}"`, {
-        module: MODULE, source: '_handleProjectSearch', context: 'sidebarSearch'
-    });
-
     const allProjects = projectManager.projects || [];
     const filteredProjects = searchTerm
-        ? allProjects.filter(project => project.name && project.name.toLowerCase().includes(searchTerm))
-        : allProjects;
+      ? allProjects.filter((project) =>
+          project.name && project.name.toLowerCase().includes(searchTerm)
+        )
+      : allProjects;
 
-    if (uiRenderer.renderProjects) {
-        uiRenderer.renderProjects(filteredProjects);
-        if (accessibilityUtils && typeof accessibilityUtils.announce === 'function') {
-            accessibilityUtils.announce(`Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`);
-        }
+    uiRenderer.renderProjects(filteredProjects);
+    if (accessibilityUtils?.announce) {
+      accessibilityUtils.announce(
+        `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
+      );
     }
   }
 
-  // Event binding logic is now handled by sidebarEvents.bindDomEvents()
-
+  /**
+   * Activate a specific sidebar tab.
+   */
   async function activateTab(name = 'recent') {
     try {
       const map = {
         recent: { btn: 'recentChatsTab', panel: 'recentChatsSection' },
         starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
-        projects: { btn: 'projectsTab', panel: 'projectsSection' },
+        projects: { btn: 'projectsTab', panel: 'projectsSection' }
       };
-      if (!map[name]) name = 'recent'; // Default to recent
+      if (!map[name]) {
+        name = 'recent';
+      }
       Object.entries(map).forEach(([key, ids]) => {
         const btn = domAPI.getElementById(ids.btn);
         const panel = domAPI.getElementById(ids.panel);
         if (btn && panel) {
-          const isActive = (key === name);
+          const isActive = key === name;
           btn.classList.toggle('tab-active', isActive);
           btn.setAttribute('aria-selected', String(isActive));
           btn.tabIndex = isActive ? 0 : -1;
           panel.classList.toggle('hidden', !isActive);
-          // Ensure 'flex' is added only if it's meant to be flex, otherwise let CSS handle display
-          if (isActive) panel.classList.add('flex'); else panel.classList.remove('flex');
+          if (isActive) {
+            panel.classList.add('flex');
+          } else {
+            panel.classList.remove('flex');
+          }
         }
       });
       storageAPI.setItem('sidebarActiveTab', name);
@@ -313,32 +312,46 @@ export function createSidebar({
 
       if (name === 'recent' || name === 'starred') {
         if (!projectId) {
-          notify.info(`No project selected. Cannot load ${name} conversations.`, { module: MODULE, context: 'sidebar', source: 'activateTab' });
-          // Explicitly tell renderer to show empty state for the active tab
-          const currentSearchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "";
+          const currentSearchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || '';
           if (name === 'recent') {
-            uiRenderer?.renderConversations?.(null, currentSearchTerm, isConversationStarred, toggleStarConversation);
-          } else if (name === 'starred') {
-            uiRenderer?.renderStarredConversations?.(null, currentSearchTerm, isConversationStarred, toggleStarConversation);
+            uiRenderer?.renderConversations?.(
+              null,
+              currentSearchTerm,
+              isConversationStarred,
+              toggleStarConversation
+            );
+          } else {
+            uiRenderer?.renderStarredConversations?.(
+              null,
+              currentSearchTerm,
+              isConversationStarred,
+              toggleStarConversation
+            );
           }
         } else {
-          // Project is selected, call the respective maybeRender function which will use the current project ID
-          if (name === 'recent') maybeRenderRecentConversations();
-          else if (name === 'starred') maybeRenderStarredConversations();
+          if (name === 'recent') {
+            maybeRenderRecentConversations();
+          } else {
+            maybeRenderStarredConversations();
+          }
         }
       } else if (name === 'projects') {
-        await ensureProjectDashboard(); // This internally calls _handleProjectSearch
-        _handleProjectSearch(); // Explicitly call to ensure it runs with current search term
+        await ensureProjectDashboard();
+        _handleProjectSearch();
       }
-      notify.info('[sidebar] tab activated', { group: true, context: 'sidebar', module: MODULE, source: 'activateTab', detail: { tab: name, projectId } });
-    } catch (err) {
-      notify.error('[sidebar] Failed to activate tab: ' + (err && err.message ? err.message : err), { group: true, context: 'sidebar', module: MODULE, source: 'activateTab', originalError: err });
+    } catch {
+      // No logging, just fail silently
     }
   }
 
+  /**
+   * Ensure project dashboard is initialized, then render projects.
+   */
   async function ensureProjectDashboard() {
     try {
-      if (!projectDashboard || typeof projectDashboard.initialize !== 'function') return;
+      if (!projectDashboard || typeof projectDashboard.initialize !== 'function') {
+        return;
+      }
       const section = domAPI.getElementById('projectsSection');
       if (section && !section.dataset.initialised) {
         section.dataset.initialised = 'true';
@@ -346,19 +359,18 @@ export function createSidebar({
       if (projectManager?.projects && uiRenderer?.renderProjects) {
         uiRenderer.renderProjects(projectManager.projects);
       }
-    } catch (err) {
-      notify.error('[sidebar] Failed to ensure project dashboard: ' + (err && err.message ? err.message : err), {
-        group: true, context: 'sidebar', module: MODULE, source: 'ensureProjectDashboard', originalError: err
-      });
+    } catch {
+      // Silent catch
     }
   }
 
+  /**
+   * Helper to render recent conversations if a project is selected (or show empty if not).
+   */
   function maybeRenderRecentConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    const projectId  = projectManager?.getCurrentProject?.()?.id;
-    const hasSearch  = !!searchTerm;
-
+    const projectId = projectManager?.getCurrentProject?.()?.id;
     if (!projectId) {
-      if (hasSearch) {
+      if (searchTerm) {
         uiRenderer?.renderConversations?.(
           null,
           searchTerm,
@@ -366,17 +378,18 @@ export function createSidebar({
           toggleStarConversation
         );
       }
-      return;               // ← stop early, prevents pointless warn
+      return;
     }
     uiRenderer?.renderConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
+  /**
+   * Helper to render starred conversations if a project is selected (or show empty if not).
+   */
   function maybeRenderStarredConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || "") {
-    const projectId  = projectManager?.getCurrentProject?.()?.id;
-    const hasSearch  = !!searchTerm;
-
+    const projectId = projectManager?.getCurrentProject?.()?.id;
     if (!projectId) {
-      if (hasSearch) {
+      if (searchTerm) {
         uiRenderer?.renderStarredConversations?.(
           null,
           searchTerm,
@@ -384,34 +397,30 @@ export function createSidebar({
           toggleStarConversation
         );
       }
-      return;               // ← stop early, prevents pointless warn
+      return;
     }
     uiRenderer?.renderStarredConversations?.(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
-  // Delegate auth state changes to sidebarAuth
+  /**
+   * Handle global auth state changes (delegates to sidebarAuth).
+   */
   function handleGlobalAuthStateChangeForSidebar(event) {
     sidebarAuth.handleGlobalAuthStateChange(event);
   }
 
+  /**
+   * Toggle or set the pinned state of the sidebar.
+   */
   function togglePin(force) {
-    pinned = (force !== undefined) ? !!force : !pinned;
+    pinned = force !== undefined ? !!force : !pinned;
     storageAPI.setItem('sidebarPinned', pinned);
     el.classList.toggle('sidebar-pinned', pinned);
     updatePinButtonVisual();
-    if (pinned) showSidebar();
+    if (pinned) {
+      showSidebar();
+    }
     dispatch('sidebarPinChanged', { pinned });
-    notify.info('[sidebar] pin status changed', {
-      group: true,
-      context: 'sidebar',
-      module: MODULE,
-      source: 'togglePin',
-      detail: {
-        pinned,
-        viewportWidth: viewportAPI.getInnerWidth?.(),
-        pinState: pinned
-      }
-    });
   }
 
   function updatePinButtonVisual() {
@@ -419,107 +428,76 @@ export function createSidebar({
     btnPin.setAttribute('aria-pressed', pinned.toString());
     btnPin.title = pinned ? 'Unpin sidebar' : 'Pin sidebar';
     btnPin.classList.toggle('text-primary', pinned);
-    // Ensure base classes are present if they might be removed elsewhere
-    // For now, assuming they are static in HTML or managed by other logic if dynamic
-    // btnPin.classList.add('btn', 'btn-ghost', 'btn-square', 'btn-sm', 'min-w-[44px]', 'min-h-[44px]');
   }
 
+  /**
+   * Toggle the sidebar's visibility, optionally forcing it.
+   */
   function toggleSidebar(forceVisible) {
-    const willShow = (forceVisible !== undefined) ? !!forceVisible : !visible;
+    const willShow = forceVisible !== undefined ? !!forceVisible : !visible;
     willShow ? showSidebar() : closeSidebar();
-    notify.info('[sidebar] toggled', {
-      group: true,
-      context: 'sidebar',
-      module: MODULE,
-      source: 'toggleSidebar',
-      detail: {
-        willShow,
-        viewportWidth: viewportAPI.getInnerWidth?.(),
-        pinState: pinned
-      }
-    });
   }
 
+  /**
+   * Show the sidebar (e.g., on mobile or when pinned).
+   */
   function showSidebar() {
     if (visible) return;
     visible = true;
 
-    // Remove the transform that hides the sidebar
     el.classList.remove('-translate-x-full');
     el.classList.add('translate-x-0');
 
-    // Remove inert attribute if it was set
     if ('inert' in HTMLElement.prototype && el.inert) {
       el.inert = false;
-      sidebarNotify.debug('Removed inert attribute from sidebar', { source: 'showSidebar' });
     }
-
-    // Set aria-hidden to false to make it accessible
     el.setAttribute('aria-hidden', 'false');
-
-    // Update toggle button state
     if (btnToggle) {
       btnToggle.setAttribute('aria-expanded', 'true');
     }
 
-    // Create backdrop for mobile
     createBackdrop();
-
-    // Add class to body for styling
     if (domAPI.body && !domAPI.body.classList.contains('with-sidebar-open')) {
       domAPI.body.classList.add('with-sidebar-open');
     }
 
-    // Handle active tab
     const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
     if (activeTab === 'projects') {
-      ensureProjectDashboard(); // Ensure projects are loaded/rendered
+      ensureProjectDashboard();
       const projSearch = domAPI.getElementById('sidebarProjectSearch');
-      if (projSearch) projSearch.focus();
+      if (projSearch) {
+        projSearch.focus();
+      }
     }
 
-    // Dispatch event
     dispatch('sidebarVisibilityChanged', { visible });
-
-    // Log
-    notify.info('[sidebar] shown', {
-      group: true,
-      context: 'sidebar',
-      module: MODULE,
-      source: 'showSidebar',
-      detail: {
-        activeTab,
-        viewportWidth: viewportAPI.getInnerWidth?.()
-      }
-    });
   }
 
+  /**
+   * Close the sidebar unless it's pinned; also manage focus if needed.
+   */
   function closeSidebar() {
     if (!visible || pinned) return;
     const activeEl = domAPI.getActiveElement();
     let focusSuccessfullyMoved = false;
 
-    if (el.contains(activeEl)) { // Check if focus is currently within the sidebar
-      sidebarNotify.debug(`Focus is inside sidebar (on ${activeEl.id || activeEl.tagName}). Attempting to move focus.`, { source: 'closeSidebar' });
-
-      // Try to move focus to the toggle button IF it's visible and interactive
-      if (btnToggle && typeof btnToggle.focus === 'function' && btnToggle.offsetParent !== null) {
+    if (el.contains(activeEl)) {
+      // Try moving focus to the toggle button
+      if (
+        btnToggle &&
+        typeof btnToggle.focus === 'function' &&
+        btnToggle.offsetParent !== null
+      ) {
         btnToggle.focus();
-        if (domAPI.getActiveElement() === btnToggle) { // Verify focus moved
+        if (domAPI.getActiveElement() === btnToggle) {
           focusSuccessfullyMoved = true;
-          sidebarNotify.debug('Focus successfully moved to sidebar toggle button.', { source: 'closeSidebar' });
         }
       }
-
-      // If focus wasn't moved to the toggle button (e.g., it's hidden or focus failed), try blurring the active element
       if (!focusSuccessfullyMoved && typeof activeEl.blur === 'function') {
         activeEl.blur();
-        sidebarNotify.debug(`Blurred previously active element (${activeEl.id || activeEl.tagName}).`, { source: 'closeSidebar' });
-        // As a final fallback, if focus is still somehow inside the sidebar (e.g., blur was prevented), move it to the body
         if (el.contains(domAPI.getActiveElement())) {
-          if (domAPI.body && typeof domAPI.body.focus === 'function') { // Ensure body is focusable (it might need tabindex="-1")
+          if (domAPI.body && typeof domAPI.body.focus === 'function') {
             domAPI.body.focus();
-            sidebarNotify.debug('Forced focus to document body as a fallback.', { source: 'closeSidebar' });
           }
         }
       }
@@ -528,107 +506,101 @@ export function createSidebar({
     visible = false;
     el.classList.add('-translate-x-full');
 
-    // IMPORTANT: Do NOT set aria-hidden="true" when there are focusable elements inside
-    // This causes accessibility issues. Instead, use inert attribute if supported
-    // or just rely on the visual hiding via CSS transform
-
-    // Check if any element inside the sidebar has focus
-    const hasFocusableElements = el.querySelector('button, input, a, [tabindex]:not([tabindex="-1"])');
-
+    const hasFocusableElements = el.querySelector(
+      'button, input, a, [tabindex]:not([tabindex="-1"])'
+    );
     if (hasFocusableElements) {
-      sidebarNotify.debug(
-        'Sidebar contains focusable elements, not setting aria-hidden to avoid accessibility issues',
-        { source: 'closeSidebar' }
-      );
-
-      // Use inert attribute if supported by the browser
       if ('inert' in HTMLElement.prototype) {
         el.inert = true;
-        sidebarNotify.debug('Using inert attribute instead of aria-hidden', { source: 'closeSidebar' });
       }
     } else {
-      // Only set aria-hidden if there are no focusable elements
       el.setAttribute('aria-hidden', 'true');
     }
 
-    if (btnToggle) { // Ensure btnToggle exists before updating its ARIA attribute
+    if (btnToggle) {
       btnToggle.setAttribute('aria-expanded', 'false');
     }
-
     removeBackdrop();
     if (domAPI.body && domAPI.body.classList.contains('with-sidebar-open')) {
       domAPI.body.classList.remove('with-sidebar-open');
     }
 
     dispatch('sidebarVisibilityChanged', { visible });
-    notify.info('[sidebar] closed', {
-      group: true,
-      context: 'sidebar',
-      module: MODULE,
-      source: 'closeSidebar',
-      focusMovedToToggle: focusSuccessfullyMoved,
-      hasFocusableElements: !!hasFocusableElements
-    });
   }
 
+  /**
+   * Called on viewport resize; removes backdrop if screen is large enough.
+   */
   function handleResize() {
-    if (viewportAPI.getInnerWidth() >= 1024) removeBackdrop();
-    notify.info('[sidebar] resize event', { group: true, context: 'sidebar', module: MODULE, source: 'handleResize', detail: { width: viewportAPI.getInnerWidth() } });
+    if (viewportAPI.getInnerWidth() >= 1024) {
+      removeBackdrop();
+    }
   }
 
+  /**
+   * Create a backdrop for mobile devices.
+   */
   function createBackdrop() {
     if (backdrop) return;
-    if (viewportAPI.getInnerWidth() >= 1024) return; // No backdrop on larger screens
+    if (viewportAPI.getInnerWidth() >= 1024) {
+      return;
+    }
     backdrop = domAPI.createElement('div');
     Object.assign(backdrop.style, {
-        position: 'fixed', inset: '0px', zIndex: '40', // Tailwind equivalent: fixed inset-0 z-40
-        backgroundColor: 'rgba(0,0,0,0.5)', // Tailwind equivalent: bg-black/50
-        cursor: 'pointer'
+      position: 'fixed',
+      inset: '0px',
+      zIndex: '40',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      cursor: 'pointer'
     });
-    // backdrop.className = 'fixed inset-0 bg-base-300/70 z-40'; // Using Tailwind classes from base
-    const closeHandler = () => closeSidebar();
-    eventHandlers.trackListener(backdrop, 'click', closeHandler, {
-      description: 'Sidebar backdrop click to close', context: MODULE
+    eventHandlers.trackListener(backdrop, 'click', () => closeSidebar(), {
+      description: 'Sidebar backdrop click to close',
+      context: MODULE
     });
-    domAPI.body && domAPI.body.appendChild(backdrop);
+    if (domAPI.body) {
+      domAPI.body.appendChild(backdrop);
+    }
   }
 
+  /**
+   * Remove the backdrop if it exists.
+   */
   function removeBackdrop() {
     if (backdrop) {
-      // Assuming eventHandlers.cleanupListeners({ context: MODULE }) will handle this,
-      // or a more specific cleanup for the backdrop listener if needed.
       backdrop.remove();
       backdrop = null;
     }
   }
 
-  function isConversationStarred(id) { return starred.has(id); }
-  function toggleStarConversation(id) {
-    if (starred.has(id)) starred.delete(id); else starred.add(id);
-    storageAPI.setItem('starredConversations', JSON.stringify([...starred]));
-    maybeRenderStarredConversations(); // Re-render starred list (potentially filtered)
-    dispatch('sidebarStarredChanged', { id, starred: starred.has(id) });
-    notify.info('[sidebar] star toggled', { group: true, context: 'sidebar', module: MODULE, source: 'toggleStarConversation', detail: { id, starred: starred.has(id) } });
+  /**
+   * Check if a conversation is starred.
+   */
+  function isConversationStarred(id) {
     return starred.has(id);
   }
 
+  /**
+   * Toggle star/unstar status for a conversation.
+   */
+  function toggleStarConversation(id) {
+    if (starred.has(id)) {
+      starred.delete(id);
+    } else {
+      starred.add(id);
+    }
+    storageAPI.setItem('starredConversations', JSON.stringify([...starred]));
+    maybeRenderStarredConversations();
+    dispatch('sidebarStarredChanged', { id, starred: starred.has(id) });
+    return starred.has(id);
+  }
+
+  /**
+   * Dispatch a custom event if possible.
+   */
   function dispatch(name, detail) {
-    // Ensure domAPI.getDocument() returns an object with dispatchEvent
     const doc = domAPI.getDocument();
     if (doc && typeof doc.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
       doc.dispatchEvent(new CustomEvent(name, { detail }));
-    } else {
-      notify.warn(
-  `[sidebar] Cannot dispatch event "${name}". domAPI.getDocument().dispatchEvent is not available or CustomEvent is undefined.`,
-  {
-    module: MODULE,
-    context: "sidebar",
-    source: "dispatch",
-    hasDoc: !!doc,
-    hasDispatchEvent: !!(doc && typeof doc.dispatchEvent === "function"),
-    hasCustomEvent: typeof CustomEvent !== "undefined",
-  }
-);
     }
   }
 
@@ -641,8 +613,6 @@ export function createSidebar({
     togglePin,
     activateTab,
     isConversationStarred,
-    toggleStarConversation,
+    toggleStarConversation
   };
-
-  // Auth form UI/control methods now come from sidebarAuth
 }

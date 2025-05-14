@@ -1,0 +1,32 @@
+# Notification System Removed
+
+The notification system has been completely removed from the application to simplify the codebase. This includes:
+
+- All UI notification banners
+- Notification utility functions
+- Error reporting and monitoring
+- Debug and trace utilities
+- Backend logging endpoints
+
+## Migration Notes
+
+When working with existing code:
+
+1. Direct DOM manipulation should be done through the `domAPI` utility
+2. For error handling, use standard try/catch blocks without notification calls
+3. For debugging, use standard browser dev tools
+4. For API calls, use the `apiClient` directly without wrappers
+5. For event handlers, register them directly with `eventHandlers.trackListener`
+
+## Architecture Changes
+
+The following components have been removed:
+
+1. **notify.js** - Core notification utility
+2. **notification-handler.js** - UI notification banners
+3. **log_notification.py** - Backend logging endpoint
+4. **notifications-helpers.js** - Debug and API wrapping utilities
+5. **backendLogger.js** - Backend logging module
+6. **sentry-init.js** - Error tracking and monitoring
+
+Refer to the updated custominstructions.md for current code standards.

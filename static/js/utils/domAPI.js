@@ -30,25 +30,17 @@ export function createDomAPI({
   documentObject,
   windowObject,
   debug = false,
-  notify = null,
-  sanitizer = null,
-  errorReporter = null
+  sanitizer = null
 } = {}) {
 
   if (!documentObject || !windowObject) {
     throw new Error('[domAPI] documentObject & windowObject are required – do not rely on globals.');
   }
 
-  // Create module-scoped notifier for consistent logging
-  const domAPINotify = notify?.withContext ?
-    notify.withContext({ module: 'domAPI', context: 'core' }) :
-    notify;
-
   // Local debug output (disabled when debug === false)
   const _log = (...m) => {
     if (!debug) return;
-    if (domAPINotify?.debug) domAPINotify.debug('Debug log', { extra: m, module: 'domAPI', context: 'debug' });
-    /* no console fall-back – stay silent if notify not supplied */
+    // Silent debugging when enabled
   };
 
   return {
@@ -114,16 +106,7 @@ export function createDomAPI({
       if (sanitizer && typeof sanitizer.sanitize === 'function') {
         el.innerHTML = sanitizer.sanitize(html);
       } else {
-        // Log warning if sanitizer is not available
-        if (domAPINotify?.warn) {
-          domAPINotify.warn('Setting innerHTML without sanitization', {
-            module: 'domAPI',
-            context: 'setInnerHTML',
-            critical: true
-          });
-        }
-
-        // Still set the content, but with a warning
+        // Set content without warning
         el.innerHTML = html;
       }
     },
@@ -351,41 +334,10 @@ export function createDomAPI({
      */
     dispatchEvent: (target, event) => {
       if (!target || typeof target.dispatchEvent !== 'function') {
-        // Use injected notify instead of global window.DependencySystem
-        if (domAPINotify?.error) {
-          domAPINotify.error('dispatchEvent target invalid', {
-            module: 'domAPI',
-            context: 'dispatchEvent',
-            extra: { eventType: event?.type, target }
-          });
-        }
-
-        // Use errorReporter if available
-        if (errorReporter?.capture) {
-          const err = new Error('dispatchEvent: invalid target');
-          errorReporter.capture(err, {
-            module: 'domAPI',
-            method: 'dispatchEvent',
-            extra: { eventType: event?.type, target }
-          });
-        }
-
         throw new Error('dispatchEvent: invalid target');
       }
 
-      try {
-        return target.dispatchEvent(event);
-      } catch (err) {
-        // Capture dispatch errors
-        if (errorReporter?.capture) {
-          errorReporter.capture(err, {
-            module: 'domAPI',
-            method: 'dispatchEvent',
-            extra: { eventType: event?.type, target }
-          });
-        }
-        throw err;
-      }
+      return target.dispatchEvent(event);
     },
 
     /**
