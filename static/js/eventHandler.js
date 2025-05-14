@@ -99,9 +99,6 @@ export function createEventHandlers({
     }
   };
 
-  // Guardrail #10: ensure app/DOM readiness early
-  DependencySystem.waitFor(['app', 'domAPI', 'notify']).catch(() => { /* noop – fire-and-forget */ });
-
   // Guardrail #10: All DOM/app wiring runs ONLY after DependencySystem.waitFor/waitForDepsAndDom inside .init()
   // Guardrail-compliance: This ensures no app/DOM logic runs before readiness.
 
@@ -1538,6 +1535,7 @@ export function createEventHandlers({
     },
     setProjectManager: (pm) => {
       _projectManager = pm;
-    }
+    },
+    DependencySystem           // <-- añadido
   };
 }

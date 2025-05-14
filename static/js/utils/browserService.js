@@ -41,7 +41,8 @@ export function normaliseUrl(u = '', errorReporter = null) {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
     // url.search already includes '?' if params exist, or is empty string otherwise.
     const path = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
-    return path || '/' + url.search + url.hash;
+    const fixed = (path || '/');
+    return fixed + url.search + url.hash;
   } catch (err) {
     if (errorReporter?.capture) {
       errorReporter.capture(err, {
