@@ -21,15 +21,6 @@ const MODULE = 'ProjectDashboardUtils';
 function _getDependency(dep, name, DependencySystem, isRequired = true) {
   const resolved = dep || DependencySystem?.modules?.get?.(name) || DependencySystem?.get?.(name);
   if (isRequired && !resolved) {
-    // Use notify if available, else throw
-    if (DependencySystem?.modules?.get?.('notify')) {
-      DependencySystem.modules.get('notify').error(`[${MODULE}] Missing required dependency: ${name}`, {
-        context: MODULE,
-        module: MODULE,
-        source: '_getDependency',
-        group: true
-      });
-    }
     throw new Error(`[${MODULE}] Missing required dependency: ${name}`);
   }
   return resolved;
@@ -42,7 +33,6 @@ function _resolveDependencies(opts) {
     eventHandlers: _getDependency(opts.eventHandlers, 'eventHandlers', DependencySystem),
     projectManager: _getDependency(opts.projectManager, 'projectManager', DependencySystem),
     modalManager: _getDependency(opts.modalManager, 'modalManager', DependencySystem),
-    notify: _getDependency(opts.notify, 'notify', DependencySystem),
     sanitizer: _getDependency(opts.sanitizer, 'sanitizer', DependencySystem),
     domAPI: _getDependency(opts.domAPI, 'domAPI', DependencySystem), // Add domAPI
     // Optional formatters
@@ -52,38 +42,20 @@ function _resolveDependencies(opts) {
 }
 
 // --- Centralized sanitizer helper (Guideline #6) ---
-function _safeSetInnerHTML(el, html, sanitizer, notify, notificationHandler) {
+function _safeSetInnerHTML(el, html, sanitizer) {
   if (!sanitizer?.sanitize) {
-    // DI-only: Use injected notify or notificationHandler, never window globals.
-    if (notify) {
-      notify.error(`[${MODULE}] Sanitizer function is missing, cannot safely set innerHTML.`, {
-        group: true,
-        context: 'projectDashboardUtils',
-        module: MODULE,
-        source: 'setInnerHTMLSafe'
-      });
-    } else if (notificationHandler?.show) {
-      notificationHandler.show(`[${MODULE}] Sanitizer function is missing, cannot safely set innerHTML.`, 'error', {
-        group: true,
-        context: 'projectDashboardUtils',
-        module: MODULE,
-        source: 'setInnerHTMLSafe'
-      });
-    }
-    // else: fail silently per modularity rules
     throw new Error(`[${MODULE}] sanitizer.sanitize is required for setting innerHTML`);
   }
-  // Guideline #6: Always sanitize before setting innerHTML.
   el.innerHTML = sanitizer.sanitize(html);
 }
 
 // --- UI Utils helpers refactored (Guideline #2) ---
-function applyCommonProps(element, options, domAPI, sanitizer, notify, notificationHandler) {
+function applyCommonProps(element, options, domAPI, sanitizer) {
   if (options.className) element.className = options.className;
   if (options.id) element.id = options.id;
   if (options.textContent !== undefined) element.textContent = options.textContent;
   if (options.innerHTML !== undefined) {
-    _safeSetInnerHTML(element, options.innerHTML, sanitizer, notify, notificationHandler);
+    _safeSetInnerHTML(element, options.innerHTML, sanitizer);
   }
   Object.entries(options).forEach(([key, value]) => {
     if (key.startsWith('data-')) element.setAttribute(key, value);
@@ -111,42 +83,35 @@ function wireEventHandlers(element, options, eventHandlers) { // Pass eventHandl
   });
 }
 
-function createElementAdvanced(tag, options, domAPI, sanitizer, notify, notificationHandler, eventHandlers) {
+function createElementAdvanced(tag, options, domAPI, sanitizer, eventHandlers) {
   const el = domAPI.createElement(tag);
-  applyCommonProps(el, options, domAPI, sanitizer, notify, notificationHandler);
+  applyCommonProps(el, options, domAPI, sanitizer);
   wireEventHandlers(el, options, eventHandlers);
   return el;
 }
 
-function createUIUtils({ eventHandlers, sanitizer, notify, notificationHandler, domAPI }) {
+function createUIUtils({ eventHandlers, sanitizer, domAPI }) {
   return {
     createElement(tag, options = {}) {
-      return createElementAdvanced(tag, options, domAPI, sanitizer, notify, notificationHandler, eventHandlers);
+      return createElementAdvanced(tag, options, domAPI, sanitizer, eventHandlers);
     }
   };
 }
 
-// --- Button binding helpers (Guideline #3, #4) ---
 function bindEditButton(deps) {
-  const { domAPI, projectManager, eventHandlers, DependencySystem, notifyCtx } = deps;
-  const editBtn = domAPI.getElementById('editProjectBtn'); // Use domAPI
+  const { domAPI, projectManager, eventHandlers, DependencySystem } = deps;
+  const editBtn = domAPI.getElementById('editProjectBtn');
   if (!editBtn) return;
 
   const handler = () => {
     const currentProject = projectManager?.currentProject;
-    // Resolve 'projectModal' via DS safely
     const pm = DependencySystem?.modules?.get?.('projectModal');
     if (currentProject && pm?.openModal) {
       pm.openModal(currentProject);
     } else {
-      // Guideline #4: Structured notification
-      notifyCtx.error('Cannot edit project: Project modal service is unavailable.', {
-        source: 'bindEditButton',
-        group: true
-      });
+      // silently ignore
     }
   };
-  // Guideline #3: Use trackListener
   eventHandlers.trackListener(editBtn, 'click', handler, {
     description: 'Edit Project Button',
     module: MODULE,
@@ -154,31 +119,22 @@ function bindEditButton(deps) {
   });
 }
 
-// (Similar refactoring for bindPinButton and bindArchiveButton using domAPI and trackListener)
 function bindPinButton(deps) {
-  const { domAPI, projectManager, eventHandlers, notifyCtx } = deps;
-  const pinBtn = domAPI.getElementById('pinProjectBtn'); // Use domAPI
+  const { domAPI, projectManager, eventHandlers } = deps;
+  const pinBtn = domAPI.getElementById('pinProjectBtn');
   if (!pinBtn) return;
 
   const handler = async () => {
     const currentProject = projectManager?.currentProject;
     if (!currentProject?.id || !projectManager?.togglePinProject) {
-      notifyCtx.warn('Cannot toggle pin: Missing project ID or toggle function.', { source: 'bindPinButton' });
+      // silently ignore
       return;
     }
     try {
-      const updatedProject = await projectManager.togglePinProject(currentProject.id);
-      notifyCtx.success(`Project ${updatedProject.pinned ? 'pinned' : 'unpinned'} successfully.`, {
-        source: 'bindPinButton',
-        extra: { projectId: currentProject.id, pinned: updatedProject.pinned }
-      });
+      await projectManager.togglePinProject(currentProject.id);
+      // silently ignore success
     } catch (error) {
-      notifyCtx.error('Failed to toggle project pin.', {
-        source: 'bindPinButton',
-        group: true,
-        originalError: error,
-        extra: { projectId: currentProject.id }
-      });
+      // silently ignore error
     }
   };
   eventHandlers.trackListener(pinBtn, 'click', handler, {
@@ -189,17 +145,16 @@ function bindPinButton(deps) {
 }
 
 function bindArchiveButton(deps) {
-  const { domAPI, projectManager, modalManager, eventHandlers, notifyCtx } = deps;
-  const archiveBtn = domAPI.getElementById('archiveProjectBtn'); // Use domAPI
+  const { domAPI, projectManager, modalManager, eventHandlers } = deps;
+  const archiveBtn = domAPI.getElementById('archiveProjectBtn');
   if (!archiveBtn) return;
 
   const handler = async () => {
     const currentProject = projectManager?.currentProject;
     if (!currentProject?.id || !projectManager?.toggleArchiveProject || !modalManager?.confirmAction) {
-      notifyCtx.warn('Cannot archive: Missing project ID, archive function, or modal manager.', { source: 'bindArchiveButton' });
+      // silently ignore
       return;
     }
-    // Use modalManager for confirmation (already uses notify internally)
     modalManager.confirmAction({
       title: currentProject.archived ? 'Unarchive Project?' : 'Archive Project?',
       message: currentProject.archived
@@ -210,19 +165,9 @@ function bindArchiveButton(deps) {
       onConfirm: async () => {
         try {
           await projectManager.toggleArchiveProject(currentProject.id);
-          notifyCtx.success(`Project ${currentProject.archived ? 'unarchived' : 'archived'} successfully.`, {
-            source: 'bindArchiveButton (onConfirm)',
-            extra: { projectId: currentProject.id, archived: !currentProject.archived }
-          });
-          // Optionally trigger a project list refresh here via projectManager or event
-          projectManager.loadProjects?.(); // Example refresh call
+          projectManager.loadProjects?.();
         } catch (error) {
-          notifyCtx.error('Failed to toggle project archive status.', {
-            source: 'bindArchiveButton (onConfirm)',
-            group: true,
-            originalError: error,
-            extra: { projectId: currentProject.id }
-          });
+          // silently ignore error
         }
       },
     });
@@ -239,29 +184,16 @@ function bindArchiveButton(deps) {
 function setupEventListeners({
   projectManager,
   modalManager,
-  eventHandlers, // Pass eventHandlers itself
+  eventHandlers,
   DependencySystem,
-  notifyCtx,
-  domAPI // Pass domAPI
+  domAPI
 }) {
-  // Dependencies are now passed down correctly
-  const deps = { projectManager, modalManager, eventHandlers, DependencySystem, notifyCtx, domAPI };
+  const deps = { projectManager, modalManager, eventHandlers, DependencySystem, domAPI };
   bindEditButton(deps);
   bindPinButton(deps);
   bindArchiveButton(deps);
 }
 
-// --- Notification wrapper (Guideline #4) ---
-function createShowNotification(notifyCtx) { // Expects context-wrapped notifier
-  return (msg, type = 'info') => {
-    // Use the methods directly on the context-wrapped notifier
-    if (type === 'error') notifyCtx.error(msg);
-    else if (type === 'success') notifyCtx.success(msg);
-    else if (type === 'warning' || type === 'warn') notifyCtx.warn(msg);
-    else notifyCtx.info(msg);
-    // No need for group: true, as notifyCtx likely handles default grouping/context
-  };
-}
 
 
 // --- Factory Function (Guideline #1, #8) ---
@@ -271,12 +203,7 @@ export function createProjectDashboardUtils(options = {}) {
 
   // Resolve all dependencies using the helper
   const deps = _resolveDependencies({ DependencySystem, ...options });
-  const { eventHandlers, projectManager, modalManager, notify, sanitizer, domAPI } = deps;
-
-  // Create context-aware notifier (Guideline #4)
-  const notifyCtx = notify.withContext({ context: 'projectDashboard', module: MODULE });
-
-  const showNotification = createShowNotification(notifyCtx);
+  const { eventHandlers, projectManager, modalManager, sanitizer, domAPI } = deps;
 
   const ProjectDashboardUtilsAPI = {};
 
@@ -284,8 +211,6 @@ export function createProjectDashboardUtils(options = {}) {
   ProjectDashboardUtilsAPI.UIUtils = createUIUtils({
     eventHandlers,
     sanitizer,
-    notify,
-    notificationHandler: options.notificationHandler,
     domAPI
   });
 
@@ -293,46 +218,39 @@ export function createProjectDashboardUtils(options = {}) {
 
   // Make setupEventListeners part of the returned API if needed externally,
   // otherwise keep it internal and call it from init.
-  const _setupEventListenersInternal = () => { // Rename if internal
-    setupEventListeners({ // Pass all required dependencies
+  const _setupEventListenersInternal = () => {
+    setupEventListeners({
       projectManager,
       modalManager,
-      eventHandlers, // Pass handler object
+      eventHandlers,
       DependencySystem,
-      notifyCtx,
-      domAPI,
-      showNotification // Pass the created wrapper
+      domAPI
     });
   };
 
   ProjectDashboardUtilsAPI.init = function () {
     if (initialized) return this;
     initialized = true;
-    notifyCtx.info('Initializing ProjectDashboard Utilities...', { source: 'init' });
     try {
-        _setupEventListenersInternal(); // Call the internal setup
+        _setupEventListenersInternal();
         const doc = domAPI.getDocument();
         if (doc) {
             domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));
         }
-        notifyCtx.info('ProjectDashboard Utilities Initialized.', { source: 'init' });
 
         // --- Standardized "projectdashboardutils:initialized" event ---
         const d = typeof document !== "undefined" ? document : null;
         if (d) d.dispatchEvent(new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } }));
 
     } catch(error) {
-        notifyCtx.error('Initialization failed.', { source: 'init', originalError: error, group: true });
         initialized = false;
     }
-    return this; // Return the API object
+    return this;
   };
 
    ProjectDashboardUtilsAPI.destroy = function() {
-       notifyCtx.info('Destroying ProjectDashboard Utilities.', { source: 'destroy' });
-       // Use central cleanup with context
-       eventHandlers.cleanupListeners?.({ context: 'projectActions' }); // Use context added in binding
-       eventHandlers.cleanupListeners?.({ context: 'uiUtils' });      // Use context added in binding
+       eventHandlers.cleanupListeners?.({ context: 'projectActions' });
+       eventHandlers.cleanupListeners?.({ context: 'uiUtils' });
        initialized = false;
    }
 
