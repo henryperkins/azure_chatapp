@@ -651,6 +651,7 @@ export function createNavigationService({
 
     // State access
     getCurrentView: () => state.currentView,
+    hasView,
     getCurrentProjectId: () => state.currentProjectId,
     getCurrentConversationId: () => state.currentConversationId,
     isNavigating: () => state.navigationInProgress,
