@@ -1,19 +1,18 @@
 /**
  * storageService.js — DI-safe localStorage wrapper (from globalUtils).
- * Uses browserService for access and notify for logging.
+ * Uses browserService for access.
  *
  * Usage:
  *   import { createStorageService } from './storageService.js';
- *   const storage = createStorageService({ browserService, APP_CONFIG, notify });
+ *   const storage = createStorageService({ browserService, APP_CONFIG });
  */
 
-export function createStorageService({ browserService, APP_CONFIG, notify }) {
+export function createStorageService({ browserService, APP_CONFIG }) {
   function safe(fn, fallback, ctx) {
     try {
       return fn();
     } catch (err) {
-      if (APP_CONFIG?.DEBUG && notify?.warn)
-        notify.warn(`[storageService] ${ctx} failed`, { err });
+      if (APP_CONFIG?.DEBUG) console.warn(`[storageService] ${ctx} failed`, err);
       return fallback;
     }
   }
