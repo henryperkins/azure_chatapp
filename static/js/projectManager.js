@@ -1,5 +1,4 @@
-// AUTO-INJECTED BY GUARDRAIL REMEDIATION
-import { wrapApi, emitReady } from "./utils/notifications-helpers.js";
+import { wrapApi } from "./utils/notifications-helpers.js";
 
  // Universal error capture helper
 function _capture(err, meta, er) {
@@ -63,7 +62,7 @@ async function retryWithBackoff(fn, maxRetries, timer, notify, errorReporter) {
     try {
       return await fn();
     } catch (err) {
-      errorReporter?.capture?.(err, { module: MODULE, method: 'retryWithBackoff' });
+      if (errorReporter) errorReporter.capture(err, { module: MODULE, method: 'retryWithBackoff' });
       _capture(err, { module: MODULE, method: "retryWithBackoff" }, errorReporter);
       if (err && err.status && ((err.status >= 400 && err.status < 500 && err.status !== 429) || err.status === 405)) {
         throw err;
@@ -73,7 +72,7 @@ async function retryWithBackoff(fn, maxRetries, timer, notify, errorReporter) {
         `Retry attempt ${attempt}/${maxRetries} for ${fn.name || 'anonymous function'}`,
         { module: MODULE, context: 'retryWithBackoff', attempt, maxRetries, originalError: err }
       );
-      errorReporter?.capture?.(err, {
+      if (errorReporter) errorReporter.capture(err, {
         module: MODULE,
         method: 'retryWithBackoff',
         attempt,
@@ -186,7 +185,7 @@ class ProjectManager {
     this.pmNotify?.info?.('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
 
     // ▸ backend audit trail
-    this.backendLogger?.log?.({
+    if (this.backendLogger) this.backendLogger.log({
       level  : 'info',
       module : MODULE,
       context: 'constructor',
@@ -287,7 +286,7 @@ class ProjectManager {
           this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_success');
           resolve(list);
         } catch (err) {
-          this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjects' });
+          if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjects' });
           _capture(err, { module: MODULE, method: "loadProjects" }, this.errorReporter);
           this.debugTools?.stop?.(_t, 'ProjectManager.loadProjects_debounced_error');
           resolve(this._handleErr('projectsLoaded', err, []));
@@ -356,7 +355,7 @@ class ProjectManager {
         const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
         this.currentProject = normalizeProjectResponse(detailRes);
       } catch (err) {
-        this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectDetails' });
+        if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectDetails' });
         _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
         this.pmNotify?.error?.("[ProjectManager] loadProjectDetails error", {
           source: "loadProjectDetails",
@@ -382,6 +381,7 @@ class ProjectManager {
           const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
           kbLoadResult = { status: 'fulfilled', value: kbValue };
         } catch (kbError) {
+          if (this.errorReporter) this.errorReporter.capture(kbError, { module: MODULE, method: 'loadProjectKnowledgeBase' });
           _capture(kbError, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
           kbLoadResult = { status: 'rejected', reason: kbError };
           this.pmNotify?.error?.(`[ProjectManager] Failed to load knowledge base details for KB ID ${this.currentProject.knowledge_base_id}`, {
@@ -425,7 +425,7 @@ class ProjectManager {
       this.debugTools?.stop?.(_t, 'ProjectManager.loadProjectDetails');
       return { ...this.currentProject };
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectDetails' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectDetails' });
       _capture(err, { module: MODULE, method: "loadProjectDetails" }, this.errorReporter);
       const userId = this.app?.state?.currentUser?.id || null;
       const status = err?.status || err?.response?.status;
@@ -476,7 +476,7 @@ class ProjectManager {
         return kb;
       }
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectKnowledgeBase' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectKnowledgeBase' });
       _capture(err, { module: MODULE, method: "loadProjectKnowledgeBase" }, this.errorReporter);
       this.pmNotify?.error(`[ProjectManager] Error loading knowledge base details for KB ID ${knowledgeBaseId} (Project ${projectId}).`, {
         group: true, context: 'projectManager', module: MODULE, source: 'loadProjectKnowledgeBase', detail: { projectId, knowledgeBaseId }, originalError: err
@@ -493,7 +493,7 @@ class ProjectManager {
       this._emit('projectStatsLoaded', { id, ...stats });
       return stats;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectStats' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectStats' });
       _capture(err, { module: MODULE, method: "loadProjectStats" }, this.errorReporter);
       return this._handleErr('projectStatsError', err, {});
     }
@@ -505,7 +505,7 @@ class ProjectManager {
       this._emit('projectFilesLoaded', { id, files });
       return files;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectFiles' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectFiles' });
       _capture(err, { module: MODULE, method: "loadProjectFiles" }, this.errorReporter);
       return this._handleErr('projectFilesError', err, []);
     }
@@ -517,7 +517,7 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id, conversations });
       return conversations;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectConversations' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectConversations' });
       _capture(err, { module: MODULE, method: "loadProjectConversations" }, this.errorReporter);
       return this._handleErr('projectConversationsError', err, []);
     }
@@ -529,7 +529,7 @@ class ProjectManager {
       this._emit('projectArtifactsLoaded', { id, artifacts });
       return artifacts;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'loadProjectArtifacts' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'loadProjectArtifacts' });
       _capture(err, { module: MODULE, method: "loadProjectArtifacts" }, this.errorReporter);
       return this._handleErr('projectArtifactsError', err, []);
     }
@@ -551,7 +551,7 @@ class ProjectManager {
       );
       return proj;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'saveProject' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'saveProject' });
       _capture(err, { module: MODULE, method: "saveProject" }, this.errorReporter);
       this._handleErr('projectSaveError', err, null, { method: 'saveProject', endpoint: url });
       throw err;
@@ -565,7 +565,7 @@ class ProjectManager {
       this._emit('projectDeleted', { id });
       this.notify.success(`[ProjectManager] Project ${id} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProject', detail: { id } });
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'deleteProject' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'deleteProject' });
       _capture(err, { module: MODULE, method: "deleteProject" }, this.errorReporter);
       this._handleErr('projectDeleteError', err, null, { method: 'deleteProject', endpoint: this._CONFIG.DETAIL.replace('{id}', id) });
       throw err;
@@ -579,7 +579,7 @@ class ProjectManager {
       this.notify.success(`[ProjectManager] Project ${id} archive toggled`, { group: true, context: 'projectManager', module: MODULE, source: 'toggleArchiveProject', detail: { id, archived: res?.archived } });
       return res;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'toggleArchiveProject' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'toggleArchiveProject' });
       _capture(err, { module: MODULE, method: "toggleArchiveProject" }, this.errorReporter);
       this._handleErr('projectArchiveToggled', err, null, { method: 'toggleArchiveProject', endpoint: this._CONFIG.ARCHIVE.replace('{id}', id) });
       throw err;
@@ -591,7 +591,7 @@ class ProjectManager {
       this.storage.setItem?.('selectedProjectId', projectId);
       return await this.chatManager.createNewConversation(projectId, opts);
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'createConversation' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'createConversation' });
       _capture(err, { module: MODULE, method: "createConversation" }, this.errorReporter);
       this._handleErr('conversationCreateError', err, null, { source: 'createConversation', detail: { projectId } });
       throw err;
@@ -612,7 +612,7 @@ class ProjectManager {
       this.notify.info(`[ProjectManager] Conversation ${conversationId} fetched.`, { group: true, context: 'projectManager', module: MODULE, source: 'getConversation', detail: { conversationId, projectId } });
       return convo;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'getConversation' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'getConversation' });
       _capture(err, { module: MODULE, method: "getConversation" }, this.errorReporter);
       this._handleErr(`conversationLoadError`, err, null, { source: 'getConversation', detail: { conversationId, projectId } });
       throw err;
@@ -625,7 +625,7 @@ class ProjectManager {
       this.notify.success(`[ProjectManager] Conversation ${conversationId} deleted`, { group: true, context: 'projectManager', module: MODULE, source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       return true;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'deleteProjectConversation' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'deleteProjectConversation' });
       _capture(err, { module: MODULE, method: "deleteProjectConversation" }, this.errorReporter);
       this._handleErr('deleteProjectConversationError', err, null, { source: 'deleteProjectConversation', detail: { conversationId, projectId } });
       throw err;
@@ -670,7 +670,7 @@ class ProjectManager {
           this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
           return true;
         } catch (err) {
-          this.errorReporter?.capture?.(err, { module: MODULE, method: 'uploadFileWithRetry' });
+          if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'uploadFileWithRetry' });
           throw err;
         }
       },
@@ -705,7 +705,7 @@ class ProjectManager {
       this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
       return project;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'createProject' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'createProject' });
       _capture(err, { module: MODULE, method: "createProject" }, this.errorReporter);
       const endpoint = this._CONFIG.PROJECTS;
       const status = err?.status || err?.response?.status;
@@ -741,7 +741,7 @@ class ProjectManager {
       this.notify.success('[ProjectManager] Default conversation created: ' + conversation.id, { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId, conversationId: conversation.id } });
       return conversation;
     } catch (err) {
-      this.errorReporter?.capture?.(err, { module: MODULE, method: 'createDefaultConversation' });
+      if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'createDefaultConversation' });
       _capture(err, { module: MODULE, method: "createDefaultConversation" }, this.errorReporter);
       this.notify.error('[ProjectManager] Failed to create default conversation: ' + (err?.message || err), { group: true, context: 'projectManager', module: MODULE, source: 'createDefaultConversation', detail: { projectId }, originalError: err });
       return null;
