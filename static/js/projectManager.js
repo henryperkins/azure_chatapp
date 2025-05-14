@@ -1,9 +1,3 @@
-import { wrapApi } from "./utils/notifications-helpers.js";
-
- // Universal error capture helper
-function _capture(err, meta, er) {
-  if (er?.capture) er.capture(err, meta);
-}
 
 const MODULE = "ProjectManager";
 
@@ -56,28 +50,16 @@ function extractResourceList(res, keys = ['projects', 'conversations', 'files', 
   return [];
 }
 
-async function retryWithBackoff(fn, maxRetries, timer, notify, errorReporter) {
+async function retryWithBackoff(fn, maxRetries, timer, _notify, _errorReporter) {
   let attempt = 0;
   while (true) {
     try {
       return await fn();
     } catch (err) {
-      if (errorReporter) errorReporter.capture(err, { module: MODULE, method: 'retryWithBackoff' });
-      _capture(err, { module: MODULE, method: "retryWithBackoff" }, errorReporter);
       if (err && err.status && ((err.status >= 400 && err.status < 500 && err.status !== 429) || err.status === 405)) {
         throw err;
       }
       if (++attempt > maxRetries) throw err;
-      notify?.warn?.(
-        `Retry attempt ${attempt}/${maxRetries} for ${fn.name || 'anonymous function'}`,
-        { module: MODULE, context: 'retryWithBackoff', attempt, maxRetries, originalError: err }
-      );
-      if (errorReporter) errorReporter.capture(err, {
-        module: MODULE,
-        method: 'retryWithBackoff',
-        attempt,
-        maxRetries
-      });
       await new Promise(r => timer(r, 1000 * attempt));
     }
   }
@@ -93,75 +75,35 @@ class ProjectManager {
     chatManager,
     DependencySystem,
     modelConfig = null,
-    notify = null,
-    notificationHandler = null,
     listenerTracker = null,
     timer = typeof setTimeout === 'function' ? setTimeout : (cb) => cb(),
     storage = { setItem: () => { }, getItem: () => null },
     apiEndpoints,
     apiRequest = null,
-    errorReporter = null,
-    debugTools = null,
-    backendLogger = null,
     browserService = null,
     domAPI = null
   } = {}) {
     if (!DependencySystem) {
-      if (notify) notify.error('[ProjectManager] DependencySystem required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
       throw new Error('DependencySystem required');
     }
 
-    // Create module-scoped notifier per guardrail #15
-    this.pmNotify = notify?.withContext
-      ? notify.withContext({ module: 'ProjectManager', context: 'operations' })
-      : notify;
-
-    // Log initialization
-    this.pmNotify?.info('ProjectManager initializing', { source: 'constructor' });
-    if (backendLogger?.log) {
-      backendLogger.log({
-        level: 'info',
-        module: 'ProjectManager',
-        context: 'init',
-        message: 'ProjectManager initializing'
-      });
-    }
     if (!apiEndpoints) {
-      if (notify) notify.error('[ProjectManager] apiEndpoints required', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
       throw new Error('apiEndpoints required');
     }
 
     this.app = app ?? DependencySystem.modules.get('app');
     this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
-    this.notify = notify ?? DependencySystem.modules.get?.('notify');
-    this.errorReporter = errorReporter ?? DependencySystem.modules.get?.('errorReporter');
-    this.debugTools = debugTools || DependencySystem.modules.get?.('debugTools') || null;
-    this.backendLogger = backendLogger ?? DependencySystem.modules.get?.('backendLogger') ?? null;
     this.timer = timer;
     this.storage = storage;
     this.apiRequest = apiRequest ?? app?.apiRequest;
     this.browserService = browserService ?? DependencySystem.modules.get?.('browserService') ?? null;
     this.domAPI       = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
-    // Fallback: wrap raw handler if notify util isn't injected yet
-    if (!this.notify && notificationHandler?.show) {
-      const h = notificationHandler;
-      this.notify = {
-        info: (m, o = {}) => h.show(m, 'info', 4000, { ...o, group: true, context: 'projectManager', module: MODULE }),
-        success: (m, o = {}) => h.show(m, 'success', 4000, { ...o, group: true, context: 'projectManager', module: MODULE }),
-        warn: (m, o = {}) => h.show(m, 'warning', 6000, { ...o, group: true, context: 'projectManager', module: MODULE }),
-        error: (m, o = {}) => h.show(m, 'error', 0, { ...o, group: true, context: 'projectManager', module: MODULE }),
-      };
-    }
-    if (!this.notify) {
-      throw new Error('notify util or notificationHandler missing');
-    }
     // Listener tracking
     if (!listenerTracker) {
       const ev = DependencySystem.modules.get('eventHandlers');
       if (!ev?.trackListener) {
-        this.notify.error('[ProjectManager] eventHandlers.trackListener missing', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
         throw new Error('eventHandlers.trackListener missing');
       }
       listenerTracker = {
@@ -192,73 +134,28 @@ class ProjectManager {
       FILE_DOWNLOAD      : apiEndpoints.FILE_DOWNLOAD      || '/api/projects/{id}/files/{file_id}/download/',
       ARTIFACT_DOWNLOAD  : apiEndpoints.ARTIFACT_DOWNLOAD  || '/api/projects/{id}/artifacts/{artifact_id}/download/',
     };
-
-    this.pmNotify?.debug?.('[ProjectManager] Configured API Endpoints:', {
-      source: 'constructor',
-      extra: { config: JSON.parse(JSON.stringify(this._CONFIG)) }
-    });
-    this.pmNotify?.info?.('[ProjectManager] Initialized', { group: true, context: 'projectManager', module: MODULE, source: 'constructor' });
-
-    // ▸ backend audit trail
-    if (this.backendLogger) this.backendLogger.log({
-      level  : 'info',
-      module : MODULE,
-      context: 'constructor',
-      message: 'initialized'
-    });
   }
 
-  async _req(url, opts = {}, src = MODULE) {
-    return wrapApi(
-      this.apiRequest,
-      { notify: this.notify, errorReporter: this.errorReporter, module: MODULE },
-      url,
-      opts,
-      src
-    );
+  async _req(url, opts = {}) {
+    if (typeof this.apiRequest !== 'function')
+      throw new Error('[ProjectManager] apiRequest missing');
+    return this.apiRequest(url, opts);
   }
 
   _emit(event, detail) {
     if (this.domAPI && typeof this.domAPI.dispatchEvent === 'function') {
       this.domAPI.dispatchEvent(this.domAPI.getDocument(), new CustomEvent(event, { detail }));
     } else {
-      (this.notify || console).warn?.(
-        `[ProjectManager] Missing domAPI; using global dispatchEvent`,
-        { module: MODULE, context: '_emit', event }
-      );
       globalThis.document?.dispatchEvent(new CustomEvent(event, { detail }));
     }
   }
   _authOk(failEvent, extraDetail = {}) {
     if (this.app?.state?.isAuthenticated) return true;
-    this.notify.warn('[ProjectManager] Auth required', { group: true, context: 'projectManager', module: MODULE, source: '_authOk', extra: extraDetail });
     this._emit(failEvent, { error: 'auth_required', ...extraDetail });
     return false;
   }
   _handleErr(eventName, err, fallback, extra = {}) {
-    _capture(err, { module: MODULE, method: eventName }, this.errorReporter);
-    const status = err?.status || err?.response?.status;
-    const detail = err?.detail || err?.response?.data?.detail || err?.response?.detail;
-    const endpoint = extra?.endpoint || err?.endpoint || '';
-    let errMsg = `[ProjectManager] ${eventName}: ${err.message}`;
-    if (status || endpoint || detail) {
-      errMsg += ` |`;
-      if (endpoint) errMsg += ` endpoint: ${endpoint};`;
-      if (status) errMsg += ` HTTP ${status};`;
-      if (detail) errMsg += ` detail: ${detail}`;
-    }
-    this.notify.error(errMsg, {
-      group: true,
-      context: 'projectManager',
-      module: MODULE,
-      source: eventName,
-      status,
-      endpoint,
-      detail,
-      originalError: err,
-      ...extra
-    });
-    this._emit(eventName, { error: err.message, status, endpoint, detail });
+    this._emit(eventName, { error: err?.message, ...extra });
     return fallback;
   }
 
@@ -682,17 +579,13 @@ class ProjectManager {
             method: 'POST',
             body: formData
           }, "uploadFileWithRetry");
-          this.notify.success(`[ProjectManager] File uploaded for project ${projectId}`, { group: true, context: 'projectManager', module: MODULE, source: 'uploadFileWithRetry', detail: { projectId, fileName: file.name } });
           return true;
         } catch (err) {
-          if (this.errorReporter) this.errorReporter.capture(err, { module: MODULE, method: 'uploadFileWithRetry' });
           throw err;
         }
       },
       maxRetries,
-      this.timer,
-      this.notify,
-      this.errorReporter
+      this.timer
     );
   }
 
@@ -783,7 +676,7 @@ class ProjectManager {
   }
 
   async retryWithBackoff(fn, maxRetries = 3) {
-    return retryWithBackoff(fn, maxRetries, this.timer, this.notify, this.errorReporter);
+    return retryWithBackoff(fn, maxRetries, this.timer);
   }
 
   async initialize() {
@@ -819,8 +712,8 @@ class ProjectManager {
 
 function _readyWrapper(deps) {
   return Promise.resolve(
-    deps.DependencySystem?.waitFor?.(['app', 'notify']) ??
-    globalThis.DependencySystem?.waitFor?.(['app', 'notify'])
+    deps.DependencySystem?.waitFor?.(['app']) ??
+    globalThis.DependencySystem?.waitFor?.(['app'])
   ).then(() => {
     const instance = new ProjectManager(deps);
     deps.DependencySystem?.register?.('projectManager', instance);
