@@ -106,8 +106,6 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.domAPI = domAPI;
       this.getDep = getDep;
 
-      // notification system stubs removed
-
       this.elements = elements;
       this.state = {
         knowledgeBase: null,
@@ -159,8 +157,6 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async initialize(isVisible, kbData = null, projectId = null) {
-      // notification/logging removed
-
       if (this.state.isInitialized && !isVisible) {
         this.elements.activeSection.classList.add("hidden");
         this.elements.inactiveSection.classList.add("hidden");
@@ -187,7 +183,6 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.elements.container.classList.toggle("hidden", !isVisible);
       this.elements.container.classList.toggle("pointer-events-none", !isVisible);
 
-      // notification/logging removed
       this.domAPI.dispatchEvent(
         this.domAPI.getDocument(),
         new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: true } })
@@ -253,10 +248,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
-      // notification/logging removed
-
       if (!kbData) {
-        // notification/logging removed
         this._showInactiveState();
         this.elements.knowledgeBaseFilesSection.classList.add("hidden");
         if (projectId) {
@@ -269,7 +261,6 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
 
       this.state.knowledgeBase = kbData;
-      // notification/logging removed
 
       const pid = projectId || kbData.project_id || this._getCurrentProjectId();
       if (this.elements.activeSection) {
@@ -303,14 +294,12 @@ export function createKnowledgeBaseComponent(options = {}) {
         this._updateUploadButtonsState();
 
         if (pid) {
-          // notification/logging removed
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
             new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId: pid } })
           );
         }
       } catch (err) {
-        // notification/logging removed
         if (pid) {
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
@@ -379,7 +368,6 @@ export function createKnowledgeBaseComponent(options = {}) {
     _showStatusAlert(message, type = "info") {
       const statusIndicator = this.domAPI.getElementById("kbStatusIndicator");
       if (!statusIndicator) {
-        // notification/logging removed
         return;
       }
       statusIndicator.textContent = "";
@@ -430,7 +418,6 @@ export function createKnowledgeBaseComponent(options = {}) {
 
   class KnowledgeBaseComponentWithDestroy extends KnowledgeBaseComponent {
     destroy() {
-      // notification/logging removed from destroy()
       const ds = this.getDep('DependencySystem');
       if (ds && typeof ds.cleanupModuleListeners === 'function') {
         ds.cleanupModuleListeners(MODULE);
