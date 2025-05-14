@@ -8,7 +8,6 @@
  * @param {Object} options.eventHandlers - Required. Event listener management.
  * @param {Object} options.projectManager - Required. Project data and actions.
  * @param {Object} options.modalManager - Required. Modal interaction handler.
- * @param {Object} options.notify - Required. Context-aware notification utility.
  * @param {Object} options.sanitizer - Required. HTML sanitization utility.
  * @param {Object} options.domAPI - Required. DOM manipulation abstraction.
  * @param {Function} [options.formatDate] - Optional date formatter.
