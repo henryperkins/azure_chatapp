@@ -52,13 +52,6 @@ export function createEventHandlers({
       app.navigate(url);
     } else if (browserService && typeof browserService.setLocation === 'function') {
       browserService.setLocation(url);
-    } else {
-      handlerNotify.warn('No navigation function available for redirect.', {
-        module: MODULE,
-        source: 'redirect',
-        context: 'redirect',
-        extra: { url }
-      });
     }
   }
 
