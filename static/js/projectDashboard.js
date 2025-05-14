@@ -1,18 +1,9 @@
 /**
  * projectDashboard.js
  *
- * ALL user/system notification, error, warning, or info banners must be
- * routed via the DI notification handler (`notificationHandler.show`). Never
- * use direct `console` or `alert` for user/system feedback. For dev/debug logs,
- * use only `this.logger.*` (DI-injected), never user alerts.
- *
- * For architectural conventions, see notification-system.md and custominstructions.md.
- *
  * Coordinates project dashboard components and state, interacting exclusively
  * via DependencySystem for all dependencies. No global/ .* access for shared modules.
  */
-
-import { createNotify } from "./utils/notify.js";
 
 class ProjectDashboard {
   constructor(deps) { // Changed to accept a single deps object
@@ -32,30 +23,6 @@ class ProjectDashboard {
     this.eventHandlers = deps.eventHandlers; // Directly from deps
     this.auth = getModule('auth');
     this.navigationService = getModule('navigationService');
-    this.errorReporter = deps.errorReporter; // Get errorReporter from deps
-    if (!this.errorReporter) throw new Error('[ProjectDashboard] errorReporter is required.');
-
-    this.logger = {
-      info: (msg, opts = {}) => this.dashboardNotify.info(msg, opts),
-      warn: (msg, opts = {}) => this.dashboardNotify.warn(msg, opts),
-      error: (msg, opts = {}) => this.dashboardNotify.error(msg, opts),
-      debug: (msg, opts = {}) => this.dashboardNotify.debug(msg, opts)
-    };
-    this.debugTools = getModule('debugTools') || null;
-    this.globalUtils = getModule('globalUtils');
-    this.notificationHandler = deps.notificationHandler; // Directly from deps
-    if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler is required.');
-
-    // --- Inject notify utility and context-rich dashboardNotify ---
-    this.notify =
-      deps.notify || // From deps if provided
-      getModule('notify') ||
-      createNotify({ notificationHandler: this.notificationHandler });
-
-    this.dashboardNotify = this.notify.withContext({
-      module: 'ProjectDashboard',
-      context: 'projectDashboard'
-    });
 
     // Inject domAPI for all DOM access
     this.domAPI = deps.domAPI; // Directly from deps
@@ -71,7 +38,7 @@ class ProjectDashboard {
     if (!this.browserService) throw new Error('[ProjectDashboard] browserService module required');
 
     this.state = { currentView: null, currentProject: null, initialized: false };
-    // Flag & stub view registration to prevent “unregistered view” errors 🔥
+    // Flag & stub view registration to prevent "unregistered view" errors 🔥
     this._viewsRegistered = false;
     this._ensureNavigationViews();
     this._unsubs = [];
@@ -84,7 +51,6 @@ class ProjectDashboard {
     const authBus = this.auth?.AuthBus;
     const handler = (e) => {
       const { authenticated } = e.detail || {};
-      this.logger.info(`[ProjectDashboard authStateChanged listener] Event received: authenticated=${authenticated}`, { detail: e.detail });
 
       // Always ensure UI elements are in the correct state
       const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
@@ -94,7 +60,6 @@ class ProjectDashboard {
 
       if (!authenticated) {
         // If the event indicates logout, ensure the UI reflects this.
-        this.logger.info('[ProjectDashboard authStateChanged listener] Not authenticated. Ensuring login message is shown.');
 
         // Show login message, hide main content
         if (loginMsg) loginMsg.classList.remove('hidden');
@@ -121,16 +86,12 @@ class ProjectDashboard {
       if (loginMsg) loginMsg.classList.add('hidden');
       if (mainCnt) mainCnt.classList.remove('hidden');
 
-      this.logger.info('[ProjectDashboard authStateChanged listener] Ensured login message hidden, main content visible.');
-
       // Initialize if needed, then show project list
       const actionPromise = !this.state.initialized
         ? this.initialize().then(initSuccess => {
             if (initSuccess) {
-              this.logger.info('[ProjectDashboard authStateChanged listener] Dashboard initialized successfully. Will show project list.');
               return this.showProjectList(); // This also loads projects
             }
-            this.logger.warn('[ProjectDashboard authStateChanged listener] Dashboard initialization failed after auth event.');
             return null;
           })
         : Promise.resolve(this.showProjectList()); // showProjectList also calls _loadProjects
@@ -154,15 +115,9 @@ class ProjectDashboard {
             // Force reflow
             void finalListView.offsetHeight;
           }
-
-          this.logger.info('[ProjectDashboard authStateChanged listener] Final visibility safeguard executed for authenticated state.', {
-            loginMsgHidden: finalLoginMsg ? finalLoginMsg.classList.contains('hidden') : 'N/A',
-            mainCntVisible: finalMainCnt ? !finalMainCnt.classList.contains('hidden') : 'N/A',
-            listViewVisible: finalListView ? (!finalListView.classList.contains('hidden') && finalListView.style.display !== 'none') : 'N/A'
-          });
         }, 200); // Increased delay for more reliability
-      }).catch(err => {
-        this.logger.error('[ProjectDashboard authStateChanged listener] Error in post-auth action promise.', { error: err });
+      }).catch(() => {
+        // Silent error handling
       });
     };
     const eventTarget = authBus && typeof authBus.addEventListener === 'function' ? authBus : document;
@@ -183,58 +138,13 @@ class ProjectDashboard {
     const traceId = DependencySystem?.getCurrentTraceIds?.()?.traceId || `trace-${this._initStartTime}`;
     const transactionId = DependencySystem?.generateTransactionId?.() || `txn-${this._initStartTime}`;
 
-    // Start performance trace if debug tools available
-    const debugTraceId = this.debugTools?.start?.('ProjectDashboard.initialize');
-
-    this.dashboardNotify.info('[ProjectDashboard] initialize() called', {
-      source: 'initialize',
-      timestamp: this._initStartTime,
-      traceId,
-      transactionId
-    });
-
-    // Log initialization attempt to backend
-    if (this.backendLogger && typeof this.backendLogger.log === 'function') {
-      this.backendLogger.log({
-        level: 'info',
-        module: 'ProjectDashboard',
-        message: 'initialization_started',
-        metadata: {
-          timestamp: this._initStartTime,
-          initialized: this.state?.initialized || false,
-          traceId,
-          transactionId
-        }
-      });
-    }
-
     if (this.state.initialized) {
-      this.logger.info('[ProjectDashboard] Already initialized.', {
-        context: 'ProjectDashboard',
-        traceId,
-        transactionId
-      });
-      this.dashboardNotify.info('Project dashboard is already initialized.', {
-        source: 'initialize',
-        traceId,
-        transactionId
-      });
-      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize');
       return true;
     }
-
-    this.logger.info('[ProjectDashboard] Initializing...', {
-      context: 'ProjectDashboard',
-      traceId,
-      transactionId,
-      timestamp: this._initStartTime
-    });
 
     try {
       const authModule = this.getModule('auth');
       if (!authModule?.isAuthenticated?.()) {
-        this.logger.warn('[ProjectDashboard initialize] authModule reports not authenticated. Initialization will not complete UI setup that requires auth. Caller or auth event handler should manage login message visibility.');
-        this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize (not authenticated)');
         return false;
       }
 
@@ -247,27 +157,18 @@ class ProjectDashboard {
       if (!listView)
         throw new Error('Missing required #projectListView container during initialization');
 
-      this.logger.info('[ProjectDashboard initialize] Components before _initializeComponents:', { // Changed to info
-        projectList: !!this.components.projectList,
-        projectDetails: !!this.components.projectDetails,
-        projectListExists: this.components.projectList !== null && this.components.projectList !== undefined,
-        projectDetailsExists: this.components.projectDetails !== null && this.components.projectDetails !== undefined
-      });
-
       await this._initializeComponents();
       this._setupEventListeners();
 
       if (this.navigationService) {
         this.navigationService.registerView('projectList', {
           show: async (params = {}) => {
-            this.logger.info('[ProjectDashboard] NavigationService: show projectList view', { params });
             this._setView({ showList: true, showDetails: false });
             if (this.components.projectList) this.components.projectList.show();
             this._loadProjects(); // Ensure projects are loaded when list view is shown
             return true;
           },
           hide: async () => {
-            this.logger.info('[ProjectDashboard] NavigationService: hide projectList view');
             if (this.components.projectList) this.components.projectList.hide?.();
             return true;
           }
@@ -275,11 +176,9 @@ class ProjectDashboard {
 
         this.navigationService.registerView('projectDetails', {
           show: async (params = {}) => {
-            this.logger.info('[ProjectDashboard] NavigationService: show projectDetails view', { params });
             const { projectId, conversationId, activeTab } = params;
 
             if (!projectId) {
-              this.dashboardNotify.error('Project ID is required to show project details.', { source: 'navService.showProjectDetails' });
               this.navigationService.navigateToProjectList();
               return false;
             }
@@ -287,7 +186,6 @@ class ProjectDashboard {
             this._setView({ showList: false, showDetails: true }); // Switch UI first
 
             if (!this.components.projectDetails) {
-              this.dashboardNotify.error('ProjectDetailsComponent is not available.', { source: 'navService.showProjectDetails' });
               this.navigationService.navigateToProjectList();
               return false;
             }
@@ -299,14 +197,11 @@ class ProjectDashboard {
               try {
                 projectToRender = await this.projectManager.loadProjectDetails(projectId);
               } catch (error) {
-                this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'initialize.navigationService.projectDetails.show.loadProjectDetails' });
-                this.dashboardNotify.error('Failed to load project details from projectManager.', { source: 'navService.showProjectDetails', originalError: error });
                 // projectManager.loadProjectDetails already emits projectDetailsError/projectNotFound
                 // and projectDashboard listens to projectNotFound to showProjectList.
                 return false;
               }
             } else {
-              this.dashboardNotify.error('ProjectManager or loadProjectDetails method is not available.', { source: 'navService.showProjectDetails' });
               this.navigationService.navigateToProjectList();
               return false;
             }
@@ -325,11 +220,9 @@ class ProjectDashboard {
             } else {
               // This case means projectToRender was null (e.g., 404) or renderProject is missing
               if (!projectToRender) {
-                this.dashboardNotify.warn('Project data was not found or couldn\'t be loaded.', { source: 'navService.showProjectDetails' });
                 // projectManager.loadProjectDetails would have emitted projectNotFound,
                 // which projectDashboard listens to and calls showProjectList().
               } else {
-                this.dashboardNotify.error('ProjectDetailsComponent.renderProject is not available.', { source: 'navService.showProjectDetails' });
                 this.navigationService.navigateToProjectList();
               }
               return false;
@@ -337,14 +230,10 @@ class ProjectDashboard {
             return true;
           },
           hide: async () => {
-            this.logger.info('[ProjectDashboard] NavigationService: hide projectDetails view');
             if (this.components.projectDetails) this.components.projectDetails.hide?.();
             return true;
           }
         });
-        this.dashboardNotify.info('ProjectDashboard views registered with NavigationService.');
-      } else {
-        this.dashboardNotify.error('NavigationService not available for view registration.');
       }
 
       // Mark as initialized
@@ -368,70 +257,11 @@ class ProjectDashboard {
         })
       );
 
-      // Log successful initialization
-      this.logger.info('[ProjectDashboard] Initialization complete.', {
-        context: 'ProjectDashboard',
-        duration: initDuration,
-        timestamp: initEndTime,
-        traceId,
-        transactionId
-      });
-
-      // Log to backend
-      if (this.backendLogger && typeof this.backendLogger.log === 'function') {
-        this.backendLogger.log({
-          level: 'info',
-          module: 'ProjectDashboard',
-          message: 'initialization_complete',
-          metadata: {
-            timestamp: initEndTime,
-            duration: initDuration,
-            traceId,
-            transactionId,
-            componentsStatus: {
-              projectList: !!this.components.projectList,
-              projectDetails: !!this.components.projectDetails,
-              projectListInitialized: this.components.projectList?.state?.initialized || false,
-              projectDetailsInitialized: this.components.projectDetails?.state?.initialized || false
-            }
-          }
-        });
-      }
-
-      // Stop the trace if it was started
-      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize');
       return true;
     } catch (error) {
       // Calculate initialization duration even for failed attempts
       const initEndTime = Date.now();
       const initDuration = initEndTime - (this._initStartTime || initEndTime);
-
-      // Capture error with detailed context
-      this.errorReporter.capture(error, {
-        module: 'ProjectDashboard',
-        source: 'initialize',
-        traceId,
-        transactionId,
-        duration: initDuration
-      });
-
-      // Log detailed error information
-      this.logger.error('[ProjectDashboard] Initialization failed:', {
-        error,
-        errorMessage: error?.message,
-        errorStack: error?.stack,
-        traceId,
-        transactionId,
-        duration: initDuration
-      });
-
-      // Notify user with error details
-      this.dashboardNotify.error('Dashboard initialization failed', {
-        source: 'initialize',
-        originalError: error,
-        traceId,
-        transactionId
-      });
 
       // Mark as not initialized
       this.state.initialized = false;
@@ -452,55 +282,24 @@ class ProjectDashboard {
         })
       );
 
-      // Log to backend
-      if (this.backendLogger && typeof this.backendLogger.log === 'function') {
-        this.backendLogger.log({
-          level: 'error',
-          module: 'ProjectDashboard',
-          message: 'initialization_failed',
-          metadata: {
-            timestamp: initEndTime,
-            duration: initDuration,
-            traceId,
-            transactionId,
-            error: error?.message,
-            componentsStatus: {
-              projectList: !!this.components.projectList,
-              projectDetails: !!this.components.projectDetails
-            }
-          }
-        });
-      }
-
-      // Stop the trace if it was started
-      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize (error)');
       return false;
-    } finally {
-      // Always stop the trace in finally block to ensure it's stopped
-      this.debugTools?.stop?.(debugTraceId, 'ProjectDashboard.initialize');
     }
   }
 
   cleanup() {
     if (this._unsubs && this._unsubs.length) {
-      this.dashboardNotify.debug('Running manual _unsubs cleanup.', { source: 'cleanup', count: this._unsubs.length });
       this._unsubs.forEach((unsub) => typeof unsub === 'function' && unsub());
       this._unsubs = [];
     }
     const ds = this.getModule('DependencySystem');
     if (ds && typeof ds.cleanupModuleListeners === 'function') {
       ds.cleanupModuleListeners('projectDashboard');
-      this.dashboardNotify.info('Called DependencySystem.cleanupModuleListeners for projectDashboard.', { source: 'cleanup' });
     } else if (this.eventHandlers?.cleanupListeners) {
       this.eventHandlers.cleanupListeners({ context: 'projectDashboard' });
-      this.dashboardNotify.info('Called eventHandlers.cleanupListeners for projectDashboard.', { source: 'cleanup' });
-    } else {
-      this.dashboardNotify.warn('cleanupListeners not available on eventHandlers or DependencySystem.', { source: 'cleanup' });
     }
   }
 
   async showProjectList() {
-    this.logger.info('[ProjectDashboard] Showing project list view');
     // this.state._aborted = false; // Explicitly reset _aborted flag here // TODO: Refactor state mutation
     this.state.currentView = 'list';
     this.state.currentProject = null;
@@ -515,23 +314,14 @@ class ProjectDashboard {
     if (this.components.projectList && !this.components.projectList.state?.initialized) {
       try {
         await this.components.projectList.initialize();
-        this.logger.info('[ProjectDashboard] ProjectListComponent initialized on demand.');
       } catch (err) {
-        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: 'showProjectList.initializeProjectList' });
-        this.logger.error('[ProjectDashboard] Failed to initialize ProjectListComponent on demand.', { error: err });
-        this.dashboardNotify.error('Failed to load project list UI.', { source: 'showProjectList', originalError: err });
-        // Potentially show an error state instead of just logging
-        return; // Stop further execution if initialization fails
+        // Stop further execution if initialization fails
+        return;
       }
     }
 
     if (this.components.projectList) {
       this.components.projectList.show();
-      this.logger.info('[ProjectDashboard] ProjectList component shown');
-      this.dashboardNotify.info('Switched to project list view.', { source: 'showProjectList' });
-    } else {
-      this.logger.warn('[ProjectDashboard] ProjectList component not available');
-      this.dashboardNotify.warn('The project list is currently unavailable.', { source: 'showProjectList' });
     }
 
     this._loadProjects();
@@ -542,7 +332,6 @@ class ProjectDashboard {
         listView.classList.remove('opacity-0');
         listView.style.display = '';
         listView.classList.remove('hidden');
-        this.logger.info('[ProjectDashboard] Additional visibility check for project list view completed');
       }
     }, 50);
   }
@@ -579,12 +368,6 @@ class ProjectDashboard {
     ) {
       projectId = projectObjOrId; // ID only
     } else {
-      this.dashboardNotify.error('Invalid project ID', {
-        source: 'showProjectDetails',
-        traceId,
-        transactionId,
-        extra: { projectObjOrId }
-      });
       this.showProjectList();
       return false;
     }
@@ -596,29 +379,9 @@ class ProjectDashboard {
 
     // Initialize ProjectDetails if needed, *before* trying to show/render
     if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
-      this.dashboardNotify.info('Initializing ProjectDetailsComponent on demand...', {
-        source: 'showProjectDetails',
-        traceId,
-        transactionId,
-        extra: { projectId }
-      });
       try {
         await this.components.projectDetails.initialize();
-        this.dashboardNotify.info('ProjectDetailsComponent initialized on demand.', {
-          source: 'showProjectDetails',
-          traceId,
-          transactionId,
-          extra: { projectId }
-        });
       } catch (initErr) {
-        this.errorReporter.capture(initErr, { module: 'ProjectDashboard', source: 'showProjectDetails.initializeProjectDetails' });
-        this.logger.error('[ProjectDashboard] Failed to initialize ProjectDetailsComponent on demand.', { error: initErr });
-        this.dashboardNotify.error('Failed to load project details UI.', {
-          source: 'showProjectDetails',
-          traceId,
-          transactionId,
-          extra: { projectId, error: initErr?.message, originalError: initErr }
-        });
         this.showProjectList(); // Go back to list if details UI fails to init
         return false;
       }
@@ -635,55 +398,26 @@ class ProjectDashboard {
         if (this.components.projectDetails && this.components.projectDetails.renderProject) {
           try {
             if (this._lastLoadId !== currentLoadId) {
-              this.logger.info('[ProjectDashboard] Aborting showProjectDetails (direct path) due to newer load');
-              this.dashboardNotify.debug('Aborted: newer navigation event detected', {
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId }
-              });
               return false;
             }
-            this.logger.info('[ProjectDashboard] Setting initial view visibility first');
             this._setView({ showList: false, showDetails: true });
 
-            this.logger.info('[ProjectDashboard] Showing project details component (direct path)');
             if (this.components.projectDetails) this.components.projectDetails.show();
 
-            this.logger.info('[ProjectDashboard] Hiding project list component');
             if (this.components.projectList) this.components.projectList.hide();
 
-            this.logger.info('[ProjectDashboard] Rendering project data (direct path)');
             this.components.projectDetails.renderProject(project);
 
             // Final verification that the details are visible
-            this.logger.info('[ProjectDashboard] Performing final visibility check');
             const detailsView = this.domAPI.getElementById('projectDetailsView');
             if (detailsView) {
               if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
-                this.logger.warn(
-                  '[ProjectDashboard] Details view still hidden after all operations, forcing visibility'
-                );
                 detailsView.classList.remove('hidden', 'opacity-0');
                 detailsView.style.display = '';
                 detailsView.setAttribute('aria-hidden', 'false');
               }
             }
-            this.dashboardNotify.info('Project details displayed successfully.', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            });
           } catch (error) {
-            this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'showProjectDetails.renderDirect.viewTransition' });
-            this.logger.error('[ProjectDashboard] Error during view transition:', error);
-            this.dashboardNotify.error('Error displaying project details (direct path)', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId, error: error?.message, originalError: error }
-            });
             this._setView({ showList: false, showDetails: true });
           }
         }
@@ -695,23 +429,9 @@ class ProjectDashboard {
         try {
           const loadedProject = await this.projectManager.loadProjectDetails(projectId);
           if (this._lastLoadId !== currentLoadId) {
-            this.logger.info('[ProjectDashboard] Aborting showProjectDetails (API path) due to newer load');
-            this.dashboardNotify.debug('Aborted: newer navigation event detected (API path)', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            });
             return false;
           }
           if (!loadedProject) {
-            this.logger.warn('[ProjectDashboard] Project not found after details load');
-            this.dashboardNotify.error('Project not found', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            });
             this.showProjectList();
             return false;
           }
@@ -723,103 +443,41 @@ class ProjectDashboard {
 
             try {
               if (this._lastLoadId !== currentLoadId) {
-                this.logger.info(
-                  '[ProjectDashboard] Aborting showProjectDetails (API path) due to newer load after render check'
-                );
-                this.dashboardNotify.debug('Aborted: newer navigation event detected (API path, post-render check)', {
-                  source: 'showProjectDetails',
-                  traceId,
-                  transactionId,
-                  extra: { projectId }
-                });
                 return false;
               }
-              this.logger.info('[ProjectDashboard] Setting initial view visibility first (API path)');
               this._setView({ showList: false, showDetails: true });
 
-              this.logger.info('[ProjectDashboard] Showing project details component (API path)');
               if (this.components.projectDetails) this.components.projectDetails.show();
 
-              this.logger.info('[ProjectDashboard] Hiding project list component (API path)');
               if (this.components.projectList) this.components.projectList.hide();
 
-              this.logger.info('[ProjectDashboard] Rendering project data (API path)');
               this.components.projectDetails.renderProject(project);
 
-              this.logger.info('[ProjectDashboard] Performing final visibility check (API path)');
               const detailsView = this.domAPI.getElementById('projectDetailsView');
               if (detailsView) {
                 if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
-                  this.logger.warn(
-                    '[ProjectDashboard] Details view still hidden after all operations, forcing visibility (API path)'
-                  );
                   detailsView.classList.remove('hidden', 'opacity-0');
                   detailsView.style.display = '';
-                detailsView.setAttribute('aria-hidden', 'false');
+                  detailsView.setAttribute('aria-hidden', 'false');
+                }
               }
+            } catch (error) {
+              this._setView({ showList: false, showDetails: true });
             }
-            this.dashboardNotify.info('Project details displayed successfully (API path).', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            });
-          } catch (error) {
-            this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'showProjectDetails.renderApi.viewTransition' });
-            this.logger.error('[ProjectDashboard] Error during view transition (API path):', error);
-            this.dashboardNotify.error('Error displaying project details (API path)', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId, error: error?.message, originalError: error }
-            });
-            this._setView({ showList: false, showDetails: true });
           }
-        }
-      } catch (error) { // This is the catch for projectManager.loadProjectDetails(projectId)
-        this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'showProjectDetails.loadProjectDetailsApi' });
-        if (this._lastLoadId !== currentLoadId) {
-          this.logger.info('[ProjectDashboard] Aborting showProjectDetails error handler due to newer load');
-          this.dashboardNotify.debug('Aborted: newer navigation event detected (API path, error handler)', {
-              source: 'showProjectDetails',
-              traceId,
-              transactionId,
-              extra: { projectId }
-            });
+        } catch (error) {
+          if (this._lastLoadId !== currentLoadId) {
             return false;
           }
-          this.logger.error('[ProjectDashboard] Failed to load project details:', error);
-          this.dashboardNotify.error('Failed to load project details', {
-            source: 'showProjectDetails',
-            traceId,
-            transactionId,
-            extra: { projectId, error: error?.message, originalError: error }
-          });
           this.showProjectList();
           return false;
         }
         return this._postProjectDetailsSuccess(project, projectId, false);
       } else {
-        this.dashboardNotify.warn('ProjectManager is unavailable or user not authenticated. Showing project list.', {
-          source: 'showProjectDetails',
-          traceId,
-          transactionId,
-          extra: { projectId }
-        });
         this.showProjectList();
         return false;
       }
     } catch (err) { // Catch errors from the outer try block (e.g., initialization)
-      this.logger.error('[ProjectDashboard] Error in showProjectDetails main try block:', err);
-      this.dashboardNotify.error('An unexpected error occurred while loading project details.', {
-        source: 'showProjectDetails_OuterCatch'
-      });
-      this.errorReporter.capture(err, { module: 'ProjectDashboard', source: 'showProjectDetails.outerCatch' });
-      this.logger.error('[ProjectDashboard] Error in showProjectDetails main try block:', err);
-      this.dashboardNotify.error('An unexpected error occurred while loading project details.', {
-        source: 'showProjectDetails_OuterCatch',
-        originalError: err
-      });
       this.showProjectList(); // Go back to list on unexpected errors
       return false;
     }
@@ -836,35 +494,7 @@ class ProjectDashboard {
       const defaultConversation = project.conversations[0];
       if (defaultConversation && defaultConversation.id) {
         this.browserService.setSearchParam('chatId', defaultConversation.id);
-        this.dashboardNotify.info(
-          `[ProjectDashboard] _postProjectDetailsSuccess: Default conversation ID ${defaultConversation.id} set in URL for project ${projectId}.`,
-          {
-            source: '_postProjectDetailsSuccess',
-            projectId,
-            chatId: defaultConversation.id
-          }
-        );
-      } else {
-        this.dashboardNotify.warn(
-          `[ProjectDashboard] _postProjectDetailsSuccess: Project has conversations array, but the first conversation is invalid or missing an ID. Cannot set default chatId.`,
-          {
-            source: '_postProjectDetailsSuccess',
-            projectId,
-            projectConversationsPreview: project.conversations.slice(0, 1)
-          }
-        );
       }
-    } else {
-      this.dashboardNotify.info(
-        `[ProjectDashboard] _postProjectDetailsSuccess: Project has no conversations array, or it's empty. Cannot set default chatId.`,
-        {
-          source: '_postProjectDetailsSuccess',
-          projectId,
-          conversationsDataExists: Object.prototype.hasOwnProperty.call(project, 'conversations'),
-          conversationsIsArray: Array.isArray(project.conversations),
-          conversationsLength: Array.isArray(project.conversations) ? project.conversations.length : undefined
-        }
-      );
     }
 
     // Optionally fire projectLoaded event
@@ -881,18 +511,17 @@ class ProjectDashboard {
     if (cm?.initialize) {
       Promise
         .resolve(cm.initialize({ projectId }))
-        .catch(err => this.dashboardNotify.error('Chat initialisation failed',
-          { source: '_postProjectDetailsSuccess', originalError: err }));
+        .catch(() => {
+          // Silent error handling
+        });
     }
     return true;
   }
 
   _setView({ showList, showDetails }) {
     if (this.state._aborted) {
-      this.logger.info('[ProjectDashboard] _setView aborted due to navigation change');
       return;
     }
-    this.logger.info('[ProjectDashboard] _setView called with:', { showList, showDetails });
 
     // First, ensure login message is hidden and main content is visible
     const loginMessage = this.domAPI.getElementById('loginRequiredMessage');
@@ -905,15 +534,6 @@ class ProjectDashboard {
     const detailsView = this.domAPI.getElementById('projectDetailsView');
     const chatHeaderBar = this.domAPI.getElementById('chatHeaderBar');
 
-    this.logger.info('[ProjectDashboard] _setView DOM elements before:', {
-      listViewExists: !!listView,
-      detailsViewExists: !!detailsView,
-      listViewClasses: listView ? listView.className : 'N/A',
-      detailsViewClasses: detailsView ? detailsView.className : 'N/A',
-      listViewDisplay: listView ? listView.style.display : 'N/A',
-      detailsViewDisplay: detailsView ? detailsView.style.display : 'N/A'
-    });
-
     // Handle project list view visibility - use more direct approach to ensure visibility
     if (listView) {
       if (showList) {
@@ -925,19 +545,11 @@ class ProjectDashboard {
         listView.style.opacity = '1'; // Ensure opacity is set to visible
         this.domAPI.setAttribute(listView, 'aria-hidden', 'false');
         void listView.offsetHeight; // Force a reflow
-        this.logger.info('[ProjectDashboard] Project list view made visible', {
-          classes: listView.className,
-          display: listView.style.display,
-          ariaHidden: listView.getAttribute('aria-hidden')
-        });
       } else {
         this.domAPI.toggleClass(listView, 'hidden', true);
         listView.style.display = 'none';
         this.domAPI.setAttribute(listView, 'aria-hidden', 'true');
-        this.logger.info('[ProjectDashboard] Project list view hidden');
       }
-    } else {
-      this.logger.warn('[ProjectDashboard] Project list view element not found');
     }
 
     // Handle project details view visibility - use more direct approach
@@ -951,26 +563,17 @@ class ProjectDashboard {
         this.domAPI.setAttribute(detailsView, 'aria-hidden', 'false');
         detailsView.classList.remove('opacity-0');
         detailsView.classList.add('flex-1', 'flex-col');
-        this.logger.info('[ProjectDashboard] Project details view made visible', {
-          classes: detailsView.className,
-          display: detailsView.style.display,
-          ariaHidden: detailsView.getAttribute('aria-hidden')
-        });
       } else {
         this.domAPI.toggleClass(detailsView, 'hidden', true);
         detailsView.style.display = 'none';
         this.domAPI.setAttribute(detailsView, 'aria-hidden', 'true');
         detailsView.classList.remove('flex-1', 'flex-col');
-        this.logger.info('[ProjectDashboard] Project details view hidden');
       }
     } else {
-      this.logger.warn('[ProjectDashboard] Project details view element not found');
-
       // Try to recreate the details view if it's missing
       if (showDetails) {
         const projectManagerPanel = this.domAPI.getElementById('projectManagerPanel');
         if (projectManagerPanel) {
-          this.logger.info('[ProjectDashboard] Attempting to recreate missing projectDetailsView');
           const newDetailsView = this.domAPI.createElement('div');
           newDetailsView.id = 'projectDetailsView';
           newDetailsView.classList.add('flex-1', 'flex-col');
@@ -984,7 +587,6 @@ class ProjectDashboard {
             .then(response => response.text())
             .then(html => {
               newDetailsView.innerHTML = html;
-              this.logger.info('[ProjectDashboard] Successfully recreated projectDetailsView');
 
               // Notify that the template is loaded
               this.domAPI.dispatchEvent(
@@ -992,9 +594,8 @@ class ProjectDashboard {
                 new CustomEvent('projectDetailsTemplateLoaded', { detail: { success: true } })
               );
             })
-            .catch(err => {
-              this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_setView.fetchProjectDetailsTemplate' });
-              this.logger.error('[ProjectDashboard] Failed to load project details template', { error: err });
+            .catch(() => {
+              // Silent error handling
             });
         }
       }
@@ -1038,7 +639,6 @@ class ProjectDashboard {
         void listView.getBoundingClientRect();
         this.browserService.setTimeout(() => {
           if (listView.classList.contains('hidden') || listView.style.display === 'none') {
-            this.logger.warn('[ProjectDashboard] List view still hidden after _setView, forcing visibility');
             listView.classList.remove('hidden');
             listView.classList.remove('opacity-0');
             listView.style.display = '';
@@ -1053,7 +653,6 @@ class ProjectDashboard {
         void detailsView.getBoundingClientRect();
         this.browserService.setTimeout(() => {
           if (detailsView.classList.contains('hidden') || detailsView.style.display === 'none') {
-            this.logger.warn('[ProjectDashboard] Details view still hidden after _setView, forcing visibility');
             detailsView.classList.remove('hidden');
             detailsView.classList.remove('opacity-0');
             detailsView.style.display = 'flex';
@@ -1074,7 +673,6 @@ class ProjectDashboard {
       if (finalMainCnt) finalMainCnt.classList.remove('hidden');
 
       if (listView && showList && (listView.classList.contains('hidden') || listView.style.display === 'none')) {
-        this.logger.warn('[ProjectDashboard] Final check: List view still hidden, forcing visibility');
         listView.classList.remove('hidden');
         listView.style.display = '';
         listView.style.visibility = 'visible';
@@ -1082,21 +680,12 @@ class ProjectDashboard {
       }
 
       if (detailsView && showDetails && (detailsView.classList.contains('hidden') || detailsView.style.display === 'none')) {
-        this.logger.warn('[ProjectDashboard] Final check: Details view still hidden, forcing visibility');
         detailsView.classList.remove('hidden');
         detailsView.style.display = 'flex';
         detailsView.style.visibility = 'visible';
         detailsView.style.opacity = '1';
       }
     }, 150);
-
-    this.logger.info('[ProjectDashboard] View state after update:', {
-      listViewVisible: listView ? !listView.classList.contains('hidden') && listView.style.display !== 'none' : false,
-      detailsViewVisible: detailsView ? !detailsView.classList.contains('hidden') && detailsView.style.display !== 'none' : false,
-      chatHeaderBarVisible: chatHeaderBar ? !chatHeaderBar.classList.contains('hidden') : false,
-      listViewDisplay: listView?.style.display || 'N/A',
-      detailsViewDisplay: detailsView?.style.display || 'N/A',
-    });
   }
 
   _showLoginRequiredMessage() {
@@ -1117,13 +706,7 @@ class ProjectDashboard {
     this.components.projectList = this.components.projectList || this.getModule('projectListComponent') || null;
     this.components.projectDetails = this.components.projectDetails || this.getModule('projectDetailsComponent') || null;
 
-    this.logger.info('[ProjectDashboard] Initializing components...', {
-      projectListExists: !!this.components.projectList,
-      projectDetailsExists: !!this.components.projectDetails
-    });
-
     // First, wait for project details template to be loaded
-    this.logger.info('[ProjectDashboard] Waiting for project details template...');
     try {
       await new Promise((resolve) => {
         // First check if the template has already been loaded
@@ -1132,13 +715,11 @@ class ProjectDashboard {
         const detailsTabs = detailsView ? this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]') : null;
 
         if (detailsTabs) {
-          this.logger.info('[ProjectDashboard] Project details template already loaded');
           return resolve();
         }
 
         // Set up timeout for template loading
         const timeoutId = this.browserService.setTimeout(() => {
-          this.logger.error('[ProjectDashboard] Timeout waiting for projectDetailsTemplateLoaded event');
           // Don't reject - try to continue even if the template isn't loaded
           // This helps prevent hanging on initialization
           resolve();
@@ -1147,12 +728,6 @@ class ProjectDashboard {
         // Set up event listener for template loaded event
         const handler = (event) => {
           this.browserService.clearTimeout(timeoutId);
-          if (event.detail && event.detail.success) {
-            this.logger.info('[ProjectDashboard] projectDetailsTemplateLoaded event received successfully');
-          } else {
-            this.logger.warn('[ProjectDashboard] projectDetailsTemplateLoaded event received with failure',
-              { error: event.detail?.error });
-          }
           resolve();
         };
 
@@ -1177,7 +752,6 @@ class ProjectDashboard {
           this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]') : null;
 
         if (detailsTabsRecheck) {
-          this.logger.info('[ProjectDashboard] Project details template found after listener setup');
           this.browserService.clearTimeout(timeoutId);
           if (this.eventHandlers && this.eventHandlers.cleanupListeners) {
             this.eventHandlers.cleanupListeners({
@@ -1190,36 +764,26 @@ class ProjectDashboard {
         }
       });
     } catch (err) {
-      this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForDetailsTemplate' });
-      this.logger.error('[ProjectDashboard] Error waiting for project details template', { error: err });
       // Continue even if there was an error - we'll try to recover
     }
 
     // Next, wait for project list template to be loaded
     const listViewEl = this.domAPI.getElementById('projectListView');
     if (listViewEl && listViewEl.childElementCount > 0) {
-      this.logger.info('[ProjectDashboard] Project list template already present');
+      // Project list template already present
     } else {
-      this.logger.info('[ProjectDashboard] Waiting for project list template...');
       try {
         await new Promise((resolve) => {
           const eventTarget = this.domAPI.getDocument();
 
           // Set up timeout
           const timeoutId = this.browserService.setTimeout(() => {
-            this.logger.error('[ProjectDashboard] Timeout waiting for project list template');
             // Resolve anyway to prevent hanging
             resolve();
           }, 8000);
 
           const handler = (event) => {
             this.browserService.clearTimeout(timeoutId);
-            if (event.detail && event.detail.success) {
-              this.logger.info('[ProjectDashboard] projectListHtmlLoaded event received successfully');
-            } else {
-              this.logger.warn('[ProjectDashboard] projectListHtmlLoaded event received with failure',
-                { error: event.detail?.error });
-            }
             resolve();
           };
 
@@ -1239,7 +803,6 @@ class ProjectDashboard {
           }
 
           // Dispatch an event to trigger template loading if needed
-          this.logger.info('[ProjectDashboard] Dispatching requestProjectListTemplate event');
           this.domAPI.dispatchEvent(
             eventTarget,
             new CustomEvent('requestProjectListTemplate', {
@@ -1248,8 +811,6 @@ class ProjectDashboard {
           );
         });
       } catch (err) {
-        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForListTemplate' });
-        this.logger.error('[ProjectDashboard] Error waiting for project list template', { error: err });
         // Continue execution
       }
     }
@@ -1257,13 +818,11 @@ class ProjectDashboard {
     // Use waitForDepsAndDom utility if available
     const waitForDepsAndDom = this.globalUtils?.waitForDepsAndDom;
     if (!waitForDepsAndDom) {
-      this.logger.warn('[ProjectDashboard] waitForDepsAndDom utility is not available. Component initialization might be unstable.');
+      // Component initialization might be unstable
     }
 
     // Initialize ProjectList component
     if (this.components.projectList && !this.components.projectList.state?.initialized) {
-      this.logger.info('[ProjectDashboard] Initializing ProjectList component...');
-
       // Wait for DOM elements if possible
       if (waitForDepsAndDom) {
         try {
@@ -1271,14 +830,10 @@ class ProjectDashboard {
             DependencySystem: this.dependencySystem,
             domSelectors: ['#projectList', '#projectListView'],
             timeout: 5000,
-            notify: this.logger,
             domAPI: this.domAPI,
             source: 'ProjectDashboard_InitProjectList'
           });
-          this.logger.info('[ProjectDashboard] ProjectList DOM elements ready');
         } catch (err) {
-          this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForListDom' });
-          this.logger.warn('[ProjectDashboard] Not all ProjectList DOM elements found', { error: err });
           // Continue anyway
         }
       }
@@ -1287,25 +842,14 @@ class ProjectDashboard {
       try {
         if (typeof this.components.projectList.initialize === 'function') {
           await this.components.projectList.initialize();
-          this.logger.info('[ProjectDashboard] ProjectList component initialized successfully');
-        } else {
-          this.logger.error('[ProjectDashboard] ProjectList component missing initialize method');
         }
       } catch (err) {
-        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.initProjectList' });
-        this.logger.error('[ProjectDashboard] Error initializing ProjectList component', { error: err });
         // Continue execution to give projectDetails a chance
       }
-    } else if (this.components.projectList && this.components.projectList.state?.initialized) {
-      this.logger.info('[ProjectDashboard] ProjectList component already initialized');
-    } else {
-      this.logger.error('[ProjectDashboard] ProjectList component not found');
     }
 
     // Initialize ProjectDetails component
     if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
-      this.logger.info('[ProjectDashboard] Initializing ProjectDetails component...');
-
       // Wait for DOM elements if possible
       if (waitForDepsAndDom) {
         try {
@@ -1313,14 +857,10 @@ class ProjectDashboard {
             DependencySystem: this.dependencySystem,
             domSelectors: ['#projectDetailsView'],
             timeout: 5000,
-            notify: this.logger,
             domAPI: this.domAPI,
             source: 'ProjectDashboard_InitProjectDetails'
           });
-          this.logger.info('[ProjectDashboard] ProjectDetails DOM elements ready');
         } catch (err) {
-          this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForDetailsDom' });
-          this.logger.warn('[ProjectDashboard] ProjectDetails DOM element not found', { error: err });
           // Continue anyway
         }
       }
@@ -1329,28 +869,15 @@ class ProjectDashboard {
       try {
         if (typeof this.components.projectDetails.initialize === 'function') {
           await this.components.projectDetails.initialize();
-          this.logger.info('[ProjectDashboard] ProjectDetails component initialized successfully');
-        } else {
-          this.logger.error('[ProjectDashboard] ProjectDetails component missing initialize method');
         }
       } catch (err) {
-        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.initProjectDetails' });
-        this.logger.error('[ProjectDashboard] Error initializing ProjectDetails component', { error: err });
+        // Silent error handling
       }
-    } else if (this.components.projectDetails && this.components.projectDetails.state?.initialized) {
-      this.logger.info('[ProjectDashboard] ProjectDetails component already initialized');
-    } else {
-      this.logger.error('[ProjectDashboard] ProjectDetails component not found');
     }
 
     // Double check both components are properly accessible before completing
     this.components.projectList = this.components.projectList || this.getModule('projectListComponent');
     this.components.projectDetails = this.components.projectDetails || this.getModule('projectDetailsComponent');
-
-    this.logger.info('[ProjectDashboard] Component initialization complete', {
-      projectListInitialized: this.components.projectList?.state?.initialized || false,
-      projectDetailsInitialized: this.components.projectDetails?.state?.initialized || false
-    });
   }
 
   _setupEventListeners() {
@@ -1375,7 +902,6 @@ class ProjectDashboard {
 
   _handleProjectCreated(e) {
     const project = e.detail;
-    this.logger.info('[ProjectDashboard] Project created:', project);
 
     if (project && project.id) {
       this.browserService.setTimeout(() => {
@@ -1403,11 +929,8 @@ class ProjectDashboard {
 
   _loadProjects() {
     this.state._aborted = false;
-    this.logger.info('[ProjectDashboard] Loading projects...');
 
     if (!this.app) {
-      this.dashboardNotify.error('Project dashboard unavailable. Please refresh the page.', { source: '_loadProjects' });
-      this.logger.error('[ProjectDashboard] app is null or undefined');
       return;
     }
 
@@ -1416,14 +939,8 @@ class ProjectDashboard {
       (typeof this.auth?.isAuthenticated === 'function' && this.auth.isAuthenticated());
 
     if (!isAuthed) {
-      this.dashboardNotify.warn('Not authenticated. Please log in to view projects.', { source: '_loadProjects' });
-      this.logger.warn('[ProjectDashboard] Not authenticated, cannot load projects. Auth state:', {
-        appState: this.app?.state,
-        authModuleAuthenticated: typeof this.auth?.isAuthenticated === 'function' ? this.auth.isAuthenticated() : 'n/a'
-      });
       this.browserService.setTimeout(() => {
         if (typeof this.auth?.isAuthenticated === 'function' && this.auth.isAuthenticated()) {
-          this.logger.info('[ProjectDashboard] Retrying project load after delayed auth success');
           this._loadProjects();
         }
       }, 500);
@@ -1431,19 +948,14 @@ class ProjectDashboard {
     }
 
     if (!this.projectManager) {
-      this.dashboardNotify.error('Project manager unavailable. Please refresh the page.', { source: '_loadProjects' });
-      this.logger.error('[ProjectDashboard] projectManager is null or undefined');
       return;
     }
 
     if (typeof this.projectManager.loadProjects !== 'function') {
-      this.dashboardNotify.error('Cannot load projects. Project manager is incomplete.', { source: '_loadProjects' });
-      this.logger.error('[ProjectDashboard] Cannot load projects: projectManager.loadProjects not available');
       return;
     }
 
     if (!this.browserService || typeof this.browserService.setTimeout !== 'function') {
-      this.logger.error('[ProjectDashboard] browserService.setTimeout not available');
       this._executeProjectLoad();
       return;
     }
@@ -1453,25 +965,18 @@ class ProjectDashboard {
 
   _executeProjectLoad() {
     if (this.state._aborted) {
-      this.logger.info('[ProjectDashboard] Project loading aborted before execution');
       return;
     }
-
-    this.logger.info('[ProjectDashboard] Attempting to load projects with projectManager.loadProjects...');
 
     this.projectManager
       .loadProjects('all')
       .then((projects) => {
         if (this.state._aborted) {
-          this.logger.info('[ProjectDashboard] _loadProjects aborted, ignoring loaded projects');
           return;
         }
-        this.logger.info('[ProjectDashboard] Projects loaded successfully:', projects);
       })
-      .catch((error) => {
-        this.errorReporter.capture(error, { module: 'ProjectDashboard', source: '_executeProjectLoad' });
-        this.logger.error('[ProjectDashboard] Error loading projects:', error);
-        this.dashboardNotify.error('Failed to load projects. Please try again.', { source: '_executeProjectLoad', originalError: error });
+      .catch(() => {
+        // Silent error handling
       });
   }
 
@@ -1484,29 +989,22 @@ class ProjectDashboard {
   _handleBackToList() {
     const historyObj = this.getModule && this.getModule('historyObject')
       ? this.getModule('historyObject')
-      : (this.logger && typeof this.logger.warn === 'function' && this.logger.warn('[ProjectDashboard] No DI-injected historyObject available for pushState'), null);
+      : null;
     const pathname = this.browserService.getLocationPathname
       ? this.browserService.getLocationPathname()
-      : (this.logger && typeof this.logger.warn === 'function' && this.logger.warn('[ProjectDashboard] No DI-injected location/pathname available, using \'/\''), '/');
+      : '/';
     if (historyObj && typeof historyObj.pushState === 'function') {
       historyObj.pushState(
         {},
         '',
         this.browserService.buildUrl ? this.browserService.buildUrl({ project: '' }) : pathname
       );
-    } else {
-      this.logger.warn('[ProjectDashboard] No historyObject available for pushState');
     }
     this.showProjectList();
   }
 
   _handleAuthStateChange(event) {
     const { authenticated, user, source } = event.detail || {};
-    this.logger.info('[ProjectDashboard] Auth state changed:', {
-      authenticated,
-      userId: user?.id,
-      source: source || 'unknown'
-    });
 
     this.browserService.requestAnimationFrame(() => {
       const loginRequiredMessage = this.domAPI.getElementById('loginRequiredMessage');
@@ -1514,24 +1012,13 @@ class ProjectDashboard {
       const projectListView = this.domAPI.getElementById('projectListView');
       const projectDetailsView = this.domAPI.getElementById('projectDetailsView');
 
-      this.logger.debug('[ProjectDashboard] Current DOM element state:', {
-        loginRequiredMessageExists: !!loginRequiredMessage,
-        mainContentExists: !!mainContent,
-        projectListViewExists: !!projectListView,
-        projectDetailsViewExists: !!projectDetailsView,
-        projectListViewClasses: projectListView ? projectListView.className : 'N/A',
-        projectListViewDisplay: projectListView ? projectListView.style.display : 'N/A'
-      });
-
       if (!authenticated) {
-        this.logger.info('[ProjectDashboard] User not authenticated, showing login message');
         if (loginRequiredMessage) loginRequiredMessage.classList.remove('hidden');
         if (mainContent) mainContent.classList.add('hidden');
         if (projectListView) projectListView.classList.add('hidden');
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
         this.state._aborted = true;
       } else {
-        this.logger.info('[ProjectDashboard] User authenticated, showing project list');
         this.state._aborted = false;
 
         if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
@@ -1545,44 +1032,29 @@ class ProjectDashboard {
           projectListView.classList.remove('opacity-0');
           projectListView.style.display = '';
           void projectListView.offsetHeight;
-          this.logger.info('[ProjectDashboard] Made project list view visible immediately after auth', {
-            classes: projectListView.className,
-            display: projectListView.style.display
-          });
-        } else {
-          this.logger.warn('[ProjectDashboard] projectListView element not found, cannot make visible');
         }
         if (projectDetailsView) projectDetailsView.classList.add('hidden');
 
         const componentsInitialized = this.components.projectList && this.components.projectList.state?.initialized;
         if (!componentsInitialized) {
-          this.logger.info('[ProjectDashboard] Components not initialized after auth, reinitializing...');
           this._initializeComponents()
             .then(() => {
               if (this.components.projectList) {
                 this.components.projectList.show();
                 this._loadProjects();
-                this.logger.info('[ProjectDashboard] Project list component initialized and shown after auth');
-              } else {
-                this.logger.error('[ProjectDashboard] Project list component still not available after initialization');
               }
             })
-            .catch(err => {
-              this.logger.error('[ProjectDashboard] Error initializing components after auth', { error: err });
+            .catch(() => {
+              // Silent error handling
             });
         } else {
-          this.logger.info('[ProjectDashboard] Components already initialized, showing project list');
           if (this.components.projectList) {
             this.components.projectList.show();
-            this.logger.info('[ProjectDashboard] Project list component shown after auth');
-          } else {
-            this.logger.warn('[ProjectDashboard] Project list component not available');
           }
           if (this.components.projectDetails) {
             this.components.projectDetails.hide();
           }
           this.browserService.setTimeout(() => {
-            this.logger.info('[ProjectDashboard] Loading projects after authentication state change');
             this._loadProjects();
             this.browserService.setTimeout(() => {
               const plv = this.domAPI.getElementById('projectListView');
@@ -1590,9 +1062,6 @@ class ProjectDashboard {
                 plv.classList.remove('opacity-0');
                 plv.style.display = '';
                 plv.classList.remove('hidden');
-                this.logger.info('[ProjectDashboard] Verified project list view visibility after auth');
-              } else {
-                this.logger.warn('[ProjectDashboard] projectListView element not found in visibility check');
               }
             }, 100);
           }, 300);
@@ -1604,7 +1073,6 @@ class ProjectDashboard {
   _handleProjectsLoaded(event) {
     const { projects = [], error = false, message } = event.detail || {};
     if (error) {
-      this.logger.error('[ProjectDashboard] projectsLoaded event with error:', message);
       this.browserService.requestAnimationFrame(() => {
         if (this.components.projectList?._showErrorState) {
           this.components.projectList._showErrorState(message || 'Failed to load projects');
@@ -1614,10 +1082,7 @@ class ProjectDashboard {
     }
     this.browserService.requestAnimationFrame(() => {
       if (this.components.projectList) {
-        this.logger.info(`[ProjectDashboard] Rendering ${projects.length} project(s).`);
         this.components.projectList.renderProjects({ projects });
-      } else {
-        this.logger.warn('[ProjectDashboard] ProjectListComponent not available to render projects.');
       }
     });
   }
@@ -1659,26 +1124,21 @@ class ProjectDashboard {
 
   _handleProjectNotFound(event) {
     const { projectId } = event.detail || {};
-    this.logger.warn('[ProjectDashboard] Project not found:', projectId);
     this.state.currentProject = null;
     const detailsView = this.domAPI.getElementById('projectDetailsView');
     if (detailsView) {
       detailsView.classList.add('hidden');
       detailsView.style.display = 'none';
     }
-    this.dashboardNotify.error('The requested project was not found', { source: '_handleProjectNotFound' });
     this.showProjectList();
   }
 
   _handleProjectDeleted(event) {
     const { projectId } = event.detail || {};
-    this.logger.info(`[ProjectDashboard] Project deleted event received for ID: ${projectId}`);
     if (this.state.currentProject && this.state.currentProject.id === projectId) {
-      this.logger.info('[ProjectDashboard] Currently viewed project was deleted, returning to list view.');
       this.showProjectList();
     } else {
       if (this.state.currentView === 'list') {
-        this.logger.info('[ProjectDashboard] Project deleted while list is visible, reloading list.');
         this._loadProjects();
       }
     }
@@ -1686,7 +1146,7 @@ class ProjectDashboard {
 
   /**
    * Ensure NavigationService knows about core views even before full
-   * initialization. This prevents “Cannot activate unregistered view”
+   * initialization. This prevents "Cannot activate unregistered view"
    * errors triggered by auth-independent modules that call
    * navigationService.navigateTo(…).
    * Stub handlers are intentionally no-ops and will be overwritten by the
@@ -1699,29 +1159,27 @@ class ProjectDashboard {
       try {
         this.navigationService.registerView(id, { show: noop, hide: noop });
       } catch (err) {
-        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_ensureNavigationViews.registerViewLoop' });
         // Duplicate registration or handler validation error – safe to ignore
       }
     });
     this._viewsRegistered = true;
   }
 }
+
 /**
  * Factory function for ProjectDashboard.
  * Validates all required dependencies at the top and exposes cleanup API.
  */
-    export function createProjectDashboard(deps) {
+export function createProjectDashboard(deps) {
   // Validate required dependencies at the top
   if (!deps || typeof deps !== 'object') {
     throw new Error('[createProjectDashboard] A dependencies object is required.');
   }
   const requiredDeps = [
     'dependencySystem',
-    'notificationHandler',
     'domAPI',
     'browserService',
-    'eventHandlers',
-    'errorReporter' // Added errorReporter
+    'eventHandlers'
   ];
   for (const dep of requiredDeps) {
     if (!deps[dep]) {

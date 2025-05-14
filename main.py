@@ -234,8 +234,6 @@ from routes.projects.artifacts import router as project_artifacts_router
 from routes.user_preferences import router as user_preferences_router
 from routes.unified_conversations import router as conversations_router
 from routes.sentry_test import router as sentry_test_router
-from routes.log_notification import router as log_notification_router
-
 from routes.admin import router as admin_router
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
@@ -419,7 +417,6 @@ app.include_router(
 )
 app.include_router(user_preferences_router, tags=["preferences"])
 app.include_router(conversations_router, prefix="/api/projects", tags=["conversations"])
-app.include_router(log_notification_router)
 # Debug-only Sentry test routes
 app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring"])
 
@@ -532,11 +529,6 @@ async def generic_exception_handler(request: Request, exc: Exception) -> JSONRes
         status_code=500, content={"detail": "Internal server error (insecure debug)"}
     )
 
-
-# -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# Log Notification API Endpoint for Frontend <--- ADDED
-# (Removed: now handled by routes.log_notification router)
 
 # Uvicorn Entry
 # -----------------------------------------------------------------------------
