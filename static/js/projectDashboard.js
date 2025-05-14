@@ -15,9 +15,9 @@
 import { createNotify } from "./utils/notify.js";
 
 class ProjectDashboard {
-  constructor(dependencySystem, notify = null) {
-    if (!dependencySystem) throw new Error('[ProjectDashboard] dependencySystem is required.');
-    this.dependencySystem = dependencySystem; // Store for later use
+  constructor(deps) { // Changed to accept a single deps object
+    if (!deps.dependencySystem) throw new Error('[ProjectDashboard] dependencySystem is required.');
+    this.dependencySystem = deps.dependencySystem; // Store for later use
 
     // Dependency resolution
     const getModule = (key) =>
@@ -29,9 +29,12 @@ class ProjectDashboard {
     this.getModule = getModule;
     this.app = getModule('app');
     this.projectManager = getModule('projectManager');
-    this.eventHandlers = getModule('eventHandlers');
+    this.eventHandlers = deps.eventHandlers; // Directly from deps
     this.auth = getModule('auth');
-    this.navigationService = getModule('navigationService'); // Added
+    this.navigationService = getModule('navigationService');
+    this.errorReporter = deps.errorReporter; // Get errorReporter from deps
+    if (!this.errorReporter) throw new Error('[ProjectDashboard] errorReporter is required.');
+
     this.logger = {
       info: (msg, opts = {}) => this.dashboardNotify.info(msg, opts),
       warn: (msg, opts = {}) => this.dashboardNotify.warn(msg, opts),
@@ -39,14 +42,13 @@ class ProjectDashboard {
       debug: (msg, opts = {}) => this.dashboardNotify.debug(msg, opts)
     };
     this.debugTools = getModule('debugTools') || null;
-    // Utilidades globales (waitForDepsAndDom, etc.)
     this.globalUtils = getModule('globalUtils');
-    this.notificationHandler = getModule('notificationHandler');
-    if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler (via DependencySystem) is required.');
+    this.notificationHandler = deps.notificationHandler; // Directly from deps
+    if (!this.notificationHandler) throw new Error('[ProjectDashboard] notificationHandler is required.');
 
     // --- Inject notify utility and context-rich dashboardNotify ---
     this.notify =
-      notify ||
+      deps.notify || // From deps if provided
       getModule('notify') ||
       createNotify({ notificationHandler: this.notificationHandler });
 
@@ -56,7 +58,7 @@ class ProjectDashboard {
     });
 
     // Inject domAPI for all DOM access
-    this.domAPI = getModule('domAPI');
+    this.domAPI = deps.domAPI; // Directly from deps
     if (!this.domAPI) throw new Error('[ProjectDashboard] domAPI module required for DOM abstraction');
 
     this.components = {
@@ -65,7 +67,7 @@ class ProjectDashboard {
     };
 
     // Injected browser abstractions
-    this.browserService = getModule('browserService');
+    this.browserService = deps.browserService; // Directly from deps
     if (!this.browserService) throw new Error('[ProjectDashboard] browserService module required');
 
     this.state = { currentView: null, currentProject: null, initialized: false };
@@ -252,6 +254,7 @@ class ProjectDashboard {
               try {
                 projectToRender = await this.projectManager.loadProjectDetails(projectId);
               } catch (error) {
+                this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'initialize.navigationService.projectDetails.show.loadProjectDetails' });
                 this.dashboardNotify.error('Failed to load project details from projectManager.', { source: 'navService.showProjectDetails', originalError: error });
                 // projectManager.loadProjectDetails already emits projectDetailsError/projectNotFound
                 // and projectDashboard listens to projectNotFound to showProjectList.
@@ -308,6 +311,7 @@ class ProjectDashboard {
       this.debugTools?.stop?.(traceId, 'ProjectDashboard.initialize');
       return true;
     } catch (error) {
+      this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'initialize' });
       this.logger.error('[ProjectDashboard] Initialization failed:', error);
       this.dashboardNotify.error('Dashboard initialization failed', { source: 'initialize', originalError: error });
       this.state.initialized = false;
@@ -342,7 +346,7 @@ class ProjectDashboard {
 
   async showProjectList() {
     this.logger.info('[ProjectDashboard] Showing project list view');
-    this.state._aborted = false; // Explicitly reset _aborted flag here
+    // this.state._aborted = false; // Explicitly reset _aborted flag here // TODO: Refactor state mutation
     this.state.currentView = 'list';
     this.state.currentProject = null;
     this.browserService.removeSearchParam('project');
@@ -358,8 +362,9 @@ class ProjectDashboard {
         await this.components.projectList.initialize();
         this.logger.info('[ProjectDashboard] ProjectListComponent initialized on demand.');
       } catch (err) {
+        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: 'showProjectList.initializeProjectList' });
         this.logger.error('[ProjectDashboard] Failed to initialize ProjectListComponent on demand.', { error: err });
-        this.dashboardNotify.error('Failed to load project list UI.', { source: 'showProjectList' });
+        this.dashboardNotify.error('Failed to load project list UI.', { source: 'showProjectList', originalError: err });
         // Potentially show an error state instead of just logging
         return; // Stop further execution if initialization fails
       }
@@ -451,6 +456,7 @@ class ProjectDashboard {
           extra: { projectId }
         });
       } catch (initErr) {
+        this.errorReporter.capture(initErr, { module: 'ProjectDashboard', source: 'showProjectDetails.initializeProjectDetails' });
         this.logger.error('[ProjectDashboard] Failed to initialize ProjectDetailsComponent on demand.', { error: initErr });
         this.dashboardNotify.error('Failed to load project details UI.', {
           source: 'showProjectDetails',
@@ -515,6 +521,7 @@ class ProjectDashboard {
               extra: { projectId }
             });
           } catch (error) {
+            this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'showProjectDetails.renderDirect.viewTransition' });
             this.logger.error('[ProjectDashboard] Error during view transition:', error);
             this.dashboardNotify.error('Error displaying project details (direct path)', {
               source: 'showProjectDetails',
@@ -593,30 +600,32 @@ class ProjectDashboard {
                   );
                   detailsView.classList.remove('hidden', 'opacity-0');
                   detailsView.style.display = '';
-                  detailsView.setAttribute('aria-hidden', 'false');
-                }
+                detailsView.setAttribute('aria-hidden', 'false');
               }
-              this.dashboardNotify.info('Project details displayed successfully (API path).', {
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId }
-              });
-            } catch (error) {
-              this.logger.error('[ProjectDashboard] Error during view transition (API path):', error);
-              this.dashboardNotify.error('Error displaying project details (API path)', {
-                source: 'showProjectDetails',
-                traceId,
-                transactionId,
-                extra: { projectId, error: error?.message, originalError: error }
-              });
-              this._setView({ showList: false, showDetails: true });
             }
+            this.dashboardNotify.info('Project details displayed successfully (API path).', {
+              source: 'showProjectDetails',
+              traceId,
+              transactionId,
+              extra: { projectId }
+            });
+          } catch (error) {
+            this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'showProjectDetails.renderApi.viewTransition' });
+            this.logger.error('[ProjectDashboard] Error during view transition (API path):', error);
+            this.dashboardNotify.error('Error displaying project details (API path)', {
+              source: 'showProjectDetails',
+              traceId,
+              transactionId,
+              extra: { projectId, error: error?.message, originalError: error }
+            });
+            this._setView({ showList: false, showDetails: true });
           }
-        } catch (error) {
-          if (this._lastLoadId !== currentLoadId) {
-            this.logger.info('[ProjectDashboard] Aborting showProjectDetails error handler due to newer load');
-            this.dashboardNotify.debug('Aborted: newer navigation event detected (API path, error handler)', {
+        }
+      } catch (error) { // This is the catch for projectManager.loadProjectDetails(projectId)
+        this.errorReporter.capture(error, { module: 'ProjectDashboard', source: 'showProjectDetails.loadProjectDetailsApi' });
+        if (this._lastLoadId !== currentLoadId) {
+          this.logger.info('[ProjectDashboard] Aborting showProjectDetails error handler due to newer load');
+          this.dashboardNotify.debug('Aborted: newer navigation event detected (API path, error handler)', {
               source: 'showProjectDetails',
               traceId,
               transactionId,
@@ -649,6 +658,12 @@ class ProjectDashboard {
       this.logger.error('[ProjectDashboard] Error in showProjectDetails main try block:', err);
       this.dashboardNotify.error('An unexpected error occurred while loading project details.', {
         source: 'showProjectDetails_OuterCatch'
+      });
+      this.errorReporter.capture(err, { module: 'ProjectDashboard', source: 'showProjectDetails.outerCatch' });
+      this.logger.error('[ProjectDashboard] Error in showProjectDetails main try block:', err);
+      this.dashboardNotify.error('An unexpected error occurred while loading project details.', {
+        source: 'showProjectDetails_OuterCatch',
+        originalError: err
       });
       this.showProjectList(); // Go back to list on unexpected errors
       return false;
@@ -823,6 +838,7 @@ class ProjectDashboard {
               );
             })
             .catch(err => {
+              this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_setView.fetchProjectDetailsTemplate' });
               this.logger.error('[ProjectDashboard] Failed to load project details template', { error: err });
             });
         }
@@ -1019,6 +1035,7 @@ class ProjectDashboard {
         }
       });
     } catch (err) {
+      this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForDetailsTemplate' });
       this.logger.error('[ProjectDashboard] Error waiting for project details template', { error: err });
       // Continue even if there was an error - we'll try to recover
     }
@@ -1076,6 +1093,7 @@ class ProjectDashboard {
           );
         });
       } catch (err) {
+        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForListTemplate' });
         this.logger.error('[ProjectDashboard] Error waiting for project list template', { error: err });
         // Continue execution
       }
@@ -1104,6 +1122,7 @@ class ProjectDashboard {
           });
           this.logger.info('[ProjectDashboard] ProjectList DOM elements ready');
         } catch (err) {
+          this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForListDom' });
           this.logger.warn('[ProjectDashboard] Not all ProjectList DOM elements found', { error: err });
           // Continue anyway
         }
@@ -1118,6 +1137,7 @@ class ProjectDashboard {
           this.logger.error('[ProjectDashboard] ProjectList component missing initialize method');
         }
       } catch (err) {
+        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.initProjectList' });
         this.logger.error('[ProjectDashboard] Error initializing ProjectList component', { error: err });
         // Continue execution to give projectDetails a chance
       }
@@ -1144,6 +1164,7 @@ class ProjectDashboard {
           });
           this.logger.info('[ProjectDashboard] ProjectDetails DOM elements ready');
         } catch (err) {
+          this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.waitForDetailsDom' });
           this.logger.warn('[ProjectDashboard] ProjectDetails DOM element not found', { error: err });
           // Continue anyway
         }
@@ -1158,6 +1179,7 @@ class ProjectDashboard {
           this.logger.error('[ProjectDashboard] ProjectDetails component missing initialize method');
         }
       } catch (err) {
+        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_initializeComponents.initProjectDetails' });
         this.logger.error('[ProjectDashboard] Error initializing ProjectDetails component', { error: err });
       }
     } else if (this.components.projectDetails && this.components.projectDetails.state?.initialized) {
@@ -1292,6 +1314,7 @@ class ProjectDashboard {
         this.logger.info('[ProjectDashboard] Projects loaded successfully:', projects);
       })
       .catch((error) => {
+        this.errorReporter.capture(error, { module: 'ProjectDashboard', source: '_executeProjectLoad' });
         this.logger.error('[ProjectDashboard] Error loading projects:', error);
         this.dashboardNotify.error('Failed to load projects. Please try again.', { source: '_executeProjectLoad', originalError: error });
       });
@@ -1521,12 +1544,35 @@ class ProjectDashboard {
       try {
         this.navigationService.registerView(id, { show: noop, hide: noop });
       } catch (err) {
+        this.errorReporter.capture(err, { module: 'ProjectDashboard', source: '_ensureNavigationViews.registerViewLoop' });
         // Duplicate registration or handler validation error – safe to ignore
       }
     });
     this._viewsRegistered = true;
   }
 }
-export function createProjectDashboard(dependencySystem) {
-  return new ProjectDashboard(dependencySystem);
+/**
+ * Factory function for ProjectDashboard.
+ * Validates all required dependencies at the top and exposes cleanup API.
+ */
+    export function createProjectDashboard(deps) {
+  // Validate required dependencies at the top
+  if (!deps || typeof deps !== 'object') {
+    throw new Error('[createProjectDashboard] A dependencies object is required.');
+  }
+  const requiredDeps = [
+    'dependencySystem',
+    'notificationHandler',
+    'domAPI',
+    'browserService',
+    'eventHandlers',
+    'errorReporter' // Added errorReporter
+  ];
+  for (const dep of requiredDeps) {
+    if (!deps[dep]) {
+      throw new Error(`[createProjectDashboard] Missing required dependency: ${dep}`);
+    }
+  }
+  // Pass the full deps object to the constructor
+  return new ProjectDashboard(deps);
 }
