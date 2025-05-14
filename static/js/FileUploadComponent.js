@@ -392,18 +392,6 @@ export class FileUploadComponent {
     }
   }
 
-  /** Error message helper remains the same */
-  _getUploadErrorMessage(error) {
-    const message = error?.message || error?.data?.detail || "Unknown error";
-    // Be more specific based on potential status codes or messages
-    if (error?.status === 401 || error?.status === 403) return "Authentication/Authorization failed";
-    if (error?.status === 413 || message.includes('too large') || message.includes('size')) return `File exceeds ${this.fileConstants.maxSizeMB}MB limit`;
-    if (error?.status === 400 && message.includes('token limit')) return 'Project token limit exceeded';
-    if (error?.status === 422 || message.includes('validation')) return "Invalid file type or format";
-    if (error?.status === 500) return "Server error during upload";
-    if (message.includes('NetworkError') || error?.message === 'Failed to fetch') return "Network error. Please check connection.";
-    return message; // Fallback to original message
-  }
 }
 
 export const createFileUploadComponent = (opts) => new FileUploadComponent(opts);
