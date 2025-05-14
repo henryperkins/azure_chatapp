@@ -22,7 +22,6 @@ export function createKnowledgeBaseComponent(options = {}) {
   const domAPI = getDep("domAPI");
   if (!sanitizer || typeof sanitizer.sanitize !== 'function')
     throw new Error("KnowledgeBaseComponent requires 'sanitizer' (object with .sanitize).");
-  if (!notifyDep) throw new Error(`${MODULE} requires 'notify' dependency`);
   if (!app || !projectManager || !eventHandlers || !uiUtils || !modalManager) {
     throw new Error(
       "KnowledgeBaseComponent requires 'app', 'projectManager', 'eventHandlers', 'uiUtils', and 'modalManager' dependencies."
@@ -107,9 +106,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.domAPI = domAPI;
       this.getDep = getDep;
 
-      this.notify = notifyDep.withContext({ context: "knowledgeBaseComponent", module: MODULE });
-      this._notify = (type, msg, extra = {}) =>
-        (this.notify[type] || this.notify.info)(msg, { group: true, source: extra.source || MODULE });
+      // notification system stubs removed
 
       this.elements = elements;
       this.state = {
@@ -162,7 +159,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async initialize(isVisible, kbData = null, projectId = null) {
-      this.notify.info(`Initializing, isVisible: ${isVisible}, projectId: ${projectId}`, { source: "initialize" });
+      // notification/logging removed
 
       if (this.state.isInitialized && !isVisible) {
         this.elements.activeSection.classList.add("hidden");
@@ -190,7 +187,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.elements.container.classList.toggle("hidden", !isVisible);
       this.elements.container.classList.toggle("pointer-events-none", !isVisible);
 
-      this.notify.info(`Initialization complete for projectId: ${projectId}`, { source: "initialize" });
+      // notification/logging removed
       this.domAPI.dispatchEvent(
         this.domAPI.getDocument(),
         new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: true } })
@@ -222,10 +219,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       }, { description: "KB Reprocess Files" });
 
       const showModalHandler = () => {
-        this.notify.debug("Settings/Setup button clicked. Current KB state before showing modal:", {
-          source: "showKnowledgeBaseModalTrigger",
-          extra: { kbStateSummary: this.state.knowledgeBase ? { id: this.state.knowledgeBase.id, name: this.state.knowledgeBase.name, is_active: this.state.knowledgeBase.is_active } : null }
-        });
+        // notification/logging removed
         this.manager.showKnowledgeBaseModal();
       };
       addListener(this.elements.setupButton, "click", showModalHandler, { description: "KB Setup Button" });
@@ -254,22 +248,15 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (cur?.id && this.validateUUID(cur.id)) {
         return cur.id;
       }
-      this.notify.warning("Could not determine current project ID.", { source: "_getCurrentProjectId" });
+      // notification/logging removed
       return null;
     }
 
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
-      this.notify.debug(`renderKnowledgeBaseInfo called. projectId: ${projectId}`, {
-        source: "renderKnowledgeBaseInfo",
-        extra: {
-          receivedKbDataSummary: kbData ? { id: kbData.id, name: kbData.name, is_active: kbData.is_active } : null,
-          currentStateKbIdBeforeUpdate: this.state.knowledgeBase?.id
-        }
-      });
-      this.notify.info(`Rendering KB info for projectId: ${projectId}`, { source: "renderKnowledgeBaseInfo" });
+      // notification/logging removed
 
       if (!kbData) {
-        this.notify.info(`renderKnowledgeBaseInfo: No kbData provided for projectId ${projectId}. Showing inactive state.`, { source: "renderKnowledgeBaseInfo" });
+        // notification/logging removed
         this._showInactiveState();
         this.elements.knowledgeBaseFilesSection.classList.add("hidden");
         if (projectId) {
@@ -282,13 +269,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
 
       this.state.knowledgeBase = kbData;
-      this.notify.debug(`renderKnowledgeBaseInfo: this.state.knowledgeBase updated.`, {
-        source: "renderKnowledgeBaseInfo",
-        extra: {
-          newKbStateSummary: this.state.knowledgeBase ? { id: this.state.knowledgeBase.id, name: this.state.knowledgeBase.name, is_active: this.state.knowledgeBase.is_active } : null,
-          projectIdContext: projectId
-        }
-      });
+      // notification/logging removed
 
       const pid = projectId || kbData.project_id || this._getCurrentProjectId();
       if (this.elements.activeSection) {
@@ -307,7 +288,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       try {
         if (kbData.is_active !== false && kbData.id) {
           this.manager.loadKnowledgeBaseHealth(kbData.id)
-            .catch((err) => this.notify.warning("Failed to load KB health", { source: "renderKnowledgeBaseInfo", originalError: err }));
+            .catch(() => {});
           this.manager.loadKnowledgeBaseFiles(pid, kbData.id);
         } else {
           this.elements.knowledgeBaseFilesSection.classList.add("hidden");
@@ -322,14 +303,14 @@ export function createKnowledgeBaseComponent(options = {}) {
         this._updateUploadButtonsState();
 
         if (pid) {
-          this.notify.info(`Emitting projectKnowledgeBaseRendered for projectId: ${pid}`, { source: "renderKnowledgeBaseInfo" });
+          // notification/logging removed
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
             new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId: pid } })
           );
         }
       } catch (err) {
-        this.notify.error("Error while rendering KB info", { source: "renderKnowledgeBaseInfo", originalError: err });
+        // notification/logging removed
         if (pid) {
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
@@ -392,23 +373,13 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     _updateStatusAlerts(kb) {
-      if (kb.is_active !== false) {
-        if (kb.stats.file_count === 0) {
-          this._notify("warning", "Knowledge Base is empty. Upload files via 'Files' tab.", { source: "_updateStatusAlerts" });
-        } else if (kb.stats.file_count > 0 && kb.stats.chunk_count === 0 && kb.stats.unprocessed_files > 0) {
-          this._notify("warning", "Files need processing. Click 'Reprocess Files'.", { source: "_updateStatusAlerts" });
-        } else if (kb.stats.unprocessed_files > 0) {
-          this._notify("info", `${kb.stats.unprocessed_files} file(s) need processing.`, { source: "_updateStatusAlerts" });
-        }
-      } else {
-        this._notify("warning", "Knowledge Base is disabled. Enable it to use search.", { source: "_updateStatusAlerts" });
-      }
+      // notification/logging removed; adjust as needed if visual indicator required
     }
 
     _showStatusAlert(message, type = "info") {
       const statusIndicator = this.domAPI.getElementById("kbStatusIndicator");
       if (!statusIndicator) {
-        this._notify(type, message, { source: "_showStatusAlert" });
+        // notification/logging removed
         return;
       }
       statusIndicator.textContent = "";
@@ -459,19 +430,15 @@ export function createKnowledgeBaseComponent(options = {}) {
 
   class KnowledgeBaseComponentWithDestroy extends KnowledgeBaseComponent {
     destroy() {
-      this.notify.info("KnowledgeBaseComponent destroy() called.", { source: "destroy" });
+      // notification/logging removed from destroy()
       const ds = this.getDep('DependencySystem');
       if (ds && typeof ds.cleanupModuleListeners === 'function') {
         ds.cleanupModuleListeners(MODULE);
-        this.notify.debug(`Called DependencySystem.cleanupModuleListeners for context: ${MODULE}`, { source: "destroy" });
       } else if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
         this.eventHandlers.cleanupListeners({ context: MODULE });
-        this.notify.debug(`Called eventHandlers.cleanupListeners for context: ${MODULE}`, { source: "destroy" });
-      } else {
-        this.notify.warn('cleanupListeners not available on eventHandlers or DependencySystem.', { source: "destroy" });
       }
       this.state.isInitialized = false;
-      this.notify.info("KnowledgeBaseComponent destroyed and listeners cleaned up.", { source: "destroy" });
+      // destroy complete
     }
   }
 
