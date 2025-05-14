@@ -174,7 +174,10 @@ export const fileIcon = (t = "") =>
     }[t.toLowerCase()] || "📄"
   );
 
-// Misc helpers
+/**
+ * @deprecated Use apiClient + proper .get/.post signature for this
+ * (errorReporter/maybeCapture removed)
+ */
 export async function waitForDepsAndDom({
   deps = [],
   DependencySystem = window.DependencySystem,
@@ -182,19 +185,15 @@ export async function waitForDepsAndDom({
   pollInterval = 30,
   timeout = 4000,
   domAPI,
-  notify = console,
   source = 'waitForDepsAndDom'
 } = {}) {
   if (!DependencySystem) {
-    notify.error("waitForDepsAndDom: DependencySystem missing", { source, critical: true });
     throw new Error("waitForDepsAndDom: DependencySystem missing");
   }
   if (!DependencySystem.modules || typeof DependencySystem.modules.has !== 'function' || typeof DependencySystem.modules.get !== 'function') {
-    notify.error("waitForDepsAndDom: DependencySystem.modules is missing or invalid", { source, critical: true });
     throw new Error("waitForDepsAndDom: DependencySystem.modules is missing or invalid");
   }
   if (!domAPI || typeof domAPI.querySelector !== 'function') {
-    notify.error('waitForDepsAndDom: domAPI.querySelector is required (no global fallback)', { source, critical: true });
     throw new Error('waitForDepsAndDom: domAPI.querySelector is required');
   }
 
@@ -204,14 +203,12 @@ export async function waitForDepsAndDom({
       const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
       const domReady = domSelectors.every((s) => domAPI.querySelector(s));
       if (depsReady && domReady) {
-        notify.debug?.(`waitForDepsAndDom: Conditions met for source '${source}'. Deps: [${deps.join(', ')}], DOM: [${domSelectors.join(', ')}]`, { source });
         return;
       }
       if (Date.now() - start > timeout) {
         const missingDeps = deps.filter((d) => !(DependencySystem.modules.has(d) && DependencySystem.modules.get(d)));
         const missingDom = domSelectors.filter((s) => !domAPI.querySelector(s));
         const errorMsg = `waitForDepsAndDom timeout ${timeout}ms for source '${source}' — Missing Deps: [${missingDeps.join(', ')}], Missing DOM: [${missingDom.join(', ')}]`;
-        notify.error(errorMsg, { source, timeout, missingDeps, missingDom });
         throw new Error(errorMsg);
       }
     } catch (err) {
@@ -219,10 +216,8 @@ export async function waitForDepsAndDom({
         throw err;
       }
       if (Date.now() - start > timeout) {
-        notify.error?.(`waitForDepsAndDom error after timeout threshold for source '${source}': ${err.message}`, { source, originalError: err });
         throw new Error(`waitForDepsAndDom error for source '${source}': ${err.message}`);
       }
-      notify.warn?.(`waitForDepsAndDom: Caught error while checking dependencies for source '${source}', retrying...`, { source, originalError: err });
     }
     await new Promise((r) => setTimeout(r, pollInterval));
   }
