@@ -1,36 +1,21 @@
 // static/js/chat-ui-utils.js
 // Factory that adds UI helpers onto an existing ChatManager instance
 export function attachChatUI(chatMgr, deps) {
-  const { domAPI, DOMPurify, eventHandlers, notify, errorReporter } = deps;
+  const { domAPI, DOMPurify, eventHandlers } = deps;
 
   async function _setupUIElements() {
-    notify.debug('Setting up UI elements using stored selectors.', {
-      source: '_setupUIElements',
-      selectors: {
-        container: chatMgr.containerSelector,
-        messages: chatMgr.messageContainerSelector,
-        input: chatMgr.inputSelector,
-        send: chatMgr.sendButtonSelector,
-        minimize: chatMgr.minimizeButtonSelector,
-        title: chatMgr.titleSelector
-      }
-    });
-
     if (!domAPI) {
-      notify.error('domAPI not available in _setupUIElements. Cannot proceed with UI setup.', { source: '_setupUIElements' });
       chatMgr._handleError('_setupUIElements', new Error('domAPI is required for UI setup.'));
       throw new Error('domAPI is required for UI setup.');
     }
 
     chatMgr.container = domAPI.querySelector(chatMgr.containerSelector);
     if (!chatMgr.container) {
-      notify.error(`Chat container not found with selector: ${chatMgr.containerSelector}`, { source: '_setupUIElements' });
       throw new Error(`Chat container not found: ${chatMgr.containerSelector}`);
     }
 
     chatMgr.messageContainer = domAPI.querySelector(chatMgr.messageContainerSelector);
     if (!chatMgr.messageContainer) {
-      notify.warn(`Message container not found with selector: ${chatMgr.messageContainerSelector}. Attempting to create.`, { source: '_setupUIElements' });
       chatMgr.messageContainer = domAPI.createElement('div');
       chatMgr.messageContainer.id = chatMgr.messageContainerSelector.startsWith('#') ? chatMgr.messageContainerSelector.substring(1) : 'chatMessages';
       domAPI.appendChild(chatMgr.container, chatMgr.messageContainer);
@@ -38,7 +23,6 @@ export function attachChatUI(chatMgr, deps) {
 
     chatMgr.inputField = domAPI.querySelector(chatMgr.inputSelector);
     if (!chatMgr.inputField) {
-      notify.warn(`Input field not found with selector: ${chatMgr.inputSelector}. Attempting to create.`, { source: '_setupUIElements' });
       const inputArea = domAPI.createElement("div");
       inputArea.className = "chat-input-area flex p-2 border-t border-base-300";
 
@@ -59,40 +43,17 @@ export function attachChatUI(chatMgr, deps) {
       domAPI.appendChild(chatMgr.container, inputArea);
     } else {
       chatMgr.sendButton = domAPI.querySelector(chatMgr.sendButtonSelector);
-      if (!chatMgr.sendButton) {
-        notify.warn(`Send button not found with selector: ${chatMgr.sendButtonSelector}, even though input field was found.`, { source: '_setupUIElements' });
-      }
     }
 
     chatMgr.titleElement = domAPI.querySelector(chatMgr.titleSelector);
-    if (!chatMgr.titleElement) {
-      notify.debug(`Chat title element not found with selector: ${chatMgr.titleSelector}. Chat title will not be displayed by ChatManager.`, { source: '_setupUIElements' });
-    }
 
     if (chatMgr.minimizeButtonSelector) {
       chatMgr.minimizeButton = domAPI.querySelector(chatMgr.minimizeButtonSelector);
-      if (!chatMgr.minimizeButton) {
-        notify.debug(`Minimize button not found with selector: ${chatMgr.minimizeButtonSelector}. Minimize functionality will not be available.`, { source: '_setupUIElements' });
-      }
     }
-
-    notify.debug('UI elements setup process complete.', {
-      source: '_setupUIElements',
-      elementsFound: {
-        container: !!chatMgr.container,
-        messageContainer: !!chatMgr.messageContainer,
-        inputField: !!chatMgr.inputField,
-        sendButton: !!chatMgr.sendButton,
-        titleElement: !!chatMgr.titleElement,
-        minimizeButton: !!chatMgr.minimizeButton
-      }
-    });
   }
 
   function _setupEventListeners() {
-    notify.debug('Setting up event listeners', { source: '_setupEventListeners' });
     if (!eventHandlers || typeof eventHandlers.trackListener !== 'function') {
-      notify.error('eventHandlers.trackListener not available. Cannot bind UI events.', { source: '_setupEventListeners' });
       return;
     }
     if (typeof eventHandlers.cleanupListeners === 'function') {
@@ -129,27 +90,17 @@ export function attachChatUI(chatMgr, deps) {
     }
 
     if (!domAPI || typeof domAPI.getDocument !== 'function') {
-      notify.error('Cannot listen for modelConfigChanged: domAPI.getDocument is not available.', { source: '_setupEventListeners' });
+      return;
     } else {
       const eventTargetForModelConfig = domAPI.getDocument();
       eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
         if (e.detail) chatMgr.updateModelConfig(e.detail);
       }, { description: 'Model config changed event for ChatManager', context: 'chatManager' });
     }
-
-    notify.debug('Event listeners set up successfully', { source: '_setupEventListeners' });
   }
 
   function _showMessage(role, content, id = null, thinking = null, redactedThinking = false) {
-    notify.debug(`Showing message in UI. Role: ${role}, Content Length: ${content?.length || 0}`, {
-      source: '_showMessage',
-      role,
-      messageId: id,
-      hasThinking: !!thinking,
-      isRedacted: redactedThinking
-    });
     if (!chatMgr.messageContainer) {
-      notify.warn('Message container not found. Cannot show message.', { source: '_showMessage' });
       return;
     }
     const message = domAPI.createElement("div");
@@ -256,16 +207,11 @@ export function attachChatUI(chatMgr, deps) {
     if (chatMgr.inputField) {
       chatMgr.inputField.value = "";
       chatMgr.inputField.focus();
-      notify.debug('Chat input field cleared and focused.', { source: '_clearInputField' });
-    } else {
-      notify.warn('Input field not found. Cannot clear.', { source: '_clearInputField' });
     }
   }
 
   function _showErrorMessage(message) {
-    notify.debug(`Showing error message in UI: "${message}"`, { source: '_showErrorMessage' });
     if (!chatMgr.messageContainer) {
-      notify.warn('Message container not found. Cannot show error message.', { source: '_showErrorMessage' });
       return;
     }
     const errorEl = domAPI.createElement("div");
@@ -290,14 +236,10 @@ export function attachChatUI(chatMgr, deps) {
   function _clearMessages() {
     if (chatMgr.messageContainer) {
       domAPI.replaceChildren(chatMgr.messageContainer);
-      notify.debug('All messages cleared from UI.', { source: '_clearMessages' });
-    } else {
-      notify.warn('Message container not found. Cannot clear messages.', { source: '_clearMessages' });
     }
   }
 
   function _renderMessages(messages) {
-    notify.debug(`Rendering ${messages?.length || 0} messages.`, { source: '_renderMessages', count: messages?.length || 0 });
     chatMgr._clearMessages();
     if (!messages?.length) {
       chatMgr._showMessage("system", "No messages yet");
@@ -315,9 +257,7 @@ export function attachChatUI(chatMgr, deps) {
   }
 
   function _showLoadingIndicator() {
-    notify.debug('Showing loading indicator.', { source: '_showLoadingIndicator' });
     if (!chatMgr.messageContainer) {
-      notify.warn('Message container not found. Cannot show loading indicator.', { source: '_showLoadingIndicator' });
       return;
     }
     const indicator = domAPI.createElement("div");
@@ -337,14 +277,11 @@ export function attachChatUI(chatMgr, deps) {
     const indicator = domAPI.querySelector("#chatLoadingIndicator");
     if (indicator) {
       indicator.remove();
-      notify.debug('Loading indicator hidden.', { source: '_hideLoadingIndicator' });
     }
   }
 
   function _showThinkingIndicator() {
-    notify.debug('Showing thinking indicator.', { source: '_showThinkingIndicator' });
     if (!chatMgr.messageContainer) {
-      notify.warn('Message container not found. Cannot show thinking indicator.', { source: '_showThinkingIndicator' });
       return;
     }
     const indicator = domAPI.createElement("div");
@@ -367,7 +304,6 @@ export function attachChatUI(chatMgr, deps) {
     const el = domAPI.querySelector("#thinkingIndicator");
     if (el) {
       el.remove();
-      notify.debug('Thinking indicator hidden.', { source: '_hideThinkingIndicator' });
     }
   }
 
