@@ -1167,27 +1167,42 @@ function handleInitError(err) {
 if (typeof window !== 'undefined') {
   // Add global error handler to catch and log any errors
   window.onerror = function(message, source, lineno, colno, error) {
-    // console.error('[GLOBAL ERROR]', message, 'at', source, lineno, colno, error); // Removed
-    return false; // Let default error handling continue
+    return false;
   };
 
-  // Add unhandled promise rejection handler
-  window.addEventListener('unhandledrejection', function(event) {
-    // console.error('[UNHANDLED PROMISE REJECTION]', event.reason); // Removed
-  });
-
-  // console.log('[APP] Starting initialization...'); // Removed
+  window.addEventListener('unhandledrejection', function(event) {});
 
   const doc = browserAPI.getDocument();
+  function forceShowLoginModal() {
+    // Only show login modal if not authenticated
+    const authMod = DependencySystem.modules.get?.('auth');
+    if (authMod && !authMod.isAuthenticated?.()) {
+      // Open the modal using modalManager if available
+      const modalManager = DependencySystem.modules.get?.('modalManager');
+      if (modalManager && typeof modalManager.show === 'function') {
+        modalManager.show('login');
+      } else {
+        // Fallback: try the native dialog element directly
+        const loginDlg = doc.getElementById('loginModal');
+        if (loginDlg && typeof loginDlg.showModal === 'function') {
+          loginDlg.showModal();
+        }
+      }
+    }
+  }
+
   if (doc.readyState === 'loading') {
-    // Use plain addEventListener so we don't rely on eventHandlers before init
-    // console.log('[APP] Document still loading, waiting for DOMContentLoaded'); // Removed
     doc.addEventListener('DOMContentLoaded', function() {
-      // console.log('[APP] DOMContentLoaded fired, calling init()'); // Removed
-      init();
+      init().then(() => {
+        // After app initializes and modals are ready, force show login
+        setTimeout(forceShowLoginModal, 800);
+      });
     }, { once: true });
   } else {
-    // console.log('[APP] Document already loaded, calling init() immediately'); // Removed
-    setTimeout(init, 0);
+    setTimeout(() => {
+      init().then(() => {
+        setTimeout(forceShowLoginModal, 800);
+      });
+    }, 0);
   }
 }

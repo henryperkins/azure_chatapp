@@ -360,7 +360,7 @@
       <button id="modalRegisterTab" type="button" class="tab tab-bordered flex-1 rounded-t-lg" aria-selected="false">Register</button>
     </div>
     <div id="loginPanel" class="tab-panel" role="tabpanel" aria-labelledby="loginTab"> <!-- Removed style="display:block;" -->
-      <form id="loginModalForm" class="space-y-3">
+      <form id="loginModalForm" class="space-y-3" autocomplete="off" onsubmit="return false;">
         <div class="form-control-enhanced">
           <label for="loginModalUsername" class="label font-medium">Username</label>
           <input type="text" id="loginModalUsername" name="username" required aria-required="true" class="input input-bordered w-full validator" autocomplete="username"/>

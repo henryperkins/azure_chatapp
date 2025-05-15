@@ -478,6 +478,18 @@ export function createAuthModule({
       });
       console.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response);
 
+      // Diagnostic: Print cookies after login attempt
+      try {
+        const doc = domAPI.getDocument?.();
+        if (doc && typeof doc.cookie === 'string') {
+          console.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login:', doc.cookie);
+        } else {
+          console.log('[DIAGNOSTIC][auth.js][loginUser] Unable to read document.cookie');
+        }
+      } catch (cookieErr) {
+        console.log('[DIAGNOSTIC][auth.js][loginUser] Exception reading cookies:', cookieErr);
+      }
+
       // If server returns a username, create minimal user object
       if (response && response.username) {
         const userObject = {
@@ -486,6 +498,15 @@ export function createAuthModule({
         };
         broadcastAuth(true, userObject, 'login_success_immediate');
         _lastLoginTimestamp = Date.now();   // ← NEW
+
+        // Explicit diagnostic: Warn if no cookies after supposed success
+        try {
+          const doc = domAPI.getDocument?.();
+          if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
+            console.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after successful login! Backend may not be setting cookies.');
+          }
+        } catch {}
+
         return response;
       }
 
@@ -498,6 +519,14 @@ export function createAuthModule({
       };
       broadcastAuth(true, provisionalUser, 'login_success_provisional');
       _lastLoginTimestamp = Date.now();   // ← NEW
+
+      // Explicit diagnostic: Warn if no cookies after fallback too
+      try {
+        const doc = domAPI.getDocument?.();
+        if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
+          console.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after provisional login! Backend may not be setting cookies.');
+        }
+      } catch {}
 
       return response;     // ← mantiene la API hacia fuera
       // -------------------------------------------------------------------
