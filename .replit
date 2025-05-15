@@ -6,7 +6,7 @@ channel = "stable-24_05"
 packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
 
 [deployment]
-run = ["sh", "-c", "uvicorn main:app —reload"]
+run = ["sh", "-c", "uvicorn main:app --reload --host=0.0.0.0 --port=8000"]
 build = ["sh", "-c", "npm run build:css"]
 deploymentTarget = "cloudrun"
 
