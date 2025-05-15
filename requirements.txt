@@ -21,8 +21,6 @@ asyncpg
 httpx
 # Sentry integration
 sentry-sdk[fastapi,sqlalchemy]
-python-json-logger
-python-json-logger
 # Cloud storage dependencies (optional)
 azure-storage-blob
 boto3

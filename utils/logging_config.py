@@ -1,8 +1,9 @@
 import logging
 import sys
 import os
+import json
+import datetime
 from contextvars import ContextVar
-from python_json_logger import jsonlogger
 
 # ContextVars for request_id and trace_id
 request_id_var: ContextVar[str] = ContextVar("request_id", default=None)
@@ -17,30 +18,42 @@ class ContextFilter(logging.Filter):
         record.trace_id = trace_id_var.get()
         return True
 
-class CustomJsonFormatter(jsonlogger.JsonFormatter):
+class CustomJsonFormatter(logging.Formatter):
     """
     A custom JSON formatter to structure log records.
     Ensures standard fields like timestamp, level, message, request_id, trace_id,
     and any fields passed in `extra` are present.
     """
-    def add_fields(self, log_record, record, message_dict):
-        super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
-        if not log_record.get('timestamp'):
-            log_record['timestamp'] = record.created
-        if not log_record.get('level'):
-            log_record['level'] = record.levelname
-        if not log_record.get('message'):
-            log_record['message'] = record.getMessage()
-
+    def format(self, record):
+        log_record = {}
+        
+        # Add basic fields
+        log_record['timestamp'] = self.formatTime(record, self.datefmt)
+        log_record['level'] = record.levelname
+        log_record['message'] = record.getMessage()
+        
+        # Add logger name, module, and line info
+        log_record['name'] = record.name
+        log_record['module'] = record.module
+        log_record['funcName'] = record.funcName
+        log_record['lineno'] = record.lineno
+        
         # Ensure contextvars are included if available
         if hasattr(record, 'request_id') and record.request_id:
             log_record['request_id'] = record.request_id
         if hasattr(record, 'trace_id') and record.trace_id:
             log_record['trace_id'] = record.trace_id
-
-        # Add any extra fields
-        for key, value in record.__dict__.get('extra', {}).items():
-            log_record[key] = value
+            
+        # Add any extra fields from the record
+        if hasattr(record, 'extra'):
+            for key, value in record.extra.items():
+                log_record[key] = value
+                
+        # Add exception info if present
+        if record.exc_info:
+            log_record['exc_info'] = self.formatException(record.exc_info)
+            
+        return json.dumps(log_record)
 
 def init_structured_logging():
     """
