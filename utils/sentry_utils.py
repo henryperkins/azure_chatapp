@@ -1,643 +1,405 @@
 """
 utils/sentry_utils.py
------
-Enhanced Sentry integration utilities with:
-- Better performance monitoring
-- Improved trace management
-- Comprehensive logging configuration
-- Robust MCP server validation
-- Advanced event filtering
-- Optional integration with ConversationService for metrics
+─────────────────────────────────────────────────────────────────────────
+Unified Sentry utilities for the entire code-base.
+
+Goals
+=====
+1. **Single source of truth** for Sentry configuration / helpers.
+2. **Structured JSON logging** enabled before Sentry bootstraps.
+3. **Context propagation** – expose `request_id_var` & `trace_id_var`
+   (imported from utils.logging_config) and copy them to background tasks.
+4. **Zero blocking calls** – never call `asyncio.run()` from inside an
+   event loop; all helpers are either sync-only or `async` friendly.
+5. **Privacy first** – aggressive redaction of credentials & PII.
+6. **Low-cardinality** – avoid per-user / per-record tag explosions.
+
+Usage
+=====
+• Call `configure_sentry()` once at application start-up **after**
+  `init_structured_logging()` (from utils.logging_config).
+• Import helper functions (`sentry_span`, `set_sentry_tag`, …) anywhere.
+
+This file purposefully contains **no** top-level Sentry initialisation
+side-effects; everything happens inside `configure_sentry()`.
 """
 
-import logging
-import time
-import contextlib
-import re
+from __future__ import annotations
+
 import asyncio
-from typing import Any, Optional, Generator, Union, Set, AsyncGenerator, TYPE_CHECKING
+import contextlib
+import logging
+import os
+import re
+import time
+from contextvars import copy_context
+from typing import (
+    Any,
+    AsyncGenerator,
+    Callable,
+    Generator,
+    Literal,
+    Optional,
+    Set,
+    Union,
+)
+
 from fastapi import Request, Response
-
+from fastapi.responses import JSONResponse
 import sentry_sdk
-from sentry_sdk import configure_scope, push_scope
-from sentry_sdk.tracing import Span, Transaction
-from sentry_sdk.integrations import Integration # Added import
-from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
-from sentry_sdk.types import Event, Hint
-# Sentry SDK integrations - imported at module level for lint compliance
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.tracing import Span, Transaction
+from sentry_sdk.types import Event, Hint
 
+# ------------------------------------------------------------------------- #
+# Structured logging context-vars (imported – do NOT create a second copy). #
+# ------------------------------------------------------------------------- #
+from utils.logging_config import (
+    init_structured_logging,
+    request_id_var,
+    trace_id_var,
+)
 
-# Optional imports with fallbacks
-try:
-    import psutil
-except ImportError:
-    psutil = None
-
-try:
-    from db import get_async_session
-    from services.conversation_service import ConversationService
-    from sqlalchemy.ext.asyncio import AsyncSession
-    HAS_CONVERSATION_SERVICE = True
-except ImportError:
-    HAS_CONVERSATION_SERVICE = False
-    if TYPE_CHECKING:
-        from sqlalchemy.ext.asyncio import AsyncSession  # type: ignore
-        from services.conversation_service import ConversationService  # type: ignore
-    else:
-        AsyncSession = Any  # type: ignore
-        ConversationService = Any  # type: ignore
-
-    async def get_async_session() -> AsyncGenerator["AsyncSession", None]:
-        """
-        get_async_session is unavailable because the conversation service is not installed.
-        """
-        raise RuntimeError(
-            "get_async_session is unavailable without conversation_service and db modules."
-        )
-        yield  # unreachable: required only for typing (see Pylint W0101 suppression)
-
-# Type aliases
-SentryEvent = dict[str, Any]  # Kept for backward compatibility
-SentryHint = Optional[dict[str, Any]]  # Kept for backward compatibility
-
-# Constants
-NOISY_LOGGERS = {
-    # Built-in and framework loggers
+# ------------------------------------------------------------------------- #
+# Constants                                                                 #
+# ------------------------------------------------------------------------- #
+NOISY_LOGGERS: Set[str] = {
+    # Framework / servers
     "uvicorn.access",
     "uvicorn.error",
     "fastapi",
-    # Database loggers
+    "asyncio",
+    # SQL
     "sqlalchemy.engine.Engine",
     "sqlalchemy.pool",
     # HTTP clients
     "urllib3.connectionpool",
     "requests",
     "httpx",
-    # Async/misc
-    "asyncio",
-    "concurrent",
-    "multipart",
 }
-
-SENSITIVE_KEYS = {
+SENSITIVE_KEYS: Set[str] = {
     "password",
     "token",
-    "api_key",
     "secret",
-    "auth",
-    "credentials",
-    "session",
+    "api_key",
+    "apikey",
+    "authorization",
     "cookie",
+    "session",
 }
-
-IGNORED_TRANSACTIONS = {
+IGNORED_TRANSACTIONS: Set[str] = {
     "/health",
-    "/static/",
+    "/metrics",
     "/favicon.ico",
     "/robots.txt",
-    "/metrics",
+    "/static/",
     "/api/auth/csrf",
     "/api/auth/verify",
 }
 
-
-def configure_sentry_loggers(additional_ignores: Optional[Set[str]] = None) -> None:
-    """
-    Configure Sentry to ignore noisy loggers while preserving breadcrumbs.
-    """
-    ignored_loggers = NOISY_LOGGERS.union(additional_ignores or set())
-    for logger_name in ignored_loggers:
-        ignore_logger(logger_name)
-    logging.info(f"Configured Sentry to ignore {len(ignored_loggers)} loggers")
-
-
-import os
-
-def configure_sentry(
-    dsn: str,
-    environment: str = "production",
-    release: Optional[str] = None,
-    traces_sample_rate: float = 1.0,
-    profiles_sample_rate: Optional[float] = None,
-    additional_ignores: Optional[Set[str]] = None,
-    before_send: Optional[Any] = None,
-    traces_sampler: Optional[Any] = None,
-    before_send_transaction: Optional[Any] = None,
-) -> None:
-    """
-    Centralized Sentry configuration. Supports optional profiling and custom sampling.
-    Call this at app startup.
-    Now reads SENTRY_DEBUG env variable ("1", "true" for enabled), else defaults to False.
-    Honors SENTRY_ENABLED env var (or settings.SENTRY_ENABLED, if imported) to globally disable Sentry.
-    """
-    # Check SENTRY_ENABLED, prefer config if importable, otherwise env var
-    sentry_enabled_env = os.getenv("SENTRY_ENABLED", "").lower()
-    try:
-        from config import settings
-        sentry_enabled = getattr(settings, "SENTRY_ENABLED", False)
-    except Exception:
-        sentry_enabled = sentry_enabled_env in ("1", "true", "yes", "on")
-
-    if not sentry_enabled:
-        logging.info("Sentry not enabled; skipping sentry_sdk.init")
-        return
-
-    sentry_logging = LoggingIntegration(
-        level=logging.WARNING,  # Only capture warnings/errors
-        event_level=logging.ERROR,
-    )
-    init_kwargs = {}
-    init_kwargs["dsn"] = dsn
-    # Make debug configurable via env var SENTRY_DEBUG
-    debug_env = os.getenv("SENTRY_DEBUG", "").lower()
-    init_kwargs["debug"] = debug_env in ("1", "true", "yes", "on")
-    init_kwargs["environment"] = environment
-    init_kwargs["release"] = release
-    init_kwargs["traces_sample_rate"] = traces_sample_rate
-    init_kwargs["default_integrations"] = False
-    # Determine if SqlalchemyIntegration should be enabled
-    # Default to False as per the plan (docs/sentry-sqlalchemy-async-fix.md)
-    sentry_sqla_async_enabled_default = False
-    # Initialize sentry_sqla_async_enabled with its default value.
-    # It will be updated by trying to read from config.settings or environment variable.
-    sentry_sqla_async_enabled = sentry_sqla_async_enabled_default
-
-    try:
-        from config import settings as app_settings # Use a distinct alias
-        # If SENTRY_SQLA_ASYNC_ENABLED is defined in app_settings, use its value.
-        # Otherwise, retain the default value for sentry_sqla_async_enabled.
-        if hasattr(app_settings, 'SENTRY_SQLA_ASYNC_ENABLED'):
-            sentry_sqla_async_enabled = app_settings.SENTRY_SQLA_ASYNC_ENABLED
-        else:
-            # If not in app_settings, try to get from environment variable or use default.
-            sentry_sqla_async_enabled_env_str = os.getenv("SENTRY_SQLA_ASYNC_ENABLED", str(sentry_sqla_async_enabled_default))
-            sentry_sqla_async_enabled = sentry_sqla_async_enabled_env_str.lower() in ("1", "true", "yes", "on")
-    except ImportError:
-        # If config.settings cannot be imported, fall back to environment variable or default.
-        sentry_sqla_async_enabled_env_str = os.getenv("SENTRY_SQLA_ASYNC_ENABLED", str(sentry_sqla_async_enabled_default))
-        sentry_sqla_async_enabled = sentry_sqla_async_enabled_env_str.lower() in ("1", "true", "yes", "on")
-
-    # Base integrations
-    current_integrations: list[Integration] = [ # Added type hint
-        sentry_logging,
-        FastApiIntegration(),
-        AsyncioIntegration(), # Keep AsyncioIntegration
-    ]
-
-    if sentry_sqla_async_enabled:
-        current_integrations.append(SqlalchemyIntegration())
-        logging.info("Sentry SqlalchemyIntegration has been enabled via SENTRY_SQLA_ASYNC_ENABLED.")
-    else:
-        logging.info("Sentry SqlalchemyIntegration disabled for async engine compatibility (SENTRY_SQLA_ASYNC_ENABLED is false or not set).")
-
-    init_kwargs["integrations"] = current_integrations
-    # Only include these if not None, don't set if None
-    if profiles_sample_rate is not None:
-        init_kwargs["profiles_sample_rate"] = profiles_sample_rate
-    if before_send is not None:
-        init_kwargs["before_send"] = before_send
-    if traces_sampler is not None:
-        init_kwargs["traces_sampler"] = traces_sampler
-    if before_send_transaction is not None:
-        init_kwargs["before_send_transaction"] = before_send_transaction
-
-    # Remove keys whose value is None, as Sentry rejects them
-    final_kwargs = {k: v for k, v in init_kwargs.items() if v is not None}
-
-    sentry_sdk.init(**final_kwargs)
-
-    configure_sentry_loggers(additional_ignores)
-
-
-def check_sentry_mcp_connection(timeout: float = 2.0) -> bool:
-    """
-    Validate MCP server connection with timeout and retry logic.
-    """
-    try:
-        start_time = time.time()
-
-        with push_scope() as scope:
-            scope.set_tag("test_type", "mcp_connection_check")
-            test_id = f"mcp-test-{int(time.time())}"
-            scope.set_tag("connection_test_id", test_id)
-
-            with sentry_sdk.start_transaction(
-                op="test", name="MCP Connection Test", sampled=True
-            ) as transaction:
-                # Add test span
-                with transaction.start_child(op="test", description="Connection check"):
-                    if time.time() - start_time > timeout:
-                        raise TimeoutError("MCP connection test timed out")
-
-                    logging.info("Sentry MCP connection test successful")
-                    return True
-
-    except Exception as e:
-        logging.error(f"Sentry MCP connection test failed: {str(e)}")
-        return False
-
-
-def extract_sentry_trace(request: Request) -> dict[str, str]:
-    """
-    Extract distributed tracing headers with validation.
-    """
-    trace_data = {}
-
-    if sentry_trace := request.headers.get("sentry-trace"):
-        if re.match(r"^[0-9a-f]{32}-[0-9a-f]{16}-[01]$", sentry_trace):
-            trace_data["sentry-trace"] = sentry_trace
-
-    if baggage := request.headers.get("baggage"):
-        trace_data["baggage"] = baggage
-
-    return trace_data
-
-
-def inject_sentry_trace_headers(response: Response) -> None:
-    """
-    Inject tracing headers into response with validation.
-    """
-    if trace_parent := sentry_sdk.get_traceparent():
-        response.headers["sentry-trace"] = trace_parent
-
-    if baggage := sentry_sdk.get_baggage():
-        response.headers["baggage"] = baggage
-
-
-# --- USER/TAG/CONTEXT HELPERS ---
-
-def set_sentry_user(user: dict[str, Any]) -> None:
-    """
-    Set the current Sentry user context for the request.
-    Use in request-lifecycle middleware.
-    """
-    from sentry_sdk import set_user
-    safe_user = _filter_user_data(user)
-    set_user(safe_user)
-
-def set_sentry_tag(key: str, value: Union[str, int, float, bool]) -> None:
-    """
-    Set a custom tag on current Sentry span or global scope.
-    """
-    from sentry_sdk import set_tag as sdk_set_tag
-    try:
-        sdk_set_tag(key, value)
-    except Exception:
-        # If used outside request context
-        pass
-
-def set_sentry_context(key: str, ctx: dict[str, Any]) -> None:
-    """
-    Attach a dict as custom context under the specified key.
-    """
-    from sentry_sdk import set_context as sdk_set_context
-    try:
-        sdk_set_context(key, ctx)
-    except Exception:
-        pass
-
-def get_current_trace_id() -> Optional[str]:
-    """
-    Returns the current Sentry trace ID, or None.
-    """
-    try:
-        curr_span = sentry_sdk.get_current_span()
-        return curr_span.trace_id if curr_span else None
-    except Exception:
-        return None
-
-
-def tag_transaction(key: str, value: Union[str, int, float, bool]) -> None:
-    """
-    Safely tag current transaction or scope with type validation.
-    """
-    if not isinstance(value, (str, int, float, bool)):
-        value = str(value)
-
-    with contextlib.suppress(Exception):
-        if span := sentry_sdk.get_current_span():
-            span.set_tag(key, value)
-        else:
-            with configure_scope() as scope:
-                scope.set_tag(key, value)
-
-
-@contextlib.contextmanager
-def sentry_span(
-    op: str, description: Optional[str] = None, **kwargs: Any
-) -> Generator[Span, None, None]:
-    """
-    Context manager for creating nested spans with error handling.
-    """
-    parent = sentry_sdk.get_current_span()
-    description = description or op
-
-    try:
-        if parent is None:
-            with sentry_sdk.start_transaction(op=op, name=description) as transaction:
-                _set_span_data(transaction, kwargs)
-                yield transaction
-        else:
-            with parent.start_child(op=op, description=description) as span:
-                _set_span_data(span, kwargs)
-                yield span
-    except Exception as e:
-        logging.error(f"Failed to create Sentry span: {str(e)}")
-        raise
-
-from typing import Literal
-
-def capture_breadcrumb(
-    category: str,
-    message: str,
-    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
-    data: Optional[dict[str, Any]] = None,
-) -> None:
-    """
-    Add a manual Sentry breadcrumb. Useful for important business actions.
-    Level must be one of: fatal, critical, error, warning, info, debug
-    """
-    from sentry_sdk import add_breadcrumb
-    SENTRY_ALLOWED_LEVELS = {"fatal", "critical", "error", "warning", "info", "debug"}
-    safe_level = level.lower() if isinstance(level, str) else "info"
-    if safe_level not in SENTRY_ALLOWED_LEVELS:
-        safe_level = "info"
-    try:
-        add_breadcrumb(
-            category=category,
-            message=message,
-            level=safe_level,
-            data=data or {},
-        )
-    except Exception:
-        pass
-
-def capture_custom_message(
-    message: str,
-    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
-    extra: Optional[dict[str, Any]] = None,
-) -> Optional[str]:
-    """
-    Capture a custom message to Sentry with optional extra context.
-    Level must be one of: fatal, critical, error, warning, info, debug
-    """
-    from sentry_sdk import capture_message, push_scope
-    SENTRY_ALLOWED_LEVELS = {"fatal", "critical", "error", "warning", "info", "debug"}
-    safe_level = level.lower() if isinstance(level, str) else "info"
-    if safe_level not in SENTRY_ALLOWED_LEVELS:
-        safe_level = "info"
-    try:
-        if extra:
-            with push_scope() as scope:
-                for k, v in extra.items():
-                    scope.set_extra(k, v)
-                return capture_message(message, level=safe_level)  # type: ignore
-        else:
-            return capture_message(message, level=safe_level)  # type: ignore
-    except Exception:
-        return None
-
-
-def _set_span_data(span: Union[Span, Transaction], data: dict[str, Any]) -> None:
-    """Helper to safely add data to spans"""
-    for key, value in data.items():
-        try:
-            span.set_data(key, value)
-        except Exception:
-            span.set_data(key, str(value))
-
-
-def _filter_event_data(event: Event) -> Event:
-    """Internal helper to filter sensitive data from events"""
-    # Filter request data
-    if request := event.get("request", {}):
-        _filter_request_data(request)
-
-    # Filter user data
-    if user := event.get("user", {}):
-        event["user"] = _filter_user_data(user)
-
-    # Filter extra context
-    if contexts := event.get("contexts", {}):
-        event["contexts"] = _filter_contexts(contexts)
-
-    return event
-
-
-def _get_active_conversations_count() -> Optional[int]:
-    """
-    Safely get active conversations count via ConversationService.
-    NOTE: This function uses asyncio.run and may cause issues if called
-          from an existing event loop (e.g., within FastAPI).
-          Consider alternative approaches for integrating DB metrics.
-    """
-    if not HAS_CONVERSATION_SERVICE:
-        return None
-
-    try:
-
-        async def _collect_conversations() -> Optional[int]:
-            if not HAS_CONVERSATION_SERVICE:
-                return None
-
-            # Use AsyncSession directly (it's either imported or Any)
-            session_gen: AsyncGenerator[AsyncSession, None] = get_async_session()
-            db: Optional[AsyncSession] = None
-            try:
-                # Use async context manager pattern for session handling if possible
-                # Assuming get_async_session yields a session managed externally or needs manual handling here
-                db = await session_gen.asend(None)
-                if db is None: # Should not happen with standard context manager pattern but check anyway
-                    raise RuntimeError("Failed to acquire DB session.")
-
-                service = ConversationService(db)
-                # Assuming user_id=0 is a placeholder for fetching all/system conversations
-                conversations = await service.list_conversations(
-                    user_id=0, # Consider if this user_id is appropriate
-                    skip=0,
-                    limit=10_000, # Be cautious with large limits
-                )
-                return len(conversations)
-            finally:
-                # Ensure the generator is properly closed
-                if db is not None:
-                    try:
-                        # Signal completion/cleanup to the generator
-                        await session_gen.asend(None)
-                    except StopAsyncIteration:
-                        pass # Expected when generator finishes
-                    except Exception as close_exc:
-                        logging.error(f"Error closing session generator: {close_exc}")
-
-
-        # Warning: asyncio.run() cannot be called from a running event loop.
-        # This will likely fail within FastAPI.
-        return asyncio.run(_collect_conversations())
-
-    except RuntimeError as e:
-        # Catch the specific error from asyncio.run if called incorrectly
-        logging.error(f"RuntimeError calling _collect_conversations (likely due to nested event loops): {str(e)}", exc_info=True)
-        return None
-    except Exception as e:
-        logging.error(f"Error getting active conversations: {str(e)}", exc_info=True)
-        return None
-
-
-def filter_sensitive_event(
-    event: Event, hint: Optional[Hint] = None
-) -> Optional[Event]:
-    """
-    Enhanced error event processor that:
-    - Filters sensitive data
-    - Adds request context
-    - Includes relevant database info
-    - Attaches application state (like active conversations count) - REMOVED DB CALL
-    """
-    if not event:
-        return event
-
-    try:
-        # If there's a request in the hint, attach it to the event
-        if hint and isinstance(hint, dict) and hint.get("request"):
-            request = hint["request"]
-            event.setdefault(
-                "request",
-                {
-                    "method": getattr(request, "method", "UNKNOWN"),
-                    "url": str(getattr(request, "url", "UNKNOWN")),
-                    "headers": {
-                        # Redact sensitive headers like Authorization
-                        k: "[FILTERED]" if any(s in k.lower() for s in SENSITIVE_KEYS | {"authorization"}) else v
-                        for k, v in getattr(request, "headers", {}).items()
-                    },
-                    "query_params": dict(getattr(request, "query_params", {})),
-                },
-            )
-
-        # Add database context for SQL errors (optional)
-        # Example: If hint contains DB info, add it here.
-        # if hint and isinstance(hint, dict) and hint.get("sqlalchemy_info"):
-        #    event.setdefault("extra", {}).update({"db_info": hint["sqlalchemy_info"]})
-
-
-        # Add application metrics if available
-        try:
-            metrics = {}
-            if psutil:
-                metrics["memory_usage_mb"] = (
-                    psutil.Process().memory_info().rss / 1024 / 1024
-                )
-
-
-            if metrics:
-                event.setdefault("extra", {}).update(metrics)
-        except Exception as metrics_exc:
-            # Avoid errors in metrics collection stopping event processing
-            logging.warning(f"Failed to gather system metrics for Sentry event: {metrics_exc}")
-
-
-    except Exception as e:
-        logging.error(f"Error enhancing Sentry event: {str(e)}")
-
-    return _filter_event_data(event) # Ensure sensitive data filtering still runs
-
-
-def _filter_request_data(request: dict[str, Any]) -> None:
-    """Filter sensitive data from request payload"""
-    if isinstance((data := request.get("data")), dict):
-        for key in list(data.keys()):
-            if any(sensitive in key.lower() for sensitive in SENSITIVE_KEYS):
-                data[key] = "[FILTERED]"
-
-    if isinstance((headers := request.get("headers")), dict):
-        request["headers"] = {
-            k: (
-                "[FILTERED]"
-                if any(sensitive in k.lower() for sensitive in SENSITIVE_KEYS)
-                else v
-            )
+# ------------------------------------------------------------------------- #
+# Helper – filter sensitive data                                            #
+# ------------------------------------------------------------------------- #
+
+
+def _filter_request_data(request_data: dict[str, Any]) -> None:
+    """In-place redaction of headers / body keys marked sensitive."""
+    if isinstance((payload := request_data.get("data")), dict):
+        for k in list(payload):
+            if any(s in k.lower() for s in SENSITIVE_KEYS):
+                payload[k] = "[FILTERED]"
+
+    if isinstance((headers := request_data.get("headers")), dict):
+        request_data["headers"] = {
+            k: ("[FILTERED]" if any(s in k.lower() for s in SENSITIVE_KEYS) else v)
             for k, v in headers.items()
         }
 
 
 def _filter_user_data(user: dict[str, Any]) -> dict[str, Any]:
-    """Preserve only safe user identifiers"""
+    """Return only safe identifiers."""
     return {
         "id": user.get("id"),
-        "ip_address": user.get("ip_address"),
         "username": user.get("username"),
+        "ip_address": user.get("ip_address"),
     }
 
 
 def _filter_contexts(contexts: dict[str, Any]) -> dict[str, Any]:
-    """Filter sensitive data from contexts"""
+    """Redact sensitive keys in contexts."""
     return {
-        k: (
-            "[FILTERED]"
-            if any(sensitive in k.lower() for sensitive in SENSITIVE_KEYS)
-            else v
-        )
+        k: ("[FILTERED]" if any(s in k.lower() for s in SENSITIVE_KEYS) else v)
         for k, v in contexts.items()
     }
 
 
-def capture_critical_issue_with_logs(log_text: str) -> Optional[str]:
-    """Capture a critical issue with attached log files"""
-    with configure_scope() as scope:
+def _filter_event(event: Event) -> Event:
+    """Apply all redaction helpers (mutates in-place)."""
+    if "request" in event:
+        _filter_request_data(event["request"])  # type: ignore[arg-type]
+    if "user" in event:
+        event["user"] = _filter_user_data(event["user"])  # type: ignore[arg-type]
+    if "contexts" in event:
+        event["contexts"] = _filter_contexts(event["contexts"])  # type: ignore[arg-type]
+    return event
+
+
+# ------------------------------------------------------------------------- #
+# Sentry before_send hooks                                                  #
+# ------------------------------------------------------------------------- #
+def filter_sensitive_event(event: Event, hint: Optional[Hint] = None) -> Optional[Event]:
+    """
+    Main `before_send` hook.
+    • Scrubs sensitive fields.
+    • Enriches with lightweight system metrics.
+    • Rejects noisy transactions.
+    """
+    # Drop high-volume, low-value transactions early
+    if event.get("type") == "transaction":
+        url = str(event.get("request", {}).get("url", ""))
+        if any(p in url for p in IGNORED_TRANSACTIONS):
+            return None
+    try:
+        # System memory metric (cheap)
+        import psutil  # optional dependency
+
+        mem_mb = psutil.Process().memory_info().rss / 1024 / 1024  # type: ignore[attr-defined]
+        event.setdefault("extra", {}).update({"memory_usage_mb": round(mem_mb, 1)})
+    except Exception:  # pragma: no cover
+        pass  # never fail the event
+
+    return _filter_event(event)
+
+
+# ------------------------------------------------------------------------- #
+# Public bootstrap                                                          #
+# ------------------------------------------------------------------------- #
+def configure_sentry(
+    *,
+    dsn: str,
+    environment: str = "production",
+    release: str | None = None,
+    traces_sample_rate: float = 0.2,
+    profiles_sample_rate: float | None = None,
+    enable_sqlalchemy: bool | None = None,
+) -> None:
+    """
+    Initialise structured logging **and** Sentry – call ONCE at start-up.
+
+    Env flags respected
+    -------------------
+    • SENTRY_ENABLED (default: False)
+    • SENTRY_DEBUG   (default: False)
+    """
+    # 1️⃣  Structured JSON logging – idempotent.
+    init_structured_logging()
+
+    if str(os.getenv("SENTRY_ENABLED", "")).lower() not in {"1", "true", "yes"}:
+        logging.info("Sentry disabled via env flag; skipping initialisation.")
+        return
+
+    sentry_logging = LoggingIntegration(
+        level=logging.WARNING,  # breadcrumb level
+        event_level=logging.ERROR,
+    )
+
+    integrations = [
+        sentry_logging,
+        FastApiIntegration(transaction_style="endpoint"),
+        AsyncioIntegration(),
+    ]
+
+    # Optional SQLAlchemy instrumentation (off by default for async engines)
+    sql_flag = (
+        enable_sqlalchemy
+        if enable_sqlalchemy is not None
+        else str(os.getenv("SENTRY_SQLA_ASYNC_ENABLED", "false")).lower() in {"1", "true"}
+    )
+    if sql_flag:
+        integrations.append(SqlalchemyIntegration())
+        logging.info("Sentry SqlAlchemy integration enabled.")
+    else:
+        logging.info("Sentry SqlAlchemy integration disabled.")
+
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=environment,
+        release=release,
+        traces_sample_rate=traces_sample_rate,
+        profiles_sample_rate=profiles_sample_rate,
+        integrations=integrations,
+        default_integrations=False,  # we only load what we want
+        before_send=filter_sensitive_event,
+        debug=str(os.getenv("SENTRY_DEBUG", "")).lower() in {"1", "true", "yes"},
+        send_default_pii=False,
+    )
+
+    _ignore_noisy_loggers()
+    logging.info("Sentry initialised (%s)", environment)
+
+
+def _ignore_noisy_loggers() -> None:
+    for logger_name in NOISY_LOGGERS:
+        ignore_logger(logger_name)
+
+
+# ------------------------------------------------------------------------- #
+# Convenience helpers                                                       #
+# ------------------------------------------------------------------------- #
+def set_sentry_user(user: dict[str, Any]) -> None:
+    """Shortcut with redaction."""
+    from sentry_sdk import set_user
+
+    set_user(_filter_user_data(user))
+
+
+def set_sentry_tag(key: str, value: Union[str, int, float, bool]) -> None:
+    """Low-cardinality tag helper (falls back to scope)."""
+    value = str(value)[:64]  # truncate to reduce cardinality
+    with contextlib.suppress(Exception):
+        if span := sentry_sdk.get_current_span():
+            span.set_tag(key, value)
+        else:
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_tag(key, value)
+
+
+def set_sentry_context(key: str, ctx: dict[str, Any]) -> None:
+    ctx = {k: (str(v)[:128] if len(str(v)) > 128 else v) for k, v in ctx.items()}
+    with contextlib.suppress(Exception):
+        sentry_sdk.set_context(key, ctx)  # type: ignore[arg-type]
+
+
+def get_current_trace_id() -> str | None:
+    try:
+        span = sentry_sdk.get_current_span()
+        return span.trace_id if span else None
+    except Exception:  # pragma: no cover
+        return None
+
+
+# ------------------------------------------------------------------------- #
+# Span helpers (sync + async)                                               #
+# ------------------------------------------------------------------------- #
+@contextlib.contextmanager
+def sentry_span(
+    op: str,
+    description: str | None = None,
+    **data: Any,
+) -> Generator[Span, None, None]:
+    """
+    Lightweight context-manager for a nested span or a root transaction
+    when none exists (never starts a blocking `asyncio.run()`).
+    """
+    parent = sentry_sdk.get_current_span()
+    desc = description or op
+    try:
+        if parent is None:
+            with sentry_sdk.start_transaction(op=op, name=desc) as tx:  # root span
+                _set_span_data(tx, data)
+                yield tx
+        else:  # child span
+            with parent.start_child(op=op, description=desc) as sp:
+                _set_span_data(sp, data)
+                yield sp
+    except Exception:  # pragma: no cover
+        logging.exception("Failed to create Sentry span")
+        raise
+
+
+def _set_span_data(span: Span | Transaction, data: dict[str, Any]) -> None:
+    """Attach data, but stringify non-serialisable values safely."""
+    for k, v in data.items():
+        try:
+            span.set_data(k, v)
+        except Exception:
+            span.set_data(k, str(v))
+
+
+# ------------------------------------------------------------------------- #
+# Response helpers                                                          #
+# ------------------------------------------------------------------------- #
+def inject_sentry_trace_headers(response: Response) -> None:
+    """Copy current trace headers to the outgoing Response safely."""
+    with contextlib.suppress(Exception):
+        if tp := sentry_sdk.get_traceparent():
+            response.headers["sentry-trace"] = tp
+        if baggage := sentry_sdk.get_baggage():
+            response.headers["baggage"] = baggage
+
+
+def make_sentry_trace_response(
+    payload: dict[str, Any],
+    transaction: Span | Transaction,
+    status_code: int = 200,
+) -> JSONResponse:
+    """Convenience for REST endpoints that return raw dicts."""
+    resp = JSONResponse(content=payload, status_code=status_code)
+    try:
+        resp.headers["sentry-trace"] = transaction.to_traceparent()
+        if hasattr(transaction, "containing_transaction"):
+            # py-right: ignore[reportAttributeAccessIssue]
+            parent = transaction.containing_transaction()
+            if getattr(parent, "_baggage", None):
+                resp.headers["baggage"] = parent._baggage.serialize()
+    except Exception:  # pragma: no cover
+        pass
+    return resp
+
+
+# ------------------------------------------------------------------------- #
+# Context-aware background tasks helper                                     #
+# ------------------------------------------------------------------------- #
+def create_background_task(
+    coro_func: Callable[..., "asyncio.Future[Any]"] | Callable[..., "AsyncGenerator[Any, None]"],
+    *args: Any,
+    **kwargs: Any,
+) -> asyncio.Task[Any]:
+    """
+    Spawn an asyncio Task **carrying over** current ContextVars so that
+    `request_id_var` / `trace_id_var` remain visible inside the task.
+
+    Example
+    -------
+    task = create_background_task(my_async_worker, user_id=123)
+    """
+    ctx = copy_context()
+    loop = asyncio.get_running_loop()
+    return loop.create_task(ctx.run(coro_func, *args, **kwargs))
+
+
+# ------------------------------------------------------------------------- #
+# Misc utilities                                                             #
+# ------------------------------------------------------------------------- #
+def capture_custom_message(
+    message: str,
+    level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = "info",
+    extra: dict[str, Any] | None = None,
+) -> str | None:
+    allowed = {"fatal", "critical", "error", "warning", "info", "debug"}
+    level = level if level in allowed else "info"
+    try:
+        if extra:
+            with sentry_sdk.push_scope() as scope:
+                for k, v in extra.items():
+                    scope.set_extra(k, v)
+                return sentry_sdk.capture_message(message, level=level)  # type: ignore[arg-type]
+        return sentry_sdk.capture_message(message, level=level)  # type: ignore[arg-type]
+    except Exception:  # pragma: no cover
+        return None
+
+
+def capture_critical_issue_with_logs(log_text: str) -> str | None:
+    """Attach log snippet to a high-severity event."""
+    with sentry_sdk.configure_scope() as scope:
         scope.add_attachment(
-            bytes=log_text.encode("utf-8"),
+            bytes=log_text.encode(),
             filename="server_logs.txt",
             content_type="text/plain",
         )
-        return sentry_sdk.capture_event(
-            {
-                "message": "Critical server issue with logs attached",
-                "level": "error",
-            }
-        )
-
-
-def filter_transactions(
-    event: SentryEvent, _hint: SentryHint = None
-) -> Optional[SentryEvent]:
-    """
-    Filter transaction events to reduce noise.
-    """
-    if not event or event.get("type") != "transaction":
-        return event
-
-    transaction = event.get("transaction", "")
-    url = str(event.get("request", {}).get("url", ""))
-
-    # Drop known noisy endpoints
-    if any(ignored in url for ignored in IGNORED_TRANSACTIONS):
-        return None
-
-    if "health" in transaction.lower():
-        return None
-
-    return event
-
-# --- SENTRY TRACE RESPONSE HELPER ---
-
-from fastapi.responses import JSONResponse
-
-def make_sentry_trace_response(payload: dict, transaction) -> JSONResponse:
-    """
-    Wraps a dict payload as a JSONResponse with Sentry trace headers for distributed tracing.
-    """
-    resp = JSONResponse(content=payload)
-    try:
-        resp.headers["sentry-trace"] = transaction.to_traceparent()
-        # Add `baggage` if available (dynamic sampling):
-        if hasattr(transaction, "containing_transaction"):
-            containing_transaction = transaction.containing_transaction()
-            if hasattr(containing_transaction, "_baggage") and hasattr(containing_transaction._baggage, "serialize"):
-                resp.headers["baggage"] = containing_transaction._baggage.serialize()
-    except Exception:
-        # Defensive: don't break response on header issues
-        pass
-    return resp
+    return capture_custom_message(
+        "Critical server issue with logs attached", level="error"
+    )
