@@ -2,37 +2,32 @@
  * kb-result-handlers.js – Modular KB result interaction handlers (fully DI/SPA-compliant)
  *
  * ## Features
- *  - Clipboard copy for KB results (ARIA/notification, safe DOM APIs)
+ *  - Clipboard copy for KB results (ARIA, safe DOM APIs)
  *  - Enhanced KB result display styling by relevance
  *  - Metadata enrichment for KB result modal
  *
  * ## Dependencies (all via DI, none global!)
  *   - eventHandlers: REQUIRED ({ trackListener })
- *   - notificationHandler: REQUIRED (object { error, warn, show } or fn(msg, type))
  *   - DOMPurify: REQUIRED (sanitizer function/class instance for innerHTML)
  *   - domAPI: OPTIONAL (for window/document access, default: window/document)
  *
  * ## Usage
  *   import createKbResultHandlers from './kb-result-handlers.js';
- *   const kbResultHandlers = createKbResultHandlers({ eventHandlers, notificationHandler, DOMPurify, domAPI });
+ *   const kbResultHandlers = createKbResultHandlers({ eventHandlers, DOMPurify, domAPI });
  *   kbResultHandlers.init();
  *
  *  - DO NOT use as a global script or legacy script tag.
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-export default function createKbResultHandlers({ eventHandlers, notify, DOMPurify, domAPI } = {}) {
+export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI } = {}) {
   if (!eventHandlers) {
     throw new Error('[kb-result-handlers] eventHandlers dependency required');
-  }
-  if (!notify) {
-    throw new Error('[kb-result-handlers] notify dependency required');
   }
   if (!DOMPurify) {
     throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
   }
   const wnd = (domAPI && domAPI.window) || (typeof window !== 'undefined' ? window : null);
-
 
   // -- Init function, call once when DOM is ready and deps are injected
   function init() {
@@ -74,8 +69,7 @@ export default function createKbResultHandlers({ eventHandlers, notify, DOMPurif
       .then(() => {
         showCopyFeedback(true);
       })
-      .catch(err => {
-        notify.error('[KB Clipboard] Failed to copy text: ' + (err && err.message ? err.message : err), { group: true, context: "knowledgeBase" });
+      .catch(() => {
         showCopyFeedback(false);
       });
   }

@@ -10,7 +10,6 @@ const MODULE = "KnowledgeBaseSearchHandler";
  * @param {Object} ctx.elements - DOM element references.
  * @param {Object} ctx.state - Component's internal state.
  * @param {Object} ctx.config - Component's configuration.
- * @param {Function} ctx.notify.info - Notification function.
  * @param {Function} ctx.apiRequest - API request function.
  * @param {Object} ctx.eventHandlers - Event handling utility.
  * @param {Object} ctx.uiUtils - UI utility functions.
@@ -24,7 +23,7 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
   // App readiness guard—wait for dependencies before wiring up
   if (!ctx.DependencySystem) throw new Error(`[${MODULE}] DependencySystem missing for app readiness check`);
   await ctx.DependencySystem.waitFor?.([
-    "app", "projectManager", "notify", "eventHandlers", "domAPI"
+    "app", "projectManager", "eventHandlers", "domAPI"
   ]);
 
 

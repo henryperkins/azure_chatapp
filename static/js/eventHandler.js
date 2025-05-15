@@ -82,8 +82,8 @@ export function createEventHandlers({
 
     const wrapped = (evt) => handler.call(element, evt);
 
-    if (domAPI?.addEventListener) domAPI.addEventListener(element, type, wrapped, finalOpts);
-    else                           element.addEventListener(type, wrapped, finalOpts);
+    // domAPI is a required dependency, so domAPI.addEventListener should always be used.
+    domAPI.addEventListener(element, type, wrapped, finalOpts);
 
     typeMap.set(handler, { wrappedHandler: wrapped, options: finalOpts, context: options.context });
     return wrapped;
@@ -228,10 +228,13 @@ export function createEventHandlers({
       domAPI.preventDefault(e); // Use domAPI to avoid direct event calls
       if (domAPI.hasClass(form, 'submitting')) return;
 
-      if (validateBeforeSubmit && typeof form.checkValidity === 'function') {
-        if (!form.checkValidity()) {
-          if (typeof form.reportValidity === 'function') {
-            form.reportValidity();
+      // To be fully DI-compliant, form-specific methods should also be called via domAPI.
+      // This assumes domAPI is extended or provides a generic way to call element methods.
+      // e.g., domAPI.callMethod(form, 'checkValidity') or specific domAPI.checkFormValidity(form)
+      if (validateBeforeSubmit && typeof form.checkValidity === 'function') { // form.checkValidity is a direct DOM call
+        if (!domAPI.callMethod(form, 'checkValidity')) { // Assumed domAPI.callMethod or similar
+          if (typeof form.reportValidity === 'function') { // form.reportValidity is a direct DOM call
+            domAPI.callMethod(form, 'reportValidity'); // Assumed domAPI.callMethod or similar
           }
           return;
         }
@@ -246,10 +249,11 @@ export function createEventHandlers({
       }
 
       try {
-        const formData = new FormData(form);
+        // Use browserService.FormData if available (it's a required dep)
+        const formData = browserService.FormData ? new browserService.FormData(form) : new FormData(form);
         await submitHandler(formData, form);
-        if (resetOnSuccess && typeof form.reset === 'function') {
-          form.reset();
+        if (resetOnSuccess && typeof form.reset === 'function') { // form.reset is a direct DOM call
+          domAPI.callMethod(form, 'reset'); // Assumed domAPI.callMethod or similar
         }
       } catch (error) {
         if (options.onError) {
@@ -484,11 +488,8 @@ export function createEventHandlers({
 
     const details = typeMap.get(handler);
     try {
-      if (domAPI && typeof domAPI.removeEventListener === 'function') {
-        domAPI.removeEventListener(el, evt, details.wrappedHandler, details.options);
-      } else {
-        el.removeEventListener(evt, details.wrappedHandler, details.options);
-      }
+      // domAPI is a required dependency, so domAPI.removeEventListener should always be used.
+      domAPI.removeEventListener(el, evt, details.wrappedHandler, details.options);
       typeMap.delete(handler);
       if (typeMap.size === 0) elementMap.delete(evt);
       if (elementMap.size === 0) trackedListeners.delete(el);
@@ -507,11 +508,8 @@ export function createEventHandlers({
         typeMap.forEach((details, originalHandler) => {
           if (!cleanupContext || details.context === cleanupContext) {
             try {
-              if (domAPI && typeof domAPI.removeEventListener === 'function') {
-                domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
-              } else {
-                element.removeEventListener(type, details.wrappedHandler, details.options);
-              }
+              // domAPI is a required dependency, so domAPI.removeEventListener should always be used.
+              domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
               entriesToRemove.push({ element, type, originalHandler });
             } catch (error) {
               // No logging

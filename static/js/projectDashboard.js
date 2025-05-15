@@ -1,43 +1,37 @@
-/**
- * projectDashboard.js
- *
- * Coordinates project dashboard components and state, interacting exclusively
- * via DependencySystem for all dependencies. No global/ .* access for shared modules.
- */
 
 class ProjectDashboard {
-  constructor(deps) { // Changed to accept a single deps object
+  constructor(deps) {
     if (!deps.dependencySystem) throw new Error('[ProjectDashboard] dependencySystem is required.');
-    this.dependencySystem = deps.dependencySystem; // Store for later use
+    this.dependencySystem = deps.dependencySystem;
 
     // Dependency resolution
-    const getModule = (key) =>
-      this.dependencySystem.modules.get(key) ||
-      this.dependencySystem.modules.get(
-        key.charAt(0).toLowerCase() + key.slice(1)
-      );
+    const getModule = (key) => {
+      const module = this.dependencySystem.modules.get(key);
+      if (!module) throw new Error(`[ProjectDashboard] Required module "${key}" not found.`);
+      return module;
+    };
 
     this.getModule = getModule;
     this.app = getModule('app');
     this.projectManager = getModule('projectManager');
-    this.eventHandlers = deps.eventHandlers; // Directly from deps
+    this.eventHandlers = deps.eventHandlers;
     this.auth = getModule('auth');
     this.navigationService = getModule('navigationService');
 
     // Inject domAPI for all DOM access
-    this.domAPI = deps.domAPI; // Directly from deps
+    this.domAPI = deps.domAPI;
     if (!this.domAPI) throw new Error('[ProjectDashboard] domAPI module required for DOM abstraction');
 
     this.components = {
-      projectList: getModule('projectListComponent') || null,
-      projectDetails: getModule('projectDetailsComponent') || null
+      projectList: getModule('projectListComponent'),
+      projectDetails: getModule('projectDetailsComponent')
     };
 
     // Injected browser abstractions
     this.browserService = deps.browserService; // Directly from deps
     if (!this.browserService) throw new Error('[ProjectDashboard] browserService module required');
 
-    this.state = { currentView: null, currentProject: null, initialized: false };
+    this.state = { currentView: null, initialized: false };
     // Flag & stub view registration to prevent "unregistered view" errors 🔥
     this._viewsRegistered = false;
     this._ensureNavigationViews();
@@ -120,13 +114,11 @@ class ProjectDashboard {
         // Silent error handling
       });
     };
-    const eventTarget = authBus && typeof authBus.addEventListener === 'function' ? authBus : document;
-    const description =
-      eventTarget === authBus
-        ? ''
-        : '';
-    this.eventHandlers.trackListener(eventTarget, 'authStateChanged', handler, { context: 'projectDashboard' });
-    this._unsubs.push(() => eventTarget.removeEventListener('authStateChanged', handler));
+    if (!authBus || typeof authBus.addEventListener !== 'function') {
+      throw new Error('[ProjectDashboard] AuthBus with addEventListener required for auth state tracking');
+    }
+    this.eventHandlers.trackListener(authBus, 'authStateChanged', handler, { context: 'projectDashboard' });
+    this._unsubs.push(() => authBus.removeEventListener('authStateChanged', handler));
   }
 
   async initialize() {
@@ -293,7 +285,7 @@ class ProjectDashboard {
   async showProjectList() {
     // this.state._aborted = false; // Explicitly reset _aborted flag here // TODO: Refactor state mutation
     this.state.currentView = 'list';
-    this.state.currentProject = null;
+    this.app.setCurrentProject(null);
     this.browserService.removeSearchParam('project');
     this.browserService.removeSearchParam('chatId');
 
@@ -361,6 +353,7 @@ class ProjectDashboard {
     const wasFullObject = (typeof projectObjOrId === 'object');
 
     this.state.currentView = null; // Indicate transition
+    // All project setting/reading is now via app
 
     // Initialize ProjectDetails if needed, *before* trying to show/render
     if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
@@ -376,8 +369,8 @@ class ProjectDashboard {
     try {
       // If we already have a project object, use it directly
       if (project) {
-        if (this.projectManager && typeof this.projectManager.setCurrentProject === 'function') {
-          this.projectManager.setCurrentProject(project);
+        if (this.app && typeof this.app.setCurrentProject === 'function') {
+          this.app.setCurrentProject(project);
         }
 
         if (this.components.projectDetails && this.components.projectDetails.renderProject) {
@@ -1074,7 +1067,7 @@ class ProjectDashboard {
 
   _handleProjectLoaded(event) {
     const project = event.detail;
-    this.state.currentProject = project || null;
+    this.app.setCurrentProject(project || null);
     this.browserService.requestAnimationFrame(() => {
       if (this.components.projectDetails) {
         this.components.projectDetails.renderProject(project);
@@ -1120,7 +1113,8 @@ class ProjectDashboard {
 
   _handleProjectDeleted(event) {
     const { projectId } = event.detail || {};
-    if (this.state.currentProject && this.state.currentProject.id === projectId) {
+    const currentProject = this.app && typeof this.app.getCurrentProject === 'function' ? this.app.getCurrentProject() : null;
+    if (currentProject && currentProject.id === projectId) {
       this.showProjectList();
     } else {
       if (this.state.currentView === 'list') {
