@@ -100,6 +100,24 @@ class ProjectManager {
     this.browserService = browserService ?? DependencySystem.modules.get?.('browserService') ?? null;
     this.domAPI       = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
+    // Helper to await app readiness
+    this._awaitAppReady = async () => {
+      await DependencySystem.waitFor(['app']);
+      if (!this.app.state?.isReady) {
+        await new Promise(res => {
+          const doc = this.domAPI?.getDocument?.();
+          if (!doc) {
+            throw new Error('[ProjectManager] domAPI.getDocument is required—no global document fallback permitted.');
+          }
+          const handler = () => {
+            doc.removeEventListener('app:ready', handler);
+            res();
+          };
+          doc.addEventListener('app:ready', handler, { once: true });
+        });
+      }
+    };
+
     // Listener tracking
     if (!listenerTracker) {
       const ev = DependencySystem.modules.get('eventHandlers');
@@ -429,16 +447,17 @@ class ProjectManager {
     }
   }
 
-  getCurrentProject() {
-    // Always routed via app
+  async getCurrentProject() {
+    await this._awaitAppReady();
     return this.app && typeof this.app.getCurrentProject === 'function'
       ? this.app.getCurrentProject()
       : null;
   }
-  setCurrentProject(project) {
+  async setCurrentProject(project) {
     if (!project || !project.id) {
       return;
     }
+    await this._awaitAppReady();
     this.storage?.setItem?.('selectedProjectId', project.id);
     if (this.app && typeof this.app.setCurrentProject === 'function') {
       this.app.setCurrentProject(project);
@@ -555,9 +574,11 @@ class ProjectManager {
 /* -------------------------------------------------------------------------- */
 
 function _readyWrapper(deps) {
+  if (!deps.DependencySystem) {
+    throw new Error('[ProjectManager] DependencySystem must be injected—no global fallback permitted.');
+  }
   return Promise.resolve(
-    deps.DependencySystem?.waitFor?.(['app']) ??
-    globalThis.DependencySystem?.waitFor?.(['app'])
+    deps.DependencySystem.waitFor?.(['app'])
   ).then(() => {
     const instance = new ProjectManager(deps);
     deps.DependencySystem?.register?.('projectManager', instance);
@@ -568,11 +589,10 @@ function _readyWrapper(deps) {
 /* Factory export – always returns a NEW instance */
 
 export function createProjectManager(deps = {}) {
-  const ds = deps.DependencySystem || globalThis.DependencySystem;
-  if (!ds) throw new Error('[createProjectManager] DependencySystem required');
+  if (!deps.DependencySystem) throw new Error('[createProjectManager] DependencySystem required');
 
-  const instance = new ProjectManager({ ...deps, DependencySystem: ds });
-  ds.register?.('projectManager', instance);
+  const instance = new ProjectManager({ ...deps, DependencySystem: deps.DependencySystem });
+  deps.DependencySystem.register?.('projectManager', instance);
   return instance;            // returns a fresh instance (not a Promise)
 }
 

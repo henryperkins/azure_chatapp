@@ -151,6 +151,22 @@ class ProjectDetailsComponent {
     this._backBtnHandler = null;
     this._tabClickHandler = null;
   }
+
+  async _getReadyCurrentProject() {
+    await this.DependencySystem.waitFor(['app']);
+    if (!this.app.state?.isReady) {
+      await new Promise(res => {
+        const doc = this.domAPI.getDocument?.() || globalThis.document;
+        if (!doc) return res();
+        const handler = () => {
+          doc.removeEventListener('app:ready', handler);
+          res();
+        };
+        doc.addEventListener('app:ready', handler, { once: true });
+      });
+    }
+    return this.app.getCurrentProject();
+  }
   _setState(patch = {}) {
     this.state = { ...this.state, ...patch };
   }
@@ -372,8 +388,8 @@ class ProjectDetailsComponent {
         eventHandlers: this.eventHandlers,
         projectManager: this.projectManager,
         domAPI: this.domAPI,
-        onUploadComplete: () => {
-          const currentProject = this.app.getCurrentProject();
+        onUploadComplete: async () => {
+          const currentProject = await this._getReadyCurrentProject();
           const id = currentProject?.id;
           if (id) this.projectManager.loadProjectFiles(id);
         },
@@ -449,7 +465,7 @@ class ProjectDetailsComponent {
     this.show();
   }
 
-  switchTab(tabName) {
+  async switchTab(tabName) {
     if (!this.state.initialized) {
       return;
     }
@@ -459,7 +475,7 @@ class ProjectDetailsComponent {
       return;
     }
 
-    const currentProject = this.app.getCurrentProject();
+    const currentProject = await this._getReadyCurrentProject();
     const pid = currentProject?.id;
     const needsProject = ["files", "knowledge", "conversations", "artifacts", "chat"].includes(tabName);
 
@@ -518,8 +534,8 @@ class ProjectDetailsComponent {
     }
   }
 
-  _maybeEmitReady() {
-    const currentProject = this.app.getCurrentProject();
+  async _maybeEmitReady() {
+    const currentProject = await this._getReadyCurrentProject();
     if (
       this.state.initialized &&
       this._uiReadyFlag &&
@@ -828,8 +844,8 @@ class ProjectDetailsComponent {
     return div;
   }
 
-  _confirmDeleteFile(fileId, fileName) {
-    const currentProject = this.app.getCurrentProject();
+  async _confirmDeleteFile(fileId, fileName) {
+    const currentProject = await this._getReadyCurrentProject();
     const pid = currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
       return;
@@ -850,8 +866,8 @@ class ProjectDetailsComponent {
     });
   }
 
-  _downloadFile(fileId, fileName) {
-    const currentProject = this.app.getCurrentProject();
+  async _downloadFile(fileId, fileName) {
+    const currentProject = await this._getReadyCurrentProject();
     const pid = currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
       return;
@@ -866,7 +882,7 @@ class ProjectDetailsComponent {
   }
 
   async _openConversation(cv) {
-    const currentProject = this.app.getCurrentProject();
+    const currentProject = await this._getReadyCurrentProject();
     const pid = currentProject?.id;
     if (!this.app.validateUUID(pid) || !cv?.id) {
       return;
@@ -877,7 +893,7 @@ class ProjectDetailsComponent {
       if (this.navigationService) {
         this.navigationService.navigateToConversation(pid, cv.id);
       } else {
-        this.switchTab("chat");
+        await this.switchTab("chat");
         const url = new URL(this.router.getURL());
         url.searchParams.set("chatId", cv.id);
         this.router.navigate(url.toString());

@@ -34,6 +34,10 @@ export const APP_CONFIG = {
     AUTH_REGISTER: '/api/auth/register',
     AUTH_VERIFY: '/api/auth/verify',
     AUTH_REFRESH: '/api/auth/refresh',
+    USER_PROFILE: '/api/user/me',
+    USER_PROJECTS: '/api/user/projects',
+    USER_STARRED_CONVERSATIONS: '/api/preferences/starred',
+    USER_UPDATE_PREFERENCES: '/api/user/preferences',
 
     // --- ADDED CHAT/CONVERSATION ENDPOINTS ---
     // List/create conversations for a project

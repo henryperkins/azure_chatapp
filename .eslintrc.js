@@ -21,39 +21,57 @@ module.exports = {
         'plugin:import/recommended',
     ],
     rules: {
-        // --- Refactoring Enforcement Rules ---
+        // --- Guardrail Enforcement Rules ---
 
-        // Ban any direct `window.*` access; use `DependencySystem.get(...)` or injection
+        // Factory Function Export Pattern (Guardrail #1)
         'no-restricted-syntax': [
             'error',
             {
+                selector: "ExportDefaultDeclaration",
+                message: 'Use named factory function exports (createXyz) instead of default exports',
+            },
+            {
                 selector: "MemberExpression[object.name='window']",
-                message: 'Access shared modules via DependencySystem.get(...) or dependency injection instead of window.*',
+                message: 'Access shared modules via dependency injection instead of window.*',
+            },
+        ],
+
+        // Strict Dependency Injection (Guardrail #2)
+        'no-restricted-globals': [
+            'error',
+            {
+                name: 'window',
+                message: 'Do not access window directly; use injected dependencies',
+            },
+            {
+                name: 'document',
+                message: 'Do not access document directly; use injected domAPI',
+            },
+            {
+                name: 'console',
+                message: 'Do not use console directly; use notify or createDebugTools',
+            },
+            {
+                name: 'setTimeout',
+                message: 'Avoid setTimeout for timing/waiting; use async/await or provide justification',
+            },
+            {
+                name: 'setInterval',
+                message: 'Avoid setInterval for polling; use event-driven logic or WebSockets',
             },
         ],
 
         // Ban specific `window` properties explicitly for clarity
         'no-restricted-properties': [
             'error',
-            { object: 'window', property: 'app', message: 'Use DependencySystem.get("app") or dependency injection.' },
-            { object: 'window', property: 'projectManager', message: 'Use DependencySystem.get("projectManager") or dependency injection.' },
-            { object: 'window', property: 'eventHandlers', message: 'Use DependencySystem.get("eventHandlers") or dependency injection.' },
-            { object: 'window', property: 'auth', message: 'Use DependencySystem.get("auth") or dependency injection.' },
-            { object: 'window', property: 'chatManager', message: 'Use DependencySystem.get("chatManager") or dependency injection.' },
-            { object: 'window', property: 'modalManager', message: 'Use DependencySystem.get("modalManager") or dependency injection.' },
-        ],
-
-        // Ban setTimeout/setInterval to avoid timing hacks and polling loops
-        'no-restricted-globals': [
-            'error',
-            {
-                name: 'setTimeout',
-                message: 'Avoid setTimeout for timing/waiting; use orchestrator (app.js), async/await, or provide justification via eslint-disable comment.',
-            },
-            {
-                name: 'setInterval',
-                message: 'Avoid setInterval for polling; use event-driven logic or WebSockets.',
-            },
+            { object: 'window', property: 'app', message: 'Use dependency injection instead of window.app' },
+            { object: 'window', property: 'projectManager', message: 'Use dependency injection instead of window.projectManager' },
+            { object: 'window', property: 'eventHandlers', message: 'Use dependency injection instead of window.eventHandlers' },
+            { object: 'window', property: 'auth', message: 'Use dependency injection instead of window.auth' },
+            { object: 'window', property: 'chatManager', message: 'Use dependency injection instead of window.chatManager' },
+            { object: 'window', property: 'modalManager', message: 'Use dependency injection instead of window.modalManager' },
+            { object: 'window', property: 'location', message: 'Use navigationService instead of window.location' },
+            { object: 'window', property: 'fetch', message: 'Use apiClient instead of window.fetch' },
         ],
 
         // --- Standard Code Quality Rules ---
@@ -71,7 +89,7 @@ module.exports = {
             argsIgnorePattern: '^_',    // Allow unused args prefixed with _
         }],
         'eqeqeq': ['error', 'always', { null: 'ignore' }],
-        'no-console': ['warn', { allow: ['warn', 'error', 'info', 'debug', 'table'] }],
+        'no-console': ['error', { allow: ['warn', 'error'] }],
 
         // Import plugin rule to catch missing or misspelled imports
         'import/no-unresolved': ['error', { commonjs: true, amd: true }],
@@ -85,6 +103,8 @@ module.exports = {
             },
             rules: {
                 // Relax rules for test files if necessary
+                'no-console': 'off',
+                'no-restricted-globals': 'off',
             },
         },
     ],

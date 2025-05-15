@@ -11,8 +11,8 @@ import sentry_sdk
 from fastapi import APIRouter, HTTPException, Response
 from typing import Any, Optional
 import random
-import time
 import uuid
+import asyncio  # Added for asyncio.sleep
 
 from utils.sentry_utils import tag_transaction, sentry_span, inject_sentry_trace_headers
 from utils.mcp_sentry import (
@@ -118,7 +118,7 @@ async def test_sentry_performance(response: Response):
         )
 
         # Simulate a database operation
-        time.sleep(0.1)  # 100ms simulated database query
+        await asyncio.sleep(0.1)  # 100ms simulated database query
 
     # Create a span for a simulated HTTP request
     with sentry_span(
@@ -130,7 +130,7 @@ async def test_sentry_performance(response: Response):
         span.set_data("http.request_content_length", 0)
 
         # Simulate an external API call
-        time.sleep(0.2)  # 200ms simulated API call
+        await asyncio.sleep(0.2)  # 200ms simulated API call
 
         # Create a nested span
         with sentry_span(
@@ -138,14 +138,14 @@ async def test_sentry_performance(response: Response):
         ) as child_span:
             child_span.set_data("serialization.format", "json")
             child_span.set_data("response.size", 1240)
-            time.sleep(0.05)  # 50ms simulated processing
+            await asyncio.sleep(0.05)  # 50ms simulated processing
 
     # Create a span for cache operations
     with sentry_span(op="cache.get", description="Check cache") as span:
         span.set_tag("cache.type", "redis")
         span.set_data("cache.key", f"user:preferences:{random.randint(1000, 9999)}")
         span.set_data("cache.hit", False)
-        time.sleep(0.03)  # 30ms simulated cache check
+        await asyncio.sleep(0.03)  # 30ms simulated cache check
 
     # Log the completion
     logger.info(f"Completed performance test with ID: {perf_id}")
@@ -336,7 +336,7 @@ async def test_distributed_tracing(response: Response):
         span.set_tag("service.tier", "frontend")
 
         # Simulate auth service work
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
 
         # These headers would normally be sent to the next service
         # Trace headers would normally be sent to next service
@@ -353,11 +353,11 @@ async def test_distributed_tracing(response: Response):
         span.set_tag("service.tier", "middleware")
 
         # Simulate business logic work
-        time.sleep(0.1)
+        await asyncio.sleep(0.1)
 
         # Nested span for specific operation
         with sentry_span(op="business.validation", description="Validate Request"):
-            time.sleep(0.03)
+            await asyncio.sleep(0.03)
 
     # Simulate data service
     with sentry_span(op="service.data", description="Data Service") as span:
@@ -367,11 +367,11 @@ async def test_distributed_tracing(response: Response):
         # Simulate data processing
         with sentry_span(op="db.read", description="Database Read"):
             span.set_tag("db.type", "postgresql")
-            time.sleep(0.07)
+            await asyncio.sleep(0.07)
 
         # Simulate data transform
         with sentry_span(op="data.transform", description="Transform Results"):
-            time.sleep(0.04)
+            await asyncio.sleep(0.04)
 
     logger.info(f"Completed distributed tracing test with ID: {trace_id}")
 

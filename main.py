@@ -35,15 +35,18 @@ from typing import Dict, Any, Optional, cast
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+# from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration # Unused
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.types import Event, Hint
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
+from fastapi.routing import APIRoute
 
 # …
 # Dev helper: always deliver fresh JS/CSS/HTML – disables browser cache
-from fastapi.staticfiles import StaticFiles
-
 
 class NoCacheStatic(StaticFiles):
     async def get_response(self, path, scope):
@@ -51,12 +54,6 @@ class NoCacheStatic(StaticFiles):
         if response.status_code == 200 and path.endswith((".js", ".css", ".html")):
             response.headers["Cache-Control"] = "no-store"
         return response
-
-
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
-from fastapi.routing import APIRoute
-from sentry_sdk.types import Event, Hint
 
 
 # -----------------------------------------------------------------------------
@@ -191,7 +188,7 @@ def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None
     sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
     integrations = [
         sentry_logging,
-        FastApiIntegration(transaction_style="endpoint"),
+        FastApiIntegration(transaction_style="endpoint", capture_server_errors=False),
         # SqlalchemyIntegration(), # Temporarily commented out to diagnose greenlet_spawn issue
         AsyncioIntegration(),
     ]
@@ -216,36 +213,38 @@ def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None
 # -----------------------------------------------------------------------------
 # FastAPI & Application Setup
 # -----------------------------------------------------------------------------
-from config import settings
-from db import init_db, get_async_session_context
-from utils.auth_utils import clean_expired_tokens
-from utils.db_utils import schedule_token_cleanup
-from db.schema_manager import SchemaManager
+# Initialize structured logging FIRST, before other imports that might configure logging.
+from utils.logging_config import init_structured_logging  # noqa: E402
+init_structured_logging()
+
+from config import settings  # noqa: E402
+from db import init_db, get_async_session_context  # noqa: E402
+from utils.auth_utils import clean_expired_tokens  # noqa: E402
+from utils.db_utils import schedule_token_cleanup  # noqa: E402
+# from db.schema_manager import SchemaManager # Unused in main.py
 
 # ----- Ensure ALL models are registered for migrations/table creation -----
-import models
+import models  # noqa: E402, F401 # F401: imported but unused - common for model registration
 
 # Import your routers
-from auth import router as auth_router, create_default_user
-from routes.knowledge_base_routes import router as knowledge_base_router
-from routes.projects.projects import router as projects_router
-from routes.projects.files import router as project_files_router
-from routes.projects.artifacts import router as project_artifacts_router
-from routes.user_preferences import router as user_preferences_router
-from routes.unified_conversations import router as conversations_router
-from routes.sentry_test import router as sentry_test_router
-from routes.admin import router as admin_router
+from auth import router as auth_router, create_default_user  # noqa: E402
+from routes.knowledge_base_routes import router as knowledge_base_router  # noqa: E402
+from routes.projects.projects import router as projects_router  # noqa: E402
+from routes.projects.files import router as project_files_router  # noqa: E402
+from routes.projects.artifacts import router as project_artifacts_router  # noqa: E402
+from routes.user_preferences import router as user_preferences_router  # noqa: E402
+from routes.unified_conversations import router as conversations_router  # noqa: E402
+from routes.sentry_test import router as sentry_test_router  # noqa: E402
+from routes.admin import router as admin_router  # noqa: E402
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Default to dev
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logging.getLogger("urllib3").setLevel(logging.INFO)  # suprime spam DEBUG
-logger = logging.getLogger(__name__)
+# logging.basicConfig is no longer needed as init_structured_logging() handles setup.
+# The root logger is configured there. We can still get specific loggers.
+logging.getLogger("urllib3").setLevel(logging.INFO)  # Suppress spam DEBUG from urllib3
+logger = logging.getLogger(__name__)  # Get a logger for this module
 
 
 # -----------------------------------------------------------------------------
@@ -442,32 +441,45 @@ async def debug_routes() -> list[Dict[str, Any]]:
 # -----------------------------------------------------------------------------
 # Request ID Logging Middleware
 # -----------------------------------------------------------------------------
+from utils.logging_config import request_id_var, trace_id_var  # noqa: E402
+
 @app.middleware("http")
 async def request_id_logging_middleware(request: Request, call_next):
     """
     Attach a per-request UUID so every log/Sentry event can be correlated.
+    Sets contextvars for request_id and trace_id for structured logging.
     Also logs basic ↗/↘ lines and returns the ID in a response header.
     """
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
 
+    # Set contextvars for logging
+    request_id_token = request_id_var.set(request_id)
+    sentry_trace = sentry_sdk.get_traceparent()
+    trace_id_token = trace_id_var.set(sentry_trace if sentry_trace else "-")
+
+    # Ensure this logger call is correctly formatted and parentheses are balanced.
     logger.info(
         "[%s] ↗ %s %s%s",
         request_id,
         request.method,
         request.url.path,
-        f"?{request.url.query}" if request.url.query else "",
-    )
+        f"?{request.url.query}" if request.url.query else ""
+    )  # Explicitly ensuring this closing parenthesis is here.
 
     try:
         response = await call_next(request)
     except Exception as exc:
         # delegate to generic handler so it still gets Sentry + JSON payload
         response = await generic_exception_handler(request, exc)
+    finally:
+        # Reset contextvars
+        request_id_var.reset(request_id_token)
+        trace_id_var.reset(trace_id_token)
 
     response.headers["X-Request-ID"] = request_id
     logger.info(
-        "[%s] ↘ %s %s – %s",
+        "[%s] ↘ %s %s – %s",  # This log will also benefit
         request_id,
         response.status_code,
         request.method,
