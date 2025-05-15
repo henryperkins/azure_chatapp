@@ -765,10 +765,25 @@ export function createAuthModule({
       return authState.isAuthenticated;
     }
 
-    // Setup forms
-    // Initial call to setupAuthForms might be too early if modals are not yet loaded.
-    // The modalsLoaded listener is more reliable.
-    // setupAuthForms(); // Removed initial direct call
+    // Setup forms when DOM is ready (prevents attaching before elements exist)
+    // If document is already parsed, call immediately; otherwise wait for DOMContentLoaded
+    const documentRef = domAPI.getDocument();
+    if (documentRef) {
+      if (documentRef.readyState === 'interactive' || documentRef.readyState === 'complete') {
+        setupAuthForms();
+      } else if (typeof eventHandlers.trackListener === 'function') {
+        // Guardrail-compliant listener for DOMContentLoaded
+        eventHandlers.trackListener(
+          documentRef,
+          'DOMContentLoaded',
+          () => { setupAuthForms(); },
+          { context: 'AuthModule:DOMReadyListener', description: 'Attach auth form handlers after DOM ready' }
+        );
+      } else if (documentRef.addEventListener) {
+        // Fallback if trackListener not available
+        documentRef.addEventListener('DOMContentLoaded', () => setupAuthForms());
+      }
+    }
 
     // Centralized listen for modalsLoaded using eventHandlers.trackListener (guardrail-compliant)
     const doc = domAPI.getDocument();

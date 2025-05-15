@@ -122,16 +122,10 @@ def set_secure_cookie(
     env = (settings.ENV or "").lower()
     is_production = env == "production"
 
-    # Dev / staging: choose the `secure` flag dynamically based on the incoming request
-    # scheme. This prevents the “login → immediate logout” bug when testing over HTTPS
-    # tunnels (ngrok, Cloudflare, etc.) while still allowing plain-HTTP on localhost.
+    # Development: use host-only cookies without secure flag to ensure local testing works
     if not is_production:
-        secure = request.url.scheme == "https"
-        # Explicitly set domain for localhost, otherwise let it be host-only
-        if request.url.hostname == "localhost" or request.url.hostname == "127.0.0.1":
-            domain = request.url.hostname
-        else:
-            domain = None  # For other non-prod scenarios (e.g., LAN IP)
+        secure = False
+        domain = None
         samesite = "lax"
         httponly = True
         path = "/"
