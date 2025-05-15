@@ -1,4 +1,4 @@
-modules = ["python-3.12", "nodejs-18", "web", "postgresql-17", "python-base-3.12", "nodejs-22"]
+modules = ["python-3.12", "nodejs-18", "web", "postgresql-17", "python-base-3.12", "nodejs-22", "python-3.11"]
 run = "npm run dev"
 
 [nix]
@@ -20,7 +20,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uvicorn main:app --reload --host=0.0.0.0 --port=5000"
+args = "uvicorn main:app --reload --host=0.0.0.0 --port=8000"
 
 [[ports]]
 localPort = 8000
