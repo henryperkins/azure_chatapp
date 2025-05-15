@@ -1,60 +1,60 @@
 # Code Smells Detected
 
 ## 1. God / Mega Classes
-- ProjectManager (~900 líneas)
-- ChatManager (~1 600 líneas, mezcla red-API/DOM/UI)
+- ProjectManager (~900 lines)
+- ChatManager (~1 600 lines, mixes network/API/DOM/UI concerns)
 - ProjectDashboard, ProjectDetailsComponent, Sidebar, EventHandler  
-  → Rompen el principio de responsabilidad única; difícil de testear y mantener.
+  → Violate the Single Responsibility Principle; hard to test and maintain.
 
-## 2. Funciones excesivamente largas
-- initializeUIComponents (≈340 líneas)
-- ChatManager.initialize (≈340 líneas)
+## 2. Excessively Long Functions
+- initializeUIComponents (≈340 lines)
+- ChatManager.initialize (≈340 lines)
 - ProjectDashboard.showProjectDetails, _setView, etc.  
-  → Refactorizar en helpers más pequeños.
+  → Refactor into smaller helpers.
 
-## 3. Constructores y fábricas con listas de parámetros muy extensas
-Ej.: `createProjectDetailsComponent`, `createSidebar`, `createChatManager`  
-  → Usar objetos de configuración o DI contenedores para reducir longitud.
+## 3. Constructors / factories with overly long parameter lists
+E.g. `createProjectDetailsComponent`, `createSidebar`, `createChatManager`  
+  → Use configuration objects or DI containers to shorten them.
 
-## 4. Duplicación de lógica/UI
-- `_showMessage`, `_createThinkingBlock`, indicadores de “thinking/loading” aparecen en ChatManager y attachChatUI.
-- Código repetido para toggle de pestañas (ProjectDetails vs Sidebar).
+## 4. Duplicated logic / UI
+- `_showMessage`, `_createThinkingBlock`, “thinking/loading” indicators appear in both ChatManager and attachChatUI.
+- Repeated code for tab toggling (ProjectDetails vs Sidebar).
 
-## 5. Comentario / código muerto
-- Numerosos `// console.error … // Removed`
-- Bloques enteros comentados (debug, old way vs new way).  
-  → Eliminar o mover a utilidades de logging.
+## 5. Commented-out / dead code
+- Numerous `// console.error … // Removed`
+- Entire commented blocks (debug, “old way vs new way”).  
+  → Remove or move to dedicated logging utilities.
 
-## 6. Dependencia a `globalThis.document` y `window` en módulos que declaran DI estricta  
-  → Viola las propias guardrails (ej. ProjectManager, ProjectDetailsComponent).
+## 6. Direct dependency on `globalThis.document` and `window` in modules that claim strict DI  
+  → Breaks own guardrails (e.g., ProjectManager, ProjectDetailsComponent).
 
-## 7. Manejo silencioso de errores
-`catch { /* silent */ }` o `// Error handled silently`  
-  → Oculta fallos y complica debugging.
+## 7. Silent error handling
+`catch { /* silent */ }` or `// Error handled silently`  
+  → Masks failures and complicates debugging.
 
-## 8. Estados duplicados y flags ad-hoc
-- currentProject almacenado en varios lugares (ProjectManager, app, Sidebar).
-- Flags como `_uiReadyFlag`, `_dataReadyFlag`, `_lastReadyEmittedId` proliferan.
+## 8. Duplicated state and ad-hoc flags
+- `currentProject` stored in multiple places (ProjectManager, app, Sidebar).
+- Flags such as `_uiReadyFlag`, `_dataReadyFlag`, `_lastReadyEmittedId` proliferate.
 
-## 9. Uso excesivo de eventos personalizados sin tipado ni documentación
-Dificulta trazabilidad (`projectDetailsReady`, `sidebarTabChanged`, etc.).
+## 9. Heavy use of undocumented, untyped custom events
+Makes traceability hard (`projectDetailsReady`, `sidebarTabChanged`, etc.).
 
-## 10. Nombres y convenciones inconsistentes
-- normaliseUrl vs normalizeUrl (dos aliases)
-- ProjectDetail**s**Component vs projectDetails (plural/singular)  
-  → Unificar.
+## 10. Inconsistent naming / conventions
+- `normaliseUrl` vs `normalizeUrl` (two aliases)
+- `ProjectDetail**s**Component` vs `projectDetails` (plural/singular)  
+  → Standardize.
 
-## 11. Abuso de `try/catch` “full blanket”
-Muchas capturas silenciosas con comentarios “Removed” → ocultan bugs.
+## 11. Blanket `try/catch` abuse
+Many silent catches with comments “Removed” → hides bugs.
 
-## 12. Mezcla de responsabilidades de infraestructura y UI
-Ej.: EventHandler maneja colapsibles, formularios, modales y navegación.
+## 12. Mixed infrastructure and UI responsibilities
+E.g. EventHandler manages collapsibles, forms, modals and navigation.
 
 ---
 
-Recomendaciones generales:
-1. Extraer módulos más pequeños (API service, UI renderer, state manager).
-2. Aplicar Single Responsibility y separar DOM/UI de lógica de negocio.
-3. Eliminar código muerto y `catch` silenciosos; usar logger centralizado.
-4. Documentar y tipar eventos personalizados.
-5. Añadir tests unitarios para helpers aislados.
+General Recommendations:
+1. Extract smaller modules (API service, UI renderer, state manager).
+2. Apply Single Responsibility and separate DOM/UI from business logic.
+3. Remove dead code and silent catches; use a central logger.
+4. Document and type custom events.
+5. Add unit tests for isolated helpers.
