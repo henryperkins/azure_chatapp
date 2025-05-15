@@ -136,6 +136,7 @@ export function createAuthModule({
   // === 5) CSRF & TOKEN LOGIC ===
   let csrfToken = '';
   let csrfTokenPromise = null;
+  let _lastLoginTimestamp = 0;   // ← NEW
   function getCSRFToken() {
     const current = readCookie('csrf_token');
     if (current && current !== csrfToken) {
@@ -346,6 +347,10 @@ export function createAuthModule({
   let verifyInterval = null;
 
   async function verifyAuthState(forceVerify = false) {
+    // Skip verification for ~4 s right after a login to let cookies settle
+    if (!forceVerify && Date.now() - _lastLoginTimestamp < 4000) {
+      return authState.isAuthenticated;
+    }
     if (authCheckInProgress && !forceVerify) return authState.isAuthenticated;
     authCheckInProgress = true;
     try {
@@ -480,6 +485,7 @@ export function createAuthModule({
           id:      response.id || response.user_id || response.userId || (`temp-id-${Date.now()}`)
         };
         broadcastAuth(true, userObject, 'login_success_immediate');
+        _lastLoginTimestamp = Date.now();   // ← NEW
         return response;
       }
 
@@ -491,13 +497,7 @@ export function createAuthModule({
         id: `temp-${Date.now()}`
       };
       broadcastAuth(true, provisionalUser, 'login_success_provisional');
-
-      // fire verifyAuthState in background (non-blocking, slight delay)
-      const bs = DependencySystem?.modules?.get('browserService');
-      const _timerFn = bs?.setTimeout ?? ((fn, t) => setTimeout(fn, t));
-      _timerFn(() => {
-        verifyAuthState(true).catch(() => { /* silent */ });
-      }, 800);
+      _lastLoginTimestamp = Date.now();   // ← NEW
 
       return response;     // ← mantiene la API hacia fuera
       // -------------------------------------------------------------------
