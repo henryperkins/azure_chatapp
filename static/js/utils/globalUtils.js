@@ -228,9 +228,5 @@ export async function waitForDepsAndDom({
  * (errorReporter/maybeCapture removed)
  */
 export async function fetchData({ apiClient }, id) {
-  try {
-    return await apiClient.get(`/item/${id}`);
-  } catch (err) {
-    throw err;
-  }
+  return await apiClient.get(`/item/${id}`);
 }

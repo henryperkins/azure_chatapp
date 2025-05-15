@@ -20,13 +20,11 @@
  * @param {Function} deps.dom.addMediaListener
  * @param {Function} deps.dom.addEventListener
  * @param {Function} deps.dom.createMutationObserver
- * @param {Object} deps.notify - Contextual notification system
  * @returns {Object} ThemeManager API
  */
 export function createThemeManager(deps) {
   // --- Dependency Validation ---
   if (!deps?.dom) throw new Error('DOM abstraction layer required');
-  if (!deps?.notify) throw new Error('Notification system required');
 
   const requiredDomMethods = [
     'getDocumentAttribute', 'setDocumentAttribute',
@@ -40,11 +38,8 @@ export function createThemeManager(deps) {
     }
   });
 
-  const { dom, notify } = deps;
-  const themeNotifier = notify.withContext({
-    module: 'ThemeManager',
-    context: 'themeToggle'
-  });
+  // We no longer depend on "notify"
+  const { dom } = deps;
 
   // --- Constants ---
   const THEMES = Object.freeze({
@@ -92,7 +87,8 @@ export function createThemeManager(deps) {
     return saved === THEMES.LIGHT || saved === THEMES.DARK ? saved : null;
   };
 
-  const setTheme = (theme, source = 'manual') => {
+  const setTheme = (theme) => {
+    // Store the old theme if needed
     const previousTheme = dom.getDocumentAttribute('data-theme');
 
     // Apply changes
@@ -100,31 +96,19 @@ export function createThemeManager(deps) {
     dom.localStorageSet('theme', theme);
     updateThemeIcon(isDarkTheme(theme));
 
-    // Log the change
-    themeNotifier.info(`Theme changed to ${theme}`, {
-      source,
-      previousTheme,
-      changedVia: source === 'system' ? 'OS preference' : 'user action'
-    });
-
+    // Return new theme
     return theme;
   };
 
   // --- Event Handlers ---
   const handleToggleClick = () => {
     const current = dom.getDocumentAttribute('data-theme');
-    setTheme(
-      isDarkTheme(current) ? THEMES.LIGHT : THEMES.DARK,
-      'user-toggle'
-    );
+    setTheme(isDarkTheme(current) ? THEMES.LIGHT : THEMES.DARK);
   };
 
   const handleSystemChange = (event) => {
     if (!getSavedTheme()) {
-      setTheme(
-        event.matches ? THEMES.DARK : THEMES.LIGHT,
-        'system'
-      );
+      setTheme(event.matches ? THEMES.DARK : THEMES.LIGHT);
     }
   };
 
@@ -166,7 +150,7 @@ export function createThemeManager(deps) {
     // Set theme on load
     const savedTheme = getSavedTheme();
     const themeToSet = savedTheme || getSystemPreference();
-    setTheme(themeToSet, savedTheme ? 'saved' : 'system');
+    setTheme(themeToSet);
 
     // Initial icon update
     updateThemeIcon(isDarkTheme(themeToSet));
@@ -181,22 +165,17 @@ export function createThemeManager(deps) {
     cleanupCallbacks.forEach(cleanup => {
       try {
         cleanup && cleanup();
-      } catch (err) {
-        themeNotifier.error('Cleanup callback failed', {
-          source: 'teardown',
-          extra: { error: err }
-        });
+      } catch {
+        // Previously used notification for error reporting, now removed
       }
     });
     cleanupCallbacks = [];
+
     if (mutationObserver) {
       try {
         mutationObserver.disconnect();
-      } catch (err) {
-        themeNotifier.error('MutationObserver disconnect failed', {
-          source: 'teardown',
-          extra: { error: err }
-        });
+      } catch {
+        // Also removed notification error handling
       }
       mutationObserver = null;
     }

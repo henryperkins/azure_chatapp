@@ -118,14 +118,14 @@ export function createAuthModule({
 
   function showError(el, msg) {
     if (el) {
-      el.textContent = msg; // textContent is safe
-      el.classList.remove('hidden');
+      domAPI.setTextContent(el, msg);
+      domAPI.removeClass(el, 'hidden');
     }
   }
   function hideError(el) {
     if (el) {
-      el.textContent = '';
-      el.classList.add('hidden');
+      domAPI.setTextContent(el, '');
+      domAPI.addClass(el, 'hidden');
     }
   }
 
@@ -271,19 +271,16 @@ export function createAuthModule({
     authState.username = userObject?.username || null;
 
     if (changed) {
-      // Update app state if possible
-      const appInstance = DependencySystem?.modules?.get('app');
-      if (appInstance && typeof appInstance.setAuthState === 'function') {
-        appInstance.setAuthState({ isAuthenticated: authenticated, currentUser: userObject });
+      // Update appModule's state (the canonical source)
+      const appModuleRef = DependencySystem?.modules?.get('appModule');
+      if (appModuleRef && typeof appModuleRef.setAuthState === 'function') {
+        appModuleRef.setAuthState({ isAuthenticated: authenticated, currentUser: userObject });
       }
-
-      // Update "currentUser" in DependencySystem
-      if (DependencySystem?.modules) {
-        const currentUserModule = DependencySystem.modules.get('currentUser');
-        if (currentUserModule !== userObject) {
-          DependencySystem.modules.set('currentUser', userObject);
-        }
-      }
+      // The local `currentUser` in app.js will be updated via `handleAuthStateChange`
+      // which reads from appModule.state.currentUser.
+      // The DI registration of 'currentUser' in app.js is for the initial value;
+      // consumers should get the dynamic value via app.state.currentUser.
+      // Thus, no direct update to DependencySystem.modules.set('currentUser', userObject) here.
 
       // Dispatch events to internal AuthBus
       const eventDetail = {
@@ -518,17 +515,18 @@ export function createAuthModule({
     const loginForm = domAPI.getElementById('loginModalForm');
     if (loginForm && !loginForm._listenerAttached) {
       loginForm._listenerAttached = true;
-      loginForm.setAttribute('novalidate', 'novalidate');
-      loginForm.removeAttribute('action');
-      loginForm.removeAttribute('method');
+      domAPI.setAttribute(loginForm, 'novalidate', 'novalidate');
+      domAPI.removeAttribute(loginForm, 'action');
+      domAPI.removeAttribute(loginForm, 'method');
 
       const handler = async (e) => {
-        e.preventDefault();
+        domAPI.preventDefault(e); // Use domAPI
         const errorEl = domAPI.getElementById('loginModalError');
         hideError(errorEl);
-        const submitBtn = loginForm.querySelector('button[type="submit"]');
+        const submitBtn = domAPI.querySelector('button[type="submit"]', loginForm); // Use domAPI
         setButtonLoading(submitBtn, true, 'Logging in...');
-        const formData = new FormData(loginForm);
+        const browserService = DependencySystem.modules.get('browserService');
+        const formData = browserService ? new browserService.FormData(loginForm) : new FormData(loginForm);
         const username = formData.get('username')?.trim();
         const password = formData.get('password');
 
@@ -580,17 +578,18 @@ export function createAuthModule({
     const registerForm = domAPI.getElementById('registerModalForm');
     if (registerForm && !registerForm._listenerAttached) {
       registerForm._listenerAttached = true;
-      registerForm.setAttribute('novalidate', 'novalidate');
-      registerForm.removeAttribute('action');
-      registerForm.removeAttribute('method');
+      domAPI.setAttribute(registerForm, 'novalidate', 'novalidate');
+      domAPI.removeAttribute(registerForm, 'action');
+      domAPI.removeAttribute(registerForm, 'method');
 
       const handler = async (e) => {
-        e.preventDefault();
+        domAPI.preventDefault(e); // Use domAPI
         const errorEl = domAPI.getElementById('registerModalError');
-        const submitBtn = domAPI.getElementById('registerModalSubmitBtn');
+        const submitBtn = domAPI.getElementById('registerModalSubmitBtn'); // Assuming this ID is unique and domAPI.getElementById is fine
         hideError(errorEl);
         setButtonLoading(submitBtn, true, 'Registering...');
-        const formData = new FormData(registerForm);
+        const browserService = DependencySystem.modules.get('browserService');
+        const formData = browserService ? new browserService.FormData(registerForm) : new FormData(registerForm);
         const username = formData.get('username')?.trim();
         const password = formData.get('password');
         const passwordConfirm = formData.get('passwordConfirm');
@@ -686,13 +685,26 @@ export function createAuthModule({
       }
 
       // Periodic verify
-      verifyInterval = setInterval(() => {
-        if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
-          verifyAuthState(false).catch(() => {
-            // Silent failure
-          });
-        }
-      }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+      const browserService = DependencySystem.modules.get('browserService');
+      if (browserService && typeof browserService.setTimeout === 'function') {
+        verifyInterval = browserService.setInterval(() => { // Use browserService.setInterval if available
+          if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
+            verifyAuthState(false).catch(() => {
+              // Silent failure
+            });
+          }
+        }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+      } else {
+        // Fallback to global setInterval if browserService doesn't provide it (less ideal)
+        verifyInterval = setInterval(() => {
+          if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
+            verifyAuthState(false).catch(() => {
+              // Silent failure
+            });
+          }
+        }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+      }
+
 
       authState.isReady = true;
 
@@ -733,7 +745,12 @@ export function createAuthModule({
     }
     registeredListeners.length = 0;
     if (verifyInterval) {
-      clearInterval(verifyInterval);
+      const browserService = DependencySystem.modules.get('browserService');
+      if (browserService && typeof browserService.clearInterval === 'function') {
+        browserService.clearInterval(verifyInterval);
+      } else {
+        clearInterval(verifyInterval); // Fallback
+      }
       verifyInterval = null;
     }
   }

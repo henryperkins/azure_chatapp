@@ -124,7 +124,6 @@ class ProjectDetailsComponent {
     this.onBack = onBack || (() => {});
 
     this.state = {
-      currentProject: null,
       activeTab: "details",
       isLoading: Object.create(null),
       initialized: false,
@@ -374,7 +373,8 @@ class ProjectDetailsComponent {
         projectManager: this.projectManager,
         domAPI: this.domAPI,
         onUploadComplete: () => {
-          const id = this.state.currentProject?.id;
+          const currentProject = this.app.getCurrentProject();
+          const id = currentProject?.id;
           if (id) this.projectManager.loadProjectFiles(id);
         },
         elements: {
@@ -435,7 +435,7 @@ class ProjectDetailsComponent {
       return;
     }
 
-    this._setState({ currentProject: project });
+    this.app.setCurrentProject(project);
     // mark data ready → enable “New Chat” button
     this._setState({ projectDataActuallyLoaded: true });
     this._updateNewChatButtonState();
@@ -459,7 +459,8 @@ class ProjectDetailsComponent {
       return;
     }
 
-    const pid = this.state.currentProject?.id;
+    const currentProject = this.app.getCurrentProject();
+    const pid = currentProject?.id;
     const needsProject = ["files", "knowledge", "conversations", "artifacts", "chat"].includes(tabName);
 
     if (needsProject && !this.app.validateUUID(pid)) {
@@ -485,7 +486,9 @@ class ProjectDetailsComponent {
         Promise.resolve().then(() => {
           try {
             this.modelConfig.renderQuickConfig(panel);
-          } catch (e) {}
+          } catch (e) {
+            // console.error('Error rendering model config:', e); // Removed
+          }
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
             new CustomEvent("modelConfigRendered", {
@@ -503,7 +506,7 @@ class ProjectDetailsComponent {
 
       if (conversationsTabContent) {
         this.chatManager.initialize({
-          projectId: this.state.currentProject?.id,
+          projectId: pid,
           containerSelector: "#projectChatUI", // Existing ID in project_details.html within #conversationsTab
           messageContainerSelector: "#projectChatMessages", // Existing ID
           inputSelector: "#projectChatInput", // Existing ID
@@ -516,27 +519,28 @@ class ProjectDetailsComponent {
   }
 
   _maybeEmitReady() {
+    const currentProject = this.app.getCurrentProject();
     if (
       this.state.initialized &&
       this._uiReadyFlag &&
       this._dataReadyFlag &&
-      this.state.currentProject &&
-      this.state.currentProject.id
+      currentProject &&
+      currentProject.id
     ) {
-      if (this._lastReadyEmittedId === this.state.currentProject.id) return;
-      this._lastReadyEmittedId = this.state.currentProject.id;
+      if (this._lastReadyEmittedId === currentProject.id) return;
+      this._lastReadyEmittedId = currentProject.id;
 
       this.domAPI.dispatchEvent(
         this.domAPI.getDocument(),
         new CustomEvent("projectDetailsReady", {
           detail: {
-            project: this.state.currentProject,
+            project: currentProject,
             container: this.elements.container
           }
         })
       );
       this.bus.dispatchEvent(new CustomEvent('ready', {
-        detail: { project: this.state.currentProject, container: this.elements.container }
+        detail: { project: currentProject, container: this.elements.container }
       }));
     }
   }
@@ -697,6 +701,7 @@ class ProjectDetailsComponent {
           const kb = this.state.currentProject?.knowledge_base;
           Promise.resolve().then(() => this.knowledgeBaseComponent.initialize(true, kb, pid))
             .catch(e => {
+              // console.error('Error initializing knowledge base component:', e); // Removed
             });
         }
         break;
@@ -710,6 +715,7 @@ class ProjectDetailsComponent {
     try {
       await asyncFn();
     } catch (err) {
+      // console.error(`Error in _withLoading for section ${section}:`, err); // Removed
     } finally {
       this.state.isLoading[section] = false;
       this._toggleIndicator(section, false);
@@ -814,14 +820,17 @@ class ProjectDetailsComponent {
     this.eventHandlers.trackListener(btn, "click", () => {
       if (this.projectManager.downloadArtifact) {
         this.projectManager.downloadArtifact(this.state.currentProject.id, art.id)
-          .catch(e => {});
+          .catch(e => {
+            // console.error('Error downloading artifact:', e); // Removed
+          });
       }
     }, { description: `DownloadArtifact_${art.id}`, context: MODULE });
     return div;
   }
 
   _confirmDeleteFile(fileId, fileName) {
-    const pid = this.state.currentProject?.id;
+    const currentProject = this.app.getCurrentProject();
+    const pid = currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
       return;
     }
@@ -834,13 +843,16 @@ class ProjectDetailsComponent {
         try {
           await this.projectManager.deleteFile(pid, fileId);
           this.projectManager.loadProjectFiles(pid);
-        } catch (e) {}
+        } catch (e) {
+          // console.error('Error deleting file:', e); // Removed
+        }
       }
     });
   }
 
   _downloadFile(fileId, fileName) {
-    const pid = this.state.currentProject?.id;
+    const currentProject = this.app.getCurrentProject();
+    const pid = currentProject?.id;
     if (!this.app.validateUUID(pid) || !fileId) {
       return;
     }
@@ -848,11 +860,14 @@ class ProjectDetailsComponent {
       return;
     }
     this.projectManager.downloadFile(pid, fileId)
-      .catch(e => {});
+      .catch(e => {
+        // console.error('Error downloading file:', e); // Removed
+      });
   }
 
   async _openConversation(cv) {
-    const pid = this.state.currentProject?.id;
+    const currentProject = this.app.getCurrentProject();
+    const pid = currentProject?.id;
     if (!this.app.validateUUID(pid) || !cv?.id) {
       return;
     }
@@ -868,6 +883,7 @@ class ProjectDetailsComponent {
         this.router.navigate(url.toString());
       }
     } catch (error) {
+      // console.error('Error opening conversation:', error); // Removed
     }
   }
 }

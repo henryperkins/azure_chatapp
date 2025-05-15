@@ -3,6 +3,7 @@ module.exports = {
         browser: true,    // Allows browser globals like `window`, `document`
         es2021: true,     // Enables ES2021 syntax
         node: true,       // Allows Node.js globals (for build scripts, CI, etc.)
+        worker: true,     // Allows worker globals like `self`
     },
     parserOptions: {
         ecmaVersion: 2021,    // Match the env setting
@@ -14,6 +15,7 @@ module.exports = {
     plugins: [
         'import',            // For import/no-unresolved and other import rules
     ],
+    ignorePatterns: ['static/js/vendor/'],
     extends: [
         'eslint:recommended',
         'plugin:import/recommended',

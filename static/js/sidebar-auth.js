@@ -141,7 +141,6 @@ export function createSidebarAuth({
     domAPI.toggleClass(sidebarAuthFormContainerEl, "hidden", !!initiallyAuthenticated);
     if (!initiallyAuthenticated) {
       updateAuthFormUI(false);
-    } else {
     }
   }
 

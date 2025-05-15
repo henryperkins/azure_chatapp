@@ -6,12 +6,9 @@
  *
  * ## Design
  * - Exported via a factory function `createAccessibilityEnhancements(deps)`.
- * - NO direct window/global usage: all dependencies (domAPI, eventHandlers, DependencySystem, notify, errorReporter, createDebugTools) must be injected.
+ * - NO direct window/global usage: all dependencies (domAPI, eventHandlers, DependencySystem, createDebugTools) must be injected.
  * - NO side-effects on import: must be explicitly initialized by calling `accessibilityModule.init()`.
  * - All DOM events must register via eventHandlers.trackListener with a module context.
- * - User-facing notification, warning, and error feedback routed via injected notify.
- * - Internal errors logged via injected errorReporter.capture.
- * - All async handlers have try/catch and propagate errors contextually via errorReporter.
  * - All state is internal to the class instance; nothing leaks to window or global scope.
  * - Full teardown support: all listeners cleaned via eventHandlers.cleanupListeners({ context: MODULE_CONTEXT }) in destroy().
  *
@@ -21,8 +18,6 @@
  * ## DI requirements for createAccessibilityEnhancements(deps):
  *   - deps.domAPI: { getElementById, querySelector, querySelectorAll, createElement, getDocument, getBody, getActiveElement, etc. } (required)
  *   - deps.eventHandlers: { trackListener, cleanupListeners } (required)
- *   - deps.notify: Notification utility { info, warn, error } (required)
- *   - deps.errorReporter: Error reporting utility { capture } (required)
  *   - [deps.DependencySystem]: Strongly recommended for registration.
  *   - [deps.createDebugTools]: Optional, for performance tracing.
  */
@@ -34,8 +29,6 @@ class AccessibilityUtilsModule {
     // Store dependencies
     this.domAPI = deps.domAPI;
     this.eventHandlers = deps.eventHandlers;
-    this.notify = deps.notify;
-    this.errorReporter = deps.errorReporter;
     this.DependencySystem = deps.DependencySystem; // Optional
 
     // Validate required dependencies
@@ -44,12 +37,6 @@ class AccessibilityUtilsModule {
     }
     if (!this.eventHandlers || typeof this.eventHandlers.trackListener !== 'function' || typeof this.eventHandlers.cleanupListeners !== 'function') {
       throw new Error('eventHandlers with trackListener and cleanupListeners required for AccessibilityUtilsModule');
-    }
-    if (!this.notify || typeof this.notify.error !== 'function') {
-      throw new Error('notify util with error method required for AccessibilityUtilsModule');
-    }
-    if (!this.errorReporter || typeof this.errorReporter.capture !== 'function') {
-      throw new Error('errorReporter util with capture method required for AccessibilityUtilsModule');
     }
 
     // Initialize internal state
@@ -70,7 +57,7 @@ class AccessibilityUtilsModule {
 
     // Initialize debug tools if createDebugTools is provided
     if (deps.createDebugTools && typeof deps.createDebugTools === 'function') {
-      this.debug = deps.createDebugTools({ notify: this.notify, contextPrefix: MODULE_CONTEXT });
+      this.debug = deps.createDebugTools({ contextPrefix: MODULE_CONTEXT });
     } else {
       // Provide a stub if not available, so calls don't break
       this.debug = { start: () => null, stop: () => { }, trace: (fn) => fn() };
@@ -107,14 +94,7 @@ class AccessibilityUtilsModule {
       try {
         this.eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
       } catch (err) {
-        // Use errorReporter for internal system issues
-        this.errorReporter.capture(err, {
-          module: MODULE_CONTEXT,
-          method: 'destroy',
-          reason: 'Failed cleaning up event listeners',
-        });
-        // Fallback to notify.warn if errorReporter itself fails or for broader visibility of critical cleanup failure
-        this.notify.warn(`[Accessibility] Critical: Failed cleaning up listeners for context '${MODULE_CONTEXT}'. See error logs.`, { group: true, context: MODULE_CONTEXT });
+        // Swallow cleanup failure silently per notification-removal-checklist
       }
     }
 
@@ -130,12 +110,7 @@ class AccessibilityUtilsModule {
 
   _trackListener(element, type, handler, options = {}) {
     if (!element) {
-      this.errorReporter.capture(new Error('Attempted to track listener on null element'), {
-        module: MODULE_CONTEXT,
-        method: '_trackListener',
-        type,
-        description: options.description,
-      });
+      // Swallow error per notification-removal-checklist (previously would errorReport)
       return;
     }
     const optionsWithContext = { ...options, context: MODULE_CONTEXT };
@@ -155,13 +130,7 @@ class AccessibilityUtilsModule {
         try {
           sidebar = await this.DependencySystem.waitFor('sidebar', null, 3000);
         } catch (err) {
-          this.errorReporter.capture(err, {
-            module: MODULE_CONTEXT,
-            method: '_handleGlobalKeydown',
-            dependency: 'sidebar',
-            reason: 'waitFor timed out or failed',
-          });
-          // Gracefully continue without sidebar.
+          // Swallow error per notification-removal-checklist
         }
       }
 
@@ -181,7 +150,7 @@ class AccessibilityUtilsModule {
             break;
           }
           case 'p':
-          case 'P': // Consider case for key matching
+          case 'P':
             sidebar?.togglePin();
             break;
           case 'n':
@@ -196,24 +165,19 @@ class AccessibilityUtilsModule {
             this._toggleKeyboardHelp();
             break;
           default:
-            handled = false; // Not one of our shortcuts
+            handled = false;
         }
         if (handled) e.preventDefault();
       }
 
-      // Escape specifically for closing help (even with modifiers sometimes, depending on UX goals)
       if (e.key === 'Escape') {
-        if (this._closeKeyboardHelpIfOpen()) { // If help was open and now closed
-          e.preventDefault(); // Prevent other escape actions if help was closed
+        if (this._closeKeyboardHelpIfOpen()) {
+          e.preventDefault();
         }
       }
 
-    } catch (error) {
-      this.errorReporter.capture(error, {
-        module: MODULE_CONTEXT,
-        method: '_handleGlobalKeydown',
-        keyEvent: { key: e.key, code: e.code, shift: e.shiftKey, ctrl: e.ctrlKey, alt: e.altKey },
-      });
+    } catch {
+      // Swallow all errors in notification-removal mode
     } finally {
       this.debug.stop(traceId, '_handleGlobalKeydown: processed');
     }
@@ -252,12 +216,11 @@ class AccessibilityUtilsModule {
       this.lastFocusedElement = this.domAPI.getActiveElement();
       dlg.classList.remove('hidden');
       this._trapFocus(dlg);
-      // Focus first button or the dialog itself after a short delay for rendering
       this._focusElement(dlg.querySelector('button') || dlg, 50);
     } else {
       dlg.classList.add('hidden');
       this.lastFocusedElement?.focus?.();
-      this.lastFocusedElement = null; // Clear reference
+      this.lastFocusedElement = null;
     }
   }
 
@@ -265,14 +228,14 @@ class AccessibilityUtilsModule {
     const dlg = this.domAPI.getElementById('keyboardHelp');
     if (dlg && !dlg.classList.contains('hidden')) {
       this._toggleKeyboardHelp(false);
-      return true; // Was open and action was taken
+      return true;
     }
-    return false; // Was not open
+    return false;
   }
 
   toggleKeyboardShortcuts(enable) {
     this.keyboardShortcutsEnabled = enable === undefined ? !this.keyboardShortcutsEnabled : !!enable;
-    this.notify.info(`Keyboard shortcuts ${this.keyboardShortcutsEnabled ? 'enabled' : 'disabled'}.`, { context: MODULE_CONTEXT });
+    // Previously notified the user—now silent for notification-removal
     return this.keyboardShortcutsEnabled;
   }
 
@@ -296,7 +259,6 @@ class AccessibilityUtilsModule {
       hint = this.domAPI.createElement('p');
       hint.id = `${input.id}-hint`;
       hint.className = 'validator-hint';
-      // Ensure insertAdjacentElement is available on domAPI or use alternative
       if (typeof input.insertAdjacentElement === 'function') {
         input.insertAdjacentElement('afterend', hint);
       } else {
@@ -339,7 +301,6 @@ class AccessibilityUtilsModule {
             this.lastFocusedElement = this.domAPI.getActiveElement();
             this._trapFocus(m.target);
           } else {
-            // When dialog closes, try to return focus.
             this.lastFocusedElement?.focus?.();
             this.lastFocusedElement = null;
           }
@@ -356,7 +317,7 @@ class AccessibilityUtilsModule {
     const bodyObserverCallback = (mutations) => {
       mutations.forEach(m => {
         m.addedNodes.forEach(node => {
-          if (node.nodeType === Node.ELEMENT_NODE) { // Check if it's an element
+          if (node.nodeType === Node.ELEMENT_NODE) {
             if (node.tagName === 'DIALOG') {
               dialogObserver.observe(node, { attributes: true });
             } else if (typeof node.querySelectorAll === 'function') {
@@ -384,7 +345,7 @@ class AccessibilityUtilsModule {
           if (!targetElement.hasAttribute('tabindex')) {
             targetElement.setAttribute('tabindex', '-1');
           }
-          this._focusElement(targetElement); // Use internal focus helper
+          this._focusElement(targetElement);
         }
       }
     };
@@ -413,20 +374,15 @@ class AccessibilityUtilsModule {
         }
       }
     };
-    // This listener is specific to the container being trapped.
-    // It should be cleaned up if the container is removed or trapping stops.
-    // For now, it's cleaned up with the rest of MODULE_CONTEXT listeners.
     this._trackListener(container, 'keydown', keydownHandler, {
-      description: 'Trap focus Tab handler for container', // Context will ensure it's cleaned up
+      description: 'Trap focus Tab handler for container',
     });
 
-    // Ensure first element is focused if focus is not already within the container
     setTimeout(() => {
-      // Check if container still exists and is part of the document
       if (this.domAPI.getBody().contains(container) && !container.contains(this.domAPI.getActiveElement())) {
         first.focus();
       }
-    }, 50); // Accessibility timing
+    }, 50);
   }
 
   _getFocusable(container) {
@@ -434,8 +390,8 @@ class AccessibilityUtilsModule {
     const sel = 'a[href], button, input, textarea, select, details, [tabindex]:not([tabindex="-1"])';
     return Array.from(container.querySelectorAll(sel)).filter(el =>
       !el.disabled &&
-      !el.closest('[inert]') && // Respect inert attribute
-      el.offsetParent !== null && // Element is visible
+      !el.closest('[inert]') &&
+      el.offsetParent !== null &&
       this.domAPI.getComputedStyle(el).visibility !== 'hidden' &&
       this.domAPI.getComputedStyle(el).display !== 'none'
     );
@@ -446,20 +402,13 @@ class AccessibilityUtilsModule {
     if (!el || typeof el.focus !== 'function') return false;
 
     const actuallyFocus = () => {
-      // Check if element is still in DOM and focusable before focusing
       if (this.domAPI.getBody().contains(el) && typeof el.focus === 'function') {
         el.focus();
-      } else {
-        this.errorReporter.capture(new Error('Element to focus is no longer valid or focusable'), {
-          module: MODULE_CONTEXT,
-          method: '_focusElement',
-          target: typeof target === 'string' ? target : el.tagName,
-        });
       }
     };
 
     if (delay > 0) {
-      setTimeout(actuallyFocus, delay); // Accessibility timing
+      setTimeout(actuallyFocus, delay);
     } else {
       actuallyFocus();
     }
@@ -477,7 +426,6 @@ class AccessibilityUtilsModule {
     if (!region) {
       region = this.domAPI.createElement('div');
       region.id = 'a11y-announcer';
-      // Standard visually hidden styles:
       Object.assign(region.style, {
         border: '0',
         clip: 'rect(0 0 0 0)',
@@ -487,21 +435,17 @@ class AccessibilityUtilsModule {
         padding: '0',
         position: 'absolute',
         width: '1px',
-        whiteSpace: 'nowrap', // Avoid line breaks reading as spaces
+        whiteSpace: 'nowrap',
       });
       region.setAttribute('aria-live', mode);
       region.setAttribute('aria-atomic', 'true');
       this.domAPI.getBody().appendChild(region);
     }
-    // Update mode if different
+
     if (region.getAttribute('aria-live') !== mode) {
       region.setAttribute('aria-live', mode);
     }
-
-    // Clear previous content before setting new, helps some SRs re-announce.
     region.textContent = '';
-
-    // Accessibility timing: Use setTimeout to ensure ARIA live region updates are reliably announced.
     setTimeout(() => {
       region.textContent = text;
     }, 50);
@@ -510,15 +454,13 @@ class AccessibilityUtilsModule {
 
 export function createAccessibilityEnhancements(deps) {
   // Basic check for essential dependencies at factory level
-  if (!deps || !deps.domAPI || !deps.eventHandlers || !deps.notify || !deps.errorReporter) {
-    console.error('AccessibilityUtils: Missing one or more core dependencies (domAPI, eventHandlers, notify, errorReporter). Cannot initialize.');
-    // Return a non-functional stub or throw, depending on desired strictness
+  if (!deps || !deps.domAPI || !deps.eventHandlers) {
+    // Swallow error per notification-removal-checklist
     return {
-      init: () => console.error("AccessibilityUtils not initialized due to missing core dependencies."),
-      destroy: () => { },
-      // Stub other public methods if necessary
+      init: () => {},
+      destroy: () => {},
       toggleKeyboardShortcuts: () => false,
-      announce: () => { },
+      announce: () => {},
     };
   }
   return new AccessibilityUtilsModule(deps);

@@ -9,7 +9,6 @@ const MODULE = "KnowledgeBaseManager";
  * @param {Object} ctx - The KnowledgeBaseComponent instance (context).
  * @param {Object} ctx.elements - DOM element references.
  * @param {Object} ctx.state - Component's internal state.
- * @param {Function} ctx.notify - Notification object with context.
  * @param {Function} ctx.apiRequest - API request function.
  * @param {Object} ctx.modalManager - Modal management utility.
  * @param {Object} ctx.projectManager - Project management utility.
@@ -43,7 +42,7 @@ export function createKnowledgeBaseManager(ctx) {
 
   if (DependencySystem?.waitFor) {
     appReadyPromise = DependencySystem.waitFor(["app"]).catch(err => {
-      /* swallow – notifications removed */
+      /* swallow */
     });
   }
 
@@ -86,7 +85,7 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Failed to toggle knowledge base status.");
       }
     } catch(err) {
-      /* swallow – notifications removed */
+      /* swallow */
       // Revert UI if toggle failed
       if (ctx.elements.kbToggle) ctx.elements.kbToggle.checked = !enabled;
       ctx._updateStatusIndicator(!enabled);
@@ -128,7 +127,7 @@ export function createKnowledgeBaseManager(ctx) {
          throw new Error(resp.message || "Reprocessing request failed.");
       }
     } catch(err) {
-      /* swallow – notifications removed */
+      /* swallow */
     } finally {
       ctx._setButtonLoading(btn, false);
     }
@@ -220,11 +219,11 @@ export function createKnowledgeBaseManager(ctx) {
             ctx.renderKnowledgeBaseInfo(project?.knowledge_base, projectId);
             hideKnowledgeBaseModal(); // Close modal as the "create" action is invalid
           } catch (refreshError) {
-            /* swallow – notifications removed */
+            /* swallow */
           }
         }
       } else {
-        /* swallow – notifications removed */
+        /* swallow */
       }
     }
   }
@@ -400,16 +399,11 @@ export function createKnowledgeBaseManager(ctx) {
     try {
       const projectId = ctx._getCurrentProjectId();
       if (!projectId) {
-        notify.warning("Project ID not found for KB health check.", {
-          context: "health",
-          source: "loadKnowledgeBaseHealth"
-        });
         return null;
       }
       const healthResp = await ctx.apiRequest(
         `/api/projects/${projectId}/knowledge-bases/status?detailed=true`,
-        { method: "GET"},
-        false // Don't show default notifications for this background check
+        { method: "GET" }
       );
 
       if (healthResp?.data) {

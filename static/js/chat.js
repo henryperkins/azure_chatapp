@@ -1040,8 +1040,8 @@ export function createChatManager({
     }
 
     _handleError(context, error) {
-        const message = this._extractErrorMessage(error);
-        // Notification and error reporting code has been removed
+        // Empty method - notification and error reporting code has been removed
+        // Keeping the method to maintain API compatibility
     }
 
     _renderMessages(messages) {

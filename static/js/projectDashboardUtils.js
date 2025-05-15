@@ -129,6 +129,7 @@ function bindPinButton(deps) {
     try {
       await projectManager.togglePinProject(currentProject.id);
     } catch (error) {
+      // console.error('Error toggling project pin:', error); // Removed
     }
   };
   eventHandlers.trackListener(pinBtn, 'click', handler, {
@@ -160,6 +161,7 @@ function bindArchiveButton(deps) {
           await projectManager.toggleArchiveProject(currentProject.id);
           projectManager.loadProjects?.();
         } catch (error) {
+          // console.error('Error toggling project archive:', error); // Removed
         }
       },
     });
