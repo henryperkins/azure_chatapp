@@ -1,12 +1,14 @@
-modules = ["nodejs-18", "python-3.12", "web", "nodejs-23", "postgresql-17", "python-base-3.12", "postgresql-16"]
-run = "uvicorn main:app —reload"
+modules = ["python-3.12", "nodejs-18", "web", "postgresql-17", "python-base-3.12", "nodejs-22", "python-3.11"]
+run = "npm run dev"
 
 [nix]
 channel = "stable-24_05"
-packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "python311Packages.pip", "python312Packages.pip", "rustc"]
 
 [deployment]
-run = ["sh", "-c", "uvicorn main:app —reload"]
+run = ["sh", "-c", "uvicorn main:app --host=0.0.0.0 --port=8000"]
+buildCommand = "pip install -r requirements.txt --break-system-packages && pip install asyncpg psycopg2-binary && npm install && npm run build:css"
+deploymentTarget = "cloudrun"
 
 [workflows]
 runButton = "Run"
@@ -18,4 +20,11 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uvicorn main:app --reload --host=0.0.0.0 --port=5000"
+args = "uvicorn main:app --reload --host=0.0.0.0 --port=8000"
+
+[[ports]]
+localPort = 8000
+externalPort = 80
+
+[objectStorage]
+defaultBucketID = "replit-objstore-3116564a-aa4a-4d2d-81db-c110d4b1f252"
