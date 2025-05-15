@@ -97,7 +97,28 @@ export function createApiClient({
     const p = (async () => {
       try {
         const resp = await (browserService?.fetch || fetch)(normUrl, opts);
-        return resp;
+
+        // ---------- NEW unified response handling ----------
+        const contentType = resp.headers.get('content-type') || '';
+        let payload = null;
+
+        if (resp.status !== 204) {                // 204 = No-Content
+          if (contentType.includes('application/json')) {
+            try { payload = await resp.json(); } catch { payload = null; }
+          } else {
+            try { payload = await resp.text(); } catch { payload = null; }
+          }
+        }
+
+        if (resp.ok) {                     // 2xx
+          return payload;                  // <- what callers will receive
+        }
+
+        // ----- non-OK: throw rich error object -----
+        const err = new Error(`HTTP ${resp.status}`);
+        err.status = resp.status;
+        err.data   = payload;
+        throw err;
       } finally {
         clearTimeout(timer);
         if (method === "GET") pending.delete(key);

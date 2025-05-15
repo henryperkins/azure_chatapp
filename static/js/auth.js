@@ -474,22 +474,19 @@ export function createAuthModule({
       console.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response);
 
       // If server returns a username, create minimal user object
-      let userObject = null;
       if (response && response.username) {
-        userObject = {
+        const userObject = {
           username: response.username,
-          id: response.id || response.user_id || response.userId || ('temp-id-' + Date.now())
+          id:      response.id || response.user_id || response.userId || (`temp-id-${Date.now()}`)
         };
         broadcastAuth(true, userObject, 'login_success_immediate');
-        // Immediate post-login verification removed.
-        // The periodic verifyAuthState will handle ongoing session validation.
-        return response; // Directly return after successful login and broadcast
+        return response;
       }
 
-      // If the server data is incomplete (e.g. no username after successful status)
-      // This part is reached if response.username was not present from the login endpoint.
-      console.warn('[DIAGNOSTIC][auth.js][loginUser] Login succeeded but no username in response');
-      throw new Error('Login succeeded but server response was incomplete (e.g., missing username).');
+      // Fallback path: server didn’t return user info – run verification to populate state
+      console.warn('[DIAGNOSTIC][auth.js][loginUser] Login response lacked user data – running verifyAuthState');
+      await verifyAuthState(true);   // this will broadcast auth if cookies are valid
+      return response;               // don’t treat as fatal
     } catch (error) {
       console.error('[DIAGNOSTIC][auth.js][loginUser][ERROR]', error);
       await clearTokenState({ source: 'login_error' });
