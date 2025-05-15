@@ -61,6 +61,8 @@ export function createApiClient({
     }
 
     opts.headers = { Accept: "application/json", ...(opts.headers || {}) };
+    // Always send cookies unless caller over-rides
+    if (!('credentials' in opts)) opts.credentials = 'include';
 
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
