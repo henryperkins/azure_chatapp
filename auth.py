@@ -122,11 +122,13 @@ def set_secure_cookie(
     env = (settings.ENV or "").lower()
     is_production = env == "production"
 
+    # Dev / staging: choose the `secure` flag dynamically based on the incoming request
+    # scheme. This prevents the “login → immediate logout” bug when testing over HTTPS
+    # tunnels (ngrok, Cloudflare, etc.) while still allowing plain-HTTP on localhost.
     if not is_production:
-        # Always use permissive settings for dev/staging/test
-        secure = False
-        domain = None  # Let browser default for localhost usually works best
-        samesite = "lax"  # Changed from 'none' which often requires Secure=True
+        secure = request.url.scheme == "https"
+        domain = None  # Always None so the browser binds the cookie to the current host
+        samesite = "lax"  # 'none' would require Secure=True; lax works for SPA/API
         httponly = True
         path = "/"
     else:
@@ -138,21 +140,16 @@ def set_secure_cookie(
         path = cookie_attrs["path"]
 
     try:
-        # --- BEGIN ADDED LOGGING ---
         log_value_short = f"{value[:8]}..." if value else "'' (clearing)"
         logger.info(
             f"[AUTH_COOKIE_SET] Setting cookie '{key}': value={log_value_short}, max_age={max_age}, "
-            f"httpOnly={httponly}, secure={secure}, domain={domain or 'Default'}, samesite={samesite}, path={path}"
+            f"httpOnly={httponly}, secure={secure}, domain={domain if domain else '[None]'}, samesite={samesite}, path={path}"
         )
-        # --- END ADDED LOGGING ---
 
         if value == "":
-            # Clear cookie
-            # --- ADDED LOGGING ---
             logger.info(
                 f"[AUTH_COOKIE_CLEAR] Clearing cookie {key}, domain={domain}, path={path}"
             )
-            # --- END ADDED LOGGING ---
             if domain:
                 response.delete_cookie(key=key, path=path, domain=str(domain))
             else:
@@ -166,7 +163,7 @@ def set_secure_cookie(
             secure=secure,
             path=path,
             max_age=max_age or 0,
-            domain=(domain if domain else None),  # Pass None if domain is None/empty
+            domain=None,  # PATCH: forcibly None so cookie attaches to local domain
             samesite=samesite,
         )
     except Exception as e:
