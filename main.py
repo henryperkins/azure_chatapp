@@ -29,7 +29,6 @@ Key Integration Points:
 
 import os
 import logging
-import uuid
 from typing import Dict, Any, Optional, cast
 
 import sentry_sdk
@@ -85,8 +84,8 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             # Handle any other data type by converting to a single-item list
             allowed_origins = [str(allowed_origins).strip()]
     else:
-        # Allow all origins for local development and debugging
-        allowed_origins = ["*"]
+        # Allow specific origin for local development when credentials are true
+        allowed_origins = ["http://localhost:8000"]  # Assuming default port
 
     if is_production:
         # Extra hard lock—never allow this CORS in prod!
@@ -103,14 +102,14 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
         "\nSet a robust SESSION_SECRET in your env file for any real usage."
     )
 
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=session_secret,
-        session_cookie="session",
-        same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
-        https_only=False,  # Do not require HTTPS for local dev
-        max_age=60 * 60 * 24 * 7,  # 7 days
-    )
+    # app.add_middleware(
+    #     SessionMiddleware,
+    #     secret_key=session_secret,
+    #     session_cookie="session",
+    #     same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
+    #     https_only=False,  # Do not require HTTPS for local dev
+    #     max_age=60 * 60 * 24 * 7,  # 7 days
+    # )
 
     # ⚡ PATCH: Only add CORS if not production, no wide-open allowed.
     app.add_middleware(
