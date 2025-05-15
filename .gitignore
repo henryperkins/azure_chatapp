@@ -2,7 +2,7 @@ venv
 node_modules
 .env
 __pycache__
-
+.venv
 .aider*
 uploads
 uploads/*
