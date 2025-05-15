@@ -139,8 +139,8 @@ export function createSidebar({
 
       if (app && typeof app.getInitialSidebarContext === 'function') {
         const { projectId } = app.getInitialSidebarContext() || {};
-        if (projectId && projectManager && typeof projectManager.setCurrentProjectId === 'function') {
-          projectManager.setCurrentProjectId(projectId);
+        if (projectId && app && typeof app.setCurrentProject === 'function') {
+          app.setCurrentProject({ id: projectId });
         }
       }
 

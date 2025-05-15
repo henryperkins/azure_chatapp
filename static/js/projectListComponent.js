@@ -175,21 +175,17 @@ export class ProjectListComponent {
             throw new Error(`'.grid' container not found within #${this.elementId}.`);
         }
 
-        try {
-            await this.globalUtils.waitForDepsAndDom({
-                DependencySystem: this.app?.DependencySystem || this.eventHandlers?.DependencySystem,
-                domSelectors: [
-                  '#projectList', '#projectListView', '#projectDetailsView',
-                  '#projectTitle', '#projectDescription', '#backToProjectsBtn',
-                  '#projectFilterTabs'
-                ],
-                timeout: 10000,
-                domAPI: docAPI,
-                source: 'ProjectListComponent_InternalDOMWait'
-            });
-        } catch (err) {
-            throw err;
-        }
+        await this.globalUtils.waitForDepsAndDom({
+            DependencySystem: this.app?.DependencySystem || this.eventHandlers?.DependencySystem,
+            domSelectors: [
+              '#projectList', '#projectListView', '#projectDetailsView',
+              '#projectTitle', '#projectDescription', '#backToProjectsBtn',
+              '#projectFilterTabs'
+            ],
+            timeout: 10000,
+            domAPI: docAPI,
+            source: 'ProjectListComponent_InternalDOMWait'
+        });
 
         this._bindEventListeners();
         this._bindCreateProjectButtons();

@@ -113,8 +113,7 @@ class ProjectManager {
     }
     this.listenerTracker = listenerTracker;
 
-    /** @type {?Object} */
-    this.currentProject = null;
+    // ELIMINATE local project state; always use app
     this._loadingProjects = false;
     this._loadProjectsDebounceTimer = null;
     this._DEBOUNCE_DELAY = 300;
@@ -224,26 +223,24 @@ class ProjectManager {
     } else {
       throw new Error('Invalid DETAIL endpoint configuration');
     }
-    this.currentProject = null;
+    // Remove old: this.currentProject = null;
 
     try {
-      try {
-        const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
-        this.currentProject = normalizeProjectResponse(detailRes);
-      } catch (err) {
-        throw err;
-      }
-      this._emit('projectLoaded', this.currentProject);
+      let currentProjectObj;
+      const detailRes = await this._req(detailUrl, undefined, "loadProjectDetails");
+      currentProjectObj = normalizeProjectResponse(detailRes);
+      this.app.setCurrentProject(currentProjectObj);
+      this._emit('projectLoaded', currentProjectObj);
 
-      if (this.currentProject.archived) {
-        this._emit('projectArchivedNotice', { id: this.currentProject.id });
-        return { ...this.currentProject };
+      if (currentProjectObj.archived) {
+        this._emit('projectArchivedNotice', { id: currentProjectObj.id });
+        return { ...currentProjectObj };
       }
 
       let kbLoadResult = { status: 'fulfilled', value: null };
-      if (this.currentProject && this.currentProject.knowledge_base_id) {
+      if (currentProjectObj && currentProjectObj.knowledge_base_id) {
         try {
-          const kbValue = await this.loadProjectKnowledgeBase(this.currentProject.id, this.currentProject.knowledge_base_id);
+          const kbValue = await this.loadProjectKnowledgeBase(currentProjectObj.id, currentProjectObj.knowledge_base_id);
           kbLoadResult = { status: 'fulfilled', value: kbValue };
         } catch (kbError) {
           kbLoadResult = { status: 'rejected', reason: kbError };
@@ -270,9 +267,9 @@ class ProjectManager {
         this._emit('projectDetailsLoadError', { id, errors: criticalErrors });
       }
 
-      this._emit('projectDetailsFullyLoaded', { projectId: this.currentProject.id });
+      this._emit('projectDetailsFullyLoaded', { projectId: currentProjectObj.id });
 
-      return { ...this.currentProject };
+      return { ...currentProjectObj };
     } catch (err) {
       const userId = this.app?.state?.currentUser?.id || null;
       const status = err?.status || err?.response?.status;
@@ -433,16 +430,21 @@ class ProjectManager {
   }
 
   getCurrentProject() {
-    return this.currentProject ? JSON.parse(JSON.stringify(this.currentProject)) : null;
+    // Always routed via app
+    return this.app && typeof this.app.getCurrentProject === 'function'
+      ? this.app.getCurrentProject()
+      : null;
   }
   setCurrentProject(project) {
     if (!project || !project.id) {
       return;
     }
-    const previous = this.currentProject;
-    this.currentProject = project;
     this.storage?.setItem?.('selectedProjectId', project.id);
-    this._emit('currentProjectChanged', { project, previousProject: previous });
+    if (this.app && typeof this.app.setCurrentProject === 'function') {
+      this.app.setCurrentProject(project);
+    }
+    // Optionally emit here as well
+    this._emit('currentProjectChanged', { project });
     return project;
   }
   async prepareFileUploads(projectId, fileList) {
@@ -458,18 +460,14 @@ class ProjectManager {
   async uploadFileWithRetry(projectId, { file }, maxRetries = 3) {
     return retryWithBackoff(
       async () => {
-        try {
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('projectId', projectId);
-          await this._req(`/api/projects/${projectId}/files/`, {
-            method: 'POST',
-            body: formData
-          }, "uploadFileWithRetry");
-          return true;
-        } catch (err) {
-          throw err;
-        }
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('projectId', projectId);
+        await this._req(`/api/projects/${projectId}/files/`, {
+          method: 'POST',
+          body: formData
+        }, "uploadFileWithRetry");
+        return true;
       },
       maxRetries,
       this.timer
@@ -496,30 +494,26 @@ class ProjectManager {
   }
 
   async createProject(projectData) {
-    try {
-      const response = await this._req(this._CONFIG.PROJECTS, {
-        method: 'POST',
-        body: projectData
-      }, "createProject");
-      const project = response.data || response;
-      if (!project || !project.id) throw new Error('Invalid project response');
-      const ensureConversation = async () => {
-        const hasConvo = (Array.isArray(project.conversations) && project.conversations.length > 0)
-          || Number(project.conversation_count) > 0;
-        if (hasConvo) return project.conversations?.[0];
-        return await this.createDefaultConversation(project.id);
-      };
-      const conversation = await ensureConversation();
-      if (conversation) {
-        project.conversations = [conversation];
-        project.conversation_count = 1;
-      }
-      this._emit('projectCreated', project);
-      this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
-      return project;
-    } catch (err) {
-      throw err;
+    const response = await this._req(this._CONFIG.PROJECTS, {
+      method: 'POST',
+      body: projectData
+    }, "createProject");
+    const project = response.data || response;
+    if (!project || !project.id) throw new Error('Invalid project response');
+    const ensureConversation = async () => {
+      const hasConvo = (Array.isArray(project.conversations) && project.conversations.length > 0)
+        || Number(project.conversation_count) > 0;
+      if (hasConvo) return project.conversations?.[0];
+      return await this.createDefaultConversation(project.id);
+    };
+    const conversation = await ensureConversation();
+    if (conversation) {
+      project.conversations = [conversation];
+      project.conversation_count = 1;
     }
+    this._emit('projectCreated', project);
+    this._emit('projectConversationsLoaded', { id: project.id, conversations: project.conversations });
+    return project;
   }
   async createDefaultConversation(projectId) {
     try {

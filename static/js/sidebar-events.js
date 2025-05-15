@@ -1,18 +1,14 @@
 /**
  * sidebar-events.js – Event binding and listener tracking for sidebar.
- * Exports a factory: createSidebarEvents({ eventHandlers, DependencySystem, domAPI, uiRenderer, notify, MODULE, ... }).
+ * Exports a factory: createSidebarEvents({ eventHandlers, DependencySystem, domAPI, uiRenderer, MODULE, ... }).
  * All dependencies strictly injected. No top-level logic.
- * All notifications use proper context/module tags.
  */
-
-import { safeInvoker } from "./utils/notifications-helpers.js";
 
 export function createSidebarEvents({
   eventHandlers,
   DependencySystem,
   domAPI,
   uiRenderer,
-  notify,
   MODULE = "Sidebar",
   chatSearchInputEl,
   sidebarProjectSearchInputEl,
@@ -30,14 +26,12 @@ export function createSidebarEvents({
   togglePin
 }) {
   function bindDomEvents() {
-    const track = (element, evtType, originalHandlerCallback, description, sourceOverride) => {
+    const track = (element, evtType, originalHandlerCallback, description) => {
       if (!element) return;
-      const contextualHandler = safeInvoker(
-        originalHandlerCallback,
-        { notify },
-        { context: "sidebar", module: MODULE, source: sourceOverride || description }
-      );
-      eventHandlers.trackListener(element, evtType, contextualHandler, { description, context: MODULE });
+      eventHandlers.trackListener(element, evtType, originalHandlerCallback, {
+        description,
+        context: MODULE
+      });
     };
 
     // DOM lookups assumed passed in as arguments (no repeated lookups)
@@ -46,12 +40,12 @@ export function createSidebarEvents({
     const btnPin = domAPI.getElementById("pinSidebarBtn");
     const viewportAPI = DependencySystem?.modules?.get("viewportAPI");
 
-    track(btnToggle, "click", () => showSidebar(), "Sidebar toggle", "toggleSidebar");
-    track(btnClose, "click", () => closeSidebar(), "Sidebar close", "closeSidebar");
-    track(btnPin, "click", () => togglePin(), "Sidebar pin", "togglePin");
+    track(btnToggle, "click", () => showSidebar(), "Sidebar toggle");
+    track(btnClose, "click", () => closeSidebar(), "Sidebar close");
+    track(btnPin, "click", () => togglePin(), "Sidebar pin");
 
     if (viewportAPI && viewportAPI.onResize) {
-      track(viewportAPI, "resize", handleResize, "Sidebar resize", "handleResize");
+      track(viewportAPI, "resize", handleResize, "Sidebar resize");
     }
 
     [
@@ -60,20 +54,30 @@ export function createSidebarEvents({
       { name: "projects", id: "projectsTab" }
     ].forEach(({ name, id }) => {
       const btn = domAPI.getElementById(id);
-      track(btn, "click", () => activateTab(name), `Sidebar tab ${name}`, "activateTab");
+      track(btn, "click", () => activateTab(name), `Sidebar tab ${name}`);
     });
 
-    track(chatSearchInputEl, "input", _handleChatSearch, "Chat search filter input", "handleChatSearch");
-    track(sidebarProjectSearchInputEl, "input", _handleProjectSearch, "Project search filter input", "handleProjectSearch");
+    track(chatSearchInputEl, "input", _handleChatSearch, "Chat search filter input");
+    track(sidebarProjectSearchInputEl, "input", _handleProjectSearch, "Project search filter input");
 
     const authModule = DependencySystem.modules.get("auth");
     const eventTargetForAuth = authModule?.AuthBus || domAPI.getDocument();
 
     // Consumer must supply appropriate auth state handler
     if (typeof arguments.handleGlobalAuthStateChangeForSidebar === "function") {
-      track(eventTargetForAuth, "authStateChanged", arguments.handleGlobalAuthStateChangeForSidebar, "Sidebar AuthStateChange Global Listener", "handleGlobalAuthStateChangeForSidebar");
+      track(
+        eventTargetForAuth,
+        "authStateChanged",
+        arguments.handleGlobalAuthStateChangeForSidebar,
+        "Sidebar AuthStateChange Global Listener"
+      );
       if (authModule?.AuthBus) {
-        track(authModule.AuthBus, "authReady", arguments.handleGlobalAuthStateChangeForSidebar, "Sidebar AuthReady Global Listener", "handleGlobalAuthStateChangeForSidebar");
+        track(
+          authModule.AuthBus,
+          "authReady",
+          arguments.handleGlobalAuthStateChangeForSidebar,
+          "Sidebar AuthReady Global Listener"
+        );
       }
     }
 
@@ -88,46 +92,17 @@ export function createSidebarEvents({
       { description: "Sidebar projectsLoaded refresh", context: MODULE }
     );
 
-    // Error handling on sidebar root DOM
-    const el = domAPI.getElementById("mainSidebar");
-    if (el) {
-      const errorHandler = safeInvoker(
-        (e) => {
-          notify.error(
-            "[sidebar] Widget error: " +
-              (e && e.detail && e.detail.message ? e.detail.message : String(e)),
-            {
-              group: true,
-              context: "sidebar",
-              module: MODULE,
-              source: "childWidgetError",
-              originalError: e?.detail?.error || e?.error || e
-            }
-          );
-        },
-        { notify },
-        { context: "sidebar", module: MODULE, source: "childWidgetError" }
-      );
-      eventHandlers.trackListener(el, "error", errorHandler, { description: "Sidebar child widget error", context: MODULE });
-    }
-
     // Listen for new conversations being created
     const chatCreatedHandler = (e) => {
-      notify.info("[sidebar] chat:conversationCreated event received", { detail: e.detail, module: MODULE, source: "bindDomEvents.chatCreatedHandler" });
-      const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-      if (activeTab === 'recent') {
+      const activeTab = storageAPI.getItem("sidebarActiveTab") || "recent";
+      if (activeTab === "recent") {
         _handleChatSearch();
       }
-      // ... (any other logic for this event)
     };
     eventHandlers.trackListener(
       domAPI.getDocument(),
       "chat:conversationCreated",
-      safeInvoker(
-        chatCreatedHandler,
-        { notify },
-        { context: MODULE, source: "onChatConversationCreatedInvoker" }
-      ),
+      chatCreatedHandler,
       { description: "Sidebar chat:conversationCreated listener", context: MODULE }
     );
   }

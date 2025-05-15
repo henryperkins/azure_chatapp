@@ -2,8 +2,8 @@
 /**
  * chatExtensions.js
  * DependencySystem/DI refactored modular extension for chat UI enhancements:
- *   - Chat title editing
- *   - Future conversation actions
+ *  - Chat title editing
+ *  - Future conversation actions
  *
  * Usage:
  *   import { createChatExtensions } from './chatExtensions.js';
@@ -11,128 +11,134 @@
  *   chatExtensions.init(); // call after DOM is ready
  */
 
-export function createChatExtensions({
-  DependencySystem,
-  eventHandlers,
-  chatManager,
-  auth,
-  app,
-  notify,
-  domAPI
-} = {}) {
-  // Dependency resolution fallback if not provided
-  // Do NOT use direct window global for DependencySystem. Always require as injected dependency for modularity/testability.
+export function createChatExtensions(options) {
+  if (!options) {
+    throw new Error("[chatExtensions] Missing options object.");
+  }
+
+  var DependencySystem = options.DependencySystem;
+  var eventHandlers = options.eventHandlers;
+  var chatManager = options.chatManager;
+  var auth = options.auth;
+  var app = options.app;
+  var domAPI = options.domAPI;
+
+  // Ensure no optional chaining for older environments
   if (!DependencySystem) {
-    throw new Error("[chatExtensions] DependencySystem is required as a dependency (no window global fallback permitted)");
+    throw new Error("[chatExtensions] DependencySystem is required as a dependency (no window global fallback).");
   }
 
-  eventHandlers = eventHandlers ||
-    (DependencySystem?.get?.('eventHandlers') ||
-      DependencySystem?.modules?.get?.('eventHandlers') ||
-      undefined);
-
-  chatManager = chatManager ||
-    (DependencySystem?.get?.('chatManager') ||
-      DependencySystem?.modules?.get?.('chatManager') ||
-      undefined);
-
-  auth = auth ||
-    (DependencySystem?.get?.('auth') ||
-      DependencySystem?.modules?.get?.('auth') ||
-      undefined);
-
-  app = app ||
-    (DependencySystem?.get?.('app') ||
-      DependencySystem?.modules?.get?.('app') ||
-      undefined);
-
-  notify = notify ||
-    (DependencySystem?.get?.('notify') ||
-      DependencySystem?.modules?.get?.('notify') ||
-      undefined);
-
-  domAPI = domAPI ||
-    (DependencySystem?.get?.('domAPI') ||
-      DependencySystem?.modules?.get?.('domAPI') ||
-      (typeof document !== "undefined"
-        ? {
-          getElementById: (id) => document.getElementById(id),
-          querySelector: (sel) => document.querySelector(sel),
-        }
-        : undefined)
-    );
-
-  // Helper - require trackListener, no fallback to direct .addEventListener allowed
-  if (!eventHandlers || !eventHandlers.trackListener) {
-    throw new Error("[chatExtensions] eventHandlers.trackListener is required (no direct addEventListener fallback permitted)");
-  }
-  const trackListener = eventHandlers.trackListener.bind(eventHandlers); // This is a direct reference
-  const MODULE_CONTEXT = 'chatExtensions'; // Define context
-
-  // Helper - consistent showNotification: uses DI notified util, strict grouping.
-  if (!notify) throw new Error('[chatExtensions] notify util required for notification');
-  const showNotification = (msg, type = 'info') => {
-    if (type === 'error') {
-      notify.error(msg, { group: true, context: "chatExtensions" });
-    } else if (type === 'success') {
-      notify.success(msg, { group: true, context: "chatExtensions" });
-    } else if (type === 'warning' || type === 'warn') {
-      notify.warn(msg, { group: true, context: "chatExtensions" });
-    } else if (type === 'debug') {
-      notify.info(msg, { group: true, context: "chatExtensions" }); // Optionally: customize if you want true debug level
-    } else {
-      notify.info(msg, { group: true, context: "chatExtensions" });
+  // Fallback for eventHandlers
+  if (!eventHandlers) {
+    if (DependencySystem.get && typeof DependencySystem.get === "function") {
+      eventHandlers = DependencySystem.get("eventHandlers");
     }
-  };
+    if (!eventHandlers && DependencySystem.modules && DependencySystem.modules.get) {
+      eventHandlers = DependencySystem.modules.get("eventHandlers");
+    }
+  }
+
+  // Fallback for chatManager
+  if (!chatManager) {
+    if (DependencySystem.get && typeof DependencySystem.get === "function") {
+      chatManager = DependencySystem.get("chatManager");
+    }
+    if (!chatManager && DependencySystem.modules && DependencySystem.modules.get) {
+      chatManager = DependencySystem.modules.get("chatManager");
+    }
+  }
+
+  // Fallback for auth
+  if (!auth) {
+    if (DependencySystem.get && typeof DependencySystem.get === "function") {
+      auth = DependencySystem.get("auth");
+    }
+    if (!auth && DependencySystem.modules && DependencySystem.modules.get) {
+      auth = DependencySystem.modules.get("auth");
+    }
+  }
+
+  // Fallback for app
+  if (!app) {
+    if (DependencySystem.get && typeof DependencySystem.get === "function") {
+      app = DependencySystem.get("app");
+    }
+    if (!app && DependencySystem.modules && DependencySystem.modules.get) {
+      app = DependencySystem.modules.get("app");
+    }
+  }
+
+  // Fallback for domAPI
+  if (!domAPI) {
+    if (DependencySystem.get && typeof DependencySystem.get === "function") {
+      domAPI = DependencySystem.get("domAPI");
+    }
+    if (!domAPI && DependencySystem.modules && DependencySystem.modules.get) {
+      domAPI = DependencySystem.modules.get("domAPI");
+    }
+    if (!domAPI && typeof document !== "undefined") {
+      domAPI = {
+        getElementById: function(id) { return document.getElementById(id); },
+        querySelector: function(sel) { return document.querySelector(sel); },
+        createElement: function(tag) { return document.createElement(tag); },
+        setTextContent: function(el, text) { el.textContent = text; },
+        preventDefault: function(e) { if (e && e.preventDefault) e.preventDefault(); },
+        appendChild: function(parent, child) { parent.appendChild(child); },
+        setInnerHTML: function(el, html) { el.innerHTML = html; }
+      };
+    }
+  }
+
+  // Validate required methods
+  if (!eventHandlers || typeof eventHandlers.trackListener !== "function") {
+    throw new Error("[chatExtensions] eventHandlers.trackListener is required.");
+  }
+
+  var trackListener = eventHandlers.trackListener.bind(eventHandlers);
+  var MODULE_CONTEXT = "chatExtensions";
 
   function init() {
-    notify.info("[ChatExtensions] init() called", {
-      group: true, context: "chatExtensions", module: "ChatExtensions", source: "init"
-    });
-    try {
-      setupChatTitleEditing();
+    // Removed wrapping try/catch for logs
+    setupChatTitleEditing();
 
-      // The visibility of chatTitleEditBtn is now primarily controlled by
-      // the main application logic handling the 'data-requires-chat' attribute
-      // on its parent container or itself, and its new static position in the chat header.
-      // No explicit hiding/showing based on a separate chatUI element is needed here anymore.
-      showNotification('[ChatExtensions] Initialized', 'debug');
+    // The visibility of chatTitleEditBtn is primarily controlled by the main application logic;
+    // no extra toggling here.
 
-      // --- Standardized "chatextensions:initialized" event ---
-      const doc = typeof document !== "undefined" ? document : null;
-      if (doc) doc.dispatchEvent(new CustomEvent('chatextensions:initialized', { detail: { success: true } }));
-
-    } catch (error) {
-      showNotification("[ChatExtensions] Initialization failed: " + (error && error.message ? error.message : error), "error");
+    var doc = (typeof document !== "undefined") ? document : null;
+    if (doc) {
+      doc.dispatchEvent(new CustomEvent("chatextensions:initialized", {
+        detail: { success: true }
+      }));
     }
   }
 
   function setupChatTitleEditing() {
-    const editTitleBtn = domAPI && domAPI.getElementById
-      ? domAPI.getElementById("chatTitleEditBtn")
-      : null;
-    const chatTitleEl = domAPI && domAPI.getElementById
-      ? domAPI.getElementById("chatTitle")
-      : null;
+    if (!domAPI) return;
+
+    var editTitleBtn = domAPI.getElementById ? domAPI.getElementById("chatTitleEditBtn") : null;
+    var chatTitleEl = domAPI.getElementById ? domAPI.getElementById("chatTitle") : null;
 
     if (!editTitleBtn || !chatTitleEl) {
-      showNotification("[ChatExtensions] Chat title edit elements not found in DOM", "warn");
       return;
     }
-    if (editTitleBtn.hasAttribute("data-chat-title-handler-bound")) return;
+    if (editTitleBtn.hasAttribute("data-chat-title-handler-bound")) {
+      return;
+    }
 
-    trackListener(editTitleBtn, "click", () => {
+    trackListener(editTitleBtn, "click", function() {
       handleTitleEditClick(editTitleBtn, chatTitleEl);
     }, { description: "Chat title editing", context: MODULE_CONTEXT });
 
     editTitleBtn.setAttribute("data-chat-title-handler-bound", "true");
   }
 
-  async function handleTitleEditClick(editTitleBtn, chatTitleEl) {
-    if (chatTitleEl.getAttribute("contenteditable") === "true") return;
+  function handleTitleEditClick(editTitleBtn, chatTitleEl) {
+    if (chatTitleEl.getAttribute("contenteditable") === "true") {
+      return;
+    }
 
-    const originalTitle = chatTitleEl.textContent;
-    const originalBtnText = editTitleBtn.textContent;
+    var originalTitle = chatTitleEl.textContent;
+    var originalBtnText = editTitleBtn.textContent;
 
     // Enter edit mode
     chatTitleEl.setAttribute("contenteditable", "true");
@@ -146,19 +152,9 @@ export function createChatExtensions({
     );
     chatTitleEl.focus();
 
-    // Select all text (DI-pure fallback)
-    // No window global allowed for focus selection logic. If you require programmatic selection,
-    // inject a `selectContents` utility via DI, or handle selection in the upstream app code.
-    // Here we omit programmatic selectAll to preserve strict modularity.
-
     editTitleBtn.textContent = "Save";
 
-    // Save/cancel logic
-    const completeEditing = async (shouldSave) => {
-      // Do not use direct removeEventListener; eventHandlers.trackListener produces teardown-able handlers.
-      // If advanced teardown is needed, consider adding a registry to eventHandlers to support targeted removal.
-      // Currently, we rely on the teardown mechanics of eventHandlers to avoid legacy leaks.
-
+    function completeEditing(shouldSave) {
       chatTitleEl.setAttribute("contenteditable", "false");
       chatTitleEl.classList.remove(
         "border",
@@ -175,86 +171,80 @@ export function createChatExtensions({
         return;
       }
 
-      const newTitle = chatTitleEl.textContent.trim();
-      if (!newTitle) {
+      var newTitle = chatTitleEl.textContent.trim();
+      if (!newTitle || newTitle.length > 100 || newTitle === originalTitle) {
         chatTitleEl.textContent = originalTitle;
-        showNotification("Title cannot be empty", "error");
         return;
       }
-      if (newTitle.length > 100) {
+
+      if (!auth || typeof auth.isAuthenticated !== "function" || !auth.isAuthenticated()) {
         chatTitleEl.textContent = originalTitle;
-        showNotification("Title must be under 100 characters", "error");
         return;
       }
-      if (newTitle === originalTitle) return;
 
-      try {
-        if (!auth?.isAuthenticated?.()) {
-          showNotification("Authentication required", "error");
-          chatTitleEl.textContent = originalTitle;
-          return;
-        }
-
-        const conversationId = chatManager?.currentConversationId;
-        const projectId = chatManager?.projectId;
-        if (!conversationId || !projectId) {
-          showNotification("No active conversation", "error");
-          chatTitleEl.textContent = originalTitle;
-          return;
-        }
-
-        const endpoint = `/api/projects/${projectId}/conversations/${conversationId}`;
-        if (!app?.apiRequest) throw new Error("No apiRequest available");
-        await app.apiRequest(endpoint, "PATCH", { title: newTitle });
-        showNotification("Conversation title updated", "success");
-        // Do not use window global. Instead, if an action to reload conversation list is required,
-        // inject it as a dependency above via DI (e.g., reloadConversationList callback).
-        // Omitted here for strict modularity/codebase requirements.
-      } catch (err) {
+      var conversationId = chatManager ? chatManager.currentConversationId : null;
+      var projectId = chatManager ? chatManager.projectId : null;
+      if (!conversationId || !projectId) {
         chatTitleEl.textContent = originalTitle;
-        showNotification((err && err.message) || "Error updating conversation title", "error");
+        return;
       }
-    };
 
-    const keyHandler = (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
+      if (!app || typeof app.apiRequest !== "function") {
+        chatTitleEl.textContent = originalTitle;
+        return;
+      }
+
+      var endpoint = "/api/projects/" + projectId + "/conversations/" + conversationId;
+      app.apiRequest(endpoint, "PATCH", { title: newTitle })
+        .catch(function() {
+          chatTitleEl.textContent = originalTitle;
+        });
+    }
+
+    function keyHandler(e) {
+      if (!e) return;
+      if (e.key === "Enter") {
+        domAPI.preventDefault(e);
         completeEditing(true);
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
+      } else if (e.key === "Escape") {
+        domAPI.preventDefault(e);
         completeEditing(false);
       }
-    };
+    }
 
-    const clickOutsideHandler = (e) => {
+    function clickOutsideHandler(e) {
       if (!chatTitleEl.contains(e.target) && e.target !== editTitleBtn) {
         completeEditing(true);
       }
-    };
+    }
 
     trackListener(chatTitleEl, "keydown", keyHandler, {
       description: "Chat title editing keydown", context: MODULE_CONTEXT
     });
+
     if (typeof document !== "undefined") {
       trackListener(document, "click", clickOutsideHandler, {
         description: "Chat title outside click", once: true, context: MODULE_CONTEXT
       });
     }
-    trackListener(editTitleBtn, "click", () => completeEditing(true), {
+
+    trackListener(editTitleBtn, "click", function() {
+      completeEditing(true);
+    }, {
       description: "Chat title save", once: true, context: MODULE_CONTEXT
     });
   }
 
   function destroy() {
-    notify.info("[ChatExtensions] destroy() called", {
-      group: true, context: "chatExtensions", module: "ChatExtensions", source: "destroy"
-    });
-    if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
-        DependencySystem.cleanupModuleListeners(MODULE_CONTEXT);
-    } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-        eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+    if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === "function") {
+      DependencySystem.cleanupModuleListeners(MODULE_CONTEXT);
+    } else if (eventHandlers && typeof eventHandlers.cleanupListeners === "function") {
+      eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
     }
   }
 
-  return { init, destroy };
+  return {
+    init: init,
+    destroy: destroy
+  };
 }

@@ -1,6 +1,6 @@
 # Module-by-Module Notification Removal Checklist
 
-Follow this checklist for each JavaScript module to systematically remove all notification, logging, debugging, and error reporting code while preserving business logic.
+Follow this checklist for each JavaScript module to systematically remove all notification, logging, debugging, and error reporting code while preserving business logic. This checklist helps ensure a thorough and consistent approach to removing notification-related code across the codebase.
 
 ## 1. Imports and Requires
 - [ ] Remove imports from notification modules:
@@ -11,8 +11,11 @@ Follow this checklist for each JavaScript module to systematically remove all no
   import { createDebugTools, maybeCapture, safeInvoker, wrapApi, logEventToServer } from './utils/notifications-helpers.js';
   import { createBackendLogger } from './utils/backendLogger.js';
   import { createSentryManager } from './sentry-init.js';
+  import { createErrorReporter } from './utils/error-reporter.js';
+  import { createAnalytics } from './utils/analytics.js';
   ```
 - [ ] Remove any other imports that exclusively reference notification utilities
+- [ ] Check for dynamic imports using `import()` syntax that load notification modules
 
 ## 2. Factory Function Parameters
 - [ ] Remove notification parameters from factory functions:
@@ -72,6 +75,10 @@ Follow this checklist for each JavaScript module to systematically remove all no
   // Remove specialized notify calls:
   notify.apiError('API failed', { endpoint: '/api/data' });
   notify.authWarn('Authentication warning');
+
+  // Remove any direct console calls that were used for logging:
+  console.log('Debug information');
+  console.error('Error occurred', err);
   ```
 
 ## 6. Error Reporting
@@ -120,6 +127,32 @@ Follow this checklist for each JavaScript module to systematically remove all no
 
   // OR - if try/catch only existed for logging:
   // Business logic without try/catch
+  ```
+
+- [ ] Be careful with async functions that use try/catch for error handling:
+  ```javascript
+  // BEFORE
+  async function fetchData() {
+    try {
+      const data = await apiClient.get('/api/data');
+      notify.success('Data fetched successfully');
+      return data;
+    } catch (err) {
+      notify.error('Failed to fetch data', { originalError: err });
+      errorReporter.capture(err, { method: 'fetchData' });
+      throw err;
+    }
+  }
+
+  // AFTER
+  async function fetchData() {
+    try {
+      const data = await apiClient.get('/api/data');
+      return data;
+    } catch (err) {
+      throw err; // Keep if business logic needs it
+    }
+  }
   ```
 
 ## 10. API Wrappers
@@ -198,11 +231,35 @@ Follow this checklist for each JavaScript module to systematically remove all no
   eventHandlers.cleanupListeners({ context: 'notifications' });
   ```
 
+- [ ] Check for unused variables after removing notification code:
+  ```javascript
+  // BEFORE
+  const DA = this.domAPI;
+  const EH = this.eventHandlers;
+
+  // If DA is only used for notifications and now unused, remove it:
+  // AFTER
+  const EH = this.eventHandlers;
+  ```
+
 ## 16. Optional Clean-up
 - [ ] If a module becomes empty or trivial after removing notification code, consider if it should be removed entirely
 - [ ] If a parameter is passed only for notification and is no longer used anywhere, remove it from all call sites
+- [ ] Update any module indexes or dependency registries that reference removed modules
+- [ ] Remove any configuration settings related to notifications if they're no longer needed
+
+## 17. Testing Strategy
+- [ ] Create a test plan that covers key functionality affected by notification removal
+- [ ] Identify critical user flows that need to be tested manually
+- [ ] Update any existing tests that may have been relying on notification systems
+- [ ] Consider adding new tests to verify business logic works without notifications
 
 ## Final Verification
 - [ ] Ensure all business logic continues to work properly
 - [ ] Verify all UI elements display and function correctly
 - [ ] Check for any remaining references to removed notification systems
+- [ ] Run the application and test key user flows
+- [ ] Verify that no console errors appear related to missing notification dependencies
+- [ ] Run any automated tests to ensure functionality is preserved
+- [ ] Check browser console for any unexpected errors
+- [ ] Verify that the application's size has been reduced (bundle size if applicable)

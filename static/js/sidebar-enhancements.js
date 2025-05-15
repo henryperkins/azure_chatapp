@@ -18,10 +18,9 @@
  * No globals are attached by this module.
  */
 
-export function createSidebarEnhancements({ eventHandlers, DependencySystem, domAPI, notify }) {
+export function createSidebarEnhancements({ eventHandlers, DependencySystem, domAPI }) {
   if (!eventHandlers) throw new Error('eventHandlers required for sidebar-enhancements');
   if (!domAPI) throw new Error('domAPI required for sidebar-enhancements');
-  if (!notify) throw new Error('notify required for sidebar-enhancements'); // Added notify check
   const EH = eventHandlers;
   const MODULE_NAME = 'sidebar-enhancements'; // For consistent logging
 
@@ -42,7 +41,7 @@ export function createSidebarEnhancements({ eventHandlers, DependencySystem, dom
         }, `sidebar-enhancements: checkbox change ${newCheckboxId}`);
       }
     } catch (err) {
-      notify.error(`Failed in migrateLegacyToggle for ${oldToggleId}`, { module: MODULE_NAME, originalError: err, source: 'migrateLegacyToggle' });
+      // Notification removed per checklist; fail silently or log as needed.
     }
   }
 
@@ -85,7 +84,7 @@ export function createSidebarEnhancements({ eventHandlers, DependencySystem, dom
         sidebar?.activateTab('projects');
       }, 'sidebar-enhancements: manage projects link');
     } catch (err) {
-      notify.error('Failed in initManageProjectsLink', { module: MODULE_NAME, originalError: err, source: 'initManageProjectsLink' });
+      // Notification removed per checklist; fail silently or log as needed.
     }
   }
 
