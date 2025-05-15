@@ -127,8 +127,12 @@ def set_secure_cookie(
     # tunnels (ngrok, Cloudflare, etc.) while still allowing plain-HTTP on localhost.
     if not is_production:
         secure = request.url.scheme == "https"
-        domain = None  # Always None so the browser binds the cookie to the current host
-        samesite = "lax"  # 'none' would require Secure=True; lax works for SPA/API
+        # Explicitly set domain for localhost, otherwise let it be host-only
+        if request.url.hostname == "localhost" or request.url.hostname == "127.0.0.1":
+            domain = request.url.hostname
+        else:
+            domain = None  # For other non-prod scenarios (e.g., LAN IP)
+        samesite = "lax"
         httponly = True
         path = "/"
     else:
@@ -163,7 +167,7 @@ def set_secure_cookie(
             secure=secure,
             path=path,
             max_age=max_age or 0,
-            domain=None,  # PATCH: forcibly None so cookie attaches to local domain
+            domain=domain,  # Use the determined domain
             samesite=samesite,
         )
     except Exception as e:

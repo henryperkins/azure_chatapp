@@ -617,6 +617,23 @@ export function createEventHandlers({
     );
   }
 
+  /**
+   * Creates a CustomEvent in a DI-compliant way.
+   * @param {string} type - The name of the event.
+   * @param {Object} [options={}] - Options for the CustomEvent (e.g., detail, bubbles, cancelable).
+   * @returns {CustomEvent|null} The created CustomEvent, or null if windowObject or CustomEvent API is not available.
+   */
+  function createCustomEvent(type, options = {}) {
+    const windowObject = browserService?.getWindow?.(); // browserService is in the factory's scope
+    if (!windowObject || typeof windowObject.CustomEvent !== 'function') {
+      // Depending on strictness, could throw an error or log via an injected logger if available
+      // For now, returning null or a simple object if CustomEvent is not polyfilled/available.
+      // console.error('[EventHandler] Cannot create CustomEvent: windowObject or window.CustomEvent is not available.');
+      return { type, detail: options.detail }; // Fallback to a plain object
+    }
+    return new windowObject.CustomEvent(type, options);
+  }
+
   return {
     trackListener,
     cleanupListeners,
@@ -629,6 +646,7 @@ export function createEventHandlers({
     init,
     PRIORITY,
     untrackListener,
+    createCustomEvent, // Add the new function here
     setProjectManager: (pm) => {
       _projectManager = pm;
     },

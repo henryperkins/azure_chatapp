@@ -151,6 +151,22 @@ const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
 };
 DependencySystem.register('apiEndpoints', apiEndpoints);
 
+// Create and register a simple application logger
+const appLogger = {
+  log: (...args) => console.log('[App]', ...args),
+  warn: (...args) => console.warn('[App]', ...args),
+  error: (...args) => console.error('[App]', ...args),
+  info: (...args) => console.info('[App]', ...args),
+  debug: (...args) => {
+    // Ensure APP_CONFIG is accessible or provide a default
+    const debugEnabled = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG === true);
+    if (debugEnabled) {
+      console.debug('[App]', ...args);
+    }
+  }
+};
+DependencySystem.register('logger', appLogger);
+
 // ---------------------------------------------------------------------------
 // 4) Early app module
 // ---------------------------------------------------------------------------
@@ -597,9 +613,14 @@ async function initializeCoreSystems() {
     domAPI,
     sanitizer,
     modalManager,
-    apiEndpoints
+    apiEndpoints,
+    logger: appLogger // Pass the logger instance
   });
   DependencySystem.register('auth', authModule);
+  // Initialize auth module to set up event listeners
+  await authModule.init().catch(err => {
+    console.error('[App] Auth module initialization error:', err);
+  });
 
   // Create model config
   const modelConfigInstance = createModelConfig({

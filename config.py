@@ -97,7 +97,7 @@ class Settings:
     )  # 30 days
 
     # Cookie domain for the application
-    COOKIE_DOMAIN: str = "localhost"  # Set to localhost for development
+    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")  # Empty by default to use current host
 
     # Allowed hosts for development
     ALLOWED_HOSTS: list[str] = [
