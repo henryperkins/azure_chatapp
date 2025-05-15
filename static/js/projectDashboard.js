@@ -4,6 +4,22 @@ class ProjectDashboard {
     if (!deps.dependencySystem) throw new Error('[ProjectDashboard] dependencySystem is required.');
     this.dependencySystem = deps.dependencySystem;
 
+    // Helper to await app readiness
+    this._awaitAppReady = async () => {
+      await this.dependencySystem.waitFor(['app']);
+      if (!this.app.state?.isReady) {
+        await new Promise(res => {
+          const doc = this.domAPI.getDocument?.() || globalThis.document;
+          if (!doc) return res();
+          const handler = () => {
+            doc.removeEventListener('app:ready', handler);
+            res();
+          };
+          doc.addEventListener('app:ready', handler, { once: true });
+        });
+      }
+    };
+
     // Dependency resolution
     const getModule = (key) => {
       const module = this.dependencySystem.modules.get(key);
@@ -283,6 +299,7 @@ class ProjectDashboard {
   }
 
   async showProjectList() {
+    await this._awaitAppReady();
     // this.state._aborted = false; // Explicitly reset _aborted flag here // TODO: Refactor state mutation
     this.state.currentView = 'list';
     this.app.setCurrentProject(null);
@@ -369,9 +386,10 @@ class ProjectDashboard {
     try {
       // If we already have a project object, use it directly
       if (project) {
-        if (this.app && typeof this.app.setCurrentProject === 'function') {
-          this.app.setCurrentProject(project);
-        }
+            if (this.app && typeof this.app.setCurrentProject === 'function') {
+              await this._awaitAppReady();
+              this.app.setCurrentProject(project);
+            }
 
         if (this.components.projectDetails && this.components.projectDetails.renderProject) {
           try {
@@ -416,6 +434,7 @@ class ProjectDashboard {
           project = loadedProject;
           if (project && this.components.projectDetails?.renderProject) {
             if (this.projectManager && typeof this.projectManager.setCurrentProject === 'function') {
+              await this._awaitAppReady();
               this.projectManager.setCurrentProject(project);
             }
 
@@ -1067,7 +1086,10 @@ class ProjectDashboard {
 
   _handleProjectLoaded(event) {
     const project = event.detail;
-    this.app.setCurrentProject(project || null);
+    (async () => {
+      await this._awaitAppReady();
+      this.app.setCurrentProject(project || null);
+    })();
     this.browserService.requestAnimationFrame(() => {
       if (this.components.projectDetails) {
         this.components.projectDetails.renderProject(project);
@@ -1113,14 +1135,17 @@ class ProjectDashboard {
 
   _handleProjectDeleted(event) {
     const { projectId } = event.detail || {};
-    const currentProject = this.app && typeof this.app.getCurrentProject === 'function' ? this.app.getCurrentProject() : null;
-    if (currentProject && currentProject.id === projectId) {
-      this.showProjectList();
-    } else {
-      if (this.state.currentView === 'list') {
-        this._loadProjects();
+    (async () => {
+      await this._awaitAppReady();
+      const currentProject = this.app && typeof this.app.getCurrentProject === 'function' ? this.app.getCurrentProject() : null;
+      if (currentProject && currentProject.id === projectId) {
+        this.showProjectList();
+      } else {
+        if (this.state.currentView === 'list') {
+          this._loadProjects();
+        }
       }
-    }
+    })();
   }
 
   /**

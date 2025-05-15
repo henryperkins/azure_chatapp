@@ -16,82 +16,26 @@ export function createChatExtensions(options) {
     throw new Error("[chatExtensions] Missing options object.");
   }
 
-  var DependencySystem = options.DependencySystem;
-  var eventHandlers = options.eventHandlers;
-  var chatManager = options.chatManager;
-  var auth = options.auth;
-  var app = options.app;
-  var domAPI = options.domAPI;
+  // Strict Dependency Injection — all dependencies must be passed in via options
+  const { DependencySystem, eventHandlers, chatManager, auth, app, domAPI } = options;
 
-  // Ensure no optional chaining for older environments
   if (!DependencySystem) {
-    throw new Error("[chatExtensions] DependencySystem is required as a dependency (no window global fallback).");
+    throw new Error("[chatExtensions] DependencySystem is required as a dependency.");
   }
-
-  // Fallback for eventHandlers
-  if (!eventHandlers) {
-    if (DependencySystem.get && typeof DependencySystem.get === "function") {
-      eventHandlers = DependencySystem.get("eventHandlers");
-    }
-    if (!eventHandlers && DependencySystem.modules && DependencySystem.modules.get) {
-      eventHandlers = DependencySystem.modules.get("eventHandlers");
-    }
-  }
-
-  // Fallback for chatManager
-  if (!chatManager) {
-    if (DependencySystem.get && typeof DependencySystem.get === "function") {
-      chatManager = DependencySystem.get("chatManager");
-    }
-    if (!chatManager && DependencySystem.modules && DependencySystem.modules.get) {
-      chatManager = DependencySystem.modules.get("chatManager");
-    }
-  }
-
-  // Fallback for auth
-  if (!auth) {
-    if (DependencySystem.get && typeof DependencySystem.get === "function") {
-      auth = DependencySystem.get("auth");
-    }
-    if (!auth && DependencySystem.modules && DependencySystem.modules.get) {
-      auth = DependencySystem.modules.get("auth");
-    }
-  }
-
-  // Fallback for app
-  if (!app) {
-    if (DependencySystem.get && typeof DependencySystem.get === "function") {
-      app = DependencySystem.get("app");
-    }
-    if (!app && DependencySystem.modules && DependencySystem.modules.get) {
-      app = DependencySystem.modules.get("app");
-    }
-  }
-
-  // Fallback for domAPI
-  if (!domAPI) {
-    if (DependencySystem.get && typeof DependencySystem.get === "function") {
-      domAPI = DependencySystem.get("domAPI");
-    }
-    if (!domAPI && DependencySystem.modules && DependencySystem.modules.get) {
-      domAPI = DependencySystem.modules.get("domAPI");
-    }
-    if (!domAPI && typeof document !== "undefined") {
-      domAPI = {
-        getElementById: function(id) { return document.getElementById(id); },
-        querySelector: function(sel) { return document.querySelector(sel); },
-        createElement: function(tag) { return document.createElement(tag); },
-        setTextContent: function(el, text) { el.textContent = text; },
-        preventDefault: function(e) { if (e && e.preventDefault) e.preventDefault(); },
-        appendChild: function(parent, child) { parent.appendChild(child); },
-        setInnerHTML: function(el, html) { el.innerHTML = html; }
-      };
-    }
-  }
-
-  // Validate required methods
   if (!eventHandlers || typeof eventHandlers.trackListener !== "function") {
-    throw new Error("[chatExtensions] eventHandlers.trackListener is required.");
+    throw new Error("[chatExtensions] eventHandlers.trackListener is required (DI only).");
+  }
+  if (!chatManager) {
+    throw new Error("[chatExtensions] chatManager dependency is required (DI only).");
+  }
+  if (!auth) {
+    throw new Error("[chatExtensions] auth dependency is required (DI only).");
+  }
+  if (!app) {
+    throw new Error("[chatExtensions] app dependency is required (DI only).");
+  }
+  if (!domAPI) {
+    throw new Error("[chatExtensions] domAPI dependency is required (DI only).");
   }
 
   var trackListener = eventHandlers.trackListener.bind(eventHandlers);

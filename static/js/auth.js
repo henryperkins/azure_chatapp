@@ -60,10 +60,14 @@ export function createAuthModule({
 
   // Cookie reading helper
   function readCookie(name) {
-    const cookieStr = domAPI.getAttribute
-      ? domAPI.getAttribute(domAPI.getDocument(), 'cookie')
-      : '';
+    /*  Guard-rail compliant access – avoid direct window/document globals:
+        we use the injected domAPI to reach document.cookie.  */
+    const doc = domAPI.getDocument?.();
+    if (!doc || typeof doc.cookie !== 'string') return null;
+
+    const cookieStr = doc.cookie;
     if (!cookieStr) return null;
+
     const m = cookieStr.match(
       new RegExp('(?:^|;\\s*)' + name + '\\s*=\\s*([^;]+)')
     );

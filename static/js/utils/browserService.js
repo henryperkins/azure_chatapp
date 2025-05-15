@@ -99,6 +99,11 @@ export function createBrowserService({ windowObject } = {}) {
 
     // Timing helpers
     setTimeout: windowObject.setTimeout.bind(windowObject),
+
+    /* Auth & other modules need interval helpers – expose via DI */
+    setInterval: (...args) => windowObject.setInterval(...args),
+    clearInterval: (...args) => windowObject.clearInterval(...args),
+
     requestAnimationFrame: (cb) =>
       typeof windowObject.requestAnimationFrame === 'function'
         ? windowObject.requestAnimationFrame(cb)
