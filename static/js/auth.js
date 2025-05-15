@@ -19,7 +19,8 @@ export function createAuthModule({
   sanitizer,
   modalManager,
   apiEndpoints,
-  DependencySystem
+  DependencySystem,
+  logger // New dependency for logging
 } = {}) {
   // === 1) CHECK & SET FALLBACKS FOR MISSING DEPENDENCIES ===
 
@@ -30,8 +31,22 @@ export function createAuthModule({
 
   // Fallback for missing DependencySystem
   if (!DependencySystem) {
-    // Continue without DependencySystem
+    // no-op: DependencySystem is not provided. Continue without DependencySystem.
+    void 0;
   }
+
+  // Fallback for missing logger
+  if (!logger) {
+    const consoleLogger = {
+      log: (...args) => console.log(...args),
+      warn: (...args) => console.warn(...args),
+      error: (...args) => console.error(...args),
+      info: (...args) => console.info(...args),
+      debug: (...args) => console.debug(...args),
+    };
+    logger = consoleLogger;
+  }
+
 
   // === 2) INTERNAL UTILITIES & HELPERS ===
 
@@ -143,9 +158,9 @@ export function createAuthModule({
       csrfToken = current; // keep variable and cookie in sync
     }
     if (current) {
-      console.log('[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value', current);
+      logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value', current);
     } else {
-      console.log('[DIAGNOSTIC][auth.js][getCSRFToken] no CSRF cookie found');
+      logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] no CSRF cookie found');
     }
     return csrfToken;
   }
@@ -158,7 +173,7 @@ export function createAuthModule({
     const url = csrfUrl.includes('?')
       ? `${csrfUrl}&ts=${Date.now()}`
       : `${csrfUrl}?ts=${Date.now()}`;
-    console.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching', url);
+    logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching', url);
 
     const data = await apiClient(url, {
       method: 'GET',
@@ -167,10 +182,10 @@ export function createAuthModule({
       cache: 'no-store'
     });
     if (!data || !data.token) {
-      console.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data);
+      logger.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data);
       throw new Error('CSRF token missing');
     }
-    console.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token', data.token);
+    logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token', data.token);
     return data.token;
   }
 
@@ -225,9 +240,9 @@ export function createAuthModule({
       const token = getCSRFToken() || (await getCSRFTokenAsync());
       if (token) {
         options.headers['X-CSRF-Token'] = token;
-        console.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header', token, 'for', endpoint);
+        logger.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header', token, 'for', endpoint);
       } else {
-        console.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint);
+        logger.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint);
       }
     }
 
@@ -237,12 +252,12 @@ export function createAuthModule({
     }
 
     try {
-      console.log('[DIAGNOSTIC][auth.js][authRequest][REQUEST]', endpoint, options);
+      logger.log('[DIAGNOSTIC][auth.js][authRequest][REQUEST]', endpoint, options);
       const data = await apiClient(endpoint, options);
-      console.log('[DIAGNOSTIC][auth.js][authRequest][RESPONSE]', endpoint, data);
+      logger.log('[DIAGNOSTIC][auth.js][authRequest][RESPONSE]', endpoint, data);
       return data;
     } catch (error) {
-      console.error('[DIAGNOSTIC][auth.js][authRequest][ERROR]', endpoint, error);
+      logger.error('[DIAGNOSTIC][auth.js][authRequest][ERROR]', endpoint, error);
       extendErrorWithStatus(error, error.message);
       throw error;
     }
@@ -279,7 +294,7 @@ export function createAuthModule({
 
   // === 8) BROADCASTING AUTH STATE ===
   function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
-    console.log('[DIAGNOSTIC][auth.js][broadcastAuth] called.', {
+    logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] called.', {
       authenticated, userObject, source,
       previousAuth: authState.isAuthenticated,
       previousUserObject: authState.userObject
@@ -298,10 +313,10 @@ export function createAuthModule({
       // Update appModule's state (the canonical source)
       const appModuleRef = DependencySystem?.modules?.get('appModule');
       if (appModuleRef && typeof appModuleRef.setAuthState === 'function') {
-        console.log('[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state', { isAuthenticated: authenticated, currentUser: userObject });
+        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state', { isAuthenticated: authenticated, currentUser: userObject });
         appModuleRef.setAuthState({ isAuthenticated: authenticated, currentUser: userObject });
       } else {
-        console.warn('[DIAGNOSTIC][auth.js][broadcastAuth] No appModuleRef or no setAuthState function!');
+        logger.warn('[DIAGNOSTIC][auth.js][broadcastAuth] No appModuleRef or no setAuthState function!');
       }
 
       // Dispatch events to internal AuthBus
@@ -312,20 +327,26 @@ export function createAuthModule({
         source
       };
       try {
-        console.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus', eventDetail);
-        AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail: eventDetail }));
+        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus', eventDetail);
+        if (!eventHandlers.createCustomEvent) {
+          throw new Error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create events for guardrail compliance.');
+        }
+        AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authStateChanged', { detail: eventDetail }));
       } catch (busErr) {
-        console.error('[DIAGNOSTIC][auth.js][broadcastAuth] AuthBus dispatch failed', busErr);
+        logger.error('[DIAGNOSTIC][auth.js][broadcastAuth] AuthBus dispatch failed', busErr);
       }
 
       // Dispatch on document
       try {
         const doc = domAPI.getDocument();
         if (doc) {
-          console.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc');
+          logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc');
+          if (!eventHandlers.createCustomEvent) {
+            throw new Error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create events for guardrail compliance.');
+          }
           domAPI.dispatchEvent(
             doc,
-            new CustomEvent('authStateChanged', {
+            eventHandlers.createCustomEvent('authStateChanged', {
               detail: {
                 ...eventDetail,
                 source: source + '_via_auth_module'
@@ -334,10 +355,10 @@ export function createAuthModule({
           );
         }
       } catch (err) {
-        console.error('[DIAGNOSTIC][auth.js][broadcastAuth] doc dispatch failed', err);
+        logger.error('[DIAGNOSTIC][auth.js][broadcastAuth] doc dispatch failed', err);
       }
     } else {
-      console.log('[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting');
+      logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting');
     }
   }
 
@@ -400,7 +421,13 @@ export function createAuthModule({
 
       const hasUsername = Boolean(response?.username || (response?.user && response.user.username));
       const location = domAPI.getWindow()?.location;
-      const urlParams = location ? new URLSearchParams(location.search) : null;
+      const browserService = DependencySystem?.modules?.get('browserService');
+      const windowObj = browserService?.getWindow?.();
+      if (!windowObj || typeof windowObj.URLSearchParams !== 'function') {
+        logger.error('[AuthModule] window.URLSearchParams (via browserService.getWindow()) is required for guardrail compliance.');
+        // Potentially throw or handle error, for now, proceed cautiously
+      }
+      const urlParams = location && windowObj?.URLSearchParams ? new windowObj.URLSearchParams(location.search) : null;
       const hasLoginParams = urlParams && urlParams.has('username') && urlParams.has('password');
 
       if (isAuthenticatedByFlags || hasUsername || hasLoginParams) {
@@ -426,13 +453,18 @@ export function createAuthModule({
         broadcastAuth(true, tempUser, 'verify_auth_based_on_cookies');
 
         // Re-verify in short delay
-        setTimeout(() => {
-          if (authState.isAuthenticated) {
-            verifyAuthState(true).catch(() => {
-              // Silent failure
-            });
-          }
-        }, 2000);
+        const browserServiceForTimeoutReverify = DependencySystem?.modules?.get('browserService');
+        if (!browserServiceForTimeoutReverify || typeof browserServiceForTimeoutReverify.setTimeout !== 'function') {
+          logger.error('[AuthModule] browserService.setTimeout is required for guardrail compliance (verifyAuthState re-verify).');
+        } else {
+          browserServiceForTimeoutReverify.setTimeout(() => {
+            if (authState.isAuthenticated) {
+              verifyAuthState(true).catch((err) => {
+                logger.debug('[AuthModule] Silent failure during re-verify auth state:', err);
+              });
+            }
+          }, 2000);
+        }
         return true;
       }
 
@@ -470,24 +502,24 @@ export function createAuthModule({
 
   async function loginUser(username, password) {
     try {
-      console.log('[DIAGNOSTIC][auth.js][loginUser] Attempting login', username);
+      logger.log('[DIAGNOSTIC][auth.js][loginUser] Attempting login', username);
       await getCSRFTokenAsync();
       const response = await authRequest(apiEndpoints.AUTH_LOGIN, 'POST', {
         username: username.trim(),
         password
       });
-      console.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response);
+      logger.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response);
 
       // Diagnostic: Print cookies after login attempt
       try {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string') {
-          console.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login:', doc.cookie);
+          logger.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login:', doc.cookie);
         } else {
-          console.log('[DIAGNOSTIC][auth.js][loginUser] Unable to read document.cookie');
+          logger.log('[DIAGNOSTIC][auth.js][loginUser] Unable to read document.cookie');
         }
       } catch (cookieErr) {
-        console.log('[DIAGNOSTIC][auth.js][loginUser] Exception reading cookies:', cookieErr);
+        logger.log('[DIAGNOSTIC][auth.js][loginUser] Exception reading cookies:', cookieErr);
       }
 
       // If server returns a username, create minimal user object
@@ -503,15 +535,17 @@ export function createAuthModule({
         try {
           const doc = domAPI.getDocument?.();
           if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
-            console.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after successful login! Backend may not be setting cookies.');
+            logger.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after successful login! Backend may not be setting cookies.');
           }
-        } catch {}
+        } catch (cookieCheckErr) {
+            logger.debug('[AuthModule] Cookie check after login failed (non-critical):', cookieCheckErr);
+        }
 
         return response;
       }
 
       // --- NEW fallback: server returned no user data ---------------------
-      console.warn('[DIAGNOSTIC][auth.js][loginUser] Login response lacked user data – broadcasting provisional auth state.');
+      logger.warn('[DIAGNOSTIC][auth.js][loginUser] Login response lacked user data – broadcasting provisional auth state.');
 
       const provisionalUser = {
         username: username.trim(),
@@ -524,28 +558,30 @@ export function createAuthModule({
       try {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
-          console.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after provisional login! Backend may not be setting cookies.');
+          logger.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after provisional login! Backend may not be setting cookies.');
         }
-      } catch {}
+      } catch (cookieCheckErr) {
+          logger.debug('[AuthModule] Cookie check after provisional login failed (non-critical):', cookieCheckErr);
+      }
 
       return response;     // ← mantiene la API hacia fuera
       // -------------------------------------------------------------------
     } catch (error) {
-      console.error('[DIAGNOSTIC][auth.js][loginUser][ERROR]', error);
+      logger.error('[DIAGNOSTIC][auth.js][loginUser][ERROR]', error);
       await clearTokenState({ source: 'login_error' });
       throw error;
     }
   }
 
   async function logout() {
-    console.log('[DIAGNOSTIC][auth.js][logout] Logging out');
+    logger.log('[DIAGNOSTIC][auth.js][logout] Logging out');
     await clearTokenState({ source: 'logout_manual' });
     try {
       await getCSRFTokenAsync();
       await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
-      console.log('[DIAGNOSTIC][auth.js][logout] Logout POST done');
+      logger.log('[DIAGNOSTIC][auth.js][logout] Logout POST done');
     } catch (err) {
-      console.error('[DIAGNOSTIC][auth.js][logout][ERROR]', err);
+      logger.error('[DIAGNOSTIC][auth.js][logout][ERROR]', err);
       // Silent failure
     }
   }
@@ -555,18 +591,18 @@ export function createAuthModule({
       throw new Error('Username and password required.');
     }
     try {
-      console.log('[DIAGNOSTIC][auth.js][registerUser] Registering', userData.username);
+      logger.log('[DIAGNOSTIC][auth.js][registerUser] Registering', userData.username);
       await getCSRFTokenAsync();
       const response = await authRequest(apiEndpoints.AUTH_REGISTER, 'POST', {
         username: userData.username.trim(),
         password: userData.password
       });
-      console.log('[DIAGNOSTIC][auth.js][registerUser][API RESPONSE]', response);
+      logger.log('[DIAGNOSTIC][auth.js][registerUser][API RESPONSE]', response);
       // Attempt a verification
       await verifyAuthState(true);
       return response;
     } catch (error) {
-      console.error('[DIAGNOSTIC][auth.js][registerUser][ERROR]', error);
+      logger.error('[DIAGNOSTIC][auth.js][registerUser][ERROR]', error);
       await clearTokenState({ source: 'register_error' });
       throw error;
     }
@@ -584,14 +620,17 @@ export function createAuthModule({
       domAPI.removeAttribute(loginForm, 'method');
 
       const handler = async (e) => {
-        console.log('[AuthModule] loginModalForm submit handler invoked. Event:', e); // Diagnostic log
+        logger.log('[AuthModule] loginModalForm submit handler invoked. Event:', e); // Diagnostic log
         domAPI.preventDefault(e); // Use domAPI
         const errorEl = domAPI.getElementById('loginModalError');
         hideError(errorEl);
         const submitBtn = domAPI.querySelector('button[type="submit"]', loginForm); // Use domAPI
         setButtonLoading(submitBtn, true, 'Logging in...');
         const browserService = DependencySystem.modules.get('browserService');
-        const formData = browserService ? new browserService.FormData(loginForm) : new FormData(loginForm);
+        if (!browserService || !browserService.FormData) {
+          throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
+        }
+        const formData = new browserService.FormData(loginForm);
         const username = formData.get('username')?.trim();
         const password = formData.get('password');
 
@@ -654,7 +693,10 @@ export function createAuthModule({
         hideError(errorEl);
         setButtonLoading(submitBtn, true, 'Registering...');
         const browserService = DependencySystem.modules.get('browserService');
-        const formData = browserService ? new browserService.FormData(registerForm) : new FormData(registerForm);
+        if (!browserService || !browserService.FormData) {
+          throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
+        }
+        const formData = new browserService.FormData(registerForm);
         const username = formData.get('username')?.trim();
         const password = formData.get('password');
         const passwordConfirm = formData.get('passwordConfirm');
@@ -728,38 +770,40 @@ export function createAuthModule({
     // The modalsLoaded listener is more reliable.
     // setupAuthForms(); // Removed initial direct call
 
-    // Directly attach listener for modalsLoaded to ensure it's set up.
+    // Centralized listen for modalsLoaded using eventHandlers.trackListener (guardrail-compliant)
     const doc = domAPI.getDocument();
-    if (doc && typeof doc.addEventListener === 'function') {
-      console.log('[AuthModule] Attempting to add direct event listener for modalsLoaded.');
-      doc.addEventListener('modalsLoaded', function handleModalsLoaded() {
-        // Ensure this listener is only called once.
-        doc.removeEventListener('modalsLoaded', handleModalsLoaded);
-        console.log('[AuthModule] Direct modalsLoaded event received, attempting to setupAuthForms.');
-        setTimeout(() => {
-          console.log('[AuthModule] setTimeout finished, calling setupAuthForms from direct modalsLoaded listener.');
+    if (doc && typeof eventHandlers.trackListener === "function") {
+      eventHandlers.trackListener(
+        doc,
+        'modalsLoaded',
+        function handleModalsLoadedTracked() {
+          eventHandlers.cleanupListeners({ context: 'AuthModule:modalsLoadedListener' });
           setupAuthForms();
-
-          // === LATE SAFETY PATCH: Forcefully REMOVE action/method and attach handler after DOM settlement ===
-          setTimeout(() => {
+          // LATE PATCH: forceful remove/attach logic with unique context
+          const browserServiceForTimeout = DependencySystem?.modules?.get('browserService');
+          if (!browserServiceForTimeout || typeof browserServiceForTimeout.setTimeout !== 'function') {
+            logger.error('[AuthModule] browserService.setTimeout is required for guardrail compliance (latePatchTimeout).');
+            return; // Or handle error appropriately
+          }
+          const latePatchTimeout = browserServiceForTimeout.setTimeout(() => {
             const loginF = domAPI.getElementById('loginModalForm');
             if (loginF) {
               domAPI.removeAttribute(loginF, 'action');
               domAPI.removeAttribute(loginF, 'method');
               if (!loginF._listenerAttached) {
-                console.log('[SAFETY][auth.js] Late re-attach of login form handler');
                 loginF._listenerAttached = true;
                 domAPI.setAttribute(loginF, 'novalidate', 'novalidate');
-                // Duplicate the safe JS handler register if needed
                 const safeHandler = async (e) => {
                   domAPI.preventDefault(e);
-                  // Only call the publicAuth logic if present
                   const errorEl = domAPI.getElementById('loginModalError');
                   hideError(errorEl);
                   const submitBtn = domAPI.querySelector('button[type="submit"]', loginF);
                   setButtonLoading(submitBtn, true, 'Logging in...');
                   const browserService = DependencySystem.modules.get('browserService');
-                  const formData = browserService ? new browserService.FormData(loginF) : new FormData(loginF);
+                  if (!browserService || !browserService.FormData) {
+                    throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
+                  }
+                  const formData = new browserService.FormData(loginF);
                   const username = formData.get('username')?.trim();
                   const password = formData.get('password');
                   if (!username || !password) {
@@ -799,29 +843,46 @@ export function createAuthModule({
                 };
                 eventHandlers.trackListener(loginF, 'submit', safeHandler, {
                   passive: false,
-                  context: 'AuthModule:loginFormSubmit:LATEPATCH',
-                  description: 'Login Form Late Patch Submit'
+                  context: 'AuthModule:loginFormSubmit:LATEPATCH_TRACKED',
+                  description: 'Login Form Late Patch Submit (tracked)'
                 });
               }
             }
           }, 400);
-        }, 100); // 100ms delay
-      });
+        },
+        {
+          passive: false,
+          context: 'AuthModule:modalsLoadedListener',
+          description: 'Track modalsLoaded via centralized handler'
+        }
+      );
     } else {
-      console.error('[AuthModule] domAPI.getDocument() or addEventListener not available for modalsLoaded.');
+      logger.error('[AuthModule] domAPI.getDocument() or eventHandlers.trackListener not available for modalsLoaded.');
       // Fallback if direct attachment is not possible
-      setTimeout(() => {
-        console.log('[AuthModule] Fallback setTimeout (direct listener failed), calling setupAuthForms.');
+      const browserService = DependencySystem?.modules?.get('browserService');
+      if (!browserService || typeof browserService.setTimeout !== 'function') {
+        logger.error('[AuthModule] browserService.setTimeout is required for guardrail compliance. No global setTimeout fallback allowed.');
+        // Potentially throw or handle error, for now, proceed cautiously
+        return;
+      }
+      browserService.setTimeout(() => {
+        logger.log('[AuthModule] Fallback setTimeout (direct listener failed), calling setupAuthForms.');
         setupAuthForms();
 
         // === FALLBACK: Late patch outside event listener if needed ===
-        setTimeout(() => {
+        // Ensure browserService is available for this nested setTimeout as well
+        const nestedBrowserService = DependencySystem?.modules?.get('browserService');
+        if (!nestedBrowserService || typeof nestedBrowserService.setTimeout !== 'function') {
+            logger.error('[AuthModule] browserService.setTimeout is required for guardrail compliance (nested late patch).');
+            return;
+        }
+        nestedBrowserService.setTimeout(() => {
           const loginF = domAPI.getElementById('loginModalForm');
           if (loginF) {
             domAPI.removeAttribute(loginF, 'action');
             domAPI.removeAttribute(loginF, 'method');
             if (!loginF._listenerAttached) {
-              console.log('[SAFETY][auth.js] Late re-attach of login form handler (fallback)');
+              logger.log('[SAFETY][auth.js] Late re-attach of login form handler (fallback)');
               loginF._listenerAttached = true;
               domAPI.setAttribute(loginF, 'novalidate', 'novalidate');
               const safeHandler = async (e) => {
@@ -831,7 +892,10 @@ export function createAuthModule({
                 const submitBtn = domAPI.querySelector('button[type="submit"]', loginF);
                 setButtonLoading(submitBtn, true, 'Logging in...');
                 const browserService = DependencySystem.modules.get('browserService');
-                const formData = browserService ? new browserService.FormData(loginF) : new FormData(loginF);
+                if (!browserService || !browserService.FormData) {
+                  throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
+                }
+                const formData = new browserService.FormData(loginF);
                 const username = formData.get('username')?.trim();
                 const password = formData.get('password');
                 if (!username || !password) {
@@ -871,13 +935,13 @@ export function createAuthModule({
               };
               eventHandlers.trackListener(loginF, 'submit', safeHandler, {
                 passive: false,
-                context: 'AuthModule:loginFormSubmit:LATEPATCH',
-                description: 'Login Form Late Patch Submit'
+                context: 'AuthModule:loginFormSubmit:LATEPATCH_FALLBACK',
+                description: 'Login Form Late Patch Submit (fallback tracked)'
               });
             }
           }
         }, 400);
-      }, 1000); // Increased delay for this fallback
+      }, 1000);
     }
 
     try {
@@ -885,7 +949,7 @@ export function createAuthModule({
       try {
         await getCSRFTokenAsync(true); // Force fetch a new token
       } catch (csrfErr) {
-        // Continue without CSRF token
+        logger.debug('[AuthModule] CSRF token fetch during init (error intentionally handled):', csrfErr);
       }
 
       // Verify
@@ -899,24 +963,16 @@ export function createAuthModule({
 
       // Periodic verify
       const browserService = DependencySystem.modules.get('browserService');
-      if (browserService && typeof browserService.setTimeout === 'function') {
-        verifyInterval = browserService.setInterval(() => { // Use browserService.setInterval if available
-          if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
-            verifyAuthState(false).catch(() => {
-              // Silent failure
-            });
-          }
-        }, AUTH_CONFIG.VERIFICATION_INTERVAL);
-      } else {
-        // Fallback to global setInterval if browserService doesn't provide it (less ideal)
-        verifyInterval = setInterval(() => {
-          if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
-            verifyAuthState(false).catch(() => {
-              // Silent failure
-            });
-          }
-        }, AUTH_CONFIG.VERIFICATION_INTERVAL);
+      if (!browserService || typeof browserService.setInterval !== 'function') {
+        throw new Error('[AuthModule] browserService.setInterval is required for guardrail compliance. No global setInterval fallback allowed.');
       }
+      verifyInterval = browserService.setInterval(() => {
+        if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
+          verifyAuthState(false).catch((err) => {
+            logger.debug('[AuthModule] Periodic verifyAuthState failed (silent):', err);
+          });
+        }
+      }, AUTH_CONFIG.VERIFICATION_INTERVAL);
 
 
       authState.isReady = true;
@@ -930,16 +986,19 @@ export function createAuthModule({
         timestamp: Date.now(),
         source: 'init_complete'
       };
-      AuthBus.dispatchEvent(new CustomEvent('authReady', { detail: readyEventDetail }));
-      try {
-        const doc = domAPI.getDocument();
-        if (doc) {
-          domAPI.dispatchEvent(doc, new CustomEvent('authReady', { detail: readyEventDetail }));
-        }
-      } catch (docErr) {
-        // Silent failure
-      }
 
+      if (!eventHandlers.createCustomEvent) {
+        logger.error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create authReady event.');
+        // Potentially throw or handle error
+      } else {
+        AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
+        try {
+          const doc = domAPI.getDocument();
+          if (doc) {
+            domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
+          }
+        } catch (docErr) { logger.warn('[AuthModule] Failed to dispatch authReady on document', docErr); }
+      }
       broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_complete');
       return verified;
     } catch (err) {
@@ -959,11 +1018,10 @@ export function createAuthModule({
     registeredListeners.length = 0;
     if (verifyInterval) {
       const browserService = DependencySystem.modules.get('browserService');
-      if (browserService && typeof browserService.clearInterval === 'function') {
-        browserService.clearInterval(verifyInterval);
-      } else {
-        clearInterval(verifyInterval); // Fallback
+      if (!browserService || typeof browserService.clearInterval !== 'function') {
+        throw new Error('[AuthModule] browserService.clearInterval is required for guardrail compliance. No global clearInterval fallback allowed.');
       }
+      browserService.clearInterval(verifyInterval);
       verifyInterval = null;
     }
   }
@@ -980,7 +1038,13 @@ export function createAuthModule({
       if (!resp) {
         // Check if user might be in URL params
         const location = domAPI.getWindow()?.location;
-        const urlParams = location ? new URLSearchParams(location.search) : null;
+        const browserService = DependencySystem?.modules?.get('browserService');
+        const windowObj = browserService?.getWindow?.();
+        if (!windowObj || typeof windowObj.URLSearchParams !== 'function') {
+          logger.error('[AuthModule] window.URLSearchParams (via browserService.getWindow()) is required for guardrail compliance (fetchCurrentUser).');
+          // Potentially return null or throw
+        }
+        const urlParams = location && windowObj?.URLSearchParams ? new windowObj.URLSearchParams(location.search) : null;
         const hasLoginParams = urlParams && urlParams.has('username') && urlParams.has('password');
         if (hasLoginParams) {
           return {
