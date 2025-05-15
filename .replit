@@ -3,7 +3,7 @@ run = "npm run dev"
 
 [nix]
 channel = "stable-24_05"
-packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc"]
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "python312Packages.pip", "python311Packages.pip"]
 
 [deployment]
 run = ["sh", "-c", "uvicorn main:app --reload --host=0.0.0.0 --port=8000"]
@@ -20,8 +20,11 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uvicorn main:app --reload --host=0.0.0.0 --port=8000"
+args = "uvicorn main:app --reload"
 
 [[ports]]
 localPort = 8000
 externalPort = 80
+
+[objectStorage]
+defaultBucketID = "replit-objstore-3116564a-aa4a-4d2d-81db-c110d4b1f252"
