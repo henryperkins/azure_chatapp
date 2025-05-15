@@ -141,6 +141,11 @@ export function createAuthModule({
     if (current && current !== csrfToken) {
       csrfToken = current; // keep variable and cookie in sync
     }
+    if (current) {
+      console.log('[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value', current);
+    } else {
+      console.log('[DIAGNOSTIC][auth.js][getCSRFToken] no CSRF cookie found');
+    }
     return csrfToken;
   }
 
@@ -152,6 +157,7 @@ export function createAuthModule({
     const url = csrfUrl.includes('?')
       ? `${csrfUrl}&ts=${Date.now()}`
       : `${csrfUrl}?ts=${Date.now()}`;
+    console.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching', url);
 
     const data = await apiClient(url, {
       method: 'GET',
@@ -160,8 +166,10 @@ export function createAuthModule({
       cache: 'no-store'
     });
     if (!data || !data.token) {
+      console.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data);
       throw new Error('CSRF token missing');
     }
+    console.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token', data.token);
     return data.token;
   }
 
@@ -216,6 +224,9 @@ export function createAuthModule({
       const token = getCSRFToken() || (await getCSRFTokenAsync());
       if (token) {
         options.headers['X-CSRF-Token'] = token;
+        console.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header', token, 'for', endpoint);
+      } else {
+        console.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint);
       }
     }
 
@@ -225,9 +236,12 @@ export function createAuthModule({
     }
 
     try {
+      console.log('[DIAGNOSTIC][auth.js][authRequest][REQUEST]', endpoint, options);
       const data = await apiClient(endpoint, options);
+      console.log('[DIAGNOSTIC][auth.js][authRequest][RESPONSE]', endpoint, data);
       return data;
     } catch (error) {
+      console.error('[DIAGNOSTIC][auth.js][authRequest][ERROR]', endpoint, error);
       extendErrorWithStatus(error, error.message);
       throw error;
     }
@@ -264,6 +278,11 @@ export function createAuthModule({
 
   // === 8) BROADCASTING AUTH STATE ===
   function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
+    console.log('[DIAGNOSTIC][auth.js][broadcastAuth] called.', {
+      authenticated, userObject, source,
+      previousAuth: authState.isAuthenticated,
+      previousUserObject: authState.userObject
+    });
     const previousAuth = authState.isAuthenticated;
     const previousUserObject = authState.userObject;
     const changed =
@@ -278,13 +297,11 @@ export function createAuthModule({
       // Update appModule's state (the canonical source)
       const appModuleRef = DependencySystem?.modules?.get('appModule');
       if (appModuleRef && typeof appModuleRef.setAuthState === 'function') {
+        console.log('[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state', { isAuthenticated: authenticated, currentUser: userObject });
         appModuleRef.setAuthState({ isAuthenticated: authenticated, currentUser: userObject });
+      } else {
+        console.warn('[DIAGNOSTIC][auth.js][broadcastAuth] No appModuleRef or no setAuthState function!');
       }
-      // The local `currentUser` in app.js will be updated via `handleAuthStateChange`
-      // which reads from appModule.state.currentUser.
-      // The DI registration of 'currentUser' in app.js is for the initial value;
-      // consumers should get the dynamic value via app.state.currentUser.
-      // Thus, no direct update to DependencySystem.modules.set('currentUser', userObject) here.
 
       // Dispatch events to internal AuthBus
       const eventDetail = {
@@ -294,15 +311,17 @@ export function createAuthModule({
         source
       };
       try {
+        console.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus', eventDetail);
         AuthBus.dispatchEvent(new CustomEvent('authStateChanged', { detail: eventDetail }));
       } catch (busErr) {
-        // Silent failure
+        console.error('[DIAGNOSTIC][auth.js][broadcastAuth] AuthBus dispatch failed', busErr);
       }
 
       // Dispatch on document
       try {
         const doc = domAPI.getDocument();
         if (doc) {
+          console.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc');
           domAPI.dispatchEvent(
             doc,
             new CustomEvent('authStateChanged', {
@@ -314,8 +333,10 @@ export function createAuthModule({
           );
         }
       } catch (err) {
-        // Silent failure
+        console.error('[DIAGNOSTIC][auth.js][broadcastAuth] doc dispatch failed', err);
       }
+    } else {
+      console.log('[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting');
     }
   }
 
@@ -444,11 +465,13 @@ export function createAuthModule({
 
   async function loginUser(username, password) {
     try {
+      console.log('[DIAGNOSTIC][auth.js][loginUser] Attempting login', username);
       await getCSRFTokenAsync();
       const response = await authRequest(apiEndpoints.AUTH_LOGIN, 'POST', {
         username: username.trim(),
         password
       });
+      console.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response);
 
       // If server returns a username, create minimal user object
       let userObject = null;
@@ -458,37 +481,31 @@ export function createAuthModule({
           id: response.id || response.user_id || response.userId || ('temp-id-' + Date.now())
         };
         broadcastAuth(true, userObject, 'login_success_immediate');
-        // Let cookies finalize
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        try {
-          const verified = await verifyAuthState(true);
-          if (verified) {
-            return response;
-          } else {
-            broadcastAuth(true, userObject, 'login_forced_auth_despite_verify_fail');
-            return response;
-          }
-        } catch (verifyErr) {
-          broadcastAuth(true, userObject, 'login_forced_auth_with_verify_error');
-          return response;
-        }
+        // Immediate post-login verification removed.
+        // The periodic verifyAuthState will handle ongoing session validation.
+        return response; // Directly return after successful login and broadcast
       }
 
-      // If the server data is incomplete
-      throw new Error('Login succeeded but invalid response data.');
+      // If the server data is incomplete (e.g. no username after successful status)
+      // This part is reached if response.username was not present from the login endpoint.
+      console.warn('[DIAGNOSTIC][auth.js][loginUser] Login succeeded but no username in response');
+      throw new Error('Login succeeded but server response was incomplete (e.g., missing username).');
     } catch (error) {
+      console.error('[DIAGNOSTIC][auth.js][loginUser][ERROR]', error);
       await clearTokenState({ source: 'login_error' });
       throw error;
     }
   }
 
   async function logout() {
+    console.log('[DIAGNOSTIC][auth.js][logout] Logging out');
     await clearTokenState({ source: 'logout_manual' });
     try {
       await getCSRFTokenAsync();
       await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
+      console.log('[DIAGNOSTIC][auth.js][logout] Logout POST done');
     } catch (err) {
+      console.error('[DIAGNOSTIC][auth.js][logout][ERROR]', err);
       // Silent failure
     }
   }
@@ -498,15 +515,18 @@ export function createAuthModule({
       throw new Error('Username and password required.');
     }
     try {
+      console.log('[DIAGNOSTIC][auth.js][registerUser] Registering', userData.username);
       await getCSRFTokenAsync();
       const response = await authRequest(apiEndpoints.AUTH_REGISTER, 'POST', {
         username: userData.username.trim(),
         password: userData.password
       });
+      console.log('[DIAGNOSTIC][auth.js][registerUser][API RESPONSE]', response);
       // Attempt a verification
       await verifyAuthState(true);
       return response;
     } catch (error) {
+      console.error('[DIAGNOSTIC][auth.js][registerUser][ERROR]', error);
       await clearTokenState({ source: 'register_error' });
       throw error;
     }
@@ -524,6 +544,7 @@ export function createAuthModule({
       domAPI.removeAttribute(loginForm, 'method');
 
       const handler = async (e) => {
+        console.log('[AuthModule] loginModalForm submit handler invoked. Event:', e); // Diagnostic log
         domAPI.preventDefault(e); // Use domAPI
         const errorEl = domAPI.getElementById('loginModalError');
         hideError(errorEl);
@@ -663,12 +684,160 @@ export function createAuthModule({
     }
 
     // Setup forms
-    setupAuthForms();
-    if (eventHandlers.trackListener) {
-      eventHandlers.trackListener(domAPI.getDocument(), 'modalsLoaded', setupAuthForms, {
-        context: 'AuthModule:init',
-        description: 'Auth Modals Loaded Listener'
+    // Initial call to setupAuthForms might be too early if modals are not yet loaded.
+    // The modalsLoaded listener is more reliable.
+    // setupAuthForms(); // Removed initial direct call
+
+    // Directly attach listener for modalsLoaded to ensure it's set up.
+    const doc = domAPI.getDocument();
+    if (doc && typeof doc.addEventListener === 'function') {
+      console.log('[AuthModule] Attempting to add direct event listener for modalsLoaded.');
+      doc.addEventListener('modalsLoaded', function handleModalsLoaded() {
+        // Ensure this listener is only called once.
+        doc.removeEventListener('modalsLoaded', handleModalsLoaded);
+        console.log('[AuthModule] Direct modalsLoaded event received, attempting to setupAuthForms.');
+        setTimeout(() => {
+          console.log('[AuthModule] setTimeout finished, calling setupAuthForms from direct modalsLoaded listener.');
+          setupAuthForms();
+
+          // === LATE SAFETY PATCH: Forcefully REMOVE action/method and attach handler after DOM settlement ===
+          setTimeout(() => {
+            const loginF = domAPI.getElementById('loginModalForm');
+            if (loginF) {
+              domAPI.removeAttribute(loginF, 'action');
+              domAPI.removeAttribute(loginF, 'method');
+              if (!loginF._listenerAttached) {
+                console.log('[SAFETY][auth.js] Late re-attach of login form handler');
+                loginF._listenerAttached = true;
+                domAPI.setAttribute(loginF, 'novalidate', 'novalidate');
+                // Duplicate the safe JS handler register if needed
+                const safeHandler = async (e) => {
+                  domAPI.preventDefault(e);
+                  // Only call the publicAuth logic if present
+                  const errorEl = domAPI.getElementById('loginModalError');
+                  hideError(errorEl);
+                  const submitBtn = domAPI.querySelector('button[type="submit"]', loginF);
+                  setButtonLoading(submitBtn, true, 'Logging in...');
+                  const browserService = DependencySystem.modules.get('browserService');
+                  const formData = browserService ? new browserService.FormData(loginF) : new FormData(loginF);
+                  const username = formData.get('username')?.trim();
+                  const password = formData.get('password');
+                  if (!username || !password) {
+                    showError(errorEl, 'Username and password are required.');
+                    setButtonLoading(submitBtn, false);
+                    return;
+                  }
+                  if (!validateUsername(username)) {
+                    showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
+                    setButtonLoading(submitBtn, false);
+                    return;
+                  }
+                  const pwCheck = validatePassword(password);
+                  if (!pwCheck.valid) {
+                    showError(errorEl, pwCheck.message);
+                    setButtonLoading(submitBtn, false);
+                    return;
+                  }
+                  try {
+                    await publicAuth.login(username, password);
+                    if (modalManager?.hide) {
+                      modalManager.hide('login');
+                    }
+                  } catch (error) {
+                    let msg = 'Login failed due to server error.';
+                    if (error.status === 401) {
+                      msg = 'Incorrect username or password.';
+                    } else if (error.status === 400) {
+                      msg = error.data?.detail || 'Invalid login request.';
+                    } else {
+                      msg = error.data?.detail || error.message || msg;
+                    }
+                    showError(errorEl, msg);
+                  } finally {
+                    setButtonLoading(submitBtn, false, 'Login');
+                  }
+                };
+                eventHandlers.trackListener(loginF, 'submit', safeHandler, {
+                  passive: false,
+                  context: 'AuthModule:loginFormSubmit:LATEPATCH',
+                  description: 'Login Form Late Patch Submit'
+                });
+              }
+            }
+          }, 400);
+        }, 100); // 100ms delay
       });
+    } else {
+      console.error('[AuthModule] domAPI.getDocument() or addEventListener not available for modalsLoaded.');
+      // Fallback if direct attachment is not possible
+      setTimeout(() => {
+        console.log('[AuthModule] Fallback setTimeout (direct listener failed), calling setupAuthForms.');
+        setupAuthForms();
+
+        // === FALLBACK: Late patch outside event listener if needed ===
+        setTimeout(() => {
+          const loginF = domAPI.getElementById('loginModalForm');
+          if (loginF) {
+            domAPI.removeAttribute(loginF, 'action');
+            domAPI.removeAttribute(loginF, 'method');
+            if (!loginF._listenerAttached) {
+              console.log('[SAFETY][auth.js] Late re-attach of login form handler (fallback)');
+              loginF._listenerAttached = true;
+              domAPI.setAttribute(loginF, 'novalidate', 'novalidate');
+              const safeHandler = async (e) => {
+                domAPI.preventDefault(e);
+                const errorEl = domAPI.getElementById('loginModalError');
+                hideError(errorEl);
+                const submitBtn = domAPI.querySelector('button[type="submit"]', loginF);
+                setButtonLoading(submitBtn, true, 'Logging in...');
+                const browserService = DependencySystem.modules.get('browserService');
+                const formData = browserService ? new browserService.FormData(loginF) : new FormData(loginF);
+                const username = formData.get('username')?.trim();
+                const password = formData.get('password');
+                if (!username || !password) {
+                  showError(errorEl, 'Username and password are required.');
+                  setButtonLoading(submitBtn, false);
+                  return;
+                }
+                if (!validateUsername(username)) {
+                  showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
+                  setButtonLoading(submitBtn, false);
+                  return;
+                }
+                const pwCheck = validatePassword(password);
+                if (!pwCheck.valid) {
+                  showError(errorEl, pwCheck.message);
+                  setButtonLoading(submitBtn, false);
+                  return;
+                }
+                try {
+                  await publicAuth.login(username, password);
+                  if (modalManager?.hide) {
+                    modalManager.hide('login');
+                  }
+                } catch (error) {
+                  let msg = 'Login failed due to server error.';
+                  if (error.status === 401) {
+                    msg = 'Incorrect username or password.';
+                  } else if (error.status === 400) {
+                    msg = error.data?.detail || 'Invalid login request.';
+                  } else {
+                    msg = error.data?.detail || error.message || msg;
+                  }
+                  showError(errorEl, msg);
+                } finally {
+                  setButtonLoading(submitBtn, false, 'Login');
+                }
+              };
+              eventHandlers.trackListener(loginF, 'submit', safeHandler, {
+                passive: false,
+                context: 'AuthModule:loginFormSubmit:LATEPATCH',
+                description: 'Login Form Late Patch Submit'
+              });
+            }
+          }
+        }, 400);
+      }, 1000); // Increased delay for this fallback
     }
 
     try {
