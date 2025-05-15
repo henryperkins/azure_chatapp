@@ -30,8 +30,6 @@ import asyncio
 import contextlib
 import logging
 import os
-import re
-import time
 from contextvars import copy_context
 from typing import (
     Any,
@@ -44,8 +42,9 @@ from typing import (
     Union,
 )
 
-from fastapi import Request, Response
+from fastapi import Response
 from fastapi.responses import JSONResponse
+from fastapi import Request as FastAPIRequest
 import sentry_sdk
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -57,11 +56,6 @@ from sentry_sdk.types import Event, Hint
 # ------------------------------------------------------------------------- #
 # Structured logging context-vars (imported – do NOT create a second copy). #
 # ------------------------------------------------------------------------- #
-from utils.logging_config import (
-    init_structured_logging,
-    request_id_var,
-    trace_id_var,
-)
 
 # ------------------------------------------------------------------------- #
 # Constants                                                                 #
@@ -195,7 +189,7 @@ def configure_sentry(
     • SENTRY_DEBUG   (default: False)
     """
     # 1️⃣  Structured JSON logging – idempotent.
-    init_structured_logging()
+    pass  # Removed init_structured_logging() call; logging config not needed here
 
     if str(os.getenv("SENTRY_ENABLED", "")).lower() not in {"1", "true", "yes"}:
         logging.info("Sentry disabled via env flag; skipping initialisation.")
@@ -370,6 +364,50 @@ def create_background_task(
     loop = asyncio.get_running_loop()
     return loop.create_task(ctx.run(coro_func, *args, **kwargs))
 
+
+# ------------------------------------------------------------------------- #
+# Sentry middleware helpers (extract_sentry_trace, tag_transaction, capture_breadcrumb)
+# ------------------------------------------------------------------------- #
+
+def extract_sentry_trace(request: 'FastAPIRequest') -> dict[str, str]:
+    """
+    Extracts Sentry tracing headers from a FastAPI request for distributed tracing.
+    Returns a dictionary of relevant headers for Sentry's continue_trace.
+    """
+    trace_headers = {}
+    for header in ("sentry-trace", "baggage"):
+        value = request.headers.get(header)
+        if value:
+            trace_headers[header] = value
+    return trace_headers
+
+def tag_transaction(key: str, value: Any) -> None:
+    """
+    Tag the current Sentry transaction/span. Used to annotate traces with contextual data.
+    """
+    try:
+        span = sentry_sdk.get_current_span()
+        if span:
+            span.set_tag(key, value)
+        else:
+            with sentry_sdk.configure_scope() as scope:
+                scope.set_tag(key, value)
+    except Exception:
+        pass
+
+def capture_breadcrumb(category: str, message: str, level: str = "info", data: dict | None = None) -> None:
+    """
+    Record a custom Sentry breadcrumb with optional extra data.
+    """
+    try:
+        sentry_sdk.add_breadcrumb(
+            category=category,
+            message=message,
+            level=level,
+            data=data or {},
+        )
+    except Exception:
+        pass
 
 # ------------------------------------------------------------------------- #
 # Misc utilities                                                             #

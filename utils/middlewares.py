@@ -41,9 +41,6 @@ from utils.sentry_utils import (
     capture_breadcrumb,
 )
 
-# Structured-logging contextvars
-from utils.logging_config import request_id_var, trace_id_var
-
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------ #
@@ -153,8 +150,6 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         # Generate context IDs for structured logging
         request_id = str(uuid.uuid4())
         trace_id = transaction.trace_id if hasattr(transaction, "trace_id") else ""
-        req_token = request_id_var.set(request_id)
-        trace_token = trace_id_var.set(trace_id)
 
         # Tag IDs on Sentry
         tag_transaction("request.id", request_id)
@@ -171,8 +166,7 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             route_ms = (time.time() - route_start) * 1000
         finally:
-            request_id_var.reset(req_token)
-            trace_id_var.reset(trace_token)
+            pass  # Removed contextvar resets
 
         # Final transaction enrichment
         transaction.set_data("route_processing_ms", route_ms)

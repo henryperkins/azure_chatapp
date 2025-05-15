@@ -188,7 +188,7 @@ def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None
     sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
     integrations = [
         sentry_logging,
-        FastApiIntegration(transaction_style="endpoint", capture_server_errors=False),
+        FastApiIntegration(transaction_style="endpoint"),
         # SqlalchemyIntegration(), # Temporarily commented out to diagnose greenlet_spawn issue
         AsyncioIntegration(),
     ]
@@ -214,8 +214,6 @@ def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None
 # FastAPI & Application Setup
 # -----------------------------------------------------------------------------
 # Initialize structured logging FIRST, before other imports that might configure logging.
-from utils.logging_config import init_structured_logging  # noqa: E402
-init_structured_logging()
 
 from config import settings  # noqa: E402
 from db import init_db, get_async_session_context  # noqa: E402
@@ -441,52 +439,6 @@ async def debug_routes() -> list[Dict[str, Any]]:
 # -----------------------------------------------------------------------------
 # Request ID Logging Middleware
 # -----------------------------------------------------------------------------
-from utils.logging_config import request_id_var, trace_id_var  # noqa: E402
-
-@app.middleware("http")
-async def request_id_logging_middleware(request: Request, call_next):
-    """
-    Attach a per-request UUID so every log/Sentry event can be correlated.
-    Sets contextvars for request_id and trace_id for structured logging.
-    Also logs basic ↗/↘ lines and returns the ID in a response header.
-    """
-    request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-
-    # Set contextvars for logging
-    request_id_token = request_id_var.set(request_id)
-    sentry_trace = sentry_sdk.get_traceparent()
-    trace_id_token = trace_id_var.set(sentry_trace if sentry_trace else "-")
-
-    # Ensure this logger call is correctly formatted and parentheses are balanced.
-    logger.info(
-        "[%s] ↗ %s %s%s",
-        request_id,
-        request.method,
-        request.url.path,
-        f"?{request.url.query}" if request.url.query else ""
-    )  # Explicitly ensuring this closing parenthesis is here.
-
-    try:
-        response = await call_next(request)
-    except Exception as exc:
-        # delegate to generic handler so it still gets Sentry + JSON payload
-        response = await generic_exception_handler(request, exc)
-    finally:
-        # Reset contextvars
-        request_id_var.reset(request_id_token)
-        trace_id_var.reset(trace_id_token)
-
-    response.headers["X-Request-ID"] = request_id
-    logger.info(
-        "[%s] ↘ %s %s – %s",  # This log will also benefit
-        request_id,
-        response.status_code,
-        request.method,
-        request.url.path,
-    )
-    return response
-
 
 # -----------------------------------------------------------------------------
 # DB Down Middleware (friendly error if DB unavailable)

@@ -166,6 +166,7 @@ const appModule = {
   },
   // Method to update authentication-related state
   setAuthState(newAuthState) {
+    console.log('[DIAGNOSTIC][appModule.setAuthState]', JSON.stringify(newAuthState));
     Object.assign(this.state, newAuthState);
   },
   // Method to update general app lifecycle state
@@ -910,28 +911,36 @@ async function initializeAuthSystem() {
     throw new Error('[App] Auth module is missing or invalid.');
   }
 
+  // === DIAGNOSTIC: REGISTER AUTH EVENTS BEFORE INIT ===
+  if (auth.AuthBus) {
+    console.log('[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init');
+    eventHandlers.trackListener(
+      auth.AuthBus,
+      'authStateChanged',
+      (event) => {
+        console.log('[DIAGNOSTIC][AuthBus] Received authStateChanged', event?.detail);
+        handleAuthStateChange(event);
+      },
+      { description: '[App] AuthBus authStateChanged', context: 'app' }
+    );
+    eventHandlers.trackListener(
+      auth.AuthBus,
+      'authReady',
+      (event) => {
+        console.log('[DIAGNOSTIC][AuthBus] Received authReady', event?.detail);
+        handleAuthStateChange(event);
+      },
+      { description: '[App] AuthBus authReady', context: 'app' }
+    );
+  } else {
+    console.warn('[DIAGNOSTIC][initializeAuthSystem] No AuthBus instance for auth event registration');
+  }
   try {
     // auth.init() is responsible for verifying auth and calling broadcastAuth,
     // which in turn calls appModule.setAuthState().
     // So, appModule.state.isAuthenticated will be updated by auth.init() itself.
+    console.log('[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()');
     await auth.init();
-
-    // Register auth events. handleAuthStateChange will react to these events.
-    // appModule.state is already updated by auth.js before these events are dispatched.
-    if (auth.AuthBus) {
-      eventHandlers.trackListener(
-        auth.AuthBus,
-        'authStateChanged',
-        handleAuthStateChange, // This will now mostly react to the already changed appModule.state
-        { description: '[App] AuthBus authStateChanged', context: 'app' }
-      );
-      eventHandlers.trackListener(
-        auth.AuthBus,
-        'authReady',
-        handleAuthStateChange, // Same as above
-        { description: '[App] AuthBus authReady', context: 'app' }
-      );
-    }
 
     renderAuthHeader(); // Ensure this renders based on the now canonical appModule.state (via local currentUser sync)
     return true;
@@ -959,6 +968,11 @@ function handleAuthStateChange(event) {
   // auth.js's broadcastAuth (via app.setAuthState) has already updated appModule.state
   // before this event listener is triggered.
   // This function now primarily reacts to that pre-established state.
+
+  console.log('[DIAGNOSTIC][handleAuthStateChange]', {
+    eventDetail: event?.detail,
+    appModuleState: JSON.stringify(appModule.state)
+  });
 
   const isAuthenticated = appModule.state.isAuthenticated; // Read from canonical source
   const user = appModule.state.currentUser; // Read from canonical source
