@@ -345,5 +345,24 @@ export function createDomAPI({
      * @returns {Document}
      */
     getDocument: () => documentObject,
+
+    /* ---------- NUEVAS UTILIDADES REQUERIDAS POR OTROS MÓDULOS ---------- */
+
+    /**
+     * Invoca con seguridad un método nativo del elemento (por ejemplo
+     * checkValidity, reset, focus, reportValidity, etc.) evitando el
+     * acceso directo fuera de la capa DI.  Devuelve el valor que retorne
+     * el método, o undefined si el método no existe.
+     */
+    callMethod: (el, methodName, ...args) => (
+      el && typeof el[methodName] === 'function'
+        ? el[methodName](...args)
+        : undefined
+    ),
+
+    /**
+     * Acceso al window inyectado (algunos módulos lo usan vía domAPI).
+     */
+    getWindow: () => windowObject,
   };
 }
