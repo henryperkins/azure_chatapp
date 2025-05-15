@@ -46,6 +46,9 @@ logger = logging.getLogger(__name__)
 
 # Database URL from config
 DATABASE_URL = settings.DATABASE_URL.split("?")[0]  # Remove any existing query parameters
+# Make sure we're using the right driver
+if "+asyncpg" not in DATABASE_URL and DATABASE_URL.startswith("postgresql"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://")
 
 # ---------------------------------------------------------
 # Modalità self-signed / debug

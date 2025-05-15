@@ -7,7 +7,7 @@ packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgres
 
 [deployment]
 run = ["sh", "-c", "uvicorn main:app --host=0.0.0.0 --port=8000"]
-buildCommand = "pip install -r requirements.txt --break-system-packages && npm install && npm run build:css"
+buildCommand = "pip install -r requirements.txt --break-system-packages && pip install asyncpg psycopg2-binary && npm install && npm run build:css"
 deploymentTarget = "cloudrun"
 
 [workflows]
