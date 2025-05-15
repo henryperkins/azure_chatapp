@@ -483,10 +483,24 @@ export function createAuthModule({
         return response;
       }
 
-      // Fallback path: server didn’t return user info – run verification to populate state
-      console.warn('[DIAGNOSTIC][auth.js][loginUser] Login response lacked user data – running verifyAuthState');
-      await verifyAuthState(true);   // this will broadcast auth if cookies are valid
-      return response;               // don’t treat as fatal
+      // --- NEW fallback: server returned no user data ---------------------
+      console.warn('[DIAGNOSTIC][auth.js][loginUser] Login response lacked user data – broadcasting provisional auth state.');
+
+      const provisionalUser = {
+        username: username.trim(),
+        id: `temp-${Date.now()}`
+      };
+      broadcastAuth(true, provisionalUser, 'login_success_provisional');
+
+      // fire verifyAuthState in background (non-blocking, slight delay)
+      const bs = DependencySystem?.modules?.get('browserService');
+      const _timerFn = bs?.setTimeout ?? ((fn, t) => setTimeout(fn, t));
+      _timerFn(() => {
+        verifyAuthState(true).catch(() => { /* silent */ });
+      }, 800);
+
+      return response;     // ← mantiene la API hacia fuera
+      // -------------------------------------------------------------------
     } catch (error) {
       console.error('[DIAGNOSTIC][auth.js][loginUser][ERROR]', error);
       await clearTokenState({ source: 'login_error' });
