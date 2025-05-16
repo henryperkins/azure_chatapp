@@ -562,8 +562,11 @@ export class ProjectListComponent {
             }
         }
 
-        // Wait strictly for late-injected markup when present
-        await this.domReadinessService.waitFor(['#projectCardsPanel', '#projectFilterTabs'], 5000);
+        // Esperar a que los elementos dinámicamente inyectados existan
+        await this.domReadinessService.elementsReady(
+          ['#projectCardsPanel', '#projectFilterTabs'],
+          { timeout: 5000, context: MODULE_CONTEXT + '_show' }
+        );
 
         this._makeVisible();
 
