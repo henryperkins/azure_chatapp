@@ -655,11 +655,14 @@ textarea:focus-visible,
 
 
 /* Utility: Avoid text-xs for essential info on mobile */
+/* 
+  Mobile override: On small screens, .text-xs is promoted to text-sm for readability.
+  If you want true xs text on mobile, use .text-xs-force instead.
+*/
 @media (max-width: 640px) {
-  .text-xs {
-    font-size: 0.875rem !important; /* This is text-sm size. Rename the utility or explain via comment. */
+  .text-xs-mobile {
+    font-size: 0.875rem !important; /* This is text-sm size. */
     line-height: 1.25rem !important;
-    /* Consider defining a mobile-only text-sm class, or use `text-sm` directly. */
   }
 }
 
