@@ -65,14 +65,23 @@ export function createBrowserService({ windowObject } = {}) {
 
   // --------- DI wrappers for browser APIs ---------
   function FormDataImpl(form) {
+    if (!windowObject.FormData) {
+      throw new Error('browserService: windowObject.FormData is not available. This may occur in test/mocked environments.');
+    }
     return new windowObject.FormData(form);
   }
 
   function MutationObserverImpl(callback) {
+    if (!windowObject.MutationObserver) {
+      throw new Error('browserService: windowObject.MutationObserver is not available. This may occur in test/mocked environments.');
+    }
     return new windowObject.MutationObserver(callback);
   }
 
   async function fetchImpl(...args) {
+    if (!windowObject.fetch) {
+      throw new Error('browserService: windowObject.fetch is not available. This may occur in test/mocked environments.');
+    }
     // Direct passthrough; you may inject/wrap for testability in tests
     return windowObject.fetch(...args);
   }
@@ -98,16 +107,33 @@ export function createBrowserService({ windowObject } = {}) {
     get length() { return windowObject.localStorage.length; },
 
     // Timing helpers
-    setTimeout: windowObject.setTimeout.bind(windowObject),
+    setTimeout: (...args) => {
+      if (!windowObject.setTimeout) {
+        throw new Error('browserService: windowObject.setTimeout is not available. This may occur in test/mocked environments.');
+      }
+      return windowObject.setTimeout(...args);
+    },
 
     /* Auth & other modules need interval helpers – expose via DI */
-    setInterval: (...args) => windowObject.setInterval(...args),
-    clearInterval: (...args) => windowObject.clearInterval(...args),
+    setInterval: (...args) => {
+      if (!windowObject.setInterval) {
+        throw new Error('browserService: windowObject.setInterval is not available. This may occur in test/mocked environments.');
+      }
+      return windowObject.setInterval(...args);
+    },
+    clearInterval: (...args) => {
+      if (!windowObject.clearInterval) {
+        throw new Error('browserService: windowObject.clearInterval is not available. This may occur in test/mocked environments.');
+      }
+      return windowObject.clearInterval(...args);
+    },
 
     requestAnimationFrame: (cb) =>
       typeof windowObject.requestAnimationFrame === 'function'
         ? windowObject.requestAnimationFrame(cb)
-        : windowObject.setTimeout(cb, 0),
+        : (windowObject.setTimeout
+            ? windowObject.setTimeout(cb, 0)
+            : (() => { throw new Error('browserService: windowObject.setTimeout is not available for requestAnimationFrame fallback.'); })()),
 
     // Location / navigation helpers
     setLocation: (url) => { windowObject.location.assign(url); },
