@@ -932,9 +932,8 @@ async function initializeUIComponents() {
     // First, wait for critical DOM elements
     await domReadinessService.dependenciesAndElements({
       domSelectors: [
-        '#projectList',
-        '#projectListView',
-        '#projectDetailsView',
+        '#projectListView',     // contenedor que ya existe en el HTML base
+        '#projectDetailsView'   // idem
         // '#knowledgeTab' // REMOVED: This element is in project_details.html and loaded dynamically.
       ],
       timeout: 10000, // Adjusted timeout for clarity
@@ -1058,6 +1057,13 @@ async function initializeUIComponents() {
   }
 
   createAndRegisterUIComponents();
+
+  // ── Asegurar que ProjectDashboard registra las vistas reales ──────────
+  const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
+  if (projectDashboardInstance) {
+    // no esperamos (fire-and-forget) para evitar dead-lock con ‘app:ready’
+    safeInit(projectDashboardInstance, 'ProjectDashboard', 'initialize');
+  }
 
   // Initialize accessibility
   await safeInit(accessibilityUtils, 'AccessibilityUtils', 'init');

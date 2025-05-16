@@ -218,6 +218,15 @@ export function createProjectDashboard(deps) {
         this._setupEventListeners();
         this._registerNavigationViews();
 
+        // Si el usuario ya está autenticado, mostrar la vista de proyectos
+        if (this.auth?.isAuthenticated?.()) {
+          try {
+            await this.showProjectList();
+          } catch (err) {
+            this.logger.error('[ProjectDashboard][initialize] showProjectList failed', err, { context: 'projectDashboard' });
+          }
+        }
+
         // Mark initialized
         this.state.initialized = true;
         const initDuration = Date.now() - initStartTime;
