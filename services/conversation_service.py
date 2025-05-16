@@ -126,7 +126,7 @@ class ConversationService:
             # Eager load project and knowledge_base only when project_id is specified
             query = query.options(
                 joinedload(Conversation.project),
-                joinedload(Conversation.knowledge_base) # Add this
+                joinedload(Conversation.knowledge_base)
             )
 
             result = await self.db.execute(query.where(and_(*filters)))
@@ -181,7 +181,7 @@ class ConversationService:
         title: str,
         model_id: str,
         project_id: Optional[UUID] = None,
-        knowledge_base_id: Optional[UUID] = None, # ADDED
+        knowledge_base_id: Optional[UUID] = None,
         use_knowledge_base: bool = False,
         ai_settings: Optional[dict[str, Any]] = None,
     ) -> Conversation:
@@ -195,25 +195,24 @@ class ConversationService:
         if project_id:
             project = await self._validate_project_access(project_id, user_id)
             if use_knowledge_base:
-                await self.db.refresh(project, ['knowledge_base']) # Ensure KB relationship is loaded
+                await self.db.refresh(project, ['knowledge_base'])
                 if not project.knowledge_base:
                     raise ConversationError("Project has no knowledge base, cannot set use_knowledge_base=True.", 400)
                 if knowledge_base_id != project.knowledge_base.id:
                     # This should ideally be caught by the route, but as a safeguard:
                     logger.error(f"KnowledgeBase ID mismatch for project {project_id}. "
-                                 f"Passed: {knowledge_base_id}, Project's KB: {project.knowledge_base.id}") # REMOVED EXTRA PARENTHESIS
+                                 f"Passed: {knowledge_base_id}, Project's KB: {project.knowledge_base.id}")
                     raise ConversationError("Knowledge base ID mismatch for the specified project.", 400)
-            elif knowledge_base_id is not None: # use_knowledge_base is False but kb_id is provided
-                 raise ConversationError("knowledge_base_id should not be provided if use_knowledge_base is False for a project.", 400)
-
+            elif knowledge_base_id is not None:
+                raise ConversationError("knowledge_base_id should not be provided if use_knowledge_base is False for a project.", 400)
 
         conv = Conversation(
             user_id=user_id,
             title=title.strip(),
             model_id=model_id,
             project_id=project_id,
-            knowledge_base_id=knowledge_base_id, # USE PASSED PARAMETER
-            use_knowledge_base=use_knowledge_base, # USE PASSED PARAMETER
+            knowledge_base_id=knowledge_base_id,
+            use_knowledge_base=use_knowledge_base,
             extra_data={"ai_settings": ai_settings} if ai_settings else None,
         )
 
@@ -276,7 +275,7 @@ class ConversationService:
             order_by=Conversation.created_at.desc(),
             limit=limit,
             offset=skip,
-            options=cast(List[Any], load_options) # Pass the options here
+            options=cast(List[Any], load_options)
         )
 
     async def update_conversation(
@@ -778,7 +777,7 @@ class ConversationService:
                 .distinct()
                 .order_by(c_alias.created_at.desc())
             )
-            total_query = select(func.count()).select_from( # Corrected: func.count()
+            total_query = select(func.count()).select_from(  # Corrected: func.count()
                 join_stmt.order_by(None).subquery()
             )
 
@@ -796,7 +795,7 @@ class ConversationService:
                 .where(and_(*base_filters, search_filter))
                 .order_by(Conversation.created_at.desc())
             )
-            count_stmt = select(func.count()).select_from( # Corrected: func.count()
+            count_stmt = select(func.count()).select_from(  # Corrected: func.count()
                 query_stmt.order_by(None).subquery()
             )
             result_count = await self.db.execute(count_stmt)
