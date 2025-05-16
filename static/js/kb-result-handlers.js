@@ -38,14 +38,14 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
   /** Clipboard features */
   function initializeKnowledgeCopyFeatures() {
     // Tracked listener via eventHandlers -- never direct addEventListener
-    const copyBtn = document.getElementById('copyContentBtn');
+    const copyBtn = domAPI.getElementById('copyContentBtn');
     if (copyBtn) {
       eventHandlers.trackListener(copyBtn, 'click', () => {
         copyKnowledgeContent();
       });
     }
 
-    const kbModal = document.getElementById('knowledgeResultModal');
+    const kbModal = domAPI.getElementById('knowledgeResultModal');
     if (kbModal) {
       eventHandlers.trackListener(kbModal, 'keydown', (e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
@@ -60,7 +60,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
   }
 
   function copyKnowledgeContent() {
-    const contentElement = document.getElementById('knowledgeResultContent');
+    const contentElement = domAPI.getElementById('knowledgeResultContent');
     if (!contentElement) return;
 
     const textToCopy = contentElement.textContent;
@@ -75,7 +75,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
   }
 
   function showCopyFeedback(success) {
-    const feedbackEl = document.getElementById('copyFeedback');
+    const feedbackEl = domAPI.getElementById('copyFeedback');
     if (!feedbackEl) return;
 
     // Update message and icon
@@ -110,7 +110,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
 
   /** Enhance display by relevance score and metadata */
   function enhanceKnowledgeResultDisplay() {
-    const kbModal = document.getElementById('knowledgeResultModal');
+    const kbModal = domAPI.getElementById('knowledgeResultModal');
     if (!kbModal) return;
 
     // Enhance style on open attribute change
@@ -130,7 +130,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
   }
 
   function updateResultStyleByRelevance() {
-    const scoreEl = document.getElementById('knowledgeResultScore');
+    const scoreEl = domAPI.getElementById('knowledgeResultScore');
     if (!scoreEl) return;
 
     const scoreText = scoreEl.textContent;
@@ -160,11 +160,11 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
   }
 
   function populateResultMetadata() {
-    const typeEl = document.getElementById('knowledgeResultType');
-    const dateEl = document.getElementById('knowledgeResultDate');
-    const sizeEl = document.getElementById('knowledgeResultSize');
+    const typeEl = domAPI.getElementById('knowledgeResultType');
+    const dateEl = domAPI.getElementById('knowledgeResultDate');
+    const sizeEl = domAPI.getElementById('knowledgeResultSize');
     if (!typeEl || !dateEl || !sizeEl) return;
-    const sourceEl = document.getElementById('knowledgeResultSource');
+    const sourceEl = domAPI.getElementById('knowledgeResultSource');
     if (!sourceEl) return;
     const filePath = sourceEl.textContent || '';
     if (filePath) {
