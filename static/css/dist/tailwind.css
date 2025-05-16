@@ -1886,6 +1886,9 @@
   .collapse {
     visibility: collapse;
   }
+  .invisible {
+    visibility: hidden;
+  }
   .visible {
     visibility: visible;
   }
@@ -4135,6 +4138,9 @@
     --btn-shadow: 0 0 0 0 oklch(0% 0 0/0), 0 0 0 0 oklch(0% 0 0/0);
     isolation: isolate;
   }
+  .isolate {
+    isolation: isolate;
+  }
   .mockup-phone-camera {
     grid-column: 1/1;
     grid-row: 1/1;
@@ -5700,6 +5706,14 @@
     width: var(--size);
     height: var(--size);
   }
+  .size-0 {
+    width: calc(var(--spacing) * 0);
+    height: calc(var(--spacing) * 0);
+  }
+  .size-1 {
+    width: calc(var(--spacing) * 1);
+    height: calc(var(--spacing) * 1);
+  }
   .status-lg {
     width: calc(0.25rem * 3);
     height: calc(0.25rem * 3);
@@ -6019,6 +6033,9 @@
     flex-shrink: 0;
   }
   .flex-grow {
+    flex-grow: 1;
+  }
+  .grow {
     flex-grow: 1;
   }
   .-translate-x-full {
@@ -7546,6 +7563,10 @@
   .italic {
     font-style: italic;
   }
+  .ordinal {
+    --tw-ordinal: ordinal;
+    font-variant-numeric: var(--tw-ordinal,) var(--tw-slashed-zero,) var(--tw-numeric-figure,) var(--tw-numeric-spacing,) var(--tw-numeric-fraction,);
+  }
   .btn-link {
     text-decoration-line: underline;
     outline-color: currentColor;
@@ -7567,6 +7588,9 @@
         text-decoration-line: underline;
       }
     }
+  }
+  .overline {
+    text-decoration-line: overline;
   }
   .underline {
     text-decoration-line: underline;
@@ -7605,6 +7629,10 @@
     --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
+  .ring {
+    --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
   .outline-hidden {
     --tw-outline-style: none;
     outline-style: none;
@@ -7631,6 +7659,10 @@
   }
   .blur {
     --tw-blur: blur(8px);
+    filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
+  }
+  .invert {
+    --tw-invert: invert(100%);
     filter: var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,);
   }
   .filter {
@@ -8055,8 +8087,44 @@
       --timeline-row-start: minmax(0, 1fr);
     }
   }
+  .\[lower\:upper\] {
+    lower: upper;
+  }
   .\[property\:value\] {
     property: value;
+  }
+  .\[ticket\:489\] {
+    ticket: 489;
+  }
+  .\[ticket\:1523\] {
+    ticket: 1523;
+  }
+  .\[ticket\:1570\] {
+    ticket: 1570;
+  }
+  .\[ticket\:1892\] {
+    ticket: 1892;
+  }
+  .\[ticket\:2229\] {
+    ticket: 2229;
+  }
+  .\[ticket\:2362\] {
+    ticket: 2362;
+  }
+  .\[ticket\:2619\] {
+    ticket: 2619;
+  }
+  .\[ticket\:3208\] {
+    ticket: 3208;
+  }
+  .\[ticket\:3633\] {
+    ticket: 3633;
+  }
+  .\[ticket\:4457\] {
+    ticket: 4457;
+  }
+  .\[ticket\:10782\] {
+    ticket: 10782;
   }
   .\[trace\:start\] {
     trace: start;
@@ -11505,6 +11573,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   syntax: "*";
   inherits: false;
 }
+@property --tw-ordinal {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-slashed-zero {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-figure {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-spacing {
+  syntax: "*";
+  inherits: false;
+}
+@property --tw-numeric-fraction {
+  syntax: "*";
+  inherits: false;
+}
 @property --tw-shadow {
   syntax: "*";
   inherits: false;
@@ -11709,6 +11797,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
       --tw-space-x-reverse: 0;
       --tw-border-style: solid;
       --tw-font-weight: initial;
+      --tw-ordinal: initial;
+      --tw-slashed-zero: initial;
+      --tw-numeric-figure: initial;
+      --tw-numeric-spacing: initial;
+      --tw-numeric-fraction: initial;
       --tw-shadow: 0 0 #0000;
       --tw-shadow-color: initial;
       --tw-shadow-alpha: 100%;
