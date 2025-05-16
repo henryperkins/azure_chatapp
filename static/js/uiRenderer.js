@@ -29,11 +29,8 @@ export function createUiRenderer(deps = {}) {
   const CONTEXT = "uiRenderer";
 
   // ==== Pattern 7: App readiness strictly via domReadinessService ====
-  // Wait for relevant sidebar DOM/content region readiness as prerequisite
-  // (This is a no-op if invoked repeatedly)
   let _domReady = null;
-  function ensureSidebarReady() {
-    // Wait for all primary sidebar sections (they must exist before proceeding)
+  async function ensureSidebarReady() {
     if (!_domReady) {
       _domReady = domReadinessService.dependenciesAndElements([
         "#projectsSection ul",
@@ -41,17 +38,12 @@ export function createUiRenderer(deps = {}) {
         "#starredChatsSection ul"
       ]);
     }
-    return _domReady;
+    return await _domReady;
   }
 
   // ==== Pattern 2: All DOM/global/event access via DI ====
 
   // ==== Pattern 4: Centralised Event Handling + 5: Context Tags ====
-  // All event registration/deregistration centralized, tagged with {context}
-
-  /**
-   * Clean up all tracked event listeners for this module.
-   */
   function cleanup() {
     try {
       eventHandlers.cleanupListeners({ context: CONTEXT });
@@ -60,11 +52,6 @@ export function createUiRenderer(deps = {}) {
     }
   }
 
-  /**
-   * Clears the list identified by the given selector.
-   * @param {string} selector - CSS selector for the list element.
-   * @returns {HTMLElement|null} The list element, or null if not found.
-   */
   function _clearList(selector) {
     const listElement = domAPI.querySelector(selector);
     if (listElement) {
@@ -73,11 +60,6 @@ export function createUiRenderer(deps = {}) {
     return listElement;
   }
 
-  /**
-   * Toggles a "loading" state by inserting/removing a loading indicator element.
-   * @param {HTMLElement} listElement - The UI list element.
-   * @param {boolean} isLoading - Whether to show or hide the loading indicator.
-   */
   function _setLoadingState(listElement, isLoading) {
     if (!listElement) return;
     if (isLoading) {
@@ -93,12 +75,6 @@ export function createUiRenderer(deps = {}) {
     }
   }
 
-  /**
-   * Displays a simple message (e.g., an error or info message) in a list.
-   * @param {HTMLElement} listElement - The target list element.
-   * @param {string} message - Text content of the message.
-   * @param {string} [cssClass='info-message'] - CSS class to style the list item.
-   */
   function _displayMessageInList(listElement, message, cssClass = 'info-message') {
     if (!listElement) return;
     const messageEl = domAPI.createElement('li');
@@ -107,11 +83,6 @@ export function createUiRenderer(deps = {}) {
     listElement.appendChild(messageEl);
   }
 
-  /**
-   * Extracts an array of conversation objects from various possible API responses.
-   * @param {any} response - The raw response from an API request.
-   * @returns {Array} An array of conversation objects or an empty array if not found.
-   */
   function _extractConversationsFromResponse(response) {
     if (response?.data?.conversations && Array.isArray(response.data.conversations)) {
       return response.data.conversations;
@@ -128,9 +99,6 @@ export function createUiRenderer(deps = {}) {
     return [];
   }
 
-  /**
-   * Safe event handler wrapper for logging errors (Pattern 12)
-   */
   function safeHandler(handler, description) {
     return (...args) => {
       try {
@@ -142,14 +110,6 @@ export function createUiRenderer(deps = {}) {
     }
   }
 
-  /**
-   * Creates a <li> element that displays a conversation item, including a star button.
-   * @param {Object} conversation - Conversation data.
-   * @param {boolean} isListItemForStarredTab - Whether this item is for the starred conversation list.
-   * @param {Function} isConversationStarredFn - Function to check if a conversation is starred.
-   * @param {Function} toggleStarConversationCb - Callback to toggle star/unstar.
-   * @returns {HTMLElement} The newly created <li> element.
-   */
   function _createConversationListItem(
     conversation,
     isListItemForStarredTab = false,
@@ -236,7 +196,21 @@ export function createUiRenderer(deps = {}) {
     const RECENT_CONVERSATIONS_LIST_SELECTOR = '#recentChatsSection ul';
     const listElement = _clearList(RECENT_CONVERSATIONS_LIST_SELECTOR);
     if (!listElement) return;
-    if (!projectId) return;
+    if (!projectId) {
+      if (logger && logger.info)
+        logger.info('[UiRenderer][renderConversations] called with empty/null projectId', {
+          module: CONTEXT,
+          fn: 'renderConversations',
+          projectId,
+          searchTerm
+        });
+      _displayMessageInList(
+        listElement,
+        'No project selected. Please select a project from the Projects tab.',
+        'info-message'
+      );
+      return;
+    }
 
     _setLoadingState(listElement, true);
     try {
@@ -271,6 +245,21 @@ export function createUiRenderer(deps = {}) {
       });
       const conversations = _extractConversationsFromResponse(response);
 
+      if (logger && logger.info) {
+        const sample = Array.isArray(conversations) ? conversations.slice(0, 2) : conversations;
+        logger.info(
+          `[UiRenderer][renderConversations] arrayLength=${Array.isArray(conversations) ? conversations.length : 'non-array'}`,
+          {
+            module: CONTEXT,
+            fn: 'renderConversations',
+            projectId,
+            searchTerm,
+            conversationsSample: sample,
+            full: Array.isArray(conversations) && conversations.length > 0 ? conversations[0] : undefined
+          }
+        );
+      }
+
       _setLoadingState(listElement, false);
 
       if (conversations.length === 0) {
@@ -291,7 +280,16 @@ export function createUiRenderer(deps = {}) {
       }
     } catch (error) {
       _setLoadingState(listElement, false);
-      logger.error("[UiRenderer] Error loading conversations", error, { context: CONTEXT });
+      logger.error(
+        "[UiRenderer][renderConversations] Error loading conversations",
+        error,
+        {
+          module: CONTEXT,
+          fn: 'renderConversations',
+          projectId,
+          searchTerm
+        }
+      );
       _displayMessageInList(
         listElement,
         'Error loading conversations. Please try again.',
@@ -391,11 +389,24 @@ export function createUiRenderer(deps = {}) {
    * Renders a list of projects in the sidebar.
    * @param {Array} projects - Array of project objects.
    */
-  function renderProjects(projects = []) {
-    ensureSidebarReady();
+  async function renderProjects(projects = []) {
+    await ensureSidebarReady();
     const PROJECT_LIST_SELECTOR = '#projectsSection ul';
     const listElement = _clearList(PROJECT_LIST_SELECTOR);
     if (!listElement) return;
+
+    if (logger && logger.info) {
+      const sample = Array.isArray(projects) ? projects.slice(0, 2) : projects;
+      logger.info(
+        `[UiRenderer][renderProjects] arrayLength=${Array.isArray(projects) ? projects.length : 'non-array'}`,
+        {
+          module: CONTEXT,
+          fn: 'renderProjects',
+          projectsSample: sample,
+          full: Array.isArray(projects) && projects.length > 0 ? projects[0] : undefined
+        }
+      );
+    }
 
     if (projects.length === 0) {
       _displayMessageInList(listElement, 'No projects found.');
