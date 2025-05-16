@@ -194,6 +194,12 @@ export function createProjectDashboard(deps) {
 
       const initStartTime = Date.now();
       try {
+        // Wait for global app readiness first
+        await this.domReadinessService.waitForEvent('app:ready', {
+          timeout: this.APP_CONFIG?.TIMEOUTS?.APP_READY_WAIT ?? 10000, // Use configured timeout or default
+          context: 'ProjectDashboard_waitForAppReady'
+        });
+
         // Check authentication (read from app.state or auth module)
         if (!this.auth?.isAuthenticated?.()) {
           logger.error('[ProjectDashboard][initialize]', 'User not authenticated', { context: 'projectDashboard' });
@@ -955,6 +961,14 @@ export function createProjectDashboard(deps) {
     showProjectDetails: dashboard.showProjectDetails.bind(dashboard),
     cleanup: dashboard.cleanup.bind(dashboard),
     // Optionally expose the local bus if needed:
-    dashboardBus: dashboard.dashboardBus
+    dashboardBus: dashboard.dashboardBus,
+    setProjectListComponent: (component) => {
+      if (dashboard.components) dashboard.components.projectList = component;
+      else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectList', { context: 'projectDashboard'});
+    },
+    setProjectDetailsComponent: (component) => {
+      if (dashboard.components) dashboard.components.projectDetails = component;
+      else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectDetails', { context: 'projectDashboard'});
+    }
   };
 }

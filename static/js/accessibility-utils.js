@@ -81,7 +81,7 @@ export function createAccessibilityEnhancements({
     async init() {
       const traceId = this.debug.start('init');
       try {
-        await domReadinessService.waitForEvent(domAPI.getDocument(), 'DOMContentLoaded');
+        await domReadinessService.documentReady();
         if (this._destroyed) return;
 
         this._bindGlobalShortcuts();
