@@ -276,33 +276,33 @@ export class ProjectListComponent {
             (e) => this._handleProjectUpdated(e.detail)
         );
 
-        this.eventHandlers.trackListener(
-            doc,
-            "authStateChanged",
-            (e) => {
-                const { authenticated, user } = e.detail || {};
+        const handleAuthStateChange = (e) => {
+            const { authenticated, user } = e.detail || {};
 
-                if (authenticated) {
-                    if (!this.state.initialized) {
-                        try {
-                            this.initialize().then(() => {
-                                this.show();
-                                this._loadProjects();
-                            }).catch(() => {});
-                        } catch (err) {
-                            // Ignore initialization error here
-                        }
-                    } else {
-                        this.show();
-                        setTimeout(() => {
+            if (authenticated) {
+                if (!this.state.initialized) {
+                    try {
+                        this.initialize().then(() => {
+                            this.show();
                             this._loadProjects();
-                        }, 100);
+                        }).catch(() => {});
+                    } catch (err) {
+                        // Ignore initialization error here
                     }
                 } else {
-                    this._showLoginRequired();
+                    this.show();
+                    setTimeout(() => {
+                        this._loadProjects();
+                    }, 100);
                 }
+            } else {
+                this._showLoginRequired();
             }
-        );
+        };
+
+        // Aceptar ambas variantes del evento
+        this.eventHandlers.trackListener(doc, "authStateChanged",  handleAuthStateChange);
+        this.eventHandlers.trackListener(doc, "auth:stateChanged", handleAuthStateChange);
 
         this._bindFilterEvents();
     }
