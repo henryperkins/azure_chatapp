@@ -120,14 +120,17 @@
 
 /* Pulse border animation for drag-and-drop highlight */
 @keyframes pulse-border {
-  0%,
-  100% {
+  0% {
     border-color: rgba(107, 114, 128, 0.7);
     /* base-300 70% opacity */
   }
   50% {
     border-color: rgba(107, 114, 128, 1);
     /* base-300 100% opacity */
+  }
+  100% {
+    border-color: rgba(107, 114, 128, 0.7);
+    /* base-300 70% opacity */
   }
 }
 
