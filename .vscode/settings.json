@@ -1,5 +1,7 @@
 {
-    "github.copilot.enable": false,
+    "github.copilot.enable": {
+        "*": true
+    },
     "python-envs.pythonProjects": [
         {
             "path": "",

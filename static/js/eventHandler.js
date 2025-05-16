@@ -17,7 +17,7 @@
  * @param {Object} [deps.storage] - Optional storage abstraction override (usually from browserService).
  * @param {Object} deps.errorReporter - Required error logging utility.
  * @param {Object} deps.logger - Required logging utility.
- * @param {Object} deps.domReadinessService - Required readiness service.
+ * @param {Object} [deps.domReadinessService] - Readiness service (use setter for DI circularity).
  * @param {Object} [deps.timeAPI] - Optional timing API (defaults to performance.now).
  * @returns {Object} Event handler API { trackListener, cleanupListeners, delegate, etc. }
  */
@@ -35,8 +35,7 @@ export function createEventHandlers({
   navigate,
   storage,
   logger,           // STRICT: must be provided via DI
-  errorReporter,    // STRICT: must be provided via DI
-  domReadinessService
+  errorReporter    // STRICT: must be provided via DI
 } = {}) {
   const MODULE = 'EventHandler';
   if (!DependencySystem) {
@@ -57,9 +56,10 @@ export function createEventHandlers({
   if (!errorReporter) {
     throw new Error('[eventHandler] DI errorReporter is required.');
   }
-  if (!domReadinessService) {
-    throw new Error('[eventHandler] Missing domReadinessService');
-  }
+  // domReadinessService will be provided via setter for DI circularity
+  let _domReadinessService = null;
+  function setDomReadinessService(svc) { _domReadinessService = svc; }
+
   logger.debug('[EventHandler] Factory initialized', {
     MODULE,
     version: '1.0',
@@ -323,11 +323,13 @@ export function createEventHandlers({
       return this; // Return API object early
     }
 
-    // Using the injected domReadinessService here
+    if (!_domReadinessService) {
+      throw new Error('[eventHandler.init] domReadinessService must be set via setDomReadinessService before calling init()');
+    }
     const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10000;
 
     // Wait for core dependencies and the body to exist
-    await domReadinessService.dependenciesAndElements({
+    await _domReadinessService.dependenciesAndElements({
       deps: [
         'app',
         'auth',
@@ -342,7 +344,7 @@ export function createEventHandlers({
     });
 
     // -- Strict document/body readiness
-    await domReadinessService.documentReady();
+    await _domReadinessService.documentReady();
 
     // -- DOM event-dependent setup
     const runDomDependentSetup = () => {
@@ -354,7 +356,7 @@ export function createEventHandlers({
     runDomDependentSetup();
 
     // -- Project modal form (wait for element to exist)
-    domReadinessService.elementsReady('#projectModalForm', {
+    _domReadinessService.elementsReady('#projectModalForm', {
       timeout: dependencyWaitTimeout,
       context: 'eventHandler.init:modalForm'
     }).then(() => {
@@ -700,6 +702,7 @@ export function createEventHandlers({
     setProjectManager: (pm) => {
       _projectManager = pm;
     },
+    setDomReadinessService, // <-- add to API
     DependencySystem,
     cleanup, // Expose cleanup API per guardrail
   };

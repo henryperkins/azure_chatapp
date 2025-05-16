@@ -36,7 +36,7 @@ import { createChatExtensions } from './chatExtensions.js';
 import { createModelConfig } from './modelConfig.js';
 import { createProjectDashboardUtils } from './projectDashboardUtils.js';
 import { createProjectDashboard } from './projectDashboard.js';
-import { ProjectListComponent } from './projectListComponent.js';
+import { createProjectListComponent } from './projectListComponent.js';
 import { createProjectDetailsComponent } from './projectDetailsComponent.js';
 import { createSidebar } from './sidebar.js';
 import { createUiRenderer } from './uiRenderer.js';
@@ -128,25 +128,32 @@ if (!sanitizer) {
 DependencySystem.register('sanitizer', sanitizer);
 DependencySystem.register('domPurify', sanitizer); // legacy alias
 
-// Now create eventHandlers FIRST so it is available for all later DI consumers
+const errorReporter =
+  { report: (...args) => logger.error('[ErrorReporterStub]', ...args) };
+DependencySystem.register('errorReporter', errorReporter);
+
 const eventHandlers = createEventHandlers({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
   APP_CONFIG,
-  sanitizer
+  sanitizer,
+  logger,
+  errorReporter
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
-// Create and register DomReadinessService AFTER eventHandlers is available
 const domReadinessService = createDomReadinessService({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
-  eventHandlers,
+  eventHandlers, // Inject eventHandlers as required by domReadinessService
   APP_CONFIG
 });
 DependencySystem.register('domReadinessService', domReadinessService);
+
+// Wire circular dependency with setter (post-construction)
+eventHandlers.setDomReadinessService(domReadinessService);
 
 DependencySystem.register('browserAPI', browserAPI);
 DependencySystem.register('browserService', browserServiceInstance);
@@ -243,7 +250,9 @@ DependencySystem.register('apiRequest', apiRequest);
 // ---------------------------------------------------------------------------
 const accessibilityUtils = createAccessibilityEnhancements({
   domAPI,
-  eventHandlers
+  eventHandlers,
+  logger,
+  domReadinessService
 });
 DependencySystem.register('accessibilityUtils', accessibilityUtils);
 
@@ -652,14 +661,17 @@ async function initializeCoreSystems() {
     eventHandlers,
     domAPI,
     sanitizer,
+    APP_CONFIG,           // pass full app configuration
     modalManager,
     apiEndpoints,
-    logger // Pass the DI logger (registered above)
+    logger, // Pass the DI logger (registered above)
+    domReadinessService
   });
   DependencySystem.register('auth', authModule);
   // Initialize auth module to set up event listeners
   await authModule.init().catch(err => {
-    DependencySystem.modules.get('logger').error('[App] Auth module initialization error:', err);
+    const logMsg = (err && (err.message || err.stack)) ? `Auth module initialization error: ${err.message}\n${err.stack}` : `[App] Auth module initialization error: ${JSON.stringify(err)}`;
+    DependencySystem.modules.get('logger').error('[App] ' + logMsg, err);
   });
 
   // Create model config
@@ -700,12 +712,70 @@ async function initializeCoreSystems() {
     await eventHandlers.init();
   }
 
+  // ------------------------------------------------------------------------
+  // Early stub/component registration for projectListComponent and projectDetailsComponent
+  // To avoid "Optional module ... not found" warnings in ProjectDashboard constructor,
+  // instantiate and register placeholder or real component objects before dashboard creation
+  // ------------------------------------------------------------------------
+  function createPlaceholder(name) {
+    return {
+      state: { initialized: false },
+      initialize: async () => {},
+      show: () => {},
+      hide: () => {},
+      cleanup: () => {},
+      __placeholder: true,
+      toString() { return `[Placeholder ${name}]`; }
+    };
+  }
+
+  if (!DependencySystem.modules.has('projectListComponent')) {
+    // Safe to construct the real instance early as its constructor does not touch the DOM yet,
+    // but you may also opt to use createPlaceholder('projectListComponent') if real dependencies might be incomplete here.
+    const earlyPLC = createProjectListComponent({
+      projectManager,
+      eventHandlers,
+      modalManager: DependencySystem.modules.get('modalManager'),
+      app,
+      router: DependencySystem.modules.get('navigationService'),
+      storage: DependencySystem.modules.get('storage'),
+      sanitizer: DependencySystem.modules.get('sanitizer'),
+      domAPI,
+      browserService: browserServiceInstance,
+      globalUtils: DependencySystem.modules.get('globalUtils')
+    });
+    DependencySystem.register('projectListComponent', earlyPLC);
+  }
+
+  if (!DependencySystem.modules.has('projectDetailsComponent')) {
+    const earlyPDC = createProjectDetailsComponent({
+      projectManager,
+      eventHandlers,
+      modalManager: DependencySystem.modules.get('modalManager'),
+      FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
+      domAPI,
+      sanitizer: DependencySystem.modules.get('sanitizer'),
+      app,
+      router: DependencySystem.modules.get('navigationService'),
+      chatManager: DependencySystem.modules.get('chatManager'),
+      modelConfig: DependencySystem.modules.get('modelConfig'),
+      knowledgeBaseComponent: null, // injected later in UI phase
+      domReadinessService
+    });
+    DependencySystem.register('projectDetailsComponent', earlyPDC);
+  }
+  // ------------------------------------------------------------------------
+
   // Create project dashboard with strict dependency injection
   const projectDashboard = createProjectDashboard({
     dependencySystem: DependencySystem,
     domAPI,
     browserService: browserServiceInstance,
-    eventHandlers
+    eventHandlers,
+    logger, // Inject logger DI as required by dashboard
+    sanitizer,
+    APP_CONFIG,           // pass full app configuration
+    domReadinessService
   });
   DependencySystem.register('projectDashboard', projectDashboard);
 
@@ -912,7 +982,7 @@ function createAndRegisterUIComponents() {
   const backBtnElement = domAPI.getElementById('backToProjectsBtn');
 
   if (projectListElement) {
-    const projectListComponentInstance = new ProjectListComponent({
+    const projectListComponentInstance = createProjectListComponent({
       projectManager: DependencySystem.modules.get('projectManager'),
       eventHandlers,
       modalManager: DependencySystem.modules.get('modalManager'),
