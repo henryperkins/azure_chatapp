@@ -17,10 +17,9 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select # Add this import
-from sqlalchemy.orm import selectinload # Add this import
-from models.project import Project # ADDED
-import sentry_sdk
+from sqlalchemy.future import select  # Add this import
+from sqlalchemy.orm import selectinload  # Add this import
+from models.project import Project  # ADDED
 from sentry_sdk import (
     capture_exception,
     configure_scope,
@@ -30,7 +29,6 @@ from sentry_sdk import (
 )
 
 from db import get_async_session
-from models.user import User
 from services.conversation_service import ConversationService, get_conversation_service
 from utils.auth_utils import get_current_user_and_token
 from utils.sentry_utils import sentry_span, make_sentry_trace_response
@@ -54,7 +52,7 @@ class ConversationCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
-    ai_settings: Optional[dict] = Field(None, description="AI-specific settings") # ADDED
+    ai_settings: Optional[dict] = Field(None, description="AI-specific settings")  # ADDED
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
 
@@ -213,7 +211,7 @@ async def create_conversation(
                         project_id=project_id,
                         knowledge_base_id=kb_id,  # ADDED
                         use_knowledge_base=True,  # ADDED
-                        ai_settings=conversation_data.ai_settings # CORRECTED from extra_data
+                        ai_settings=conversation_data.ai_settings  # CORRECTED from extra_data
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
                 except IntegrityError as db_exc:

@@ -118,18 +118,32 @@ cookie_config_helper = CookieSettings(settings.ENV, settings.COOKIE_DOMAIN)
 def set_secure_cookie(
     response: Response, key: str, value: str, max_age: Optional[int], request: Request
 ) -> None:
-    # Always use permissive cookie settings except in production
+    """Sets a cookie with correct flags for each environment, explicitly guarding localhost."""
     env = (settings.ENV or "").lower()
+    hostname = request.url.hostname
+    running_localhost = hostname in ["127.0.0.1", "localhost"]
     is_production = env == "production"
 
-    # Development: use host-only cookies without secure flag to ensure local testing works
-    if not is_production:
+    # On localhost, always use dev cookie attributes—even if ENV=production
+    if running_localhost:
+        secure = False
+        domain = None
+        samesite = "lax"
+        httponly = True
+        path = "/"
+        if is_production:
+            logger.warning(
+                f"[AUTH_COOKIE_PLAN] Overriding production secure/domain for localhost request (host={hostname}); ENV=production"
+            )
+    elif not is_production:
+        # Non-prod, non-localhost (e.g., LAN IP in dev): use relaxed settings
         secure = False
         domain = None
         samesite = "lax"
         httponly = True
         path = "/"
     else:
+        # True production (public hostname, ENV=production)
         cookie_attrs = cookie_config_helper.get_attributes(request)
         secure = cookie_attrs["secure"]
         domain = cookie_attrs["domain"]
@@ -583,6 +597,51 @@ async def get_token_expiry_settings() -> TokenExpirySettings:
         access_token_expire_minutes=ACCESS_TOKEN_EXPIRE_MIN,
         refresh_token_expire_days=REFRESH_TOKEN_EXPIRE_DAYS,
     )
+
+@router.get("/settings/auth", response_model=dict)
+async def get_auth_settings(request: Request):
+    """Expose effective cookie/CORS/auth config for this request."""
+    env = (settings.ENV or "").lower()
+    hostname = request.url.hostname
+    running_localhost = hostname in ["127.0.0.1", "localhost"]
+    is_production = env == "production"
+    # Always compute what set_secure_cookie would use for these values:
+    if running_localhost:
+        secure = False
+        domain = None
+        samesite = "lax"
+        httponly = True
+        path = "/"
+        env_note = "localhost mode overrides all production cookie/domain/cors."
+    elif not is_production:
+        secure = False
+        domain = None
+        samesite = "lax"
+        httponly = True
+        path = "/"
+        env_note = "development mode, relaxed cookie policy."
+    else:
+        attrs = cookie_config_helper.get_attributes(request)
+        secure = attrs["secure"]
+        domain = attrs["domain"]
+        samesite = attrs["samesite"]
+        httponly = attrs["httponly"]
+        path = attrs["path"]
+        env_note = "strict production policy"
+    return {
+        "environment": env,
+        "request_hostname": hostname,
+        "is_production": is_production,
+        "running_localhost": running_localhost,
+        "cookie_policy": {
+            "secure": secure,
+            "domain": domain,
+            "samesite": samesite,
+            "httponly": httponly,
+            "path": path,
+        },
+        "note": env_note,
+    }
 
 
 @router.get("/timestamp", response_model=dict[str, float])

@@ -1110,6 +1110,30 @@ export function createAuthModule({
     }
   }
 
+  // === 13.5) FETCH LIVE AUTH SETTINGS DIAGNOSTICS ===
+  /**
+   * Fetch and log current backend cookie/CSRF/CORS config to help confirm correct alignment.
+   * Uses DI apiClient and apiEndpoints; never mutates global state.
+   */
+  async function fetchAuthSettingsDiagnostic() {
+    if (!apiEndpoints.AUTH_SETTINGS) {
+      logger.error('[AuthModule] No AUTH_SETTINGS endpoint provided in apiEndpoints');
+      return;
+    }
+    try {
+      const settings = await apiClient(apiEndpoints.AUTH_SETTINGS, {
+        method: 'GET',
+        credentials: 'include',
+        headers: { Accept: 'application/json' }
+      });
+      logger.info('[AuthModule][fetchAuthSettingsDiagnostic] Backend config LIVE:', settings);
+      return settings;
+    } catch (err) {
+      logger.error('[AuthModule][fetchAuthSettingsDiagnostic] Error fetching auth settings:', err);
+      throw err;
+    }
+  }
+
   // === 14) PUBLIC API EXPORT (FACTORY PATTERN) ===
   const publicAuth = {
     isAuthenticated: () => authState.isAuthenticated,
@@ -1133,7 +1157,8 @@ export function createAuthModule({
       return /(?:^|;\s*)(access_token|refresh_token)=/.test(cookieStr);
     },
     cleanup,
-    fetchCurrentUser
+    fetchCurrentUser,
+    fetchAuthSettingsDiagnostic
   };
 
   return publicAuth;
