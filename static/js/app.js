@@ -258,6 +258,7 @@ DependencySystem.register('navigationService', navigationService);
 const htmlTemplateLoader = createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
+  eventHandlers,          // ← add this line
   apiClient: {                      // HtmlTemplateLoader expects an object with .fetch()
     fetch: (...args) => apiRequest(...args)
   },
