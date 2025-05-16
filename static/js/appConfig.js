@@ -9,7 +9,7 @@ export const APP_CONFIG = {
   // Mantener vacío para usar la misma URL de origen que la página
   BASE_API_URL: '',
   SELECTORS: {
-    APP_LOADING_SPINNER: '#appLoading',
+    APP_LOADING_SPINNER: '#appLoadingSpinner',
     APP_FATAL_ERROR: '#appFatalError',
     LOGIN_REQUIRED_MESSAGE: '#loginRequiredMessage',
     AUTH_BUTTON: '#authButton',

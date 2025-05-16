@@ -106,7 +106,10 @@ export function createDomAPI({
       if (sanitizer && typeof sanitizer.sanitize === 'function') {
         el.innerHTML = sanitizer.sanitize(html);
       } else {
-        // Set content without warning
+        // SECURITY WARNING: Setting innerHTML without a sanitizer is dangerous!
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[domAPI] WARNING: setInnerHTML called without sanitizer. This is a security risk.');
+        }
         el.innerHTML = html;
       }
     },
@@ -123,7 +126,12 @@ export function createDomAPI({
     getComputedStyle: (el) =>
       (windowObject?.getComputedStyle)
         ? windowObject.getComputedStyle(el)
-        : { visibility: '', display: '' },
+        : (() => {
+            if (typeof console !== 'undefined' && console.warn) {
+              console.warn('[domAPI] WARNING: getComputedStyle fallback returns minimal object. This may break code expecting CSSStyleDeclaration.');
+            }
+            return { visibility: '', display: '' };
+          })(),
 
     /**
      * Prevent default on event if possible
@@ -311,16 +319,19 @@ export function createDomAPI({
      * @param {Function} handler - Event handler
      * @param {Object|boolean} [opts] - Options
      */
+    /**
+     * Add event listener to element, documentObject, or windowObject.
+     * NOTE: For global events like 'resize', 'hashchange', or 'popstate', you MUST pass windowObject explicitly.
+     * If el is null/undefined, attaches to documentObject by default.
+     */
     addEventListener: (el, ...args) => {
       (el ?? documentObject).addEventListener(...args);
     },
 
     /**
-     * Remove event listener from element or documentObject.
-     * @param {Element|Document} el - Target element (or null for documentObject)
-     * @param {string} type - Event type
-     * @param {Function} handler - Event handler
-     * @param {Object|boolean} [opts] - Options
+     * Remove event listener from element, documentObject, or windowObject.
+     * NOTE: For global events like 'resize', 'hashchange', or 'popstate', you MUST pass windowObject explicitly.
+     * If el is null/undefined, removes from documentObject by default.
      */
     removeEventListener: (el, ...args) => {
       (el ?? documentObject).removeEventListener(...args);
