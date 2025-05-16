@@ -471,10 +471,13 @@ export class ProjectListComponent {
                 projectManagerPanel.style.display = "";
             }
 
+            // --- HARD FIX: Always fully hide projectDetailsView (details container and all children) ---
             const projectDetailsView = docAPI?.getElementById("projectDetailsView");
             if (projectDetailsView) {
                 projectDetailsView.classList.add("hidden");
                 projectDetailsView.style.display = "none";
+                projectDetailsView.style.visibility = "hidden";
+                projectDetailsView.style.opacity = "0";
             }
 
             const loginMessage = docAPI?.getElementById("loginRequiredMessage");
@@ -488,6 +491,14 @@ export class ProjectListComponent {
             }
 
             void listViewContainer.offsetHeight; // force reflow
+        }
+        // Extra: defensive - forcibly hide projectDetailsView outside standard ancestry (corner cases)
+        const pdv = document.getElementById("projectDetailsView");
+        if (pdv) {
+            pdv.classList.add("hidden");
+            pdv.style.display = "none";
+            pdv.style.visibility = "hidden";
+            pdv.style.opacity = "0";
         }
     }
 
@@ -787,8 +798,12 @@ export class ProjectListComponent {
     }
 
     _showEmptyState() {
+        // Force visibility up the ancestor chain for empty state
+        this._makeVisible();
+
         const docAPI = this.domAPI;
         if (!this.gridElement) return;
+
         this._clearElement(this.gridElement);
         this.gridElement.classList.add("grid", "project-list");
         const emptyDiv = docAPI.createElement("div");
@@ -803,6 +818,22 @@ export class ProjectListComponent {
         `);
         this.gridElement.appendChild(emptyDiv);
 
+        // Unhide #projectList and #projectListView explicitly, in case a parent stayed hidden
+        const elem = docAPI?.getElementById("projectList");
+        if (elem) {
+            elem.classList.remove("hidden", "opacity-0");
+            elem.style.opacity = "1";
+            elem.style.display = "";
+        }
+        const view = docAPI?.getElementById("projectListView");
+        if (view) {
+            view.classList.remove("hidden", "opacity-0");
+            view.style.opacity = "1";
+            view.style.display = "";
+            view.style.visibility = "visible";
+        }
+
+        // Make the create button clickable
         const createBtn = docAPI?.getElementById
             ? docAPI.getElementById("emptyStateCreateBtn")
             : docAPI.getElementById("emptyStateCreateBtn");
