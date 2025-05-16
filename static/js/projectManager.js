@@ -87,6 +87,8 @@ class ProjectManager {
       throw new Error('DependencySystem required');
     }
 
+    this.DependencySystem = DependencySystem;        // ← NUEVA línea
+
     if (!apiEndpoints) {
       throw new Error('apiEndpoints required');
     }
@@ -165,7 +167,14 @@ class ProjectManager {
     if (doc) this.domAPI.dispatchEvent(doc, new CustomEvent(event, { detail }));
   }
   _authOk(failEvent, extraDetail = {}) {
+    // 1º: estado canónico de la app
     if (this.app?.state?.isAuthenticated) return true;
+
+    // 2º: fallback – consultar módulo auth por si app.state aún no se ha actualizado
+    const auth = this.DependencySystem?.modules?.get?.('auth');
+    if (auth?.isAuthenticated?.()) return true;
+
+    // 3º: no autenticado → emitir evento de fallo
     this._emit(failEvent, { error: 'auth_required', ...extraDetail });
     return false;
   }
