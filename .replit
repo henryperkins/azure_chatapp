@@ -3,12 +3,12 @@ run = "npm run dev"
 
 [nix]
 channel = "stable-24_05"
-packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "rustc", "python312Packages.pip", "python311Packages.pip"]
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "postgresql", "python311Packages.pip", "python312Packages.pip", "rustc"]
 
 [deployment]
-run = ["sh", "-c", "uvicorn main:app --reload --host=0.0.0.0 --port=8000"]
-build = ["sh", "-c", "npm run build:css"]
-deploymentTarget = "cloudrun"
+run = ["sh", "-c", "uvicorn main:app --host=0.0.0.0 --port=8000"]
+buildCommand = "pip install -r requirements.txt --break-system-packages && pip install asyncpg psycopg2-binary && npm install && npm run build:css"
+deploymentTarget = "gce"
 
 [workflows]
 runButton = "Run"
@@ -20,7 +20,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "uvicorn main:app --reload"
+args = "uvicorn main:app --reload --host=0.0.0.0 --port=8000"
 
 [[ports]]
 localPort = 8000
