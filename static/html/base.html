@@ -203,6 +203,10 @@
 </head>
 
 <body class="bg-base-200 text-base-content h-screen flex flex-col font-sans">
+<div id="appInitError" class="bg-error text-error-content text-sm p-2 hidden" aria-live="assertive" style="z-index: 9999;">
+  <strong>Initialization Error:</strong>
+  <span id="appInitErrorText"></span>
+</div>
 <!-- Skip link for accessibility -->
   <a href="#mainContent" class="skip-to-content sr-only focus:not-sr-only focus:inline-block focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-content">
     Skip to content

@@ -128,7 +128,7 @@ export function createDomReadinessService({
             new Error(
               `[domReadinessService] Timed out after ${timeout}ms for selectors: ${
                 missing.join(', ')
-              } (context: ${context})`
+              } (context: ${context}). Elements missing: [${missing.join(', ')}]`
             )
           );
         }, timeout);

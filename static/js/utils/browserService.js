@@ -43,7 +43,8 @@ export function normaliseUrl(u = '') {
 // U.S.-spelling alias – keeps backward compatibility
 export const normalizeUrl = normaliseUrl;
 
-export function createBrowserService({ windowObject } = {}) {
+export function createBrowserService({ windowObject, logger } = {}) {
+  const _logger = logger;
 
   let _currentUser = null;
 
@@ -82,8 +83,32 @@ export function createBrowserService({ windowObject } = {}) {
     if (!windowObject.fetch) {
       throw new Error('browserService: windowObject.fetch is not available. This may occur in test/mocked environments.');
     }
-    // Direct passthrough; you may inject/wrap for testability in tests
-    return windowObject.fetch(...args);
+    if (_logger) {
+      _logger.log('[browserService][fetchImpl] Request', {
+        context: 'browserService:fetchImpl',
+        url: args[0]
+      });
+    }
+    let response;
+    try {
+      response = await windowObject.fetch(...args);
+      if (!response.ok && _logger) {
+        _logger.warn('[browserService][fetchImpl] Non-OK response: ' + response.status, {
+          context: 'browserService:fetchImpl',
+          url: args[0],
+          status: response.status
+        });
+      }
+      return response;
+    } catch (err) {
+      if (_logger) {
+        _logger.error('[browserService][fetchImpl] Error during fetch', err, {
+          context: 'browserService:fetchImpl',
+          url: args[0]
+        });
+      }
+      throw err;
+    }
   }
 
   function setCurrentUser(userObj) { _currentUser = userObj ?? null; }
