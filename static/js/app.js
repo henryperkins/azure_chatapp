@@ -372,10 +372,8 @@ function createOrGetChatManager() {
     navAPI: {
       getSearch: () => browserAPI.getLocation().search,
       getHref: () => browserAPI.getLocation().href,
-      pushState: (url, title = '') => { // Ensure title is handled or documented if navigationService doesn't use it
+      pushState: (url, title = "") => {
         const navService = DependencySystem.modules.get('navigationService');
-        // Assuming navigationService.navigateTo(url) is the correct method.
-        // The 'title' parameter might be lost if navigateTo doesn't support it.
         navService?.navigateTo(url);
       },
       getPathname: () => browserAPI.getLocation().pathname
@@ -388,6 +386,29 @@ function createOrGetChatManager() {
 
   DependencySystem.register('chatManager', cm);
   return cm;
+}
+
+/**
+ * safeHandler – Ensures all event handler exceptions are logged via DI logger.
+ * Always use for user-initiated/UI handlers, with context tagging.
+ */
+function safeHandler(handler, description) {
+  // logger is guaranteed in DI for all app modules
+  const logger = DependencySystem.modules.get && DependencySystem.modules.get('logger');
+  return (...args) => {
+    try {
+      return handler(...args);
+    } catch (err) {
+      if (logger && typeof logger.error === "function") {
+        logger.error(
+          `[app.js][${description}]`,
+          err && err.stack ? err.stack : err,
+          { context: description || "app.js" }
+        );
+      }
+      throw err;
+    }
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -465,7 +486,11 @@ export async function init() {
             show: async () => {
               // Wait for both projectDashboard and projectListComponent to be available
               try {
-                await DependencySystem.waitFor(['projectDashboard', 'projectListComponent'], null, 10000);
+                await domReadinessService.dependenciesAndElements({
+                  deps: ['projectDashboard', 'projectListComponent'],
+                  timeout: 10000,
+                  context: 'app.js:nav:projectList'
+                });
 
                 const dashboard = DependencySystem.modules.get('projectDashboard');
                 if (dashboard?.showProjectList) {
@@ -480,9 +505,10 @@ export async function init() {
                   }
                 }
                 return false;
-              } catch (err) {
-                return false;
-              }
+  } catch (err) {
+    logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:show' });
+    // Continue despite error to attempt recovery
+  }
             },
             hide: async () => {
               try {
@@ -501,9 +527,10 @@ export async function init() {
                 }
 
                 return false;
-              } catch (err) {
-                return false;
-              }
+  } catch (err) {
+    logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:hide' });
+    // Error handled silently
+  }
             }
           });
         }
@@ -514,7 +541,11 @@ export async function init() {
             show: async (params) => {
               // Wait for both projectDashboard and projectDetailsComponent to be available
               try {
-                await DependencySystem.waitFor(['projectDashboard', 'projectDetailsComponent'], null, 10000);
+                await domReadinessService.dependenciesAndElements({
+                  deps: ['projectDashboard', 'projectDetailsComponent'],
+                  timeout: 10000,
+                  context: 'app.js:nav:projectDetails'
+                });
 
                 // First try the dashboard method
                 const dashboard = DependencySystem.modules.get('projectDashboard');
@@ -531,9 +562,10 @@ export async function init() {
                 }
 
                 return false;
-              } catch (err) {
-                return false;
-              }
+    } catch (err) {
+      logger.error('[pm?.loadProjects]', err, { context: 'app:projectManager:loadProjects' });
+      // Error handled silently
+    }
             },
             hide: async () => {
               try {
@@ -571,6 +603,7 @@ export async function init() {
 
     return true;
   } catch (err) {
+    logger.error('[init]', err, { context: 'app:init' });
     handleInitError(err);
 
     AppBus.dispatchEvent(new CustomEvent('app:ready', {
@@ -711,9 +744,10 @@ async function initializeCoreSystems() {
   if (modalManager.init) {
     try {
       await modalManager.init();
-    } catch (err) {
-      // Error handled silently
-    }
+              } catch (err) {
+                logger.error('[projectList:show]', err, { context: 'app:nav:projectList:show' });
+                return false;
+              }
   }
 
   return true;
@@ -778,9 +812,10 @@ async function initializeUIComponents() {
         { once: true, description: 'Wait for modalsLoaded in initializeUIComponents', context: 'app' }
       );
     });
-  } catch (err) {
-    // Continue despite error to attempt recovery
-  }
+              } catch (err) {
+                logger.error('[projectList:hide]', err, { context: 'app:nav:projectList:hide' });
+                return false;
+              }
 
   createAndRegisterUIComponents();
 
@@ -814,9 +849,10 @@ async function initializeUIComponents() {
       if (chatManager?.loadConversation) {
         try {
           await chatManager.loadConversation(conversationId);
-        } catch (err) {
-          // Error handled silently
-        }
+              } catch (err) {
+                logger.error('[onConversationSelect]', err, { context: 'app:uiRenderer:onConversationSelect' });
+                return false;
+              }
       }
     },
     onProjectSelect: async (projectId) => {
@@ -824,9 +860,10 @@ async function initializeUIComponents() {
       if (projectDashboardDep?.showProjectDetails) {
         try {
           await projectDashboardDep.showProjectDetails(projectId);
-        } catch (err) {
-          // Error handled silently
-        }
+              } catch (err) {
+                logger.error('[projectDetails:hide]', err, { context: 'app:nav:projectDetails:hide' });
+                return false;
+              }
       }
     }
   });
@@ -1096,16 +1133,17 @@ function renderAuthHeader() {
       eventHandlers.trackListener(
         logoutBtn,
         'click',
-        (e) => {
+        safeHandler((e) => {
           domAPI.preventDefault(e);
           authMod?.logout?.();
-        },
+        }, 'Auth logout button'),
         { description: 'Auth logout button', context: 'app' }
       );
     }
-  } catch (err) {
-    // Error handled silently
-  }
+    } catch (err) {
+      logger.error('[safeInit]', err, { context: 'app:safeInit:AccessibilityUtils' });
+      // Error handled silently
+    }
 }
 
 async function fetchCurrentUser() {
@@ -1138,6 +1176,7 @@ async function fetchCurrentUser() {
 
     return null;
   } catch (error) {
+    logger.error('[fetchCurrentUser]', error, { context: 'app:fetchCurrentUser' });
     return null;
   }
 }
@@ -1146,7 +1185,10 @@ async function fetchCurrentUser() {
 // 21) App listeners and error handling
 // ---------------------------------------------------------------------------
 function registerAppListeners() {
-  DependencySystem.waitFor(['auth', 'chatManager', 'projectManager', 'eventHandlers'])
+  domReadinessService.dependenciesAndElements({
+    deps: ['auth', 'chatManager', 'projectManager', 'eventHandlers'],
+    context: 'app.js:registerAppListeners'
+  })
     .then(() => {
       setupChatInitializationTrigger();
     })
@@ -1167,7 +1209,7 @@ function setupChatInitializationTrigger() {
   eventHandlers.trackListener(
     domAPI.getDocument(),
     'projectSelected',
-    async (e) => {
+    safeHandler(async (e) => {
       const projectId = e?.detail?.projectId;
       if (!projectId) return;
 
@@ -1175,10 +1217,11 @@ function setupChatInitializationTrigger() {
         try {
           await chatManager.initialize({ projectId });
         } catch (err) {
+          logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
           // Error handled silently
         }
       }
-    },
+    }, 'projectSelected/init chat'),
     { description: 'Initialize ChatManager on projectSelected', context: 'app' }
   );
 }
@@ -1191,6 +1234,7 @@ function handleInitError(err) {
       domAPI.removeClass(errorContainer, 'hidden');
     }
   } catch (displayErr) {
+    logger.error('[handleInitError]', displayErr, { context: 'app:handleInitError' });
     // Error handled silently
   }
 }
@@ -1204,7 +1248,12 @@ if (typeof window !== 'undefined') {
     return false;
   };
 
-  window.addEventListener('unhandledrejection', function(event) {});
+  eventHandlers.trackListener(
+    window,
+    'unhandledrejection',
+    safeHandler(function(event) {}, 'global unhandledrejection'),
+    { context: 'app' }
+  );
 
   const doc = browserAPI.getDocument();
   function forceShowLoginModal() {
