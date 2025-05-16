@@ -1124,11 +1124,13 @@ export function createAuthModule({
     AuthBus,
     getCSRFTokenAsync,
     getCSRFToken,
+    /* --- reemplazar implementación defectuosa --- */
     hasAuthCookies: () => {
-      const cookieStr = domAPI.getAttribute
-        ? domAPI.getAttribute(domAPI.getDocument(), 'cookie')
-        : '';
-      return cookieStr && (cookieStr.includes('access_token') || cookieStr.includes('refresh_token'));
+      const doc = domAPI.getDocument?.();
+      if (!doc || typeof doc.cookie !== 'string') return false;
+      const cookieStr = doc.cookie || '';
+      /* Busca cookies access_token o refresh_token de forma segura */
+      return /(?:^|;\s*)(access_token|refresh_token)=/.test(cookieStr);
     },
     cleanup,
     fetchCurrentUser
