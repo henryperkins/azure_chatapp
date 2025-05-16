@@ -23,8 +23,6 @@ from utils.serializers import serialize_list
 from enum import Enum
 from models.user import User, UserRole
 from models.project import Project, ProjectUserAssociation
-from uuid import UUID
-from sqlalchemy.future import select
 
 
 # ---- ID normaliser --------------------------------------------------------
@@ -58,7 +56,7 @@ async def _lookup_project(session, key):
     """
     # Try to get by UUID first if the key is already a UUID object
     if isinstance(key, UUID):
-        # Attempt lookup by UUID primary key (if applicable) 
+        # Attempt lookup by UUID primary key (if applicable)
         project = await session.get(Project, key)
         if project:
             return project
@@ -77,7 +75,7 @@ async def _lookup_project(session, key):
         if project:
             return project
     except (ValueError, TypeError):
-        pass # key was not convertible to int
+        pass
 
     # Original UUID lookup block (handles UUID strings if coerce_project_id wasn't used)
     # This might be redundant if coerce_project_id is always used upstream,
