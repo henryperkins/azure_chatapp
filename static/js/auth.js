@@ -38,11 +38,11 @@ export function createAuthModule({
   // Fallback for missing logger
   if (!logger) {
     const consoleLogger = {
-      log: (...args) => console.log(...args),
-      warn: (...args) => console.warn(...args),
-      error: (...args) => console.error(...args),
-      info: (...args) => console.info(...args),
-      debug: (...args) => console.debug(...args),
+      log: (...args) => logger.info('[AuthModule]', ...args),
+      warn: (...args) => logger.warn('[AuthModule]', ...args),
+      error: (...args) => logger.error('[AuthModule]', ...args),
+      info: (...args) => logger.info('[AuthModule]', ...args),
+      debug: (...args) => logger.debug ? logger.debug('[AuthModule]', ...args) : undefined,
     };
     logger = consoleLogger;
   }

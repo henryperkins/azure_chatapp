@@ -20,7 +20,6 @@
  * @returns {Object} Event handler API { trackListener, cleanupListeners, delegate, etc. }
  */
 
-import { waitForDepsAndDom } from './utils/globalUtils.js';
 import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
 
 const MODULE = 'EventHandler';
@@ -34,8 +33,31 @@ export function createEventHandlers({
   browserService,
   APP_CONFIG,
   navigate,
-  storage
+  storage,
+  logger,            // New: optionally injected logger
+  errorReporter      // New: optionally injected error tracking
 } = {}) {
+  // --- Dependency fallback ---
+  if (!logger && DependencySystem?.modules?.get('logger')) {
+    logger = DependencySystem.modules.get('logger');
+  }
+  if (!errorReporter && DependencySystem?.modules?.get('errorReporter')) {
+    errorReporter = DependencySystem.modules.get('errorReporter');
+  }
+
+  if (!logger) {
+    logger = {
+      log: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {}
+    };
+  }
+  if (!errorReporter) {
+    errorReporter = { report: () => {} };
+  }
+  logger.debug('[EventHandler] Factory initialized', { MODULE, version: '1.0', appInjected: !!app });
   // We allow dynamic injection/update of projectManager
   let _projectManager = projectManager;
 
@@ -289,20 +311,15 @@ export function createEventHandlers({
       return this; // Return API object early
     }
 
-    await DependencySystem.waitFor?.(['app', 'domAPI']);
-
-    // Guardrail #10: wait for required modules
-    await DependencySystem.waitFor?.([
-      'app',
-      'auth',
-      'projectManager',
-      'modalManager',
-      'domAPI',
-      'browserService'
-    ]);
-
+    // Use DI domReadinessService for unified readiness
+    const domReadinessService = DependencySystem?.modules?.get?.('domReadinessService');
+    if (!domReadinessService) {
+      throw new Error('[eventHandler] domReadinessService missing in DI');
+    }
     const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10000;
-    await waitForDepsAndDom({
+
+    // Wait for core dependencies and the body to exist
+    await domReadinessService.dependenciesAndElements({
       deps: [
         'app',
         'auth',
@@ -312,52 +329,29 @@ export function createEventHandlers({
         'browserService'
       ],
       domSelectors: ['body'],
-      DependencySystem,
-      domAPI,
-      timeout: dependencyWaitTimeout
+      timeout: dependencyWaitTimeout,
+      context: 'eventHandler.init'
     });
 
-    // --- DOM-dependent listeners: espera a que el body esté PARSEADO ---
+    // -- Strict document/body readiness
+    await domReadinessService.documentReady();
+
+    // -- DOM event-dependent setup
     const runDomDependentSetup = () => {
       setupCommonElements();
       setupNavigationElements();
       setupContentElements();
     };
 
-    const doc = domAPI.getDocument();
-    if (doc.readyState === 'loading') {
-      trackListener(
-        doc,
-        'DOMContentLoaded',
-        runDomDependentSetup,
-        {
-          once: true,
-          description: 'EventHandler DOM-ready setup',
-          context: MODULE,
-          source: 'init'
-        }
-      );
-    } else {
-      // Body y nodos ya presentes
-      runDomDependentSetup();
-    }
+    runDomDependentSetup();
 
-    const checkProjectModalForm = () => {
-      if (domAPI.getElementById('projectModalForm')) {
-        setupProjectModalForm();
-      }
-    };
-
-    if (domAPI.getDocument().readyState !== 'loading') {
-      checkProjectModalForm();
-    } else {
-      trackListener(
-        domAPI.getDocument(),
-        'DOMContentLoaded',
-        checkProjectModalForm,
-        { once: true, module: MODULE, context: 'init', source: 'init' }
-      );
-    }
+    // -- Project modal form (wait for element to exist)
+    domReadinessService.elementsReady('#projectModalForm', {
+      timeout: dependencyWaitTimeout,
+      context: 'eventHandler.init:modalForm'
+    }).then(() => {
+      setupProjectModalForm();
+    }).catch(() => { /* fail silently if not found after timeout */ });
 
     // LOGIN BUTTON / MODAL HANDLING
     function bindAuthButtonDelegate() {
@@ -524,7 +518,10 @@ export function createEventHandlers({
       if (typeMap.size === 0) elementMap.delete(evt);
       if (elementMap.size === 0) trackedListeners.delete(el);
     } catch (error) {
-      // No logging
+      logger.error(`[EventHandler][untrackListener] Failed to remove event listener:`, {
+        element: el, evt, handler, error
+      });
+      errorReporter.report?.(error, { module: MODULE, evt, fn: 'untrackListener' });
     }
   }
 
@@ -542,7 +539,10 @@ export function createEventHandlers({
               domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
               entriesToRemove.push({ element, type, originalHandler });
             } catch (error) {
-              // No logging
+              logger.error(`[EventHandler][cleanupListeners] Error removing event listener:`, {
+                element, type, details, error, context: cleanupContext
+              });
+              errorReporter.report?.(error, { module: MODULE, evt: type, fn: 'cleanupListeners', context: cleanupContext });
             }
           }
         });
