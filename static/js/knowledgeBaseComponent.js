@@ -29,54 +29,50 @@ export function createKnowledgeBaseComponent(options = {}) {
   }
   if (!domAPI) throw new Error(`${MODULE} requires 'domAPI' abstraction for DOM access.`);
 
-  // --- Element Resolution: only via elRefs or domAPI ---
-  const elRefs = options.elRefs || {};
-  function reqEl(key, selector) {
-    const el = elRefs[key] || domAPI.getElementById(selector);
-    if (!el) throw new Error(`[${MODULE}] Missing required element/ref: ${key} (${selector})`);
-    return el;
-  }
-  const elements = {
-    container: reqEl("container", "knowledgeTab"),
-    activeSection: reqEl("activeSection", "knowledgeBaseActive"),
-    inactiveSection: reqEl("inactiveSection", "knowledgeBaseInactive"),
-    statusBadge: reqEl("statusBadge", "kbStatusBadge"),
-    searchInput: reqEl("searchInput", "knowledgeSearchInput"),
-    searchButton: reqEl("searchButton", "runKnowledgeSearchBtn"),
-    resultsContainer: reqEl("resultsContainer", "knowledgeResultsList"),
-    resultsSection: reqEl("resultsSection", "knowledgeSearchResults"),
-    noResultsSection: reqEl("noResultsSection", "knowledgeNoResults"),
-    topKSelect: reqEl("topKSelect", "knowledgeTopK"),
-    kbToggle: reqEl("kbToggle", "knowledgeBaseEnabled"),
-    reprocessButton: reqEl("reprocessButton", "reprocessFilesBtn"),
-    setupButton: reqEl("setupButton", "setupKnowledgeBaseBtn"),
-    settingsButton: reqEl("settingsButton", "knowledgeBaseSettingsBtn"),
-    kbNameDisplay: reqEl("kbNameDisplay", "knowledgeBaseName"),
-    kbModelDisplay: reqEl("kbModelDisplay", "knowledgeBaseModelDisplay"),
-    kbVersionDisplay: reqEl("kbVersionDisplay", "knowledgeBaseVersionDisplay"),
-    kbLastUsedDisplay: reqEl("kbLastUsedDisplay", "knowledgeBaseLastUsedDisplay"),
-    settingsModal: reqEl("settingsModal", "knowledgeBaseSettingsModal"),
-    settingsForm: reqEl("settingsForm", "knowledgeBaseForm"),
-    cancelSettingsBtn: reqEl("cancelSettingsBtn", "cancelKnowledgeBaseFormBtn"),
-    deleteKnowledgeBaseBtn: reqEl("deleteKnowledgeBaseBtn", "deleteKnowledgeBaseBtn"),
-    modelSelect: reqEl("modelSelect", "knowledgeBaseModelSelect"),
-    resultModal: reqEl("resultModal", "knowledgeResultModal"),
-    resultTitle: reqEl("resultTitle", "knowledgeResultTitle"),
-    resultSource: reqEl("resultSource", "knowledgeResultSource"),
-    resultScore: reqEl("resultScore", "knowledgeResultScore"),
-    resultContent: reqEl("resultContent", "knowledgeResultContent"),
-    useInChatBtn: reqEl("useInChatBtn", "useInChatBtn"),
-    knowledgeBaseFilesSection: reqEl("knowledgeBaseFilesSection", "knowledgeBaseFilesSection"),
-    knowledgeBaseFilesListContainer: reqEl("knowledgeBaseFilesListContainer", "knowledgeBaseFilesListContainer"),
-    kbGitHubAttachedRepoInfo: reqEl("kbGitHubAttachedRepoInfo", "kbGitHubAttachedRepoInfo"),
-    kbAttachedRepoUrlDisplay: reqEl("kbAttachedRepoUrlDisplay", "kbAttachedRepoUrlDisplay"),
-    kbAttachedRepoBranchDisplay: reqEl("kbAttachedRepoBranchDisplay", "kbAttachedRepoBranchDisplay"),
-    kbDetachRepoBtn: reqEl("kbDetachRepoBtn", "kbDetachRepoBtn"),
-    kbGitHubAttachForm: reqEl("kbGitHubAttachForm", "kbGitHubAttachForm"),
-    kbGitHubRepoUrlInput: reqEl("kbGitHubRepoUrlInput", "kbGitHubRepoUrlInput"),
-    kbGitHubBranchInput: reqEl("kbGitHubBranchInput", "kbGitHubBranchInput"),
-    kbGitHubFilePathsTextarea: reqEl("kbGitHubFilePathsTextarea", "kbGitHubFilePathsTextarea"),
-    kbAttachRepoBtn: reqEl("kbAttachRepoBtn", "kbAttachRepoBtn"),
+  // --- Element Selectors (resolution deferred to init) ---
+  const elRefs = options.elRefs || {}; // For externally provided elements
+  // Removed reqEl function from factory scope. It will be part of _initElements.
+  const elementSelectors = { // Renamed from 'elements'
+    container: "knowledgeTab", // Store selectors (strings)
+    activeSection: "knowledgeBaseActive",
+    inactiveSection: "knowledgeBaseInactive",
+    statusBadge: "kbStatusBadge",
+    searchInput: "knowledgeSearchInput",
+    searchButton: "runKnowledgeSearchBtn",
+    resultsContainer: "knowledgeResultsList",
+    resultsSection: "knowledgeSearchResults",
+    noResultsSection: "knowledgeNoResults",
+    topKSelect: "knowledgeTopK",
+    kbToggle: "knowledgeBaseEnabled",
+    reprocessButton: "reprocessFilesBtn",
+    setupButton: "setupKnowledgeBaseBtn",
+    settingsButton: "knowledgeBaseSettingsBtn",
+    kbNameDisplay: "knowledgeBaseName",
+    kbModelDisplay: "knowledgeBaseModelDisplay",
+    kbVersionDisplay: "knowledgeBaseVersionDisplay",
+    kbLastUsedDisplay: "knowledgeBaseLastUsedDisplay",
+    settingsModal: "knowledgeBaseSettingsModal",
+    settingsForm: "knowledgeBaseForm",
+    cancelSettingsBtn: "cancelKnowledgeBaseFormBtn",
+    deleteKnowledgeBaseBtn: "deleteKnowledgeBaseBtn",
+    modelSelect: "knowledgeBaseModelSelect",
+    resultModal: "knowledgeResultModal",
+    resultTitle: "knowledgeResultTitle",
+    resultSource: "knowledgeResultSource",
+    resultScore: "knowledgeResultScore",
+    resultContent: "knowledgeResultContent",
+    useInChatBtn: "useInChatBtn",
+    knowledgeBaseFilesSection: "knowledgeBaseFilesSection",
+    knowledgeBaseFilesListContainer: "knowledgeBaseFilesListContainer",
+    kbGitHubAttachedRepoInfo: "kbGitHubAttachedRepoInfo",
+    kbAttachedRepoUrlDisplay: "kbAttachedRepoUrlDisplay",
+    kbAttachedRepoBranchDisplay: "kbAttachedRepoBranchDisplay",
+    kbDetachRepoBtn: "kbDetachRepoBtn",
+    kbGitHubAttachForm: "kbGitHubAttachForm",
+    kbGitHubRepoUrlInput: "kbGitHubRepoUrlInput",
+    kbGitHubBranchInput: "kbGitHubBranchInput",
+    kbGitHubFilePathsTextarea: "kbGitHubFilePathsTextarea",
+    kbAttachRepoBtn: "kbAttachRepoBtn",
   };
 
   const validateUUID = app.validateUUID;
@@ -105,8 +101,11 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.modalManager = modalManager;
       this.domAPI = domAPI;
       this.getDep = getDep;
+      this.DependencySystem = DS; // Assign DependencySystem to the instance
 
-      this.elements = elements;
+      this.elementSelectors = elementSelectors; // Store selectors from factory
+      this.elements = {}; // Will be populated by _initElements
+      this.elRefs = elRefs; // Store elRefs passed in options for _initElements
       this.state = {
         knowledgeBase: null,
         isSearching: false,
@@ -156,11 +155,39 @@ export function createKnowledgeBaseComponent(options = {}) {
       this._bindEventHandlers();
     }
 
+    _initElements() {
+      const reqEl = (key, selector) => {
+        // Prioritize elRefs if provided for a key
+        const el = this.elRefs[key] || this.domAPI.getElementById(selector);
+        if (!el) throw new Error(`[${MODULE}] Missing required element/ref: ${key} (${selector})`);
+        return el;
+      };
+
+      for (const key in this.elementSelectors) {
+        this.elements[key] = reqEl(key, this.elementSelectors[key]);
+      }
+    }
+
     async initialize(isVisible, kbData = null, projectId = null) {
+      try {
+        this._initElements(); // Resolve DOM elements now
+      } catch (error) {
+        const logger = this.getDep('logger');
+        logger?.error(`[${MODULE}] Failed to initialize elements: ${error.message}`, error);
+        this.domAPI.dispatchEvent(
+          this.domAPI.getDocument(),
+          new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: false, error } })
+        );
+        // Optionally, display an error in the UI or throw to prevent further execution
+        // For now, let's make the component non-functional but not break the app
+        this.elements.container?.classList.add("hidden"); // Hide if container was found
+        return; // Stop initialization
+      }
+
       if (this.state.isInitialized && !isVisible) {
-        this.elements.activeSection.classList.add("hidden");
-        this.elements.inactiveSection.classList.add("hidden");
-        this.elements.knowledgeBaseFilesSection.classList.add("hidden");
+        this.elements.activeSection?.classList.add("hidden");
+        this.elements.inactiveSection?.classList.add("hidden");
+        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
         return;
       }
 
@@ -169,9 +196,9 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (kbData) {
         await this.renderKnowledgeBaseInfo(kbData, projectId);
       } else {
-        this.elements.activeSection.classList.add("hidden");
-        this.elements.inactiveSection.classList.add("hidden");
-        this.elements.knowledgeBaseFilesSection.classList.add("hidden");
+        this.elements.activeSection?.classList.add("hidden");
+        this.elements.inactiveSection?.classList.add("hidden");
+        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
         if (projectId) {
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),

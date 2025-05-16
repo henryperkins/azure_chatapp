@@ -191,9 +191,12 @@ class ProjectManager {
         this._loadingProjects = true;
         this._emit('projectsLoading', { filter });
         try {
-          let baseUrl = typeof this.apiEndpoints.PROJECTS === 'function'
-            ? this.apiEndpoints.PROJECTS()
-            : this.apiEndpoints.PROJECTS || this._CONFIG.PROJECTS;
+          let baseUrl = typeof this.apiEndpoints.USER_PROJECTS === 'function' // Check USER_PROJECTS function
+            ? this.apiEndpoints.USER_PROJECTS()
+            : this.apiEndpoints.USER_PROJECTS || // Then direct USER_PROJECTS string
+              (typeof this.apiEndpoints.PROJECTS === 'function' // Then fallback to PROJECTS function
+                ? this.apiEndpoints.PROJECTS()
+                : this.apiEndpoints.PROJECTS || this._CONFIG.PROJECTS); // Then fallback to PROJECTS string or _CONFIG.PROJECTS
           if (typeof baseUrl === 'string' && !baseUrl.endsWith('/') && !baseUrl.includes('?')) {
             baseUrl += '/';
           }

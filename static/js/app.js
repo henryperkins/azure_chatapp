@@ -756,10 +756,14 @@ async function initializeCoreSystems() {
       domAPI,
       sanitizer: DependencySystem.modules.get('sanitizer'),
       app,
-      router: DependencySystem.modules.get('navigationService'),
+      navigationService: DependencySystem.modules.get('navigationService'),
+      htmlTemplateLoader,               // ensures template loading available
+      logger,                           // DI-provided logger
+      APP_CONFIG,                       // optional but useful for PDC
       chatManager: DependencySystem.modules.get('chatManager'),
       modelConfig: DependencySystem.modules.get('modelConfig'),
-      knowledgeBaseComponent: null, // injected later in UI phase
+      knowledgeBaseComponent: null,     // injected later in UI phase
+      apiClient: apiRequest,            // optional helper for sub-components
       domReadinessService
     });
     DependencySystem.register('projectDetailsComponent', earlyPDC);
@@ -838,7 +842,7 @@ async function initializeUIComponents() {
     return;
   }
 
-  // Wait for relevant DOM elements and ensure modals are loaded
+  let domAndModalsReady = false;
   try {
     // First, wait for critical DOM elements
     await domReadinessService.dependenciesAndElements({
@@ -846,44 +850,80 @@ async function initializeUIComponents() {
         '#projectList',
         '#projectListView',
         '#projectDetailsView',
-        '#projectTitle',
-        '#projectDescription',
-        '#backToProjectsBtn'
+        // '#knowledgeTab' // REMOVED: This element is in project_details.html and loaded dynamically.
       ],
-      timeout: 10000,
-      context: 'app.js:initializeUIComponents'
+      timeout: 10000, // Adjusted timeout for clarity
+      context: 'app.js:initializeUIComponents:domCheck'
     });
 
-    // Next, ensure modals are loaded by checking for the modalsLoaded event
-    // This is important because project_list.html might be injected by the modal loader
-    const modalsLoaded = await new Promise((resolve) => {
-      // Check if we already received the modalsLoaded event
+    // Load project list template into #projectListView
+    const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
+    const loggerInstance = DependencySystem.modules.get('logger'); // Get logger for this operation
+
+    if (htmlLoader && typeof htmlLoader.loadTemplate === 'function') {
+      try {
+        loggerInstance.log('[App][initializeUIComponents] Loading project_list.html template into #projectListView', { context: 'app:loadTemplates' });
+        await htmlLoader.loadTemplate({
+          url: '/static/html/project_list.html',
+          containerSelector: '#projectListView', // This element is confirmed to exist by the domReadinessService call above
+          eventName: 'projectListHtmlLoaded'     // Event ProjectDashboard waits for
+        });
+        loggerInstance.log('[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.', { context: 'app:loadTemplates' });
+      } catch (err) {
+        loggerInstance.error('[App][initializeUIComponents] Failed to load project_list.html template', err, { context: 'app:loadTemplates' });
+        // Potentially re-throw or handle critical failure if this template is essential for app operation
+      }
+    } else {
+      loggerInstance.error('[App][initializeUIComponents] htmlTemplateLoader.loadTemplate is not available. Cannot load project_list.html.', { context: 'app:loadTemplates' });
+    }
+
+    // Next, ensure modals are loaded
+    const modalsActuallyLoaded = await new Promise((resolve) => {
       const modalsContainer = domAPI.getElementById('modalsContainer');
       if (modalsContainer && modalsContainer.childElementCount > 0) {
-        return resolve(true);
+        return resolve(true); // Modals already injected
       }
 
-      // Set up timeout for modals loading
       const timeoutId = browserAPI.getWindow().setTimeout(() => {
+        logger.warn('[initializeUIComponents] Timeout waiting for modalsLoaded event.', { context: 'app:initializeUIComponents:modalsTimeout' });
         resolve(false);
       }, 8000);
 
-      // Listen for the modalsLoaded event
       eventHandlers.trackListener(
         domAPI.getDocument(),
         'modalsLoaded',
         (e) => {
           browserAPI.getWindow().clearTimeout(timeoutId);
           const success = !!(e?.detail?.success);
+          if (!success) {
+            logger.warn('[initializeUIComponents] modalsLoaded event reported failure.', { detail: e?.detail }, { context: 'app:initializeUIComponents:modalsLoadFailed' });
+          }
           resolve(success);
         },
         { once: true, description: 'Wait for modalsLoaded in initializeUIComponents', context: 'app' }
       );
     });
-              } catch (err) {
-                logger.error('[projectList:hide]', err, { context: 'app:nav:projectList:hide' });
-                return false;
-              }
+
+    if (modalsActuallyLoaded) {
+      domAndModalsReady = true;
+    } else {
+      logger.error('[initializeUIComponents] Modals did not load successfully. UI component creation might fail.', { context: 'app:initializeUIComponents:modalsNotReady' });
+      // Depending on strictness, could set domAndModalsReady = false here or let it proceed with caution.
+      // For now, if critical DOM is ready but modals aren't, we might still proceed for non-modal components.
+      // However, KBC uses modals, so this is important. Let's be strict.
+      domAndModalsReady = false;
+    }
+
+  } catch (err) {
+    logger.error('[initializeUIComponents] Error during DOM/modal readiness check', err, { context: 'app:initializeUIComponents:readinessError' });
+    // domAndModalsReady remains false
+  }
+
+  if (!domAndModalsReady) {
+    logger.error('[initializeUIComponents] Critical DOM elements or Modals not ready. Aborting UI component creation.', { context: 'app:initializeUIComponents:abort' });
+    _uiInitialized = false; // Can attempt to re-initialize later if applicable
+    return; // Exit initializeUIComponents
+  }
 
   createAndRegisterUIComponents();
 
@@ -933,7 +973,9 @@ async function initializeUIComponents() {
                 return false;
               }
       }
-    }
+    },
+    domReadinessService, // Added missing dependency
+    logger // Already present, but good to ensure all deps are listed together if reordering
   });
   DependencySystem.register('uiRenderer', uiRendererInstance);
 
@@ -950,7 +992,10 @@ async function initializeUIComponents() {
       storageAPI: DependencySystem.modules.get('storage'),
       domAPI,
       viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() },
-      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils')
+      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
+      logger: DependencySystem.modules.get('logger'), // Pass the DI logger
+      safeHandler: safeHandler, // Pass the safeHandler utility
+      domReadinessService: DependencySystem.modules.get('domReadinessService') // Pass domReadinessService
     });
     DependencySystem.register('sidebar', sidebarInstance);
   }
@@ -973,71 +1018,76 @@ async function initializeUIComponents() {
 }
 
 function createAndRegisterUIComponents() {
-  const projectListElement = domAPI.getElementById('projectList');
-  const projectDetailsElement = domAPI.getElementById('projectDetailsView');
-  const projectTitleElement = domAPI.getElementById('projectTitle');
-  const projectDescriptionElement = domAPI.getElementById('projectDescription');
-  const backBtnElement = domAPI.getElementById('backToProjectsBtn');
-
-  if (projectListElement) {
-    const projectListComponentInstance = createProjectListComponent({
-      projectManager: DependencySystem.modules.get('projectManager'),
-      eventHandlers,
-      modalManager: DependencySystem.modules.get('modalManager'),
-      app,
-      router: DependencySystem.modules.get('navigationService'),
-      storage: DependencySystem.modules.get('storage'),
-      sanitizer: DependencySystem.modules.get('sanitizer'),
-      domAPI,
-      browserService: browserServiceInstance,
-      globalUtils: DependencySystem.modules.get('globalUtils')
-    });
-    DependencySystem.register('projectListComponent', projectListComponentInstance);
+  // Knowledge Base Component - Create and register if not already present.
+  let knowledgeBaseComponentInstance = DependencySystem.modules.get('knowledgeBaseComponent');
+  if (!knowledgeBaseComponentInstance) {
+    // Ensure all required elements for KBC are checked by domReadinessService in initializeUIComponents
+    // or that KBC's constructor is robust enough for elRefs to be potentially null initially if lazy loaded.
+    // Given the error, #knowledgeTab is critical.
+    try {
+      knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
+        DependencySystem,
+        apiRequest, // KBC factory needs this
+        projectManager: DependencySystem.modules.get('projectManager'), // KBC factory needs this
+        uiUtils, // KBC factory needs this
+        sanitizer: DependencySystem.modules.get('sanitizer') // KBC factory needs this
+        // elRefs can be omitted; component should query when container exists
+      });
+    } catch (err) {
+      logger.warn('[createAndRegisterUIComponents] KnowledgeBaseComponent creation failed; falling back to placeholder.', { context: 'app:createAndRegisterUIComponents', error: err?.message });
+      // Minimal placeholder to satisfy DI until real component can be instantiated by PDC later
+      knowledgeBaseComponentInstance = {
+        initialize: async () => {},
+        renderKnowledgeBaseInfo: () => {}
+      };
+    }
+    DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
   }
 
-  const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
-    DependencySystem,
-    apiRequest,
-    auth: DependencySystem.modules.get('auth'),
-    projectManager: DependencySystem.modules.get('projectManager'),
-    uiUtils,
-    sanitizer: DependencySystem.modules.get('sanitizer')
-  });
-  DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
-
-  if (projectDetailsElement && projectTitleElement && projectDescriptionElement && backBtnElement) {
-    const projectDetailsComponentInstance = createProjectDetailsComponent({
-      projectManager: DependencySystem.modules.get('projectManager'),
-      eventHandlers,
-      modalManager: DependencySystem.modules.get('modalManager'),
-      FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
-      domAPI,
-      sanitizer: DependencySystem.modules.get('sanitizer'),
-      app,
-      router: DependencySystem.modules.get('navigationService'),
-      chatManager: DependencySystem.modules.get('chatManager'),
-      modelConfig: DependencySystem.modules.get('modelConfig'),
-      knowledgeBaseComponent: knowledgeBaseComponentInstance,
-      onBack: async () => {
-        const navService = DependencySystem.modules.get('navigationService');
-        navService?.navigateToProjectList();
-      }
-    });
-    DependencySystem.register('projectDetailsComponent', projectDetailsComponentInstance);
+  // Project Details Component - Assumed to be created in initializeCoreSystems.
+  // Inject KnowledgeBaseComponent into it.
+  const projectDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
+  if (projectDetailsComponent) {
+    if (typeof projectDetailsComponent.setKnowledgeBaseComponent === 'function') {
+      projectDetailsComponent.setKnowledgeBaseComponent(knowledgeBaseComponentInstance);
+    } else {
+      logger.warn('[createAndRegisterUIComponents] projectDetailsComponent is missing setKnowledgeBaseComponent method.', { context: 'app:createAndRegisterUIComponents' });
+    }
+  } else {
+    // This case should ideally not happen if initializeCoreSystems always registers it.
+    logger.warn('[createAndRegisterUIComponents] projectDetailsComponent not found in DI. Cannot inject KBC.', { context: 'app:createAndRegisterUIComponents' });
   }
 
-  // Update ProjectDashboard references
+  // Project List Component - Assumed to be created in initializeCoreSystems.
+  // No re-creation or re-registration needed here.
+  const projectListComponent = DependencySystem.modules.get('projectListComponent');
+  if (!projectListComponent) {
+     logger.warn('[createAndRegisterUIComponents] projectListComponent not found in DI.', { context: 'app:createAndRegisterUIComponents' });
+  }
+
+  // Update ProjectDashboard references using the new setter methods
   const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
-  if (projectDashboardInstance?.components) {
-    const projectDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
-    const projectListComponent = DependencySystem.modules.get('projectListComponent');
+  if (projectDashboardInstance) {
+    const pdcForDashboard = DependencySystem.modules.get('projectDetailsComponent');
+    const plcForDashboard = DependencySystem.modules.get('projectListComponent');
 
-    if (projectDetailsComponent) {
-      projectDashboardInstance.components.projectDetails = projectDetailsComponent;
+    if (pdcForDashboard && typeof projectDashboardInstance.setProjectDetailsComponent === 'function') {
+      projectDashboardInstance.setProjectDetailsComponent(pdcForDashboard);
+    } else if (pdcForDashboard) {
+      logger.warn('[createAndRegisterUIComponents] projectDashboardInstance missing setProjectDetailsComponent method.', { context: 'app:createAndRegisterUIComponents' });
+      // Fallback to direct assignment if setter is missing but component exists (less ideal)
+      if (projectDashboardInstance.components) projectDashboardInstance.components.projectDetails = pdcForDashboard;
     }
-    if (projectListComponent) {
-      projectDashboardInstance.components.projectList = projectListComponent;
+
+    if (plcForDashboard && typeof projectDashboardInstance.setProjectListComponent === 'function') {
+      projectDashboardInstance.setProjectListComponent(plcForDashboard);
+    } else if (plcForDashboard) {
+      logger.warn('[createAndRegisterUIComponents] projectDashboardInstance missing setProjectListComponent method.', { context: 'app:createAndRegisterUIComponents' });
+      // Fallback
+      if (projectDashboardInstance.components) projectDashboardInstance.components.projectList = plcForDashboard;
     }
+  } else {
+    logger.warn('[createAndRegisterUIComponents] projectDashboardInstance not found. Cannot set sub-components.', { context: 'app:createAndRegisterUIComponents' });
   }
 }
 
