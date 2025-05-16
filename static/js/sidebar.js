@@ -250,14 +250,26 @@ export function createSidebar({
     );
   }
 
-  function handleGlobalAuthStateChange(event) {
+  async function handleGlobalAuthStateChange(event) {
     const authModule = DependencySystem.modules?.get('auth') || DependencySystem.get?.('auth');
     const authenticated = event?.detail?.authenticated ?? authModule?.isAuthenticated?.();
 
     domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', !!authenticated);
     domAPI.toggleClass(el, 'hidden', !authenticated);
 
-    if (!authenticated) {
+    if (authenticated) {
+      // On login: ensure projects are loaded and UI is updated
+      try {
+        if (logger && logger.info) logger.info(`[Sidebar][auth:stateChanged] Logged in, loading projects and refreshing Projects tab`);
+        if (projectManager?.loadProjects) {
+          await projectManager.loadProjects('all');
+        }
+        // Switch to projects tab or re-render it
+        await activateTab('projects');
+      } catch (err) {
+        if (logger && logger.error) logger.error(`[Sidebar][auth:stateChanged] Failed to load projects`, err && err.stack ? err.stack : err);
+      }
+    } else {
       // If logged out, revert to login mode
       if (isRegisterMode) {
         updateAuthFormUI(false);
@@ -636,6 +648,37 @@ export function createSidebar({
         { context: MODULE, description: 'Toggle sidebar pin' }
       );
     }
+
+    // Tab menu handlers: Register click handlers for tab buttons (Recent, Starred, Projects)
+    const tabs = [
+      { id: 'recentChatsTab',   tab: 'recent',   desc: 'Tab: Recent Chats' },
+      { id: 'starredChatsTab',  tab: 'starred',  desc: 'Tab: Starred Chats' },
+      { id: 'projectsTab',      tab: 'projects', desc: 'Tab: Projects' },
+    ];
+    tabs.forEach(({ id, tab, desc }) => {
+      const element = domAPI.getElementById(id);
+      if (element) {
+        eventHandlers.trackListener(
+          element,
+          'click',
+          wrapWithErrorLog(
+            async (e) => {
+              if (e.preventDefault) e.preventDefault();
+              if (logger && logger.debug) logger.debug(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`);
+              try {
+                await activateTab(tab);
+                if (accessibilityUtils?.announce)
+                  accessibilityUtils.announce(`Switched to ${tab} tab in sidebar`);
+              } catch (error) {
+                if (logger && logger.error) logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`, error && error.stack ? error.stack : error);
+              }
+            },
+            `tabmenu:${id}`
+          ),
+          { context: MODULE, description: `Sidebar tab button click => activateTab('${tab}')` }
+        );
+      }
+    });
 
     // Show/Close
     if (btnToggle) {

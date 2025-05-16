@@ -378,6 +378,8 @@ function createOrGetChatManager() {
     projectDetailsComponent: DependencySystem.modules.get('projectDetailsComponent'),
     app,
     domAPI,
+    domReadinessService,
+    logger,
     navAPI: {
       getSearch: () => browserAPI.getLocation().search,
       getHref: () => browserAPI.getLocation().href,
@@ -424,11 +426,32 @@ function safeHandler(handler, description) {
 // 14) Main initialization function
 // ---------------------------------------------------------------------------
 export async function init() {
+  logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
+
+  // Global emergency fail-safe: if this init hasn't completed in 30000ms, forcibly log & dispatch 'app:ready' with error
+  let globalInitTimeoutFired = false;
+  const GLOBAL_INIT_TIMEOUT_MS = 30000;
+  const globalInitTimeoutId = browserAPI.getWindow().setTimeout(() => {
+    globalInitTimeoutFired = true;
+    const err = new Error(
+      `[App.init] Global initialization timeout after ${GLOBAL_INIT_TIMEOUT_MS}ms.`
+    );
+    logger.error('[App.init] Emergency global timeout', err, { context: 'app:init:globalTimeout', ts: Date.now() });
+    handleInitError(err);
+    AppBus.dispatchEvent(new CustomEvent('app:ready', {
+      detail: { success: false, error: err }
+    }));
+    domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', {
+      detail: { success: false, error: err }
+    }));
+  }, GLOBAL_INIT_TIMEOUT_MS);
+
   if (_globalInitCompleted || _globalInitInProgress) {
+    browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
     return _globalInitCompleted;
   }
-  // Check against the canonical state in appModule
   if (appModule.state.initialized || appModule.state.initializing) {
+    browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
     return appModule.state.initialized;
   }
 
@@ -437,45 +460,109 @@ export async function init() {
 
   toggleLoadingSpinner(true);
 
+  // Per-phase timeout in ms for each awaited step
+  const PHASE_TIMEOUT = 12000; // 12s per step to catch long hangs
+
+  // Diagnostic step marker
+  function logStep(phase, stage, extra = {}) {
+    logger.log('[App.init]', {
+      phase, stage,
+      ts: Date.now(),
+      ...extra
+    });
+  }
+
   try {
     // 1) Initialize core systems in order
-    await initializeCoreSystems();
+    logStep('initializeCoreSystems', 'pre');
+    await Promise.race([
+      initializeCoreSystems(),
+      new Promise((_, reject) =>
+        browserAPI.getWindow().setTimeout(
+          () => reject(new Error('Timeout in initializeCoreSystems')),
+          PHASE_TIMEOUT
+        )
+      )
+    ]);
+    logStep('initializeCoreSystems', 'post');
 
     // 2) Wait for critical dependencies
-    await DependencySystem.waitFor(
-      ['auth', 'eventHandlers', 'modalManager'],
-      null,
-      APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
-    );
+    logStep('DependencySystem.waitFor', 'pre');
+    await Promise.race([
+      DependencySystem.waitFor(
+        ['auth', 'eventHandlers', 'modalManager'],
+        null,
+        APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
+      ),
+      new Promise((_, reject) =>
+        browserAPI.getWindow().setTimeout(
+          () => reject(new Error('Timeout in DependencySystem.waitFor')),
+          PHASE_TIMEOUT
+        )
+      )
+    ]);
+    logStep('DependencySystem.waitFor', 'post');
 
     // 3) Initialize auth system
-    await initializeAuthSystem(); // This will ensure appModule.state.isAuthenticated is set
+    logStep('initializeAuthSystem', 'pre');
+    await Promise.race([
+      initializeAuthSystem(),
+      new Promise((_, reject) =>
+        browserAPI.getWindow().setTimeout(
+          () => reject(new Error('Timeout in initializeAuthSystem')),
+          PHASE_TIMEOUT
+        )
+      )
+    ]);
+    logStep('initializeAuthSystem', 'post');
 
     // 4) If authenticated, fetch current user
-    // Read from the canonical state source
+    logStep('fetchCurrentUser', 'pre', { authed: !!appModule.state.isAuthenticated });
     if (appModule.state.isAuthenticated) {
-      const user = await fetchCurrentUser(); // fetchCurrentUser updates the local `currentUser`
+      const user = await Promise.race([
+        fetchCurrentUser(),
+        new Promise((_, reject) =>
+          browserAPI.getWindow().setTimeout(
+            () => reject(new Error('Timeout in fetchCurrentUser')),
+            PHASE_TIMEOUT
+          )
+        )
+      ]);
       if (user) {
-        // app.setCurrentUser will update appModule.state.currentUser
         app.setCurrentUser(user);
-        // browserAPI.setCurrentUser is for browserService's internal state, if used by other parts
         browserAPI.setCurrentUser(user);
       }
     }
+    logStep('fetchCurrentUser', 'post');
 
     // 5) Initialize UI components
-    await initializeUIComponents();
+    logStep('initializeUIComponents', 'pre');
+    await Promise.race([
+      initializeUIComponents(),
+      new Promise((_, reject) =>
+        browserAPI.getWindow().setTimeout(
+          () => reject(new Error('Timeout in initializeUIComponents')),
+          PHASE_TIMEOUT
+        )
+      )
+    ]);
+    logStep('initializeUIComponents', 'post');
 
     // 6) (Optional) initialize leftover model config UI
+    logStep('modelConfig.initializeUI', 'pre');
     const mc = DependencySystem.modules.get('modelConfig');
     if (mc?.initializeUI) {
       mc.initializeUI();
     }
+    logStep('modelConfig.initializeUI', 'post');
 
     // 7) Register app-level listeners
+    logStep('registerAppListeners', 'pre');
     registerAppListeners();
+    logStep('registerAppListeners', 'post');
 
     // 8) Initialize navigation service
+    logStep('navigationService', 'pre');
     const navService = DependencySystem.modules.get('navigationService');
     if (!navService) {
       throw new Error('[App] NavigationService missing from DI. Aborting initialization.');
@@ -483,7 +570,15 @@ export async function init() {
     navigationService = navService;
 
     if (navigationService?.init) {
-      await navigationService.init();
+      await Promise.race([
+        navigationService.init(),
+        new Promise((_, reject) =>
+          browserAPI.getWindow().setTimeout(
+            () => reject(new Error('Timeout in navigationService.init')),
+            PHASE_TIMEOUT
+          )
+        )
+      ]);
 
       // Register default views
       const projectDashboard = DependencySystem.modules.get('projectDashboard');
@@ -493,7 +588,6 @@ export async function init() {
         if (!navigationService.hasView('projectList')) {
           navigationService.registerView('projectList', {
             show: async () => {
-              // Wait for both projectDashboard and projectListComponent to be available
               try {
                 await domReadinessService.dependenciesAndElements({
                   deps: ['projectDashboard', 'projectListComponent'],
@@ -506,7 +600,6 @@ export async function init() {
                   await dashboard.showProjectList();
                   return true;
                 } else {
-                  // Fallback to direct component access if dashboard method not available
                   const plc = DependencySystem.modules.get('projectListComponent');
                   if (plc?.show) {
                     await plc.show();
@@ -514,32 +607,26 @@ export async function init() {
                   }
                 }
                 return false;
-  } catch (err) {
-    logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:show' });
-    // Continue despite error to attempt recovery
-  }
+              } catch (err) {
+                logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:show' });
+              }
             },
             hide: async () => {
               try {
-                // Try dashboard method first
                 const dashboard = DependencySystem.modules.get('projectDashboard');
                 if (dashboard?.components?.projectList?.hide) {
                   await dashboard.components.projectList.hide();
                   return true;
                 }
-
-                // Fallback to direct component access
                 const plc = DependencySystem.modules.get('projectListComponent');
                 if (plc?.hide) {
                   await plc.hide();
                   return true;
                 }
-
                 return false;
-  } catch (err) {
-    logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:hide' });
-    // Error handled silently
-  }
+              } catch (err) {
+                logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:hide' });
+              }
             }
           });
         }
@@ -548,7 +635,6 @@ export async function init() {
         if (!navigationService.hasView('projectDetails')) {
           navigationService.registerView('projectDetails', {
             show: async (params) => {
-              // Wait for both projectDashboard and projectDetailsComponent to be available
               try {
                 await domReadinessService.dependenciesAndElements({
                   deps: ['projectDashboard', 'projectDetailsComponent'],
@@ -556,42 +642,33 @@ export async function init() {
                   context: 'app.js:nav:projectDetails'
                 });
 
-                // First try the dashboard method
                 const dashboard = DependencySystem.modules.get('projectDashboard');
                 if (dashboard?.showProjectDetails) {
                   await dashboard.showProjectDetails(params.projectId);
                   return true;
                 }
-
-                // Then try the component directly
                 const pdc = DependencySystem.modules.get('projectDetailsComponent');
                 if (pdc?.showProjectDetails) {
                   await pdc.showProjectDetails(params.projectId);
                   return true;
                 }
-
                 return false;
-    } catch (err) {
-      logger.error('[pm?.loadProjects]', err, { context: 'app:projectManager:loadProjects' });
-      // Error handled silently
-    }
+              } catch (err) {
+                logger.error('[pm?.loadProjects]', err, { context: 'app:projectManager:loadProjects' });
+              }
             },
             hide: async () => {
               try {
-                // Try dashboard method first
                 const dashboard = DependencySystem.modules.get('projectDashboard');
                 if (dashboard?.components?.projectDetails?.hideProjectDetails) {
                   await dashboard.components.projectDetails.hideProjectDetails();
                   return true;
                 }
-
-                // Fallback to direct component access
                 const pdc = DependencySystem.modules.get('projectDetailsComponent');
                 if (pdc?.hideProjectDetails) {
                   await pdc.hideProjectDetails();
                   return true;
                 }
-
                 return false;
               } catch (err) {
                 return false;
@@ -600,38 +677,36 @@ export async function init() {
           });
         }
       }
-    } else {
-      // Error handled silently
     }
+    logStep('navigationService', 'post');
 
-    // Mark app as initialized in the canonical state
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
 
-    AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
-    // Mirror the event on document for modules relying on domReadinessService.waitForEvent
-    domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
-
+    if (!globalInitTimeoutFired) {
+      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
+      AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
+      domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
+    }
     return true;
   } catch (err) {
-    logger.error('[init]', err, { context: 'app:init' });
-    handleInitError(err);
-
-    AppBus.dispatchEvent(new CustomEvent('app:ready', {
-      detail: { success: false, error: err }
-    }));
-    // Mirror the event on document for modules relying on domReadinessService.waitForEvent
-    domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', {
-      detail: { success: false, error: err }
-    }));
+    if (!globalInitTimeoutFired) {
+      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
+      logger.error('[init]', err, { context: 'app:init', ts: Date.now() });
+      handleInitError(err);
+      AppBus.dispatchEvent(new CustomEvent('app:ready', {
+        detail: { success: false, error: err }
+      }));
+      domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', {
+        detail: { success: false, error: err }
+      }));
+    }
     return false;
   } finally {
     _globalInitInProgress = false;
-    // Update canonical state for initializing and currentPhase
     appModule.setAppLifecycleState({
       initializing: false,
       currentPhase: appModule.state.initialized ? 'initialized_idle' : 'failed_idle'
-      // This will also trigger isReady update via setAppLifecycleState logic
     });
     toggleLoadingSpinner(false);
   }
@@ -641,6 +716,7 @@ export async function init() {
 // 15) Core systems initialization
 // ---------------------------------------------------------------------------
 async function initializeCoreSystems() {
+  logger.log('[initializeCoreSystems] Entering function', { context: 'app.initializeCoreSystems' });
   // Wait for minimal DOM readiness
   await domReadinessService.dependenciesAndElements({
     deps: ['domAPI'],
@@ -674,8 +750,9 @@ async function initializeCoreSystems() {
     domReadinessService
   });
   DependencySystem.register('auth', authModule);
-  // Initialize auth module to set up event listeners
-  await authModule.init().catch(err => {
+logger.log('[initializeCoreSystems] auth module registered', { context: 'app.initializeCoreSystems' });
+// Initialize auth module to set up event listeners
+await authModule.init().catch(err => {
     const logMsg = (err && (err.message || err.stack)) ? `Auth module initialization error: ${err.message}\n${err.stack}` : `[App] Auth module initialization error: ${JSON.stringify(err)}`;
     DependencySystem.modules.get('logger').error('[App] ' + logMsg, err);
   });
@@ -683,6 +760,7 @@ async function initializeCoreSystems() {
   // Create model config
   const modelConfigInstance = createModelConfig({
     dependencySystem: DependencySystem,          // mandatory (note lower-camel case)
+    domReadinessService: DependencySystem.modules.get('domReadinessService'),
     eventHandler: eventHandlers,                 // centralised listener tracker
     storageHandler: DependencySystem.modules.get('storage'),
     sanitizer: DependencySystem.modules.get('sanitizer')
@@ -716,6 +794,7 @@ async function initializeCoreSystems() {
   // Initialize eventHandlers now that its downstream deps exist
   if (eventHandlers?.init) {
     await eventHandlers.init();
+    logger.log('[initializeCoreSystems] eventHandlers initialization complete', { context: 'app.initializeCoreSystems' });
   }
 
   // ------------------------------------------------------------------------
@@ -868,19 +947,46 @@ async function initializeUIComponents() {
 
     if (htmlLoader && typeof htmlLoader.loadTemplate === 'function') {
       try {
-        loggerInstance.log('[App][initializeUIComponents] Loading project_list.html template into #projectListView', { context: 'app:loadTemplates' });
+        loggerInstance.log(
+          '[App][initializeUIComponents] Loading project_list.html template into #projectListView',
+          { context: 'app:loadTemplates' }
+        );
         await htmlLoader.loadTemplate({
           url: '/static/html/project_list.html',
           containerSelector: '#projectListView', // This element is confirmed to exist by the domReadinessService call above
           eventName: 'projectListHtmlLoaded'     // Event ProjectDashboard waits for
         });
-        loggerInstance.log('[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.', { context: 'app:loadTemplates' });
+        loggerInstance.log(
+          '[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.',
+          { context: 'app:loadTemplates' }
+        );
+
+        const projectListContainer = domAPI.getElementById('projectListView');
+        if (projectListContainer) {
+          loggerInstance.log(
+            '[App][initializeUIComponents] #projectListView childElementCount=' +
+              projectListContainer.childElementCount,
+            { context: 'app:loadTemplates' }
+          );
+        } else {
+          loggerInstance.warn(
+            '[App][initializeUIComponents] #projectListView not found after injection',
+            { context: 'app:loadTemplates' }
+          );
+        }
       } catch (err) {
-        loggerInstance.error('[App][initializeUIComponents] Failed to load project_list.html template', err, { context: 'app:loadTemplates' });
+        loggerInstance.error(
+          '[App][initializeUIComponents] Failed to load project_list.html template',
+          err,
+          { context: 'app:loadTemplates' }
+        );
         // Potentially re-throw or handle critical failure if this template is essential for app operation
       }
     } else {
-      loggerInstance.error('[App][initializeUIComponents] htmlTemplateLoader.loadTemplate is not available. Cannot load project_list.html.', { context: 'app:loadTemplates' });
+      loggerInstance.error(
+        '[App][initializeUIComponents] htmlTemplateLoader.loadTemplate is not available. Cannot load project_list.html.',
+        { context: 'app:loadTemplates' }
+      );
     }
 
     // Next, ensure modals are loaded
@@ -891,7 +997,10 @@ async function initializeUIComponents() {
       }
 
       const timeoutId = browserAPI.getWindow().setTimeout(() => {
-        logger.warn('[initializeUIComponents] Timeout waiting for modalsLoaded event.', { context: 'app:initializeUIComponents:modalsTimeout' });
+        logger.warn(
+          '[initializeUIComponents] Timeout waiting for modalsLoaded event.',
+          { context: 'app:initializeUIComponents:modalsTimeout' }
+        );
         resolve(false);
       }, 8000);
 
@@ -902,31 +1011,48 @@ async function initializeUIComponents() {
           browserAPI.getWindow().clearTimeout(timeoutId);
           const success = !!(e?.detail?.success);
           if (!success) {
-            logger.warn('[initializeUIComponents] modalsLoaded event reported failure.', { detail: e?.detail }, { context: 'app:initializeUIComponents:modalsLoadFailed' });
+            logger.warn(
+              '[initializeUIComponents] modalsLoaded event reported failure.',
+              { detail: e?.detail },
+              { context: 'app:initializeUIComponents:modalsLoadFailed' }
+            );
           }
           resolve(success);
         },
-        { once: true, description: 'Wait for modalsLoaded in initializeUIComponents', context: 'app' }
+        {
+          once: true,
+          description: 'Wait for modalsLoaded in initializeUIComponents',
+          context: 'app'
+        }
       );
     });
 
     if (modalsActuallyLoaded) {
       domAndModalsReady = true;
     } else {
-      logger.error('[initializeUIComponents] Modals did not load successfully. UI component creation might fail.', { context: 'app:initializeUIComponents:modalsNotReady' });
+      logger.error(
+        '[initializeUIComponents] Modals did not load successfully. UI component creation might fail.',
+        { context: 'app:initializeUIComponents:modalsNotReady' }
+      );
       // Depending on strictness, could set domAndModalsReady = false here or let it proceed with caution.
       // For now, if critical DOM is ready but modals aren't, we might still proceed for non-modal components.
       // However, KBC uses modals, so this is important. Let's be strict.
       domAndModalsReady = false;
     }
-
   } catch (err) {
-    logger.error('[initializeUIComponents] Error during DOM/modal readiness check', err, { context: 'app:initializeUIComponents:readinessError' });
+    logger.error(
+      '[initializeUIComponents] Error during DOM/modal readiness check',
+      err,
+      { context: 'app:initializeUIComponents:readinessError' }
+    );
     // domAndModalsReady remains false
   }
 
   if (!domAndModalsReady) {
-    logger.error('[initializeUIComponents] Critical DOM elements or Modals not ready. Aborting UI component creation.', { context: 'app:initializeUIComponents:abort' });
+    logger.error(
+      '[initializeUIComponents] Critical DOM elements or Modals not ready. Aborting UI component creation.',
+      { context: 'app:initializeUIComponents:abort' }
+    );
     _uiInitialized = false; // Can attempt to re-initialize later if applicable
     return; // Exit initializeUIComponents
   }
@@ -963,10 +1089,14 @@ async function initializeUIComponents() {
       if (chatManager?.loadConversation) {
         try {
           await chatManager.loadConversation(conversationId);
-              } catch (err) {
-                logger.error('[onConversationSelect]', err, { context: 'app:uiRenderer:onConversationSelect' });
-                return false;
-              }
+        } catch (err) {
+          logger.error(
+            '[onConversationSelect]',
+            err,
+            { context: 'app:uiRenderer:onConversationSelect' }
+          );
+          return false;
+        }
       }
     },
     onProjectSelect: async (projectId) => {
@@ -974,10 +1104,14 @@ async function initializeUIComponents() {
       if (projectDashboardDep?.showProjectDetails) {
         try {
           await projectDashboardDep.showProjectDetails(projectId);
-              } catch (err) {
-                logger.error('[projectDetails:hide]', err, { context: 'app:nav:projectDetails:hide' });
-                return false;
-              }
+        } catch (err) {
+          logger.error(
+            '[projectDetails:hide]',
+            err,
+            { context: 'app:nav:projectDetails:hide' }
+          );
+          return false;
+        }
       }
     },
     domReadinessService, // Added missing dependency
@@ -1015,20 +1149,25 @@ async function initializeUIComponents() {
       logger.error('[App] Sidebar init did not complete successfully.');
     }
   } catch (err) {
-    if (logger && logger.error) logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
+    if (logger && logger.error)
+      logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
     // Visibly banner error in UI
     try {
       const errorBanner = domAPI.getElementById('appInitError');
       if (errorBanner) {
         const errorBannerText = domAPI.getElementById('appInitErrorText');
         if (errorBannerText) {
-          domAPI.setTextContent(errorBannerText, \`Sidebar initialization failed: \${err?.message || err}\`);
+          domAPI.setTextContent(
+            errorBannerText,
+            `Sidebar initialization failed: ${err?.message || err}`
+          );
         }
         domAPI.removeClass(errorBanner, 'hidden');
       }
     } catch (e) {
       // Last-resort: console
-      if (logger && logger.error) logger.error('[App] Failed to display sidebar error in banner', e && e.stack ? e.stack : e);
+      if (logger && logger.error)
+        logger.error('[App] Failed to display sidebar error in banner', e && e.stack ? e.stack : e);
     }
   }
 
