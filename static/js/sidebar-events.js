@@ -25,7 +25,14 @@ export function createSidebarEvents({
   ensureProjectDashboard,
   togglePin
 }) {
+  // Flag interno de singleton
+  let _bound = false;
+
   function bindDomEvents() {
+    // Si ya se enlazó, salir inmediatamente
+    if (_bound) return;
+    _bound = true;
+
     const track = (element, evtType, originalHandlerCallback, description) => {
       if (!element) return;
       eventHandlers.trackListener(element, evtType, originalHandlerCallback, {
