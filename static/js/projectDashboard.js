@@ -528,6 +528,9 @@ export function createProjectDashboard(deps) {
       add(doc, 'authStateChanged', this._handleAuthStateChange.bind(this), {
         description: 'Dashboard: authStateChanged(global)'
       });
+      add(doc, 'auth:stateChanged', this._handleAuthStateChange.bind(this), {
+        description: 'Dashboard: auth:stateChanged(global)'
+      });
       add(doc, 'projectDeleted', this._handleProjectDeleted.bind(this), {
         description: 'Dashboard: projectDeleted'
       });
