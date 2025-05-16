@@ -400,6 +400,11 @@ export function createEventHandlers({
       }
     );
 
+    // --- FAST-PATH: modals may already be injected before this listener is registered
+    if (domAPI.getElementById('modalsContainer')?.childElementCount > 0) {
+      setupLoginModalTabs();
+    }
+
     initialized = true;
     return this;
   }
