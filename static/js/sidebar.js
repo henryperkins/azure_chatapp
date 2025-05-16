@@ -28,8 +28,26 @@
  */
 
 import { safeParseJSON } from './utils/globalUtils.js';
-import { createDomReadinessService } from './utils/domReadinessService.js';
 
+// Factory function strictly enforces DI for logger and domReadinessService per guardrails.
+/**
+ * @param {object} deps - All dependencies must be injected; see .clinerules
+ * @param {object} deps.eventHandlers
+ * @param {object} deps.DependencySystem
+ * @param {object} deps.domAPI
+ * @param {object} deps.uiRenderer
+ * @param {object} deps.storageAPI
+ * @param {object} deps.projectManager
+ * @param {object} deps.app
+ * @param {object} deps.projectDashboard
+ * @param {object} deps.viewportAPI
+ * @param {object} deps.accessibilityUtils
+ * @param {object} deps.sanitizer
+ * @param {object} deps.domReadinessService - MANDATORY: Centralized DOM/app readiness via DI
+ * @param {object} deps.logger - MANDATORY: Logger dependency via DI only
+ * @param {function} deps.safeHandler - MANDATORY: Event handler error wrapper via DI
+ * @returns {object} Sidebar API
+ */
 export function createSidebar({
   eventHandlers,
   DependencySystem,
@@ -42,11 +60,13 @@ export function createSidebar({
   viewportAPI,
   accessibilityUtils,
   sanitizer, // optional, e.g. sanitizer.sanitize()
-  domReadinessService, // <-- new optional injected dependency
+  domReadinessService,
+  logger,
+  safeHandler, // required for event handler wrapping
   ...rest
 } = {}) {
   /* ------------------------------------------------------------------ */
-  /* 1) Validation & Setup                                              */
+  /* 1) Validation & Setup (Strict DI)                                  */
   /* ------------------------------------------------------------------ */
   if (!eventHandlers) throw new Error('[Sidebar] eventHandlers is required.');
   if (!DependencySystem) throw new Error('[Sidebar] DependencySystem is required.');
@@ -63,25 +83,11 @@ export function createSidebar({
   if (!accessibilityUtils || typeof accessibilityUtils.announce !== 'function') {
     throw new Error('[Sidebar] accessibilityUtils is required for accessibility announcements.');
   }
-  // sanitizer is optional, but recommended if you handle user input or HTML injection
+  if (!logger) throw new Error('[Sidebar] DI logger is required.');
+  if (!domReadinessService) throw new Error('[Sidebar] DI domReadinessService is required.');
+  if (typeof safeHandler !== 'function') throw new Error('[Sidebar] DI safeHandler (function) is required.');
 
   const MODULE = 'Sidebar';
-
-  // EXTEND: domReadinessService validation/fallback
-  if (!domReadinessService) {
-    domReadinessService = createDomReadinessService({
-      DependencySystem,
-      domAPI,
-      browserService: rest.browserService,
-      eventHandlers,
-      APP_CONFIG: rest.APP_CONFIG
-    });
-  }
-
-  // DI logger (injected strictly per guardrails)
-  const logger =
-    (DependencySystem?.modules?.get && DependencySystem.modules.get('logger')) ||
-    (DependencySystem?.get && DependencySystem.get('logger'));
 
   // Gently resolve optional dependencies from the DependencySystem if not explicitly provided
   app = app || tryResolve('app');
@@ -224,10 +230,10 @@ export function createSidebar({
     eventHandlers.trackListener(
       sidebarAuthToggleEl,
       'click',
-      () => {
+      safeHandler(() => {
         updateAuthFormUI(!isRegisterMode);
         clearAuthForm();
-      },
+      }, '[Sidebar] toggle auth mode'),
       { description: 'Sidebar toggle auth mode', context: MODULE }
     );
 
@@ -235,10 +241,10 @@ export function createSidebar({
     eventHandlers.trackListener(
       sidebarAuthFormEl,
       'submit',
-      (e) => {
+      safeHandler((e) => {
         e.preventDefault();
         _handleAuthSubmit(authModule);
-      },
+      }, '[Sidebar] auth form submit'),
       { description: 'Sidebar auth submit', context: MODULE }
     );
   }
@@ -530,10 +536,15 @@ export function createSidebar({
       backgroundColor: 'rgba(0,0,0,0.5)',
       cursor: 'pointer'
     });
-    eventHandlers.trackListener(backdrop, 'click', closeSidebar, {
-      context: MODULE,
-      description: 'Sidebar backdrop click => close'
-    });
+    eventHandlers.trackListener(
+      backdrop,
+      'click',
+      safeHandler(closeSidebar, '[Sidebar] backdrop click'),
+      {
+        context: MODULE,
+        description: 'Sidebar backdrop click => close'
+      }
+    );
     domAPI.body?.appendChild(backdrop);
   }
 
@@ -740,9 +751,21 @@ export function createSidebar({
   /* ------------------------------------------------------------------ */
   /* 11) Public API – Matches existing consumers’ expectations          */
   /* ------------------------------------------------------------------ */
+  // Dedicated EventTarget bus for sidebar events (per module event bus guardrail)
+  const SidebarBus = new EventTarget();
+
+  function cleanup() {
+    destroy();
+    // Remove all listeners on the bus. No standard clear, so replace with new instance if needed elsewhere
+    // (or mark as cleaned if bus is published)
+    // Here, just a placeholder for explicit cleanup as EventTarget has no removeAll.
+  }
+
   return {
     init,
     destroy,
+    cleanup, // per guardrail: factory must expose cleanup API
+    eventBus: SidebarBus,
     toggleSidebar,
     closeSidebar,
     showSidebar,
