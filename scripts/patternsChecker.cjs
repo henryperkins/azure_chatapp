@@ -144,31 +144,69 @@ function E(file,line,ruleId,msg,hint=""){return{file,line,ruleId,message:msg,hin
 /* ───────────────────────── Visitors (Guardrails) ─────────────── */
 
 /* 1. Factory Function Export */
-function vFactory(err,file){
-  let found=false,cleanup=false,depCheck=false;
-  return{
-    ExportNamedDeclaration(p){
-      const d=p.node.declaration;
-      if(!d||d.type!=="FunctionDeclaration")return;
-      const name=d.id?.name||"";
-      if(!/^create[A-Z]/.test(name))return;
-      found=true;
-      if(!d.params.length)
-        err.push(E(file,d.loc.start.line,1,`${name} must accept 'deps'.`,
+function vFactory(err, file) {
+  let found = false, cleanup = false, depCheck = false;
+  let factoryLine = 1;
+
+  return {
+    ExportNamedDeclaration(p) {
+      const d = p.node.declaration;
+      if (!d || d.type !== "FunctionDeclaration") return;
+      const name = d.id?.name || "";
+      if (!/^create[A-Z]/.test(name)) return;
+      found = true;
+      factoryLine = d.loc.start.line;
+
+      if (!d.params.length)
+        err.push(E(file, d.loc.start.line, 1, `${name} must accept 'deps'.`,
           `export function ${name}(deps){ /* ... */ }`));
-      p.traverse({IfStatement(q){
-        if(/dependency/i.test(q.toString())&&/throw\s+new\s+Error/.test(q.toString()))
-          depCheck=true;
-      }});
+
+      // Loosened: any throw for missing dependency counts
+      p.traverse({
+        ThrowStatement(q) {
+          // Only count throws that are inside an if (!dep) or similar
+          let parent = q.parentPath;
+          while (parent && parent.node && parent.node.type !== "IfStatement" && parent.parentPath) {
+            parent = parent.parentPath;
+          }
+          // Look for: if ( ... ) { throw new Error('Missing ...') }
+          if (parent && parent.node && parent.node.type === "IfStatement") {
+            const test = parent.node.test;
+            // Look for !something or typeof something !==
+            if (
+              (test.type === "UnaryExpression" && test.operator === "!" && test.argument.type === "Identifier") ||
+              (test.type === "BinaryExpression" && test.operator === "===" && (
+                (test.left.type === "UnaryExpression" && test.left.operator === "typeof") ||
+                (test.right.type === "UnaryExpression" && test.right.operator === "typeof")
+              ))
+            ) {
+              // If error message matches "Missing ..."
+              if (
+                q.node.argument &&
+                q.node.argument.type === "NewExpression" &&
+                q.node.argument.callee.name === "Error" &&
+                q.node.argument.arguments.length &&
+                q.node.argument.arguments[0].type === "StringLiteral" &&
+                /^Missing\b/.test(q.node.argument.arguments[0].value)
+              ) {
+                depCheck = true;
+              }
+            }
+          }
+        }
+      });
     },
-    FunctionDeclaration(p){
-      if(["cleanup","teardown"].includes(p.node.id?.name)) cleanup=true;
+    FunctionDeclaration(p) {
+      if (["cleanup", "teardown"].includes(p.node.id?.name)) cleanup = true;
     },
-    Program:{exit(){
-      if(!found)   err.push(E(file,1,1,"Missing factory export.","export function createXyz(deps){…}"));
-      if(found&&!depCheck) err.push(E(file,1,1,"Factory must validate deps.","throw new Error('Missing …')"));
-      if(found&&!cleanup)  err.push(E(file,1,1,"Factory must expose cleanup API.","function cleanup() { … }"));
-    }}
+    Program: { exit() {
+      if (!found)
+        err.push(E(file, 1, 1, "Missing factory export.", "export function createXyz(deps){…}"));
+      if (found && !depCheck)
+        err.push(E(file, factoryLine, 1, "Factory must validate deps.", "throw new Error('Missing …')"));
+      if (found && !cleanup)
+        err.push(E(file, factoryLine, 1, "Factory must expose cleanup API.", "function cleanup() { … }"));
+    } }
   };
 }
 
@@ -272,9 +310,18 @@ function vEvent(err, file, isAppJs) {
         if (c.property.name === "trackListener") {
           ctx.track = true;
           const last = p.node.arguments.at(-1);
-          if (!(last?.type === "ObjectExpression" && hasProp(last, "context")))
+          if (!(last?.type === "ObjectExpression" && hasProp(last, "context"))) {
             err.push(E(file, p.node.loc.start.line, 5, "Missing { context } in trackListener.",
-              "eventHandlers.trackListener(btn,'click',handler,{ context:'sidebar' })"));
+                       "eventHandlers.trackListener(btn,'click',handler,{ context:'sidebar' })"));
+          } else {
+            // Additional check: ensure context is a string literal
+            const contextProp = last.properties.find(
+              (pr) => (pr.key.name === "context" || pr.key.value === "context")
+            );
+            if (contextProp && contextProp.value.type !== "StringLiteral") {
+              err.push(E(file, p.node.loc.start.line, 5, "context should be a string literal."));
+            }
+          }
         }
         if (c.property.name === "cleanupListeners") ctx.cleanup = true;
       }
@@ -362,8 +409,8 @@ function vReadiness(err, file, isAppJs) {
 
           // Exception for bootstrap DOMContentLoaded in app.js
           if (isAppJs &&
-              c.object.name === "doc" &&
-              ev?.value === "DOMContentLoaded") {
+            c.object.name === "doc" &&
+            ev?.value === "DOMContentLoaded") {
             return; // Skip this violation for bootstrap
           }
 
@@ -373,15 +420,52 @@ function vReadiness(err, file, isAppJs) {
 
         // allowed methods
         if (c.object.name === "domReadinessService" &&
-            ["waitForEvent", "dependenciesAndElements"].includes(c.property.name))
+          ["waitForEvent", "dependenciesAndElements"].includes(c.property.name))
           ok = true;
       }
     },
-    Program: { exit() {
-      // For app.js, don't require domReadinessService usage if it's the one creating it
-      if (!ok && !isAppJs)
-        err.push(E(file, 1, 7, "No domReadinessService.waitForEvent/dependenciesAndElements call detected."));
-    }}
+    Program: {
+      exit(path) {
+        // For app.js, don't require domReadinessService usage if it's the one creating it
+        if (!ok && !isAppJs) {
+          err.push(E(file, 1, 7, "No domReadinessService.waitForEvent/dependenciesAndElements call detected."));
+        }
+
+        if (!isAppJs) {
+          let diParamSet = new Set();
+          let factoryLine = 1;
+          path.traverse({
+            FunctionDeclaration(fdPath) {
+              if (/^create[A-Z]/.test(fdPath.node.id?.name)) {
+                factoryLine = fdPath.node.loc.start.line;
+                // Collect destructured DI params (e.g. export function createX({ domReadinessService }) { ... })
+                collectDIParamNamesFromParams(fdPath.node.params, diParamSet);
+
+                // Now, ALSO check destructuring inside the body: const { domReadinessService } = deps;
+                fdPath.traverse({
+                  VariableDeclarator(vdPath) {
+                    if (
+                      vdPath.node.id.type === 'ObjectPattern' &&
+                      vdPath.node.init &&
+                      vdPath.node.init.name === 'deps'
+                    ) {
+                      vdPath.node.id.properties.forEach(pr => {
+                        if (pr.key && pr.key.name === 'domReadinessService') {
+                          diParamSet.add('domReadinessService');
+                        }
+                      });
+                    }
+                  }
+                });
+              }
+            }
+          });
+          if (!diParamSet.has("domReadinessService")) {
+            err.push(E(file, factoryLine, 7, "Missing domReadinessService in DI param."));
+          }
+        }
+      }
+    }
   };
 }
 

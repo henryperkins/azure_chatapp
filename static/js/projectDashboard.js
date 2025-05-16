@@ -196,7 +196,7 @@ export function createProjectDashboard(deps) {
       try {
         // Wait for global app readiness first
         await this.domReadinessService.waitForEvent('app:ready', {
-          timeout: this.APP_CONFIG?.TIMEOUTS?.APP_READY_WAIT ?? 10000, // Use configured timeout or default
+          timeout: this.APP_CONFIG?.TIMEOUTS?.APP_READY_WAIT ?? 30000, // Use configured timeout or default
           context: 'ProjectDashboard_waitForAppReady'
         });
 
