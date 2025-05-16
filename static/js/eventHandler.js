@@ -317,9 +317,30 @@ export function createEventHandlers({
       timeout: dependencyWaitTimeout
     });
 
-    setupCommonElements();
-    setupNavigationElements();
-    setupContentElements();
+    // --- DOM-dependent listeners: espera a que el body esté PARSEADO ---
+    const runDomDependentSetup = () => {
+      setupCommonElements();
+      setupNavigationElements();
+      setupContentElements();
+    };
+
+    const doc = domAPI.getDocument();
+    if (doc.readyState === 'loading') {
+      trackListener(
+        doc,
+        'DOMContentLoaded',
+        runDomDependentSetup,
+        {
+          once: true,
+          description: 'EventHandler DOM-ready setup',
+          context: MODULE,
+          source: 'init'
+        }
+      );
+    } else {
+      // Body y nodos ya presentes
+      runDomDependentSetup();
+    }
 
     const checkProjectModalForm = () => {
       if (domAPI.getElementById('projectModalForm')) {
@@ -411,7 +432,7 @@ export function createEventHandlers({
 
   function setupCommonElements() {
     const darkModeToggle = domAPI.getElementById('darkModeToggle');
-    if (darkModeToggle) {
+    if (darkModeToggle && !domAPI.getDataAttribute(darkModeToggle, 'ehBound')) {
       trackListener(
         darkModeToggle,
         'click',
@@ -422,6 +443,7 @@ export function createEventHandlers({
         },
         { description: 'Dark Mode Toggle', module: MODULE, context: 'ui', source: 'setupCommonElements' }
       );
+      domAPI.setDataAttribute(darkModeToggle, 'ehBound', '1'); // marca como enlazado
       // Initial dark mode state
       if (storageBackend.getItem('darkMode') === 'true') {
         domAPI.addClass(domAPI.getDocument().documentElement, 'dark');
@@ -456,21 +478,24 @@ export function createEventHandlers({
   function setupNavigationElements() {
     const navLinks = domAPI.querySelectorAll('.nav-link');
     navLinks.forEach((link) => {
-      trackListener(
-        link,
-        'click',
-        (e) => {
-          domAPI.preventDefault(e);
-          const href = domAPI.getAttribute(link, 'href');
-          if (href) redirect(href);
-        },
-        {
-          description: `Navigation Link: ${domAPI.getAttribute(link, 'href') || 'unknown'}`,
-          module: MODULE,
-          context: 'navigation',
-          source: 'setupNavigationElements'
-        }
-      );
+      if (!domAPI.getDataAttribute(link, 'ehBound')) {
+        trackListener(
+          link,
+          'click',
+          (e) => {
+            domAPI.preventDefault(e);
+            const href = domAPI.getAttribute(link, 'href');
+            if (href) redirect(href);
+          },
+          {
+            description: `Navigation Link: ${domAPI.getAttribute(link, 'href') || 'unknown'}`,
+            module: MODULE,
+            context: 'navigation',
+            source: 'setupNavigationElements'
+          }
+        );
+        domAPI.setDataAttribute(link, 'ehBound', '1');
+      }
     });
   }
 
