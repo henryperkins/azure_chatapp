@@ -7,6 +7,7 @@
  * @param {Object}   deps.DependencySystem  – Required (for consistency, though not used heavily here)
  * @param {Object}   deps.domAPI           – Required, for DOM queries and event dispatch
  * @param {Object}   deps.sanitizer        – Optional. If present, must have .sanitize(html)
+ * @param {Object}   deps.eventHandlers    – Required, must provide createCustomEvent
  *
  * // Additional guardrail-driven injections:
  * @param {Object}   deps.apiClient        – Required, for all HTTP requests
@@ -18,12 +19,15 @@ export function createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
   sanitizer = null,
+  eventHandlers,
   apiClient,
   timerAPI
 } = {}) {
   // Guardrail checks:
   if (!DependencySystem) throw new Error('DependencySystem required by HtmlTemplateLoader');
   if (!domAPI)           throw new Error('domAPI required by HtmlTemplateLoader');
+  if (!eventHandlers || typeof eventHandlers.createCustomEvent !== 'function')
+    throw new Error('[HtmlTemplateLoader] eventHandlers.createCustomEvent required');
   if (!apiClient || typeof apiClient.fetch !== 'function') {
     throw new Error('[HtmlTemplateLoader] apiClient with a .fetch() method is required');
   }
@@ -82,12 +86,9 @@ export function createHtmlTemplateLoader({
       // Error handling intentionally left blank (no notification/capture)
     } finally {
       timerAPI.clearTimeout(tm);
-      domAPI.dispatchEvent(
-        domAPI.getDocument(),
-        new CustomEvent(eventName, {
-          detail: { success, error: success ? null : 'Fetch or injection failed' }
-        })
-      );
+      const evt = eventHandlers.createCustomEvent(eventName,
+        { detail: { success, error: success ? null : 'Fetch or injection failed' } });
+      domAPI.dispatchEvent(domAPI.getDocument(), evt);
     }
 
     return success;
@@ -140,10 +141,9 @@ export function createHtmlTemplateLoader({
           eventNameEmitted: eventName
         });
         // Dispatch event in case something is awaiting
-        domAPI.dispatchEvent(
-          domAPI.getDocument(),
-          new CustomEvent(eventName, { detail: { success: false, error: err.message } })
-        );
+        const evt = eventHandlers.createCustomEvent(eventName,
+          { detail: { success: false, error: err.message } });
+        domAPI.dispatchEvent(domAPI.getDocument(), evt);
       }
     }
 
