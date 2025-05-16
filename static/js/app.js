@@ -682,17 +682,24 @@ async function initializeCoreSystems() {
 
   // Wait for modals to load
   let modalsLoadedSuccess = false;
-  await new Promise((res) => {
-    eventHandlers.trackListener(
-      domAPI.getDocument(),
-      'modalsLoaded',
-      (e) => {
-        modalsLoadedSuccess = !!(e?.detail?.success);
-        res(true);
-      },
-      { once: true, description: 'modalsLoaded for app init', context: 'app' }
-    );
-  });
+
+  // If the HTML was injected before this code ran, skip the event wait
+  const injected = domAPI.getElementById('modalsContainer')?.childElementCount > 0;
+  if (injected) {
+    modalsLoadedSuccess = true;
+  } else {
+    await new Promise((res) => {
+      eventHandlers.trackListener(
+        domAPI.getDocument(),
+        'modalsLoaded',
+        (e) => {
+          modalsLoadedSuccess = !!(e?.detail?.success);
+          res(true);
+        },
+        { once: true, description: 'modalsLoaded for app init', context: 'app' }
+      );
+    });
+  }
 
   // modalManager.init
   if (modalManager.init) {
