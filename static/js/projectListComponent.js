@@ -1059,6 +1059,16 @@ export class ProjectListComponent {
     }
 }
 
+/**
+ * Factory export for DependencySystem-compliant usage.
+ * Ensures compliance with .clinerules: Only use this function to obtain an instance.
+ * @param {Object} deps - see ProjectListComponent constructor for DI.
+ * @returns {ProjectListComponent}
+ */
+export function createProjectListComponent(deps) {
+    return new ProjectListComponent(deps);
+}
+
 /* eslint-disable no-undef */
 if (typeof process !== "undefined" && process?.env?.NODE_ENV === 'test') {
     ProjectListComponent.prototype._testHelpers = {

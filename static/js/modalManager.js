@@ -119,10 +119,71 @@ class ModalManager {
   }
 
   _onDialogClose(modalId) {
-    if (this.activeModal === modalId) {
-      this.activeModal = null;
-      this.domAPI.getBody().style.overflow = '';
+    // Find the modalName for this modalId for robust activeModal clearing
+    let modalNameForId = null;
+    if (this.modalMappings) {
+      for (const [name, id] of Object.entries(this.modalMappings)) {
+        if (id === modalId) {
+          modalNameForId = name;
+          break;
+        }
+      }
     }
+    if (this.activeModal === modalNameForId) {
+      this.activeModal = null;
+      this._manageBodyScroll(true);
+      this.logger.debug?.(`[ModalManager] Dialog ${modalId} (${modalNameForId || 'unknown'}) closed via 'close' event, activeModal cleared.`);
+    }
+  }
+
+  _registerAvailableModals() {
+    if (!this.modalMappings || typeof this.modalMappings !== 'object') {
+      this.logger.warn?.('[ModalManager] No modalMappings available to register.');
+      return;
+    }
+
+    Object.entries(this.modalMappings).forEach(([modalName, modalId]) => {
+      const modalEl = this.domAPI.getElementById(modalId);
+      if (!modalEl) {
+        this.logger.warn?.(`[ModalManager] Modal element #${modalId} for "${modalName}" not found.`);
+        return;
+      }
+
+      // For <dialog> elements, listen to the native 'close' event
+      if (modalEl.tagName === 'DIALOG' && typeof this.eventHandlers?.trackListener === 'function') {
+        this.eventHandlers.trackListener(
+          modalEl,
+          'close',
+          () => this._onDialogClose(modalId),
+          {
+            description: `Dialog close event for ${modalId}`,
+            context: 'modalManager',
+            source: 'ModalManager._registerAvailableModals'
+          }
+        );
+      }
+
+      // For generic close buttons within modals
+      const closeButtons = this.domAPI.querySelectorAll('[data-modal-dismiss], .modal-close-button', modalEl);
+      closeButtons.forEach(button => {
+        if (typeof this.eventHandlers?.trackListener === 'function') {
+          this.eventHandlers.trackListener(
+            button,
+            'click',
+            (e) => {
+              e.preventDefault();
+              this.hide(modalName); // Use modalName for hiding
+            },
+            {
+              description: `Close button click for modal ${modalName} (${modalId})`,
+              context: 'modalManager',
+              source: 'ModalManager._registerAvailableModals'
+            }
+          );
+        }
+      });
+      this.logger.debug?.(`[ModalManager] Registered modal: ${modalName} (#${modalId})`);
+    });
   }
 
   async init() {

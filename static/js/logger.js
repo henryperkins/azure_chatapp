@@ -14,10 +14,10 @@ export function createLogger({
   debug = false,
   context = 'App'
 } = {}) {
-  function send(level, args) {
+  async function send(level, args) {
     if (!enableServer) return;
     try {
-      fetch(endpoint, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -27,13 +27,19 @@ export function createLogger({
           ts: Date.now()
         })
       });
+      if (!response.ok) {
+        // Surface server-side log ingestion failures
+        console.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
+      }
     } catch (err) {
-      // Fail gracefully (network/log bridge errors never block UI)
+      // Surface client-side failures (e.g., network down, CORS, 0 response)
+      console.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
     }
   }
   function wrap(level, fn) {
     return (...args) => {
       fn(`[${context}]`, ...args);
+      // fire-and-forget, do not await to avoid blocking UI
       send(level, args);
     };
   }

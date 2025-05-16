@@ -657,7 +657,6 @@ export function createAuthModule(deps) {
 
   async function init() {
     // Wait for DOM/app readiness strictly via domReadinessService—no ad-hoc or legacy logic
-    await domReadinessService.waitForEvent('app:ready', domAPI.getDocument());
     // Prevent multiple initializations
     if (authState.isReady) {
       broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_already_ready');
