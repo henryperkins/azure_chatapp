@@ -848,9 +848,7 @@ async function initializeUIComponents() {
         '#projectDetailsView',
         '#projectTitle',
         '#projectDescription',
-        '#backToProjectsBtn',
-        '#projectFilterTabs',
-        '#projectCardsPanel'
+        '#backToProjectsBtn'
       ],
       timeout: 10000,
       context: 'app.js:initializeUIComponents'

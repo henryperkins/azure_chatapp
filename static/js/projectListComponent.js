@@ -551,6 +551,9 @@ export class ProjectListComponent {
             }
         }
 
+        // Wait strictly for late-injected markup when present
+        await this.domReadinessService.waitFor(['#projectCardsPanel', '#projectFilterTabs'], 5000);
+
         this._makeVisible();
 
         const projectListView = docAPI?.getElementById("projectListView");
