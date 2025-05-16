@@ -12,7 +12,7 @@
     "audit": "node scripts/audit.js",
     "codemod": "jscodeshift -t scripts/remove-window-export.js static/js/**/*.js",
     "prebuild": "npm run build:css",
-    "start": "node your-server-file.js"
+    "start": "uvicorn main:app --host=0.0.0.0 --port=8000"
   },
   "repository": {
     "type": "git",
