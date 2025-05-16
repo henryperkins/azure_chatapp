@@ -52,8 +52,11 @@
   @apply mt-4 space-y-2;
 }
 
-/* Old "animate-in fade-in-0 zoom-in-95" is invalid in Tailwind v4
-   Replaced with "fade-zoom-in" (defined in tailwind.css) */
+/* 
+   Old "animate-in fade-in-0 zoom-in-95" is invalid in Tailwind v4.
+   Now replaced with "fade-zoom-in" (defined in tailwind.css).
+   Remove this comment after all code is migrated to v4.
+*/
 .file-preview-item {
   @apply p-2 bg-base-100 rounded-box shadow-xs flex items-center gap-2 border border-base-300;
   animation: fadeZoomIn 0.3s ease-in-out forwards;
