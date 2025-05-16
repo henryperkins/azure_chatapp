@@ -16,13 +16,13 @@
  * @param {Function} [deps.navigate] - Optional navigation function override.
  * @param {Object} [deps.storage] - Optional storage abstraction override (usually from browserService).
  * @param {Object} deps.errorReporter - Required error logging utility.
+ * @param {Object} deps.logger - Required logging utility.
+ * @param {Object} deps.domReadinessService - Required readiness service.
  * @param {Object} [deps.timeAPI] - Optional timing API (defaults to performance.now).
  * @returns {Object} Event handler API { trackListener, cleanupListeners, delegate, etc. }
  */
 
 import { debounce as globalDebounce, toggleElement as globalToggleElement } from './utils/globalUtils.js';
-
-const MODULE = 'EventHandler';
 
 export function createEventHandlers({
   app,
@@ -34,30 +34,38 @@ export function createEventHandlers({
   APP_CONFIG,
   navigate,
   storage,
-  logger,            // New: optionally injected logger
-  errorReporter      // New: optionally injected error tracking
+  logger,           // STRICT: must be provided via DI
+  errorReporter,    // STRICT: must be provided via DI
+  domReadinessService
 } = {}) {
-  // --- Dependency fallback ---
-  if (!logger && DependencySystem?.modules?.get('logger')) {
-    logger = DependencySystem.modules.get('logger');
+  const MODULE = 'EventHandler';
+  if (!DependencySystem) {
+    throw new Error('[eventHandler] Missing DependencySystem');
   }
-  if (!errorReporter && DependencySystem?.modules?.get('errorReporter')) {
-    errorReporter = DependencySystem.modules.get('errorReporter');
+  if (!domAPI) {
+    throw new Error('[eventHandler] Missing domAPI');
   }
-
+  if (!browserService) {
+    throw new Error('[eventHandler] Missing browserService');
+  }
+  if (!APP_CONFIG) {
+    throw new Error('[eventHandler] Missing APP_CONFIG');
+  }
   if (!logger) {
-    logger = {
-      log: () => {},
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      debug: () => {}
-    };
+    throw new Error('[eventHandler] DI logger is required.');
   }
   if (!errorReporter) {
-    errorReporter = { report: () => {} };
+    throw new Error('[eventHandler] DI errorReporter is required.');
   }
-  logger.debug('[EventHandler] Factory initialized', { MODULE, version: '1.0', appInjected: !!app });
+  if (!domReadinessService) {
+    throw new Error('[eventHandler] Missing domReadinessService');
+  }
+  logger.debug('[EventHandler] Factory initialized', {
+    MODULE,
+    version: '1.0',
+    appInjected: !!app,
+    context: MODULE
+  });
   // We allow dynamic injection/update of projectManager
   let _projectManager = projectManager;
 
@@ -281,6 +289,10 @@ export function createEventHandlers({
         if (options.onError) {
           options.onError(error);
         }
+        logger.error(`[${MODULE}][setupForm][handleSubmit]`, error, {
+          context: 'form-submit',
+          formId: form?.id || formId
+        });
       } finally {
         if (showLoadingState) {
           domAPI.removeClass(form, 'submitting');
@@ -311,11 +323,7 @@ export function createEventHandlers({
       return this; // Return API object early
     }
 
-    // Use DI domReadinessService for unified readiness
-    const domReadinessService = DependencySystem?.modules?.get?.('domReadinessService');
-    if (!domReadinessService) {
-      throw new Error('[eventHandler] domReadinessService missing in DI');
-    }
+    // Using the injected domReadinessService here
     const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10000;
 
     // Wait for core dependencies and the body to exist
@@ -370,7 +378,9 @@ export function createEventHandlers({
           try {
             currentModalManager.show('login');
           } catch (error) {
-            // No logging
+            logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, {
+              context: 'auth'
+            });
           }
         },
         { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
@@ -519,7 +529,11 @@ export function createEventHandlers({
       if (elementMap.size === 0) trackedListeners.delete(el);
     } catch (error) {
       logger.error(`[EventHandler][untrackListener] Failed to remove event listener:`, {
-        element: el, evt, handler, error
+        element: el,
+        evt,
+        handler,
+        error,
+        context: details.context
       });
       errorReporter.report?.(error, { module: MODULE, evt, fn: 'untrackListener' });
     }
@@ -539,7 +553,7 @@ export function createEventHandlers({
               domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
               entriesToRemove.push({ element, type, originalHandler });
             } catch (error) {
-              logger.error(`[EventHandler][cleanupListeners] Error removing event listener:`, {
+              logger.error(`[${MODULE}][cleanupListeners] Error removing event listener:`, {
                 element, type, details, error, context: cleanupContext
               });
               errorReporter.report?.(error, { module: MODULE, evt: type, fn: 'cleanupListeners', context: cleanupContext });
@@ -658,10 +672,16 @@ export function createEventHandlers({
     if (!windowObject || typeof windowObject.CustomEvent !== 'function') {
       // Depending on strictness, could throw an error or log via an injected logger if available
       // For now, returning null or a simple object if CustomEvent is not polyfilled/available.
-      // console.error('[EventHandler] Cannot create CustomEvent: windowObject or window.CustomEvent is not available.');
+      logger.warn(`[${MODULE}][createCustomEvent] Cannot create CustomEvent: windowObject or window.CustomEvent is not available.`, { context: MODULE });
       return { type, detail: options.detail }; // Fallback to a plain object
     }
     return new windowObject.CustomEvent(type, options);
+  }
+
+  function cleanup() {
+    // Cleans up all event listeners and module state
+    cleanupListeners();
+    // You could add more explicit cleanup logic here if stateful singletons or intervals are added
   }
 
   return {
@@ -676,10 +696,11 @@ export function createEventHandlers({
     init,
     PRIORITY,
     untrackListener,
-    createCustomEvent, // Add the new function here
+    createCustomEvent,
     setProjectManager: (pm) => {
       _projectManager = pm;
     },
-    DependencySystem           // <-- añadido
+    DependencySystem,
+    cleanup, // Expose cleanup API per guardrail
   };
 }
