@@ -233,6 +233,7 @@ from routes.user_preferences import router as user_preferences_router  # noqa: E
 from routes.unified_conversations import router as conversations_router  # noqa: E402
 from routes.sentry_test import router as sentry_test_router  # noqa: E402
 from routes.admin import router as admin_router  # noqa: E402
+from routes.logs import router as logs_router  # noqa: E402
 
 APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
 APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
@@ -418,6 +419,9 @@ app.include_router(sentry_test_router, prefix="/debug/sentry", tags=["monitoring
 
 # Admin/debug repairs
 app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+
+# Client log ingestion endpoint
+app.include_router(logs_router)
 
 
 @app.get("/debug/routes", include_in_schema=False)

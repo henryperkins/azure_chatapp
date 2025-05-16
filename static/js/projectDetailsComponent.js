@@ -28,10 +28,8 @@
  *   • chatManager               : obj – initialize({ projectId, … })
  *
  * Import externo:
- *   • waitForDepsAndDom         de './utils/globalUtils.js'
+ *   • domReadinessService       de './utils/domReadinessService.js' (DI via factory)
  */
-
-import { waitForDepsAndDom } from './utils/globalUtils.js';
 
 const MODULE = "ProjectDetailsComponent";
 
@@ -49,6 +47,7 @@ function createProjectDetailsComponent({
   sanitizer,
   domAPI,
   globalUtils,
+  domReadinessService,
   knowledgeBaseComponent = null,
   modelConfig = null,
   chatManager = null
@@ -61,12 +60,13 @@ function createProjectDetailsComponent({
     !FileUploadComponentClass ||
     !router ||
     !sanitizer ||
-    !domAPI
+    !domAPI ||
+    !domReadinessService
   ) {
     throw new Error(
       "[ProjectDetailsComponent] Missing required dependencies " +
       "(app, projectManager, eventHandlers, modalManager, FileUploadComponentClass, " +
-      "router, sanitizer, domAPI)."
+      "router, sanitizer, domAPI, domReadinessService)."
     );
   }
 
@@ -82,6 +82,7 @@ function createProjectDetailsComponent({
     sanitizer,
     domAPI,
     globalUtils,
+    domReadinessService,
     knowledgeBaseComponent,
     modelConfig,
     chatManager
@@ -100,6 +101,7 @@ class ProjectDetailsComponent {
     sanitizer,
     domAPI,
     globalUtils,
+    domReadinessService,
     knowledgeBaseComponent = null,
     modelConfig = null,
     chatManager = null
@@ -118,6 +120,7 @@ class ProjectDetailsComponent {
     this.knowledgeBaseComponent = knowledgeBaseComponent;
     this.modelConfig = modelConfig;
     this.chatManager = chatManager;
+    this.domReadinessService = domReadinessService;
     this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem; // Get DependencySystem
     this.navigationService = this.DependencySystem?.modules?.get('navigationService');
 
@@ -173,11 +176,10 @@ class ProjectDetailsComponent {
 
   async initialize() {
     // Wait for DOM to be ready before finding elements
-    await waitForDepsAndDom({
-      DependencySystem: this.eventHandlers?.DependencySystem ?? null,
-      domAPI          : this.domAPI,
-      domSelectors : ['#projectDetailsView'],
-      timeout      : 5000
+    await this.domReadinessService.dependenciesAndElements({
+      domSelectors: ['#projectDetailsView'],
+      timeout: 5000,
+      context: 'ProjectDetailsComponent_initialize'
     });
 
     if (this.state.initialized) {

@@ -1,0 +1,1311 @@
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747371351312
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747371351318
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747371351320"
+  ],
+  "ts": 1747371351321
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "07915ebf-fe17-4910-8e78-1fd3249560b7"
+  ],
+  "ts": 1747371351727
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747371351729
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747371351817
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371351817
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747371351819,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747371351821
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371351818
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747371351818
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747371351822
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371351823
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747371351823
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747371420011
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747371420019"
+  ],
+  "ts": 1747371420019
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747371420017
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "0bb37d0f-1704-4c46-a250-99dd02676c4c"
+  ],
+  "ts": 1747371420377
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747371420386
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371420554
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371420557
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747371420556
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747371420557,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747371420558
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747371420557
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747371420558
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747371420559
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371420558
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/login",
+    {
+      "method": "POST",
+      "headers": {
+        "Accept": "application/json",
+        "X-CSRF-Token": "0bb37d0f-1704-4c46-a250-99dd02676c4c",
+        "Content-Type": "application/json"
+      },
+      "credentials": "include",
+      "body": "{\"username\":\"hperkins\",\"password\":\"Twiohmld1234!\"}"
+    }
+  ],
+  "ts": 1747371510547
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[AuthModule] loginModalForm submit handler invoked. Event:",
+    {
+      "isTrusted": true
+    }
+  ],
+  "ts": 1747371510531
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header",
+    "0bb37d0f-1704-4c46-a250-99dd02676c4c",
+    "for",
+    "/api/auth/login"
+  ],
+  "ts": 1747371510547
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "0bb37d0f-1704-4c46-a250-99dd02676c4c"
+  ],
+  "ts": 1747371510546
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][loginUser] Attempting login",
+    "hperkins"
+  ],
+  "ts": 1747371510546
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "0bb37d0f-1704-4c46-a250-99dd02676c4c"
+  ],
+  "ts": 1747371510548
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][loginUser] Cookies after login:",
+    "csrf_token=0bb37d0f-1704-4c46-a250-99dd02676c4c"
+  ],
+  "ts": 1747371511387
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/login",
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJocGVya2lucyIsInVzZXJfaWQiOjEsInR5cGUiOiJhY2Nlc3MiLCJ2ZXJzaW9uIjowLCJpYXQiOjE3NDczNzE1MTAsImV4cCI6MTc0NzQ1NzkxMCwianRpIjoiNTU5N2Y3ZjItYjZjMy00MzA2LTk4ODQtNzVjYzA4OWYwMDJiIn0.yTfkXMvo957sS8AGzqlGSaui1czQ6p9vOpp85bJUS2Y",
+      "token_type": "bearer",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJocGVya2lucyIsInVzZXJfaWQiOjEsInR5cGUiOiJyZWZyZXNoIiwidmVyc2lvbiI6MCwiaWF0IjoxNzQ3MzcxNTEwLCJleHAiOjE3NDk5NjM1MTAsImp0aSI6IjM2NDNmNGYyLWM4MTQtNDk1OS05MGYxLWY0Y2E2YmU4ZjM0NCJ9.-nE9NN1bYqg5RwH6G1r7yf33Xcqlucsf9lo5XOCOquc",
+      "username": "hperkins",
+      "message": null,
+      "token_version": 0
+    }
+  ],
+  "ts": 1747371511386
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]",
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJocGVya2lucyIsInVzZXJfaWQiOjEsInR5cGUiOiJhY2Nlc3MiLCJ2ZXJzaW9uIjowLCJpYXQiOjE3NDczNzE1MTAsImV4cCI6MTc0NzQ1NzkxMCwianRpIjoiNTU5N2Y3ZjItYjZjMy00MzA2LTk4ODQtNzVjYzA4OWYwMDJiIn0.yTfkXMvo957sS8AGzqlGSaui1czQ6p9vOpp85bJUS2Y",
+      "token_type": "bearer",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJocGVya2lucyIsInVzZXJfaWQiOjEsInR5cGUiOiJyZWZyZXNoIiwidmVyc2lvbiI6MCwiaWF0IjoxNzQ3MzcxNTEwLCJleHAiOjE3NDk5NjM1MTAsImp0aSI6IjM2NDNmNGYyLWM4MTQtNDk1OS05MGYxLWY0Y2E2YmU4ZjM0NCJ9.-nE9NN1bYqg5RwH6G1r7yf33Xcqlucsf9lo5XOCOquc",
+      "username": "hperkins",
+      "message": null,
+      "token_version": 0
+    }
+  ],
+  "ts": 1747371511386
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "username": "hperkins",
+        "id": "temp-id-1747371511388"
+      }
+    }
+  ],
+  "ts": 1747371511388
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "username": "hperkins",
+        "id": "temp-id-1747371511388"
+      },
+      "source": "login_success_immediate",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371511388
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"username\":\"hperkins\",\"id\":\"temp-id-1747371511388\"}}"
+  ],
+  "ts": 1747371511389
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "username": "hperkins",
+        "id": "temp-id-1747371511388"
+      },
+      "timestamp": 1747371511389,
+      "source": "login_success_immediate"
+    }
+  ],
+  "ts": 1747371511389
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747371511390
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747371947796
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747371947802
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747371947804"
+  ],
+  "ts": 1747371947804
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "53bb5c63-abd9-495b-9efe-030f0bc770a4"
+  ],
+  "ts": 1747371947903
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747371947904
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371947993
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747371947997
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747371947995
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371947995
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747371947996,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747371947996
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747371947996
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371947997
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747371947998
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747371957491
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747371957498
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747371957499"
+  ],
+  "ts": 1747371957499
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "f5aab468-f0de-4b37-a4e1-ad345c20844e"
+  ],
+  "ts": 1747371957584
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747371957586
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747371957747
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371957746
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747371957748
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371957747
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747371957748,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747371957748
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747371957748
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747371957749
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747371957749
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747372992993
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747372993000
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747372993002"
+  ],
+  "ts": 1747372993002
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "3818f48a-267b-401d-b77b-9ada14732479"
+  ],
+  "ts": 1747372993090
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747372993091
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747372993265
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747372993266
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747372993267
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747372993266
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747372993267
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747372993267,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747372993267
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747372993268
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747372993268
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747373000983
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747373000990
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747373000992"
+  ],
+  "ts": 1747373000993
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "f4ec959c-eaed-4c0b-b378-63f96bd6945c"
+  ],
+  "ts": 1747373001099
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747373001100
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747373001266
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747373001265
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747373001266,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747373001266
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747373001265
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747373001264
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747373001265
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747373001267
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747373001267
+}

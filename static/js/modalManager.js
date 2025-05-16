@@ -14,6 +14,8 @@ class ModalManager {
    * @param {Object} [opts.browserService]
    * @param {Object} [opts.modalMapping]
    * @param {Object} [opts.domPurify]
+   * @param {Object} [opts.logger]
+   * @param {Object} [opts.errorReporter]
    */
   constructor({
     eventHandlers,
@@ -21,7 +23,9 @@ class ModalManager {
     browserService,
     DependencySystem,
     modalMapping,
-    domPurify
+    domPurify,
+    logger,            // New: injectable logger
+    errorReporter      // New: injectable error reporting
   } = {}) {
     this.DependencySystem = DependencySystem || undefined;
     this.eventHandlers =
@@ -48,10 +52,21 @@ class ModalManager {
       this.DependencySystem?.modules?.get?.('sanitizer') ||
       null;
 
+    // logger and errorReporter DI pattern
+    this.logger =
+      logger ||
+      this.DependencySystem?.modules?.get?.('logger') ||
+      { error: () => {}, warn: () => {}, info: () => {}, log: () => {}, debug: () => {} };
+    this.errorReporter =
+      errorReporter ||
+      this.DependencySystem?.modules?.get?.('errorReporter') ||
+      { report: () => {} };
     this.app = this.DependencySystem?.modules?.get?.('app') || null;
 
     this.activeModal = null;
     this._scrollLockY = undefined;
+
+    this.logger.debug?.('[ModalManager] constructed', { withApp: !!this.app });
   }
 
   _isDebug() {
@@ -115,29 +130,40 @@ class ModalManager {
     if (!depSys) {
       throw new Error('[ModalManager] DependencySystem missing in init');
     }
-    await depSys.waitFor(['eventHandlers'], null, 5000);
 
-    this.validateModalMappings(this.modalMappings);
+    // Wait for both eventHandlers and domAPI
+    await depSys.waitFor(['eventHandlers', 'domAPI'], null, 5000);
 
-    Object.values(this.modalMappings).forEach((modalId) => {
-      const modalEl = this.domAPI.getElementById(modalId);
-      if (!modalEl) {
-        throw new Error(`[ModalManager] Required modal missing in DOM: ${modalId}`);
-      }
-      const handler = () => this._onDialogClose(modalId);
-      if (this.eventHandlers?.trackListener) {
-        this.eventHandlers.trackListener(modalEl, 'close', handler, {
-          description: `Close event for ${modalId}`,
-          context: 'modalManager',
-          source: 'ModalManager.init'
-        });
-      }
+    // Attempt to get the domReadinessService from DI
+    const domReadinessService = depSys.modules?.get('domReadinessService');
+    if (!domReadinessService) {
+      throw new Error('[ModalManager] Missing domReadinessService in DI. Make sure it is registered.');
+    }
+
+    // Wait for body readiness
+    await domReadinessService.dependenciesAndElements({
+      deps: [],
+      domSelectors: ['body'],
+      timeout: 5000,
+      context: 'modalManager.init'
     });
 
-    const doc =
-      this.domAPI?.getDocument?.() ||
-      (typeof document !== 'undefined' ? document : null);
-    if (doc && typeof this.domAPI?.dispatchEvent === 'function') {
+    // Optionally, wait for 'modalsLoaded' event. If it times out, we proceed anyway
+    try {
+      await domReadinessService.waitForEvent('modalsLoaded', {
+        timeout: 8000,
+        context: 'modalManager.init'
+      });
+    } catch (error) {
+      // We do not fail if modalsLoaded never fires
+    }
+
+    // Register any currently available modals
+    this._registerAvailableModals();
+
+    // Dispatch an initialization success event
+    const doc = this.domAPI.getDocument();
+    if (doc && typeof this.domAPI.dispatchEvent === 'function') {
       this.domAPI.dispatchEvent(
         doc,
         new CustomEvent('modalmanager:initialized', { detail: { success: true } })
@@ -156,9 +182,11 @@ class ModalManager {
     Object.entries(modalMapping).forEach(([key, modalId]) => {
       const elements = this.domAPI.querySelectorAll(`#${modalId}`);
       if (elements.length === 0) {
-        // removed console usage
+        this.logger.error?.(`[ModalManager][validateModalMappings] No modal element found for modalId '${modalId}' (mapping key '${key}')`);
+        this.errorReporter.report?.(new Error('Modal element not found'), { module: 'ModalManager', modalId, mappingKey: key, fn: 'validateModalMappings' });
       } else if (elements.length > 1) {
-        // removed console usage
+        this.logger.warn?.(`[ModalManager][validateModalMappings] Multiple modal elements found for modalId '${modalId}' (mapping key '${key}'). IDs must be unique.`);
+        this.errorReporter.report?.(new Error('Duplicate modal element IDs'), { module: 'ModalManager', modalId, mappingKey: key, fn: 'validateModalMappings' });
       }
     });
   }
@@ -287,8 +315,10 @@ class ProjectModal {
    *   @param {Object} [opts.DependencySystem]
    *   @param {Object} [opts.domAPI]
    *   @param {Object} [opts.domPurify]
+   *   @param {Object} [opts.logger]
+   *   @param {Object} [opts.errorReporter]
    */
-  constructor({ projectManager, eventHandlers, DependencySystem, domAPI, domPurify } = {}) {
+  constructor({ projectManager, eventHandlers, DependencySystem, domAPI, domPurify, logger, errorReporter } = {}) {
     this.DependencySystem = DependencySystem || undefined;
 
     this.eventHandlers =
@@ -310,10 +340,21 @@ class ProjectModal {
       this.DependencySystem?.modules?.get?.('sanitizer') ||
       null;
 
+    this.logger =
+      logger ||
+      this.DependencySystem?.modules?.get?.('logger') ||
+      { error: () => {}, warn: () => {}, info: () => {}, log: () => {}, debug: () => {} };
+    this.errorReporter =
+      errorReporter ||
+      this.DependencySystem?.modules?.get?.('errorReporter') ||
+      { report: () => {} };
+
     this.modalElement = null;
     this.formElement = null;
     this.isOpen = false;
     this.currentProjectId = null;
+
+    this.logger.debug?.('[ProjectModal] constructed');
   }
 
   _isDebug() {
@@ -496,8 +537,9 @@ class ProjectModal {
 
       await this.saveProject(projectId, projectData);
       this.closeModal();
-    } catch {
-      // removed console usage
+    } catch (err) {
+      this.logger.error?.('[ProjectModal][handleSubmit] Error saving project:', err);
+      this.errorReporter.report?.(err, { module: 'ProjectModal', fn: 'handleSubmit', currentProjectId: this.currentProjectId });
     } finally {
       const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
       this._setButtonLoading(saveBtn, false);

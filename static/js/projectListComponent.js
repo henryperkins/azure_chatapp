@@ -45,6 +45,8 @@
  *   projectList.initialize();
  */
 
+import { createDomReadinessService } from './utils/domReadinessService.js';
+
 const MODULE_CONTEXT = "ProjectListComponent";
 
 export class ProjectListComponent {
@@ -70,7 +72,9 @@ export class ProjectListComponent {
         apiClient,
         domAPI,
         browserService,
-        globalUtils
+        globalUtils,
+        domReadinessService,
+        APP_CONFIG
     } = {}) {
         // Assign DI fields
         this.projectManager = projectManager;
@@ -87,6 +91,15 @@ export class ProjectListComponent {
         }
         this.domAPI = domAPI;
         this._doc = null;
+
+        this.domReadinessService = domReadinessService ||
+            createDomReadinessService({
+                DependencySystem: this.DependencySystem,
+                domAPI,
+                browserService,
+                eventHandlers,
+                APP_CONFIG
+            });
 
         this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem;
         this.navigationService = this.DependencySystem?.modules?.get('navigationService');
@@ -138,13 +151,10 @@ export class ProjectListComponent {
     }
 
     async initialize() {
-        try {
-            if (this.DependencySystem?.waitFor) {
-                await this.DependencySystem.waitFor(['app:ready']);
-            }
-        } catch (err) {
-            // Continue if app readiness wait fails
-        }
+        await this.domReadinessService.waitForEvent('app:ready', {
+            deps: ['app'],
+            context: MODULE_CONTEXT + '_appReady'
+        });
 
         this._doc = this.domAPI.getDocument?.();
         if (this.state.initialized) {
@@ -175,16 +185,14 @@ export class ProjectListComponent {
             throw new Error(`'.grid' container not found within #${this.elementId}.`);
         }
 
-        await this.globalUtils.waitForDepsAndDom({
-            DependencySystem: this.app?.DependencySystem || this.eventHandlers?.DependencySystem,
+        await this.domReadinessService.dependenciesAndElements({
+            deps        : ['projectManager', 'eventHandlers'],
             domSelectors: [
-              '#projectList', '#projectListView', '#projectDetailsView',
-              '#projectTitle', '#projectDescription', '#backToProjectsBtn',
-              '#projectFilterTabs'
+                '#projectList', '#projectCardsPanel',
+                '#projectFilterTabs'
             ],
-            timeout: 10000,
-            domAPI: docAPI,
-            source: 'ProjectListComponent_InternalDOMWait'
+            timeout     : 10000,
+            context     : MODULE_CONTEXT + '_init'
         });
 
         this._bindEventListeners();
@@ -603,6 +611,10 @@ export class ProjectListComponent {
     }
 
     async _loadProjects() {
+        await this.domReadinessService.dependenciesAndElements({
+            deps: ['auth'],
+            context: MODULE_CONTEXT + '_loadProjects'
+        });
         if (this.state.loading) return;
         if (!this.projectManager?.loadProjects) {
             return;
@@ -1039,6 +1051,9 @@ export class ProjectListComponent {
     destroy() {
         if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
             this.eventHandlers.cleanupListeners();
+        }
+        if (this.domReadinessService && typeof this.domReadinessService.destroy === 'function') {
+            this.domReadinessService.destroy();
         }
         this._setState({ initialized: false });
     }

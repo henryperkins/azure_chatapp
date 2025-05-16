@@ -1,24 +1,11 @@
 
+import { createDomReadinessService } from './utils/domReadinessService.js';
+
 class ProjectDashboard {
   constructor(deps) {
     if (!deps.dependencySystem) throw new Error('[ProjectDashboard] dependencySystem is required.');
     this.dependencySystem = deps.dependencySystem;
 
-    // Helper to await app readiness
-    this._awaitAppReady = async () => {
-      await this.dependencySystem.waitFor(['app']);
-      if (!this.app.state?.isReady) {
-        await new Promise(res => {
-          const doc = this.domAPI.getDocument?.() || globalThis.document;
-          if (!doc) return res();
-          const handler = () => {
-            doc.removeEventListener('app:ready', handler);
-            res();
-          };
-          doc.addEventListener('app:ready', handler, { once: true });
-        });
-      }
-    };
 
     // Dependency resolution
     const getModule = (key) => {
@@ -46,6 +33,16 @@ class ProjectDashboard {
     // Injected browser abstractions
     this.browserService = deps.browserService; // Directly from deps
     if (!this.browserService) throw new Error('[ProjectDashboard] browserService module required');
+
+    // DomReadinessService: either inject or construct local instance
+    this.domReadinessService = deps.domReadinessService ||
+      createDomReadinessService({
+        DependencySystem : this.dependencySystem,
+        domAPI          : this.domAPI,
+        browserService  : this.browserService,
+        eventHandlers   : this.eventHandlers,
+        APP_CONFIG      : deps.APP_CONFIG
+      });
 
     this.state = { currentView: null, initialized: false };
     // Flag & stub view registration to prevent "unregistered view" errors 🔥
@@ -296,10 +293,17 @@ class ProjectDashboard {
     } else if (this.eventHandlers?.cleanupListeners) {
       this.eventHandlers.cleanupListeners({ context: 'projectDashboard' });
     }
+    if (this.domReadinessService && typeof this.domReadinessService.destroy === 'function') {
+      this.domReadinessService.destroy();
+    }
   }
 
   async showProjectList() {
-    await this._awaitAppReady();
+    await this.domReadinessService.dependenciesAndElements({
+      deps: ['app'],
+      domSelectors: [],
+      context: 'ProjectDashboard_appReady'
+    });
     // this.state._aborted = false; // Explicitly reset _aborted flag here // TODO: Refactor state mutation
     this.state.currentView = 'list';
     this.app.setCurrentProject(null);
@@ -387,7 +391,11 @@ class ProjectDashboard {
       // If we already have a project object, use it directly
       if (project) {
             if (this.app && typeof this.app.setCurrentProject === 'function') {
-              await this._awaitAppReady();
+              await this.domReadinessService.dependenciesAndElements({
+                deps: ['app'],
+                domSelectors: [],
+                context: 'ProjectDashboard_appReady'
+              });
               this.app.setCurrentProject(project);
             }
 
@@ -434,7 +442,11 @@ class ProjectDashboard {
           project = loadedProject;
           if (project && this.components.projectDetails?.renderProject) {
             if (this.projectManager && typeof this.projectManager.setCurrentProject === 'function') {
-              await this._awaitAppReady();
+              await this.domReadinessService.dependenciesAndElements({
+                deps: ['app'],
+                domSelectors: [],
+                context: 'ProjectDashboard_appReady'
+              });
               this.projectManager.setCurrentProject(project);
             }
 
@@ -703,139 +715,29 @@ class ProjectDashboard {
     this.components.projectList = this.components.projectList || this.getModule('projectListComponent') || null;
     this.components.projectDetails = this.components.projectDetails || this.getModule('projectDetailsComponent') || null;
 
-    // First, wait for project details template to be loaded
-    try {
-      await new Promise((resolve) => {
-        // First check if the template has already been loaded
-        const doc = this.domAPI.getDocument();
-        const detailsView = this.domAPI.getElementById('projectDetailsView');
-        const detailsTabs = detailsView ? this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]') : null;
+    // Wait for template load events in a centralized way
+    await this.domReadinessService.waitForEvent('projectDetailsTemplateLoaded', {
+      timeout: 8000,
+      context: 'ProjectDashboard_template'
+    });
 
-        if (detailsTabs) {
-          return resolve();
-        }
+    await this.domReadinessService.waitForEvent('projectListHtmlLoaded', {
+      timeout: 8000,
+      context: 'ProjectDashboard_template'
+    });
 
-        // Set up timeout for template loading
-        const timeoutId = this.browserService.setTimeout(() => {
-          // Don't reject - try to continue even if the template isn't loaded
-          // This helps prevent hanging on initialization
-          resolve();
-        }, 8000);
-
-        // Set up event listener for template loaded event
-        const handler = (event) => {
-          this.browserService.clearTimeout(timeoutId);
-          resolve();
-        };
-
-        if (this.eventHandlers && this.eventHandlers.trackListener) {
-          this.eventHandlers.trackListener(
-            doc,
-            'projectDetailsTemplateLoaded',
-            handler,
-            {
-              once: true,
-              context: 'projectDashboard',
-              description: 'Wait for projectDetailsTemplateLoaded'
-            }
-          );
-        } else {
-          doc.addEventListener('projectDetailsTemplateLoaded', handler, { once: true });
-        }
-
-        // Check once more after setup in case event fired between our first check and listener setup
-        const detailsViewRecheck = this.domAPI.getElementById('projectDetailsView');
-        const detailsTabsRecheck = detailsViewRecheck ?
-          this.domAPI.querySelector('#projectDetailsView .tabs[role="tablist"]') : null;
-
-        if (detailsTabsRecheck) {
-          this.browserService.clearTimeout(timeoutId);
-          if (this.eventHandlers && this.eventHandlers.cleanupListeners) {
-            this.eventHandlers.cleanupListeners({
-              element: doc,
-              type: 'projectDetailsTemplateLoaded',
-              handler: handler
-            });
-          }
-          resolve();
-        }
-      });
-    } catch (err) {
-      // Continue even if there was an error - we'll try to recover
-    }
-
-    // Next, wait for project list template to be loaded
-    const listViewEl = this.domAPI.getElementById('projectListView');
-    if (listViewEl && listViewEl.childElementCount > 0) {
-      // Project list template already present
-    } else {
+    // Wait for required DOM elements before initializing components
+    if (this.components.projectList && !this.components.projectList.state?.initialized) {
       try {
-        await new Promise((resolve) => {
-          const eventTarget = this.domAPI.getDocument();
-
-          // Set up timeout
-          const timeoutId = this.browserService.setTimeout(() => {
-            // Resolve anyway to prevent hanging
-            resolve();
-          }, 8000);
-
-          const handler = (event) => {
-            this.browserService.clearTimeout(timeoutId);
-            resolve();
-          };
-
-          if (this.eventHandlers && this.eventHandlers.trackListener) {
-            this.eventHandlers.trackListener(
-              eventTarget,
-              'projectListHtmlLoaded',
-              handler,
-              {
-                once: true,
-                context: 'projectDashboard',
-                description: 'Wait for projectListHtmlLoaded'
-              }
-            );
-          } else {
-            eventTarget.addEventListener('projectListHtmlLoaded', handler, { once: true });
-          }
-
-          // Dispatch an event to trigger template loading if needed
-          this.domAPI.dispatchEvent(
-            eventTarget,
-            new CustomEvent('requestProjectListTemplate', {
-              detail: { requesterId: 'projectDashboard' }
-            })
-          );
+        await this.domReadinessService.dependenciesAndElements({
+          domSelectors: ['#projectList', '#projectListView'],
+          timeout: 5000,
+          context: 'ProjectDashboard_InitProjectList'
         });
       } catch (err) {
-        // Continue execution
-      }
-    }
-
-    // Use waitForDepsAndDom utility if available
-    const waitForDepsAndDom = this.globalUtils?.waitForDepsAndDom;
-    if (!waitForDepsAndDom) {
-      // Component initialization might be unstable
-    }
-
-    // Initialize ProjectList component
-    if (this.components.projectList && !this.components.projectList.state?.initialized) {
-      // Wait for DOM elements if possible
-      if (waitForDepsAndDom) {
-        try {
-          await waitForDepsAndDom({
-            DependencySystem: this.dependencySystem,
-            domSelectors: ['#projectList', '#projectListView'],
-            timeout: 5000,
-            domAPI: this.domAPI,
-            source: 'ProjectDashboard_InitProjectList'
-          });
-        } catch (err) {
-          // Continue anyway
-        }
+        // Continue anyway
       }
 
-      // Now explicitly initialize the component
       try {
         if (typeof this.components.projectList.initialize === 'function') {
           await this.components.projectList.initialize();
@@ -845,24 +747,17 @@ class ProjectDashboard {
       }
     }
 
-    // Initialize ProjectDetails component
     if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
-      // Wait for DOM elements if possible
-      if (waitForDepsAndDom) {
-        try {
-          await waitForDepsAndDom({
-            DependencySystem: this.dependencySystem,
-            domSelectors: ['#projectDetailsView'],
-            timeout: 5000,
-            domAPI: this.domAPI,
-            source: 'ProjectDashboard_InitProjectDetails'
-          });
-        } catch (err) {
-          // Continue anyway
-        }
+      try {
+        await this.domReadinessService.dependenciesAndElements({
+          domSelectors: ['#projectDetailsView'],
+          timeout: 5000,
+          context: 'ProjectDashboard_InitProjectDetails'
+        });
+      } catch (err) {
+        // Continue anyway
       }
 
-      // Now explicitly initialize the component
       try {
         if (typeof this.components.projectDetails.initialize === 'function') {
           await this.components.projectDetails.initialize();
@@ -1087,7 +982,11 @@ class ProjectDashboard {
   _handleProjectLoaded(event) {
     const project = event.detail;
     (async () => {
-      await this._awaitAppReady();
+      await this.domReadinessService.dependenciesAndElements({
+        deps: ['app'],
+        domSelectors: [],
+        context: 'ProjectDashboard_appReady'
+      });
       this.app.setCurrentProject(project || null);
     })();
     this.browserService.requestAnimationFrame(() => {
@@ -1136,7 +1035,11 @@ class ProjectDashboard {
   _handleProjectDeleted(event) {
     const { projectId } = event.detail || {};
     (async () => {
-      await this._awaitAppReady();
+      await this.domReadinessService.dependenciesAndElements({
+        deps: ['app'],
+        domSelectors: [],
+        context: 'ProjectDashboard_appReady'
+      });
       const currentProject = this.app && typeof this.app.getCurrentProject === 'function' ? this.app.getCurrentProject() : null;
       if (currentProject && currentProject.id === projectId) {
         this.showProjectList();
@@ -1173,6 +1076,17 @@ class ProjectDashboard {
 /**
  * Factory function for ProjectDashboard.
  * Validates all required dependencies at the top and exposes cleanup API.
+ */
+/**
+ * Factory function for ProjectDashboard.
+ * Validates all required dependencies at the top and exposes cleanup API.
+ * @param {object} deps
+ * @param {object} deps.dependencySystem      // required
+ * @param {object} deps.domAPI                // required
+ * @param {object} deps.browserService        // required
+ * @param {object} deps.eventHandlers         // required
+ * @param {object} [deps.domReadinessService] // optional: dom readiness handler
+ * @param {object} [deps.APP_CONFIG]          // optional: for readinessService timeouts
  */
 export function createProjectDashboard(deps) {
   // Validate required dependencies at the top

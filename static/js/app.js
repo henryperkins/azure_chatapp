@@ -15,6 +15,7 @@
 import { APP_CONFIG } from './appConfig.js';
 import { createDomAPI } from './utils/domAPI.js';
 import { createBrowserService, normaliseUrl } from './utils/browserService.js';
+import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
 
@@ -23,8 +24,7 @@ import {
   stableStringify,
   isAbsoluteUrl,
   isValidProjectId,
-  toggleElement,
-  waitForDepsAndDom
+  toggleElement
 } from './utils/globalUtils.js';
 
 import { createEventHandlers } from './eventHandler.js';
@@ -85,6 +85,27 @@ const browserServiceInstance = createBrowserService({
 });
 const browserAPI = browserServiceInstance;
 
+// ---------------------------------------------------------------------------
+// 2) Initialize DependencySystem (moved up, before first use)
+// ---------------------------------------------------------------------------
+const DependencySystem = browserAPI.getDependencySystem();
+if (!DependencySystem?.modules?.get) {
+  throw new Error('[App] DependencySystem not present – bootstrap aborted');
+}
+
+// Logger: Import first for early DI registration
+import { createLogger } from './logger.js';
+
+const logger = createLogger({
+  context: 'App',
+  debug: APP_CONFIG && APP_CONFIG.DEBUG === true
+});
+DependencySystem.register('logger', logger);
+
+// Dedicated App Event Bus
+const AppBus = new EventTarget();
+DependencySystem.register('AppBus', AppBus);
+
 const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
   windowObject: browserAPI.getWindow(),
@@ -92,37 +113,12 @@ const domAPI = createDomAPI({
 });
 
 // ---------------------------------------------------------------------------
-// 2) Initialize DependencySystem
-// ---------------------------------------------------------------------------
-const DependencySystem = browserAPI.getDependencySystem();
-if (!DependencySystem?.modules?.get) {
-  throw new Error('[App] DependencySystem not present – bootstrap aborted');
-}
-
-// Dedicated App Event Bus
-const AppBus = new EventTarget();
-DependencySystem.register('AppBus', AppBus);
-
-// ---------------------------------------------------------------------------
 // 3) Register base services
 // ---------------------------------------------------------------------------
 DependencySystem.register('domAPI', domAPI);
-DependencySystem.register('browserAPI', browserAPI);
-DependencySystem.register('browserService', browserServiceInstance);
-DependencySystem.register('storage', browserServiceInstance);
-DependencySystem.register('uiUtils', uiUtils);
 
-const globalUtils = {
-  waitForDepsAndDom,
-  isValidProjectId,
-  isAbsoluteUrl,
-  normaliseUrl,
-  shouldSkipDedup,
-  stableStringify
-};
-DependencySystem.register('globalUtils', globalUtils);
-
-const sanitizer = browserAPI.getWindow()?.DOMPurify;
+// Wait until sanitizer is initialized before constructing eventHandlers
+let sanitizer = browserAPI.getWindow()?.DOMPurify;
 if (!sanitizer) {
   throw new Error(
     '[App] DOMPurify not found – aborting bootstrap for security reasons. ' +
@@ -132,6 +128,41 @@ if (!sanitizer) {
 DependencySystem.register('sanitizer', sanitizer);
 DependencySystem.register('domPurify', sanitizer); // legacy alias
 
+// Now create eventHandlers FIRST so it is available for all later DI consumers
+const eventHandlers = createEventHandlers({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  APP_CONFIG,
+  sanitizer
+});
+DependencySystem.register('eventHandlers', eventHandlers);
+
+// Create and register DomReadinessService AFTER eventHandlers is available
+const domReadinessService = createDomReadinessService({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  eventHandlers,
+  APP_CONFIG
+});
+DependencySystem.register('domReadinessService', domReadinessService);
+
+DependencySystem.register('browserAPI', browserAPI);
+DependencySystem.register('browserService', browserServiceInstance);
+DependencySystem.register('storage', browserServiceInstance);
+DependencySystem.register('uiUtils', uiUtils);
+
+const globalUtils = {
+  isValidProjectId,
+  isAbsoluteUrl,
+  normaliseUrl,
+  shouldSkipDedup,
+  stableStringify
+};
+DependencySystem.register('globalUtils', globalUtils);
+
+// (NO duplicate sanitizer declaration/registration here)
 DependencySystem.register('FileUploadComponent', FileUploadComponent);
 
 // Register apiEndpoints
@@ -151,21 +182,8 @@ const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
 };
 DependencySystem.register('apiEndpoints', apiEndpoints);
 
-// Create and register a simple application logger
-const appLogger = {
-  log: (...args) => console.log('[App]', ...args),
-  warn: (...args) => console.warn('[App]', ...args),
-  error: (...args) => console.error('[App]', ...args),
-  info: (...args) => console.info('[App]', ...args),
-  debug: (...args) => {
-    // Ensure APP_CONFIG is accessible or provide a default
-    const debugEnabled = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.DEBUG === true);
-    if (debugEnabled) {
-      console.debug('[App]', ...args);
-    }
-  }
-};
-DependencySystem.register('logger', appLogger);
+const globalConsole = (typeof console !== 'undefined') ? console : {};
+// (Removed old appLogger: replaced by DI-registered logger above)
 
 // ---------------------------------------------------------------------------
 // 4) Early app module
@@ -182,7 +200,7 @@ const appModule = {
   },
   // Method to update authentication-related state
   setAuthState(newAuthState) {
-    console.log('[DIAGNOSTIC][appModule.setAuthState]', JSON.stringify(newAuthState));
+    DependencySystem.modules.get('logger').log('[DIAGNOSTIC][appModule.setAuthState]', JSON.stringify(newAuthState));
     Object.assign(this.state, newAuthState);
   },
   // Method to update general app lifecycle state
@@ -219,18 +237,6 @@ const apiRequest = createApiClient({
   browserService: browserServiceInstance
 });
 DependencySystem.register('apiRequest', apiRequest);
-
-// ---------------------------------------------------------------------------
-// Create eventHandlers
-// ---------------------------------------------------------------------------
-const eventHandlers = createEventHandlers({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  APP_CONFIG,
-  sanitizer
-});
-DependencySystem.register('eventHandlers', eventHandlers);
 
 // ---------------------------------------------------------------------------
 // Accessibility enhancements
@@ -588,11 +594,11 @@ export async function init() {
 // ---------------------------------------------------------------------------
 async function initializeCoreSystems() {
   // Wait for minimal DOM readiness
-  await waitForDepsAndDom({
-    DependencySystem,
-    domAPI,
+  await domReadinessService.dependenciesAndElements({
     deps: ['domAPI'],
-    domSelectors: ['body']
+    domSelectors: ['body'],
+    timeout: 10000,
+    context: 'app.js:initializeCoreSystems'
   });
 
   // Create & init modal manager
@@ -615,12 +621,12 @@ async function initializeCoreSystems() {
     sanitizer,
     modalManager,
     apiEndpoints,
-    logger: appLogger // Pass the logger instance
+    logger // Pass the DI logger (registered above)
   });
   DependencySystem.register('auth', authModule);
   // Initialize auth module to set up event listeners
   await authModule.init().catch(err => {
-    console.error('[App] Auth module initialization error:', err);
+    DependencySystem.modules.get('logger').error('[App] Auth module initialization error:', err);
   });
 
   // Create model config
@@ -731,9 +737,7 @@ async function initializeUIComponents() {
   // Wait for relevant DOM elements and ensure modals are loaded
   try {
     // First, wait for critical DOM elements
-    await waitForDepsAndDom({
-      DependencySystem,
-      domAPI,
+    await domReadinessService.dependenciesAndElements({
       domSelectors: [
         '#projectList',
         '#projectListView',
@@ -744,7 +748,8 @@ async function initializeUIComponents() {
         '#projectFilterTabs',
         '#projectCardsPanel'
       ],
-      timeout: 10000 // Increased timeout for reliability
+      timeout: 10000,
+      context: 'app.js:initializeUIComponents'
     });
 
     // Next, ensure modals are loaded by checking for the modalsLoaded event
@@ -942,12 +947,12 @@ async function initializeAuthSystem() {
 
   // === DIAGNOSTIC: REGISTER AUTH EVENTS BEFORE INIT ===
   if (auth.AuthBus) {
-    console.log('[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init');
+    DependencySystem.modules.get('logger').log('[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init');
     eventHandlers.trackListener(
       auth.AuthBus,
       'authStateChanged',
       (event) => {
-        console.log('[DIAGNOSTIC][AuthBus] Received authStateChanged', event?.detail);
+        DependencySystem.modules.get('logger').log('[DIAGNOSTIC][AuthBus] Received authStateChanged', event?.detail);
         handleAuthStateChange(event);
       },
       { description: '[App] AuthBus authStateChanged', context: 'app' }
@@ -956,19 +961,19 @@ async function initializeAuthSystem() {
       auth.AuthBus,
       'authReady',
       (event) => {
-        console.log('[DIAGNOSTIC][AuthBus] Received authReady', event?.detail);
+        DependencySystem.modules.get('logger').log('[DIAGNOSTIC][AuthBus] Received authReady', event?.detail);
         handleAuthStateChange(event);
       },
       { description: '[App] AuthBus authReady', context: 'app' }
     );
   } else {
-    console.warn('[DIAGNOSTIC][initializeAuthSystem] No AuthBus instance for auth event registration');
+    DependencySystem.modules.get('logger').warn('[DIAGNOSTIC][initializeAuthSystem] No AuthBus instance for auth event registration');
   }
   try {
     // auth.init() is responsible for verifying auth and calling broadcastAuth,
     // which in turn calls appModule.setAuthState().
     // So, appModule.state.isAuthenticated will be updated by auth.init() itself.
-    console.log('[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()');
+    DependencySystem.modules.get('logger').log('[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()');
     await auth.init();
 
     renderAuthHeader(); // Ensure this renders based on the now canonical appModule.state (via local currentUser sync)
@@ -998,7 +1003,7 @@ function handleAuthStateChange(event) {
   // before this event listener is triggered.
   // This function now primarily reacts to that pre-established state.
 
-  console.log('[DIAGNOSTIC][handleAuthStateChange]', {
+  DependencySystem.modules.get('logger').log('[DIAGNOSTIC][handleAuthStateChange]', {
     eventDetail: event?.detail,
     appModuleState: JSON.stringify(appModule.state)
   });

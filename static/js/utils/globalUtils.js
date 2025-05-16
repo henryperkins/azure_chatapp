@@ -30,6 +30,8 @@ export { createStorageService } from './storageService.js';
  */
 export { createBrowserService } from './browserService.js';
 
+import { createDomReadinessService } from "./domReadinessService.js";
+
 // General-purpose helper functions
 import { isValidProjectId as rawIsValidProjectId } from "../projectManager.js";
 export const isValidProjectId = rawIsValidProjectId;
@@ -175,52 +177,24 @@ export const fileIcon = (t = "") =>
   );
 
 /**
- * @deprecated Use apiClient + proper .get/.post signature for this
- * (errorReporter/maybeCapture removed)
+ * @deprecated  Replaced by domReadinessService.dependenciesAndElements.
+ *              Please migrate.  This shim will be removed soon.
  */
-export async function waitForDepsAndDom({
-  deps = [],
-  DependencySystem = window.DependencySystem,
-  domSelectors = [],
-  pollInterval = 30,
-  timeout = 4000,
-  domAPI,
-  source = 'waitForDepsAndDom'
-} = {}) {
-  if (!DependencySystem) {
-    throw new Error("waitForDepsAndDom: DependencySystem missing");
-  }
-  if (!DependencySystem.modules || typeof DependencySystem.modules.has !== 'function' || typeof DependencySystem.modules.get !== 'function') {
-    throw new Error("waitForDepsAndDom: DependencySystem.modules is missing or invalid");
-  }
-  if (!domAPI || typeof domAPI.querySelector !== 'function') {
-    throw new Error('waitForDepsAndDom: domAPI.querySelector is required');
-  }
-
-  const start = Date.now();
-  while (true) {
-    try {
-      const depsReady = deps.every((d) => DependencySystem.modules.has(d) && DependencySystem.modules.get(d));
-      const domReady = domSelectors.every((s) => domAPI.querySelector(s));
-      if (depsReady && domReady) {
-        return;
-      }
-      if (Date.now() - start > timeout) {
-        const missingDeps = deps.filter((d) => !(DependencySystem.modules.has(d) && DependencySystem.modules.get(d)));
-        const missingDom = domSelectors.filter((s) => !domAPI.querySelector(s));
-        const errorMsg = `waitForDepsAndDom timeout ${timeout}ms for source '${source}' — Missing Deps: [${missingDeps.join(', ')}], Missing DOM: [${missingDom.join(', ')}]`;
-        throw new Error(errorMsg);
-      }
-    } catch (err) {
-      if (err.message.startsWith(`waitForDepsAndDom timeout ${timeout}ms`)) {
-        throw err;
-      }
-      if (Date.now() - start > timeout) {
-        throw new Error(`waitForDepsAndDom error for source '${source}': ${err.message}`);
-      }
-    }
-    await new Promise((r) => setTimeout(r, pollInterval));
-  }
+export async function waitForDepsAndDom(cfg = {}) {
+  const { DependencySystem, domAPI, browserService, eventHandlers, APP_CONFIG } = cfg;
+  const drs = createDomReadinessService({
+    DependencySystem,
+    domAPI,
+    browserService,
+    eventHandlers,
+    APP_CONFIG,
+  });
+  await drs.dependenciesAndElements({
+    deps        : cfg.deps,
+    domSelectors: cfg.domSelectors,
+    timeout     : cfg.timeout ?? 10_000,
+    context     : cfg.source ?? 'waitForDepsAndDom(shim)',
+  });
 }
 
 /**
