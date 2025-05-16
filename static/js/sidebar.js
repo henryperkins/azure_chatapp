@@ -63,6 +63,7 @@ export function createSidebar({
   domReadinessService,
   logger,
   safeHandler, // required for event handler wrapping
+  APP_CONFIG = window.APP_CONFIG || {}, // Added for debug flag checks, fallback to global if present
   ...rest
 } = {}) {
   /* ------------------------------------------------------------------ */
@@ -677,6 +678,8 @@ export function createSidebar({
   /* ------------------------------------------------------------------ */
   async function init() {
     // Use domReadinessService for robust, centralized readiness
+    if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: Starting...");
+
     await domReadinessService.dependenciesAndElements({
       deps: ['eventHandlers', 'auth'],
       domSelectors: [
@@ -691,10 +694,19 @@ export function createSidebar({
     });
 
     try {
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom");
       findDom();
+
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initAuthDom");
       initAuthDom();
+
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: setupInlineAuthForm");
       setupInlineAuthForm();
+
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState");
       restorePersistentState();
+
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: bindDomEvents");
       bindDomEvents();
 
       // Possibly set current project from the app context
@@ -714,12 +726,14 @@ export function createSidebar({
       if (!doc || typeof doc.dispatchEvent !== 'function') {
         throw new Error('[Sidebar] Document from domAPI must support dispatchEvent');
       }
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: completed successfully");
       return true;
     } catch (err) {
       if (logger && logger.error) {
         logger.error('[Sidebar] init failed', err && err.stack ? err.stack : err);
       }
-      return false;
+      // Surface errors to callers, do not swallow -- recovery plan step 3a
+      throw err;
     }
   }
 

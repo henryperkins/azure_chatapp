@@ -1,5 +1,5 @@
 /**
- * app.js – Main application orchestration.
+ * app.js - Main application orchestration.
  *
  * ╔════════════════ WARNING: BOOTSTRAP EXCEPTION ════════════════╗
  * ║ This is the ONLY JS/TS module permitted to contain          ║
@@ -90,7 +90,7 @@ const browserAPI = browserServiceInstance;
 // ---------------------------------------------------------------------------
 const DependencySystem = browserAPI.getDependencySystem();
 if (!DependencySystem?.modules?.get) {
-  throw new Error('[App] DependencySystem not present – bootstrap aborted');
+  throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
 // Logger: Import first for early DI registration
@@ -121,7 +121,7 @@ DependencySystem.register('domAPI', domAPI);
 let sanitizer = browserAPI.getWindow()?.DOMPurify;
 if (!sanitizer) {
   throw new Error(
-    '[App] DOMPurify not found – aborting bootstrap for security reasons. ' +
+    '[App] DOMPurify not found - aborting bootstrap for security reasons. ' +
     'Load it with SRI before app.js'
   );
 }
@@ -398,7 +398,7 @@ function createOrGetChatManager() {
 }
 
 /**
- * safeHandler – Ensures all event handler exceptions are logged via DI logger.
+ * safeHandler - Ensures all event handler exceptions are logged via DI logger.
  * Always use for user-initiated/UI handlers, with context tagging.
  */
 function safeHandler(handler, description) {
@@ -609,6 +609,8 @@ export async function init() {
     _globalInitCompleted = true;
 
     AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
+    // Mirror the event on document for modules relying on domReadinessService.waitForEvent
+    domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
 
     return true;
   } catch (err) {
@@ -616,6 +618,10 @@ export async function init() {
     handleInitError(err);
 
     AppBus.dispatchEvent(new CustomEvent('app:ready', {
+      detail: { success: false, error: err }
+    }));
+    // Mirror the event on document for modules relying on domReadinessService.waitForEvent
+    domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', {
       detail: { success: false, error: err }
     }));
     return false;
@@ -995,11 +1001,36 @@ async function initializeUIComponents() {
       accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
       logger: DependencySystem.modules.get('logger'), // Pass the DI logger
       safeHandler: safeHandler, // Pass the safeHandler utility
-      domReadinessService: DependencySystem.modules.get('domReadinessService') // Pass domReadinessService
+      domReadinessService: DependencySystem.modules.get('domReadinessService'),
+      APP_CONFIG // Pass config for sidebar debug logging
     });
     DependencySystem.register('sidebar', sidebarInstance);
   }
-  await safeInit(sidebarInstance, 'Sidebar', 'init');
+
+  // Instrumentation: explicitly log sidebar init result and report failure visibly.
+  let sidebarInitSuccess = false;
+  try {
+    sidebarInitSuccess = await safeInit(sidebarInstance, 'Sidebar', 'init');
+    if (!sidebarInitSuccess && logger && logger.error) {
+      logger.error('[App] Sidebar init did not complete successfully.');
+    }
+  } catch (err) {
+    if (logger && logger.error) logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
+    // Visibly banner error in UI
+    try {
+      const errorBanner = domAPI.getElementById('appInitError');
+      if (errorBanner) {
+        const errorBannerText = domAPI.getElementById('appInitErrorText');
+        if (errorBannerText) {
+          domAPI.setTextContent(errorBannerText, \`Sidebar initialization failed: \${err?.message || err}\`);
+        }
+        domAPI.removeClass(errorBanner, 'hidden');
+      }
+    } catch (e) {
+      // Last-resort: console
+      if (logger && logger.error) logger.error('[App] Failed to display sidebar error in banner', e && e.stack ? e.stack : e);
+    }
+  }
 
   // If authenticated, load projects. Read from canonical state.
   if (appModule.state.isAuthenticated) {
@@ -1144,13 +1175,22 @@ async function initializeAuthSystem() {
 // 18) Additional helpers
 // ---------------------------------------------------------------------------
 async function safeInit(instance, name, methodName) {
+  const logger = DependencySystem.modules.get('logger');
   if (!instance) {
-    return;
+    logger?.warn(`[safeInit] Instance ${name} is null/undefined. Cannot call ${methodName}.`, { context: `app:safeInit:${name}` });
+    return false;
   }
   if (typeof instance[methodName] !== 'function') {
-    return;
+    logger?.warn(`[safeInit] Method ${methodName} not found on ${name}.`, { context: `app:safeInit:${name}` });
+    return false;
   }
-  await instance[methodName]();
+  try {
+    const result = await instance[methodName]();
+    return result === undefined ? true : !!result;
+  } catch (err) {
+    logger?.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `app:safeInit:${name}:${methodName}` });
+    return false;
+  }
 }
 
 function handleAuthStateChange(event) {
