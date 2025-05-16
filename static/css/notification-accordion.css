@@ -409,18 +409,19 @@ body.with-sidebar-open #notificationArea {
 
 /* E. Rounded corners stay when list expands */
 .accordion-banner.collapse-open {
-  border-bottom-left-radius: theme(borderRadius.lg);
-  border-bottom-right-radius: theme(borderRadius.lg);
+  /* Use Tailwind's rounded-lg utility for border radius */
+  border-bottom-left-radius: var(--radius-box, 0.5rem);
+  border-bottom-right-radius: var(--radius-box, 0.5rem);
 }
 
 /* Theming variables (optional but recommended) */
 :root{
   /* Notification group banner background: info color (light mode), readable aqua for dark mode */
-  --notif-group-bg: #83eaff;      /* rgb(131, 234, 255) DaisyUI info default */
+  --notif-group-bg: var(--color-info, #83eaff);      /* Use theme info color if available */
   --notif-dim-opacity: .6;
 }
 html[data-theme="dark"]{
-  --notif-group-bg: #226b81;      /* deep aqua for dark, visually accessible */
+  --notif-group-bg: var(--color-info, #226b81);      /* Use theme info color if available */
 }
 
 .accordion-banner.grouped{
@@ -451,9 +452,9 @@ html[data-theme="dark"] {
   }
   /* Badge: accent border, darker bg, lighter text */
   .notification-context-badge {
-     background-color: #23243a !important;
-     border-color: #4ec9fa !important;
-     color: #fafbfd !important;
+     background-color: var(--color-base-200, #23243a) !important;
+     border-color: var(--color-info, #4ec9fa) !important;
+     color: var(--color-base-content, #fafbfd) !important;
      font-weight: 600;
   }
   /* Accordion summary and message list: bright text, darker alternate bg */
@@ -478,11 +479,11 @@ html[data-theme="dark"] {
   }
   /* Notification left border: preserve color emphasis */
   .notification-item.info,
-  .accordion-banner.notification-info    { border-left-color: #4ec9fa !important; }
+  .accordion-banner.notification-info    { border-left-color: var(--color-info, #4ec9fa) !important; }
   .notification-item.success,
-  .accordion-banner.notification-success { border-left-color: #90efb7 !important; }
+  .accordion-banner.notification-success { border-left-color: var(--color-success, #90efb7) !important; }
   .notification-item.error,
-  .accordion-banner.notification-error   { border-left-color: #fa7ea6 !important; }
+  .accordion-banner.notification-error   { border-left-color: var(--color-error, #fa7ea6) !important; }
   .notification-item.warning,
-  .accordion-banner.notification-warning { border-left-color: #ffcb6b !important; }
+  .accordion-banner.notification-warning { border-left-color: var(--color-warning, #ffcb6b) !important; }
 }
