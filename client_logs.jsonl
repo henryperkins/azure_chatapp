@@ -1309,3 +1309,652 @@
   ],
   "ts": 1747373001267
 }
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747378025638
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747378025669
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747378025674"
+  ],
+  "ts": 1747378025674
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744"
+  ],
+  "ts": 1747378026327
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747378026329
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": false,
+      "user": null
+    }
+  ],
+  "ts": 1747378026519
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "clearTokenState:verify_negative_after_all_checks",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747378026521
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747378026522
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747378026521
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "verify_negative_after_all_checks",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747378026522
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "init_complete",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747378026522
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747378026524
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744",
+    "for",
+    "/api/auth/login"
+  ],
+  "ts": 1747378091630
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744"
+  ],
+  "ts": 1747378091631
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[AuthModule] loginModalForm submit handler invoked. Event:",
+    {
+      "isTrusted": true
+    }
+  ],
+  "ts": 1747378091617
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][loginUser] Attempting login",
+    "hperkins"
+  ],
+  "ts": 1747378091627
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744"
+  ],
+  "ts": 1747378091630
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/login",
+    {
+      "method": "POST",
+      "headers": {
+        "Accept": "application/json",
+        "X-CSRF-Token": "190dabfe-e3f6-44f3-98e9-0b717d9b4744",
+        "Content-Type": "application/json"
+      },
+      "credentials": "include",
+      "body": "{\"username\":\"hperkins\",\"password\":\"Twiohmld1234!\"}"
+    }
+  ],
+  "ts": 1747378091630
+}
+{
+  "level": "error",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][ERROR]",
+    "/api/auth/login",
+    {
+      "status": 401,
+      "data": {
+        "detail": "Invalid credentials."
+      }
+    }
+  ],
+  "ts": 1747378092261
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "clearTokenState:login_error",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747378092263
+}
+{
+  "level": "error",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][loginUser][ERROR]",
+    {
+      "status": 401,
+      "data": {
+        "detail": "Invalid credentials."
+      }
+    }
+  ],
+  "ts": 1747378092262
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747378092264
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/register",
+    {
+      "method": "POST",
+      "headers": {
+        "Accept": "application/json",
+        "X-CSRF-Token": "190dabfe-e3f6-44f3-98e9-0b717d9b4744",
+        "Content-Type": "application/json"
+      },
+      "credentials": "include",
+      "body": "{\"username\":\"henry\",\"password\":\"Twiohmld1234!\"}"
+    }
+  ],
+  "ts": 1747378114448
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][registerUser] Registering",
+    "henry"
+  ],
+  "ts": 1747378114446
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744"
+  ],
+  "ts": 1747378114447
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744",
+    "for",
+    "/api/auth/register"
+  ],
+  "ts": 1747378114447
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "190dabfe-e3f6-44f3-98e9-0b717d9b4744"
+  ],
+  "ts": 1747378114448
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/register",
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJoZW5yeSIsInVzZXJfaWQiOjEsInR5cGUiOiJhY2Nlc3MiLCJ2ZXJzaW9uIjowLCJpYXQiOjE3NDczNzgxMTUsImV4cCI6MTc0NzQ2NDUxNSwianRpIjoiNzE4NWJiODEtOTU5NC00MzdiLTk0MmUtZmY1YjI5NzNiNDBjIn0.beFSDfr-j1lWl3QCtNTYzSNiPo4zu_lHayYabsugja4",
+      "token_type": "bearer",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJoZW5yeSIsInVzZXJfaWQiOjEsInR5cGUiOiJyZWZyZXNoIiwidmVyc2lvbiI6MCwiaWF0IjoxNzQ3Mzc4MTE1LCJleHAiOjE3NDk5NzAxMTUsImp0aSI6IjhjZTNlZTQ5LTcxYjEtNGMzOS1iMzc1LWIzNzk5YzIzOTEyOSJ9.2bzVDvuMobLRhA3usp3cjq8jIGf8k_bSB1WfRoGcU5w",
+      "username": "henry",
+      "message": "Registered user 'henry' successfully.",
+      "token_version": 0
+    }
+  ],
+  "ts": 1747378115418
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][registerUser][API RESPONSE]",
+    {
+      "access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJoZW5yeSIsInVzZXJfaWQiOjEsInR5cGUiOiJhY2Nlc3MiLCJ2ZXJzaW9uIjowLCJpYXQiOjE3NDczNzgxMTUsImV4cCI6MTc0NzQ2NDUxNSwianRpIjoiNzE4NWJiODEtOTU5NC00MzdiLTk0MmUtZmY1YjI5NzNiNDBjIn0.beFSDfr-j1lWl3QCtNTYzSNiPo4zu_lHayYabsugja4",
+      "token_type": "bearer",
+      "refresh_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImF6dXJlLWNoYXRhcHAta2V5IiwidHlwIjoiSldUIn0.eyJzdWIiOiJoZW5yeSIsInVzZXJfaWQiOjEsInR5cGUiOiJyZWZyZXNoIiwidmVyc2lvbiI6MCwiaWF0IjoxNzQ3Mzc4MTE1LCJleHAiOjE3NDk5NzAxMTUsImp0aSI6IjhjZTNlZTQ5LTcxYjEtNGMzOS1iMzc1LWIzNzk5YzIzOTEyOSJ9.2bzVDvuMobLRhA3usp3cjq8jIGf8k_bSB1WfRoGcU5w",
+      "username": "henry",
+      "message": "Registered user 'henry' successfully.",
+      "token_version": 0
+    }
+  ],
+  "ts": 1747378115419
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747378115422
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747378115957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747378115959
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747378115960
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747378115962,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747378115963
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747378115964
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"henry\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747378115961
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false
+    }
+  ],
+  "ts": 1747378156678
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747378156713
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747378156716"
+  ],
+  "ts": 1747378156716
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "291f4998-5276-4ad1-937f-6820d7493828"
+  ],
+  "ts": 1747378157044
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    }
+  ],
+  "ts": 1747378157047
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747378157680
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "timestamp": 1747378157684,
+      "source": "verify_success_with_user_id"
+    }
+  ],
+  "ts": 1747378157684
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"henry\",\"token_version\":0,\"project_ids\":[],\"conversation_ids\":[]}}"
+  ],
+  "ts": 1747378157684
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    }
+  ],
+  "ts": 1747378157682
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747378157683
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc"
+  ],
+  "ts": 1747378157685
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "henry",
+        "token_version": 0,
+        "project_ids": [],
+        "conversation_ids": []
+      }
+    }
+  ],
+  "ts": 1747378157686
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting"
+  ],
+  "ts": 1747378157687
+}
