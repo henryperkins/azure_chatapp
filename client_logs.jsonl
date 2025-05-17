@@ -7533,3 +7533,966 @@
   ],
   "ts": 1747464436380
 }
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747467539834
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "pre",
+      "ts": 1747467539837
+    }
+  ],
+  "ts": 1747467539837
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init] Called",
+    {
+      "context": "app:init",
+      "ts": 1747467539837
+    }
+  ],
+  "ts": 1747467539837
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] Entering function",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747467539838
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747467539838
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] auth module registered",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747467539838
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747467539841",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747467539841
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "JERuAhstVBnaQuXY2ph_wgOcej_0rjkhsjk8l8KlpP4",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747467540021
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747467540021
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": false,
+      "user": null
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747467540085
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "clearTokenState:verify_negative_after_all_checks",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467540085
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467540086
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467540086
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "verify_negative_after_all_checks",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467540086
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "init_complete",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467540086
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467540086
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] eventHandlers initialization complete",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747467540087
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectModal] constructed"
+  ],
+  "ts": 1747467540087
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747467541779
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init] Called",
+    {
+      "context": "app:init",
+      "ts": 1747467541783
+    }
+  ],
+  "ts": 1747467541783
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "pre",
+      "ts": 1747467541783
+    }
+  ],
+  "ts": 1747467541783
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747467541785
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] Entering function",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747467541784
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] auth module registered",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747467541785
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747467541786",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747467541786
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "vG3gCfqEHLpTg1uNR32-RS_AHxIE9Sp69WMFqpFJT8k",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747467541892
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747467541892
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": false,
+      "user": null
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747467541956
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "clearTokenState:verify_negative_after_all_checks",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467541957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467541957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467541957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "verify_negative_after_all_checks",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467541957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "init_complete",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467541957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467541957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] eventHandlers initialization complete",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747467541958
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectModal] constructed"
+  ],
+  "ts": 1747467541958
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: project (#projectModal)"
+  ],
+  "ts": 1747467646043
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: login (#loginModal)"
+  ],
+  "ts": 1747467646044
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: knowledgeResult (#knowledgeResultModal)"
+  ],
+  "ts": 1747467646046
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: delete (#deleteConfirmModal)"
+  ],
+  "ts": 1747467646045
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: instructions (#instructionsModal)"
+  ],
+  "ts": 1747467646046
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: contentView (#contentViewModal)"
+  ],
+  "ts": 1747467646046
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: confirm (#confirmActionModal)"
+  ],
+  "ts": 1747467646045
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "post",
+      "ts": 1747467646048
+    }
+  ],
+  "ts": 1747467646048
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "stage": "pre",
+      "ts": 1747467646048
+    }
+  ],
+  "ts": 1747467646048
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "stage": "post",
+      "ts": 1747467646049
+    }
+  ],
+  "ts": 1747467646049
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeAuthSystem",
+      "stage": "pre",
+      "ts": 1747467646049
+    }
+  ],
+  "ts": 1747467646049
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[ModalManager] Modal element #errorModal for \"error\" not found."
+  ],
+  "ts": 1747467646045
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init"
+  ],
+  "ts": 1747467646049
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()"
+  ],
+  "ts": 1747467646049
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": false,
+      "userObject": null,
+      "source": "init_already_ready",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467646050
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: knowledge (#knowledgeBaseSettingsModal)"
+  ],
+  "ts": 1747467646045
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747467646050
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeAuthSystem",
+      "stage": "post",
+      "ts": 1747467646057
+    }
+  ],
+  "ts": 1747467646057
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "fetchCurrentUser",
+      "stage": "pre",
+      "ts": 1747467646058,
+      "authed": false
+    }
+  ],
+  "ts": 1747467646058
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "fetchCurrentUser",
+      "stage": "post",
+      "ts": 1747467646058
+    }
+  ],
+  "ts": 1747467646058
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeUIComponents",
+      "stage": "pre",
+      "ts": 1747467646058
+    }
+  ],
+  "ts": 1747467646058
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] Loading project_list.html template into #projectListView",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747467646058
+}
+{
+  "level": "error",
+  "context": "App",
+  "args": [
+    "[App.init] Emergency global timeout",
+    {},
+    {
+      "context": "app:init:globalTimeout",
+      "ts": 1747467646059
+    }
+  ],
+  "ts": 1747467646059
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[HtmlTemplateLoader] No sanitizer provided. Injecting raw HTML is a security risk."
+  ],
+  "ts": 1747467646673
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] #projectListView childElementCount=1",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747467646674
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747467646674
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[initializeUIComponents] ModalManager not ready after 8 s – continuing without blocking.",
+    {
+      "context": "app:initializeUIComponents"
+    }
+  ],
+  "ts": 1747467654676
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] KnowledgeBaseComponent instance received and set.",
+    {
+      "context": "ProjectDetailsComponent",
+      "kbcInstance": true
+    }
+  ],
+  "ts": 1747467654685
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: initAuthDom"
+  ],
+  "ts": 1747467654692
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectDashboard] Proceeding before app:ready (bootstrap phase).",
+    {
+      "context": "projectDashboard"
+    }
+  ],
+  "ts": 1747467654687
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: setupInlineAuthForm"
+  ],
+  "ts": 1747467654692
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: restorePersistentState"
+  ],
+  "ts": 1747467654692
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[ProjectDashboard][initialize] User not authenticated – dashboard initialisation deferred until login.",
+    {
+      "context": "projectDashboard"
+    }
+  ],
+  "ts": 1747467654687
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: bindDomEvents"
+  ],
+  "ts": 1747467654693
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: completed successfully"
+  ],
+  "ts": 1747467654697
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[UiRenderer][renderProjects] arrayLength=0",
+    {
+      "module": "uiRenderer",
+      "fn": "renderProjects",
+      "projectsSample": []
+    }
+  ],
+  "ts": 1747467654698
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: Starting..."
+  ],
+  "ts": 1747467654691
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeUIComponents",
+      "stage": "post",
+      "ts": 1747467654698
+    }
+  ],
+  "ts": 1747467654698
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "stage": "pre",
+      "ts": 1747467654699
+    }
+  ],
+  "ts": 1747467654699
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "stage": "post",
+      "ts": 1747467654704
+    }
+  ],
+  "ts": 1747467654704
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: findDom"
+  ],
+  "ts": 1747467654691
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "registerAppListeners",
+      "stage": "pre",
+      "ts": 1747467654704
+    }
+  ],
+  "ts": 1747467654704
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "registerAppListeners",
+      "stage": "post",
+      "ts": 1747467654704
+    }
+  ],
+  "ts": 1747467654704
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "navigationService",
+      "stage": "pre",
+      "ts": 1747467654704
+    }
+  ],
+  "ts": 1747467654704
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "navigationService",
+      "stage": "post",
+      "ts": 1747467654705
+    }
+  ],
+  "ts": 1747467654705
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Dialog loginModal (login) closed via 'close' event, activeModal cleared."
+  ],
+  "ts": 1747467656021
+}

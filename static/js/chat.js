@@ -270,6 +270,7 @@ export function createChatManager(deps = {}) {
      */
     async initialize(options = {}) {
       const _initStart = performance.now();
+      logger.info("[ChatManager][initialize] Starting initialization", { context: "chatManager.initialize", options });
 
       // Instead of DependencySystem.waitFor, use domReadinessService for readiness
       await domReadinessService.dependenciesAndElements(['app', 'domAPI', 'eventHandlers']);
@@ -339,6 +340,7 @@ export function createChatManager(deps = {}) {
           : this.projectId; // Fallback to current if provided is invalid
 
         if (this.isInitialized && this.projectId === requestedProjectId) {
+          logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", { context: "chatManager.initialize", projectId: this.projectId });
           await this._setupUIElements();
           this._setupEventListeners();
           return true;
@@ -353,6 +355,7 @@ export function createChatManager(deps = {}) {
 
         if (!this.projectId) {
           const noProjectMsg = "No valid project ID provided for ChatManager initialization.";
+          logger.error("[ChatManager][initialize] No valid project ID provided", new Error(noProjectMsg), { context: "chatManager.initialize", providedProjectId: options.projectId });
           throw new Error(noProjectMsg);
         }
 
@@ -389,9 +392,11 @@ export function createChatManager(deps = {}) {
             }, "New Conversation Button"),
             { description: "New Conversation Button", context: "chatManager:newConvoBtn", source: "ChatManager.initialize" }
           );
+          logger.info("[ChatManager][initialize] New conversation button listener registered", { context: "chatManager.initialize", projectId: this.projectId });
         }
 
         if (this.isGlobalMode) {
+          logger.info("[ChatManager][initialize] Entering global chat mode", { context: "chatManager.initialize", projectId: this.projectId });
           if (this.messageContainer) this._clearMessages();
           if (this.messageContainer) this._showMessage("system", "Select a project or start a new global chat.");
           this.isInitialized = true;
@@ -400,6 +405,7 @@ export function createChatManager(deps = {}) {
 
         // Load conversation history or start new one
         await this._loadConversationHistory();
+        logger.info("[ChatManager][initialize] ChatManager initialized successfully", { context: "chatManager.initialize", projectId: this.projectId, duration: performance.now() - _initStart });
         this.isInitialized = true;
         return true;
 

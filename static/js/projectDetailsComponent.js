@@ -526,6 +526,7 @@ class ProjectDetailsComponent {
 
   async show({ projectId, activeTab } = {}) {
     this._logInfo("show() invoked", { projectId, activeTab });
+    this._logInfo("Loading project details template", { projectId });
     if (!projectId) {
       this._logError("No projectId provided. Redirecting to project list.");
       this.navigationService.navigateToProjectList();
@@ -534,10 +535,13 @@ class ProjectDetailsComponent {
     this.projectId = projectId;
     this._setState({ loading: true });
     const templateLoaded = await this._loadTemplate();
+    this._logInfo(`Template loaded: ${templateLoaded}`, { projectId });
     if (!templateLoaded) return this._setState({ loading: false });
 
     const elementsReady = await this._ensureElementsReady();
+    this._logInfo(`Elements ready: ${elementsReady}`, { projectId });
     if (!elementsReady) {
+      this._logError("Project details UI elements not ready, aborting show", new Error("Elements not ready"), { projectId });
       if (this.elements.container) {
         this.elements.container.innerHTML = `<div class="p-4 text-error">Failed to initialize project details UI elements.</div>`;
       }
@@ -545,13 +549,17 @@ class ProjectDetailsComponent {
     }
 
     this.elements.container.classList.remove("hidden");
+    this._logInfo("Fetching project data", { projectId });
     await this._fetchProjectData(this.projectId);
     this._renderProjectData();
+    this._logInfo("Initializing subcomponents", { projectId });
     await this._initSubComponents();
     this._bindEventListeners();
+    this._logInfo("Event listeners bound for project details view", { projectId });
 
     // New Conversation button state, chat/model, KB tab, stats—all advanced flows restored!
     this._updateNewChatButtonState();
+    this._logInfo("Restoring chat manager for project details view", { projectId });
     this._restoreChatAndModelConfig();
     this._restoreKnowledgeTab();
     this._restoreStatsCounts();
@@ -613,6 +621,7 @@ class ProjectDetailsComponent {
     if (tab === "chat" && this.chatManager?.initialize) {
       const conversationsTabContent = this.elements.tabs.conversations;
       if (conversationsTabContent) {
+        this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
         this.chatManager.initialize({
           projectId: this.projectId,
           containerSelector: "#projectChatUI",
@@ -621,7 +630,9 @@ class ProjectDetailsComponent {
           sendButtonSelector: "#projectChatSendBtn",
           titleSelector: "#projectChatContainer h3",
           minimizeButtonSelector: "#projectMinimizeChatBtn"
-        }).catch((err) => { this._logError("Error initializing chatManager", err); });
+        })
+          .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))
+          .catch((err) => { this._logError("Error initializing chatManager", err); });
       }
     }
   }
