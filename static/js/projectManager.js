@@ -81,6 +81,7 @@ class ProjectManager {
     apiEndpoints,
     apiRequest = null,
     browserService = null,
+    domReadinessService,
     domAPI = null
   } = {}) {
     if (!DependencySystem) {
@@ -93,6 +94,10 @@ class ProjectManager {
       throw new Error('apiEndpoints required');
     }
 
+    if (!domReadinessService)
+      throw new Error('[ProjectManager] domReadinessService DI is required');
+    this.domReadinessService = domReadinessService;
+
     this.app = app ?? DependencySystem.modules.get('app');
     this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
     this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
@@ -103,22 +108,11 @@ class ProjectManager {
     this.domAPI       = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
     // Helper to await app readiness
-    this._awaitAppReady = async () => {
-      await DependencySystem.waitFor(['app']);
-      if (!this.app.state?.isReady) {
-        await new Promise(res => {
-          const doc = this.domAPI?.getDocument?.();
-          if (!doc) {
-            throw new Error('[ProjectManager] domAPI.getDocument is required—no global document fallback permitted.');
-          }
-          const handler = () => {
-            doc.removeEventListener('app:ready', handler);
-            res();
-          };
-          doc.addEventListener('app:ready', handler, { once: true });
-        });
-      }
-    };
+    this._awaitAppReady = async () =>
+      this.domReadinessService.waitForEvent('app:ready', {
+        deps: ['app'],
+        context: MODULE + '_awaitAppReady'
+      });
 
     // Listener tracking
     if (!listenerTracker) {
