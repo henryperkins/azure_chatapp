@@ -106,6 +106,26 @@ DependencySystem.register('logger', logger);
 const AppBus = new EventTarget();
 DependencySystem.register('AppBus', AppBus);
 
+// ---------------------------------------------------------------------------
+// Early 'app:ready' dispatch helper
+// ---------------------------------------------------------------------------
+let _appReadyDispatched = false;
+/**
+ * fireAppReady – Emits the global "app:ready" event exactly once.
+ * Subsequent calls are ignored.
+ *
+ * @param {boolean} success - true if init succeeded.
+ * @param {Error|null} error - optional error object on failure.
+ */
+function fireAppReady(success = true, error = null) {
+  if (_appReadyDispatched) return;
+  _appReadyDispatched = true;
+  const detail = success ? { success } : { success, error };
+  AppBus.dispatchEvent(new CustomEvent('app:ready', { detail }));
+  domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail }));
+  DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', { success, error, context: 'app' });
+}
+
 const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
   windowObject: browserAPI.getWindow(),
@@ -459,12 +479,7 @@ export async function init() {
     );
     logger.error('[App.init] Emergency global timeout', err, { context: 'app:init:globalTimeout', ts: Date.now() });
     handleInitError(err);
-    AppBus.dispatchEvent(new CustomEvent('app:ready', {
-      detail: { success: false, error: err }
-    }));
-    domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', {
-      detail: { success: false, error: err }
-    }));
+    fireAppReady(false, err);
   }, GLOBAL_INIT_TIMEOUT_MS);
 
   if (_globalInitCompleted || _globalInitInProgress) {
@@ -544,6 +559,8 @@ export async function init() {
       )
     ]);
     logStep('initializeAuthSystem', 'post');
+    // Early app:ready dispatch: emits right after auth is ready (guaranteed single-fire)
+    if (!_appReadyDispatched) fireAppReady(true);
 
     // 4) If authenticated, fetch current user
     logStep('fetchCurrentUser', 'pre', { authed: !!appModule.state.isAuthenticated });
@@ -732,8 +749,7 @@ export async function init() {
 
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-      AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
-      domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
+      fireAppReady(true);
     }
     return true;
   } catch (err) {
@@ -741,12 +757,7 @@ export async function init() {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
       logger.error('[init]', err, { context: 'app:init', ts: Date.now() });
       handleInitError(err);
-      AppBus.dispatchEvent(new CustomEvent('app:ready', {
-        detail: { success: false, error: err }
-      }));
-      domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', {
-        detail: { success: false, error: err }
-      }));
+      fireAppReady(false, err);
     }
     return false;
   } finally {

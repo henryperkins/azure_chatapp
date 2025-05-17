@@ -784,7 +784,9 @@ export function createProjectDashboard(deps) {
             return true;
           }
         });
-      } catch {/* ignore duplicate */ }
+      } catch (err) {
+        // ignore duplicate navigation view registration
+      }
 
       try {
         this.navigationService.registerView('projectDetails', {
@@ -797,15 +799,22 @@ export function createProjectDashboard(deps) {
                 this.components.projectDetails.switchTab(activeTab);
               }
               // (optional) handle conversationId here if needed
-            } catch { return false; }
+            } catch (err) {
+              // if initialization or nav failed, do not proceed
+              return false;
+            }
             return true;
           },
           hide : async () => {
-            try { this.components.projectDetails?.hide?.(); } catch {}
+            try { this.components.projectDetails?.hide?.(); } catch (err) {
+              // ignore errors during component hide
+            }
             return true;
           }
         });
-      } catch {/* ignore duplicate */ }
+      } catch (err) {
+        // ignore duplicate navigation view registration
+      }
       this._viewsRegistered = true;
     }
 
@@ -1045,6 +1054,26 @@ export function createProjectDashboard(deps) {
   // 4) Instantiate the dashboard & return with a cleanup() method
   // ─────────────────────────────────────────────────────────────────────────
   const dashboard = new ProjectDashboard();
+
+  // ==== Speculative/Eager Project Details Template Loading (Fire & Forget) ====
+  // Try to find htmlTemplateLoader in dependency system and trigger load
+  try {
+    const htmlTemplateLoader =
+      dependencySystem?.modules?.get?.('htmlTemplateLoader') ||
+      (dashboard.components.projectDetails && dashboard.components.projectDetails.htmlTemplateLoader);
+    if (htmlTemplateLoader && typeof htmlTemplateLoader.loadTemplate === 'function') {
+      // Do not await; fire and forget to prime event readiness
+      htmlTemplateLoader
+        .loadTemplate({
+          url: '/static/html/project_details.html',
+          containerSelector: '#projectDetailsView',
+          eventName: 'projectDetailsTemplateLoaded'
+        })
+        .catch(() => {});
+    }
+  } catch (err) {
+    logger.warn('[ProjectDashboard] Unable to fire-and-forget details template load', err, { context: 'projectDashboard' });
+  }
 
   function cleanup() {
     dashboard.cleanup();

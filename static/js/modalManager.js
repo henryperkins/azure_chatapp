@@ -384,10 +384,11 @@ class ProjectModal {
    *   @param {Object} [opts.DependencySystem]
    *   @param {Object} [opts.domAPI]
    *   @param {Object} [opts.domPurify]
+   *   @param {Object} [opts.domReadinessService] -- injected readiness service
    *   @param {Object} [opts.logger]
    *   @param {Object} [opts.errorReporter]
    */
-  constructor({ projectManager, eventHandlers, DependencySystem, domAPI, domPurify, logger, errorReporter } = {}) {
+  constructor({ projectManager, eventHandlers, DependencySystem, domAPI, domPurify, domReadinessService, logger, errorReporter } = {}) {
     this.DependencySystem = DependencySystem || undefined;
 
     this.eventHandlers =
@@ -408,6 +409,15 @@ class ProjectModal {
       this.DependencySystem?.modules?.get?.('domPurify') ||
       this.DependencySystem?.modules?.get?.('sanitizer') ||
       null;
+
+    this.domReadinessService =
+      domReadinessService ||
+      this.DependencySystem?.modules?.get?.('domReadinessService') ||
+      null;
+
+    if (!this.domReadinessService) {
+      throw new Error('[ProjectModal] domReadinessService DI not provided');
+    }
 
     this.logger =
       logger ||
@@ -471,13 +481,33 @@ class ProjectModal {
     }
   }
 
-  init() {
+  /**
+   * Await readiness of modal DOM elements via domReadinessService.
+   * This method must be called and awaited before interacting with modal DOM.
+   */
+  async init() {
+    await this.domReadinessService.dependenciesAndElements({
+      domSelectors: ['#projectModal', '#projectModalForm'],
+      timeout: 5000,
+      context: 'projectModal.init'
+    });
     this.modalElement = this.domAPI.getElementById('projectModal');
     this.formElement = this.domAPI.getElementById('projectModalForm');
     if (!this.modalElement || !this.formElement) {
       throw new Error('[ProjectModal] Required DOM elements not found on init.');
     }
     this.setupEventListeners();
+
+    // Optionally emit readiness event if desired by code conventions
+    if (
+      typeof this.domAPI.dispatchEvent === 'function' &&
+      this.modalElement
+    ) {
+      this.domAPI.dispatchEvent(
+        this.modalElement,
+        new CustomEvent('projectModal:ready', { detail: { success: true } })
+      );
+    }
   }
 
   destroy() {
@@ -677,13 +707,15 @@ export function createProjectModal({
   eventHandlers,
   DependencySystem,
   domAPI,
-  domPurify
+  domPurify,
+  domReadinessService
 } = {}) {
   return new ProjectModal({
     projectManager,
     eventHandlers,
     DependencySystem,
     domAPI,
-    domPurify
+    domPurify,
+    domReadinessService
   });
 }
