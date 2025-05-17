@@ -6668,7 +6668,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   transform: translateX(-100%);
 }
 .sidebar.sidebar-pinned {
-  box-shadow: 0 0 0 2px var(--color-primary, #ff55a8), 0 0 14px 4px rgba(255, 85, 168, 0.25);
+  /* Box-shadow removed to eliminate thick pink border. */
   border-radius: 0 1rem 1rem 0;
 }
 .no-scrollbar {

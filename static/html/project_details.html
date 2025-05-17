@@ -1,107 +1,111 @@
-<!-- Breadcrumb navigation for better navigation -->
-<div class="flex items-center mb-4 text-sm text-base-content/60">
-  <button id="backToProjectsBtn" type="button"
-    class="mr-2 btn btn-ghost btn-sm flex items-center">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-      <path fill-rule="evenodd" d="M9.707 16.707a1 1
-            0 01-1.414 0l-6-6a1 1
-            0 010-1.414l6-6a1 1
-            0 011.414 1.414L5.414
-            9H17a1 1 0 110 2H5.414l4.293
-            4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
-    </svg>
-    <span class="ml-1">All Projects</span>
-  </button>
-  <span class="mx-2">/</span>
-  <span id="projectTitle" class="text-base-content font-semibold">Project Title</span>
-</div>
+<div class="project-details-root flex flex-col w-full max-w-6xl mx-auto p-2">
+  <!-- Project overview card: groups header, actions, and stats in a visual card -->
+  <section class="bg-base-100 rounded-box shadow-md border border-base-300 p-4 mb-6">
+    <!-- Breadcrumb navigation for better navigation -->
+    <div class="flex items-center mb-4 text-sm text-base-content/60">
+      <button id="backToProjectsBtn" type="button"
+        class="mr-2 btn btn-ghost btn-sm flex items-center">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+          <path fill-rule="evenodd" d="M9.707 16.707a1 1
+                0 01-1.414 0l-6-6a1 1
+                0 010-1.414l6-6a1 1
+                0 011.414 1.414L5.414
+                9H17a1 1 0 110 2H5.414l4.293
+                4.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+        </svg>
+        <span class="ml-1">All Projects</span>
+      </button>
+      <span class="mx-2">/</span>
+      <span id="projectTitle" class="text-base-content font-semibold">Project Title</span>
+    </div>
 
-<!-- Enhanced action buttons -->
-<div class="flex justify-end mb-4 gap-2">
-  <button id="editProjectBtn" type="button"
-    class="btn btn-ghost btn-square btn-sm text-primary" title="Edit project details">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-      stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2
-            2v11a2 2 0 002 2h11a2
-            2 0 002-2v-5m-1.414-9.414a2
-            2 0 112.828 2.828L11.828
-            15H9v-2.828l8.586-8.586z" />
-    </svg>
-  </button>
-  <button id="pinProjectBtn" type="button"
-    class="btn btn-ghost btn-square btn-sm text-warning" title="Pin project">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-      stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2
-            0 012-2h10a2 2 0 012
-            2v16l-7-3.5L5 21V5z" />
-    </svg>
-  </button>
-  <button id="archiveProjectBtn" type="button"
-    class="btn btn-ghost btn-square btn-sm" title="Archive project">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-      stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2
-            2 0 110-4h14a2 2 0 110
-            4M5 8v10a2 2 0 002 2h10a2
-            2 0 002-2V8m-9 4h4" />
-    </svg>
-  </button>
-</div>
+    <!-- Enhanced action buttons -->
+    <div class="flex justify-end mb-4 gap-2">
+      <button id="editProjectBtn" type="button"
+        class="btn btn-ghost btn-square btn-sm text-primary" title="Edit project details">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2
+                2v11a2 2 0 002 2h11a2
+                2 0 002-2v-5m-1.414-9.414a2
+                2 0 112.828 2.828L11.828
+                15H9v-2.828l8.586-8.586z" />
+        </svg>
+      </button>
+      <button id="pinProjectBtn" type="button"
+        class="btn btn-ghost btn-square btn-sm text-warning" title="Pin project">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2
+                0 012-2h10a2 2 0 012
+                2v16l-7-3.5L5 21V5z" />
+        </svg>
+      </button>
+      <button id="archiveProjectBtn" type="button"
+        class="btn btn-ghost btn-square btn-sm" title="Archive project">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2
+                2 0 110-4h14a2 2 0 110
+                4M5 8v10a2 2 0 002 2h10a2
+                2 0 002-2V8m-9 4h4" />
+        </svg>
+      </button>
+    </div>
 
-<!-- Project stats panel -->
-<div id="projectStats" class="stats shadow-custom mb-4 sm:mb-6 project-stats" data-testid="project-stats">
-  <div class="stat">
-    <div class="stat-title">Token Usage</div>
-    <div class="stat-value"><span id="tokenUsage">0</span> / <span id="maxTokens">200,000</span></div>
-    <div class="stat-desc"><span id="tokenPercentage">0%</span></div>
-    <progress id="tokenProgressBar" class="progress progress-primary w-full" value="0" max="100"></progress>
-  </div>
-  <div class="stat">
-    <div class="stat-title">Conversations</div>
-    <div class="stat-value" id="conversationCount">0</div>
-  </div>
-  <div class="stat">
-    <div class="stat-title">Files</div>
-    <div class="stat-value" id="fileCount">0</div>
-  </div>
-  <div class="stat">
-    <div class="stat-title">Artifacts</div>
-    <div class="stat-value" id="artifactCount">0</div>
-  </div>
-</div>
+    <!-- Project stats panel -->
+    <div id="projectStats" class="stats mb-4 sm:mb-6 project-stats" data-testid="project-stats">
+      <div class="stat">
+        <div class="stat-title">Token Usage</div>
+        <div class="stat-value"><span id="tokenUsage">0</span> / <span id="maxTokens">200,000</span></div>
+        <div class="stat-desc"><span id="tokenPercentage">0%</span></div>
+        <progress id="tokenProgressBar" class="progress progress-primary w-full" value="0" max="100"></progress>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Conversations</div>
+        <div class="stat-value" id="conversationCount">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Files</div>
+        <div class="stat-value" id="fileCount">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-title">Artifacts</div>
+        <div class="stat-value" id="artifactCount">0</div>
+      </div>
+    </div>
+  </section>
 
-<!-- Tab navigation (No Chat tab now)-->
-<div class="tabs mb-6" role="tablist">
-  <button id="detailsTabBtn" class="tab tab-bordered tab-active project-tab-btn" role="tab"
-    aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
-    Details
-  </button>
-  <button id="filesTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
-    aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
-    Files
-  </button>
-  <button id="conversationsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
-    aria-selected="false" aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
-    <span class="hidden xs:inline">Conversations</span>
-    <span class="xs:hidden">Convos</span>
-  </button>
-  <button id="artifactsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
-    aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
-    Artifacts
-  </button>
-  <button id="knowledgeTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
-    aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
-    <span class="hidden xs:inline">Knowledge Base</span>
-    <span class="xs:hidden">KB</span>
-  </button>
-</div>
+  <!-- Tab navigation now full width below card -->
+  <div class="tabs mb-8 w-full flex justify-start gap-8" role="tablist" style="margin-left:2px;">
+    <button id="detailsTabBtn" class="tab tab-bordered tab-active project-tab-btn" role="tab"
+      aria-selected="true" aria-controls="detailsTab" tabindex="0" data-tab="details">
+      Details
+    </button>
+    <button id="filesTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+      aria-selected="false" aria-controls="filesTab" tabindex="-1" data-tab="files">
+      Files
+    </button>
+    <button id="conversationsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+      aria-selected="false" aria-controls="conversationsTab" tabindex="-1" data-tab="conversations">
+      <span class="hidden xs:inline">Conversations</span>
+      <span class="xs:hidden">Convos</span>
+    </button>
+    <button id="artifactsTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+      aria-selected="false" aria-controls="artifactsTab" tabindex="-1" data-tab="artifacts">
+      Artifacts
+    </button>
+    <button id="knowledgeTabBtn" class="tab tab-bordered project-tab-btn" role="tab"
+      aria-selected="false" aria-controls="knowledgeTab" tabindex="-1" data-tab="knowledge">
+      <span class="hidden xs:inline">Knowledge Base</span>
+      <span class="xs:hidden">KB</span>
+    </button>
+  </div>
 
-<!-- Tab content -->
-<div id="projectTabContent">
+  <!-- Tab content -->
+  <div id="projectTabContent" class="w-full">
   <!-- Details tab -->
-  <div id="detailsTab" class="project-tab-content" role="tabpanel" aria-labelledby="detailsTabBtn"
+  <div id="detailsTab" class="project-tab-content bg-base-100 rounded-box shadow-md border border-base-300 p-6 w-full" role="tabpanel" aria-labelledby="detailsTabBtn"
     tabindex="0">
     <div class="tab-section">
       <h3 class="tab-heading">Description</h3>
