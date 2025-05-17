@@ -116,12 +116,41 @@ export function createSidebar({
   }
 
   /* ------------------------------------------------------------------ */
+  /*   Sidebar Settings panel (gear-icon toggles vertical slide-out)    */
+  /* ------------------------------------------------------------------ */
+  let settingsPanelEl = null;
+  function _ensureSettingsPanel() {
+    if (settingsPanelEl) return settingsPanelEl;
+    settingsPanelEl = domAPI.getElementById('sidebarSettingsPanel');
+
+    if (!settingsPanelEl) {
+      settingsPanelEl = domAPI.createElement('div');
+      settingsPanelEl.id = 'sidebarSettingsPanel';
+      settingsPanelEl.className =
+        'hidden flex flex-col gap-2 p-3 overflow-y-auto border-t border-base-300';
+
+      // Insert after projectsSection to keep natural flow
+      const projectsSection = domAPI.getElementById('projectsSection');
+      domAPI.appendChild(projectsSection?.parentElement || el, settingsPanelEl);
+    }
+    return settingsPanelEl;
+  }
+
+  function toggleSettingsPanel(force) {
+    const panel = _ensureSettingsPanel();
+    const show  = force !== undefined ? !!force : panel.classList.contains('hidden');
+    domAPI.toggleClass(panel, 'hidden', !show);
+    if (show) maybeRenderModelConfig();
+  }
+
+  /* ------------------------------------------------------------------ */
   /* 3) Internal State                                                  */
   /* ------------------------------------------------------------------ */
   let el = null;
   let btnToggle = null;
   let btnClose = null;
   let btnPin = null;
+  let btnSettings = null;        // NEW
   let chatSearchInputEl = null;
   let sidebarProjectSearchInputEl = null;
   let backdrop = null;
@@ -133,6 +162,19 @@ export function createSidebar({
   const starred = new Set(
     safeParseJSON(storageAPI.getItem('starredConversations'), [])
   );
+
+  function maybeRenderModelConfig() {
+    const panel = _ensureSettingsPanel();
+    if (panel.dataset.mcBound === '1') return;
+
+    panel.dataset.mcBound = '1';
+    try {
+      modelConfig.renderQuickConfig(panel);
+    } catch (err) {
+      logger.error('[Sidebar] renderQuickConfig failed', err, { context: MODULE });
+      domAPI.setTextContent(panel, 'Unable to load model configuration.');
+    }
+  }
 
   // Inline auth fields
   let isRegisterMode = false;
@@ -287,6 +329,7 @@ export function createSidebar({
     btnToggle               = domAPI.getElementById('navToggleBtn');
     btnClose                = domAPI.getElementById('closeSidebarBtn');
     btnPin                  = domAPI.getElementById('pinSidebarBtn');
+    btnSettings             = domAPI.getElementById('sidebarSettingsBtn'); // NEW (gear-icon)
     chatSearchInputEl       = domAPI.getElementById('chatSearchInput');
     sidebarProjectSearchInputEl = domAPI.getElementById('sidebarProjectSearch');
 
@@ -536,6 +579,7 @@ export function createSidebar({
     }
     removeBackdrop();
     domAPI.body?.classList.remove('with-sidebar-open');
+    toggleSettingsPanel(false);        // ensure hidden when sidebar closes
     dispatch('sidebarVisibilityChanged', { visible });
   }
 
@@ -697,6 +741,15 @@ export function createSidebar({
         btnClose, 'click',
         wrapWithErrorLog(closeSidebar, 'closeSidebarBtn click'),
         { context: MODULE, description: 'Sidebar close' }
+      );
+    }
+
+    // Gear-icon → toggle settings panel
+    if (btnSettings) {
+      eventHandlers.trackListener(
+        btnSettings, 'click',
+        wrapWithErrorLog(() => toggleSettingsPanel(), 'settingsBtn click'),
+        { context: MODULE, description: 'Toggle sidebar settings panel' }
       );
     }
   }
