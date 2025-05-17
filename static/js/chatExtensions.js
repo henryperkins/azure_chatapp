@@ -166,8 +166,9 @@ export function createChatExtensions(options) {
       description: "Chat title editing keydown", context: MODULE_CONTEXT
     });
 
-    if (typeof document !== "undefined") {
-      trackListener(document, "click", clickOutsideHandler, {
+    const doc = domAPI.getDocument?.();
+    if (doc) {
+      trackListener(doc, "click", clickOutsideHandler, {
         description: "Chat title outside click", once: true, context: MODULE_CONTEXT
       });
     }
