@@ -1117,7 +1117,15 @@ export function createChatManager(deps = {}) {
       /* Un-hide chat container & header */
       this.domAPI.removeClass(this.container, "hidden");
       const header = this.domAPI.getElementById?.("chatHeaderBar");
-      if (header) this.domAPI.removeClass(header, "hidden");
+      if (header) {
+        if (this.isGlobalMode) {
+          // Global (stand-alone) chat → show shared title bar
+          this.domAPI.removeClass(header, "hidden");
+        } else {
+          // Project-details chat has its own header; keep the global bar hidden
+          this.domAPI.addClass(header, "hidden");
+        }
+      }
 
       return true;
     }
