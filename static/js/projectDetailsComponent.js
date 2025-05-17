@@ -138,13 +138,14 @@ class ProjectDetailsComponent {
         this._setState({ loading: false });
         return false;
       }
-      const success = await this.htmlTemplateLoader.loadTemplate({
+      const loadResult = await this.htmlTemplateLoader.loadTemplate({
         url: this.templatePath,
         containerSelector: `#${this.containerId}`,
         eventName: 'projectDetailsTemplateLoaded'
       });
 
-      if (!success) {
+      // htmlTemplateLoader puede devolver `undefined`; considéralo éxito salvo que sea `false`
+      if (loadResult === false) {
         this._setState({ loading: false });
         return false;
       }
