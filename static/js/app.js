@@ -1533,7 +1533,7 @@ function setupChatInitializationTrigger() {
 
       if (auth.isAuthenticated() && chatManager?.initialize) {
         try {
-          await chatManager.initialize({ projectId });
+          await chatManager.initialize({ projectId, containerSelector: "#chatUIContainer" });
         } catch (err) {
           logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
           // Error handled silently
