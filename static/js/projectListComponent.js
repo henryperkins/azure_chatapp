@@ -45,8 +45,6 @@
  *   projectList.initialize();
  */
 
-import { createDomReadinessService } from './utils/domReadinessService.js';
-
 const MODULE_CONTEXT = "ProjectListComponent";
 
 export class ProjectListComponent {
@@ -92,14 +90,9 @@ export class ProjectListComponent {
         this.domAPI = domAPI;
         this._doc = null;
 
-        this.domReadinessService = domReadinessService ||
-            createDomReadinessService({
-                DependencySystem: this.DependencySystem,
-                domAPI,
-                browserService,
-                eventHandlers,
-                APP_CONFIG
-            });
+        if (!domReadinessService)
+          throw new Error("[ProjectListComponent] domReadinessService DI is mandatory");
+        this.domReadinessService = domReadinessService;
 
         this.DependencySystem = app?.DependencySystem || eventHandlers?.DependencySystem;
         this.navigationService = this.DependencySystem?.modules?.get('navigationService');
@@ -261,29 +254,41 @@ export class ProjectListComponent {
     _bindEventListeners() {
         const docAPI = this.domAPI;
         const doc = docAPI?.getDocument?.();
+        const logger = this.DependencySystem?.modules?.get?.('logger');
+        const safe     = (fn, dsc) => (...a) => {
+          try { return fn(...a); }
+          catch (err) {
+            logger?.error?.(`[ProjectListComponent][${dsc}]`, err, { context: MODULE_CONTEXT });
+            throw err;
+          }
+        };
         const projectsLoadedHandler = (e) => this.renderProjects(e.detail);
 
         this.eventHandlers.trackListener(
             doc,
             "projectsLoaded",
-            projectsLoadedHandler
+            safe(projectsLoadedHandler,'projectsLoaded'),
+            { context: MODULE_CONTEXT }
         );
 
         this.eventHandlers.trackListener(
             this.gridElement,
             "click",
-            (e) => this._handleCardClick(e)
+            safe((e) => this._handleCardClick(e),'gridElement:click'),
+            { context: MODULE_CONTEXT }
         );
 
         this.eventHandlers.trackListener(
             doc,
             "projectCreated",
-            (e) => this._handleProjectCreated(e.detail)
+            safe((e) => this._handleProjectCreated(e.detail),'projectCreated'),
+            { context: MODULE_CONTEXT }
         );
         this.eventHandlers.trackListener(
             doc,
             "projectUpdated",
-            (e) => this._handleProjectUpdated(e.detail)
+            safe((e) => this._handleProjectUpdated(e.detail),'projectUpdated'),
+            { context: MODULE_CONTEXT }
         );
 
         const handleAuthStateChange = (e) => {
@@ -311,8 +316,8 @@ export class ProjectListComponent {
         };
 
         // Aceptar ambas variantes del evento
-        this.eventHandlers.trackListener(doc, "authStateChanged",  handleAuthStateChange);
-        this.eventHandlers.trackListener(doc, "auth:stateChanged", handleAuthStateChange);
+        this.eventHandlers.trackListener(doc, "authStateChanged",  safe(handleAuthStateChange,'authStateChanged'), { context: MODULE_CONTEXT });
+        this.eventHandlers.trackListener(doc, "auth:stateChanged", safe(handleAuthStateChange,'auth:stateChanged'), { context: MODULE_CONTEXT });
 
         this._bindFilterEvents();
     }
@@ -335,7 +340,7 @@ export class ProjectListComponent {
     _bindSingleFilterTab(tab, filterValue) {
         if (!filterValue) return;
         const clickHandler = () => this._setFilter(filterValue);
-        this.eventHandlers.trackListener(tab, "click", clickHandler);
+        this.eventHandlers.trackListener(tab, "click", clickHandler, { context: MODULE_CONTEXT });
 
         this.eventHandlers.trackListener(tab, "keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -343,7 +348,7 @@ export class ProjectListComponent {
                 this._setFilter(filterValue);
                 tab.focus();
             }
-        });
+        }, { context: MODULE_CONTEXT });
     }
 
     _bindFilterTablistKeyboardNav(container, tabs) {
@@ -367,7 +372,7 @@ export class ProjectListComponent {
                 event.preventDefault();
                 tabs[tabs.length - 1].focus();
             }
-        });
+        }, { context: MODULE_CONTEXT });
     }
 
     _setFilter(filter) {
@@ -503,7 +508,7 @@ export class ProjectListComponent {
             void listViewContainer.offsetHeight; // force reflow
         }
         // Extra: defensive - forcibly hide projectDetailsView outside standard ancestry (corner cases)
-        const pdv = document.getElementById("projectDetailsView");
+        const pdv = this.domAPI.getElementById("projectDetailsView");
         if (pdv) {
             pdv.classList.add("hidden");
             pdv.style.display = "none";
