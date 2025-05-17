@@ -387,7 +387,8 @@ export function createChatManager(deps = {}) {
         }
         this.projectId = requestedProjectId;
 
-        await this._setupUIElements();          // UI refs only (no listeners yet)
+        /* Defer UI element lookup until after attachChatUI
+           overrides have injected/created the elements. */
 
         const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         if (newConversationBtn) {
