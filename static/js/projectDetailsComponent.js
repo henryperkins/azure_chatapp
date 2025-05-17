@@ -275,11 +275,33 @@ class ProjectDetailsComponent {
     this.eventHandlers.trackListener(doc, "projectStatsLoaded",
       this._safeHandler((e) => this.renderStats(e.detail), "StatsLoaded"),
       { context: this.listenersContext, description: "StatsLoaded" });
-    this.eventHandlers.trackListener(doc, "projectKnowledgeBaseLoaded",
-      this._safeHandler((e) => this.knowledgeBaseComponent?.renderKnowledgeBaseInfo?.(
-        e.detail?.knowledgeBase, e.detail?.projectId
-      ), "KnowledgeLoaded"),
-      { context: this.listenersContext, description: "KnowledgeLoaded" });
+    this.eventHandlers.trackListener(
+      doc,
+      "projectKnowledgeBaseLoaded",
+      this._safeHandler(
+        async (e) => {
+          if (!this.knowledgeBaseComponent) return;
+          /* Ensure KnowledgeBaseComponent has captured its DOM elements
+             before attempting to render. This prevents a race-condition
+             where the KB event fires before KBC.initialize() has run. */
+          try {
+            await this.knowledgeBaseComponent.initialize?.(
+              false,
+              e.detail?.knowledgeBase,
+              e.detail?.projectId
+            );
+          } catch (err) {
+            this._logError("Error initializing knowledgeBaseComponent", err);
+          }
+          this.knowledgeBaseComponent.renderKnowledgeBaseInfo?.(
+            e.detail?.knowledgeBase,
+            e.detail?.projectId
+          );
+        },
+        "KnowledgeLoaded"
+      ),
+      { context: this.listenersContext, description: "KnowledgeLoaded" }
+    );
   }
 
   // --- Tab switching ---
@@ -519,15 +541,87 @@ class ProjectDetailsComponent {
     catch (e) { this._logError("Error downloading file", e); }
   }
 
+
   async _openConversation(cv) {
     if (!this.projectId || !cv?.id) return;
-    try {
-      await this.projectManager.getConversation(cv.id);
-      if (this.navigationService) {
-        this.navigationService.navigateToConversation(this.projectId, cv.id);
+    // ----- Cancel/concurrency handling -----
+    if (!this._pendingOperations) this._pendingOperations = new Map();
+    const operationKey = `conversation_${cv.id}`;
+    // Cancel any existing
+    if (this._pendingOperations.has(operationKey)) {
+      this._pendingOperations.get(operationKey).cancel();
+    }
+    // CancelableOperation class definition (injected/defined inline here, singleton-per-method)
+    class CancelableOperation {
+      constructor() {
+        this.canceled = false;
+        this.promise = null;
       }
-    } catch (e) { this._logError("Error opening conversation", e); }
+      execute(asyncFn) {
+        this.canceled = false;
+        this.promise = (async () => {
+          try {
+            if (this.canceled) return null;
+            return await asyncFn();
+          } catch (err) {
+            if (this.canceled) {
+              return null;
+            }
+            throw err;
+          }
+        })();
+        return this.promise;
+      }
+      cancel() {
+        this.canceled = true;
+        this.promise = null;
+      }
+    }
+    const operation = new CancelableOperation();
+    this._pendingOperations.set(operationKey, operation);
+
+    return operation.execute(async () => {
+      try {
+        // Revalidate project context; set if not present/doesn't match
+        const currentProject = this.projectManager.getCurrentProject?.();
+        if (!currentProject || currentProject.id !== this.projectId) {
+          this.app?.setCurrentProject?.({ id: this.projectId });
+          try {
+            // Optionally load full project details if possible
+            const projectDetails = await this.projectManager.loadProjectDetails(this.projectId);
+            if (projectDetails) {
+              this.app?.setCurrentProject?.(projectDetails);
+            }
+          } catch (_e) {
+            this._logError("Error loading project before conversation", _e);
+            // continue
+          }
+        }
+        // Now get conversation, with context fix
+        await this.projectManager.getConversation(cv.id);
+        if (operation.canceled) return null;
+        if (this.navigationService) {
+          this.navigationService.navigateToConversation(this.projectId, cv.id);
+        }
+      } catch (_e) {
+        if (!operation.canceled) {
+          this._logError("Error opening conversation", _e);
+        }
+        return null;
+      }
+    });
   }
+
+  // Clean up pending operations on hide/destroy
+  _cleanupPendingOperations() {
+    if (this._pendingOperations) {
+      for (const op of this._pendingOperations.values()) {
+        op.cancel();
+      }
+      this._pendingOperations.clear();
+    }
+  }
+
 
   // -- Utility (defensive rendering, format helpers) --
   _safeAttr(str) { return String(str || "").replace(/[<>"']/g, "_"); }

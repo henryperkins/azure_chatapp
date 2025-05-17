@@ -285,7 +285,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     async renderKnowledgeBaseInfo(kbData, projectId = null) {
       if (!kbData) {
         this._showInactiveState();
-        this.elements.knowledgeBaseFilesSection.classList.add("hidden");
+        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
         if (projectId) {
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
