@@ -83,7 +83,8 @@ export function createChatManager(deps = {}) {
     DOMPurify,
     apiEndpoints,
     domReadinessService,
-    logger
+    logger,
+    DependencySystem          // ← NUEVO
   } = deps;
 
   if (!apiRequest) throw new Error('Missing apiRequest in createChatManager');
@@ -250,11 +251,14 @@ export function createChatManager(deps = {}) {
       // Local copy of the model config
       this.modelConfig = this.modelConfigAPI.getConfig();
 
-      attachChatUI(this, {
-        domAPI: this.domAPI,
-        DOMPurify: this.DOMPurify,
-        eventHandlers: this.eventHandlers
-      });
+      this.DependencySystem = DependencySystem || undefined;
+      this._uiAttached = false;      // ← NUEVO
+
+      // attachChatUI(this, {
+      //   domAPI: this.domAPI,
+      //   DOMPurify: this.DOMPurify,
+      //   eventHandlers: this.eventHandlers
+      // });
     }
 
     /**
@@ -343,7 +347,7 @@ export function createChatManager(deps = {}) {
         if (this.isInitialized && this.projectId === requestedProjectId) {
           logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", { context: "chatManager.initialize", projectId: this.projectId });
           await this._setupUIElements();
-          this._setupEventListeners();
+          // this._setupEventListeners(); // Eliminado según instrucciones
           return true;
         }
 
@@ -408,6 +412,27 @@ export function createChatManager(deps = {}) {
         await this._loadConversationHistory();
         logger.info("[ChatManager][initialize] ChatManager initialized successfully", { context: "chatManager.initialize", projectId: this.projectId, duration: performance.now() - _initStart });
         this.isInitialized = true;
+
+        // ----- Adjuntar utilidades UI una vez ChatManager está estable -----
+        if (!this._uiAttached) {
+          attachChatUI(this, {
+            domAPI: this.domAPI,
+            DOMPurify: this.DOMPurify,
+            eventHandlers: this.eventHandlers
+          });
+          this._uiAttached = true;
+
+          // Usa ahora la versión de chat-ui-utils para listeners
+          if (typeof this._setupEventListeners === 'function') {
+            this._setupEventListeners();
+          }
+        }
+
+        // Notificar que el ChatManager está listo
+        this.chatBus?.dispatchEvent(
+          new CustomEvent('chatManagerReady', { detail: { projectId: this.projectId } })
+        );
+
         return true;
 
       } catch (error) {
@@ -435,6 +460,7 @@ export function createChatManager(deps = {}) {
       this.projectId = null;
       this.isGlobalMode = false;
       this._clearMessages();
+      this._uiAttached = false;
     }
 
     /**

@@ -1106,7 +1106,29 @@ async function initializeUIComponents() {
     logger                 // NEW
   });
   DependencySystem.register('chatExtensions', chatExtensionsInstance);
-  await safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+
+  const chatMgr = DependencySystem.modules.get('chatManager');
+  const authMod = DependencySystem.modules.get('auth');
+
+  // Inicia de inmediato si ya está todo listo
+  if (chatMgr?.isInitialized && authMod?.isAuthenticated?.()) {
+    safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+  } else if (chatMgr?.chatBus) {
+    eventHandlers.trackListener(
+      chatMgr.chatBus,
+      'chatManagerReady',
+      () => {
+        if (authMod?.isAuthenticated?.()) {
+          safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+        }
+      },
+      {
+        once: true,
+        context: 'app.initializeUIComponents',
+        description: 'deferred ChatExtensions.init'
+      }
+    );
+  }
 
   // Create project dashboard utils
   const projectDashboardUtilsInstance = createProjectDashboardUtils({ DependencySystem });
