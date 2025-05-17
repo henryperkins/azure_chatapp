@@ -151,10 +151,20 @@ export class ProjectListComponent {
     }
 
     async initialize() {
-        await this.domReadinessService.waitForEvent('app:ready', {
+        /*  Si la aplicación ya se ha declarado «ready» no volvemos a
+            esperar el evento, pues ya se emitió y la espera acabaría
+            en timeout ⇒ initialize() fallaría y la vista no se mostraría. */
+        const appModule   = this.DependencySystem?.modules?.get?.('appModule');
+        const appInstance = this.DependencySystem?.modules?.get?.('app');
+        const appIsReady  = appModule?.state?.isReady === true
+                         || appInstance?.state?.isReady === true;
+
+        if (!appIsReady) {
+          await this.domReadinessService.waitForEvent('app:ready', {
             deps: ['app'],
             context: MODULE_CONTEXT + '_appReady'
-        });
+          });
+        }
 
         this._doc = this.domAPI.getDocument?.();
         if (this.state.initialized) {
