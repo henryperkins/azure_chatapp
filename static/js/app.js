@@ -1205,6 +1205,15 @@ async function initializeUIComponents() {
   w?.initAccessibilityEnhancements?.({ domAPI });
   w?.initSidebarEnhancements?.({ domAPI, eventHandlers });
 
+  // ── UI Diagnostics ─────────────────────────────────────────────
+  if (APP_CONFIG.DEBUG_UI) {
+    const unresolved = domReadinessService.getMissingSelectors?.() || [];
+    if (unresolved.length) {
+      logger.warn('[UI-Diagnostics] Unresolved selectors:', unresolved);
+    } else {
+      logger.info('[UI-Diagnostics] All selectors resolved.');
+    }
+  }
   _uiInitialized = true;
 }
 

@@ -43,6 +43,8 @@ export function createDomReadinessService({
   eventHandlers,
   APP_CONFIG
 } = {}) {
+  // Track selectors that never appeared (for UI diagnostics)
+  const _missingSelectors = new Set();
   // Store pending readiness promises by selector sets
   const pendingPromises = new Map();
   // Store references to active MutationObservers
@@ -156,6 +158,7 @@ export function createDomReadinessService({
           appearanceListeners.delete(key);
 
           const missing = selectorArray.filter((sel) => domAPI.querySelector(sel) === null);
+          missing.forEach((sel) => _missingSelectors.add(sel));
           const logger = DependencySystem?.modules?.get?.('logger') || {};
           logger.error?.(`[domReadinessService] TIMEOUT – missing selectors: ${missing.join(', ')} (context: ${context})`);
           reject(
@@ -274,7 +277,12 @@ export function createDomReadinessService({
 
     // Then wait for any DOM elements
     if (domSelectors.length > 0) {
-      await elementsReady(domSelectors, { timeout, context });
+      try {
+        await elementsReady(domSelectors, { timeout, context });
+      } catch (err) {
+        domSelectors.forEach((sel) => _missingSelectors.add(sel));
+        throw err;
+      }
     }
     return true;
   }
@@ -337,12 +345,17 @@ export function createDomReadinessService({
     return out;
   }
 
+  function getMissingSelectors() {
+    return Array.from(_missingSelectors);
+  }
+
   return {
     documentReady,
     elementsReady,
     dependenciesAndElements,
     waitForEvent,
     destroy,
-    getSelectorTimings            // ← new
+    getSelectorTimings,            // ← new
+    getMissingSelectors      // NEW
   };
 }
