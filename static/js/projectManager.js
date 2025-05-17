@@ -571,12 +571,42 @@ export function createProjectManager({
       }
     }
 
+    // Get projectId from several possible sources for conversation/context flow robustness
+    _getEffectiveProjectId() {
+      // Priority order: this.currentProjectId, this.currentProject?.id, app.getCurrentProject().id, app.getProjectId(), browserService location param
+      const candidates = [
+        this.currentProjectId,
+        this.currentProject?.id,
+        (this.app?.getCurrentProject && this.app.getCurrentProject()?.id),
+        (this.app?.getProjectId && this.app.getProjectId())
+      ];
+      for (const id of candidates) {
+        if (isValidProjectId(id)) return id;
+      }
+      // Fallback: extract from URL if browserService provides it
+      const urlSearch = this.browserService?.getLocation?.().search;
+      if (urlSearch) {
+        try {
+          const params = new URLSearchParams(urlSearch);
+          const candidate = params.get('project');
+          if (isValidProjectId(candidate)) return candidate;
+        } catch {
+          // Ignore URL parsing errors for robustness (URL may be malformed or not present)
+        }
+      }
+      return null;
+    }
+
     async getConversation(conversationId) {
       if (!this._authOk('conversationLoadError', { conversationId })) {
         throw new Error('auth');
       }
-      const projectId = this.currentProject?.id;
+      const projectId = this._getEffectiveProjectId();
       if (!isValidProjectId(projectId)) {
+        this._handleErr('conversationLoadError', new Error('No valid project context'), null, {
+          source: 'getConversation',
+          detail: { conversationId }
+        });
         throw new Error('No valid project context');
       }
       try {
