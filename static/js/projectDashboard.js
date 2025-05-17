@@ -773,17 +773,39 @@ export function createProjectDashboard(deps) {
      */
     _ensureNavigationViews() {
       if (this._viewsRegistered || !this.navigationService?.registerView) return;
-      const noop = async () => true;
-      ['projectList', 'projectDetails'].forEach((id) => {
-        try {
-          this.navigationService.registerView(id, { show: noop, hide: noop });
-        } catch (err) {
-          logger.error('[ProjectDashboard][_ensureNavigationViews]', err, {
-            context: 'projectDashboard'
-          });
-          // If it's a duplicate registration error, we can ignore
-        }
-      });
+      try {
+        this.navigationService.registerView('projectList', {
+          show : async () => {                       // delegate to real logic
+            try { await this.showProjectList(); } catch { return false; }
+            return true;
+          },
+          hide : async () => {
+            try { this.components.projectList?.hide?.(); } catch {}
+            return true;
+          }
+        });
+      } catch {/* ignore duplicate */ }
+
+      try {
+        this.navigationService.registerView('projectDetails', {
+          show : async (params = {}) => {
+            const { projectId, activeTab, conversationId } = params;
+            if (!projectId) return false;
+            try {
+              await this.showProjectDetails(projectId);
+              if (activeTab && this.components.projectDetails?.switchTab) {
+                this.components.projectDetails.switchTab(activeTab);
+              }
+              // (optional) handle conversationId here if needed
+            } catch { return false; }
+            return true;
+          },
+          hide : async () => {
+            try { this.components.projectDetails?.hide?.(); } catch {}
+            return true;
+          }
+        });
+      } catch {/* ignore duplicate */ }
       this._viewsRegistered = true;
     }
 
