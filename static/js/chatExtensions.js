@@ -17,7 +17,16 @@ export function createChatExtensions(options) {
   }
 
   // Strict Dependency Injection — all dependencies must be passed in via options
-  const { DependencySystem, eventHandlers, chatManager, auth, app, domAPI } = options;
+  const {
+    DependencySystem,
+    eventHandlers,
+    chatManager,
+    auth,
+    app,
+    domAPI,
+    domReadinessService,   // NEW
+    logger                 // NEW
+  } = options;
 
   if (!DependencySystem) {
     throw new Error("[chatExtensions] DependencySystem is required as a dependency.");
@@ -37,23 +46,26 @@ export function createChatExtensions(options) {
   if (!domAPI) {
     throw new Error("[chatExtensions] domAPI dependency is required (DI only).");
   }
+  if (!domReadinessService)
+    throw new Error('[chatExtensions] domReadinessService dependency is required (DI only).');
+  if (!logger)
+    throw new Error('[chatExtensions] logger dependency is required (DI only).');
 
   var trackListener = eventHandlers.trackListener.bind(eventHandlers);
   var MODULE_CONTEXT = "chatExtensions";
 
   function init() {
-    // Removed wrapping try/catch for logs
-    setupChatTitleEditing();
+    return domReadinessService.elementsReady(
+      ['#chatTitleEditBtn', '#chatTitle'],
+      { timeout: 8000, context: 'chatExtensions.init' }
+    ).then(() => {
+      setupChatTitleEditing();
 
-    // The visibility of chatTitleEditBtn is primarily controlled by the main application logic;
-    // no extra toggling here.
-
-    var doc = (typeof document !== "undefined") ? document : null;
-    if (doc) {
-      doc.dispatchEvent(new CustomEvent("chatextensions:initialized", {
-        detail: { success: true }
-      }));
-    }
+      const doc = domAPI.getDocument?.();
+      doc?.dispatchEvent(
+        new CustomEvent('chatextensions:initialized', { detail: { success: true } })
+      );
+    });
   }
 
   function setupChatTitleEditing() {

@@ -1101,7 +1101,9 @@ async function initializeUIComponents() {
     chatManager: DependencySystem.modules.get('chatManager'),
     auth: DependencySystem.modules.get('auth'),
     app: DependencySystem.modules.get('app'),
-    domAPI
+    domAPI,
+    domReadinessService,   // NEW
+    logger                 // NEW
   });
   DependencySystem.register('chatExtensions', chatExtensionsInstance);
   await safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
