@@ -437,9 +437,13 @@ function safeHandler(handler, description) {
 export async function init() {
   logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
 
-  // Global emergency fail-safe: if this init hasn't completed in 30000ms, forcibly log & dispatch 'app:ready' with error
+  // Global emergency fail-safe: if this init hasn't completed in the configured time, forcibly log & dispatch 'app:ready' with error
   let globalInitTimeoutFired = false;
-  const GLOBAL_INIT_TIMEOUT_MS = 30000;
+  const GLOBAL_INIT_TIMEOUT_MS = (
+    (APP_CONFIG && APP_CONFIG.TIMEOUTS && typeof APP_CONFIG.TIMEOUTS.GLOBAL_INIT === 'number')
+      ? APP_CONFIG.TIMEOUTS.GLOBAL_INIT
+      : 90000 // Default: 90 seconds
+  );
   const globalInitTimeoutId = browserAPI.getWindow().setTimeout(() => {
     globalInitTimeoutFired = true;
     const err = new Error(
