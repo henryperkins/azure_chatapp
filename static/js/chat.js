@@ -387,8 +387,7 @@ export function createChatManager(deps = {}) {
         }
         this.projectId = requestedProjectId;
 
-        await this._setupUIElements();
-        this._setupEventListeners();
+        await this._setupUIElements();          // UI refs only (no listeners yet)
 
         const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
         if (newConversationBtn) {
@@ -434,7 +433,10 @@ export function createChatManager(deps = {}) {
           });
           this._uiAttached = true;
 
-          // Usa ahora la versión de chat-ui-utils para listeners
+          // Re-acquire UI refs via chat-ui-utils helpers
+          await this._setupUIElements();
+
+          // Clean old listeners → bind fresh ones
           this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
           this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
           if (typeof this._setupEventListeners === 'function') {
