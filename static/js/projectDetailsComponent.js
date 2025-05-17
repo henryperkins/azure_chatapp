@@ -170,9 +170,48 @@ class ProjectDetailsComponent {
       return false;
     }
     const selectors = [
-      "#projectTitle", "#backToProjectsBtn", "#detailsTab", "#filesTab",
-      "#conversationsTab", "#artifactsTab", "#knowledgeTab",
-      ".project-tab-btn", "#projectDescription", "#projectGoals", "#projectInstructions"
+      /* ── Project-details core ─────────────────────────────── */
+      "#projectTitle", "#backToProjectsBtn",
+      "#detailsTab", "#filesTab", "#conversationsTab",
+      "#artifactsTab", "#knowledgeTab",
+      ".project-tab-btn",
+      "#projectDescription", "#projectGoals", "#projectInstructions",
+
+      /* ── Knowledge-base root & status ─────────────────────── */
+      "#knowledgeBaseActive", "#knowledgeBaseInactive", "#kbStatusBadge",
+
+      /* ── Search UI ────────────────────────────────────────── */
+      "#knowledgeSearchInput", "#runKnowledgeSearchBtn",
+      "#knowledgeResultsList", "#knowledgeSearchResults", "#knowledgeNoResults",
+      "#knowledgeTopK",
+
+      /* ── Activation / settings controls ───────────────────── */
+      "#knowledgeBaseEnabled", "#reprocessFilesBtn", "#setupKnowledgeBaseBtn",
+      "#knowledgeBaseSettingsBtn",
+
+      /* ── Settings modal & form ────────────────────────────── */
+      "#knowledgeBaseSettingsModal", "#knowledgeBaseForm",
+      "#cancelKnowledgeBaseFormBtn", "#deleteKnowledgeBaseBtn",
+      "#knowledgeBaseModelSelect",
+
+      /* ── Result modal ─────────────────────────────────────── */
+      "#knowledgeResultModal", "#knowledgeResultTitle",
+      "#knowledgeResultSource", "#knowledgeResultScore",
+      "#knowledgeResultContent", "#useInChatBtn",
+
+      /* ── Files section ────────────────────────────────────── */
+      "#knowledgeBaseFilesSection", "#knowledgeBaseFilesListContainer",
+
+      /* ── GitHub integration UI ────────────────────────────── */
+      "#kbGitHubAttachForm", "#kbGitHubRepoUrlInput",
+      "#kbGitHubBranchInput", "#kbGitHubFilePathsTextarea",
+      "#kbAttachRepoBtn",
+      "#kbGitHubAttachedRepoInfo", "#kbAttachedRepoUrlDisplay",
+      "#kbAttachedRepoBranchDisplay", "#kbDetachRepoBtn",
+
+      /* ── Optional info displays (safe to wait for) ────────── */
+      "#knowledgeBaseName", "#knowledgeBaseModelDisplay",
+      "#knowledgeBaseVersionDisplay", "#knowledgeBaseLastUsedDisplay"
     ];
     try {
       await this.domReadinessService.elementsReady(selectors, {
