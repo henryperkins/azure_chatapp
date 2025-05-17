@@ -138,29 +138,24 @@ class ProjectDetailsComponent {
         this._setState({ loading: false });
         return false;
       }
-      const html = await this.htmlTemplateLoader.load(this.templatePath);
-      container.innerHTML = html;
+      const success = await this.htmlTemplateLoader.loadTemplate({
+        url: this.templatePath,
+        containerSelector: `#${this.containerId}`,
+        eventName: 'projectDetailsTemplateLoaded'
+      });
+
+      if (!success) {
+        this._setState({ loading: false });
+        return false;
+      }
       this.elements.container = container;
       this._setState({ templateLoaded: true, loading: false });
       this._logInfo("Template loaded");
-
-      // Dispatch the event ProjectDashboard is waiting for
-      const eventSuccess = this.eventHandlers.createCustomEvent('projectDetailsTemplateLoaded', {
-        detail: { success: true, component: MODULE_CONTEXT, projectId: this.projectId }
-      });
-      this.domAPI.dispatchEvent(this.domAPI.getDocument(), eventSuccess);
 
       return true;
     } catch (err) {
       this._logError(`Failed to load template`, err);
       if (container) container.innerHTML = `<div class="p-4 text-error">Failed to load project details view.</div>`;
-
-      // Dispatch the event with failure status
-      const eventFailure = this.eventHandlers.createCustomEvent('projectDetailsTemplateLoaded', {
-        detail: { success: false, component: MODULE_CONTEXT, error: err, projectId: this.projectId }
-      });
-      this.domAPI.dispatchEvent(this.domAPI.getDocument(), eventFailure);
-
       this._setState({ loading: false });
       return false;
     }
