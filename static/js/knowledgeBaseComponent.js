@@ -73,6 +73,9 @@ export function createKnowledgeBaseComponent(options = {}) {
     kbGitHubBranchInput: "kbGitHubBranchInput",
     kbGitHubFilePathsTextarea: "kbGitHubFilePathsTextarea",
     kbAttachRepoBtn: "kbAttachRepoBtn",
+    knowledgeFileCount: "knowledgeFileCount",
+    knowledgeChunkCount: "knowledgeChunkCount",
+    knowledgeFileSize: "knowledgeFileSize",
   };
 
   const validateUUID = app.validateUUID;
@@ -160,7 +163,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         'kbModelDisplay', 'kbVersionDisplay', 'kbLastUsedDisplay',
         'kbGitHubAttachedRepoInfo', 'kbAttachedRepoUrlDisplay',
         'kbAttachedRepoBranchDisplay', 'kbDetachRepoBtn',
-        'kbNameDisplay' /* extend later if needed */
+        'kbNameDisplay', // extend later if needed
+        'knowledgeFileCount', 'knowledgeChunkCount', 'knowledgeFileSize'
       ]);
       const reqEl = (key, selector) => {
         // Prioritize elRefs if provided for a key
