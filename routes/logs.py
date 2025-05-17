@@ -11,8 +11,10 @@ except ImportError:
     # fallback stubs if colorama is not installed
     class Dummy:
         RESET_ALL = ""
+
     class ForeDummy(Dummy):
         RED = YELLOW = CYAN = GREEN = BLUE = MAGENTA = WHITE = RESET = ""
+
     class StyleDummy(Dummy):
         BRIGHT = NORMAL = DIM = ""
     Fore = ForeDummy()
@@ -62,16 +64,83 @@ async def receive_logs(request: Request):
         # Integration: Forward client log to Sentry as a message (retaining details)
         try:
             msg = f"[{ctx}] {level.upper()}: {summary}"
-            capture_custom_message(
-                message=msg,
-                level=level if level in {"info", "warning", "warn", "error", "debug", "fatal", "critical"} else "info",
-                extra={
-                    "browser": True,
-                    "source": ctx,
-                    "args": args,
-                    "raw": log_entry
-                }
-            )
+            if level == "fatal":
+                capture_custom_message(
+                    message=msg,
+                    level="fatal",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
+            elif level == "critical":
+                capture_custom_message(
+                    message=msg,
+                    level="critical",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
+            elif level == "error":
+                capture_custom_message(
+                    message=msg,
+                    level="error",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
+            elif level == "warning" or level == "warn":
+                capture_custom_message(
+                    message=msg,
+                    level="warning",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
+            elif level == "info":
+                capture_custom_message(
+                    message=msg,
+                    level="info",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
+            elif level == "debug":
+                capture_custom_message(
+                    message=msg,
+                    level="debug",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
+            else:
+                capture_custom_message(
+                    message=msg,
+                    level="info",
+                    extra={
+                        "browser": True,
+                        "source": ctx,
+                        "args": args,
+                        "raw": log_entry
+                    }
+                )
         except Exception as sentry_exc:
             print(f"{Fore.MAGENTA}[CLIENT LOG - SENTRY] Failed to forward log: {str(sentry_exc)}{reset}", file=sys.stderr, flush=True)
 
