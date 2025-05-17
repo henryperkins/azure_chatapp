@@ -53,6 +53,32 @@ export function createDomReadinessService({
   // Default timeout from APP_CONFIG or fallback
   const DEFAULT_TIMEOUT = APP_CONFIG?.TIMEOUTS?.DOM_READY ?? 10000;
 
+  // ───── instrumentation – selector wait times ─────
+  const _SEL_STATS = new Map();                // sel ➜ { total, waits:[{start,end,duration}] }
+  const _nowPerf   = () =>
+    (typeof performance !== 'undefined' && performance.now)
+      ? performance.now() : Date.now();
+
+  function _markStart(selectors) {
+    const t = _nowPerf();
+    selectors.forEach(sel => {
+      if (!_SEL_STATS.has(sel)) _SEL_STATS.set(sel, { total: 0, waits: [] });
+      _SEL_STATS.get(sel).waits.push({ start: t });
+    });
+  }
+  function _markEnd(selectors) {
+    const t = _nowPerf();
+    selectors.forEach(sel => {
+      const rec = _SEL_STATS.get(sel);
+      if (!rec || !rec.waits.length) return;
+      const last = rec.waits.at(-1);
+      if (last.end) return;                   // already closed
+      last.end      = t;
+      last.duration = t - last.start;
+      rec.total    += last.duration;
+    });
+  }
+
   /**
    * Waits for the document to be in a state beyond "loading"
    * (i.e. DOMContentLoaded or readystatechange complete).
@@ -93,6 +119,8 @@ export function createDomReadinessService({
   } = {}) {
     const selectorArray = Array.isArray(selectors) ? selectors : [selectors];
 
+    _markStart(selectorArray);
+
     // Quick check if all elements are already present
     const alreadyPresent = selectorArray.every((sel) => domAPI.querySelector(sel) !== null);
     if (alreadyPresent) {
@@ -109,11 +137,15 @@ export function createDomReadinessService({
 
     // Otherwise, create a new promise
     const promise = new Promise((resolve, reject) => {
+      const startTime = _nowPerf();
       // Step 1: Ensure the document is ready first
       documentReady().then(() => {
         // Check again in case the elements appeared during doc load
         const nowPresent = selectorArray.map((sel) => domAPI.querySelector(sel));
         if (nowPresent.every((el) => el !== null)) {
+          _markEnd(selectorArray);
+          const logger = DependencySystem?.modules?.get?.('logger') || {};
+          logger.info?.(`[domReadinessService] selectors [${selectorArray.join(', ')}] ready in ${Math.round(_nowPerf()-startTime)} ms`);
           return resolve(nowPresent);
         }
 
@@ -124,6 +156,8 @@ export function createDomReadinessService({
           appearanceListeners.delete(key);
 
           const missing = selectorArray.filter((sel) => domAPI.querySelector(sel) === null);
+          const logger = DependencySystem?.modules?.get?.('logger') || {};
+          logger.error?.(`[domReadinessService] TIMEOUT – missing selectors: ${missing.join(', ')} (context: ${context})`);
           reject(
             new Error(
               `[domReadinessService] Timed out after ${timeout}ms for selectors: ${
@@ -144,6 +178,9 @@ export function createDomReadinessService({
                 browserService.clearTimeout(timeoutId);
                 pendingPromises.delete(key);
                 appearanceListeners.delete(key);
+                _markEnd(selectorArray);
+                const logger = DependencySystem?.modules?.get?.('logger') || {};
+                logger.info?.(`[domReadinessService] selectors [${selectorArray.join(', ')}] ready in ${Math.round(_nowPerf()-startTime)} ms`);
                 resolve(newAppear);
               }
             }
@@ -294,11 +331,18 @@ export function createDomReadinessService({
     eventHandlers.cleanupListeners({ context: 'domReadinessService' });
   }
 
+  function getSelectorTimings() {
+    const out = {};
+    _SEL_STATS.forEach((v, k) => { out[k] = v.total; });
+    return out;
+  }
+
   return {
     documentReady,
     elementsReady,
     dependenciesAndElements,
     waitForEvent,
-    destroy
+    destroy,
+    getSelectorTimings            // ← new
   };
 }
