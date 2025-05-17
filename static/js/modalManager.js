@@ -267,6 +267,14 @@ class ModalManager {
       return false;
     }
 
+    // ── Contenido dinámico para modal de error ────────────────────────
+    if (modalName === 'error') {
+      const titleEl   = modalEl.querySelector('#errorModalTitle');
+      const messageEl = modalEl.querySelector('#errorModalMessage');
+      if (titleEl   && options.title)   titleEl.textContent   = options.title;
+      if (messageEl && options.message) messageEl.textContent = options.message;
+    }
+
     this._showModalElement(modalEl);
     this.activeModal = modalName;
     return true;

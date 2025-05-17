@@ -729,9 +729,7 @@ export function createSidebar({
         '#mainSidebar',
         '#navToggleBtn',
         '#closeSidebarBtn',
-        '#pinSidebarBtn',
-        '#chatSearchInput',
-        '#sidebarProjectSearch'
+        '#pinSidebarBtn'
       ],
       context: MODULE
     });

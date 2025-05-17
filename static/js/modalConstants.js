@@ -12,14 +12,15 @@
  */
 
 export const MODAL_MAPPINGS = {
-  project: 'projectModal',
-  login: 'loginModal',
-  delete: 'deleteConfirmModal',
-  confirm: 'confirmActionModal',
-  knowledge: 'knowledgeBaseSettingsModal',
+  project        : 'projectModal',
+  login          : 'loginModal',
+  delete         : 'deleteConfirmModal',
+  confirm        : 'confirmActionModal',
+  error          : 'errorModal',            // ← NUEVO
+  knowledge      : 'knowledgeBaseSettingsModal',
   knowledgeResult: 'knowledgeResultModal',
-  instructions: 'instructionsModal',
-  contentView: 'contentViewModal'
+  instructions   : 'instructionsModal',
+  contentView    : 'contentViewModal'
 };
 
 export default MODAL_MAPPINGS;
