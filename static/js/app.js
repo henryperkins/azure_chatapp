@@ -835,7 +835,8 @@ await authModule.init().catch(err => {
       remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
     },
     domAPI,
-    domReadinessService
+    domReadinessService,
+    logger // Ensures strict DI per guardrails/compliance for projectManager
   });
   eventHandlers.setProjectManager?.(projectManager);
 
@@ -873,10 +874,14 @@ await authModule.init().catch(err => {
       router: DependencySystem.modules.get('navigationService'),
       storage: DependencySystem.modules.get('storage'),
       sanitizer: DependencySystem.modules.get('sanitizer'),
+      htmlSanitizer: DependencySystem.modules.get('sanitizer'),
+      apiClient: DependencySystem.modules.get('apiRequest'),
       domAPI,
       domReadinessService,
       browserService: browserServiceInstance,
-      globalUtils: DependencySystem.modules.get('globalUtils')
+      globalUtils: DependencySystem.modules.get('globalUtils'),
+      APP_CONFIG,
+      logger
     });
     DependencySystem.register('projectListComponent', earlyPLC);
   }
