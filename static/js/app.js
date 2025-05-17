@@ -828,6 +828,7 @@ await authModule.init().catch(err => {
       storage: DependencySystem.modules.get('storage'),
       sanitizer: DependencySystem.modules.get('sanitizer'),
       domAPI,
+      domReadinessService,
       browserService: browserServiceInstance,
       globalUtils: DependencySystem.modules.get('globalUtils')
     });
@@ -1329,20 +1330,25 @@ function handleAuthStateChange(event) {
   }
 
   if (isAuthenticated) {
-    // Navigate to project list view after authentication
     const navService = DependencySystem.modules.get('navigationService');
+    const drs = domReadinessService;
     if (navService?.navigateToProjectList) {
-      // Use a small delay to ensure auth state is fully processed
-      setTimeout(() => {
-        navService.navigateToProjectList()
-          .catch(() => {
-            // Error handled silently
-          });
-      }, 100);
+      drs.waitForEvent('app:ready', {
+        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
+        context: 'app:handleAuthStateChange'
+      }).then(() => {
+        navService.navigateToProjectList().catch(() => {
+          // Error handled silently
+        });
+      });
     } else if (projectManager?.loadProjects) {
-      // Fallback to direct project loading if navigation service is not available
-      projectManager.loadProjects('all').catch(() => {
-        // Error handled silently
+      drs.waitForEvent('app:ready', {
+        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
+        context: 'app:handleAuthStateChange'
+      }).then(() => {
+        projectManager.loadProjects('all').catch(() => {
+          // Error handled silently
+        });
       });
     }
   }
