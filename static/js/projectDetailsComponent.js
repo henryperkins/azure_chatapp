@@ -766,7 +766,10 @@ class ProjectDetailsComponent {
   // --- Button state for new conversation ---
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
-    if (!newChatBtn || newChatBtn.hasAttribute('data-newchat-bound')) return;
+    if (!newChatBtn) return;
+
+    const alreadyBound = newChatBtn.hasAttribute('data-newchat-bound');
+
     // Project/auth ready?
     const kbActive =
       !!this.projectData?.knowledge_base &&
@@ -782,11 +785,16 @@ class ProjectDetailsComponent {
     newChatBtn.title = ready
       ? 'Start a new conversation'
       : (kbActive ? 'Sign-in required' : 'Knowledge Base required');
-    this.eventHandlers.trackListener(
-      newChatBtn, "click",
-      this._safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
-      { context: this.listenersContext, description: "NewConversationBtn" });
-    newChatBtn.setAttribute('data-newchat-bound','1');
+
+    if (!alreadyBound) {
+      this.eventHandlers.trackListener(
+        newChatBtn,
+        "click",
+        this._safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
+        { context: this.listenersContext, description: "NewConversationBtn" }
+      );
+      newChatBtn.setAttribute('data-newchat-bound', '1');
+    }
   }
 
   // --- Modal confirm and create new conversation logic ---
