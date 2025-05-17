@@ -209,7 +209,12 @@ class ProjectManager {
           }
           const origin = this.browserService?.getLocation?.().origin || '';
           const urlObj = new URL(baseUrl, origin);
-          urlObj.searchParams.set('filter', filter);
+          // No envíes el parámetro cuando filter === 'all' (evita 4xx del backend)
+          if (filter && filter !== 'all') {
+            urlObj.searchParams.set('filter', filter);
+          } else {
+            urlObj.searchParams.delete('filter');
+          }
           const res = await this._req(String(urlObj), undefined, "loadProjects");
           const list = extractResourceList(res, ['projects']);
           this.projects = list;
