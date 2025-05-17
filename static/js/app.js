@@ -275,8 +275,16 @@ const htmlTemplateLoader = createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
   eventHandlers,          // ← add this line
-  apiClient: {                      // HtmlTemplateLoader expects an object with .fetch()
-    fetch: (...args) => apiRequest(...args)
+  // HtmlTemplateLoader needs the real fetch so it receives a Response object,
+  // not the parsed body that apiRequest returns.
+  apiClient: {
+    fetch: (...args) => {
+      const win = browserAPI.getWindow();
+      if (!win?.fetch) {
+        throw new Error('[app] browserAPI.getWindow().fetch is not available');
+      }
+      return win.fetch(...args);
+    }
   },
   timerAPI: {
     setTimeout : (...args) => browserAPI.getWindow().setTimeout(...args),
