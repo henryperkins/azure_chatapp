@@ -53,5 +53,6 @@ export const APP_CONFIG = {
     CONSOLE_ENABLED: true,
     SENTRY_ENABLED: true,
     MIN_LEVEL: 'debug'  // Set to 'debug' for maximum visibility
-  }
+  },
+  DEBUG_UI: false,          // enables unresolved-selector report
 };
