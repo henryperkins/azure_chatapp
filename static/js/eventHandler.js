@@ -116,7 +116,11 @@ export function createEventHandlers({
     domAPI.addEventListener(element, type, wrapped, finalOpts);
 
     typeMap.set(handler, { wrappedHandler: wrapped, options: finalOpts, context: options.context });
-    return wrapped;
+    const remove = () => {               // función de des-registro
+      try { untrackListener(element, type, handler); } catch {/* noop */}
+    };
+
+    return remove;                       // ← ahora devolvemos la función “unsubscribe”
   }
 
   function toggleVisible(elementSelectorOrElement, show) {
