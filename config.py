@@ -22,6 +22,7 @@ import os
 from dotenv import load_dotenv
 from typing import Any
 from pathlib import Path
+from urllib.parse import quote_plus
 
 env_path = Path(__file__).resolve().parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
@@ -76,14 +77,29 @@ class Settings:
     # Session secret (insecure default)
     SESSION_SECRET = os.getenv("SESSION_SECRET", "dev_insecure_key")
 
-    # Database
-    DATABASE_URL = os.getenv(
-        "DATABASE_URL",
-        "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?sslmode=require",
-    )
+    # PostgreSQL connection: either full URL or separate PG* variables (preferred for Azure)
+    PGHOST = os.getenv("PGHOST", "")
+    PGPORT = os.getenv("PGPORT", "5432")
+    PGDATABASE = os.getenv("PGDATABASE", "")
+    PGUSER = os.getenv("PGUSER", "")
+    PGPASSWORD = os.getenv("PGPASSWORD", "")
+    PGSSLMODE = os.getenv("PGSSLMODE", "require")
 
-    # --- SSL strict ---
+    if PGHOST and PGDATABASE and PGUSER and PGPASSWORD:
+        _pwd = quote_plus(PGPASSWORD)
+        DATABASE_URL = (
+            f"postgresql+asyncpg://{PGUSER}:{_pwd}@{PGHOST}:{PGPORT}/{PGDATABASE}"
+            f"?sslmode={PGSSLMODE}"
+        )
+    else:
+        DATABASE_URL = os.getenv(
+            "DATABASE_URL",
+            "postgresql+asyncpg://hperkins:Twiohmld1234!@azure-chatapp-dbserver.postgres.database.azure.com:5432/azure_chatapp?sslmode=require",
+        )
+
+    # SSL settings for PostgreSQL connectivity
     PG_SSL_ALLOW_SELF_SIGNED: str = os.getenv("PG_SSL_ALLOW_SELF_SIGNED", "False")
+    PG_SSL_ROOT_CERT: str = os.getenv("PG_SSL_ROOT_CERT", "")
 
     # JWT Configuration
     JWT_SECRET = os.getenv("JWT_SECRET", "insecure-debug-jwt-secret")
