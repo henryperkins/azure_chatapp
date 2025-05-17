@@ -990,56 +990,24 @@ async function initializeUIComponents() {
       );
     }
 
-    // Next, ensure modals are loaded
-    const modalsActuallyLoaded = await new Promise((resolve) => {
-      const modalsContainer = domAPI.getElementById('modalsContainer');
-      if (modalsContainer && modalsContainer.childElementCount > 0) {
-        return resolve(true); // Modals already injected
-      }
+    /*  Esperamos, como máximo 8 s, al evento disparado por ModalManager
+        (“modalmanager:initialized”).  Si no llega NO abortamos la
+        inicialización de la UI: simplemente continuamos con una
+        advertencia. */
+    await Promise.race([
+      domReadinessService.waitForEvent('modalmanager:initialized', {
+        timeout: 8000,
+        context: 'app:initializeUIComponents:modalmanagerReady'
+      }).catch(() => {
+        logger.warn('[initializeUIComponents] ModalManager not ready after 8 s – continuing without blocking.', {
+          context: 'app:initializeUIComponents'
+        });
+      }),
+      // Fallback de tiempo (misma duración) para no colgar el await
+      new Promise(resolve => browserAPI.getWindow().setTimeout(resolve, 8000))
+    ]);
 
-      const timeoutId = browserAPI.getWindow().setTimeout(() => {
-        logger.warn(
-          '[initializeUIComponents] Timeout waiting for modalsLoaded event.',
-          { context: 'app:initializeUIComponents:modalsTimeout' }
-        );
-        resolve(false);
-      }, 8000);
-
-      eventHandlers.trackListener(
-        domAPI.getDocument(),
-        'modalsLoaded',
-        (e) => {
-          browserAPI.getWindow().clearTimeout(timeoutId);
-          const success = !!(e?.detail?.success);
-          if (!success) {
-            logger.warn(
-              '[initializeUIComponents] modalsLoaded event reported failure.',
-              { detail: e?.detail },
-              { context: 'app:initializeUIComponents:modalsLoadFailed' }
-            );
-          }
-          resolve(success);
-        },
-        {
-          once: true,
-          description: 'Wait for modalsLoaded in initializeUIComponents',
-          context: 'app'
-        }
-      );
-    });
-
-    if (modalsActuallyLoaded) {
-      domAndModalsReady = true;
-    } else {
-      logger.error(
-        '[initializeUIComponents] Modals did not load successfully. UI component creation might fail.',
-        { context: 'app:initializeUIComponents:modalsNotReady' }
-      );
-      // Depending on strictness, could set domAndModalsReady = false here or let it proceed with caution.
-      // For now, if critical DOM is ready but modals aren't, we might still proceed for non-modal components.
-      // However, KBC uses modals, so this is important. Let's be strict.
-      domAndModalsReady = false;
-    }
+    domAndModalsReady = true;   //  siempre continuamos; los modales pueden cargarse después
   } catch (err) {
     logger.error(
       '[initializeUIComponents] Error during DOM/modal readiness check',
@@ -1049,14 +1017,7 @@ async function initializeUIComponents() {
     // domAndModalsReady remains false
   }
 
-  if (!domAndModalsReady) {
-    logger.error(
-      '[initializeUIComponents] Critical DOM elements or Modals not ready. Aborting UI component creation.',
-      { context: 'app:initializeUIComponents:abort' }
-    );
-    _uiInitialized = false; // Can attempt to re-initialize later if applicable
-    return; // Exit initializeUIComponents
-  }
+  // Ya no abortamos si los modales aún no están listos
 
   createAndRegisterUIComponents();
 
