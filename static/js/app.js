@@ -1530,15 +1530,34 @@ function setupChatInitializationTrigger() {
 }
 
 function handleInitError(err) {
-  try {
-    const errorContainer = domAPI.getElementById('appInitError');
-    if (errorContainer) {
-      domAPI.setTextContent(errorContainer, `Application initialization failed: ${err?.message || 'Unknown error'}`);
-      domAPI.removeClass(errorContainer, 'hidden');
+  const modalManager = DependencySystem.modules.get?.('modalManager');
+  const shownViaModal = modalManager?.show?.('error', {
+    title  : 'Application initialization failed',
+    message: err?.message || 'Unknown initialization error',
+    showDuringInitialization: true
+  });
+
+  // Emitir evento centralizado para otros módulos
+  domAPI.dispatchEvent(
+    domAPI.getDocument(),
+    new CustomEvent('app:initError', { detail: { error: err } })
+  );
+
+  // Fallback visible sólo si no existe el modal
+  if (!shownViaModal) {
+    try {
+      const errorContainer = domAPI.getElementById('appInitError');
+      if (errorContainer) {
+        domAPI.setTextContent(
+          errorContainer,
+          `Application initialization failed: ${err?.message || 'Unknown error'}`
+        );
+        domAPI.removeClass(errorContainer, 'hidden');
+      }
+    } catch (displayErr) {
+      logger.error('[handleInitError]', displayErr, { context: 'app:handleInitError' });
+      // Error handled silently
     }
-  } catch (displayErr) {
-    logger.error('[handleInitError]', displayErr, { context: 'app:handleInitError' });
-    // Error handled silently
   }
 }
 
