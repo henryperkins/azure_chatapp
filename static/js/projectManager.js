@@ -108,9 +108,13 @@ class ProjectManager {
     this.domAPI       = domAPI ?? DependencySystem.modules.get('domAPI') ?? null;
 
     // Helper to await app readiness
+    // Wait for the central `'app:ready'` event emitted by app.js.
+    // The previous 10 s default proved too short on slower devices,
+    // causing premature time-outs.  Increase to 30 s (configurable later).
     this._awaitAppReady = async () =>
       this.domReadinessService.waitForEvent('app:ready', {
         deps: ['app'],
+        timeout: 30000, // ← bumped up from default 10 000 ms
         context: MODULE + '_awaitAppReady'
       });
 

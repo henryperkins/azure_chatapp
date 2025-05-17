@@ -153,10 +153,10 @@ export class ProjectListComponent {
                          || appInstance?.state?.isReady === true;
 
         if (!appIsReady) {
-          await this.domReadinessService.waitForEvent('app:ready', {
-            deps: ['app'],
-            context: MODULE_CONTEXT + '_appReady'
-          });
+          this.DependencySystem?.modules?.get?.('logger')?.warn(
+            '[ProjectListComponent][initialize] App is not fully ready yet – continuing anyway.',
+            { context: MODULE_CONTEXT }
+          );
         }
 
         this._doc = this.domAPI.getDocument?.();

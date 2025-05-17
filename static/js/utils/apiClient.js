@@ -69,6 +69,8 @@ export function createApiClient({
       const csrf = auth.getCSRFToken();
       if (csrf) {
         opts.headers["X-CSRF-Token"] = csrf;
+      } else if (auth?.logger && typeof auth.logger.warn === "function") {
+        auth.logger.warn("[apiClient] Missing CSRF token for " + normUrl, { context: "apiClient:csrf" });
       }
     }
 

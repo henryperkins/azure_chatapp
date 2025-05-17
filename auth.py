@@ -651,23 +651,19 @@ async def get_server_time() -> dict[str, float]:
 
 @router.get("/csrf", response_model=dict[str, str])
 async def get_csrf_token(request: Request, response: Response):
-    csrf_token = str(uuid.uuid4())
-
-    # Use the same expiration as the access token for synchronized protection
-    csrf_expiry = int(timedelta(minutes=ACCESS_TOKEN_EXPIRE_MIN).total_seconds())
-
+    # Generate CSRF token, store in session, set cookie, and return in JSON
+    import secrets
+    token = secrets.token_urlsafe()
+    request.session["csrf_token"] = token
     response.set_cookie(
         "csrf_token",
-        csrf_token,
-        max_age=csrf_expiry,
-        httponly=False,  # Must be accessible to JavaScript
+        token,
+        httponly=False,
+        secure=False,
         samesite="lax",
-        secure=request.url.scheme == "https",
         path="/",
     )
-    if settings.ENV.lower() != "production" and settings.DEBUG:
-        logger.debug("CSRF dev token => %s", csrf_token)
-    return {"token": csrf_token}
+    return {"token": token}
 
 
 @router.get("/apple-touch-icon.png", include_in_schema=False)
