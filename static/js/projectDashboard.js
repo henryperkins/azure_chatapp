@@ -1024,25 +1024,17 @@ export function createProjectDashboard(deps) {
       // List view controlling
       const listView = this.domAPI.getElementById('projectListView');
       if (listView) {
-        if (showList) {
-          listView.classList.remove('hidden', 'opacity-0');
-          listView.style.display = '';
-        } else {
-          listView.classList.add('hidden');
-          listView.style.display = 'none';
-        }
+        this.domAPI.toggleClass(listView, 'hidden', !showList);
+        this.domAPI.toggleClass(listView, 'opacity-0', !showList);
+        this.domAPI.setStyle(listView, 'display', showList ? '' : 'none');
       }
 
       // Details
       const detailsView = this.domAPI.getElementById('projectDetailsView');
       if (detailsView) {
-        if (showDetails) {
-          detailsView.classList.remove('hidden', 'opacity-0');
-          detailsView.style.display = 'flex';
-        } else {
-          detailsView.classList.add('hidden');
-          detailsView.style.display = 'none';
-        }
+        this.domAPI.toggleClass(detailsView, 'hidden', !showDetails);
+        this.domAPI.toggleClass(detailsView, 'opacity-0', !showDetails);
+        this.domAPI.setStyle(detailsView, 'display', showDetails ? 'flex' : 'none');
       }
     }
 

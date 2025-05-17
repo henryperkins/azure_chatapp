@@ -169,55 +169,46 @@ class ProjectDetailsComponent {
       this._logWarn(`Template not loaded. Cannot ensure elements are ready.`);
       return false;
     }
-    const selectors = [
-      /* ── Project-details core ─────────────────────────────── */
-      "#projectTitle", "#backToProjectsBtn",
-      "#detailsTab", "#filesTab", "#conversationsTab",
-      "#artifactsTab", "#knowledgeTab",
-      ".project-tab-btn",
+    const coreSelectors = [
+      '#projectTitle','#backToProjectsBtn',
+      '.project-tab-btn','#detailsTab','#filesTab',
+      '#conversationsTab','#artifactsTab'
+    ];
+    const optionalSelectors = [
+      "#knowledgeTab",
       "#projectDescription", "#projectGoals", "#projectInstructions",
-
-      /* ── Knowledge-base root & status ─────────────────────── */
       "#knowledgeBaseActive", "#knowledgeBaseInactive", "#kbStatusBadge",
-
-      /* ── Search UI ────────────────────────────────────────── */
       "#knowledgeSearchInput", "#runKnowledgeSearchBtn",
       "#knowledgeResultsList", "#knowledgeSearchResults", "#knowledgeNoResults",
       "#knowledgeTopK",
-
-      /* ── Activation / settings controls ───────────────────── */
       "#knowledgeBaseEnabled", "#reprocessFilesBtn", "#setupKnowledgeBaseBtn",
       "#knowledgeBaseSettingsBtn",
-
-      /* ── Settings modal & form ────────────────────────────── */
       "#knowledgeBaseSettingsModal", "#knowledgeBaseForm",
       "#cancelKnowledgeBaseFormBtn", "#deleteKnowledgeBaseBtn",
       "#knowledgeBaseModelSelect",
-
-      /* ── Result modal ─────────────────────────────────────── */
       "#knowledgeResultModal", "#knowledgeResultTitle",
       "#knowledgeResultSource", "#knowledgeResultScore",
       "#knowledgeResultContent", "#useInChatBtn",
-
-      /* ── Files section ────────────────────────────────────── */
       "#knowledgeBaseFilesSection", "#knowledgeBaseFilesListContainer",
-
-      /* ── GitHub integration UI ────────────────────────────── */
       "#kbGitHubAttachForm", "#kbGitHubRepoUrlInput",
       "#kbGitHubBranchInput", "#kbGitHubFilePathsTextarea",
       "#kbAttachRepoBtn",
       "#kbGitHubAttachedRepoInfo", "#kbAttachedRepoUrlDisplay",
       "#kbAttachedRepoBranchDisplay", "#kbDetachRepoBtn",
-
-      /* ── Optional info displays (safe to wait for) ────────── */
       "#knowledgeBaseName", "#knowledgeBaseModelDisplay",
       "#knowledgeBaseVersionDisplay", "#knowledgeBaseLastUsedDisplay"
     ];
     try {
-      await this.domReadinessService.elementsReady(selectors, {
+      await this.domReadinessService.elementsReady(coreSelectors, {
         timeout: this.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 5000,
         context: `${MODULE_CONTEXT}::_ensureElementsReady`
       });
+      // fire-and-forget for optional elements – do NOT block init
+      this.domReadinessService.elementsReady(optionalSelectors, {
+        observeMutations:true,
+        timeout: this.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 5000,
+        context:`${MODULE_CONTEXT}::optionalElements`
+      }).catch(()=>{});
       // Map elements cache
       const $ = (sel) => this.elements.container.querySelector(sel);
       this.elements.title = $("#projectTitle");
@@ -775,7 +766,7 @@ class ProjectDetailsComponent {
   // --- Button state for new conversation ---
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
-    if (!newChatBtn) return;
+    if (!newChatBtn || newChatBtn.hasAttribute('data-newchat-bound')) return;
     // Project/auth ready?
     const kbActive =
       !!this.projectData?.knowledge_base &&
@@ -795,6 +786,7 @@ class ProjectDetailsComponent {
       newChatBtn, "click",
       this._safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
       { context: this.listenersContext, description: "NewConversationBtn" });
+    newChatBtn.setAttribute('data-newchat-bound','1');
   }
 
   // --- Modal confirm and create new conversation logic ---

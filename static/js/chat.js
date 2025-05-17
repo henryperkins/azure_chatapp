@@ -206,8 +206,14 @@ export function createChatManager(deps = {}) {
    * The main ChatManager class, constructed with all DI references enclosed.
    */
   class ChatManager {
-    _api(endpoint, opts = {}) {
-      return this.apiRequest(endpoint, opts);
+    _api(endpoint, opts = {}, ctx = 'chatManager') {
+      const { params, ...rest } = opts;
+      if (params && typeof params === 'object') {
+        const u = new URL(endpoint, this.navAPI?.getHref?.() || '/');
+        Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
+        endpoint = String(u);
+      }
+      return this.apiRequest(endpoint, rest, ctx);
     }
 
     constructor() {
@@ -277,10 +283,16 @@ export function createChatManager(deps = {}) {
       logger.info("[ChatManager][initialize] Starting initialization", { context: "chatManager.initialize", options });
 
       // Instead of DependencySystem.waitFor, use domReadinessService for readiness
-      await domReadinessService.dependenciesAndElements(['app', 'domAPI', 'eventHandlers']);
+      await domReadinessService.dependenciesAndElements({
+        deps: ['app', 'domAPI', 'eventHandlers'],
+        context: 'ChatManager.init:core'
+      });
 
       // Wait for 'auth'
-      await domReadinessService.dependenciesAndElements(['auth']);
+      await domReadinessService.dependenciesAndElements({
+        deps: ['auth'],
+        context: 'ChatManager.init:auth'
+      });
       const auth = app?.DependencySystem?.modules?.get('auth') || null;
 
       // Store selectors from options
@@ -423,6 +435,8 @@ export function createChatManager(deps = {}) {
           this._uiAttached = true;
 
           // Usa ahora la versión de chat-ui-utils para listeners
+          this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
+          this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
           if (typeof this._setupEventListeners === 'function') {
             this._setupEventListeners();
           }
