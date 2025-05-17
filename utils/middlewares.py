@@ -75,6 +75,20 @@ NORMALIZE_PATHS = ["/api/users/", "/api/projects/", "/api/items/"]
 # ------------------------------------------------------------------ #
 #                           Middlewares                              #
 # ------------------------------------------------------------------ #
+class CSRFMiddleware(BaseHTTPMiddleware):
+    """
+    CSRF protection middleware. Requires X-CSRF-Token header on mutating requests.
+    """
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            header_token = request.headers.get("X-CSRF-Token")
+            session_token = request.session.get("csrf_token")
+            if not header_token or not session_token or header_token != session_token:
+                logger.warning(f"CSRF failure method={request.method} url={request.url.path} header={header_token} session={session_token}")
+                return JSONResponse(status_code=403, content={"detail": "Bad CSRF token"})
+        return await call_next(request)
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
     Adds a single debug marker header; skips all strict security headers.
@@ -297,6 +311,7 @@ def setup_middlewares(app: FastAPI) -> FastAPI:
     Mounts insecure middlewares in the recommended order. CORS (if any) should
     be added in your main entrypoint, not here.
     """
+    app.add_middleware(CSRFMiddleware)
     app.add_middleware(SecurityHeadersMiddleware, csp=DEFAULT_CSP)
     app.add_middleware(
         SentryContextMiddleware,

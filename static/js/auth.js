@@ -749,10 +749,27 @@ export function createAuthModule(deps) {
       );
     }
     try {
-      try {
-        await getCSRFTokenAsync(true);
-      } catch (csrfErr) {
-        logger.error('[AuthModule] CSRF token fetch during init (error intentionally handled):', csrfErr, { context: 'init' });
+      // CSRF retry logic: 3 attempts, user-visible modal on failure
+      let csrfFetched = false, lastError = null;
+      for (let attempt = 0; attempt < 3 && !csrfFetched; ++attempt) {
+        try {
+          await getCSRFTokenAsync(true);
+          csrfFetched = true;
+        } catch (csrfErr) {
+          lastError = csrfErr;
+          logger.error('[AuthModule] CSRF token fetch during init (retry attempt ' + (attempt + 1) + '):', csrfErr, { context: 'init' });
+        }
+      }
+      if (!csrfFetched) {
+        logger.error('[AuthModule] Failed to initialize CSRF after 3 attempts. Raising fatal modal.', lastError, { context: 'init' });
+        if (modalManager && typeof modalManager.show === 'function') {
+          modalManager.show('fatal', {
+            title: 'Startup Failure',
+            message: 'Could not fetch security token from the server after multiple attempts. Please check your connection or contact support.',
+            type: 'error',
+            context: 'CSRF_bootstrap'
+          });
+        }
       }
       let verified = false;
       try {

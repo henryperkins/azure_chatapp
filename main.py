@@ -102,14 +102,14 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
         "\nSet a robust SESSION_SECRET in your env file for any real usage."
     )
 
-    # app.add_middleware(
-    #     SessionMiddleware,
-    #     secret_key=session_secret,
-    #     session_cookie="session",
-    #     same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
-    #     https_only=False,  # Do not require HTTPS for local dev
-    #     max_age=60 * 60 * 24 * 7,  # 7 days
-    # )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=session_secret,
+        session_cookie="session",
+        same_site="lax",  # Use "lax" for local dev, or "strict" if you prefer
+        https_only=False,  # Do not require HTTPS for local dev
+        max_age=60 * 60 * 24 * 7,  # 7 days
+    )
 
     # ⚡ PATCH: Only add CORS if not production, no wide-open allowed.
     app.add_middleware(

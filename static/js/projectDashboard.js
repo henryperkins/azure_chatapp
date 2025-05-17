@@ -194,15 +194,41 @@ export function createProjectDashboard(deps) {
 
       const initStartTime = Date.now();
       try {
-        // Wait for global app readiness first
-        await this.domReadinessService.waitForEvent('app:ready', {
-          timeout: this.APP_CONFIG?.TIMEOUTS?.APP_READY_WAIT ?? 30000, // Use configured timeout or default
-          context: 'ProjectDashboard_waitForAppReady'
-        });
+        /*
+         * IMPORTANT: Do **not** block ProjectDashboard initialization on the
+         * global `app:ready` event.  The dashboard itself is created and
+         * initialized from within `initializeUIComponents()` *before* the
+         * main app orchestrator emits `app:ready`.  Waiting here would cause
+         * a circular dependency:
+         *   1. App.init → initializeUIComponents → ProjectDashboard.initialize()
+         *   2. ProjectDashboard.initialize() waits for `app:ready`
+         *   3. App.init needs initializeUIComponents to finish before it can
+         *      progress to the phase that emits `app:ready` ➔ dead-lock
+         *
+         * Instead we perform a fast synchronous check.  If the `appModule`
+         * already reports `state.isReady` we treat the app as ready; if not
+         * we continue without waiting—the dashboard listens to later auth and
+         * navigation events and will hydrate views on demand.
+         */
+        const appModule = this.dependencySystem.modules.get('appModule');
+        if (!appModule?.state?.isReady) {
+          logger.debug?.('[ProjectDashboard] Proceeding before app:ready (bootstrap phase).', { context: 'projectDashboard' });
+        }
 
         // Check authentication (read from app.state or auth module)
+        // Lack of authentication at this stage is **not** an error – the user may
+        // simply be visiting the landing page before logging in.  Treat it as a
+        // normal control-flow branch and surface as a warning-level log instead
+        // of an error to avoid noisy error tracking alerts.
+
         if (!this.auth?.isAuthenticated?.()) {
-          logger.error('[ProjectDashboard][initialize]', 'User not authenticated', { context: 'projectDashboard' });
+          logger.warn('[ProjectDashboard][initialize] User not authenticated – dashboard initialisation deferred until login.', { context: 'projectDashboard' });
+
+          // Re-use the same handler that reacts to AuthBus updates so visual
+          // feedback (login required message, hidden main content, etc.) is
+          // consistent across eager and event-driven code-paths.
+          this._onAuthStateChanged({ detail: { authenticated: false } });
+
           return false;
         }
 
@@ -854,31 +880,65 @@ export function createProjectDashboard(deps) {
       this.components.projectDetails =
         this.components.projectDetails || this.getModuleSafe('projectDetailsComponent');
 
-      try {
-        // Example: wait for template load if needed
-        await this.domReadinessService.waitForEvent('projectDetailsTemplateLoaded', {
-          timeout: 8000,
-          context: 'ProjectDashboard_template'
-        });
-      } catch (err) {
-        // Not fatal
-        logger.error('[ProjectDashboard][_initializeComponents:detailsTemplate]', err, {
-          context: 'projectDashboard'
-        });
-      }
+      // ------------------------------------------------------------------
+      // 1) Wait for Project-Details template if it hasn’t already been loaded
+      // ------------------------------------------------------------------
+      const detailsTemplateAlreadyLoaded = (() => {
+        try {
+          // Fast heuristics: component reports templateLoaded OR DOM element exists
+          if (this.components.projectDetails?.state?.templateLoaded) return true;
+          const detailsViewEl = this.domAPI.getElementById('projectDetailsView');
+          return !!(detailsViewEl && detailsViewEl.childElementCount > 0);
+        } catch {
+          return false;
+        }
+      })();
 
-      try {
-        await this.domReadinessService.waitForEvent('projectListHtmlLoaded', {
-          timeout: 8000,
-          context: 'ProjectDashboard_template'
-        });
+      if (!detailsTemplateAlreadyLoaded) {
+        try {
+          await this.domReadinessService.waitForEvent('projectDetailsTemplateLoaded', {
+            timeout: 8000,
+            context: 'ProjectDashboard_template'
+          });
         } catch (err) {
-          logger.error('[ProjectDashboard][_initializeComponents:listTemplate]', err, {
+          // This is non-fatal; log as warn to avoid noisy error reporting
+          logger.warn('[ProjectDashboard][_initializeComponents:detailsTemplate] Event timeout – continuing', {
+            err: err?.message || err,
             context: 'projectDashboard'
           });
         }
+      }
 
-      // Now ensure child components are fully inited
+      // ------------------------------------------------------------------
+      // 2) Wait for Project-List template if it hasn’t already been loaded
+      // ------------------------------------------------------------------
+      const listTemplateAlreadyLoaded = (() => {
+        try {
+          if (this.components.projectList?.state?.templateLoaded) return true;
+          const listViewEl = this.domAPI.getElementById('projectListView');
+          return !!(listViewEl && listViewEl.childElementCount > 0);
+        } catch {
+          return false;
+        }
+      })();
+
+      if (!listTemplateAlreadyLoaded) {
+        try {
+          await this.domReadinessService.waitForEvent('projectListHtmlLoaded', {
+            timeout: 8000,
+            context: 'ProjectDashboard_template'
+          });
+        } catch (err) {
+          logger.warn('[ProjectDashboard][_initializeComponents:listTemplate] Event timeout – continuing', {
+            err: err?.message || err,
+            context: 'projectDashboard'
+          });
+        }
+      }
+
+      // Initialise child components only once the app is fully ready to avoid
+      // premature waits for the `app:ready` event inside their own logic.
+      // Always attempt to initialize ProjectListComponent; do not block on appIsReady
       if (this.components.projectList && !this.components.projectList.state?.initialized) {
         try {
           await this.domReadinessService.dependenciesAndElements({
@@ -894,7 +954,9 @@ export function createProjectDashboard(deps) {
         }
       }
 
-      if (this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
+      // Retain appIsReady check for details, as details may depend on full app config
+      const appIsReady = this.dependencySystem.modules.get('appModule')?.state?.isReady === true;
+      if (appIsReady && this.components.projectDetails && !this.components.projectDetails.state?.initialized) {
         try {
           await this.domReadinessService.dependenciesAndElements({
             domSelectors: ['#projectDetailsView'],
@@ -907,6 +969,10 @@ export function createProjectDashboard(deps) {
             context: 'projectDashboard'
           });
         }
+      } else if (!appIsReady) {
+        logger.debug?.('[ProjectDashboard] Skipping early ProjectDetailsComponent initialization – waiting for app:ready.', {
+          context: 'projectDashboard'
+        });
       }
     }
 
