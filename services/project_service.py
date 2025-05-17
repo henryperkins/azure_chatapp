@@ -344,8 +344,9 @@ async def create_project(
     default_model: str = "claude-3-sonnet-20240229",
 ) -> Project:
     """
-    Creates a new project with the given parameters.
+    Creates a new project with the given parameters and ensures an active knowledge base.
     Raises ValueError if name is empty or invalid.
+    Returns the project instance (with .knowledge_base relationship loaded).
     """
     name = name.strip()
     if not name:
@@ -361,9 +362,16 @@ async def create_project(
     )
 
     db.add(project)
+    await db.flush()  # ensure project.id is available
+
+    # Ensure knowledge base
+    from services.knowledgebase_service import ensure_project_has_knowledge_base
+    await ensure_project_has_knowledge_base(project.id, db, user_id=user_id)
+
     await db.commit()
     await db.refresh(project)
-
+    # Eager load knowledge_base
+    await db.refresh(project, ["knowledge_base"])
     return project
 
 

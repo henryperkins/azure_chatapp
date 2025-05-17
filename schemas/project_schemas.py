@@ -56,6 +56,22 @@ class ArtifactResponse(BaseModel):
 class Config:
     from_attributes = True
 
+class KnowledgeBaseResponse(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    is_active: bool
+    embedding_model: Optional[str] = None
+    project_id: UUID
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None,
+            UUID: lambda v: str(v)
+        }
+
 class ProjectResponse(BaseModel):
     id: UUID
     name: str
@@ -69,6 +85,7 @@ class ProjectResponse(BaseModel):
     max_tokens: int
     version: int
     knowledge_base_id: Optional[UUID] = None
+    knowledge_base: Optional[KnowledgeBaseResponse] = None
     extra_data: Optional[dict] = None
     created_at: datetime
     updated_at: datetime

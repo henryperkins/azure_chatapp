@@ -10,7 +10,7 @@ Project management routes with full Sentry integration for:
 import logging
 import random
 import time
-import uuid # Added import for uuid
+import uuid  # Added import for uuid
 from uuid import UUID
 from typing import Optional, Tuple, Union
 from enum import Enum
@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, true
-from sqlalchemy.orm import selectinload, attributes as orm_attributes # Added for selectinload and flag_modified
+from sqlalchemy.orm import selectinload, attributes as orm_attributes  # Added for selectinload and flag_modified
 from sentry_sdk import (
     capture_exception,
     configure_scope,
@@ -32,7 +32,7 @@ from sentry_sdk import (
 
 from db import get_async_session
 from models.user import User, UserRole
-from models.project import Project, ProjectUserAssociation # Added ProjectUserAssociation
+from models.project import Project, ProjectUserAssociation  # Added ProjectUserAssociation
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact
@@ -105,7 +105,7 @@ async def create_project(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Create a new project with full monitoring and always create a knowledge base.
+    Create a new project with full monitoring and always auto-attach a knowledge base.
     """
     current_user, _token = current_user_tuple
     logger.info(
@@ -125,25 +125,17 @@ async def create_project(
             metrics.incr("project.create.attempt")
             start_time = time.time()
 
-            with sentry_span(op="db", description="Create project record"):
-                project = Project(
-                    user_id=current_user.id,
-                    name=project_data.name,
-                    goals=project_data.goals,
-                    description=project_data.description,
-                    custom_instructions=project_data.custom_instructions,
-                    max_tokens=project_data.max_tokens,
-                )
-                await save_model(db, project)
-
-            from services.knowledgebase_service import create_knowledge_base
-            kb = await create_knowledge_base(
-                name=f"{project.name} Knowledge Base",
-                project_id=project.id,
-                description="Auto-created KB for project",
+            # Create project (with auto-KB) via service
+            from services.project_service import create_project as svc_create_project
+            project = await svc_create_project(
+                user_id=current_user.id,
+                name=project_data.name,
                 db=db,
+                description=project_data.description,
+                goals=project_data.goals,
+                max_tokens=project_data.max_tokens,
+                default_model="claude-3-sonnet-20240229",
             )
-            await db.refresh(project)
 
             from services.conversation_service import ConversationService
             conv_service = ConversationService(db)
@@ -161,7 +153,8 @@ async def create_project(
             with configure_scope() as scope:
                 set_tag("user.id", str(current_user.id))
                 set_tag("project.id", str(project.id))
-                set_tag("kb.id", str(kb.id))
+                if getattr(project, "knowledge_base", None):
+                    set_tag("kb.id", str(project.knowledge_base.id))
 
             # Update user preferences
             user_stmt = (
@@ -196,10 +189,9 @@ async def create_project(
             orm_attributes.flag_modified(user_to_update, "preferences")
             await save_model(db, user_to_update)
 
-            logger.info(f"Created project {project_for_prefs_update.id} with KB {kb.id}")
+            logger.info(f"Created project {project_for_prefs_update.id} with KB {getattr(project_for_prefs_update, 'knowledge_base', None) and project_for_prefs_update.knowledge_base.id}")
 
             # For the final response, ensure the main project object is fully loaded as needed for serialization
-            # Use project_for_prefs_update as it's already fetched and refreshed in this scope
             await db.refresh(project_for_prefs_update, ["knowledge_base", "conversations"])
 
             return await create_standard_response(
