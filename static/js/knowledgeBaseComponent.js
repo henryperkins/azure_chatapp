@@ -156,11 +156,19 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     _initElements() {
+      const OPTIONAL_KEYS = new Set([
+        'kbModelDisplay', 'kbVersionDisplay', 'kbLastUsedDisplay',
+        'kbGitHubAttachedRepoInfo', 'kbAttachedRepoUrlDisplay',
+        'kbAttachedRepoBranchDisplay', 'kbDetachRepoBtn',
+        'kbNameDisplay' /* extend later if needed */
+      ]);
       const reqEl = (key, selector) => {
         // Prioritize elRefs if provided for a key
         const el = this.elRefs[key] || this.domAPI.getElementById(selector);
-        if (!el) throw new Error(`[${MODULE}] Missing required element/ref: ${key} (${selector})`);
-        return el;
+        if (!el && !OPTIONAL_KEYS.has(key)) {
+          throw new Error(`[${MODULE}] Missing required element/ref: ${key} (${selector})`);
+        }
+        return el;          // may be null for optional keys
       };
 
       for (const key in this.elementSelectors) {
