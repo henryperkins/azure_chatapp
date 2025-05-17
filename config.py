@@ -145,9 +145,10 @@ class Settings:
             "capabilities": [
                 "vision",
                 "structured_output",
+                "developer_messages",
                 "image_analysis",
                 "reasoning_effort",
-                "developer_messages",
+                "streaming"
             ],
             "parameters": {
                 "vision_detail": ["low", "high"],
@@ -168,15 +169,15 @@ class Settings:
                 "max_tokens",
             ],
         },
-        "o3-mini": {
+        "o3": {
             "provider": "azure",
             "type": "text",
-            "description": "Specialized text reasoning model",
+            "description": "Advanced o3 reasoning model with long context",
             "capabilities": [
                 "reasoning_effort",
-                "code_generation",
                 "developer_messages",
-                "streaming",
+                "structured_output",
+                "streaming"
             ],
             "parameters": {
                 "reasoning_effort": ["low", "medium", "high"],
@@ -194,6 +195,53 @@ class Settings:
                 "logit_bias",
                 "max_tokens",
             ],
+        },
+        "o3-mini": {
+            "provider": "azure",
+            "type": "text",
+            "description": "Specialized text reasoning model (mini variant of o3)",
+            "capabilities": [
+                "reasoning_effort",
+                "developer_messages",
+                "code_generation",
+                "streaming"
+            ],
+            "parameters": {
+                "reasoning_effort": ["low", "medium", "high"],
+            },
+            "max_context_tokens": 200000,
+            "max_completion_tokens": 100000,
+            "api_version": AZURE_REASONING_API_VERSION,
+            "unsupported_params": [
+                "temperature",
+                "top_p",
+                "presence_penalty",
+                "frequency_penalty",
+                "logprobs",
+                "top_logprobs",
+                "logit_bias",
+                "max_tokens",
+            ],
+        },
+        "gpt-4.1": {
+            "provider": "azure",
+            "type": "text",
+            "description": "GPT-4.1 large context and streaming support",
+            "capabilities": ["streaming"],
+            "parameters": {},
+            "max_context_tokens": 128000,
+            "max_tokens": 4096,
+            "api_version": AZURE_DEFAULT_API_VERSION,
+        },
+        "gpt-4.1-mini": {
+            "provider": "azure",
+            "type": "text",
+            "description": "GPT-4.1 mini model, fast and cost-effective",
+            "capabilities": ["streaming"],
+            "parameters": {},
+            "max_context_tokens": 128000,
+            "max_tokens": 4096,
+            "api_version": AZURE_DEFAULT_API_VERSION,
         },
         "gpt-4o": {
             "provider": "azure",

@@ -296,6 +296,7 @@ const htmlTemplateLoader = createHtmlTemplateLoader({
   DependencySystem,
   domAPI,
   eventHandlers,          // ← add this line
+  sanitizer,
   // HtmlTemplateLoader needs the real fetch so it receives a Response object,
   // not the parsed body that apiRequest returns.
   apiClient: {
@@ -1442,23 +1443,26 @@ function handleAuthStateChange(event) {
   if (isAuthenticated) {
     const navService = DependencySystem.modules.get('navigationService');
     const drs = domReadinessService;
-    if (navService?.navigateToProjectList) {
-      drs.waitForEvent('app:ready', {
-        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
-        context: 'app:handleAuthStateChange'
-      }).then(() => {
+    const readyNow = _appReadyDispatched || appModule.state.isReady;
+    const proceed = () => {
+      if (navService?.navigateToProjectList) {
         navService.navigateToProjectList().catch(() => {
           // Error handled silently
         });
-      });
-    } else if (projectManager?.loadProjects) {
-      drs.waitForEvent('app:ready', {
-        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
-        context: 'app:handleAuthStateChange'
-      }).then(() => {
+      } else if (projectManager?.loadProjects) {
         projectManager.loadProjects('all').catch(() => {
           // Error handled silently
         });
+      }
+    };
+    if (readyNow) {
+      proceed();
+    } else {
+      drs.waitForEvent('app:ready', {
+        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
+        context: 'app:handleAuthStateChange'
+      }).then(proceed).catch(() => {
+        // Error handled silently
       });
     }
   }

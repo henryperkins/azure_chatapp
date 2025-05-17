@@ -108,6 +108,7 @@ export function createModelConfig({
       provider: api.store.getItem("provider") || "anthropic",
       maxTokens: parseInt(api.store.getItem("maxTokens") || "4096", 10),
       reasoningEffort: api.store.getItem("reasoningEffort") || "medium",
+      reasoningSummary: api.store.getItem("reasoningSummary") || "concise",
       visionEnabled: api.store.getItem("visionEnabled") === "true",
       visionDetail: api.store.getItem("visionDetail") || "auto",
       visionImage: null,
@@ -165,13 +166,49 @@ export function createModelConfig({
         maxTokens: 200000,
         supportsVision: false,
       },
+      // Azure OpenAI Models
+      {
+        id: "o1",
+        name: "Azure o1 Reasoning",
+        provider: "azure",
+        maxTokens: 100000,
+        supportsVision: true,
+      },
+      {
+        id: "o3",
+        name: "Azure o3 Reasoning",
+        provider: "azure",
+        maxTokens: 100000,
+        supportsVision: false,
+      },
+      {
+        id: "o3-mini",
+        name: "Azure o3-mini Reasoning",
+        provider: "azure",
+        maxTokens: 100000,
+        supportsVision: false,
+      },
+      {
+        id: "gpt-4.1",
+        name: "GPT-4.1",
+        provider: "azure",
+        maxTokens: 4096,
+        supportsVision: false,
+      },
+      {
+        id: "gpt-4.1-mini",
+        name: "GPT-4.1 Mini",
+        provider: "azure",
+        maxTokens: 4096,
+        supportsVision: false,
+      },
       {
         id: "gpt-4o",
         name: "GPT-4o",
-        provider: "openai",
+        provider: "azure",
         maxTokens: 128000,
         supportsVision: true,
-      },
+      }
     ];
   }
 
@@ -196,6 +233,7 @@ export function createModelConfig({
       modelName: config.modelName || state.modelName,
       maxTokens: clampInt(config.maxTokens, 100, 100000, state.maxTokens),
       reasoningEffort: config.reasoningEffort || state.reasoningEffort,
+      reasoningSummary: config.reasoningSummary || state.reasoningSummary,
       visionEnabled:
         config.visionEnabled !== undefined ? config.visionEnabled : state.visionEnabled,
       visionDetail: config.visionDetail || state.visionDetail,
@@ -226,6 +264,7 @@ export function createModelConfig({
     api.store.setItem("provider", state.provider);
     api.store.setItem("maxTokens", state.maxTokens.toString());
     api.store.setItem("reasoningEffort", state.reasoningEffort);
+    api.store.setItem("reasoningSummary", state.reasoningSummary);
     api.store.setItem("visionEnabled", state.visionEnabled.toString());
     api.store.setItem("visionDetail", state.visionDetail);
     api.store.setItem("extendedThinking", state.extendedThinking.toString());
@@ -291,12 +330,51 @@ export function createModelConfig({
     setupModelDropdown(api, state);
     setupMaxTokensUI(api, state);
     setupVisionUI(api, state);
+    setupReasoningSummaryUI(api, state);
     setupExtendedThinkingUI(api, state);
     setupCustomInstructionsUI(api, state);
     updateModelDisplay(api, state);
 
     // Another internal event dispatch
     dispatchEventToBus(api, "modelconfig:initialized", { success: true });
+  }
+
+  function setupReasoningSummaryUI(api, state) {
+    const domAPI = api.ds?.modules?.get?.("domAPI");
+    if (!domAPI) return;
+    const container = domAPI.getElementById("reasoningSummaryContainer");
+    if (!container) return;
+
+    container.textContent = "";
+
+    const label = domAPI.createElement("label");
+    label.htmlFor = "reasoningSummarySelect";
+    label.className = "text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
+    label.textContent = "Reasoning Summary:";
+
+    const select = domAPI.createElement("select");
+    select.id = "reasoningSummarySelect";
+    select.className = "select select-bordered select-xs w-full";
+    ["concise", "detailed"].forEach((opt) => {
+      const o = domAPI.createElement("option");
+      o.value = opt;
+      o.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+      select.appendChild(o);
+    });
+    select.value = state.reasoningSummary;
+
+    registerListener(
+      api,
+      select,
+      "change",
+      () => {
+        updateModelConfig(api, state, { reasoningSummary: select.value });
+      },
+      { description: "reasoning summary select" }
+    );
+
+    container.appendChild(label);
+    container.appendChild(select);
   }
 
   function setupModelDropdown(api, state) {

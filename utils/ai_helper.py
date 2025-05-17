@@ -56,27 +56,36 @@ def get_model_config(
     """
     # Normalize model name to handle case sensitivity and extra whitespace
     normalized_name = model_name.strip()
-    
-    # Check for exact match first
-    if normalized_name in config.AZURE_OPENAI_MODELS:
-        logger.debug(f"Found Azure OpenAI model config for: {normalized_name}")
-        return config.AZURE_OPENAI_MODELS[normalized_name]
-    
-    # Check with case-insensitive matching if no exact match found
-    for azure_model_name, model_config in config.AZURE_OPENAI_MODELS.items():
-        if azure_model_name.lower() == normalized_name.lower():
-            logger.debug(f"Found Azure OpenAI model config (case-insensitive) for: {normalized_name} -> {azure_model_name}")
-            return model_config
-    
-    # Check for Claude models using the same approach
-    if normalized_name in config.CLAUDE_MODELS:
-        logger.debug(f"Found Claude model config for: {normalized_name}")
-        return config.CLAUDE_MODELS[normalized_name]
-    
-    for claude_model_name, model_config in config.CLAUDE_MODELS.items():
-        if claude_model_name.lower() == normalized_name.lower():
-            logger.debug(f"Found Claude model config (case-insensitive) for: {normalized_name} -> {claude_model_name}")
-            return model_config
+    all_azure_models = config.AZURE_OPENAI_MODELS
+    all_claude_models = config.CLAUDE_MODELS
+
+    # Expand Azure aliases for reliable matching (e.g. "gpt-4.1" might be input as "gpt-4-1")
+    alias_map = {
+        "gpt-4.1": "gpt-4.1",
+        "gpt-4.1-mini": "gpt-4.1-mini",
+        "gpt-4-1": "gpt-4.1",
+        "gpt-4-1-mini": "gpt-4.1-mini",
+        # Backwards compatible aliasing - extend as needed
+    }
+    alias = alias_map.get(normalized_name.lower(), normalized_name)
+
+    # Check for direct match first
+    if alias in all_azure_models:
+        logger.debug(f"Found Azure OpenAI model config for: {alias}")
+        return all_azure_models[alias]
+    if alias in all_claude_models:
+        logger.debug(f"Found Claude model config for: {alias}")
+        return all_claude_models[alias]
+
+    # Lowercase fallback for all Azure/Claude models
+    for name, m in all_azure_models.items():
+        if name.lower() == alias.lower():
+            logger.debug(f"Found Azure OpenAI model config (case-insensitive) for: {alias} -> {name}")
+            return m
+    for name, m in all_claude_models.items():
+        if name.lower() == alias.lower():
+            logger.debug(f"Found Claude model config (case-insensitive) for: {alias} -> {name}")
+            return m
 
     logger.warning(f"No configuration found for model: {normalized_name}")
     return None

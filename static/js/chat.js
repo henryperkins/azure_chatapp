@@ -563,6 +563,11 @@ export function createChatManager(deps = {}) {
         type: "message",
         vision_detail: cfg.visionDetail || "auto"
       };
+
+      // Reasoning summary (concise/detailed) if present in config
+      if (cfg.reasoningSummary) {
+        payload.reasoning_summary = cfg.reasoningSummary;
+      }
       if (this.currentImage) {
         this._validateImageSize();
         payload.image_data = this.currentImage;
