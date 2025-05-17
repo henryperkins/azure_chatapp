@@ -565,30 +565,26 @@ export function createProjectManager({
       }
     }
 
-    async getCurrentProject() {
-      await this.domReadinessService.waitForEvent('app:ready', {
-        deps: ['app'],
-        timeout: 30000,
-        context: `${MODULE}_awaitAppReady`
-      });
+    // getCurrentProject is now synchronous and does not block on app:ready.
+    getCurrentProject() {
       if (this.app && typeof this.app.getCurrentProject === 'function') {
         return this.app.getCurrentProject();
       }
+      // Log a warning if app or method is not available.
+      this.logger?.warn?.('[ProjectManager][getCurrentProject] app or app.getCurrentProject is not available.', { context: MODULE });
       return null;
     }
 
-    async setCurrentProject(project) {
+    // setCurrentProject is now synchronous and does not block on app:ready.
+    setCurrentProject(project) {
       if (!project || !project.id) {
         return;
       }
-      await this.domReadinessService.waitForEvent('app:ready', {
-        deps: ['app'],
-        timeout: 30000,
-        context: `${MODULE}_awaitAppReady`
-      });
       this.storage?.setItem?.('selectedProjectId', project.id);
       if (this.app && typeof this.app.setCurrentProject === 'function') {
         this.app.setCurrentProject(project);
+      } else {
+        this.logger?.warn?.('[ProjectManager][setCurrentProject] app or app.setCurrentProject is not available.', { context: MODULE });
       }
       this._emit('currentProjectChanged', { project });
       return project;
