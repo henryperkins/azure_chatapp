@@ -32,7 +32,7 @@ from sentry_sdk import (
 
 from db import get_async_session
 from models.user import User, UserRole
-from models.project import Project, ProjectUserAssociation  # Added ProjectUserAssociation
+from models.project import Project, ProjectUserAssociation # Added ProjectUserAssociation
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact
@@ -329,6 +329,9 @@ async def get_project(
                     logger.warning(f"Project not found: {proj_id}")
                     metrics.incr("project.view.failure", tags={"reason": "not_found"})
                     raise HTTPException(status_code=404, detail="Project not found")
+
+                # Eager-load knowledge_base before serialization to avoid async I/O in sync context
+                await db.refresh(project, ["knowledge_base"])
 
                 try:
                     await check_project_permission(

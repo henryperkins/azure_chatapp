@@ -5,23 +5,18 @@
 import logging
 import random
 import time
-from typing import List, Optional, Any, Literal, AsyncGenerator, Union
+from typing import List, Optional, Any, AsyncGenerator, Union
 
 import httpx
 from fastapi import HTTPException
-import sentry_sdk
 from sentry_sdk import (
     start_transaction,
     capture_exception,
-    configure_scope,
-    set_tag,
-    set_context,
     metrics
 )
 
 from config import settings  # Use centralized settings
-from utils.response_utils import azure_api_request  # If used in other parts
-from utils.sentry_utils import sentry_span, tag_transaction
+from utils.sentry_utils import sentry_span
 
 logger = logging.getLogger(__name__)
 
@@ -141,13 +136,17 @@ async def azure_chat(
     **kwargs
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """
-    Handle Azure OpenAI chat completions with Sentry-based monitoring.
+    Handle Azure OpenAI chat or responses API calls with Sentry-based monitoring.
     """
     transaction = start_transaction(
         op="ai.azure",
         name=f"Azure Chat - {model_name}",
         sampled=random.random() < AZURE_SAMPLE_RATE
     )
+
+    # Define which models must use the responses API.
+    RESPONSES_API_MODELS = {"o3", "gpt-4.1"}
+
     try:
         with transaction:
             transaction.set_tag("model.id", model_name)
@@ -155,32 +154,39 @@ async def azure_chat(
             # Validate parameters
             await validate_azure_params(model_name, model_config, kwargs)
 
-            # Build payload
-            payload = build_azure_payload(messages, model_name, model_config, **kwargs)
-            api_version = get_azure_api_version(model_config)
-            transaction.set_tag("azure.api_version", api_version)
-
-            # Identify streaming
-            if kwargs.get("stream") and "streaming" in model_config.get("capabilities", []):
-                return _stream_azure_response(payload, model_name, api_version)
+            # Branch: decide which API to use for this model
+            if model_name in RESPONSES_API_MODELS:
+                # -- Use Azure Responses API for o3 and gpt-4.1 --
+                payload = build_azure_payload(messages, model_name, model_config, **kwargs)
+                api_version = get_azure_api_version(model_config)
+                transaction.set_tag("azure.api_version", api_version)
+                resp_data = await _send_azure_responses_request(payload, model_name, api_version)
+                return resp_data
             else:
-                response = await _send_azure_request(payload, model_name, api_version)
-                # Check usage
-                if response.get("usage"):
-                    if "completion_tokens" in response["usage"]:
-                        metrics.distribution(
-                            "ai.azure.completion_tokens",
-                            response["usage"]["completion_tokens"],
-                            tags={"model": model_name}
-                        )
-                    # Reasoning tokens for advanced capability
-                    if response["usage"].get("reasoning_tokens"):
-                        metrics.distribution(
-                            "ai.azure.reasoning_tokens",
-                            response["usage"]["reasoning_tokens"],
-                            tags={"model": model_name}
-                        )
-                return response
+                # -- Use Chat Completions API (original path) --
+                payload = build_azure_payload(messages, model_name, model_config, **kwargs)
+                api_version = get_azure_api_version(model_config)
+                transaction.set_tag("azure.api_version", api_version)
+                if kwargs.get("stream") and "streaming" in model_config.get("capabilities", []):
+                    return _stream_azure_response(payload, model_name, api_version)
+                else:
+                    response = await _send_azure_request(payload, model_name, api_version)
+                    # Check usage
+                    if response.get("usage"):
+                        if "completion_tokens" in response["usage"]:
+                            metrics.distribution(
+                                "ai.azure.completion_tokens",
+                                response["usage"]["completion_tokens"],
+                                tags={"model": model_name}
+                            )
+                        # Reasoning tokens for advanced capability
+                        if response["usage"].get("reasoning_tokens"):
+                            metrics.distribution(
+                                "ai.azure.reasoning_tokens",
+                                response["usage"]["reasoning_tokens"],
+                                tags={"model": model_name}
+                            )
+                    return response
 
     except Exception as e:
         transaction.set_tag("error", True)
@@ -188,6 +194,68 @@ async def azure_chat(
         metrics.incr("ai.azure.request.failure", tags={"model": model_name})
         logger.error(f"Azure chat error ({model_name}): {str(e)}")
         raise
+
+# --- RESPONSES API SUPPORT ---
+
+async def _send_azure_responses_request(
+    payload: dict[str, Any],
+    model_name: str,
+    api_version: str,
+) -> dict[str, Any]:
+    """
+    Call the Azure OpenAI Responses API endpoint (for o3, gpt-4.1).
+    """
+    if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=500,
+            detail="Azure configuration missing"
+        )
+    url = f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/responses?api-version={api_version}"
+    headers = {
+        "Content-Type": "application/json",
+        "api-key": settings.AZURE_OPENAI_API_KEY
+    }
+
+    # Required fields for responses API
+    responses_payload = {
+        "model": model_name,
+        "input": payload.get("messages", []),
+    }
+    # Add additional params if present
+    for key in ["reasoning_effort", "stream", "max_tokens", "max_completion_tokens"]:
+        v = payload.get(key)
+        if v is not None:
+            responses_payload[key] = v
+
+    logger.debug(f"Responses API request to {url} with payload: {responses_payload}")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                json=responses_payload,
+                headers=headers,
+                timeout=120
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data
+    except httpx.RequestError as e:
+        logger.error(f"Azure Responses API request error: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to reach Azure OpenAI Responses API"
+        ) from e
+    except httpx.HTTPStatusError as e:
+        detail = f"Azure Responses API request failed ({e.response.status_code})"
+        try:
+            err_data = e.response.json()
+            if err_data.get("error", {}).get("message"):
+                detail += f" - {err_data['error']['message']}"
+        except Exception:
+            detail += f" - {e.response.text[:200]}"
+        logger.error(detail)
+        raise HTTPException(status_code=e.response.status_code, detail=detail) from e
 
 # -----------------------------
 # Azure Parameter Validation
@@ -230,6 +298,19 @@ async def validate_azure_params(
             if valid_efforts and kwargs["reasoning_effort"] not in valid_efforts:
                 raise ValueError(
                     f"Invalid reasoning_effort '{kwargs['reasoning_effort']}', must be in {valid_efforts}"
+                )
+
+        # Reasoning summary support (o-series/response APIs)
+        # The parameter may be named reasoning_summary (external) or summary (API).
+        reasoning_summary = kwargs.get("reasoning_summary") or kwargs.get("summary")
+        if reasoning_summary:
+            if "reasoning_summary" not in capabilities and "reasoning" not in capabilities:
+                raise ValueError(f"{model_name} doesn't support reasoning summaries.")
+            valid_summaries = parameters_config.get("reasoning_summary", []) or parameters_config.get("reasoning_summary_values", [])
+            # Azure spec uses 'concise' and 'detailed', check against config if defined
+            if valid_summaries and reasoning_summary not in valid_summaries:
+                raise ValueError(
+                    f"Invalid reasoning_summary '{reasoning_summary}', must be one of {valid_summaries}"
                 )
 
 def build_azure_payload(
@@ -281,9 +362,16 @@ def build_azure_payload(
             payload["temperature"] = kwargs["temperature"]
         # Similarly handle top_p, presence_penalty, frequency_penalty, etc.
 
-        # Reasoning effort
-        if kwargs.get("reasoning_effort") and "reasoning_effort" in model_config.get("capabilities", []):
-            payload["reasoning_effort"] = kwargs["reasoning_effort"]
+        # Reasoning (o-series/response APIs): nest effort/summary per API spec
+        reasoning_effort = kwargs.get("reasoning_effort")
+        reasoning_summary = kwargs.get("reasoning_summary") or kwargs.get("summary")
+        reasoning_obj = {}
+        if reasoning_effort and "reasoning_effort" in model_config.get("capabilities", []):
+            reasoning_obj["effort"] = reasoning_effort
+        if reasoning_summary:
+            reasoning_obj["summary"] = reasoning_summary
+        if reasoning_obj:
+            payload["reasoning"] = reasoning_obj
 
         # Vision
         if kwargs.get("image_data") and "vision" in model_config.get("capabilities", []):
