@@ -674,6 +674,9 @@ textarea:focus-visible,
 /* Utility: Ensure all images are lazy-loaded by default (for HTML, not CSS) */
 /* [No CSS needed, but document for devs: use loading="lazy" on <img> tags] */
 
+/* Utility – truncate anything that could overflow on mobile */
+.truncate-mobile{ @apply truncate overflow-hidden text-ellipsis; }
+
 /* Include DaisyUI plugin at the end if not in aggregator */
 /* @plugin "daisyui"; */
 
@@ -710,6 +713,27 @@ textarea:focus-visible,
   [role="button"]{
     min-width:44px !important;
     min-height:44px !important;
+  }
+
+  /* 2.b – Links: guarantee ≥ 44 × 44 px touch target */
+  a.link,
+  .link,
+  a[role="link"],
+  [role="link"]{
+    min-width :44px !important;
+    min-height:44px !important;
+    display   :inline-flex !important;   /* keeps layout but enlarges hit-box */
+    align-items:center;
+  }
+
+  /* 3.b – Scroll cue for narrow, overflowable areas */
+  .overflow-x-auto::after{
+    content:"\2190 scroll \2192";
+    display:block;
+    text-align:center;
+    font-size:.75rem;
+    color:rgb(120 120 120 / .6);
+    margin-top:.25rem;
   }
 
   /* 3 – Prevent horizontal overflow */

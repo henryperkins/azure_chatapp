@@ -647,7 +647,7 @@ export function createProjectListComponent(deps) {
         const theme = state.customization.theme || "default";
         const themeBg = theme === "default" ? "bg-base-100" : `bg-${theme}`;
         const themeText = theme === "default" ? "text-base-content" : `text-${theme}-content`;
-        return `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-x-auto`;
+        return `project-card ${themeBg} ${themeText} shadow-md hover:shadow-lg transition-all border border-base-300 rounded-box p-4 flex flex-col h-full mb-3 max-w-full w-full overflow-hidden`;
     }
     function _buildCardHeader(project) {
         const header = domAPI.createElement("div");

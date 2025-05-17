@@ -111,7 +111,7 @@
 }
 
 .file-upload-progress-label {
-  @apply text-xs text-base-content/70 mb-1;
+  @apply text-sm text-base-content/70 mb-1;
 }
 
 .file-upload-progress-bar {
