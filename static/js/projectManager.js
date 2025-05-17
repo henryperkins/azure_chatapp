@@ -176,7 +176,33 @@ export function createProjectManager({
     }
 
     _emit(event, detail) {
+      /* dispatch on local bus (keeps module-internal listeners) */
       this.eventBus.dispatchEvent(new CustomEvent(event, { detail }));
+
+      /* additionally broadcast to the global document so other components
+         (e.g. ProjectListComponent, ProjectDashboard) that listen on
+         document receive the same updates. All DOM access goes through
+         the DI-provided domAPI to respect guardrails. */
+      try {
+        if (this.domAPI?.getDocument) {
+          const doc = this.domAPI.getDocument();
+          if (doc) {
+            /* use DependencySystem-provided eventHandlers.createCustomEvent
+               when available, else fall back to new CustomEvent               */
+            const evh = this.DependencySystem?.modules?.get?.('eventHandlers');
+            const domEvt = evh?.createCustomEvent
+              ? evh.createCustomEvent(event, { detail })
+              : new CustomEvent(event, { detail });
+
+            this.domAPI.dispatchEvent(doc, domEvt);
+          }
+        }
+      } catch (err) {
+        /* non-fatal: log and continue */
+        this.logger?.warn?.(`[ProjectManager] failed to rebroadcast "${event}"`, err, {
+          context: this.moduleName
+        });
+      }
     }
 
     _authOk(failEvent, extraDetail = {}) {
