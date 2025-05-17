@@ -195,8 +195,8 @@ class ProjectDetailsComponent {
       "#kbAttachRepoBtn",
       "#kbGitHubAttachedRepoInfo", "#kbAttachedRepoUrlDisplay",
       "#kbAttachedRepoBranchDisplay", "#kbDetachRepoBtn",
-      "#knowledgeBaseName", "#knowledgeBaseModelDisplay",
-      "#knowledgeBaseVersionDisplay", "#knowledgeBaseLastUsedDisplay"
+      "#knowledgeBaseName", "#kbModelDisplay",
+      "#kbVersionDisplay", "#kbLastUsedDisplay"
     ];
     try {
       await this.domReadinessService.elementsReady(coreSelectors, {
