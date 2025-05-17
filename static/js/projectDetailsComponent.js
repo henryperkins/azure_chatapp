@@ -334,9 +334,11 @@ class ProjectDetailsComponent {
       this.projectData = project || null;
       if (!this.projectData) this._logError(`Unable to load project ${projectId}`);
       else this._logInfo(`Project data loaded`, { projectId });
+      this._setState({ projectDataLoaded: true });
     } catch (err) {
       this._logError(`Error loading project data`, err);
       this.projectData = null;
+      this._setState({ projectDataLoaded: false });
     }
   }
 
@@ -391,10 +393,27 @@ class ProjectDetailsComponent {
   }
 
   renderStats(s = {}) {
-    const fileCount = this.elements.container.querySelector('#fileCount');
-    const convoCount = this.elements.container.querySelector('#conversationCount');
-    if (fileCount && s.fileCount !== undefined) fileCount.textContent = s.fileCount;
-    if (convoCount && s.conversationCount !== undefined) convoCount.textContent = s.conversationCount;
+    const c = this.elements.container;
+    if (!c) return;
+
+    const sel = (id) => c.querySelector(id);
+
+    // Counts
+    if (sel('#fileCount')        && s.fileCount        !== undefined) sel('#fileCount').textContent        = s.fileCount;
+    if (sel('#conversationCount')&& s.conversationCount!== undefined) sel('#conversationCount').textContent = s.conversationCount;
+    if (sel('#artifactCount')    && s.artifactCount    !== undefined) sel('#artifactCount').textContent     = s.artifactCount;
+
+    // Token usage
+    if (s.tokenUsage !== undefined && s.maxTokens !== undefined && s.maxTokens > 0) {
+      const pct = Math.min(100, Math.round((s.tokenUsage / s.maxTokens) * 100));
+      if (sel('#tokenUsage'))       sel('#tokenUsage').textContent       = s.tokenUsage;
+      if (sel('#maxTokens'))        sel('#maxTokens').textContent        = s.maxTokens;
+      if (sel('#tokenPercentage'))  sel('#tokenPercentage').textContent  = pct + '%';
+      if (sel('#tokenProgressBar')) {
+        sel('#tokenProgressBar').value = pct;
+        sel('#tokenProgressBar').max   = 100;
+      }
+    }
   }
 
   // --- File/Conversation/Artifact Item DOM (sanitized, event-tracked) ---
@@ -581,6 +600,13 @@ class ProjectDetailsComponent {
   destroy() {
     this.hide();
     this._logInfo("Destroyed.");
+  }
+
+  // Expose simple wrapper so external callers (Dashboard) can refresh data
+  renderProject(projectObj) {
+    if (!projectObj) return;
+    this.projectData = projectObj;
+    this._renderProjectData();
   }
 
   // --- Button state for new conversation ---
