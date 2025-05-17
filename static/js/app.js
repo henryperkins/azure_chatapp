@@ -720,6 +720,16 @@ export async function init() {
       }
     });
 
+    // Log DOM selector wait stats
+    const selStats = domReadinessService.getSelectorTimings?.() || {};
+    Object.entries(selStats)
+      .sort(([,a],[,b]) => b - a)
+      .forEach(([sel, ms]) =>
+        logger.info(`[Perf] DOM selector "${sel}" waited ${ms} ms total`));
+    domAPI.getDocument()?.dispatchEvent(
+      new CustomEvent('app:domSelectorTimings', { detail: selStats })
+    );
+
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
       AppBus.dispatchEvent(new CustomEvent('app:ready', { detail: { success: true } }));
