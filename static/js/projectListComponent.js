@@ -790,6 +790,24 @@ export function createProjectListComponent(deps) {
     // --- Navigation callback can be overridden after creation ---
     function onViewProject(projectObjOrId) {
         const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
+        // --- Set project context before navigation ---
+        if (projectManager && typeof projectManager.setCurrentProject === "function") {
+            // Already have project object
+            if (typeof projectObjOrId === "object" && projectObjOrId.id) {
+                projectManager.setCurrentProject(projectObjOrId);
+            } else if (projectId) {
+                // Try to locate project object in state
+                const projectObj = state.projects.find(p => {
+                    const pid = p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
+                    return String(pid) === String(projectId);
+                });
+                if (projectObj) {
+                    projectManager.setCurrentProject(projectObj);
+                } else {
+                    projectManager.setCurrentProject({ id: projectId });
+                }
+            }
+        }
         if (app?.DependencySystem?.modules?.get?.('navigationService')
             && typeof app.DependencySystem.modules.get('navigationService').navigateToProject === "function"
         ) {

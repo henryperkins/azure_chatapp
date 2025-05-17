@@ -2,12 +2,12 @@ import logging
 import sys
 import os
 import json
-import datetime
 from contextvars import ContextVar
+from typing import Optional
 
 # ContextVars for request_id and trace_id
-request_id_var: ContextVar[str] = ContextVar("request_id", default=None)
-trace_id_var: ContextVar[str] = ContextVar("trace_id", default=None)
+request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+trace_id_var: ContextVar[Optional[str]] = ContextVar("trace_id", default=None)
 
 class ContextFilter(logging.Filter):
     """
@@ -26,33 +26,33 @@ class CustomJsonFormatter(logging.Formatter):
     """
     def format(self, record):
         log_record = {}
-        
+
         # Add basic fields
         log_record['timestamp'] = self.formatTime(record, self.datefmt)
         log_record['level'] = record.levelname
         log_record['message'] = record.getMessage()
-        
+
         # Add logger name, module, and line info
         log_record['name'] = record.name
         log_record['module'] = record.module
         log_record['funcName'] = record.funcName
         log_record['lineno'] = record.lineno
-        
+
         # Ensure contextvars are included if available
         if hasattr(record, 'request_id') and record.request_id:
             log_record['request_id'] = record.request_id
         if hasattr(record, 'trace_id') and record.trace_id:
             log_record['trace_id'] = record.trace_id
-            
+
         # Add any extra fields from the record
         if hasattr(record, 'extra'):
             for key, value in record.extra.items():
                 log_record[key] = value
-                
+
         # Add exception info if present
         if record.exc_info:
             log_record['exc_info'] = self.formatException(record.exc_info)
-            
+
         return json.dumps(log_record)
 
 def init_structured_logging():

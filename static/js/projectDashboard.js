@@ -776,11 +776,16 @@ export function createProjectDashboard(deps) {
       try {
         this.navigationService.registerView('projectList', {
           show : async () => {                       // delegate to real logic
-            try { await this.showProjectList(); } catch { return false; }
+            try { await this.showProjectList(); } catch {
+              // Ignore navigation failures to keep dashboard robust (view not found, etc.)
+              return false;
+            }
             return true;
           },
           hide : async () => {
-            try { this.components.projectList?.hide?.(); } catch {}
+            try { this.components.projectList?.hide?.(); } catch {
+              // Ignore errors during hide - likely uninitialized, no critical error
+            }
             return true;
           }
         });
