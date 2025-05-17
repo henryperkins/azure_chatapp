@@ -752,6 +752,33 @@ export function createSidebar({
         { context: MODULE, description: 'Toggle sidebar settings panel' }
       );
     }
+
+    /* ──────────────────────────────────────────────────────────────
+       Mobile UX: auto-close the sidebar after any in-sidebar link
+       is activated when screen < 768 px and sidebar isn’t pinned.
+       ────────────────────────────────────────────────────────────── */
+    function maybeAutoCloseMobile() {
+      if (!pinned && viewportAPI.getInnerWidth() < 768) {
+        closeSidebar();
+      }
+    }
+
+    // Delegate clicks on any anchor inside the sidebar
+    eventHandlers.trackListener(
+      el,
+      'click',
+      wrapWithErrorLog((e) => {
+        const link = e.target.closest('a');
+        if (link && el.contains(link)) {
+          maybeAutoCloseMobile();
+        }
+      }, 'sidebarAnchor click auto-close'),
+      {
+        capture: true,                       // early catch before default
+        context: MODULE,
+        description: 'Auto-close sidebar on mobile after link click'
+      }
+    );
   }
 
   /* ------------------------------------------------------------------ */
