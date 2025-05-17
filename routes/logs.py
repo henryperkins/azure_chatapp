@@ -20,7 +20,7 @@ except ImportError:
 
 router = APIRouter()
 
-def get_color_for_level(level:str):
+def get_color_for_level(level: str):
     level = level.lower()
     if level == "error" or level == "fatal" or level == "critical":
         return Fore.RED + Style.BRIGHT
