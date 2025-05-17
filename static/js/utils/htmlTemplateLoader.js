@@ -21,7 +21,8 @@ export function createHtmlTemplateLoader({
   sanitizer = null,
   eventHandlers,
   apiClient,
-  timerAPI
+  timerAPI,
+  logger = DependencySystem?.modules?.get?.('logger') || { warn: ()=>{} }
 } = {}) {
   // Guardrail checks:
   if (!DependencySystem) throw new Error('DependencySystem required by HtmlTemplateLoader');
@@ -47,9 +48,7 @@ export function createHtmlTemplateLoader({
   } = {}) {
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
-      if (typeof console !== 'undefined' && console.warn) {
-        console.warn(`[HtmlTemplateLoader] WARNING: containerSelector "${containerSelector}" not found in DOM. Template will not be injected.`);
-      }
+      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template will not be injected.`);
       return false;
     }
 
@@ -74,9 +73,7 @@ export function createHtmlTemplateLoader({
         container.innerHTML = sanitizer.sanitize(html);
       } else {
         // SECURITY WARNING: Injecting raw HTML without a sanitizer is dangerous!
-        if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[HtmlTemplateLoader] WARNING: No sanitizer provided. Injecting raw HTML is a security risk.');
-        }
+        logger.warn('[HtmlTemplateLoader] No sanitizer provided. Injecting raw HTML is a security risk.');
         container.innerHTML = html;
       }
 

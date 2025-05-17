@@ -109,7 +109,8 @@ DependencySystem.register('AppBus', AppBus);
 const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
   windowObject: browserAPI.getWindow(),
-  debug: APP_CONFIG.DEBUG === true
+  debug: APP_CONFIG.DEBUG === true,
+  logger
 });
 
 // ---------------------------------------------------------------------------
