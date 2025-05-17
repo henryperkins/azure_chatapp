@@ -299,6 +299,11 @@ class ProjectDetailsComponent {
             e.detail?.knowledgeBase,
             e.detail?.projectId
           );
+          if (e.detail?.knowledgeBase) {
+            this.projectData ||= {};
+            this.projectData.knowledge_base = e.detail.knowledgeBase;
+            this._updateNewChatButtonState();
+          }
         },
         "KnowledgeLoaded"
       ),
@@ -322,6 +327,11 @@ class ProjectDetailsComponent {
     });
     this._logInfo(`Activated tab: ${tabName}`);
     this._loadTabContent(tabName);
+
+    if (tabName === 'conversations' || tabName === 'chat') {
+      this._restoreChatAndModelConfig();
+      this._updateNewChatButtonState();
+    }
   }
 
   // --- Per-tab: load/refresh data on view, call PM or init subcomponents as needed ----
@@ -441,6 +451,24 @@ class ProjectDetailsComponent {
   }
 
   // --- File/Conversation/Artifact Item DOM (sanitized, event-tracked) ---
+
+  // ─── Desactivar UI de chat en caso de error / KB inactivo ───
+  disableChatUI(reason = 'Chat unavailable') {
+    try {
+      const input = this.domAPI.getElementById('projectChatInput');
+      const send  = this.domAPI.getElementById('projectChatSendBtn');
+      [input, send].forEach(el => {
+        if (!el) return;
+        el.disabled = true;
+        el.title    = reason;
+        this.domAPI.addClass(el, 'cursor-not-allowed');
+        this.domAPI.addClass(el, 'opacity-50');
+      });
+      const chatBox = this.domAPI.getElementById('projectChatUI');
+      if (chatBox) this.domAPI.addClass(chatBox, 'opacity-40');
+    } catch {/* silent */ }
+  }
+
   _fileItem(file) {
     const doc = this.domAPI.getDocument();
     const div = doc.createElement("div");
@@ -710,12 +738,20 @@ class ProjectDetailsComponent {
     const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
     if (!newChatBtn) return;
     // Project/auth ready?
+    const kbActive =
+      !!this.projectData?.knowledge_base &&
+      this.projectData.knowledge_base.is_active !== false;
+
     const ready =
       this.state.projectDataLoaded &&
-      (this.auth?.isAuthenticated?.() ?? false);
+      (this.auth?.isAuthenticated?.() ?? false) &&
+      kbActive;
+
     newChatBtn.disabled = !ready;
     newChatBtn.classList.toggle("btn-disabled", !ready);
-    newChatBtn.title = ready ? 'Start a new conversation' : 'Sign-in required';
+    newChatBtn.title = ready
+      ? 'Start a new conversation'
+      : (kbActive ? 'Sign-in required' : 'Knowledge Base required');
     this.eventHandlers.trackListener(
       newChatBtn, "click",
       this._safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
