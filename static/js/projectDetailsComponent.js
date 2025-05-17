@@ -36,7 +36,8 @@ export function createProjectDetailsComponent(deps) {
     knowledgeBaseComponent = null,
     modelConfig = null,
     chatManager = null,
-    apiClient = null
+    apiClient = null,
+    app = null               // ← NUEVO
   } = deps || {};
 
   const missing = [];
@@ -88,6 +89,7 @@ class ProjectDetailsComponent {
     this.modalManager = deps.modalManager;
     this.FileUploadComponentClass = deps.FileUploadComponentClass;
     this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
+    this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('app');
     this.modelConfig = deps.modelConfig;
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
