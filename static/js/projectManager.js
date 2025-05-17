@@ -430,7 +430,21 @@ class ProjectManager {
       this.storage.setItem?.('selectedProjectId', projectId);
       return await this.chatManager.createNewConversation(projectId, opts);
     } catch (err) {
-      this._handleErr('conversationCreateError', err, null, { source: 'createConversation', detail: { projectId } });
+      const msg = String(err?.message ?? '').toLowerCase();
+      if (msg.includes('no knowledge base')) {
+        try {
+          await this._ensureKnowledgeBase(projectId);   // auto-create / activate
+          return await this.chatManager.createNewConversation(projectId, opts); // retry once
+        } catch (retryErr) {
+          err = retryErr;   // fall through to standard handler
+        }
+      }
+      this._handleErr(
+        'conversationCreateError',
+        err,
+        null,
+        { source: 'createConversation', detail: { projectId } }
+      );
       throw err;
     }
   }
@@ -513,6 +527,36 @@ class ProjectManager {
     if (!this._authOk('projectFileDeleteError', { projectId, fileId })) throw new Error('auth');
     const url = this._CONFIG.FILE_DETAIL.replace('{id}', projectId).replace('{file_id}', fileId);
     return this._req(url, { method: 'DELETE' }, 'deleteFile');
+  }
+
+  // --- Helper: Ensure a Knowledge Base exists and is active for a project ---
+  async _ensureKnowledgeBase(projectId) {
+    if (!projectId) return null;
+
+    const listUrl = this._CONFIG.KB_LIST_URL_TEMPLATE.replace('{id}', projectId);
+
+    /* 1️⃣  Look for an already-active KB */
+    try {
+      const res   = await this._req(listUrl, undefined, '_ensureKnowledgeBase:list');
+      const items = Array.isArray(res?.data) ? res.data
+                  : Array.isArray(res)       ? res
+                  : [];
+      const active = items.find(kb => kb && kb.is_active !== false);
+      if (active) return active;          // nothing to do
+    } catch { /* ignore – we’ll create below */ }
+
+    /* 2️⃣  Create a default KB */
+    const payload = {
+      name           : 'Project Knowledge Base',
+      embedding_model: 'all-MiniLM-L6-v2',        // safe default
+      is_active      : true
+    };
+    const createRes = await this._req(
+      listUrl,
+      { method: 'POST', body: payload },
+      '_ensureKnowledgeBase:create'
+    );
+    return createRes?.data ?? createRes;
   }
 
   async downloadFile(projectId, fileId) {
