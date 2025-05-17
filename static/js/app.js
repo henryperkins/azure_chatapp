@@ -788,7 +788,8 @@ await authModule.init().catch(err => {
         }),
       remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
     },
-    domAPI
+    domAPI,
+    domReadinessService
   });
   eventHandlers.setProjectManager?.(projectManager);
 
