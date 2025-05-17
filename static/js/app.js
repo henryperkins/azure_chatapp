@@ -412,10 +412,9 @@ function createOrGetChatManager() {
     navAPI: {
       getSearch: () => browserAPI.getLocation().search,
       getHref: () => browserAPI.getLocation().href,
-      pushState: (url, title = "") => {
-        const navService = DependencySystem.modules.get('navigationService');
-        navService?.navigateTo(url);
-      },
+      // Sólo modifica la barra de direcciones; no dispares navegación
+      pushState: (url, title = "") =>
+        browserAPI.pushState({}, title, url),
       getPathname: () => browserAPI.getLocation().pathname
     },
     isValidProjectId,
