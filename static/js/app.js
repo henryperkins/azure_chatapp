@@ -437,6 +437,14 @@ function safeHandler(handler, description) {
 export async function init() {
   logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
 
+  // ────────── timing helpers ──────────
+  const phaseTimings = Object.create(null);     // { [phase]: { start, end } }
+  const SLOW_PHASE = 4_000;                     // ms – warn if phase ≥ 4 s
+  function _now() {
+    const w = browserAPI.getWindow();
+    return (w?.performance?.now?.()) ?? Date.now();
+  }
+
   // Global emergency fail-safe: if this init hasn't completed in the configured time, forcibly log & dispatch 'app:ready' with error
   let globalInitTimeoutFired = false;
   const GLOBAL_INIT_TIMEOUT_MS = (
@@ -478,11 +486,19 @@ export async function init() {
 
   // Diagnostic step marker
   function logStep(phase, stage, extra = {}) {
-    logger.log('[App.init]', {
-      phase, stage,
-      ts: Date.now(),
-      ...extra
-    });
+    const t = _now();
+    if (stage === 'pre') {
+      phaseTimings[phase] = { start: t };             // mark start
+    } else if (stage === 'post') {
+      const rec = phaseTimings[phase] || (phaseTimings[phase] = {});
+      rec.end = t;
+      const dur = rec.end - (rec.start ?? rec.end);
+      logger.log('[App.init][TIMING]', { phase, duration: Math.round(dur) });
+      if (dur >= SLOW_PHASE) {
+        logger.warn(`[App.init] Phase "${phase}" took ${Math.round(dur)} ms`, { phase, duration: dur });
+      }
+    }
+    logger.log('[App.init]', { phase, stage, ts: t, ...extra });
   }
 
   try {
@@ -695,6 +711,14 @@ export async function init() {
 
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
+
+    // Log a compact summary of all timings
+    Object.entries(phaseTimings).forEach(([p, { start, end }]) => {
+      if (start && end) {
+        const d = Math.round(end - start);
+        logger.info(`[App.init] Phase "${p}" duration: ${d} ms`);
+      }
+    });
 
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
