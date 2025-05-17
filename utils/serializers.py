@@ -46,7 +46,7 @@ def serialize_uuid(id_value: Any) -> Optional[str]:
 
 def serialize_project(project: Project) -> dict[str, Any]:
     """
-    Serialize a Project model to a dictionary.
+    Serialize a Project model to a dictionary, including nested knowledge_base if present.
 
     Args:
         project: Project database model
@@ -54,10 +54,9 @@ def serialize_project(project: Project) -> dict[str, Any]:
     Returns:
         Dictionary with serialized project data
     """
-    # Project model no longer guarantees a `knowledge_base_id` attribute.
-    # Gracefully handle its absence to avoid serialization failures that
-    # bubble up as HTTP 500 errors in the `/api/projects` endpoint.
     kb_id = getattr(project, "knowledge_base_id", None)
+    kb_obj = getattr(project, "knowledge_base", None)
+    knowledge_base = serialize_knowledge_base(kb_obj) if kb_obj is not None else None
 
     return {
         "id": serialize_uuid(project.id),
@@ -75,6 +74,7 @@ def serialize_project(project: Project) -> dict[str, Any]:
         "created_at": serialize_datetime(project.created_at),
         "updated_at": serialize_datetime(project.updated_at),
         "knowledge_base_id": serialize_uuid(kb_id),
+        "knowledge_base": knowledge_base,
         "extra_data": project.extra_data or {},
     }
 
