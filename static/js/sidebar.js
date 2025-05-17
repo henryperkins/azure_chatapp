@@ -290,8 +290,11 @@ export function createSidebar({
     chatSearchInputEl       = domAPI.getElementById('chatSearchInput');
     sidebarProjectSearchInputEl = domAPI.getElementById('sidebarProjectSearch');
 
-    if (!el || !btnToggle) {
-      throw new Error('[Sidebar] Required elements #mainSidebar or #navToggleBtn missing');
+    if (!el) {
+      throw new Error('[Sidebar] Required element #mainSidebar missing');
+    }
+    if (!btnToggle) {
+      logger.warn('[Sidebar] #navToggleBtn not found – toggle feature disabled', { context: MODULE });
     }
   }
 
@@ -726,12 +729,8 @@ export function createSidebar({
 
     await domReadinessService.dependenciesAndElements({
       deps: ['eventHandlers', 'auth'],
-      domSelectors: [
-        '#mainSidebar',
-        '#navToggleBtn',
-        '#closeSidebarBtn',
-        '#pinSidebarBtn'
-      ],
+      // El Sidebar puede funcionar sin los botones si se muestran más tarde.
+      domSelectors: ['#mainSidebar'],
       context: MODULE
     });
 
