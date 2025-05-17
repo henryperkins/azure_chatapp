@@ -108,17 +108,24 @@ export function createEventHandlers({
     const typeMap = elMap.get(type) || new Map();
     if (!trackedListeners.has(element)) trackedListeners.set(element, elMap);
     if (!elMap.has(type)) elMap.set(type, typeMap);
-    if (typeMap.has(handler)) return typeMap.get(handler).wrappedHandler;
+    if (typeMap.has(handler))
+      return typeMap.get(handler).remove;        // always hand back the “unsubscribe”
 
     const wrapped = (evt) => handler.call(element, evt);
 
     // domAPI is a required dependency, so domAPI.addEventListener should always be used.
     domAPI.addEventListener(element, type, wrapped, finalOpts);
 
-    typeMap.set(handler, { wrappedHandler: wrapped, options: finalOpts, context: options.context });
     const remove = () => {               // función de des-registro
       try { untrackListener(element, type, handler); } catch {/* noop */}
     };
+
+    typeMap.set(handler, {
+      wrappedHandler: wrapped,
+      options       : finalOpts,
+      context       : options.context,
+      remove        : remove          // <- new
+    });
 
     return remove;                       // ← ahora devolvemos la función “unsubscribe”
   }
