@@ -676,3 +676,55 @@ textarea:focus-visible,
 
 /* Include DaisyUI plugin at the end if not in aggregator */
 /* @plugin "daisyui"; */
+
+/* ===============================================================
+   Mobile enhancements – screens ≤ 480 px
+   ===============================================================*/
+@media (max-width:480px){
+
+  /* 1 – Dialogs: full-width “sheet” style */
+  dialog.modal .modal-box{
+    width:100vw !important;
+    max-width:100vw !important;
+    height:100vh;
+    max-height:100vh;
+    margin:0;
+    border-radius:0;
+    padding:1rem 1rem calc(env(safe-area-inset-bottom,0)+1.25rem);
+    overflow-y:auto;
+  }
+  dialog.modal .modal-action{
+    position:sticky;
+    bottom:calc(env(safe-area-inset-bottom,0) + .5rem);
+    background:var(--color-base-100);
+    padding-top:.75rem;
+  }
+
+  /* 2 – Touch targets: guarantee ≥ 44 × 44 px */
+  .btn,
+  .tab,
+  .btn-square,
+  .btn-circle,
+  .file-preview-delete,
+  .checkbox,
+  [role="button"]{
+    min-width:44px !important;
+    min-height:44px !important;
+  }
+
+  /* 3 – Prevent horizontal overflow */
+  html,body{overflow-x:hidden;}
+
+  /* 4 – Typography: improve legibility on small screens */
+  body,
+  dialog.modal .modal-box,
+  .project-card,
+  .chat-message-container,
+  .file-preview-item{
+    font-size:1rem;          /* 16 px */
+    line-height:1.55;
+  }
+  h1,.text-3xl{font-size:1.5rem;}
+  h2,.text-2xl{font-size:1.25rem;}
+  h3,.text-xl {font-size:1.125rem;}
+}
