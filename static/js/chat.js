@@ -280,10 +280,11 @@ export function createChatManager(deps = {}) {
       const auth = app?.DependencySystem?.modules?.get('auth') || null;
 
       // Store selectors from options
-      this.containerSelector = options.containerSelector || "#chatUIContainer"; // Default if not provided
-      this.messageContainerSelector = options.messageContainerSelector || "#conversationArea";
-      this.inputSelector = options.inputSelector || "#chatInput";
-      this.sendButtonSelector = options.sendButtonSelector || "#sendBtn";
+      this.containerSelector = options.containerSelector || "#chatUIContainer";
+      // Global-chat defaults – project details still pass their own selectors
+      this.messageContainerSelector = options.messageContainerSelector || "#globalChatMessages";
+      this.inputSelector = options.inputSelector || "#chatUIInput";
+      this.sendButtonSelector = options.sendButtonSelector || "#globalChatSendBtn";
       this.titleSelector = options.titleSelector || "#chatTitle"; // Keep titleSelector
       this.minimizeButtonSelector = options.minimizeButtonSelector || "#minimizeChatBtn";
 
