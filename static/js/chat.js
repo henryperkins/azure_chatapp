@@ -425,24 +425,22 @@ export function createChatManager(deps = {}) {
         logger.info("[ChatManager][initialize] ChatManager initialized successfully", { context: "chatManager.initialize", projectId: this.projectId, duration: performance.now() - _initStart });
         this.isInitialized = true;
 
-        // ----- Adjuntar utilidades UI una vez ChatManager está estable -----
-        if (!this._uiAttached) {
-          attachChatUI(this, {
-            domAPI: this.domAPI,
-            DOMPurify: this.DOMPurify,
-            eventHandlers: this.eventHandlers
-          });
-          this._uiAttached = true;
+        // ----- Robust UI setup: always (re)attach UI utilities & elements -----
+        attachChatUI(this, {
+          domAPI: this.domAPI,
+          DOMPurify: this.DOMPurify,
+          eventHandlers: this.eventHandlers
+        });
+        this._uiAttached = true;
 
-          // Re-acquire UI refs via chat-ui-utils helpers
-          await this._setupUIElements();
+        // Re-acquire UI refs via chat-ui-utils helpers
+        await this._setupUIElements();
 
-          // Clean old listeners → bind fresh ones
-          this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
-          this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
-          if (typeof this._setupEventListeners === 'function') {
-            this._setupEventListeners();
-          }
+        // Clean old listeners → bind fresh ones
+        this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
+        this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
+        if (typeof this._setupEventListeners === 'function') {
+          this._setupEventListeners();
         }
 
         // Notificar que el ChatManager está listo
