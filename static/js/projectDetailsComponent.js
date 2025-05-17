@@ -614,9 +614,12 @@ class ProjectDetailsComponent {
     const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
     if (!newChatBtn) return;
     // Project/auth ready?
-    const ready = this.state.projectDataLoaded && (this.auth?.isAuthenticated?.() ?? false);
+    const ready =
+      this.state.projectDataLoaded &&
+      (this.auth?.isAuthenticated?.() ?? false);
     newChatBtn.disabled = !ready;
     newChatBtn.classList.toggle("btn-disabled", !ready);
+    newChatBtn.title = ready ? 'Start a new conversation' : 'Sign-in required';
     this.eventHandlers.trackListener(
       newChatBtn, "click",
       this._safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
@@ -637,15 +640,8 @@ class ProjectDetailsComponent {
   // --- Restore chat/model config and panel (on chat/conversations tab) ---
   _restoreChatAndModelConfig() {
     const tab = this.state.activeTab;
-    if ((tab === "conversations" || tab === "chat") && this.modelConfig?.renderQuickConfig) {
-      const panel = this.elements.container.querySelector("#modelConfigPanel");
-      if (panel) {
-        try {
-          this.modelConfig.renderQuickConfig(panel);
-        } catch (e) { this._logError("Error rendering model config", e); }
-      }
-    }
-    if (tab === "chat" && this.chatManager?.initialize) {
+    if ((tab === "conversations" || tab === "chat") &&
+        this.chatManager?.initialize) {
       const conversationsTabContent = this.elements.tabs.conversations;
       if (conversationsTabContent) {
         this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
@@ -660,6 +656,14 @@ class ProjectDetailsComponent {
         })
           .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))
           .catch((err) => { this._logError("Error initializing chatManager", err); });
+      }
+    }
+    if ((tab === "conversations" || tab === "chat") && this.modelConfig?.renderQuickConfig) {
+      const panel = this.elements.container.querySelector("#modelConfigPanel");
+      if (panel) {
+        try {
+          this.modelConfig.renderQuickConfig(panel);
+        } catch (e) { this._logError("Error rendering model config", e); }
       }
     }
   }
