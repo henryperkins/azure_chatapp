@@ -152,28 +152,22 @@ export function createDomAPI({
       return null;
     },
 
-    /**
-     * Add class to element
-     */
-    addClass: (el, cls) => {
-      if (el && el.classList) el.classList.add(cls);
+    /* ───────── Clases utilitarias ───────── */
+    addClass(el, cls) {
+      if (!el?.classList || !cls) return;
+      el.classList.add(...String(cls).split(/\s+/).filter(Boolean));   // admite múltiples clases
     },
-
-    /**
-     * Remove class from element
-     */
-    removeClass: (el, cls) => {
-      if (el && el.classList) el.classList.remove(cls);
+    removeClass(el, cls) {
+      if (!el?.classList || !cls) return;
+      el.classList.remove(...String(cls).split(/\s+/).filter(Boolean));
     },
-
-    /**
-     * Toggle class on element
-     */
-    toggleClass: (el, cls, force) => {
-      if (el && el.classList) {
-        return el.classList.toggle(cls, force);
-      }
-      return null;
+    toggleClass(el, cls, force) {
+      if (!el?.classList || !cls) return;
+      String(cls).split(/\s+/).filter(Boolean).forEach(c =>
+        typeof force === "boolean"
+          ? el.classList.toggle(c, force)
+          : el.classList.toggle(c)
+      );
     },
 
     /**
@@ -245,13 +239,13 @@ export function createDomAPI({
       }
     },
 
-    /**
-     * Set property (like el.disabled = true)
-     */
-    setProperty: (el, property, value) => {
-      if (el) {
-        el[property] = value;
-      }
+    /* ───────── Propiedades (DOM & atributo) ───────── */
+    setProperty(el, prop, value) {
+      if (!el) return;
+      try {
+        if (prop in el)           el[prop] = value;         // preferencia a propiedad DOM
+        else                      el.setAttribute(prop, value); // fallback atributo
+      } catch {/* silencioso */}
     },
 
     /**
