@@ -633,11 +633,12 @@ export function createSidebar({
       { context: MODULE, description: 'Sidebar conversation created => refresh if on "recent" tab' }
     );
 
-    // Auth state changed
+    // Auth state changed  (el AuthModule emite "authStateChanged")
     eventHandlers.trackListener(
-      domAPI.getDocument(), 'auth:stateChanged',
-      wrapWithErrorLog(handleGlobalAuthStateChange, 'auth:stateChanged'),
-      { context: MODULE, description: 'Sidebar reacts to global auth changes' }
+      domAPI.getDocument(),
+      'authStateChanged',
+      wrapWithErrorLog(handleGlobalAuthStateChange, 'authStateChanged'),
+      { context: MODULE, description: 'Sidebar reacts to auth state changes' }
     );
 
     // Pin button
@@ -761,6 +762,18 @@ export function createSidebar({
       // Activate previous or default tab
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
+
+      /* Asegura que la barra lateral refleja el estado de autenticación
+         incluso si authStateChanged se disparó antes de que existiera el
+         listener. */
+      try {
+        const authMod = DependencySystem.modules?.get?.('auth');
+        handleGlobalAuthStateChange({
+          detail: { authenticated: authMod?.isAuthenticated?.() }
+        });
+      } catch (syncErr) {
+        logger.warn('[Sidebar] Auth state sync failed during init', syncErr, { context: MODULE });
+      }
 
       // Validate doc can dispatch events
       const doc = domAPI.getDocument();
