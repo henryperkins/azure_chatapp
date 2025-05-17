@@ -151,7 +151,7 @@
 </dialog>
 
 <!-- Generic Confirmation Modal (Added for ModalManager.confirmAction) -->
-<dialog id="confirmActionModal" class="modal">
+<dialog id="confirmActionModal" class="modal" aria-labelledby="confirmActionTitle">
   <div class="modal-box max-w-md w-full">
     <form method="dialog">
         <!-- Close button top right -->
@@ -159,7 +159,7 @@
           <span class="sr-only">Close</span>✕
         </button>
     </form>
-    <h3 class="font-bold text-lg">Confirm Action</h3>
+    <h3 id="confirmActionTitle" class="font-bold text-lg">Confirm Action</h3>
     <p class="py-4">Are you sure you want to proceed?</p>
     <div class="modal-action">
       <button id="cancelActionBtn" type="button" class="btn btn-outline">Cancel</button>
