@@ -416,13 +416,10 @@ export function createProjectDashboard(deps) {
           return false;
         }
 
-        // Switch UI to details
+        // Switch UI to details and render via component show()
         this._setView({ showList: false, showDetails: true });
         this.components.projectList?.hide?.();
-        this.components.projectDetails?.show?.();
-
-        // Render the project in details
-        this.components.projectDetails?.renderProject?.(project);
+        await this.components.projectDetails?.show?.({ projectId });
 
         // Post success: set search param, handle default conversation, dispatch events
         return this._postProjectDetailsSuccess(project, projectId, typeof projectObjOrId === 'object');
@@ -829,7 +826,7 @@ export function createProjectDashboard(deps) {
               return false;
             }
 
-            await this.components.projectDetails.show();
+            await this.components.projectDetails.show({ projectId, activeTab });
             let projectToRender = null;
             if (typeof this.projectManager?.loadProjectDetails === 'function') {
               try {
