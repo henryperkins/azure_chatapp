@@ -280,7 +280,7 @@ export function createChatManager(deps = {}) {
       const auth = app?.DependencySystem?.modules?.get('auth') || null;
 
       // Store selectors from options
-      this.containerSelector = options.containerSelector || "#chatUI"; // Default if not provided
+      this.containerSelector = options.containerSelector || "#chatUIContainer"; // Default if not provided
       this.messageContainerSelector = options.messageContainerSelector || "#conversationArea";
       this.inputSelector = options.inputSelector || "#chatInput";
       this.sendButtonSelector = options.sendButtonSelector || "#sendBtn";
