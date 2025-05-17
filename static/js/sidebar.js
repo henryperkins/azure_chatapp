@@ -143,14 +143,54 @@ export function createSidebar({
     if (show) maybeRenderModelConfig();
   }
 
+  /* ────────────────────────────────────────────────────────────
+     Mobile bottom dock (tab shortcuts + settings gear)
+     ──────────────────────────────────────────────────────────── */
+  function _ensureMobileDock() {
+    if (mobileDockEl || viewportAPI.getInnerWidth() >= 640) return mobileDockEl;
+
+    mobileDockEl = domAPI.getElementById('sidebarDock');
+    if (!mobileDockEl) {
+      mobileDockEl           = domAPI.createElement('div');
+      mobileDockEl.id        = 'sidebarDock';
+      mobileDockEl.className = 'sidebar-dock hidden';
+      domAPI.appendChild(el, mobileDockEl);
+    }
+
+    /* util to lazily create a dock button */
+    const mkBtn = (id, label, icon, onClick) => {
+      let b = domAPI.getElementById(id);
+      if (!b) {
+        b           = domAPI.createElement('button');
+        b.id        = id;
+        b.className = 'btn btn-ghost btn-square flex-1';
+        domAPI.setInnerHTML(b, `${icon}<span class="sr-only">${label}</span>`);
+        eventHandlers.trackListener(
+          b, 'click',
+          safeHandler(onClick, `dock:${id}`),
+          { context: MODULE, description: `Dock btn ${id}` }
+        );
+        domAPI.appendChild(mobileDockEl, b);
+      }
+    };
+
+    mkBtn('dockRecentBtn',   'Recent',   '🕑', () => activateTab('recent'));
+    mkBtn('dockStarredBtn',  'Starred',  '⭐', () => activateTab('starred'));
+    mkBtn('dockProjectsBtn', 'Projects', '📁', () => activateTab('projects'));
+    mkBtn('dockSettingsBtn', 'Settings', '⚙️', () => toggleSettingsPanel());
+
+    return mobileDockEl;
+  }
+
   /* ------------------------------------------------------------------ */
   /* 3) Internal State                                                  */
   /* ------------------------------------------------------------------ */
   let el = null;
-  let btnToggle = null;
-  let btnClose = null;
-  let btnPin = null;
-  let btnSettings = null;        // NEW
+  let btnToggle     = null;
+  let btnClose      = null;
+  let btnPin        = null;
+  let btnSettings   = null;      // NEW
+  let mobileDockEl  = null;      // NEW bottom dock on mobile
   let chatSearchInputEl = null;
   let sidebarProjectSearchInputEl = null;
   let backdrop = null;
@@ -521,6 +561,10 @@ export function createSidebar({
     el.classList.remove('-translate-x-full');
     el.classList.add('translate-x-0');
 
+    // Show mobile dock if applicable
+    const dock = _ensureMobileDock();
+    if (dock) domAPI.removeClass(dock, 'hidden');
+
     if ('inert' in HTMLElement.prototype && el.inert) {
       el.inert = false;
     }
@@ -579,6 +623,7 @@ export function createSidebar({
     }
     removeBackdrop();
     domAPI.body?.classList.remove('with-sidebar-open');
+    if (mobileDockEl) domAPI.addClass(mobileDockEl, 'hidden');
     toggleSettingsPanel(false);        // ensure hidden when sidebar closes
     dispatch('sidebarVisibilityChanged', { visible });
   }
@@ -619,6 +664,10 @@ export function createSidebar({
   function handleResize() {
     if (viewportAPI.getInnerWidth() >= 1024) {
       removeBackdrop();
+    }
+    if (mobileDockEl) {
+      const isMobile = viewportAPI.getInnerWidth() < 640;
+      domAPI.toggleClass(mobileDockEl, 'hidden', !isMobile || !visible);
     }
   }
 
@@ -817,6 +866,7 @@ export function createSidebar({
     try {
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom");
       findDom();
+      _ensureMobileDock();          // create dock if mobile
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initAuthDom");
       initAuthDom();
