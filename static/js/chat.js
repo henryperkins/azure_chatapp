@@ -428,9 +428,8 @@ export function createChatManager(deps = {}) {
      * Cleanup method to remove all tracked event listeners, etc.
      */
     cleanup() {
-      if (typeof this.eventHandlers.cleanupListeners === 'function') {
-        this.eventHandlers.cleanupListeners({ context: 'chatManager' });
-      }
+      this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
+      this.eventHandlers.cleanupListeners?.({ context: "chatManager" });
       this.isInitialized = false;
       this.currentConversationId = null;
       this.projectId = null;
@@ -1085,14 +1084,89 @@ export function createChatManager(deps = {}) {
       }
     }
 
-    _setupUIElements() {
-      // For brevity, not showing the entire logic of setting up UI elements.
-      // Just included as a placeholder to preserve code structure.
-      return Promise.resolve(true);
+    async _setupUIElements() {
+      // Wait until chat fragment is injected and elements exist
+      await domReadinessService.elementsReady(
+        [
+          this.containerSelector,
+          this.messageContainerSelector,
+          this.inputSelector,
+          this.sendButtonSelector
+        ],
+        { timeout: APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
+          context: "chatManager::_setupUIElements" }
+      );
+
+      /* Resolve references via injected domAPI */
+      this.container        = this.domAPI.querySelector(this.containerSelector);
+      this.messageContainer = this.domAPI.querySelector(this.messageContainerSelector);
+      this.inputField       = this.domAPI.querySelector(this.inputSelector);
+      this.sendButton       = this.domAPI.querySelector(this.sendButtonSelector);
+      this.titleElement     = this.titleSelector
+                                ? this.domAPI.querySelector(this.titleSelector)
+                                : null;
+      this.minimizeButton   = this.minimizeButtonSelector
+                                ? this.domAPI.querySelector(this.minimizeButtonSelector)
+                                : null;
+
+      if (!this.container || !this.messageContainer ||
+          !this.inputField || !this.sendButton) {
+        throw new Error("[ChatManager] Chat UI elements not found. Check selectors/template.");
+      }
+
+      /* Un-hide chat container & header */
+      this.domAPI.removeClass(this.container, "hidden");
+      const header = this.domAPI.getElementById?.("chatHeaderBar");
+      if (header) this.domAPI.removeClass(header, "hidden");
+
+      return true;
     }
 
     _setupEventListeners() {
-      // Same as above. Placeholder.
+      /* Clear previous listeners bound by this module */
+      this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
+      const ctx = { context: "chatManager:UI" };
+
+      /* Send-button click */
+      if (this.sendButton) {
+        this.eventHandlers.trackListener(
+          this.sendButton,
+          "click",
+          safeHandler(() => {
+            const txt = this.inputField?.value ?? "";
+            this.sendMessage(txt).catch(()=>{});
+          }, "sendBtnClick"),
+          ctx
+        );
+      }
+
+      /* Enter key in input */
+      if (this.inputField) {
+        this.eventHandlers.trackListener(
+          this.inputField,
+          "keydown",
+          safeHandler((e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              const txt = this.inputField.value;
+              this.sendMessage(txt).catch(()=>{});
+            }
+          }, "inputEnter"),
+          ctx
+        );
+      }
+
+      /* Optional minimise button */
+      if (this.minimizeButton && this.container) {
+        this.eventHandlers.trackListener(
+          this.minimizeButton,
+          "click",
+          safeHandler(() => {
+            this.container.classList.toggle("hidden");
+          }, "minimiseClick"),
+          ctx
+        );
+      }
       return true;
     }
   } // end ChatManager class
