@@ -471,50 +471,6 @@ export class ProjectListComponent {
             this.element.style.opacity = '1';
             this.element.style.display = "";
         }
-
-        const docAPI = this.domAPI;
-        const listViewContainer = docAPI?.getElementById("projectListView");
-        if (listViewContainer) {
-            listViewContainer.classList.remove("hidden", "opacity-0");
-            listViewContainer.style.display = "";
-            listViewContainer.style.visibility = "visible";
-            listViewContainer.style.opacity = "1";
-
-            const projectManagerPanel = docAPI?.getElementById("projectManagerPanel");
-            if (projectManagerPanel) {
-                projectManagerPanel.classList.remove("hidden");
-                projectManagerPanel.style.display = "";
-            }
-
-            // --- HARD FIX: Always fully hide projectDetailsView (details container and all children) ---
-            const projectDetailsView = docAPI?.getElementById("projectDetailsView");
-            if (projectDetailsView) {
-                projectDetailsView.classList.add("hidden");
-                projectDetailsView.style.display = "none";
-                projectDetailsView.style.visibility = "hidden";
-                projectDetailsView.style.opacity = "0";
-            }
-
-            const loginMessage = docAPI?.getElementById("loginRequiredMessage");
-            if (loginMessage) {
-                loginMessage.classList.add("hidden");
-            }
-
-            const mainContent = docAPI?.getElementById("mainContent");
-            if (mainContent) {
-                mainContent.classList.remove("hidden");
-            }
-
-            void listViewContainer.offsetHeight; // force reflow
-        }
-        // Extra: defensive - forcibly hide projectDetailsView outside standard ancestry (corner cases)
-        const pdv = this.domAPI.getElementById("projectDetailsView");
-        if (pdv) {
-            pdv.classList.add("hidden");
-            pdv.style.display = "none";
-            pdv.style.visibility = "hidden";
-            pdv.style.opacity = "0";
-        }
     }
 
     _extractProjects(data) {
@@ -585,14 +541,6 @@ export class ProjectListComponent {
 
         this._makeVisible();
 
-        const projectListView = docAPI?.getElementById("projectListView");
-        if (projectListView) {
-            projectListView.classList.remove("hidden", "opacity-0");
-            projectListView.style.display = "";
-            projectListView.style.visibility = "visible";
-            projectListView.style.opacity = "1";
-        }
-
         if (this.state.projects && this.state.projects.length > 0 && !this._isRendering) {
             try {
                 this.renderProjects(this.state.projects);
@@ -602,29 +550,6 @@ export class ProjectListComponent {
         } else if (!this.state.projects || this.state.projects.length === 0) {
             this._loadProjects();
         }
-
-        setTimeout(() => {
-            const finalListView = docAPI?.getElementById("projectListView");
-            const finalElement = this.element || docAPI?.getElementById(this.elementId);
-            const finalGridElement = this.gridElement;
-
-            if (finalListView && (finalListView.classList.contains("hidden") || finalListView.style.display === "none")) {
-                finalListView.classList.remove("hidden", "opacity-0");
-                finalListView.style.display = "";
-                finalListView.style.visibility = "visible";
-                finalListView.style.opacity = "1";
-            }
-
-            if (finalElement && (finalElement.classList.contains("hidden") || finalElement.style.display === "none")) {
-                finalElement.classList.remove("hidden", "opacity-0");
-                finalElement.style.display = "";
-            }
-
-            if (finalGridElement && (finalGridElement.classList.contains("hidden") || finalGridElement.style.display === "none")) {
-                finalGridElement.classList.remove("hidden");
-                finalGridElement.style.display = "";
-            }
-        }, 150);
     }
 
     hide() {
@@ -634,11 +559,6 @@ export class ProjectListComponent {
         }
         if (this.element) {
             this.element.classList.add("hidden");
-        }
-        const listViewContainer = docAPI?.getElementById("projectListView") || docAPI.getElementById("projectListView");
-        if (listViewContainer) {
-            listViewContainer.classList.add("hidden");
-            listViewContainer.style.display = "none";
         }
     }
 
@@ -835,21 +755,6 @@ export class ProjectListComponent {
           <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
         `);
         this.gridElement.appendChild(emptyDiv);
-
-        // Unhide #projectList and #projectListView explicitly, in case a parent stayed hidden
-        const elem = docAPI?.getElementById("projectList");
-        if (elem) {
-            elem.classList.remove("hidden", "opacity-0");
-            elem.style.opacity = "1";
-            elem.style.display = "";
-        }
-        const view = docAPI?.getElementById("projectListView");
-        if (view) {
-            view.classList.remove("hidden", "opacity-0");
-            view.style.opacity = "1";
-            view.style.display = "";
-            view.style.visibility = "visible";
-        }
 
         // Make the create button clickable
         const createBtn = docAPI?.getElementById
