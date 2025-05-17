@@ -361,9 +361,15 @@ export function createKnowledgeBaseComponent(options = {}) {
 
     _showInactiveState() {
       this.state.knowledgeBase = null;
-      this.elements.activeSection.classList.add("hidden");
-      this.elements.inactiveSection.classList.remove("hidden");
-      this.elements.knowledgeBaseFilesSection.classList.add("hidden");
+      if (this.elements.activeSection && this.elements.activeSection.classList) {
+        this.elements.activeSection.classList.add("hidden");
+      }
+      if (this.elements.inactiveSection && this.elements.inactiveSection.classList) {
+        this.elements.inactiveSection.classList.remove("hidden");
+      }
+      if (this.elements.knowledgeBaseFilesSection && this.elements.knowledgeBaseFilesSection.classList) {
+        this.elements.knowledgeBaseFilesSection.classList.add("hidden");
+      }
       if (this.manager?._renderKnowledgeBaseFiles) {
         this.manager._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
       } else if (this.elements.knowledgeBaseFilesListContainer) {
