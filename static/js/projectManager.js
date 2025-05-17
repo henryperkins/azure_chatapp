@@ -44,6 +44,27 @@ export function createProjectManager({
           : null;
     if (data) {
       data = { ...data, id: String(data.id ?? data.uuid ?? data.project_id ?? data.projectId ?? '').trim() };
+      // Robust frontend field mapping for key project details
+      data.name =
+        data.name ??
+        data.title ??
+        data.project_name ??
+        "";
+      data.description =
+        data.description ??
+        data.details ??
+        data.project_description ??
+        "";
+      data.goals =
+        data.goals ??
+        data.project_goals ??
+        "";
+      data.customInstructions =
+        data.customInstructions ??
+        data.instructions ??
+        data.custom_instructions ??
+        data.project_instructions ??
+        "";
     }
     if (!isValidProjectId(data?.id)) {
       throw new Error('Invalid project ID in server response');
