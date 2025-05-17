@@ -948,7 +948,7 @@ export class ProjectListComponent {
 
         const titleEl = docAPI.createElement("h3");
         titleEl.className = "font-semibold text-lg sm:text-xl mb-2 project-name truncate";
-        titleEl.textContent = project.name || "Unnamed Project";
+        titleEl.textContent = project.name || project.title || "Unnamed Project";
 
         const actions = docAPI.createElement("div");
         actions.className = "flex gap-1";
