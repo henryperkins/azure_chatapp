@@ -27,10 +27,11 @@
 }
 
 /* Move notification-accordion.css higher in import order */
-@import "./notification-accordion.css";
 @import "./enhanced-components.css";
 @import "./file-upload-enhanced.css";
 @import "./legacy-dracula-theme.css";
+@import "./project-details-enhancements.css";
+@import "./project-list-enhancements.css";
 
 /* =============================================================================
    End of Aggregate Stylesheet

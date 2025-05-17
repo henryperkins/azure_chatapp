@@ -43,6 +43,7 @@ import { createUiRenderer } from './uiRenderer.js';
 import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';
+import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
@@ -349,8 +350,7 @@ Object.assign(app, {
         detail: { project, previousProject: previous }
       }));
     }
-    // can also store in DependencySystem for easy DI
-    DependencySystem.register('currentProject', project);
+    // Do not re-register in DependencySystem. Only the initial registration (null) at startup is allowed.
     return project;
   },
   navigateToConversation: async (chatId) => {
@@ -828,8 +828,8 @@ await authModule.init().catch(err => {
   // Create or retrieve chatManager
   const chatManager = createOrGetChatManager();
 
-  // Create projectManager
-  const projectManager = await createProjectManager({
+    // Create projectManager
+  const pmFactory = await createProjectManager({
     DependencySystem,
     chatManager,
     app,
@@ -849,6 +849,7 @@ await authModule.init().catch(err => {
     domReadinessService,
     logger // Ensures strict DI per guardrails/compliance for projectManager
   });
+  const projectManager = pmFactory.instance;
   eventHandlers.setProjectManager?.(projectManager);
 
   // Initialize eventHandlers now that its downstream deps exist
@@ -1229,6 +1230,21 @@ async function initializeUIComponents() {
 }
 
 function createAndRegisterUIComponents() {
+  // Project Details Enhancements - Create and register visual improvements
+  const projectDetailsEnhancementsInstance = createProjectDetailsEnhancements({
+    domAPI,
+    browserService: browserServiceInstance,
+    eventHandlers,
+    domReadinessService,
+    logger,
+    sanitizer
+  });
+  DependencySystem.register('projectDetailsEnhancements', projectDetailsEnhancementsInstance);
+
+  // Initialize project details enhancements
+  safeInit(projectDetailsEnhancementsInstance, 'ProjectDetailsEnhancements', 'initialize')
+    .catch(err => logger.error('[createAndRegisterUIComponents]', err, { context: 'app:createAndRegisterUIComponents:projectDetailsEnhancements' }));
+
   // Knowledge Base Component - Create and register if not already present.
   let knowledgeBaseComponentInstance = DependencySystem.modules.get('knowledgeBaseComponent');
   if (!knowledgeBaseComponentInstance) {
