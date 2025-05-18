@@ -259,6 +259,56 @@
   color: var(--color-error-content);
 }
 
+/* Enhanced Chat UI */
+#projectChatMessages {
+  padding: 1rem;
+  overflow-y: auto;
+  max-height: 60vh;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-base-300) transparent;
+}
+
+#projectChatMessages::-webkit-scrollbar {
+  width: 6px;
+}
+
+#projectChatMessages::-webkit-scrollbar-thumb {
+  background-color: var(--color-base-300);
+  border-radius: 3px;
+}
+
+/* Chat bubbles */
+#projectChatMessages .chat-bubble {
+  max-width: 85%;
+  word-break: break-word;
+  border-radius: 1rem;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  margin-bottom: 0.5rem;
+}
+
+#projectChatMessages .chat-user .chat-bubble {
+  background-color: var(--color-primary);
+  color: var(--color-primary-content);
+}
+
+#projectChatMessages .chat-ai .chat-bubble {
+  background-color: var(--color-base-200);
+}
+
+/* Conversation list items */
+#projectConversationsList > div {
+  border-radius: 0.5rem;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+#projectConversationsList > div:hover {
+  background-color: var(--color-base-200);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
 /* ===== 5. Dashboard-Specific Improvements ===== */
 
 /* Data visualization - sparkline placeholder */
@@ -385,6 +435,8 @@
   scrollbar-color: var(--color-primary) var(--color-base-200);
 }
 
+/* ===== 6. Mobile Responsiveness Enhancements ===== */
+
 /* Enhanced responsive design for mobile */
 @media (max-width: 640px) {
   .project-stats {
@@ -412,6 +464,152 @@
   .stat-value {
     font-size: 1.5rem;
   }
+
+  /* Improved tab navigation for small screens */
+  .project-details-root .tabs {
+    gap: 0.5rem !important;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Ensure tab buttons have proper touch targets */
+  .project-tab-btn {
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+}
+
+/* Specific mobile optimizations for very small screens */
+@media (max-width: 480px) {
+  .project-details-root {
+    padding: 0.5rem;
+  }
+
+  .project-tab-content {
+    padding: 1rem;
+  }
+
+  /* Ensure all buttons have proper touch targets */
+  .project-details-root .btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Improve readability of project stats */
+  .project-stats .stat {
+    padding: 0.75rem;
+  }
+
+  /* Ensure tab content has proper spacing */
+  .tab-section {
+    margin-bottom: 1rem;
+  }
+
+  /* Improve typography for small screens */
+  .tab-heading {
+    font-size: 1.125rem;
+  }
+
+  /* Chat window improvements for mobile */
+  #projectChatContainer {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  #projectChatMessages {
+    max-height: 40vh;
+    padding: 0.5rem;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Improve chat input and button for mobile */
+  #projectChatUI .flex.items-center.border-t {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-base-100);
+    z-index: 10;
+    padding: 0.5rem;
+    border-top: 1px solid var(--color-base-300);
+  }
+
+  #projectChatInput {
+    min-height: 44px;
+    font-size: 1rem;
+    padding: 0.5rem;
+  }
+
+  #projectChatSendBtn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0.5rem 1rem;
+  }
+
+  /* Improve conversation list items */
+  #projectConversationsList > div {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s ease;
+  }
+
+  #projectConversationsList > div:active {
+    background-color: var(--color-base-300);
+  }
+}
+
+/* Extra small mobile screens (320-480px) */
+@media (max-width: 380px) {
+  /* Ensure proper spacing in the smallest screens */
+  .project-details-root {
+    padding: 0.25rem;
+  }
+
+  /* Reduce padding for better content space */
+  .project-tab-content {
+    padding: 0.75rem;
+  }
+
+  /* Ensure tab buttons are properly sized and spaced */
+  .project-tab-btn {
+    padding: 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  /* Improve chat experience on very small screens */
+  #projectChatMessages {
+    max-height: 35vh;
+    padding: 0.5rem;
+  }
+
+  /* Ensure chat bubbles don't overflow */
+  #projectChatMessages .chat-bubble {
+    max-width: 90%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  /* Improve conversation list readability */
+  #projectConversationsList > div h4 {
+    font-size: 0.9rem;
+  }
+
+  #projectConversationsList > div p {
+    font-size: 0.8rem;
+  }
+
+  /* Ensure file list items are properly sized */
+  #projectFilesList > div {
+    padding: 0.5rem;
+  }
 }
 
 /* Dark mode enhancements */
@@ -427,6 +625,11 @@
 
   .project-details-root .stat-title {
     color: rgba(255, 255, 255, 0.95);
+  }
+
+  /* Dark mode chat enhancements */
+  #projectChatMessages .chat-ai .chat-bubble {
+    background-color: var(--color-base-300);
   }
 }
 
