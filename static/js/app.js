@@ -1082,6 +1082,18 @@ async function initializeUIComponents() {
             { context: 'app:loadTemplates' }
           );
         }
+
+        // --- Load global chat UI template ----------------------------------
+        loggerInstance.log(
+          '[App][initializeUIComponents] Loading chat_ui.html template into #chatUIContainer',
+          { context: 'app:loadTemplates' }
+        );
+        await htmlLoader.loadTemplate({
+          url              : '/static/html/chat_ui.html',
+          containerSelector: '#chatUIContainer',
+          eventName        : 'chatUIHtmlLoaded'      // ← for diagnostics
+        });
+
       } catch (err) {
         loggerInstance.error(
           '[App][initializeUIComponents] Failed to load project_list.html template',
