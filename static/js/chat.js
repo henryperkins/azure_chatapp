@@ -175,6 +175,7 @@ export function createChatManager(deps = {}) {
       this._authChangeListener = null;
       this.modelConfig = this.modelConfigAPI.getConfig();
       this.DependencySystem = DependencySystem || undefined;
+      this.domReadinessService = domReadinessService;
       this._uiAttached = false;
     }
 
@@ -188,7 +189,8 @@ export function createChatManager(deps = {}) {
         attachChatUI(this, {
           domAPI: this.domAPI,
           DOMPurify: this.DOMPurify,
-          eventHandlers: this.eventHandlers
+          eventHandlers: this.eventHandlers,
+          domReadinessService: this.domReadinessService
         });
         this._uiAttached = true;
       }
@@ -276,11 +278,24 @@ export function createChatManager(deps = {}) {
 
         // Re-initialization for same project
         if (this.isInitialized && this.projectId === requestedProjectId) {
-          logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", { context: "chatManager.initialize", projectId: this.projectId });
+          logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", {
+            context: "chatManager.initialize",
+            projectId: this.projectId
+          });
+
+          // Ensure helpers are attached (idempotent)
           this._ensureUIAttached();
+
+          // ⬇️ Re-evaluate DOM selectors in case we just switched between the
+          //    global chat panel and the per-project chat panel.  Without this,
+          //    messageContainer / input / buttons may still point to the old
+          //    elements, causing broken listeners and race conditions.
           await this._setupUIElements();
+
+          // Re-register listeners on the freshly resolved elements
           this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
           this._setupEventListeners();
+
           logger.info("[ChatManager][initialize] Re-initialization complete", { context: "chatManager.initialize" });
           return true;
         }
@@ -331,9 +346,10 @@ export function createChatManager(deps = {}) {
           );
         }
 
+        // Ensure UI elements are present before history/render
+        await this._setupUIElements();
         await this._loadConversationHistory();
         this.isInitialized = true;
-        await this._setupUIElements();
         this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
         this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
         this._setupEventListeners();
@@ -718,6 +734,40 @@ export function createChatManager(deps = {}) {
       if (!this.messageContainer) {
         return;
       }
+
+      // Use the enhanced UI if available
+      const chatUIEnhancements = DependencySystem?.modules?.get('chatUIEnhancements');
+      if (chatUIEnhancements) {
+        // Dispatch event for the enhanced UI to handle
+        const timestamp = Date.now();
+        const sender = role === "assistant" ? "ai" : role === "user" ? "user" : "system";
+
+        // Create and dispatch custom event
+        const event = new CustomEvent('chatMessageAdded', {
+          detail: {
+            message: content,
+            sender: sender,
+            timestamp: timestamp,
+            messageId: id,
+            thinking: thinking,
+            redactedThinking: redactedThinking
+          }
+        });
+
+        this.domAPI.getDocument().dispatchEvent(event);
+
+        // Scroll to bottom
+        if (this.messageContainer) {
+          this.messageContainer.scrollTo({
+            top: this.messageContainer.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+
+        return;
+      }
+
+      // Fallback to original implementation if enhanced UI is not available
       const message = this.domAPI.createElement("div");
       message.className = `message ${role}-message`;
       if (id) message.id = id;
@@ -752,7 +802,12 @@ export function createChatManager(deps = {}) {
       }
 
       this.domAPI.appendChild(this.messageContainer, message);
-      this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
+      if (this.messageContainer){
+        this.messageContainer.scrollTo({
+          top     : this.messageContainer.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     }
 
     _createThinkingBlock(thinking, redacted) {

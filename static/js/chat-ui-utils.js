@@ -1,12 +1,36 @@
 // static/js/chat-ui-utils.js
+const UI_CTX = 'chatManager:UI';
+// static/js/chat-ui-utils.js
 // Factory that adds UI helpers onto an existing ChatManager instance
 export function attachChatUI(chatMgr, deps) {
-  const { domAPI, DOMPurify, eventHandlers } = deps;
+  const {
+    domAPI,
+    DOMPurify,
+    eventHandlers,
+    domReadinessService        // ← new
+  } = deps;
 
   async function _setupUIElements() {
     if (!domAPI) {
       chatMgr._handleError('_setupUIElements', new Error('domAPI is required for UI setup.'));
       throw new Error('domAPI is required for UI setup.');
+    }
+
+    // Wait until the template has really been injected
+    if (domReadinessService?.elementsReady) {
+      await domReadinessService.elementsReady(
+        [
+          chatMgr.containerSelector,
+          chatMgr.messageContainerSelector,
+          chatMgr.inputSelector,
+          chatMgr.sendButtonSelector
+        ],
+        {
+          timeout : 8000,
+          context : 'chatManager::UI::setup',
+          observeMutations: true
+        }
+      );
     }
 
     chatMgr.container = domAPI.querySelector(chatMgr.containerSelector);
@@ -50,6 +74,19 @@ export function attachChatUI(chatMgr, deps) {
     if (chatMgr.minimizeButtonSelector) {
       chatMgr.minimizeButton = domAPI.querySelector(chatMgr.minimizeButtonSelector);
     }
+
+    /* --- ensure visibility + correct header state ----------------------- */
+    // The per-view chat container may start hidden; always expose it now
+    if (chatMgr.container) domAPI.removeClass(chatMgr.container, 'hidden');
+
+    // Hide the global chat header when we are inside a project-details view
+    const headerBar = domAPI.getElementById?.('chatHeaderBar');
+    if (headerBar) {
+      (chatMgr.isGlobalMode
+        ? domAPI.removeClass
+        : domAPI.addClass)(headerBar, 'hidden');
+    }
+    /* -------------------------------------------------------------------- */
   }
 
   function _setupEventListeners() {
@@ -57,7 +94,7 @@ export function attachChatUI(chatMgr, deps) {
       return;
     }
     if (typeof eventHandlers.cleanupListeners === 'function') {
-      eventHandlers.cleanupListeners({ context: 'chatManager' });
+      eventHandlers.cleanupListeners({ context: UI_CTX });
     }
 
     if (chatMgr.sendButton && chatMgr.inputField) {
@@ -67,11 +104,11 @@ export function attachChatUI(chatMgr, deps) {
           chatMgr.sendMessage(messageText);
           chatMgr.inputField.value = '';
         }
-      }, { context: 'chatManager', description: 'Chat Send Button' });
+      }, { context: UI_CTX, description: 'Chat Send Button' });
     }
 
     if (chatMgr.inputField) {
-      eventHandlers.trackListener(chatMgr.inputField, 'keypress', (e) => {
+      eventHandlers.trackListener(chatMgr.inputField, 'keydown',  (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           const messageText = chatMgr.inputField.value.trim();
@@ -80,13 +117,13 @@ export function attachChatUI(chatMgr, deps) {
             chatMgr.inputField.value = '';
           }
         }
-      }, { context: 'chatManager', description: 'Chat Input Enter Key' });
+      }, { context: UI_CTX, description: 'Chat Input Enter Key' });
     }
 
     if (chatMgr.minimizeButton) {
       eventHandlers.trackListener(chatMgr.minimizeButton, 'click', () => {
         chatMgr.toggleMinimize();
-      }, { context: 'chatManager', description: 'Chat Minimize Toggle' });
+      }, { context: UI_CTX, description: 'Chat Minimize Toggle' });
     }
 
     if (!domAPI || typeof domAPI.getDocument !== 'function') {
@@ -95,7 +132,7 @@ export function attachChatUI(chatMgr, deps) {
       const eventTargetForModelConfig = domAPI.getDocument();
       eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
         if (e.detail) chatMgr.updateModelConfig(e.detail);
-      }, { description: 'Model config changed event for ChatManager', context: 'chatManager' });
+      }, { description: 'Model config changed event for ChatManager', context: UI_CTX });
     }
   }
 
@@ -194,7 +231,7 @@ export function attachChatUI(chatMgr, deps) {
     };
     eventHandlers.trackListener(toggle, "click", handler, {
       description: 'Thinking block toggle',
-      context: 'chatManager',
+      context: UI_CTX,
       source: 'ChatManager._createThinkingBlock'
     });
 
