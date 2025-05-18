@@ -1,7 +1,14 @@
 // static/js/chat-ui-utils.js
+const UI_CTX = 'chatManager:UI';
+// static/js/chat-ui-utils.js
 // Factory that adds UI helpers onto an existing ChatManager instance
 export function attachChatUI(chatMgr, deps) {
-  const { domAPI, DOMPurify, eventHandlers } = deps;
+  const {
+    domAPI,
+    DOMPurify,
+    eventHandlers,
+    domReadinessService        // ← new
+  } = deps;
 
   async function _setupUIElements() {
     if (!domAPI) {
