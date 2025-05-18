@@ -255,7 +255,8 @@ textarea:focus-visible,
   /* ===== Mobile UX enhancements ===== */
   /* lock background scroll while sidebar is open */
   html.sidebar-open,
-  body.sidebar-open{
+  body.sidebar-open,
+  body.chat-open{
     height:100dvh;          /* avoid iOS bounce */
     overflow:hidden;
   }
