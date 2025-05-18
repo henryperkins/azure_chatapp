@@ -1,6 +1,6 @@
 {
     "github.copilot.enable": {
-        "*": true
+        "*": false
     },
     "python-envs.pythonProjects": [
         {
