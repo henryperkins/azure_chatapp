@@ -44,6 +44,7 @@ import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
+import { createChatUIEnhancements } from './chatUIEnhancements.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
@@ -1006,6 +1007,49 @@ async function initializeUIComponents() {
       context: 'app.js:initializeUIComponents:domCheck'
     });
 
+    /* ── Mobile sidebar open/close helpers ───────────────── */
+    const navToggleBtn     = domAPI.getElementById('navToggleBtn');
+    const closeSidebarBtn  = domAPI.getElementById('closeSidebarBtn');
+    const doc              = domAPI.getDocument();
+
+    function setSidebarOpen(open){
+      const sidebar = domAPI.getElementById('mainSidebar');
+      // freeze / release background scroll
+      domAPI[open ? 'addClass'    : 'removeClass'](doc.body            ,'sidebar-open');
+      domAPI[open ? 'addClass'    : 'removeClass'](doc.documentElement ,'sidebar-open');
+
+      // slide sidebar in/out
+      if(sidebar){
+        domAPI[open ? 'addClass'  : 'removeClass'](sidebar,'translate-x-0');
+        domAPI[open ? 'removeClass': 'addClass']  (sidebar,'-translate-x-full');
+        sidebar.setAttribute('aria-hidden', String(!open));
+      }
+      // update toggle button ARIA
+      if(navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
+    }
+
+    if(navToggleBtn){
+      eventHandlers.trackListener(
+        navToggleBtn,'click',
+        () => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded')!=='true'),
+        {context:'app:sidebar',description:'toggleSidebar'}
+      );
+    }
+    if(closeSidebarBtn){
+      eventHandlers.trackListener(
+        closeSidebarBtn,'click',
+        () => setSidebarOpen(false),
+        {context:'app:sidebar',description:'closeSidebar'}
+      );
+    }
+    /* close with Esc key when sidebar is open */
+    eventHandlers.trackListener(
+      doc,'keydown',
+      (e) => { if(e.key==='Escape') setSidebarOpen(false); },
+      {context:'app:sidebar',description:'escCloseSidebar'}
+    );
+    /* ────────────────────────────────────────────────────── */
+
     // Load project list template into #projectListView
     const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
     const loggerInstance = DependencySystem.modules.get('logger'); // Get logger for this operation
@@ -1039,6 +1083,18 @@ async function initializeUIComponents() {
             { context: 'app:loadTemplates' }
           );
         }
+
+        // --- Load global chat UI template ----------------------------------
+        loggerInstance.log(
+          '[App][initializeUIComponents] Loading chat_ui.html template into #chatUIContainer',
+          { context: 'app:loadTemplates' }
+        );
+        await htmlLoader.loadTemplate({
+          url              : '/static/html/chat_ui.html',
+          containerSelector: '#chatUIContainer',
+          eventName        : 'chatUIHtmlLoaded'      // ← for diagnostics
+        });
+
       } catch (err) {
         loggerInstance.error(
           '[App][initializeUIComponents] Failed to load project_list.html template',
@@ -1108,12 +1164,22 @@ async function initializeUIComponents() {
   });
   DependencySystem.register('chatExtensions', chatExtensionsInstance);
 
+  // Create chat UI enhancements
+  const chatUIEnhancementsInstance = createChatUIEnhancements({
+    domAPI,
+    eventHandlers,
+    sanitizer: DependencySystem.modules.get('sanitizer'),
+    logger
+  });
+  DependencySystem.register('chatUIEnhancements', chatUIEnhancementsInstance);
+
   const chatMgr = DependencySystem.modules.get('chatManager');
   const authMod = DependencySystem.modules.get('auth');
 
-  // Inicia de inmediato si ya está todo listo
+  // Initialize chat components if already ready
   if (chatMgr?.isInitialized && authMod?.isAuthenticated?.()) {
     safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+    safeInit(chatUIEnhancementsInstance, 'ChatUIEnhancements', 'initialize');
   } else if (chatMgr?.chatBus) {
     eventHandlers.trackListener(
       chatMgr.chatBus,
@@ -1121,6 +1187,7 @@ async function initializeUIComponents() {
       () => {
         if (authMod?.isAuthenticated?.()) {
           safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+          safeInit(chatUIEnhancementsInstance, 'ChatUIEnhancements', 'initialize');
         }
       },
       {
@@ -1601,7 +1668,13 @@ function setupChatInitializationTrigger() {
 
       if (auth.isAuthenticated() && chatManager?.initialize) {
         try {
-          await chatManager.initialize({ projectId, containerSelector: "#chatUIContainer" });
+          await chatManager.initialize({
+            projectId,
+            containerSelector: "#globalChatContainer",
+            messageContainerSelector: "#globalChatMessages",
+            inputSelector: "#chatUIInput",
+            sendButtonSelector: "#globalChatSendBtn"
+          });
         } catch (err) {
           logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
           // Error handled silently

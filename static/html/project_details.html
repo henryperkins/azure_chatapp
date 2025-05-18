@@ -1,4 +1,4 @@
-<div class="project-details-root flex flex-col w-full max-w-6xl mx-auto p-2">
+<div id="projectDetailsView" class="project-details-root flex flex-col w-full max-w-6xl mx-auto p-2">
   <!-- Project overview card: groups header, actions, and stats in a visual card -->
   <section class="bg-base-100 rounded-box shadow-md border border-base-300 p-4 mb-6">
     <!-- Breadcrumb navigation for better navigation -->
@@ -204,11 +204,29 @@
           </svg>
         </button>
       </div>
-      <div id="projectChatUI" class="bg-base-100 rounded-box shadow-md border border-base-200">
-        <div id="projectChatMessages" class="chat-message-container" aria-live="polite"></div>
-        <div class="flex items-center border-t border-base-200 p-2">
-          <input id="projectChatInput" type="text" class="flex-1 input input-bordered rounded-l-sm" placeholder="Type your message..."/>
-          <button id="projectChatSendBtn" type="button" class="btn btn-primary rounded-r-sm rounded-l-none">Send</button>
+        <div id="projectChatUI" class="bg-base-100 rounded-box shadow-md border border-base-200">
+        <div class="chat-container">
+          <div id="projectChatMessages" class="chat-message-container" aria-live="polite" tabindex="0"></div>
+          <div class="flex items-center border-t border-base-200 p-2 bg-base-100 sticky bottom-0 z-10 rounded-b-box shadow-xs join">
+            <input id="projectChatInput"
+                   type="text"
+                   class="join-item flex-1 input input-bordered rounded-l-full px-4 py-3 text-base bg-base-200 focus:ring-2 focus:ring-primary transition-all"
+                   placeholder="Type your message..."
+                   aria-label="Chat message input"
+                   autocomplete="off"
+                   autofocus
+                   maxlength="1000"
+                   />
+            <button id="projectChatSendBtn"
+                    type="button"
+                    class="join-item btn btn-primary px-6 h-12 min-w-[44px] rounded-r-full rounded-l-none shadow-md hover:shadow-lg btn-icon flex items-center gap-2 text-base transition-all"
+                    aria-label="Send message">
+              <svg class="h-5 w-5 mr-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 12l14-5-5 14-2.6-4.06L5 12z"/>
+              </svg>
+              <span class="hidden sm:inline">Send</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -226,7 +244,7 @@
         New Chat
       </button>
     </div>
-    <div id="projectConversationsList" class="mt-4">
+    <div id="projectConversationsList" class="mt-4 flex flex-col gap-2 bg-base-100 rounded-box shadow-xs border border-base-200 p-2 max-h-[50vh] overflow-y-auto transition-all">
       <!-- Conversations will be populated here -->
       <div class="text-base-content/60 text-center py-8">No conversations yet.</div>
     </div>
