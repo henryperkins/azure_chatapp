@@ -175,6 +175,7 @@ export function createChatManager(deps = {}) {
       this._authChangeListener = null;
       this.modelConfig = this.modelConfigAPI.getConfig();
       this.DependencySystem = DependencySystem || undefined;
+      this.domReadinessService = domReadinessService;
       this._uiAttached = false;
     }
 
@@ -188,7 +189,8 @@ export function createChatManager(deps = {}) {
         attachChatUI(this, {
           domAPI: this.domAPI,
           DOMPurify: this.DOMPurify,
-          eventHandlers: this.eventHandlers
+          eventHandlers: this.eventHandlers,
+          domReadinessService: this.domReadinessService
         });
         this._uiAttached = true;
       }
