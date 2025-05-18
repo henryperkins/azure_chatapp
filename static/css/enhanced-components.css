@@ -79,7 +79,7 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   --animation-duration: 200ms;
   --border-color: oklch(30% 0.02 277.5);
-}
+/* } */
 
 /* Light mode theme */
 /* @plugin "daisyui/theme" { */
@@ -131,7 +131,7 @@
   /* Visual effects */
   --depth: 0.3;
   --noise: 0;
-}
+/* } */
 
 /* ======================= Enhanced Accessibility Styles ====================== */
 
