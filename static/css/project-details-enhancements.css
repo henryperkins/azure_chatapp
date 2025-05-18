@@ -207,13 +207,16 @@
     padding: 0.70rem 0.7rem !important;
     min-height: 44px;
   }
-  #projectChatMessages {
-    max-height: 20vh;
+  /* Chat messages must fill available viewport on phones */
+  #projectChatMessages{
+    max-height: calc(100dvh - 240px); /* header + tabs + input row */
   }
-  #projectChatInput,
-  #projectChatSendBtn {
-    font-size: 0.98rem !important;
-    min-height: 40px;
+  #projectChatInput{
+    flex:1 1 auto;          /* allow shrink/grow */
+    min-width:0;
+  }
+  #projectChatSendBtn{
+    flex:0 0 auto;
   }
 
   /* --- Mobile enhancements for chat input row and Send button --- */

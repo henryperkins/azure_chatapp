@@ -768,7 +768,12 @@ export function createChatManager(deps = {}) {
       }
 
       this.domAPI.appendChild(this.messageContainer, message);
-      this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
+      if (this.messageContainer){
+        this.messageContainer.scrollTo({
+          top     : this.messageContainer.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
     }
 
     _createThinkingBlock(thinking, redacted) {
