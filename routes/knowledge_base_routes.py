@@ -506,12 +506,12 @@ async def list_knowledge_base_files(
         # We pass current_user.id to ensure it aligns with service expectations if it uses it for further filtering.
         file_list_data = await get_project_file_list(
             project_id=project_id,
-            user_id=current_user.id, # Pass integer user ID
+            user_id=current_user.id,  # Pass integer user ID
             db=db,
             skip=skip,
             limit=limit,
             file_type=file_type,
-        ), # Re-added the trailing comma here
+        )
 
         # The service function already returns a dict with 'files' and 'pagination'
         return await create_standard_response(file_list_data)

@@ -17,7 +17,7 @@
    ------------------------------------------------------------------------- */
 
 /* Enhanced Dracula theme with better contrast ratios for accessibility */
-/* @plugin "daisyui/theme" { */
+@plugin "daisyui/theme" {
   name: "dracula-enhanced";
   default: false;
   prefersdark: true;
@@ -79,10 +79,10 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   --animation-duration: 200ms;
   --border-color: oklch(30% 0.02 277.5);
-/* } */
+}
 
 /* Light mode theme */
-/* @plugin "daisyui/theme" { */
+@plugin "daisyui/theme" {
   name: "azure-light";
   default: true;
   prefersdark: false;
@@ -131,7 +131,7 @@
   /* Visual effects */
   --depth: 0.3;
   --noise: 0;
-/* } */
+}
 
 /* ======================= Enhanced Accessibility Styles ====================== */
 
@@ -708,7 +708,6 @@ textarea:focus-visible,
 /* [No CSS needed, but document for devs: use loading="lazy" on <img> tags] */
 
 /* Include DaisyUI plugin at the end if not in aggregator */
-/* @plugin "daisyui"; */
 
 /* ===============================================================
    Mobile enhancements – screens ≤ 480 px
