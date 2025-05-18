@@ -11228,13 +11228,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .prose, .prose-lg, .prose-md, .prose-sm, .prose-base, .prose-xl, .prose-2xl, .prose-3xl, .prose-4xl, .prose-5xl, .prose-6xl {
   max-width: 75ch;
 }
-.truncate-mobile {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 @media (max-width:480px) {
   dialog.modal .modal-box {
     width: 100vw !important;
@@ -11255,20 +11248,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .btn, .tab, .btn-square, .btn-circle, .file-preview-delete, .checkbox, [role="button"] {
     min-width: 44px !important;
     min-height: 44px !important;
-  }
-  a.link, .link, a[role="link"], [role="link"] {
-    min-width: 44px !important;
-    min-height: 44px !important;
-    display: inline-flex !important;
-    align-items: center;
-  }
-  .overflow-x-auto::after {
-    content: "\2190 scroll \2192";
-    display: block;
-    text-align: center;
-    font-size: .75rem;
-    color: rgb(120 120 120 / .6);
-    margin-top: .25rem;
   }
   html,body {
     overflow-x: hidden;
@@ -11840,6 +11819,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   transform: translateX(-100%);
 }
 .sidebar.sidebar-pinned {
+  box-shadow: 0 0 0 2px var(--color-primary, #ff55a8), 0 0 14px 4px rgba(255, 85, 168, 0.25);
   border-radius: 0 1rem 1rem 0;
 }
 .no-scrollbar {
@@ -12062,45 +12042,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .btn-icon.btn-error {
   color: var(--color-error-content);
 }
-#projectChatMessages {
-  padding: 1rem;
-  overflow-y: auto;
-  max-height: 60vh;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-base-300) transparent;
-}
-#projectChatMessages::-webkit-scrollbar {
-  width: 6px;
-}
-#projectChatMessages::-webkit-scrollbar-thumb {
-  background-color: var(--color-base-300);
-  border-radius: 3px;
-}
-#projectChatMessages .chat-bubble {
-  max-width: 85%;
-  word-break: break-word;
-  border-radius: 1rem;
-  padding: 0.75rem 1rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  margin-bottom: 0.5rem;
-}
-#projectChatMessages .chat-user .chat-bubble {
-  background-color: var(--color-primary);
-  color: var(--color-primary-content);
-}
-#projectChatMessages .chat-ai .chat-bubble {
-  background-color: var(--color-base-200);
-}
-#projectConversationsList > div {
-  border-radius: 0.5rem;
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-#projectConversationsList > div:hover {
-  background-color: var(--color-base-200);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-}
 .sparkline {
   height: 24px;
   width: 100%;
@@ -12224,111 +12165,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .stat-value {
     font-size: 1.5rem;
   }
-  .project-details-root .tabs {
-    gap: 0.5rem !important;
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
-    flex-wrap: nowrap;
-    justify-content: flex-start;
-    -webkit-overflow-scrolling: touch;
-  }
-  .project-tab-btn {
-    min-width: 44px;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-}
-@media (max-width: 480px) {
-  .project-details-root {
-    padding: 0.5rem;
-  }
-  .project-tab-content {
-    padding: 1rem;
-  }
-  .project-details-root .btn {
-    min-width: 44px;
-    min-height: 44px;
-  }
-  .project-stats .stat {
-    padding: 0.75rem;
-  }
-  .tab-section {
-    margin-bottom: 1rem;
-  }
-  .tab-heading {
-    font-size: 1.125rem;
-  }
-  #projectChatContainer {
-    max-width: 100%;
-    overflow-x: hidden;
-  }
-  #projectChatMessages {
-    max-height: 40vh;
-    padding: 0.5rem;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  #projectChatUI .flex.items-center.border-t {
-    position: sticky;
-    bottom: 0;
-    background: var(--color-base-100);
-    z-index: 10;
-    padding: 0.5rem;
-    border-top: 1px solid var(--color-base-300);
-  }
-  #projectChatInput {
-    min-height: 44px;
-    font-size: 1rem;
-    padding: 0.5rem;
-  }
-  #projectChatSendBtn {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 0.5rem 1rem;
-  }
-  #projectConversationsList > div {
-    padding: 0.75rem;
-    margin-bottom: 0.5rem;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s ease;
-  }
-  #projectConversationsList > div:active {
-    background-color: var(--color-base-300);
-  }
-}
-@media (max-width: 380px) {
-  .project-details-root {
-    padding: 0.25rem;
-  }
-  .project-tab-content {
-    padding: 0.75rem;
-  }
-  .project-tab-btn {
-    padding: 0.5rem;
-    font-size: 0.75rem;
-  }
-  #projectChatMessages {
-    max-height: 35vh;
-    padding: 0.5rem;
-  }
-  #projectChatMessages .chat-bubble {
-    max-width: 90%;
-    padding: 0.5rem 0.75rem;
-    font-size: 0.9rem;
-  }
-  #projectConversationsList > div h4 {
-    font-size: 0.9rem;
-  }
-  #projectConversationsList > div p {
-    font-size: 0.8rem;
-  }
-  #projectFilesList > div {
-    padding: 0.5rem;
-  }
 }
 @media (prefers-color-scheme: dark) {
   .project-stats .stat {
@@ -12340,9 +12176,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   }
   .project-details-root .stat-title {
     color: rgba(255, 255, 255, 0.95);
-  }
-  #projectChatMessages .chat-ai .chat-bubble {
-    background-color: var(--color-base-300);
   }
 }
 [data-theme="dracula"] .project-details-root .stat-title, [data-theme="dracula-enhanced"] .project-details-root .stat-title {

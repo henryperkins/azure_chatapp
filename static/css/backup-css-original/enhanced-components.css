@@ -17,7 +17,7 @@
    ------------------------------------------------------------------------- */
 
 /* Enhanced Dracula theme with better contrast ratios for accessibility */
-@plugin "daisyui/theme" {
+/* @plugin "daisyui/theme" { */
   name: "dracula-enhanced";
   default: false;
   prefersdark: true;
@@ -79,10 +79,10 @@
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
   --animation-duration: 200ms;
   --border-color: oklch(30% 0.02 277.5);
-}
+/* } */
 
 /* Light mode theme */
-@plugin "daisyui/theme" {
+/* @plugin "daisyui/theme" { */
   name: "azure-light";
   default: true;
   prefersdark: false;
@@ -131,7 +131,7 @@
   /* Visual effects */
   --depth: 0.3;
   --noise: 0;
-}
+/* } */
 
 /* ======================= Enhanced Accessibility Styles ====================== */
 
@@ -251,6 +251,39 @@ textarea:focus-visible,
   .chat-container {
     @apply p-2 space-y-2;
   }
+
+  /* ===== Mobile UX enhancements ===== */
+  /* lock background scroll while sidebar is open */
+  html.sidebar-open,
+  body.sidebar-open,
+  body.chat-open{
+    height:100dvh;          /* avoid iOS bounce */
+    overflow:hidden;
+  }
+
+  /* chat message panes must fit viewport minus header/input */
+  #projectChatMessages,
+  #globalChatMessages{
+    max-height:calc(100dvh - 220px);   /* tweak if header height changes */
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+  }
+
+  /* sticky input bar: safe-area + blur */
+  #projectChatContainer .flex.items-center.border-t,
+  #globalChatContainer  .flex.items-center.border-t{
+    padding-bottom:calc(env(safe-area-inset-bottom,0) + .5rem);
+    backdrop-filter:blur(6px);
+  }
+
+  /* hide desktop join-gap rule on phones (keep vertical stack) */
+  @media (max-width:640px){
+    #projectChatUI .flex.items-center.join{ gap:.5rem !important; }
+  }
+
+  /* enable smooth slide-in/out for sidebar */
+  #mainSidebar{ transition:transform .3s ease; }
+  /* =================================== */
 }
 
 .chat-user {
@@ -655,7 +688,7 @@ textarea:focus-visible,
 
 
 /* Utility: Avoid text-xs for essential info on mobile */
-/*
+/* 
   Mobile override: On small screens, .text-xs is promoted to text-sm for readability.
   If you want true xs text on mobile, use .text-xs-force instead.
 */
@@ -673,6 +706,9 @@ textarea:focus-visible,
 
 /* Utility: Ensure all images are lazy-loaded by default (for HTML, not CSS) */
 /* [No CSS needed, but document for devs: use loading="lazy" on <img> tags] */
+
+/* Utility – truncate anything that could overflow on mobile */
+.truncate-mobile{ @apply truncate overflow-hidden text-ellipsis; }
 
 /* Include DaisyUI plugin at the end if not in aggregator */
 /* @plugin "daisyui"; */
@@ -710,6 +746,27 @@ textarea:focus-visible,
   [role="button"]{
     min-width:44px !important;
     min-height:44px !important;
+  }
+
+  /* 2.b – Links: guarantee ≥ 44 × 44 px touch target */
+  a.link,
+  .link,
+  a[role="link"],
+  [role="link"]{
+    min-width :44px !important;
+    min-height:44px !important;
+    display   :inline-flex !important;   /* keeps layout but enlarges hit-box */
+    align-items:center;
+  }
+
+  /* 3.b – Scroll cue for narrow, overflowable areas */
+  .overflow-x-auto::after{
+    content:"\2190 scroll \2192";
+    display:block;
+    text-align:center;
+    font-size:.75rem;
+    color:rgb(120 120 120 / .6);
+    margin-top:.25rem;
   }
 
   /* 3 – Prevent horizontal overflow */
