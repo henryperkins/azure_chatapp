@@ -276,6 +276,11 @@ textarea:focus-visible,
     backdrop-filter:blur(6px);
   }
 
+  /* hide desktop join-gap rule on phones (keep vertical stack) */
+  @media (max-width:640px){
+    #projectChatUI .flex.items-center.join{ gap:.5rem !important; }
+  }
+
   /* enable smooth slide-in/out for sidebar */
   #mainSidebar{ transition:transform .3s ease; }
   /* =================================== */

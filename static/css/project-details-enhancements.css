@@ -321,6 +321,43 @@
   width: 100%;
 }
 
+/* ==== Project chat: desktop input row stitch ==== */
+@media (min-width:641px){
+  #projectChatUI .flex.items-center { gap:0 !important; }
+  #projectChatSendBtn{ margin-left:0 !important; }
+}
+
+/* ==== Chat bubbles (project + global) ================================== */
+.chat-message-container{ display:flex; flex-direction:column; gap:.4rem; }
+
+.chat-message-container > .message{
+  max-width:88%;
+  padding:.55rem .9rem;
+  border-radius:1rem;
+  line-height:1.45;
+  word-break:break-word;
+}
+
+/* user-sent */
+.chat-message-container > .user-message{
+  align-self:flex-end;
+  background:var(--color-primary);
+  color:var(--color-primary-content);
+}
+
+/* assistant replies */
+.chat-message-container > .assistant-message{
+  align-self:flex-start;
+  background:var(--color-base-200);
+}
+
+/* system / info */
+.chat-message-container > .system-message{
+  align-self:center;
+  background:var(--color-info);
+  color:var(--color-info-content);
+}
+
 .project-stats .stat {
   height: 100%;
   display: flex;
