@@ -74,6 +74,19 @@ export function attachChatUI(chatMgr, deps) {
     if (chatMgr.minimizeButtonSelector) {
       chatMgr.minimizeButton = domAPI.querySelector(chatMgr.minimizeButtonSelector);
     }
+
+    /* --- ensure visibility + correct header state ----------------------- */
+    // The per-view chat container may start hidden; always expose it now
+    if (chatMgr.container) domAPI.removeClass(chatMgr.container, 'hidden');
+
+    // Hide the global chat header when we are inside a project-details view
+    const headerBar = domAPI.getElementById?.('chatHeaderBar');
+    if (headerBar) {
+      (chatMgr.isGlobalMode
+        ? domAPI.removeClass
+        : domAPI.addClass)(headerBar, 'hidden');
+    }
+    /* -------------------------------------------------------------------- */
   }
 
   function _setupEventListeners() {
@@ -95,7 +108,7 @@ export function attachChatUI(chatMgr, deps) {
     }
 
     if (chatMgr.inputField) {
-      eventHandlers.trackListener(chatMgr.inputField, 'keypress', (e) => {
+      eventHandlers.trackListener(chatMgr.inputField, 'keydown',  (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           const messageText = chatMgr.inputField.value.trim();
