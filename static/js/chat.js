@@ -278,11 +278,24 @@ export function createChatManager(deps = {}) {
 
         // Re-initialization for same project
         if (this.isInitialized && this.projectId === requestedProjectId) {
-          logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", { context: "chatManager.initialize", projectId: this.projectId });
+          logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", {
+            context: "chatManager.initialize",
+            projectId: this.projectId
+          });
+
+          // Ensure helpers are attached (idempotent)
           this._ensureUIAttached();
-          // await this._setupUIElements(); // (removed duplicate call)
+
+          // ⬇️ Re-evaluate DOM selectors in case we just switched between the
+          //    global chat panel and the per-project chat panel.  Without this,
+          //    messageContainer / input / buttons may still point to the old
+          //    elements, causing broken listeners and race conditions.
+          await this._setupUIElements();
+
+          // Re-register listeners on the freshly resolved elements
           this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
           this._setupEventListeners();
+
           logger.info("[ChatManager][initialize] Re-initialization complete", { context: "chatManager.initialize" });
           return true;
         }
