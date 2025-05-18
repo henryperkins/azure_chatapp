@@ -44,6 +44,7 @@ import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
 import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
+import { createChatUIEnhancements } from './chatUIEnhancements.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
@@ -1163,12 +1164,22 @@ async function initializeUIComponents() {
   });
   DependencySystem.register('chatExtensions', chatExtensionsInstance);
 
+  // Create chat UI enhancements
+  const chatUIEnhancementsInstance = createChatUIEnhancements({
+    domAPI,
+    eventHandlers,
+    sanitizer: DependencySystem.modules.get('sanitizer'),
+    logger
+  });
+  DependencySystem.register('chatUIEnhancements', chatUIEnhancementsInstance);
+
   const chatMgr = DependencySystem.modules.get('chatManager');
   const authMod = DependencySystem.modules.get('auth');
 
-  // Inicia de inmediato si ya está todo listo
+  // Initialize chat components if already ready
   if (chatMgr?.isInitialized && authMod?.isAuthenticated?.()) {
     safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+    safeInit(chatUIEnhancementsInstance, 'ChatUIEnhancements', 'initialize');
   } else if (chatMgr?.chatBus) {
     eventHandlers.trackListener(
       chatMgr.chatBus,
@@ -1176,6 +1187,7 @@ async function initializeUIComponents() {
       () => {
         if (authMod?.isAuthenticated?.()) {
           safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
+          safeInit(chatUIEnhancementsInstance, 'ChatUIEnhancements', 'initialize');
         }
       },
       {

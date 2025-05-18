@@ -734,6 +734,40 @@ export function createChatManager(deps = {}) {
       if (!this.messageContainer) {
         return;
       }
+
+      // Use the enhanced UI if available
+      const chatUIEnhancements = DependencySystem?.modules?.get('chatUIEnhancements');
+      if (chatUIEnhancements) {
+        // Dispatch event for the enhanced UI to handle
+        const timestamp = Date.now();
+        const sender = role === "assistant" ? "ai" : role === "user" ? "user" : "system";
+
+        // Create and dispatch custom event
+        const event = new CustomEvent('chatMessageAdded', {
+          detail: {
+            message: content,
+            sender: sender,
+            timestamp: timestamp,
+            messageId: id,
+            thinking: thinking,
+            redactedThinking: redactedThinking
+          }
+        });
+
+        this.domAPI.getDocument().dispatchEvent(event);
+
+        // Scroll to bottom
+        if (this.messageContainer) {
+          this.messageContainer.scrollTo({
+            top: this.messageContainer.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+
+        return;
+      }
+
+      // Fallback to original implementation if enhanced UI is not available
       const message = this.domAPI.createElement("div");
       message.className = `message ${role}-message`;
       if (id) message.id = id;
