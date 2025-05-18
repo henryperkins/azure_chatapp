@@ -1006,6 +1006,49 @@ async function initializeUIComponents() {
       context: 'app.js:initializeUIComponents:domCheck'
     });
 
+    /* ── Mobile sidebar open/close helpers ───────────────── */
+    const navToggleBtn     = domAPI.getElementById('navToggleBtn');
+    const closeSidebarBtn  = domAPI.getElementById('closeSidebarBtn');
+    const doc              = domAPI.getDocument();
+
+    function setSidebarOpen(open){
+      const sidebar = domAPI.getElementById('mainSidebar');
+      // freeze / release background scroll
+      domAPI[open ? 'addClass'    : 'removeClass'](doc.body            ,'sidebar-open');
+      domAPI[open ? 'addClass'    : 'removeClass'](doc.documentElement ,'sidebar-open');
+
+      // slide sidebar in/out
+      if(sidebar){
+        domAPI[open ? 'addClass'  : 'removeClass'](sidebar,'translate-x-0');
+        domAPI[open ? 'removeClass': 'addClass']  (sidebar,'-translate-x-full');
+        sidebar.setAttribute('aria-hidden', String(!open));
+      }
+      // update toggle button ARIA
+      if(navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
+    }
+
+    if(navToggleBtn){
+      eventHandlers.trackListener(
+        navToggleBtn,'click',
+        () => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded')!=='true'),
+        {context:'app:sidebar',description:'toggleSidebar'}
+      );
+    }
+    if(closeSidebarBtn){
+      eventHandlers.trackListener(
+        closeSidebarBtn,'click',
+        () => setSidebarOpen(false),
+        {context:'app:sidebar',description:'closeSidebar'}
+      );
+    }
+    /* close with Esc key when sidebar is open */
+    eventHandlers.trackListener(
+      doc,'keydown',
+      (e) => { if(e.key==='Escape') setSidebarOpen(false); },
+      {context:'app:sidebar',description:'escCloseSidebar'}
+    );
+    /* ────────────────────────────────────────────────────── */
+
     // Load project list template into #projectListView
     const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
     const loggerInstance = DependencySystem.modules.get('logger'); // Get logger for this operation

@@ -251,6 +251,33 @@ textarea:focus-visible,
   .chat-container {
     @apply p-2 space-y-2;
   }
+
+  /* ===== Mobile UX enhancements ===== */
+  /* lock background scroll while sidebar is open */
+  html.sidebar-open,
+  body.sidebar-open{
+    height:100dvh;          /* avoid iOS bounce */
+    overflow:hidden;
+  }
+
+  /* chat message panes must fit viewport minus header/input */
+  #projectChatMessages,
+  #globalChatMessages{
+    max-height:calc(100dvh - 220px);   /* tweak if header height changes */
+    overscroll-behavior:contain;
+    scrollbar-width:thin;
+  }
+
+  /* sticky input bar: safe-area + blur */
+  #projectChatContainer .flex.items-center.border-t,
+  #globalChatContainer  .flex.items-center.border-t{
+    padding-bottom:calc(env(safe-area-inset-bottom,0) + .5rem);
+    backdrop-filter:blur(6px);
+  }
+
+  /* enable smooth slide-in/out for sidebar */
+  #mainSidebar{ transition:transform .3s ease; }
+  /* =================================== */
 }
 
 .chat-user {
