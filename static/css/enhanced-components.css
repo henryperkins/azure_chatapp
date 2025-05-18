@@ -17,7 +17,7 @@
    ------------------------------------------------------------------------- */
 
 /* Enhanced Dracula theme with better contrast ratios for accessibility */
-@plugin "daisyui/theme" {
+/* @plugin "daisyui/theme" { */
   name: "dracula-enhanced";
   default: false;
   prefersdark: true;
@@ -82,7 +82,7 @@
 }
 
 /* Light mode theme */
-@plugin "daisyui/theme" {
+/* @plugin "daisyui/theme" { */
   name: "azure-light";
   default: true;
   prefersdark: false;
