@@ -280,7 +280,7 @@ export function createChatManager(deps = {}) {
         if (this.isInitialized && this.projectId === requestedProjectId) {
           logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", { context: "chatManager.initialize", projectId: this.projectId });
           this._ensureUIAttached();
-          await this._setupUIElements();
+          // await this._setupUIElements(); // (removed duplicate call)
           this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
           this._setupEventListeners();
           logger.info("[ChatManager][initialize] Re-initialization complete", { context: "chatManager.initialize" });
@@ -333,9 +333,10 @@ export function createChatManager(deps = {}) {
           );
         }
 
+        // Ensure UI elements are present before history/render
+        await this._setupUIElements();
         await this._loadConversationHistory();
         this.isInitialized = true;
-        await this._setupUIElements();
         this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
         this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
         this._setupEventListeners();
