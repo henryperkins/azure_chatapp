@@ -48,12 +48,11 @@ from services.knowledgebase_service import (
     toggle_project_kb,
     upload_file_to_project,
     delete_project_file,
-    get_project_file_list, # Added import
+    get_project_file_list,
 )
 from services.github_service import GitHubService
 
 # Models and Utils
-from models.user import User
 from models.project import Project
 from utils.auth_utils import get_current_user_and_token
 from utils.response_utils import create_standard_response
@@ -221,124 +220,6 @@ async def get_project_knowledge_bases(
         ) from e
 
 
-@router.get("/{project_id}/knowledge-bases/{kb_id}", response_model=dict)
-async def get_project_knowledge_base(
-    project_id: UUID,
-    kb_id: UUID,
-    current_user_tuple: tuple = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-):
-    """
-    Get details for a specific knowledge base under a project.
-    """
-    try:
-        current_user = current_user_tuple[0]
-
-        # Validate project access
-        await validate_project_access(project_id, current_user, db)
-
-        kb = await get_knowledge_base(knowledge_base_id=kb_id, db=db)
-        if not kb or str(kb["project_id"]) != str(project_id):
-            raise HTTPException(
-                status_code=404, detail="Knowledge base not found for this project"
-            )
-
-        return await create_standard_response(kb)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get knowledge base: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve knowledge base"
-        ) from e
-
-
-@router.patch("/{project_id}/knowledge-bases/{kb_id}", response_model=dict)
-async def update_knowledge_base(
-    project_id: UUID,
-    kb_id: UUID,
-    update_data: KnowledgeBaseUpdate,
-    current_user_tuple: tuple = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-):
-    """
-    Update an existing knowledge base.
-    """
-    try:
-        current_user = current_user_tuple[0]
-
-        # Validate project access
-        await validate_project_access(project_id, current_user, db)
-
-        # Convert update data to dict
-        update_dict = update_data.dict(exclude_unset=True)
-
-        # Update knowledge base
-        kb = await kb_service_update_kb(
-            knowledge_base_id=kb_id, update_data=update_dict, db=db
-        )
-
-        if not kb or str(kb["project_id"]) != str(project_id):
-            raise HTTPException(
-                status_code=404, detail="Knowledge base not found for this project"
-            )
-
-        return await create_standard_response(kb, "Knowledge base updated successfully")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update knowledge base: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to update knowledge base"
-        ) from e
-
-
-@router.delete("/{project_id}/knowledge-bases/{kb_id}", response_model=dict)
-async def delete_knowledge_base(
-    project_id: UUID,
-    kb_id: UUID,
-    current_user_tuple: tuple = Depends(get_current_user_and_token),
-    db: AsyncSession = Depends(get_async_session),
-):
-    """
-    Delete a knowledge base from a project.
-    """
-    try:
-        current_user = current_user_tuple[0]
-
-        # Validate project access
-        project: Project = await validate_project_access(project_id, current_user, db)
-
-        # Verify knowledge base belongs to this project
-        kb = await get_knowledge_base(knowledge_base_id=kb_id, db=db)
-        if not kb or str(kb["project_id"]) != str(project_id):
-            raise HTTPException(
-                status_code=404, detail="Knowledge base not found for this project"
-            )
-
-        # Delete the knowledge base
-        await kb_service_delete_kb(knowledge_base_id=kb_id, db=db)
-
-        # Remove reference from project, if this was the active KB
-        if project.knowledge_base and str(project.knowledge_base.id) == str(kb_id):
-            project.knowledge_base = None
-            await db.commit()
-
-        return await create_standard_response(
-            {"deleted_id": str(kb_id)}, "Knowledge base deleted successfully"
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete knowledge base: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to delete knowledge base"
-        ) from e
-
-
 # ----------------------------------------------------------------------
 # Knowledge Base Status & Health
 # ----------------------------------------------------------------------
@@ -500,20 +381,15 @@ async def list_knowledge_base_files(
                 status_code=400, detail="Project does not have an active knowledge base"
             )
 
-        # Fetch files using the service function
-        # The service function get_project_file_list already handles user_id for project access,
-        # but we've already validated project access for the current user.
-        # We pass current_user.id to ensure it aligns with service expectations if it uses it for further filtering.
         file_list_data = await get_project_file_list(
             project_id=project_id,
-            user_id=current_user.id,  # Pass integer user ID
+            user_id=current_user.id,
             db=db,
             skip=skip,
             limit=limit,
             file_type=file_type,
         )
 
-        # The service function already returns a dict with 'files' and 'pagination'
         return await create_standard_response(file_list_data)
 
     except HTTPException:
@@ -546,21 +422,17 @@ async def reindex_knowledge_base(
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
         if force:
-            # Get KB to find the embedding model
             kb = await get_knowledge_base(
                 knowledge_base_id=project.knowledge_base.id, db=db
             )
             if kb:
-                # Delete existing vectors
                 vector_db = await initialize_project_vector_db(
                     project_id=project_id,
                     embedding_model=kb.get("embedding_model", "all-MiniLM-L6-v2"),
                 )
                 await vector_db.delete_by_filter({"project_id": str(project_id)})
 
-        # Process all files
         result = await process_files_for_project(project_id=project_id, db=db)
-
         return await create_standard_response(result, "Reindexing complete")
 
     except HTTPException:
@@ -584,8 +456,6 @@ async def delete_knowledge_base_file(
     """
     try:
         current_user = current_user_tuple[0]
-
-        # Validate project access
         await validate_project_access(project_id, current_user, db)
 
         result = await delete_project_file(
@@ -615,17 +485,9 @@ async def toggle_knowledge_base(
 ):
     """
     Enables or disables the knowledge base for a specified project.
-
-    Raises:
-        HTTPException: If the project does not have a knowledge base or if an error occurs during the operation.
-
-    Returns:
-        A standardized response indicating the result of the toggle operation and the new status.
     """
     try:
         current_user = current_user_tuple[0]
-
-        # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
         if not project.knowledge_base:
@@ -662,35 +524,22 @@ async def attach_github_repository(
 ):
     """
     Attaches a GitHub repository as a data source for a project's knowledge base.
-
-    Validates project access and knowledge base existence, clones the specified repository and branch,
-    fetches the specified or all files, and uploads them to the project's knowledge base.
-    Returns the repository URL and the number of files processed.
     """
     try:
         current_user = current_user_tuple[0]
-
-        # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
         if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
-        # Initialize GitHub service
-        github_service = GitHubService(
-            token=getattr(current_user, "github_token", None)
-        )
-
-        # Clone repository
+        github_service = GitHubService(token=getattr(current_user, "github_token", None))
         branch = repo_data.branch if repo_data.branch else "main"
         repo_path = github_service.clone_repository(
             repo_url=repo_data.repo_url, branch=branch
         )
 
-        # Fetch specified files (or all if none specified)
         file_paths = repo_data.file_paths or []
         fetched_files = github_service.fetch_files(repo_path, file_paths)
 
-        # Process fetched files
         for file_path in fetched_files:
             with open(file_path, "rb") as file_obj:
                 upload_file = UploadFile(filename=file_path, file=file_obj)
@@ -727,28 +576,15 @@ async def detach_github_repository(
 ):
     """
     Detaches a GitHub repository from a project's knowledge base and removes its files.
-
-    Removes all files associated with the specified GitHub repository from the project's knowledge base.
-    Returns the repository URL and the number of files removed.
-    Raises an HTTP 400 error if the project has no knowledge base,
-    and an HTTP 500 error if the operation fails.
     """
     try:
         current_user = current_user_tuple[0]
-
-        # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
         if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
-        # Initialize GitHub service
-        github_service = GitHubService(
-            token=getattr(current_user, "github_token", None)
-        )
+        github_service = GitHubService(token=getattr(current_user, "github_token", None))
 
-        # In an actual implementation, you'd track which files came from the repo
-        # and remove them individually from your database/storage layer.
-        # This snippet shows a simplistic approach to "detaching" the repo.
         repo_path = github_service.clone_repository(repo_url=repo_data.repo_url)
         file_paths = github_service.fetch_files(repo_path, [])
         github_service.remove_files(repo_path, file_paths)
@@ -764,4 +600,117 @@ async def detach_github_repository(
         logger.error(f"Failed to detach GitHub repository: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="Failed to detach GitHub repository"
+        ) from e
+
+
+# ----------------------------------------------------------------------
+# Dynamic {kb_id:uuid} Routes Moved Below
+# ----------------------------------------------------------------------
+
+
+@router.get("/{project_id}/knowledge-bases/{kb_id:uuid}", response_model=dict)
+async def get_project_knowledge_base(
+    project_id: UUID,
+    kb_id: UUID,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Get details for a specific knowledge base under a project.
+    """
+    try:
+        current_user = current_user_tuple[0]
+
+        # Validate project access
+        await validate_project_access(project_id, current_user, db)
+
+        kb = await get_knowledge_base(knowledge_base_id=kb_id, db=db)
+        if not kb or str(kb["project_id"]) != str(project_id):
+            raise HTTPException(
+                status_code=404, detail="Knowledge base not found for this project"
+            )
+
+        return await create_standard_response(kb)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get knowledge base: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to retrieve knowledge base"
+        ) from e
+
+
+@router.patch("/{project_id}/knowledge-bases/{kb_id:uuid}", response_model=dict)
+async def update_knowledge_base(
+    project_id: UUID,
+    kb_id: UUID,
+    update_data: KnowledgeBaseUpdate,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Update an existing knowledge base.
+    """
+    try:
+        current_user = current_user_tuple[0]
+
+        await validate_project_access(project_id, current_user, db)
+        update_dict = update_data.dict(exclude_unset=True)
+        kb = await kb_service_update_kb(
+            knowledge_base_id=kb_id, update_data=update_dict, db=db
+        )
+
+        if not kb or str(kb["project_id"]) != str(project_id):
+            raise HTTPException(
+                status_code=404, detail="Knowledge base not found for this project"
+            )
+
+        return await create_standard_response(kb, "Knowledge base updated successfully")
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update knowledge base: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to update knowledge base"
+        ) from e
+
+
+@router.delete("/{project_id}/knowledge-bases/{kb_id:uuid}", response_model=dict)
+async def delete_knowledge_base(
+    project_id: UUID,
+    kb_id: UUID,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """
+    Delete a knowledge base from a project.
+    """
+    try:
+        current_user = current_user_tuple[0]
+        project: Project = await validate_project_access(project_id, current_user, db)
+
+        kb = await get_knowledge_base(knowledge_base_id=kb_id, db=db)
+        if not kb or str(kb["project_id"]) != str(project_id):
+            raise HTTPException(
+                status_code=404, detail="Knowledge base not found for this project"
+            )
+
+        await kb_service_delete_kb(knowledge_base_id=kb_id, db=db)
+
+        if project.knowledge_base and str(project.knowledge_base.id) == str(kb_id):
+            project.knowledge_base = None
+            await db.commit()
+
+        return await create_standard_response(
+            {"deleted_id": str(kb_id)}, "Knowledge base deleted successfully"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete knowledge base: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail="Failed to delete knowledge base"
         ) from e

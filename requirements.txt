@@ -1,6 +1,4 @@
-fastapi[alembic]
-alembic>=1.7.0
-gitpython>=3.1.0
+fastapi[# alembic removed – SchemaManager provides built-in migration\n# alembic removed – SchemaManager provides built-in migration\ngitpython>=3.1.0
 uvicorn
 sqlalchemy
 psycopg2-binary

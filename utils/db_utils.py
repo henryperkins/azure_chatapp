@@ -25,7 +25,7 @@ from uuid import UUID
 from fastapi import HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import strategy_options # Add this import
+from sqlalchemy.orm import strategy_options  # Add this import
 from sqlalchemy.sql.expression import BinaryExpression
 from sqlalchemy.sql import ColumnElement
 
@@ -170,7 +170,7 @@ async def get_all_by_condition(
     order_by: Optional[Any] = None,
     limit: Optional[int] = None,
     offset: Optional[int] = None,
-    options: Optional[List[strategy_options.Load]] = None, # New parameter
+    options: Optional[List[strategy_options.Load]] = None,  # New parameter
 ) -> List[T]:
     """
     Generic function to retrieve all model instances matching given conditions.
@@ -190,7 +190,7 @@ async def get_all_by_condition(
 
     # Apply loader options if provided
     if options:
-        query = query.options(*options) # Apply options here
+        query = query.options(*options)  # Apply options here
 
     # Apply all where conditions
     for condition in where_clauses:

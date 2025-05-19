@@ -13,9 +13,8 @@ Usage:
 """
 
 import asyncio
-import sys
 import os
-
+import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from sqlalchemy import select, delete
 from db import get_async_session
@@ -30,7 +29,7 @@ async def main():
 
         # Find unattached (projectless) conversations
         unattached_q = await db.execute(
-            select(Conversation).where(Conversation.project_id == None)
+            select(Conversation).where(Conversation.project_id.is_(None))
         )
         unattached_chats = unattached_q.scalars().all()
         unattached_count = len(unattached_chats)

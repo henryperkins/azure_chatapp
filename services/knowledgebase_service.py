@@ -25,17 +25,15 @@ from services.knowledgebase_helpers import KBConfig, StorageManager
 
 from fastapi import HTTPException, UploadFile, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update, exists
+from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 from functools import wraps
 from db import get_async_session_context
 
-import config
 from models.project_file import ProjectFile
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from models.user import User
-from models.conversation import Conversation
 from services.vector_db import VectorDB, process_file_for_search, get_vector_db
 from services.github_service import GitHubService
 from utils.file_validation import FileValidator, sanitize_filename
@@ -284,7 +282,7 @@ async def upload_file_to_project(
 
     # Estimate tokens
     token_data = await _estimate_file_tokens(
-        contents, file_info["sanitized_filename"], file, project # file and project args are kept for signature compatibility but not used by new logic
+        contents, file_info["sanitized_filename"], file, project  # file and project args are kept for signature compatibility but not used by new logic
     )
 
     # Check if token estimation itself returned an error in its metadata
@@ -472,22 +470,6 @@ async def attach_github_repository(
     file_paths: Optional[List[str]] = None,
     user_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    ...
-    """
-    Attaches a GitHub repository as a data source for a project's knowledge base.
-
-    Clones the specified repository and branch, fetches the given files (or all files if none specified), uploads each file to the project, and updates the knowledge base with repository information.
-
-    Args:
-        project_id: The unique identifier of the project.
-        repo_url: The URL of the GitHub repository to attach.
-        branch: The branch to use from the repository. Defaults to "main".
-        file_paths: Optional list of file paths within the repository to include. If not provided, all files are fetched.
-        user_id: Optional user identifier for access validation.
-
-    Returns:
-        A dictionary containing the repository URL, branch, and the number of files processed.
-    """
     project, kb = await _validate_project_and_kb(project_id, user_id, db)
 
     # Initialize GitHub service
@@ -626,7 +608,7 @@ async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
 
 
 async def _estimate_file_tokens(
-    contents: bytes, filename: str, file: UploadFile, project: Project # file and project args are kept for signature compatibility but not used by new logic
+    contents: bytes, filename: str, file: UploadFile, project: Project  # file and project args are kept for signature compatibility but not used by new logic
 ) -> dict[str, Any]:
     """Estimate token count for file using TextExtractor.extract_text"""
     from services.text_extraction import (
@@ -641,14 +623,14 @@ async def _estimate_file_tokens(
         # extract_text can handle bytes directly.
         # We are interested in the metadata, specifically token_count.
         _chunks, metadata_dict = await text_extractor.extract_text(
-            file_content=contents, # Pass the raw bytes
+            file_content=contents,  # Pass the raw bytes
             filename=filename
         )
         tok_count = metadata_dict.get("token_count", 0)
         tok_metadata = metadata_dict
     except Exception as e:
         logger.error(f"Error estimating tokens via extract_text: {str(e)}", exc_info=True)
-        tok_count = 0 # Fallback
+        tok_count = 0  # Fallback
         # Ensure the error is structured in a way that the calling function can check
         tok_metadata = {"error": f"Token estimation failed during text extraction: {str(e)}", "extraction_status": "failed"}
 
@@ -744,13 +726,12 @@ async def _enhance_with_file_info(
 ) -> List[dict[str, Any]]:
     """Add file metadata to search results"""
     enhanced = []
-    from typing import cast
     for res in results:
         f_id = res.get("metadata", {}).get("file_id")
         if f_id:
             try:
                 fid_uuid = UUID(f_id)
-                file_rec = await get_by_id(db, ProjectFile, cast(UUID, fid_uuid))
+                file_rec = await get_by_id(db, ProjectFile, fid_uuid)
                 if file_rec:
                     res["file_info"] = extract_file_metadata(
                         file_rec, include_token_count=False
@@ -798,7 +779,6 @@ async def get_kb_status(project_id: UUID, db: AsyncSession) -> dict[str, Any]:
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    from typing import cast
     kb_exists = project.knowledge_base is not None
     kb_active = project.knowledge_base.is_active if project.knowledge_base else False
 
@@ -1038,7 +1018,7 @@ async def get_project_file_list(
         query = query.where(ProjectFile.file_type == file_type)
 
     # Use func.count(ProjectFile.id) for a more specific count
-    count_query = select(func.count(ProjectFile.id)).select_from( # pylint: disable=not-callable
+    count_query = select(func.count(ProjectFile.id)).select_from(  # pylint: disable=not-callable
         query.subquery()
     )
     total = await db.execute(count_query)
