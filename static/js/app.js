@@ -128,29 +128,27 @@ function fireAppReady(success = true, error = null) {
   DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', { success, error, context: 'app' });
 }
 
+// ──  initialise sanitizer FIRST ──────────────────────────────────
+let sanitizer = browserAPI.getWindow()?.DOMPurify;
+if (!sanitizer) {
+  throw new Error('[App] DOMPurify not found - aborting bootstrap for security reasons.');
+}
+DependencySystem.register('sanitizer',  sanitizer);
+DependencySystem.register('domPurify', sanitizer);  // legacy alias
+
+// ──  now it is safe to create domAPI  ────────────────────────────
 const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
-  windowObject: browserAPI.getWindow(),
-  debug: APP_CONFIG.DEBUG === true,
+  windowObject  : browserAPI.getWindow(),
+  debug         : APP_CONFIG.DEBUG === true,
   logger,
-  sanitizer
+  sanitizer                      // ← now defined
 });
 
 // ---------------------------------------------------------------------------
 // 3) Register base services
 // ---------------------------------------------------------------------------
 DependencySystem.register('domAPI', domAPI);
-
-// Wait until sanitizer is initialized before constructing eventHandlers
-let sanitizer = browserAPI.getWindow()?.DOMPurify;
-if (!sanitizer) {
-  throw new Error(
-    '[App] DOMPurify not found - aborting bootstrap for security reasons. ' +
-    'Load it with SRI before app.js'
-  );
-}
-DependencySystem.register('sanitizer', sanitizer);
-DependencySystem.register('domPurify', sanitizer); // legacy alias
 
 const errorReporter =
   { report: (...args) => logger.error('[ErrorReporterStub]', ...args) };
