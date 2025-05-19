@@ -12,7 +12,8 @@ export function createChatUIEnhancements({
   eventHandlers,
   browserService,
   domReadinessService,
-  logger
+  logger,
+  sanitizer                     // ← NEW
 } = {}) {
   const MODULE_CONTEXT = 'chatUIEnhancements';
 
@@ -21,16 +22,15 @@ export function createChatUIEnhancements({
   if (!browserService?.setTimeout)        throw new Error('[chatUIEnhancements] browserService required');
   if (!domReadinessService) throw new Error('[chatUIEnhancements] domReadinessService required');
   if (!logger) throw new Error('[chatUIEnhancements] logger required');
+  if (!sanitizer?.sanitize) throw new Error('[chatUIEnhancements] sanitizer required');
 
-  // Defensive sanitizer fallback
-  const sanitizer = domReadinessService.sanitizer || {
-    sanitize: (text) => {
-      if (logger && logger.warn) {
-        logger.warn(`[${MODULE_CONTEXT}] No sanitizer provided, using fallback.`, { context: MODULE_CONTEXT });
-      }
-      return text;
-    }
+  const state = {
+    initialized: false,
+    initializing: null,
+    typingIndicatorVisible: false
   };
+
+  const _sanitizer = sanitizer;
 
   /**
    * Safe handler wrapper for all event handlers.
@@ -180,7 +180,7 @@ export function createChatUIEnhancements({
     bubbleEl.className = 'message-bubble';
 
     // Sanitize and set message content
-    bubbleEl.innerHTML = sanitizer.sanitize(message);
+    bubbleEl.innerHTML = _sanitizer.sanitize(message);
 
     // Create metadata element
     const metadataEl = domAPI.createElement && domAPI.createElement('div');
@@ -205,7 +205,7 @@ export function createChatUIEnhancements({
       if (copyBtn) {
         copyBtn.className = 'message-action-btn';
         copyBtn.setAttribute('aria-label', 'Copy message');
-        copyBtn.innerHTML = sanitizer.sanitize(
+        copyBtn.innerHTML = _sanitizer.sanitize(
           '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
         );
 
@@ -236,7 +236,7 @@ export function createChatUIEnhancements({
     // Strip HTML tags for plain text
     const tempEl = domAPI.createElement && domAPI.createElement('div');
     if (!tempEl) return;
-    tempEl.innerHTML = sanitizer.sanitize(message);
+    tempEl.innerHTML = _sanitizer.sanitize(message);
     const textContent = tempEl.textContent;
 
     const doc = domAPI.getDocument && domAPI.getDocument();
@@ -339,7 +339,7 @@ export function createChatUIEnhancements({
     const indicatorContent = domAPI.createElement && domAPI.createElement('div');
     if (!indicatorContent) return;
     indicatorContent.className = 'typing-indicator';
-    indicatorContent.innerHTML = sanitizer.sanitize('<span></span><span></span><span></span>');
+    indicatorContent.innerHTML = _sanitizer.sanitize('<span></span><span></span><span></span>');
 
     indicatorEl.appendChild(indicatorContent);
     chatContainer.appendChild(indicatorEl);

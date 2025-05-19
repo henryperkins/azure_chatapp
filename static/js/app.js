@@ -1172,7 +1172,8 @@ async function initializeUIComponents() {
     eventHandlers,
     browserService: browserServiceInstance,
     domReadinessService,
-    logger
+    logger,
+    sanitizer                      // ← NEW injection
   });
   DependencySystem.register('chatUIEnhancements', chatUIEnhancementsInstance);
 
