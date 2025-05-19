@@ -885,7 +885,7 @@ export function createProjectDashboard(deps) {
             this.components.projectDetails.renderProject?.(projectToRender);
             // Possibly load conversation
             if (conversationId && this.components.projectDetails.loadConversation) {
-              this.components.projectDetails.switchTab?.(activeTab || 'chat');
+              this.components.projectDetails.switchTab?.(activeTab || 'conversations');
               await this.components.projectDetails.loadConversation(conversationId);
             } else if (activeTab && this.components.projectDetails.switchTab) {
               this.components.projectDetails.switchTab(activeTab);
