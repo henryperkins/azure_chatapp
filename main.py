@@ -44,7 +44,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.routing import APIRoute
 
-# …
 # Dev helper: always deliver fresh JS/CSS/HTML – disables browser cache
 
 class NoCacheStatic(StaticFiles):

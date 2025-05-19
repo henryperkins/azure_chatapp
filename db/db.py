@@ -56,6 +56,7 @@ if "+asyncpg" not in DATABASE_URL and DATABASE_URL.startswith("postgresql"):
 def _str_is_true(v: str | bool | None) -> bool:
     return str(v).lower() in ("1", "true", "yes")
 
+
 ALLOW_SELF_SIGNED = (
     _str_is_true(os.getenv("PG_SSL_ALLOW_SELF_SIGNED"))
     or _str_is_true(getattr(settings, "PG_SSL_ALLOW_SELF_SIGNED", None))
@@ -82,8 +83,8 @@ def _find_pg_ssl_cert() -> str | None:
     candidates = [
         "DigiCertGlobalRootG2.crt.pem",
         "MicrosoftRSARoot2017.pem",
-        "DigiCertGlobalRootCA.pem", # Matches the .pem file we created
-        "BaltimoreCyberTrustRoot.crt.pem", # Fallback
+        "DigiCertGlobalRootCA.pem",
+        "BaltimoreCyberTrustRoot.crt.pem",
     ]
     for fname in candidates:
         if os.path.isfile(fname):
@@ -100,6 +101,7 @@ def _find_pg_ssl_cert() -> str | None:
 
     # 4) nada encontrado
     return None
+
 
 if ALLOW_SELF_SIGNED:
     PG_SSL_CERT_PATH = None

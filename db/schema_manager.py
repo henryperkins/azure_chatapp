@@ -35,14 +35,17 @@ Main entry points:
 
 """
 
+import os
+# (keep glob if you run migrations from glob elsewhere, otherwise safe for removal)
 import logging
 import time
+# Alembic removed – all migration logic is now native
 from typing import Optional, List, Set
 import hashlib
 from pathlib import Path
 
 from sqlalchemy import inspect, text, UniqueConstraint, CheckConstraint
-from sqlalchemy.schema import AddConstraint # Added import
+from sqlalchemy.schema import AddConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -53,89 +56,12 @@ logger = logging.getLogger(__name__)
 
 MIGRATIONS_PATH = Path(__file__).parent.parent / "db" / "migrations"
 
-# --- Alembic Automated Migration Integration ---
-import os
-import glob
-from alembic.config import Config
-from alembic import command
 
-def automated_alembic_migrate(message: str = "Automated migration", revision_dir: str = "alembic"):
-    """
-    Autogenerate and apply Alembic migrations automatically
-    — but if the migration is a no-op ("pass"), do not write or apply it. Prevents reload loops.
-    """
-    logger.info("Starting Alembic auto-migration workflow with no-op pruning")
-    print("==> (Alembic) Starting Alembic auto-migration workflow...")
-
-    # Path adjustments:
-    alembic_ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
-    alembic_ini_path = os.path.abspath(alembic_ini_path)
-    migration_dir_path = os.path.join(os.path.dirname(__file__), "..", revision_dir)
-    migration_dir_path = os.path.abspath(migration_dir_path)
-
-    # Create Alembic config object programmatically
-    alembic_cfg = Config(alembic_ini_path)
-    alembic_cfg.set_main_option("script_location", migration_dir_path)
-
-    from alembic.script import ScriptDirectory
-    script = ScriptDirectory.from_config(alembic_cfg)
-    prev_head = script.get_current_head()
-
-    logger.info("Checking for model/db schema drift to issue new Alembic revision...")
-    print("==> (Alembic) Checking for model/db schema drift to issue new Alembic revision...")
-    try:
-        command.revision(alembic_cfg, message=message, autogenerate=True)
-        print("==> (Alembic) Alembic revision command executed.")
-    except Exception as e:
-        logger.error(f"Alembic revision failed: {e}")
-        print(f"==> (Alembic) Alembic revision failed: {e}")
-        raise
-
-    # Check if new revision was created
-    script = ScriptDirectory.from_config(alembic_cfg)
-    new_head = script.get_current_head()
-    if prev_head != new_head:
-        # Find the new migration file
-        migration_files = sorted(glob.glob(os.path.join(migration_dir_path, "versions", "*.py")), key=os.path.getmtime, reverse=True)
-        latest_file = migration_files[0] if migration_files else None
-
-        if latest_file:
-            with open(latest_file, "r", encoding="utf-8") as f:
-                contents = f.read()
-            # Detect no-op: Both upgrade() and downgrade() are 'pass'
-            is_noop = (
-                "def upgrade():" in contents and "def downgrade():" in contents
-                and (
-                    "def upgrade():\n    pass" in contents or "def upgrade():\n\tpass" in contents
-                ) and (
-                    "def downgrade():\n    pass" in contents or "def downgrade():\n\tpass" in contents
-                )
-            )
-            if is_noop:
-                logger.info(f"Removing Alembic no-op (empty) migration file: {latest_file}")
-                print(f"==> (Alembic) Removing no-op migration {latest_file}")
-                os.remove(latest_file)
-                # Reset head so db & script state matches
-                script = ScriptDirectory.from_config(alembic_cfg)
-                command.upgrade(alembic_cfg, prev_head or "base")
-                return
-
-        logger.info(f"New Alembic migration created: {new_head}. Upgrading database...")
-        print(f"==> (Alembic) New migration created: {new_head}. Upgrading database to head...")
-
-    else:
-        logger.info("No changes detected. Database already up to date.")
-        print("==> (Alembic) No changes detected. Database already up to date (no new migration).")
-
-    try:
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migration applied: database is at head.")
-        print("==> (Alembic) Alembic upgrade applied: database is at head.")
-    except Exception as e:
-        logger.error(f"Alembic upgrade failed: {e}")
-        print(f"==> (Alembic) Alembic upgrade failed: {e}")
-        raise
-# --- End Alembic Migration Integration ---
+# -----------------------------------------------------------------
+# Alembic helper function removed.  All versioning now flows through:
+#   1. versioned SQL files in MIGRATIONS_PATH  (V###__desc.sql)
+#   2. runtime auto-alignment via SchemaManager.fix_schema()
+# -----------------------------------------------------------------
 
 
 class SchemaManager:
@@ -178,14 +104,14 @@ class SchemaManager:
         Uses a PostgreSQL advisory lock to ensure multi-pod safety.
         """
         logger.info(f"Starting database migration process from {migrations_path}...")
-        print(f"==> Starting database migration process from {migrations_path}...")
+        logger.info(f"Starting database migration process from {migrations_path}...")
 
         async with async_engine.begin() as conn:
             # Acquire advisory lock
             lock_acquired = await conn.execute(text("SELECT pg_try_advisory_lock(hashtext('schema_migrate'))"))
             if not lock_acquired.scalar_one():
                 logger.warning("Could not acquire schema migration lock. Another migration process may be running.")
-                print("==> Could not acquire schema migration lock. Another migration process may be running.")
+                logger.warning("Could not acquire schema migration lock. Another migration process may be running.")
                 # Depending on desired behavior, could raise an error or just return
                 return
 
@@ -208,31 +134,31 @@ class SchemaManager:
                     WHERE success;
                 """))
                 logger.info("Ensured schema_history table exists.")
-                print("==> Ensured schema_history table exists.")
+                logger.info("Ensured schema_history table exists.")
 
                 result = await conn.execute(text("SELECT version FROM schema_history WHERE success = TRUE"))
                 applied_versions = {row[0] for row in result}
                 logger.info(f"Found {len(applied_versions)} successfully applied migration versions: {applied_versions}")
-                print(f"==> Found {len(applied_versions)} successfully applied migration versions.")
+                logger.info(f"Found {len(applied_versions)} successfully applied migration versions.")
 
                 if not migrations_path.exists():
                     logger.warning(f"Migrations directory {migrations_path} does not exist. No migrations to apply.")
-                    print(f"==> Migrations directory {migrations_path} does not exist. No migrations to apply.")
+                    logger.warning(f"Migrations directory {migrations_path} does not exist. No migrations to apply.")
                     return
 
                 migration_files = sorted(migrations_path.glob("V*.sql"))
                 logger.info(f"Found {len(migration_files)} migration files in {migrations_path}.")
-                print(f"==> Found {len(migration_files)} migration files in {migrations_path}.")
+                logger.info(f"Found {len(migration_files)} migration files in {migrations_path}.")
 
                 for sql_file in migration_files:
                     try:
-                        version_str = sql_file.name.split("__")[0][1:] # Strip 'V'
+                        version_str = sql_file.name.split("__")[0][1:]
                         version = int(version_str)
                         description = sql_file.name.split("__")[1].split(".sql")[0].replace("_", " ")
                     except (IndexError, ValueError) as e:
                         logger.error(f"Could not parse version/description from filename {sql_file.name}: {e}")
-                        print(f"==> ERROR: Could not parse version/description from filename {sql_file.name}: {e}")
-                        continue # Skip malformed filenames
+                        logger.error(f"Could not parse version/description from filename {sql_file.name}: {e}")
+                        continue
 
                     if version in applied_versions:
                         # Optional: Add checksum validation for already applied migrations
@@ -245,10 +171,10 @@ class SchemaManager:
                         continue
 
                     logger.info(f"Attempting to apply migration: {sql_file.name} (Version: {version})")
-                    print(f"==> Attempting to apply migration: {sql_file.name} (Version: {version})")
+                    logger.info(f"Attempting to apply migration: {sql_file.name} (Version: {version})")
                     sql_content = sql_file.read_text()
                     checksum = hashlib.sha256(sql_content.encode()).hexdigest()
-                    installed_by = settings.APP_NAME # Or some other identifier
+                    installed_by = settings.APP_NAME
 
                     start_time = time.perf_counter()
                     try:
@@ -275,11 +201,11 @@ class SchemaManager:
                             },
                         )
                         logger.info(f"Successfully applied migration {sql_file.name} in {duration_ms}ms.")
-                        print(f"==> Successfully applied migration {sql_file.name} in {duration_ms}ms.")
+                        logger.info(f"Successfully applied migration {sql_file.name} in {duration_ms}ms.")
                     except Exception as e:
                         duration_ms = int((time.perf_counter() - start_time) * 1000)
                         logger.error(f"Failed to apply migration {sql_file.name}: {e}", exc_info=True)
-                        print(f"==> ERROR: Failed to apply migration {sql_file.name}: {e}")
+                        logger.error(f"Failed to apply migration {sql_file.name}: {e}")
                         await conn.execute(
                             text("""
                                 INSERT INTO schema_history (version, description, installed_by, execution_time, success, checksum)
@@ -296,58 +222,51 @@ class SchemaManager:
                                 "version": version,
                                 "description": description,
                                 "installed_by": installed_by,
-                                "execution_time": duration_ms, # Log duration even on failure
+                                "execution_time": duration_ms,
                                 "checksum": checksum,
                             },
                         )
-                        raise # Re-raise the exception to ensure the transaction rolls back and failure is visible
+                        raise  # Re-raise the exception to ensure the transaction rolls back and failure is visible
             finally:
                 # Release advisory lock
                 await conn.execute(text("SELECT pg_advisory_unlock(hashtext('schema_migrate'))"))
                 logger.info("Released schema migration lock.")
-                print("==> Released schema migration lock.")
+                logger.info("Released schema migration lock.")
         logger.info("Database migration process finished.")
-        print("==> Database migration process finished.")
-
 
     async def initialize_database(self) -> None:
         """
         Full database initialization process:
-        1. Run SQL migrations via self.migrate()
-        2. Creates missing tables (additive only, handled by fix_schema)
-        3. Aligns schema with ORM definitions (additive only, handled by fix_schema)
-        4. Validates final schema
+        1️⃣ Versioned SQL files (Flyway-style)
+        2️⃣ Auto-alignment – additive changes & optional destructive fixes
+        3️⃣ Validate
         """
         try:
             logger.info("Starting database initialization...")
-            print("==> Starting database initialization...")
+            logger.info("Starting database initialization...")
 
-            # Step 1: Run SQL migrations
+            # 1️⃣  Versioned SQL files (Flyway-style)
             await self.migrate()
 
-            # Step 2 (was 1): Create missing tables (now part of fix_schema's create_all)
-            # Step 2 & 3: Schema alignment (handles additive changes like new tables/columns)
-            # and auto-creation of new tables/columns.
+            # 2️⃣  Auto-alignment – additive changes & optional destructive fixes
             logger.info("Running schema alignment (fix_schema)...")
-            print("==> Running schema alignment (fix_schema)...")
-            await self.fix_schema() # This now handles create_all for additive changes
+            logger.info("Running schema alignment (fix_schema)...")
+            await self.fix_schema()
 
-            # Step 4 (was 3): Final validation
+            # 3️⃣  Validate
             logger.info("Validating schema...")
-            print("==> Validating schema...")
+            logger.info("Validating schema...")
             issues = await self.validate_schema()
             if issues:
                 msg = f"Schema validation completed with {len(issues)} issues."
                 logger.warning(msg)
-                print("==> " + msg)
+                logger.warning(msg)
                 for issue in issues[:5]:  # Log first 5 issues
                     logger.warning(f"  - {issue}")
-                    print(f"==> (ISSUE) {issue}")
                 if len(issues) > 5:
-                    print(f"==> ...and {len(issues)-5} more issues.")
+                    logger.warning(f"...and {len(issues) - 5} more issues.")
             else:
                 logger.info("Schema validation successful - no issues found")
-                print("==> Schema validation successful - no issues found.")
 
         except Exception as e:
             logger.error(f"Database initialization failed: {str(e)}")
@@ -397,11 +316,11 @@ class SchemaManager:
 
             # Check constraints
             for constraint in table.constraints:
-                if not constraint.name: # type: ignore
+                if not constraint.name:  # type: ignore
                     continue  # skip unnamed constraints
-                if constraint.name not in db_schema["constraints"].get(table_name, []): # type: ignore
+                if constraint.name not in db_schema["constraints"].get(table_name, []):  # type: ignore
                     mismatch_details.append(
-                        f"Missing constraint: {table_name}.{constraint.name}" # type: ignore
+                        f"Missing constraint: {table_name}.{constraint.name}"  # type: ignore
                     )
 
         return mismatch_details
@@ -511,7 +430,7 @@ class SchemaManager:
                             orm_index_names.add(constraint.name)
                     # Add names of indexes created by unique=True on columns (convention-based, might need refinement)
                     for column in table.columns:
-                        if column.unique and column.name: # unique=True implies an index
+                        if column.unique and column.name:  # unique=True implies an index
                             # Default naming convention for index from unique=True is often ix_tablename_colname or tablename_colname_key
                             # This is a heuristic. A more robust way would be to inspect the compiled DDL for the column.
                             # For now, we'll assume if a UniqueConstraint with a name exists for the column, it's covered.
@@ -522,7 +441,7 @@ class SchemaManager:
                             for constraint in table.constraints:
                                 if isinstance(constraint, UniqueConstraint) and column in constraint.columns and constraint.name:
                                     orm_index_names.add(constraint.name)
-                                    break # Found the constraint for this column
+                                    break
 
                     for db_index_name in db_indexes:
                         # Avoid dropping primary key indexes, typically named like tablename_pkey
@@ -541,7 +460,7 @@ class SchemaManager:
                                 # as this might be what's causing the transaction to abort.
                                 # However, InFailedSQLTransactionError means the transaction is already bad.
                                 if "InFailedSQLTransactionError" in str(e):
-                                    raise # Propagate if transaction is already broken
+                                    raise  # Propagate if transaction is already broken
                                 logger.warning(f"Could not drop index {db_index_name} due to: {str(e)}. It might be in use by a constraint not explicitly named in ORM's table.indexes.")
 
                 # 5. Create missing Constraints (Check, Unique, etc.)
@@ -571,7 +490,7 @@ class SchemaManager:
                                 # Compile DDL for adding the constraint
                                 # Ensure the constraint is associated with the correct metadata if not already
                                 if constraint.table is None and hasattr(constraint, '_set_parent'):
-                                     constraint._set_parent(table) # Associate with table if not already, for DDL compilation
+                                    constraint._set_parent(table)  # Associate with table if not already, for DDL compilation
 
                                 add_constraint_ddl = await conn.run_sync(
                                     lambda sync_conn: str(AddConstraint(constraint).compile(dialect=sync_conn.dialect))
@@ -580,12 +499,17 @@ class SchemaManager:
                                 logger.info(f"Successfully created constraint: {table.name}.{constraint.name}")
                             except Exception as e:
                                 # Check if error is due to constraint already existing (e.g., race condition or subtle naming issue)
-                                if "already exists" in str(e).lower() or ("duplicate" in str(e).lower() and "constraint" in str(e).lower()):
+                                if "already exists" in str(e).lower() or (
+                                    "duplicate" in str(e).lower() and "constraint" in str(e).lower()
+                                ):
                                     logger.warning(
                                         f"Constraint {table.name}.{constraint.name} may already exist or there was an issue with its name/definition: {e}"
                                     )
                                 else:
-                                    logger.error(f"Failed to create constraint {table.name}.{constraint.name} with ALTER TABLE: {e}", exc_info=True)
+                                    logger.error(
+                                        f"Failed to create constraint {table.name}.{constraint.name} with ALTER TABLE: {e}",
+                                        exc_info=True,
+                                    )
                         elif hasattr(constraint, 'create'):
                             # Fallback for other constraint types that might have a .create() method
                             logger.info(f"Attempting to explicitly create other constraint type: {table.name}.{constraint.name} of type {type(constraint).__name__}")
@@ -647,7 +571,7 @@ class SchemaManager:
             "tables": set(),  # Set[str]
             "columns": {},    # Dict[str, Dict[str, dict]]
             "indexes": {},    # Dict[str, Set[str]]
-            "constraints": {},# Dict[str, Set[str]]
+            "constraints": {},
         }
 
         async with async_engine.connect() as conn:
@@ -730,14 +654,14 @@ class SchemaManager:
 
         elif orm_type_str_for_special_cases == "TEXT" and db_type == "text":
             return True
-        elif isinstance(orm_type, PG_UUID) and db_type == "uuid": # PG_UUID is specific, direct check
+        elif isinstance(orm_type, PG_UUID) and db_type == "uuid":  # PG_UUID is specific, direct check
             return True
         # Add other special cases if necessary, e.g., for NUMERIC precision/scale if not handled by compile()
 
         # finally fall back to the static equivalence table
         orm_type_str = str(orm_type).split("(")[0].upper()
         for orm_t, db_types_list in self.type_equivalents.items():
-            if orm_t == orm_type_str and db_type.lower() in db_types_list: # ensure db_type is also lowercased for comparison
+            if orm_t == orm_type_str and db_type.lower() in db_types_list:  # ensure db_type is also lowercased for comparison
                 return True
         return False
 
@@ -755,47 +679,56 @@ class SchemaManager:
 
     async def _add_column(self, conn: AsyncConnection, table_name: str, column) -> None:
         """Add a column to a table."""
-        column_spec = f"{column.name} {column.type.compile(sync_engine.dialect)}"
+        # Safer identifier quoting and explicit error on bad defaults
+        column_spec = column.type.compile(sync_engine.dialect)
 
         if not column.nullable and column.server_default is None:
-            if str(column.type) == "JSONB":
-                column_spec += " DEFAULT '{}'::jsonb"
-            elif str(column.type) == "BOOLEAN":
-                column_spec += " DEFAULT false"
-            elif "INT" in str(column.type).upper():
-                column_spec += " DEFAULT 0"
-            elif "UUID" in str(column.type).upper():
-                column_spec += " DEFAULT gen_random_uuid()"
-            elif (
-                column.name == "created_at" and "TIMESTAMP" in str(column.type).upper()
-            ):
-                column_spec += " DEFAULT CURRENT_TIMESTAMP"
-            else:
-                column_spec += " DEFAULT ''"
+            # Protect runtime rows: make column nullable first, back-fill in a separate UPDATE, then set NOT NULL.
+            logger.info(
+                f"Adding non-nullable column '{column.name}' to '{table_name}' with no default—adding as NULL-able for now"
+            )
+            await conn.execute(
+                text(
+                    'ALTER TABLE "{tbl}" ADD COLUMN "{col}" {typ} NULL'.format(
+                        tbl=table_name, col=column.name, typ=column_spec
+                    )
+                )
+            )
+            return  # caller’s validation loop will re-detect nullability
 
-        column_spec += " NOT NULL" if not column.nullable else ""
-
+        if not column.nullable and column.server_default is None:
+            # These cases above are now handled.
+            pass
+        elif not column.nullable:
+            column_spec += " NOT NULL"
         if column.server_default is not None:
             column_spec += f" DEFAULT {column.server_default.arg}"
 
-        await conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_spec}"))
+        await conn.execute(
+            text(f'ALTER TABLE "{table_name}" ADD COLUMN "{column.name}" {column_spec}')
+        )
 
     async def _add_foreign_key(
         self, conn: AsyncConnection, table_name: str, column_name: str, fk
     ) -> None:
         """Add a foreign key constraint."""
         fk_name = f"fk_{table_name}_{column_name}_{fk.column.table.name}"
+        fk_name = fk_name[:63]  # PG identifier limit
         ondelete = f" ON DELETE {fk.ondelete}" if fk.ondelete else ""
 
         for attempt in range(3):  # Retry up to 3 times
             try:
                 await conn.execute(
                     text(
-                        f"ALTER TABLE {table_name} "
-                        f"ADD CONSTRAINT {fk_name} "
-                        f"FOREIGN KEY ({column_name}) "
-                        f"REFERENCES {fk.column.table.name}({fk.column.name})"
-                        f"{ondelete}"
+                        'ALTER TABLE "{tbl}" ADD CONSTRAINT "{fk}" '
+                        'FOREIGN KEY ("{col}") REFERENCES "{reft}"("{refc}"){od}'.format(
+                            tbl=table_name,
+                            fk=fk_name,
+                            col=column_name,
+                            reft=fk.column.table.name,
+                            refc=fk.column.name,
+                            od=ondelete,
+                        )
                     )
                 )
                 return
@@ -820,22 +753,21 @@ class SchemaManager:
         if "projects" in tables and "knowledge_bases" in tables:
             # Create projects table without the FK to knowledge_bases initially
             # The _create_projects_table method already handles creating projects without the FK
-            await self._create_projects_table() # Uses "IF NOT EXISTS"
+            await self._create_projects_table()  # Uses "IF NOT EXISTS"
             # Create knowledge_bases table
-            await self._create_knowledge_bases_table() # Uses checkfirst=True
+            await self._create_knowledge_bases_table()  # Uses checkfirst=True
             # Add the FK from projects to knowledge_bases
             await self._add_projects_knowledge_base_fk()
             # Remove them from the list of tables to be created in the general loop
             tables = [t for t in tables if t not in ["projects", "knowledge_bases"]]
-        elif "projects" in tables: # If only projects needs to be created (users already exists or created)
-            await self._create_projects_table() # This will create projects with its FK to users (uses "IF NOT EXISTS")
-            if "knowledge_bases" in await self.get_existing_tables(): # Check if KB exists to add FK
-                 await self._add_projects_knowledge_base_fk()
+        elif "projects" in tables:  # If only projects needs to be created (users already exists or created)
+            await self._create_projects_table()  # This will create projects with its FK to users (uses "IF NOT EXISTS")
+            if "knowledge_bases" in await self.get_existing_tables():  # Check if KB exists to add FK
+                await self._add_projects_knowledge_base_fk()
             tables = [t for t in tables if t != "projects"]
-        elif "knowledge_bases" in tables: # If only knowledge_bases needs to be created
-            await self._create_knowledge_bases_table() # Uses checkfirst=True
+        elif "knowledge_bases" in tables:  # If only knowledge_bases needs to be created
+            await self._create_knowledge_bases_table()  # Uses checkfirst=True
             tables = [t for t in tables if t != "knowledge_bases"]
-
 
         # Create remaining tables
         for table_name in tables:
@@ -909,18 +841,12 @@ class SchemaManager:
             logger.info("Created knowledge_bases table (if not exists)")
 
     async def _add_projects_knowledge_base_fk(self) -> None:
-        """Add the knowledge_base_id foreign key to projects."""
+        """Add the knowledge_base_id foreign key to projects, robustly and idempotently."""
+        fk_sql = (
+            'ALTER TABLE "projects" ADD CONSTRAINT IF NOT EXISTS '
+            '"fk_projects_knowledge_base" FOREIGN KEY ("knowledge_base_id") '
+            'REFERENCES "knowledge_bases"("id") ON DELETE SET NULL'
+        )
         async with async_engine.begin() as conn:
-            await conn.run_sync(
-                lambda sync_conn: sync_conn.execute(
-                    text(
-                        """
-                ALTER TABLE projects
-                ADD CONSTRAINT fk_projects_knowledge_base
-                FOREIGN KEY (knowledge_base_id)
-                REFERENCES knowledge_bases(id) ON DELETE SET NULL
-            """
-                    )
-                )
-            )
+            await conn.execute(text(fk_sql))
             logger.info("Added knowledge_base_id foreign key to projects")

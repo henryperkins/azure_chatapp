@@ -239,7 +239,7 @@ def extract_token(request_or_websocket, token_type="access"):
     cookie_name = f"{token_type}_token"
     token = None
     source = None
-    raw_cookie_header = "[Not Available]" # Default
+    raw_cookie_header = "[Not Available]"
 
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
 
@@ -398,7 +398,7 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
     logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Attempting to extract access token. Request cookies: {request.cookies}")
 
-    token = extract_token(request) # extract_token already has good logging
+    token = extract_token(request)  # extract_token already has good logging
     if not token:
         logger.warning("[GET_CURRENT_USER_AND_TOKEN] Access token not found after extract_token call.")
         # Log headers for more context if debugging is enabled

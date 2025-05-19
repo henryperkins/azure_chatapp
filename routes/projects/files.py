@@ -20,7 +20,7 @@ from utils.response_utils import create_standard_response
 from utils.db_utils import get_all_by_condition
 from services.file_storage import get_file_storage
 from services.project_service import validate_project_access
-from services.knowledgebase_service import upload_file_to_project # Added import
+from services.knowledgebase_service import upload_file_to_project
 import config
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ async def handle_upload_project_file(
             project_id=project_id,
             file=file,
             db=db,
-            user_id=user.id, # Pass user.id
+            user_id=user.id,
             background_tasks=background_tasks
         )
         return await create_standard_response(file_metadata, "File uploaded successfully")
@@ -114,7 +114,7 @@ async def list_project_files(
                         "file_type": f.file_type,
                         "file_size": f.file_size,
                         "created_at": f.created_at.isoformat(),
-                        "metadata": f.config or {}, # Changed f.metadata to f.config
+                        "metadata": f.config or {},
                     }
                     for f in files
                 ],

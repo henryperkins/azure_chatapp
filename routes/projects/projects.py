@@ -32,7 +32,7 @@ from sentry_sdk import (
 
 from db import get_async_session
 from models.user import User, UserRole
-from models.project import Project, ProjectUserAssociation # Added ProjectUserAssociation
+from models.project import Project, ProjectUserAssociation
 from models.conversation import Conversation
 from models.project_file import ProjectFile
 from models.artifact import Artifact

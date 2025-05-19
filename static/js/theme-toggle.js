@@ -164,9 +164,9 @@ export function createThemeManager(deps) {
   const teardown = () => {
     cleanupCallbacks.forEach(cleanup => {
       try {
-        cleanup && cleanup();
-      } catch {
-        // Previously used notification for error reporting, now removed
+        if (cleanup) cleanup();
+      } catch (_err) {
+        void _err; // intentionally ignoring error, previously handled with notification
       }
     });
     cleanupCallbacks = [];
@@ -174,8 +174,8 @@ export function createThemeManager(deps) {
     if (mutationObserver) {
       try {
         mutationObserver.disconnect();
-      } catch {
-        // Also removed notification error handling
+      } catch (_err) {
+        void _err; // intentionally ignoring error, previously handled with notification
       }
       mutationObserver = null;
     }

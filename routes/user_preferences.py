@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from utils.auth_utils import get_current_user_and_token
@@ -6,10 +6,6 @@ from db import get_async_session
 from models.user import User
 
 router = APIRouter()
-
-from fastapi import Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from utils.auth_utils import get_current_user_and_token
 
 
 @router.get("/api/user/me")
