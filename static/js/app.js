@@ -1168,6 +1168,9 @@ async function initializeUIComponents() {
 
   // Create chat UI enhancements
   const chatUIEnhancementsInstance = createChatUIEnhancements({
+    domAPI,
+    eventHandlers,
+    browserService: browserServiceInstance,
     domReadinessService,
     logger
   });

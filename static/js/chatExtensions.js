@@ -151,7 +151,10 @@ export function createChatExtensions(options) {
       }
 
       var endpoint = "/api/projects/" + projectId + "/conversations/" + conversationId;
-      app.apiRequest(endpoint, "PATCH", { title: newTitle })
+      app.apiRequest(endpoint, {
+        method : 'PATCH',
+        body   : { title: newTitle }
+      })
         .catch(function() {
           chatTitleEl.textContent = originalTitle;
         });
