@@ -1,5 +1,4 @@
 import { attachChatUI } from "./chat-ui-utils.js";
-import { APP_CONFIG } from './appConfig.js'; // Import APP_CONFIG
 
 /**
  * @typedef {Object} DomAPI
@@ -46,7 +45,8 @@ export function createChatManager(deps = {}) {
     apiEndpoints,
     domReadinessService,
     logger,
-    DependencySystem
+    DependencySystem,
+    APP_CONFIG                // ← NEW (DI)
   } = deps;
 
   if (!apiRequest) throw new Error('Missing apiRequest in createChatManager');
@@ -57,6 +57,7 @@ export function createChatManager(deps = {}) {
   if (!apiEndpoints) throw new Error('Missing apiEndpoints in createChatManager');
   if (!domReadinessService) throw new Error('Missing domReadinessService in createChatManager');
   if (!logger) throw new Error('Missing logger in createChatManager');
+  if (!APP_CONFIG) throw new Error('Missing APP_CONFIG in createChatManager');
 
   function safeHandler(fn, description) {
     return (...args) => {
@@ -177,6 +178,7 @@ export function createChatManager(deps = {}) {
       this.DependencySystem = DependencySystem || undefined;
       this.domReadinessService = domReadinessService;
       this._uiAttached = false;
+      this.APP_CONFIG = APP_CONFIG;
     }
 
     /**
@@ -1032,7 +1034,7 @@ export function createChatManager(deps = {}) {
           this.inputSelector,
           this.sendButtonSelector
         ],
-        { timeout: APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
+        { timeout: this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
           context: "chatManager::_setupUIElements" }
       );
 

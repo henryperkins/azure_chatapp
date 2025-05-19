@@ -423,7 +423,8 @@ function createOrGetChatManager() {
     isValidProjectId,
     isAuthenticated: () => !!authModule?.isAuthenticated?.(),
     DOMPurify: DependencySystem.modules.get('sanitizer'),
-    apiEndpoints
+    apiEndpoints,
+    APP_CONFIG                 // ← NEW injection
   });
 
   DependencySystem.register('chatManager', cm);
