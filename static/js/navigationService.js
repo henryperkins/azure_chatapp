@@ -355,7 +355,7 @@ export function createNavigationService({
     return navigateTo('projectDetails', {
       projectId,
       conversationId,
-      activeTab: 'chat'
+      activeTab: 'conversations'
     }, options);
   }
 
