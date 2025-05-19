@@ -56,8 +56,7 @@ export function createChatExtensions(options) {
 
   function init() {
     return domReadinessService.elementsReady(
-      ['#chatTitleEditBtn', '#chatTitle',
-       '#projectChatTitleEditBtn', '#projectChatTitle'],
+      ['#projectChatTitleEditBtn', '#projectChatTitle'],
       { timeout: 8000, observeMutations: true, context: 'chatExtensions.init' }
     ).then(() => {
       setupChatTitleEditing();
@@ -73,7 +72,7 @@ export function createChatExtensions(options) {
     if (!domAPI) return;
 
     const editBtns = Array.from(
-      domAPI.querySelectorAll?.("#chatTitleEditBtn, #projectChatTitleEditBtn") || []
+      domAPI.querySelectorAll?.("#projectChatTitleEditBtn") || []
     );
     if (!editBtns.length) return;
 
@@ -81,9 +80,7 @@ export function createChatExtensions(options) {
       if (btn.hasAttribute("data-chat-title-handler-bound")) return;
 
       const container    = btn.closest(".chat-title-row") || btn.parentElement;
-      const chatTitleEl  =
-            container?.querySelector("#chatTitle") ||
-            container?.querySelector("#projectChatTitle");
+      const chatTitleEl  = container?.querySelector("#projectChatTitle");
       if (!chatTitleEl) return;
 
       trackListener(btn, "click",
@@ -92,6 +89,7 @@ export function createChatExtensions(options) {
       );
       btn.setAttribute("data-chat-title-handler-bound", "true");
     });
+// (logic now exclusively targets the project chat title.)
   }
 
   function handleTitleEditClick(editTitleBtn, chatTitleEl) {
