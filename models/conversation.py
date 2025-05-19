@@ -44,8 +44,8 @@ class Conversation(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
-    project_id: Mapped[Optional[UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=True, index=True
+    project_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True
     )
     title: Mapped[str] = mapped_column(String, default="New Chat")
     model_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
