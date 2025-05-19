@@ -100,11 +100,11 @@ export function createChatUIEnhancements({
     if (state.initialized) return Promise.resolve();
     if (state.initializing) return state.initializing;
 
-    // Dual-fallback selectors for project/global chat
+    // Project-only selectors for chat UI
     const CHAT_SELECTORS = [
-      '#projectChatInput, #globalChatInput',
-      '#projectChatMessages, #globalChatMessages',
-      '#projectChatSendBtn, #globalChatSendBtn'
+      '#projectChatInput',
+      '#projectChatMessages',
+      '#projectChatSendBtn'
     ];
 
     state.initializing = (async () => {
@@ -119,8 +119,8 @@ export function createChatUIEnhancements({
         return;                 // allow another “initialize()” call later
       }
 
-      const chatInput = domAPI.getElementById && (domAPI.getElementById('projectChatInput') || domAPI.getElementById('globalChatInput'));
-      const sendBtn = domAPI.getElementById && (domAPI.getElementById('projectChatSendBtn') || domAPI.getElementById('globalChatSendBtn'));
+      const chatInput = domAPI.getElementById('projectChatInput');
+      const sendBtn = domAPI.getElementById('projectChatSendBtn');
       const doc = domAPI.getDocument && domAPI.getDocument();
 
       // Add event listeners
@@ -159,11 +159,8 @@ export function createChatUIEnhancements({
 
     const { message, sender, timestamp } = event.detail;
     const messageEl = createMessageElement(message, sender, timestamp);
-    // Fallback to globalChatMessages if messageContainer is null
-    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
     const chatContainer =
-      state.messageContainer ||
-      (domAPI.getElementById && domAPI.getElementById('projectChatMessages'));
+      state.messageContainer || domAPI.getElementById('projectChatMessages');
     if (chatContainer && messageEl) {
       chatContainer.appendChild(messageEl);
       scrollToBottom(chatContainer);
@@ -180,9 +177,6 @@ export function createChatUIEnhancements({
   function createMessageElement(message, sender, timestamp) {
     const isUser = sender === 'user';
     const messageClass = isUser ? 'user-message' : 'ai-message';
-
-    // Fallback to globalChatMessages if messageContainer is null
-    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
 
     // Create message container
     const messageEl = domAPI.createElement && domAPI.createElement('div');
@@ -330,7 +324,7 @@ export function createChatUIEnhancements({
     // Submit on Enter (without Shift)
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      const sendBtn = domAPI.getElementById && domAPI.getElementById('projectChatSendBtn');
+      const sendBtn = domAPI.getElementById('projectChatSendBtn');
       if (sendBtn) {
         sendBtn.click();
       }
@@ -343,11 +337,8 @@ export function createChatUIEnhancements({
   function showTypingIndicator() {
     if (state.typingIndicatorVisible) return;
 
-    // Fallback to globalChatMessages if messageContainer is null
-    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
     const chatContainer =
-      state.messageContainer ||
-      (domAPI.getElementById && domAPI.getElementById('projectChatMessages'));
+      state.messageContainer || domAPI.getElementById('projectChatMessages');
     if (!chatContainer) return;
 
     const indicatorEl = domAPI.createElement && domAPI.createElement('div');
@@ -373,11 +364,10 @@ export function createChatUIEnhancements({
   function hideTypingIndicator() {
     if (!state.typingIndicatorVisible) return;
 
-    // Fallback to globalChatMessages if messageContainer is null
-    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
+    const chatContainer =
+      state.messageContainer || domAPI.getElementById('projectChatMessages');
     const indicator =
-      (state.messageContainer || domAPI.getDocument())
-        ?.querySelector('#typingIndicator');
+      chatContainer?.querySelector('#typingIndicator');
     if (indicator && indicator.parentNode) {
       indicator.parentNode.removeChild(indicator);
     }
