@@ -26,8 +26,8 @@ export function attachChatUI(chatMgr, deps) {
           chatMgr.sendButtonSelector
         ],
         {
-          timeout : 8000,
-          context : 'chatManager::UI::setup',
+          timeout: 8000,
+          context: 'chatManager::UI::setup',
           observeMutations: true
         }
       );
@@ -108,7 +108,7 @@ export function attachChatUI(chatMgr, deps) {
     }
 
     if (chatMgr.inputField) {
-      eventHandlers.trackListener(chatMgr.inputField, 'keydown',  (e) => {
+      eventHandlers.trackListener(chatMgr.inputField, 'keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
           const messageText = chatMgr.inputField.value.trim();
@@ -126,13 +126,17 @@ export function attachChatUI(chatMgr, deps) {
       }, { context: UI_CTX, description: 'Chat Minimize Toggle' });
     }
 
-    if (!domAPI || typeof domAPI.getDocument !== 'function') {
-      return;
-    } else {
-      const eventTargetForModelConfig = domAPI.getDocument();
-      eventHandlers.trackListener(eventTargetForModelConfig, "modelConfigChanged", (e) => {
-        if (e.detail) chatMgr.updateModelConfig(e.detail);
-      }, { description: 'Model config changed event for ChatManager', context: UI_CTX });
+    // new: listen on the modelConfig event bus directly
+    const modelConfigBus = chatMgr.modelConfigAPI?.getEventBus?.();
+    if (modelConfigBus) {
+      eventHandlers.trackListener(
+        modelConfigBus,
+        "modelConfigChanged",
+        (e) => {
+          if (e.detail) chatMgr.updateModelConfig(e.detail);
+        },
+        { description: 'Model config changed event for ChatManager', context: UI_CTX }
+      );
     }
   }
 

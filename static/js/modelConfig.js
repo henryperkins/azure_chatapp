@@ -25,9 +25,9 @@ export function createModelConfig({
 
   // Provide a local logger using fallback no-ops.
   const localLogger = logger || {
-    info: () => {},
-    error: () => {},
-    warn: () => {},
+    info: () => { },
+    error: () => { },
+    warn: () => { },
   };
 
   // Validate required dependencies
@@ -84,15 +84,15 @@ export function createModelConfig({
   function setupDependencies() {
     const ds = dependencySystem;
     const fallbackEventHandler = {
-      trackListener: () => {},
-      untrackListener: () => {},
-      cleanupListeners: () => {},
+      trackListener: () => { },
+      untrackListener: () => { },
+      cleanupListeners: () => { },
       dispatchEvent: null,
     };
     const evts = eventHandler || fallbackEventHandler;
     const blankStorage = {
       getItem: () => null,
-      setItem: () => {},
+      setItem: () => { },
     };
     const store = storageHandler || blankStorage;
     const safe = (html) => sanitizer.sanitize(html);
@@ -213,6 +213,8 @@ export function createModelConfig({
   }
 
   function getConfig(state) {
+    // Diagnostic logging: log every time getConfig is called and what config it returns
+    localLogger.info(`[${MODULE_CONTEXT}][getConfig] Returning config:`, { ...state }, { context: MODULE_CONTEXT });
     return { ...state };
   }
 
@@ -229,8 +231,11 @@ export function createModelConfig({
   }
 
   function setStateFromConfig(state, config) {
+    // Diagnostic logging: state and config before mutation
+    localLogger.info(`[${MODULE_CONTEXT}][setStateFromConfig] Updating state. Current:`, { ...state }, "New:", { ...config }, { context: MODULE_CONTEXT });
     Object.assign(state, {
       modelName: config.modelName || state.modelName,
+      provider: config.provider || state.provider,
       maxTokens: clampInt(config.maxTokens, 100, 100000, state.maxTokens),
       reasoningEffort: config.reasoningEffort || state.reasoningEffort,
       reasoningSummary: config.reasoningSummary || state.reasoningSummary,
@@ -293,12 +298,17 @@ export function createModelConfig({
         : null;
     if (loadingEl) loadingEl.classList.remove("hidden");
 
+    // Diagnostic logging: log received config and old state
+    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Attempting to update. Received config:`, { ...config }, { context: MODULE_CONTEXT });
+    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Current state BEFORE update:`, { ...state }, { context: MODULE_CONTEXT });
+
     setStateFromConfig(state, config);
     persistConfig(api, state);
 
-    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Persisted config`, null, {
+    // Diagnostic logging: log state AFTER update
+    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Persisted config. Current state AFTER update:`, { ...state }, {
       context: MODULE_CONTEXT,
-      updatedState: state,
+      updatedState: { ...state }
     });
 
     if (!opts.skipNotify) {
@@ -306,16 +316,15 @@ export function createModelConfig({
         context: MODULE_CONTEXT,
       });
       notifyChatManager(api, state);
+      // Fire the bus event only if notification is allowed (no recursion)
+      dispatchEventToBus(api, "modelConfigChanged", { ...state });
+      api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] modelConfigChanged event dispatched`, null, {
+        context: MODULE_CONTEXT,
+        updatedState: state,
+      });
     }
 
     updateModelDisplay(api, state);
-
-    // Instead of directly busTarget.dispatchEvent, use our helper
-    dispatchEventToBus(api, "modelConfigChanged", { ...state });
-    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] modelConfigChanged event dispatched`, null, {
-      context: MODULE_CONTEXT,
-      updatedState: state,
-    });
 
     api.delayed(() => {
       if (loadingEl) loadingEl.classList.add("hidden");

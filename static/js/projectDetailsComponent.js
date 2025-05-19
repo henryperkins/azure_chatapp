@@ -663,6 +663,10 @@ class ProjectDetailsComponent {
         if (this.navigationService) {
           this.navigationService.navigateToConversation(this.projectId, cv.id);
         }
+        // ENSURE the per-project chatManager loads the selected conversation
+        if (this.chatManager && typeof this.chatManager.loadConversation === "function") {
+          this.chatManager.loadConversation(cv.id);
+        }
       } catch (_e) {
         if (!operation.canceled) {
           this._logError("Error opening conversation", _e);
@@ -816,27 +820,20 @@ class ProjectDetailsComponent {
       const conversationsTabContent = this.elements.tabs.conversations;
       if (conversationsTabContent) {
         this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
-        this.chatManager.initialize({
-          projectId: this.projectId,
-          containerSelector: "#projectChatUI",
-          messageContainerSelector: "#projectChatMessages",
-          inputSelector: "#projectChatInput",
-          sendButtonSelector: "#projectChatSendBtn",
-          titleSelector: "#projectChatContainer h3",
-          minimizeButtonSelector: "#projectMinimizeChatBtn"
-        })
-          .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))
-          .catch((err) => { this._logError("Error initializing chatManager", err); });
+    this.chatManager.initialize({
+      projectId: this.projectId,
+      containerSelector: "#projectChatUI",
+      messageContainerSelector: "#projectChatMessages",
+      inputSelector: "#projectChatInput",
+      sendButtonSelector: "#projectChatSendBtn",
+      titleSelector: "#chatTitle",
+      minimizeButtonSelector: "#projectMinimizeChatBtn"
+    })
+      .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))
+      .catch((err) => { this._logError("Error initializing chatManager", err); });
       }
     }
-    if ((tab === "conversations" || tab === "chat") && this.modelConfig?.renderQuickConfig) {
-      const panel = this.elements.container.querySelector("#modelConfigPanel");
-      if (panel) {
-        try {
-          this.modelConfig.renderQuickConfig(panel);
-        } catch (e) { this._logError("Error rendering model config", e); }
-      }
-    }
+    // [REMOVED] Model configuration UI in Project Details has been eliminated; use the sidebar
   }
 
   // --- KB subcomponent hook (re-init on tab switch/delayed inject) ---

@@ -471,6 +471,7 @@ export function createChatManager(deps = {}) {
 
       try {
         const cfg = this.modelConfigAPI.getConfig();
+        logger.info(`[ChatManager][createNewConversation] Using model config for new conversation. Model Name: ${cfg.modelName}`, { context: "chatManager", modelConfig: cfg });
         const currentUser = this.app?.state?.currentUser || {};
 
         const payload = {
@@ -663,8 +664,10 @@ export function createChatManager(deps = {}) {
     }
 
     updateModelConfig(config) {
+      logger.info("[ChatManager][updateModelConfig] Received config to update:", config, { context: "chatManager" });
       this.modelConfigAPI.updateConfig(config, { skipNotify: true });
       this.modelConfig = this.modelConfigAPI.getConfig();
+      logger.info(`[ChatManager][updateModelConfig] Model config updated in chatManager. New modelName: ${this.modelConfig.modelName}`, { context: "chatManager", newConfig: this.modelConfig });
     }
 
     async _loadConversationHistory() {
@@ -737,33 +740,20 @@ export function createChatManager(deps = {}) {
 
       // Use the enhanced UI if available
       const chatUIEnhancements = DependencySystem?.modules?.get('chatUIEnhancements');
-      if (chatUIEnhancements) {
-        // Dispatch event for the enhanced UI to handle
+      if (chatUIEnhancements && typeof chatUIEnhancements.createMessageElement === 'function') {
+        // Parameterize based on project chat selectors, not globals.
         const timestamp = Date.now();
         const sender = role === "assistant" ? "ai" : role === "user" ? "user" : "system";
 
-        // Create and dispatch custom event
-        const event = new CustomEvent('chatMessageAdded', {
-          detail: {
-            message: content,
-            sender: sender,
-            timestamp: timestamp,
-            messageId: id,
-            thinking: thinking,
-            redactedThinking: redactedThinking
-          }
-        });
-
-        this.domAPI.getDocument().dispatchEvent(event);
-
-        // Scroll to bottom
-        if (this.messageContainer) {
+        // Use enhancements to create the message element
+        const messageEl = chatUIEnhancements.createMessageElement(content, sender, timestamp);
+        if (messageEl && this.messageContainer) {
+          this.domAPI.appendChild(this.messageContainer, messageEl);
           this.messageContainer.scrollTo({
             top: this.messageContainer.scrollHeight,
             behavior: 'smooth'
           });
         }
-
         return;
       }
 
@@ -931,6 +921,11 @@ export function createChatManager(deps = {}) {
     }
 
     _showThinkingIndicator() {
+      const chatUIEnhancements = this.DependencySystem?.modules?.get('chatUIEnhancements');
+      if (chatUIEnhancements && typeof chatUIEnhancements.showTypingIndicator === 'function') {
+        chatUIEnhancements.showTypingIndicator();
+        return;
+      }
       if (!this.messageContainer) {
         return;
       }
@@ -951,6 +946,11 @@ export function createChatManager(deps = {}) {
     }
 
     _hideThinkingIndicator() {
+      const chatUIEnhancements = this.DependencySystem?.modules?.get('chatUIEnhancements');
+      if (chatUIEnhancements && typeof chatUIEnhancements.hideTypingIndicator === 'function') {
+        chatUIEnhancements.hideTypingIndicator();
+        return;
+      }
       const el = this.domAPI.querySelector("#thinkingIndicator");
       if (el) {
         el.remove();
@@ -1068,32 +1068,43 @@ export function createChatManager(deps = {}) {
     _setupEventListeners() {
       this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
       const ctx = { context: "chatManager:UI" };
+      const chatUIEnhancements = this.DependencySystem?.modules?.get('chatUIEnhancements');
 
-      if (this.sendButton) {
-        this.eventHandlers.trackListener(
-          this.sendButton,
-          "click",
-          safeHandler(() => {
-            const txt = this.inputField?.value ?? "";
-            this.sendMessage(txt).catch(()=>{});
-          }, "sendBtnClick"),
-          ctx
-        );
-      }
-
-      if (this.inputField) {
-        this.eventHandlers.trackListener(
-          this.inputField,
-          "keydown",
-          safeHandler((e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              const txt = this.inputField.value;
+      // Prefer centralized enhancements' event wiring if available
+      if (chatUIEnhancements && typeof chatUIEnhancements.attachEventHandlers === 'function') {
+        chatUIEnhancements.attachEventHandlers({
+          inputField: this.inputField,
+          sendButton: this.sendButton,
+          messageContainer: this.messageContainer,
+          onSend: (txt) => this.sendMessage(txt).catch(()=>{})
+        });
+      } else {
+        if (this.sendButton) {
+          this.eventHandlers.trackListener(
+            this.sendButton,
+            "click",
+            safeHandler(() => {
+              const txt = this.inputField?.value ?? "";
               this.sendMessage(txt).catch(()=>{});
-            }
-          }, "inputEnter"),
-          ctx
-        );
+            }, "sendBtnClick"),
+            ctx
+          );
+        }
+
+        if (this.inputField) {
+          this.eventHandlers.trackListener(
+            this.inputField,
+            "keydown",
+            safeHandler((e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                const txt = this.inputField.value;
+                this.sendMessage(txt).catch(()=>{});
+              }
+            }, "inputEnter"),
+            ctx
+          );
+        }
       }
 
       if (this.minimizeButton && this.container) {

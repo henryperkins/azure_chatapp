@@ -272,6 +272,26 @@ export function createAuthModule(deps) {
       } else {
         logger.warn('[DIAGNOSTIC][auth.js][broadcastAuth] No appModuleRef or no setAuthState function!', { context: 'broadcastAuth' });
       }
+      // Custom: Update username in header's userMenu for a single-line greeting. (No double "Hello,")
+      try {
+        const doc = domAPI.getDocument?.();
+        const userMenu = doc && doc.getElementById && doc.getElementById('userMenu');
+        if (userMenu) {
+          const usernameDisplay = userMenu.querySelector('#usernameDisplay');
+          const initialsSpan = userMenu.querySelector('#userInitials');
+          if (usernameDisplay && userObject?.username) {
+            // Only set username, do not prepend 'Hello,' (it's in markup)
+            usernameDisplay.textContent = userObject.username;
+          }
+          if (initialsSpan && userObject?.username) {
+            // Set user initials (e.g., "AB" for Alice Bob)
+            const initials = userObject.username.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+            initialsSpan.textContent = initials;
+          }
+        }
+      } catch (DOMerr) {
+        logger.error('[AuthModule][broadcastAuth] Could not update userMenu', DOMerr, { context: 'broadcastAuth' });
+      }
       const eventDetail = {
         authenticated,
         user: userObject,

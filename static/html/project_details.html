@@ -205,6 +205,15 @@
         </button>
       </div>
         <div id="projectChatUI" class="bg-base-100 rounded-box shadow-md border border-base-200">
+          <div class="chat-title-row flex items-center justify-between py-2 px-4 border-b border-base-200 bg-base-100/70">
+            <span id="chatTitle">Current Conversation Title</span>
+            <button id="chatTitleEditBtn" aria-label="Edit title" class="btn btn-ghost btn-xs px-2 h-7 focus:ring-2 focus:ring-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6 6M5 19l2.828-2.828M2 12.414l8.293-8.293a1 1 0 011.414 0l8.293 8.293a1 1 0 010 1.414l-8.293 8.293a1 1 0 01-1.414 0L2 13.828a1 1 0 010-1.414z" />
+              </svg>
+              <span class="sr-only">Edit Chat Title</span>
+            </button>
+          </div>
         <div class="chat-container">
           <div id="projectChatMessages" class="chat-message-container" aria-live="polite" tabindex="0"></div>
           <div class="flex items-center border-t border-base-200 p-2 bg-base-100 sticky bottom-0 z-10 rounded-b-box shadow-xs join">
