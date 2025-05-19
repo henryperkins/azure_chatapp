@@ -100,6 +100,15 @@ class ConversationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _require_project_id(project_id: Optional[UUID]) -> UUID:
+        if not project_id:
+            raise ConversationError(
+                "Global conversations are no longer supported – project_id is required",
+                400,
+            )
+        return project_id
+
     async def _validate_conversation_access(
         self,
         conversation_id: UUID,
@@ -108,42 +117,35 @@ class ConversationService:
         include_deleted: bool = False,
     ) -> Conversation:
         """Centralized conversation access validation."""
+        project_id = self._require_project_id(project_id)
         filters = [Conversation.id == conversation_id, Conversation.user_id == user_id]
 
         if not include_deleted:
             filters.append(Conversation.is_deleted.is_(False))
 
-        query = select(Conversation)
+        # Ensure project_id is UUID for comparison
+        try:
+            pid = UUID(str(project_id))
+        except ValueError:
+            raise ConversationError("Invalid project ID format", 400) from None
 
-        if project_id is not None:
-            # Ensure project_id is UUID for comparison
-            try:
-                pid = UUID(str(project_id))
-            except ValueError:
-                raise ConversationError("Invalid project ID format", 400) from None
+        filters.append(Conversation.project_id == pid)
+        # Eager load project and knowledge_base only when project_id is specified
+        query = select(Conversation).options(
+            joinedload(Conversation.project),
+            joinedload(Conversation.knowledge_base)
+        )
 
-            filters.append(Conversation.project_id == pid)
-            # Eager load project and knowledge_base only when project_id is specified
-            query = query.options(
-                joinedload(Conversation.project),
-                joinedload(Conversation.knowledge_base)
+        result = await self.db.execute(query.where(and_(*filters)))
+        conv = result.scalar_one_or_none()
+
+        # Double-check project mismatch
+        if conv and conv.project_id != pid:
+            logger.error(
+                f"Conversation {conversation_id} found but project mismatch: "
+                f"expected {pid}, got {conv.project_id}"
             )
-
-            result = await self.db.execute(query.where(and_(*filters)))
-            conv = result.scalar_one_or_none()
-
-            # Double-check project mismatch
-            if conv and conv.project_id != pid:
-                logger.error(
-                    f"Conversation {conversation_id} found but project mismatch: "
-                    f"expected {pid}, got {conv.project_id}"
-                )
-                conv = None
-        else:
-            # Standalone conversation: project_id must be NULL
-            filters.append(Conversation.project_id.is_(None))
-            result = await self.db.execute(query.where(and_(*filters)))
-            conv = result.scalar_one_or_none()
+            conv = None
 
         if not conv:
             logger.warning(
@@ -180,31 +182,31 @@ class ConversationService:
         user_id: int,
         title: str,
         model_id: str,
-        project_id: Optional[UUID] = None,
+        project_id: UUID,
         knowledge_base_id: Optional[UUID] = None,
         use_knowledge_base: bool = False,
         ai_settings: Optional[dict[str, Any]] = None,
     ) -> Conversation:
         """Create new conversation with validation and optional AI settings."""
+        project_id = self._require_project_id(project_id)
         try:
             validate_model_and_params(model_id, ai_settings or {})
         except ConversationError as e:
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
         # Validate project access and KB consistency if project_id is provided
-        if project_id:
-            project = await self._validate_project_access(project_id, user_id)
-            if use_knowledge_base:
-                await self.db.refresh(project, ['knowledge_base'])
-                if not project.knowledge_base:
-                    raise ConversationError("Project has no knowledge base, cannot set use_knowledge_base=True.", 400)
-                if knowledge_base_id != project.knowledge_base.id:
-                    # This should ideally be caught by the route, but as a safeguard:
-                    logger.error(f"KnowledgeBase ID mismatch for project {project_id}. "
-                                 f"Passed: {knowledge_base_id}, Project's KB: {project.knowledge_base.id}")
-                    raise ConversationError("Knowledge base ID mismatch for the specified project.", 400)
-            elif knowledge_base_id is not None:
-                raise ConversationError("knowledge_base_id should not be provided if use_knowledge_base is False for a project.", 400)
+        project = await self._validate_project_access(project_id, user_id)
+        if use_knowledge_base:
+            await self.db.refresh(project, ['knowledge_base'])
+            if not project.knowledge_base:
+                raise ConversationError("Project has no knowledge base, cannot set use_knowledge_base=True.", 400)
+            if knowledge_base_id != project.knowledge_base.id:
+                # This should ideally be caught by the route, but as a safeguard:
+                logger.error(f"KnowledgeBase ID mismatch for project {project_id}. "
+                             f"Passed: {knowledge_base_id}, Project's KB: {project.knowledge_base.id}")
+                raise ConversationError("Knowledge base ID mismatch for the specified project.", 400)
+        elif knowledge_base_id is not None:
+            raise ConversationError("knowledge_base_id should not be provided if use_knowledge_base is False for a project.", 400)
 
         conv = Conversation(
             user_id=user_id,
@@ -215,10 +217,6 @@ class ConversationService:
             use_knowledge_base=use_knowledge_base,
             extra_data={"ai_settings": ai_settings} if ai_settings else None,
         )
-
-        # The logic for auto-enabling KB based on project.knowledge_base is now
-        # effectively handled by the route, which determines kb_id and use_knowledge_base
-        # before calling this service method. The validation above ensures consistency.
 
         try:
             await save_model(self.db, conv)
@@ -242,6 +240,7 @@ class ConversationService:
         project_id: Optional[UUID] = None,
     ) -> dict:
         """Get single conversation with validation."""
+        project_id = self._require_project_id(project_id)
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
@@ -255,12 +254,9 @@ class ConversationService:
         limit: int = 100,
     ) -> List[Conversation]:
         """List conversations with pagination."""
+        project_id = self._require_project_id(project_id)
         filters = [Conversation.user_id == user_id, Conversation.is_deleted.is_(False)]
-
-        if project_id is not None:
-            filters.append(Conversation.project_id == project_id)
-        else:
-            filters.append(Conversation.project_id.is_(None))
+        filters.append(Conversation.project_id == project_id)
 
         # Define eager loading options
         load_options = [
@@ -289,6 +285,7 @@ class ConversationService:
         ai_settings: Optional[dict[str, Any]] = None,
     ) -> dict:
         """Update conversation attributes."""
+        project_id = self._require_project_id(project_id)
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
@@ -312,34 +309,30 @@ class ConversationService:
             except ConversationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
-        # Only for standalone conversations if toggling KB
+        # Only for project conversations if toggling KB
         if (
             use_knowledge_base is not None
             and conv.use_knowledge_base != use_knowledge_base
         ):
-            if conv.project_id:
-                project = await self._validate_project_access(
-                    UUID(str(conv.project_id)), user_id
+            project = await self._validate_project_access(
+                UUID(str(conv.project_id)), user_id
+            )
+            # Access knowledge base through the relationship
+            if project.knowledge_base and not use_knowledge_base:
+                logger.warning(
+                    f"Attempt to disable KB for project conversation {conv.id} is ignored."
                 )
-                # Access knowledge base through the relationship
-                if project.knowledge_base and not use_knowledge_base:
-                    logger.warning(
-                        f"Attempt to disable KB for project conversation {conv.id} is ignored."
-                    )
-                elif project.knowledge_base:
-                    conv.use_knowledge_base = True
-                    conv.knowledge_base_id = project.knowledge_base.id
-                    updated = True
-                else:
-                    # If project has no KB, we cannot enable it
-                    if use_knowledge_base:
-                        raise ConversationError(
-                            "Cannot enable knowledge base: Project has no associated knowledge base.",
-                            400,
-                        )
-            else:
-                conv.use_knowledge_base = use_knowledge_base
+            elif project.knowledge_base:
+                conv.use_knowledge_base = True
+                conv.knowledge_base_id = project.knowledge_base.id
                 updated = True
+            else:
+                # If project has no KB, we cannot enable it
+                if use_knowledge_base:
+                    raise ConversationError(
+                        "Cannot enable knowledge base: Project has no associated knowledge base.",
+                        400,
+                    )
 
         if ai_settings is not None:
             current_model_id = model_id or conv.model_id
@@ -377,6 +370,7 @@ class ConversationService:
         project_id: Optional[UUID] = None,
     ) -> UUID:
         """Soft delete conversation."""
+        project_id = self._require_project_id(project_id)
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
@@ -397,10 +391,7 @@ class ConversationService:
         project_id: Optional[UUID] = None,
     ) -> dict:
         """Restore a previously soft-deleted conversation."""
-        if not project_id:
-            raise ConversationError(
-                "Restore operation typically applies to project conversations.", 400
-            )
+        project_id = self._require_project_id(project_id)
 
         # Validate access including possibly deleted conversations
         conv = await self._validate_conversation_access(
@@ -425,6 +416,7 @@ class ConversationService:
         limit: int = 100,
     ) -> List[dict]:
         """List messages in a conversation."""
+        project_id = self._require_project_id(project_id)
         # Validate conversation
         await self._validate_conversation_access(conversation_id, user_id, project_id)
 
