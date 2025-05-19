@@ -7,20 +7,20 @@
  * Provides UI gating helpers for safe DOM event binding (esp. chat UI) per project/timing.
  */
 
-export function createChatUIEnhancements(deps) {
+export function createChatUIEnhancements({
+  domAPI,
+  eventHandlers,
+  browserService,
+  domReadinessService,
+  logger
+} = {}) {
   const MODULE_CONTEXT = 'chatUIEnhancements';
 
-  // Dependency validation
-  const { domReadinessService, logger } = deps || {};
-  const missing = [];
-  if (!domReadinessService) missing.push('domReadinessService');
-  if (!logger) missing.push('logger');
-  if (missing.length) {
-    if (logger && logger.error) {
-      logger.error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(', ')}`, { context: MODULE_CONTEXT });
-    }
-    throw new Error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(', ')}`);
-  }
+  if (!domAPI || !domAPI.getElementById)  throw new Error('[chatUIEnhancements] domAPI required');
+  if (!eventHandlers?.trackListener)      throw new Error('[chatUIEnhancements] eventHandlers required');
+  if (!browserService?.setTimeout)        throw new Error('[chatUIEnhancements] browserService required');
+  if (!domReadinessService) throw new Error('[chatUIEnhancements] domReadinessService required');
+  if (!logger) throw new Error('[chatUIEnhancements] logger required');
 
   // Defensive sanitizer fallback
   const sanitizer = domReadinessService.sanitizer || {
@@ -31,10 +31,6 @@ export function createChatUIEnhancements(deps) {
       return text;
     }
   };
-
-  // DOM API and event handlers references
-  const domAPI = domReadinessService.domAPI || {};
-  const eventHandlers = domReadinessService.eventHandlers || {};
 
   // Local state object
   const state = {
@@ -253,9 +249,10 @@ export function createChatUIEnhancements(deps) {
     const doc = domAPI.getDocument && domAPI.getDocument();
     if (!doc) return;
 
-    // Use clipboard API if available
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(textContent)
+    // Use clipboard API if available (DI-safe)
+    const clip = browserService.getWindow?.()?.navigator?.clipboard;
+    if (clip?.writeText) {
+      clip.writeText(textContent)
         .then(() => showCopyFeedback(true))
         .catch(err => {
           logger.error('[chatUIEnhancements] Failed to copy text: ', err, { context: 'chatUIEnhancements' });
@@ -307,9 +304,9 @@ export function createChatUIEnhancements(deps) {
     doc.body.appendChild(toast);
 
     // Remove after delay
-    setTimeout(() => {
+    browserService.setTimeout(() => {
       toast.style.opacity = '0';
-      setTimeout(() => {
+      browserService.setTimeout(() => {
         if (toast.parentNode) {
           toast.parentNode.removeChild(toast);
         }
