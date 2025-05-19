@@ -97,7 +97,7 @@ export function createEventHandlers({
    * @returns {Function|undefined} The wrapped handler, or undefined on failure
    */
   function trackListener(element, type, handler, options = {}) {
-    if (!element || typeof element.addEventListener !== 'function') return;
+    if (!element || typeof element.addEventListener !== 'function') return undefined;
 
     const { capture = false, once = false, signal, passive } = options;
     const nonPassive = ['click', 'submit', 'wheel', 'touchstart', 'touchmove', 'keydown', 'keypress', 'keyup'];

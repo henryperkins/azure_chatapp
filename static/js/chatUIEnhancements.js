@@ -100,12 +100,27 @@ export function createChatUIEnhancements({
     if (state.initialized) return Promise.resolve();
     if (state.initializing) return state.initializing;
 
-    state.initializing = whenChatUIReady({
-      domSelectors: ['#projectChatInput', '#projectChatMessages', '#projectChatSendBtn'],
-      context: `${MODULE_CONTEXT}::initialize`
-    }).then(() => {
-      const chatInput = domAPI.getElementById && domAPI.getElementById('projectChatInput');
-      const sendBtn = domAPI.getElementById && domAPI.getElementById('projectChatSendBtn');
+    // Dual-fallback selectors for project/global chat
+    const CHAT_SELECTORS = [
+      '#projectChatInput, #globalChatInput',
+      '#projectChatMessages, #globalChatMessages',
+      '#projectChatSendBtn, #globalChatSendBtn'
+    ];
+
+    state.initializing = (async () => {
+      try {
+        await whenChatUIReady({
+          domSelectors: CHAT_SELECTORS,
+          context: `${MODULE_CONTEXT}::initialize`
+        });
+      } catch (err) {
+        logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, { context: MODULE_CONTEXT });
+        state.initializing = null;
+        return;                 // allow another “initialize()” call later
+      }
+
+      const chatInput = domAPI.getElementById && (domAPI.getElementById('projectChatInput') || domAPI.getElementById('globalChatInput'));
+      const sendBtn = domAPI.getElementById && (domAPI.getElementById('projectChatSendBtn') || domAPI.getElementById('globalChatSendBtn'));
       const doc = domAPI.getDocument && domAPI.getDocument();
 
       // Add event listeners
@@ -130,11 +145,7 @@ export function createChatUIEnhancements({
 
       state.initialized = true;
       state.initializing = null;
-    }).catch(err => {
-      logger.error(`[${MODULE_CONTEXT}] Failed to initialize chat UI: `, err, { context: 'chatUIEnhancements' });
-      state.initializing = null;
-      throw err;
-    });
+    })();
 
     return state.initializing;
   }
@@ -148,6 +159,8 @@ export function createChatUIEnhancements({
 
     const { message, sender, timestamp } = event.detail;
     const messageEl = createMessageElement(message, sender, timestamp);
+    // Fallback to globalChatMessages if messageContainer is null
+    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
     const chatContainer =
       state.messageContainer ||
       (domAPI.getElementById && domAPI.getElementById('projectChatMessages'));
@@ -167,6 +180,9 @@ export function createChatUIEnhancements({
   function createMessageElement(message, sender, timestamp) {
     const isUser = sender === 'user';
     const messageClass = isUser ? 'user-message' : 'ai-message';
+
+    // Fallback to globalChatMessages if messageContainer is null
+    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
 
     // Create message container
     const messageEl = domAPI.createElement && domAPI.createElement('div');
@@ -327,6 +343,8 @@ export function createChatUIEnhancements({
   function showTypingIndicator() {
     if (state.typingIndicatorVisible) return;
 
+    // Fallback to globalChatMessages if messageContainer is null
+    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
     const chatContainer =
       state.messageContainer ||
       (domAPI.getElementById && domAPI.getElementById('projectChatMessages'));
@@ -355,6 +373,8 @@ export function createChatUIEnhancements({
   function hideTypingIndicator() {
     if (!state.typingIndicatorVisible) return;
 
+    // Fallback to globalChatMessages if messageContainer is null
+    state.messageContainer ??= domAPI.getElementById('globalChatMessages');
     const indicator =
       (state.messageContainer || domAPI.getDocument())
         ?.querySelector('#typingIndicator');
