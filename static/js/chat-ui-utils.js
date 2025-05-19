@@ -78,14 +78,6 @@ export function attachChatUI(chatMgr, deps) {
     /* --- ensure visibility + correct header state ----------------------- */
     // The per-view chat container may start hidden; always expose it now
     if (chatMgr.container) domAPI.removeClass(chatMgr.container, 'hidden');
-
-    // Hide the global chat header when we are inside a project-details view
-    const headerBar = domAPI.getElementById?.('chatHeaderBar');
-    if (headerBar) {
-      (chatMgr.isGlobalMode
-        ? domAPI.removeClass
-        : domAPI.addClass)(headerBar, 'hidden');
-    }
     /* -------------------------------------------------------------------- */
   }
 
