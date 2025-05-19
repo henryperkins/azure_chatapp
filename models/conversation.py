@@ -58,6 +58,11 @@ class Conversation(Base):
         server_default=text("CURRENT_TIMESTAMP"),
         onupdate=text("CURRENT_TIMESTAMP"),
     )
+
+    # NEW ── timestamp used by ConversationService soft-delete / restore
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=False), nullable=True, index=True
+    )
     extra_data: Mapped[Optional[dict]] = mapped_column(
         JSONB(none_as_null=True), default=dict
     )
