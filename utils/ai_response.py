@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Any, Union, AsyncGenerator, cast
+from typing import Optional, List, Any, Union, AsyncGenerator
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -11,7 +11,7 @@ from models.message import Message
 from utils.openai import openai_chat
 from config import settings
 from utils.db_utils import get_by_id, save_model
-from utils.message_handlers import get_conversation_messages, update_project_token_usage
+from utils.message_handlers import update_project_token_usage
 
 from utils.ai_helper import get_model_config, retrieve_knowledge_context, calculate_tokens
 
@@ -195,20 +195,65 @@ async def generate_ai_response(
         elif isinstance(response_data, dict):
             response_id = response_data.get("id")
             response_usage = response_data.get("usage")
-            stop_reason = response_data.get("stop_reason")
-            choices = response_data.get("choices", [])
-            if choices:
-                message_data = choices[0].get("message", {})
-                assistant_content = message_data.get("content", "")
-                thinking_content = response_data.get("thinking")
-                redacted_thinking = response_data.get("redacted_thinking")
-                has_thinking = response_data.get("has_thinking", False)
-                if not stop_reason:
-                    stop_reason = choices[0].get("finish_reason")
+            # stop_reason handled per response type
+
+            # Parse Azure Responses API (o3/gpt-4.1 - object == "response" and "output" in response_data):
+            if response_data.get("object") == "response" and "output" in response_data:
+                logger.info("[AI_RESPONSE] Parsing Azure Responses API structure.")
+                output_items = response_data.get("output", [])
+                # Extract assistant content
+                message_item = next((item for item in output_items if item.get("type") == "message"), None)
+                if message_item and "content" in message_item:
+                    content_blocks = message_item.get("content", [])
+                    output_text_block = next((block for block in content_blocks if block.get("type") == "output_text"), None)
+                    if output_text_block and "text" in output_text_block:
+                        assistant_content = output_text_block.get("text", "")
+                    else:
+                        logger.error(f"[AI_RESPONSE] No 'output_text' block found in Responses API message item: {message_item}")
+                        assistant_content = "[Error: No text content in response message]"
+                else:
+                    logger.error(f"[AI_RESPONSE] No 'message' type found in Responses API 'output' array or content missing: {output_items}")
+                    assistant_content = "[Error: No message content in AI response]"
+
+                # Determine stop_reason from status for Responses API
+                api_status = response_data.get("status")
+                if api_status == "completed":
+                    stop_reason = "stop"
+                elif api_status == "failed":
+                    stop_reason = "error"
+                    if response_data.get("error") and response_data["error"].get("message"):
+                        assistant_content = f"[Error: {response_data['error']['message']}]"
+                    elif assistant_content == "[Error: No message content in AI response]" or not assistant_content:
+                        assistant_content = "[Error: AI response failed without details]"
+                else:
+                    stop_reason = api_status  # e.g., 'requires_action', or None
+
+                # Extract reasoning/thinking for Responses API
+                reasoning_item = next((item for item in output_items if item.get("type") == "reasoning"), None)
+                if reasoning_item and "summary" in reasoning_item:
+                    summary_texts = [s.get("text") for s in reasoning_item.get("summary", []) if s.get("text")]
+                    if summary_texts:
+                        thinking_content = "\n".join(summary_texts)
+                        has_thinking = True
+                redacted_thinking = None  # Not standard in Azure Responses API
+
             else:
-                logger.error(f"No 'choices' found in AI response: {response_data}")
-                assistant_content = "[Error: No response content generated]"
-                stop_reason = "error"
+                # Parse as standard Chat Completions API (choices) response
+                logger.info("[AI_RESPONSE] Parsing non-Responses API dictionary structure (e.g., Chat Completions).")
+                stop_reason = response_data.get("stop_reason")
+                choices = response_data.get("choices", [])
+                if choices:
+                    message_data = choices[0].get("message", {})
+                    assistant_content = message_data.get("content", "")
+                    thinking_content = response_data.get("thinking")
+                    redacted_thinking = response_data.get("redacted_thinking")
+                    has_thinking = response_data.get("has_thinking", False)
+                    if not stop_reason:
+                        stop_reason = choices[0].get("finish_reason")
+                else:
+                    logger.error(f"No 'choices' found in AI response: {response_data}")
+                    assistant_content = "[Error: No response content generated]"
+                    stop_reason = "error"
         else:
             logger.error(
                 f"Unexpected response type from openai_chat: {type(response_data)}"
@@ -250,7 +295,6 @@ async def generate_ai_response(
         )
 
         # Track token usage
-        prompt_tokens = response_usage.get("prompt_tokens", 0) if response_usage else 0
         completion_tokens = (
             response_usage.get("completion_tokens", 0) if response_usage else 0
         )
@@ -266,7 +310,6 @@ async def generate_ai_response(
                 f"API response missing usage data for model {model_id}. "
                 f"Estimated completion tokens: {completion_tokens}"
             )
-            prompt_tokens = 0
 
         try:
             await update_project_token_usage(conversation, total_used, db)

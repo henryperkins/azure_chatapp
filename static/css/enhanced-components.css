@@ -148,6 +148,24 @@ textarea:focus-visible,
   @apply outline-offset-2 outline-2 outline-primary;
 }
 
+/* Header user menu customization */
+#userMenu .avatar .w-8.h-8 {
+  background-color: var(--color-primary, #ff55a8);
+  color: var(--color-primary-content, #fff);
+  opacity: 0.85;
+  border: 1.5px solid var(--color-primary, #ff55a8);
+}
+
+#userMenu #logoutBtn {
+  color: var(--color-base-content, #bbb);
+  transition: color 0.18s;
+}
+#userMenu #logoutBtn:hover,
+#userMenu #logoutBtn:focus {
+  color: var(--color-primary, #ff55a8);
+  text-decoration: underline;
+}
+
 /* Buttons */
 .btn {
   @apply transition duration-200 min-w-[44px] min-h-[44px];

@@ -221,13 +221,29 @@ async def _send_azure_responses_request(
         "model": model_name,
         "input": payload.get("messages", []),
     }
-    # Add additional params if present
-    for key in ["reasoning_effort", "stream", "max_tokens", "max_completion_tokens"]:
-        v = payload.get(key)
-        if v is not None:
-            responses_payload[key] = v
+    # Add nested reasoning object if present
+    if "reasoning" in payload and payload["reasoning"]:
+        responses_payload["reasoning"] = payload["reasoning"]
 
-    logger.debug(f"Responses API request to {url} with payload: {responses_payload}")
+    # Max output tokens mapping for o3 (and future models)
+    # If present, remap max_completion_tokens to max_output_tokens for model 'o3'
+    if model_name.startswith('o3'):
+        mct = payload.get("max_completion_tokens")
+        if mct is not None:
+            responses_payload["max_output_tokens"] = mct
+    else:
+        # For other models, still allow max_completion_tokens
+        mct = payload.get("max_completion_tokens")
+        if mct is not None:
+            responses_payload["max_completion_tokens"] = mct
+
+    # Always pass stream if present
+    if "stream" in payload and payload["stream"] is not None:
+        responses_payload["stream"] = payload["stream"]
+
+    # Better logging with pretty print for debugging
+    import json
+    logger.debug(f"Responses API request to {url} with payload: {json.dumps(responses_payload, indent=2)}")
 
     try:
         async with httpx.AsyncClient() as client:

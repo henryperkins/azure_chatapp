@@ -132,7 +132,8 @@ const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
   windowObject: browserAPI.getWindow(),
   debug: APP_CONFIG.DEBUG === true,
-  logger
+  logger,
+  sanitizer
 });
 
 // ---------------------------------------------------------------------------
@@ -1166,9 +1167,7 @@ async function initializeUIComponents() {
 
   // Create chat UI enhancements
   const chatUIEnhancementsInstance = createChatUIEnhancements({
-    domAPI,
-    eventHandlers,
-    sanitizer: DependencySystem.modules.get('sanitizer'),
+    domReadinessService,
     logger
   });
   DependencySystem.register('chatUIEnhancements', chatUIEnhancementsInstance);
