@@ -32,13 +32,6 @@ export function createChatUIEnhancements({
     }
   };
 
-  // Local state object
-  const state = {
-    initialized: false,
-    initializing: null,
-    typingIndicatorVisible: false
-  };
-
   /**
    * Safe handler wrapper for all event handlers.
    * @param {Function} fn - The handler function.
