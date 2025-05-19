@@ -219,6 +219,14 @@ class ModalManager {
       // We do not fail if modalsLoaded never fires
     }
 
+    // One-time listener to re-scan after templates are injected
+    eventHandlers.trackListener(
+      domAPI.getDocument(),
+      'modalsLoaded',
+      () => this._registerAvailableModals(),
+      { once: true, context: 'modalManager', description: 'late modal registration' }
+    );
+
     // Register any currently available modals
     this._registerAvailableModals();
 
