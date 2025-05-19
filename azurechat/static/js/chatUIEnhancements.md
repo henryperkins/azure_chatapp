@@ -1,3 +1,4 @@
+```javascript
 /**
  * chatUIEnhancements.js
  *
@@ -101,11 +102,11 @@ export function createChatUIEnhancements({
     if (state.initializing) return state.initializing;
 
     state.initializing = whenChatUIReady({
-      domSelectors: ['#projectChatInput', '#projectChatMessages', '#projectChatSendBtn'],
+      domSelectors: ['#chatUIInput', '#globalChatMessages', '#globalChatSendBtn'],
       context: `${MODULE_CONTEXT}::initialize`
     }).then(() => {
-      const chatInput = domAPI.getElementById && domAPI.getElementById('projectChatInput');
-      const sendBtn = domAPI.getElementById && domAPI.getElementById('projectChatSendBtn');
+      const chatInput = domAPI.getElementById && domAPI.getElementById('chatUIInput');
+      const sendBtn = domAPI.getElementById && domAPI.getElementById('globalChatSendBtn');
       const doc = domAPI.getDocument && domAPI.getDocument();
 
       // Add event listeners
@@ -150,7 +151,7 @@ export function createChatUIEnhancements({
     const messageEl = createMessageElement(message, sender, timestamp);
     const chatContainer =
       state.messageContainer ||
-      (domAPI.getElementById && domAPI.getElementById('projectChatMessages'));
+      (domAPI.getElementById && domAPI.getElementById('globalChatMessages'));
     if (chatContainer && messageEl) {
       chatContainer.appendChild(messageEl);
       scrollToBottom(chatContainer);
@@ -314,7 +315,7 @@ export function createChatUIEnhancements({
     // Submit on Enter (without Shift)
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
-      const sendBtn = domAPI.getElementById && domAPI.getElementById('projectChatSendBtn');
+      const sendBtn = domAPI.getElementById && domAPI.getElementById('globalChatSendBtn');
       if (sendBtn) {
         sendBtn.click();
       }
@@ -329,7 +330,7 @@ export function createChatUIEnhancements({
 
     const chatContainer =
       state.messageContainer ||
-      (domAPI.getElementById && domAPI.getElementById('projectChatMessages'));
+      (domAPI.getElementById && domAPI.getElementById('globalChatMessages'));
     if (!chatContainer) return;
 
     const indicatorEl = domAPI.createElement && domAPI.createElement('div');
@@ -438,3 +439,5 @@ export function createChatUIEnhancements({
     attachEventHandlers
   };
 }
+
+```
