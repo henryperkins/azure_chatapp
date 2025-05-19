@@ -1251,18 +1251,19 @@ async function initializeUIComponents() {
     sidebarInstance = createSidebar({
       DependencySystem,
       eventHandlers,
-      app,
-      projectDashboard: DependencySystem.modules.get('projectDashboard'),
-      projectManager: DependencySystem.modules.get('projectManager'),
-      uiRenderer: uiRendererInstance,
-      storageAPI: DependencySystem.modules.get('storage'),
-      domAPI,
-      viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() },
-      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
-      logger: DependencySystem.modules.get('logger'), // Pass the DI logger
-      safeHandler: safeHandler, // Pass the safeHandler utility
-      domReadinessService: DependencySystem.modules.get('domReadinessService'),
-      APP_CONFIG // Pass config for sidebar debug logging
+    app,
+    projectDashboard: DependencySystem.modules.get('projectDashboard'),
+    projectManager: DependencySystem.modules.get('projectManager'),
+    modelConfig: DependencySystem.modules.get('modelConfig'),
+    uiRenderer: uiRendererInstance,
+    storageAPI: DependencySystem.modules.get('storage'),
+    domAPI,
+    viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() },
+    accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
+    logger: DependencySystem.modules.get('logger'), // Pass the DI logger
+    safeHandler: safeHandler, // Pass the safeHandler utility
+    domReadinessService: DependencySystem.modules.get('domReadinessService'),
+    APP_CONFIG // Pass config for sidebar debug logging
     });
     DependencySystem.register('sidebar', sidebarInstance);
   }
@@ -1672,10 +1673,10 @@ function setupChatInitializationTrigger() {
         try {
           await chatManager.initialize({
             projectId,
-            containerSelector: "#globalChatContainer",
-            messageContainerSelector: "#globalChatMessages",
-            inputSelector: "#chatUIInput",
-            sendButtonSelector: "#globalChatSendBtn"
+            containerSelector: "#projectChatContainer",
+            messageContainerSelector: "#projectChatMessages",
+            inputSelector: "#projectChatInput",
+            sendButtonSelector: "#projectChatSendBtn"
           });
         } catch (err) {
           logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
