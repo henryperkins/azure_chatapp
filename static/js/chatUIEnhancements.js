@@ -25,9 +25,10 @@ export function createChatUIEnhancements({
   if (!sanitizer?.sanitize) throw new Error('[chatUIEnhancements] sanitizer required');
 
   const state = {
-    initialized: false,
-    initializing: null,
-    typingIndicatorVisible: false
+    initialized             : false,
+    initializing            : null,
+    typingIndicatorVisible  : false,
+    messageContainer        : null          // ← cache current chat container
   };
 
   const _sanitizer = sanitizer;
@@ -146,12 +147,10 @@ export function createChatUIEnhancements({
     if (!event.detail) return;
 
     const { message, sender, timestamp } = event.detail;
-
-    // Create enhanced message element
     const messageEl = createMessageElement(message, sender, timestamp);
-
-    // Add to chat container
-    const chatContainer = domAPI.getElementById && domAPI.getElementById('globalChatMessages');
+    const chatContainer =
+      state.messageContainer ||
+      (domAPI.getElementById && domAPI.getElementById('globalChatMessages'));
     if (chatContainer && messageEl) {
       chatContainer.appendChild(messageEl);
       scrollToBottom(chatContainer);
@@ -328,7 +327,9 @@ export function createChatUIEnhancements({
   function showTypingIndicator() {
     if (state.typingIndicatorVisible) return;
 
-    const chatContainer = domAPI.getElementById && domAPI.getElementById('globalChatMessages');
+    const chatContainer =
+      state.messageContainer ||
+      (domAPI.getElementById && domAPI.getElementById('globalChatMessages'));
     if (!chatContainer) return;
 
     const indicatorEl = domAPI.createElement && domAPI.createElement('div');
@@ -354,7 +355,9 @@ export function createChatUIEnhancements({
   function hideTypingIndicator() {
     if (!state.typingIndicatorVisible) return;
 
-    const indicator = domAPI.getElementById && domAPI.getElementById('typingIndicator');
+    const indicator =
+      (state.messageContainer || domAPI.getDocument())
+        ?.querySelector('#typingIndicator');
     if (indicator && indicator.parentNode) {
       indicator.parentNode.removeChild(indicator);
     }
@@ -392,6 +395,10 @@ export function createChatUIEnhancements({
    *   {Function} params.onSend
    */
   function attachEventHandlers({ inputField, sendButton, messageContainer, onSend }) {
+    /* remember the active container so showTypingIndicator/… work for both
+       the global chat and the per-project chat inside Project Details */
+    if (messageContainer) state.messageContainer = messageContainer;
+
     // Enhanced submit on Enter (no Shift)
     if (inputField && eventHandlers && typeof eventHandlers.trackListener === 'function') {
       eventHandlers.trackListener(
