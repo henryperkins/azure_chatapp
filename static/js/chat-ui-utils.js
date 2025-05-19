@@ -26,7 +26,7 @@ export function attachChatUI(chatMgr, deps) {
           chatMgr.sendButtonSelector
         ],
         {
-          timeout: 8000,
+          timeout: chatMgr?.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
           context: 'chatManager::UI::setup',
           observeMutations: true
         }
