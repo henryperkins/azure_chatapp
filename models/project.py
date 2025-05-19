@@ -27,12 +27,6 @@ if TYPE_CHECKING:
     from models.user import User
 
 
-"""
-Defines the Project model used to group files, notes, and references
-that can be attached to one or more conversations for context.
-"""
-
-
 class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
