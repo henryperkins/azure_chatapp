@@ -1042,14 +1042,6 @@ export function createChatManager(deps = {}) {
       }
 
       this.domAPI.removeClass(this.container, "hidden");
-      const header = this.domAPI.getElementById?.("chatHeaderBar");
-      if (header) {
-        if (this.isGlobalMode) {
-          this.domAPI.removeClass(header, "hidden");
-        } else {
-          this.domAPI.addClass(header, "hidden");
-        }
-      }
 
       return true;
     }
