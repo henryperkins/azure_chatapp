@@ -72,21 +72,26 @@ export function createChatExtensions(options) {
   function setupChatTitleEditing() {
     if (!domAPI) return;
 
-    var editTitleBtn = domAPI.getElementById ? domAPI.getElementById("chatTitleEditBtn") : null;
-    var chatTitleEl = domAPI.getElementById ? domAPI.getElementById("chatTitle") : null;
+    const editBtns = Array.from(
+      domAPI.querySelectorAll?.("#chatTitleEditBtn, #projectChatTitleEditBtn") || []
+    );
+    if (!editBtns.length) return;
 
-    if (!editTitleBtn || !chatTitleEl) {
-      return;
-    }
-    if (editTitleBtn.hasAttribute("data-chat-title-handler-bound")) {
-      return;
-    }
+    editBtns.forEach((btn) => {
+      if (btn.hasAttribute("data-chat-title-handler-bound")) return;
 
-    trackListener(editTitleBtn, "click", function() {
-      handleTitleEditClick(editTitleBtn, chatTitleEl);
-    }, { description: "Chat title editing", context: MODULE_CONTEXT });
+      const container    = btn.closest(".chat-title-row") || btn.parentElement;
+      const chatTitleEl  =
+            container?.querySelector("#chatTitle") ||
+            container?.querySelector("#projectChatTitle");
+      if (!chatTitleEl) return;
 
-    editTitleBtn.setAttribute("data-chat-title-handler-bound", "true");
+      trackListener(btn, "click",
+        () => handleTitleEditClick(btn, chatTitleEl),
+        { description: "Chat title editing", context: MODULE_CONTEXT }
+      );
+      btn.setAttribute("data-chat-title-handler-bound", "true");
+    });
   }
 
   function handleTitleEditClick(editTitleBtn, chatTitleEl) {
