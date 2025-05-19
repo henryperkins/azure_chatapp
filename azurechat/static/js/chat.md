@@ -1,3 +1,4 @@
+```javascript
 import { attachChatUI } from "./chat-ui-utils.js";
 
 /**
@@ -158,6 +159,7 @@ export function createChatManager(deps = {}) {
       this.currentConversationId = null;
       this.isInitialized = false;
       this.isLoading = false;
+      this.isGlobalMode = false;
       this.currentImage = null;
       this.loadPromise = null;
       this.currentRequestId = 0;
@@ -215,12 +217,12 @@ export function createChatManager(deps = {}) {
       });
       const auth = app?.DependencySystem?.modules?.get('auth') || null;
 
-      this.containerSelector = options.containerSelector;
-      this.messageContainerSelector = options.messageContainerSelector;
-      this.inputSelector = options.inputSelector;
-      this.sendButtonSelector = options.sendButtonSelector;
-      this.titleSelector = options.titleSelector;
-      this.minimizeButtonSelector = options.minimizeButtonSelector;
+      this.containerSelector = options.containerSelector || "#chatUIContainer";
+      this.messageContainerSelector = options.messageContainerSelector || "#globalChatMessages";
+      this.inputSelector = options.inputSelector || "#chatUIInput";
+      this.sendButtonSelector = options.sendButtonSelector || "#globalChatSendBtn";
+      this.titleSelector = options.titleSelector || "#chatTitle";
+      this.minimizeButtonSelector = options.minimizeButtonSelector || "#minimizeChatBtn";
 
       try {
         if (!auth || !auth.isAuthenticated()) {
@@ -310,8 +312,22 @@ export function createChatManager(deps = {}) {
         }
 
         this.projectId = requestedProjectId;
+        this.isGlobalMode = !this.isValidProjectId(this.projectId);
 
         this._ensureUIAttached();
+
+        if (this.isGlobalMode) {
+          logger.info("[ChatManager][initialize] Entering global chat mode", { context: "chatManager.initialize" });
+          await this._setupUIElements();
+          if (this.messageContainer) {
+            this._clearMessages();
+            this._showMessage("system", "Select a project or start a new global chat.");
+          }
+          this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
+          this._setupEventListeners();
+          this.isInitialized = true;
+          return true;
+        }
 
         // Setup "New Conversation" button if it exists
         const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
@@ -406,10 +422,10 @@ export function createChatManager(deps = {}) {
           ]);
 
           const conversation =
-            conversationResponse?.data?.conversation
-            ?? conversationResponse?.data
-            ?? conversationResponse?.conversation
-            ?? conversationResponse;
+                conversationResponse?.data?.conversation
+             ?? conversationResponse?.data
+             ?? conversationResponse?.conversation
+             ?? conversationResponse;
 
           if (!conversation?.id) {
             throw new Error('Failed to fetch valid conversation details.');
@@ -474,10 +490,10 @@ export function createChatManager(deps = {}) {
         const response = await this._api(convoEndpoint, { method: "POST", body: payload });
 
         const conversation =
-          response?.data?.conversation
-          ?? response?.data
-          ?? response?.conversation
-          ?? response;
+              response?.data?.conversation
+           ?? response?.data
+           ?? response?.conversation
+           ?? response;
 
         if (!conversation?.id) {
           throw new Error('Server response missing conversation ID');
@@ -595,7 +611,7 @@ export function createChatManager(deps = {}) {
         const b64 = commaIdx !== -1 ? this.currentImage.slice(commaIdx + 1) : this.currentImage;
         const sizeBytes = Math.floor((b64.length * 3) / 4);
         if (sizeBytes > CHAT_CONFIG.MAX_IMAGE_SIZE) {
-          const errorMsg = `Image is too large (${(sizeBytes / (1024 * 1024)).toFixed(1)}MB). Max allowed: ${CHAT_CONFIG.MAX_IMAGE_SIZE / (1024 * 1024)}MB.`;
+          const errorMsg = `Image is too large (${(sizeBytes / (1024*1024)).toFixed(1)}MB). Max allowed: ${CHAT_CONFIG.MAX_IMAGE_SIZE / (1024*1024)}MB.`;
           throw new Error(errorMsg);
         }
       }
@@ -779,9 +795,9 @@ export function createChatManager(deps = {}) {
       }
 
       this.domAPI.appendChild(this.messageContainer, message);
-      if (this.messageContainer) {
+      if (this.messageContainer){
         this.messageContainer.scrollTo({
-          top: this.messageContainer.scrollHeight,
+          top     : this.messageContainer.scrollHeight,
           behavior: 'smooth'
         });
       }
@@ -1019,25 +1035,23 @@ export function createChatManager(deps = {}) {
           this.inputSelector,
           this.sendButtonSelector
         ],
-        {
-          timeout: this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
-          context: "chatManager::_setupUIElements"
-        }
+        { timeout: this.APP_CONFIG?.TIMEOUTS?.CHAT_UI_READY ?? 8000,
+          context: "chatManager::_setupUIElements" }
       );
 
-      this.container = this.domAPI.querySelector(this.containerSelector);
+      this.container        = this.domAPI.querySelector(this.containerSelector);
       this.messageContainer = this.domAPI.querySelector(this.messageContainerSelector);
-      this.inputField = this.domAPI.querySelector(this.inputSelector);
-      this.sendButton = this.domAPI.querySelector(this.sendButtonSelector);
-      this.titleElement = this.titleSelector
-        ? this.domAPI.querySelector(this.titleSelector)
-        : null;
-      this.minimizeButton = this.minimizeButtonSelector
-        ? this.domAPI.querySelector(this.minimizeButtonSelector)
-        : null;
+      this.inputField       = this.domAPI.querySelector(this.inputSelector);
+      this.sendButton       = this.domAPI.querySelector(this.sendButtonSelector);
+      this.titleElement     = this.titleSelector
+                                ? this.domAPI.querySelector(this.titleSelector)
+                                : null;
+      this.minimizeButton   = this.minimizeButtonSelector
+                                ? this.domAPI.querySelector(this.minimizeButtonSelector)
+                                : null;
 
       if (!this.container || !this.messageContainer ||
-        !this.inputField || !this.sendButton) {
+          !this.inputField || !this.sendButton) {
         throw new Error("[ChatManager] Chat UI elements not found. Check selectors/template.");
       }
 
@@ -1065,7 +1079,7 @@ export function createChatManager(deps = {}) {
           inputField: this.inputField,
           sendButton: this.sendButton,
           messageContainer: this.messageContainer,
-          onSend: (txt) => this.sendMessage(txt).catch(() => { })
+          onSend: (txt) => this.sendMessage(txt).catch(()=>{})
         });
       } else {
         if (this.sendButton) {
@@ -1074,7 +1088,7 @@ export function createChatManager(deps = {}) {
             "click",
             safeHandler(() => {
               const txt = this.inputField?.value ?? "";
-              this.sendMessage(txt).catch(() => { });
+              this.sendMessage(txt).catch(()=>{});
             }, "sendBtnClick"),
             ctx
           );
@@ -1088,7 +1102,7 @@ export function createChatManager(deps = {}) {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 const txt = this.inputField.value;
-                this.sendMessage(txt).catch(() => { });
+                this.sendMessage(txt).catch(()=>{});
               }
             }, "inputEnter"),
             ctx
@@ -1124,3 +1138,5 @@ export function createChatManager(deps = {}) {
     chatBus: instance.chatBus
   };
 }
+
+```

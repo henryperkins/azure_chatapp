@@ -1,0 +1,89 @@
+```ini
+# Alembic Migration Configuration File (alembic.ini)
+# --------------------------------------------------
+#
+# This INI configures Alembic's migration infrastructure for this project.
+# It defines migration script locations, code generation options, logging, and other behaviors.
+#
+# Project Customizations & Best Practices:
+# - Migration scripts are stored in the 'alembic' directory, with versioned subfolders.
+# - By default, the true SQLAlchemy URL is injected at runtime via alembic/env.py; the value below is a placeholder.
+# - System path is set to current working directory for model import resolvability.
+# - Logging configuration is established for both Alembic and SQLAlchemy engine subsystems.
+# - Supports out-of-the-box integration with formatting/linting post-write hooks for code quality.
+# - The version_path_separator is set to 'os' for robust cross-platform operation.
+#
+# Normally modified only by maintainers. For code integration details, see 'alembic/env.py'.
+
+[alembic]
+script_location = alembic
+
+# Uncomment the file_template for time-stamped filenames:
+# file_template = %%(year)d_%%(month).2d_%%(day).2d_%%(hour).2d%%(minute).2d-%%(rev)s_%%(slug)s
+
+prepend_sys_path = .
+
+# Output timezone, version path, and encoding
+# timezone =
+# truncate_slug_length = 40
+# output_encoding = utf-8
+# recursive_version_locations = false
+version_path_separator = os
+
+# This value is overridden/injected at runtime by env.py; do not edit.
+sqlalchemy.url = driver://user:pass@localhost/dbname
+
+
+[post_write_hooks]
+# post_write_hooks defines scripts or Python functions that are run
+# on newly generated revision scripts.  See the documentation for further
+# detail and examples
+
+# format using "black" - use the console_scripts runner, against the "black" entrypoint
+# hooks = black
+# black.type = console_scripts
+# black.entrypoint = black
+# black.options = -l 79 REVISION_SCRIPT_FILENAME
+
+# lint with attempts to fix using "ruff" - use the exec runner, execute a binary
+# hooks = ruff
+# ruff.type = exec
+# ruff.executable = %(here)s/.venv/bin/ruff
+# ruff.options = --fix REVISION_SCRIPT_FILENAME
+
+# Logging configuration
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARN
+handlers = console
+qualname =
+
+[logger_sqlalchemy]
+level = WARN
+handlers =
+qualname = sqlalchemy.engine
+
+[logger_alembic]
+level = INFO
+handlers =
+qualname = alembic
+
+[handler_console]
+class = StreamHandler
+args = (sys.stderr,)
+level = NOTSET
+formatter = generic
+
+[formatter_generic]
+format = %(levelname)-5.5s [%(name)s] %(message)s
+datefmt = %H:%M:%S
+
+```

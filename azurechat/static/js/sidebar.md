@@ -1,3 +1,4 @@
+```javascript
 /**
  * sidebar.js – Unified single-factory replacement
  *      (merging sidebar, sidebar-auth, and sidebar-events)
@@ -55,7 +56,6 @@ export function createSidebar({
   uiRenderer,
   storageAPI,
   projectManager,
-  modelConfig, // DI: REQUIRED for model settings UI per frontend guardrails
   app,
   projectDashboard,
   viewportAPI,
@@ -81,7 +81,6 @@ export function createSidebar({
   }
   if (!storageAPI) throw new Error('[Sidebar] storageAPI is required.');
   if (!projectManager) throw new Error('[Sidebar] projectManager is required.');
-  if (!modelConfig) throw new Error('[Sidebar] modelConfig (DI) is required for model settings UI.');
   if (!viewportAPI) throw new Error('[Sidebar] viewportAPI is required.');
   if (!accessibilityUtils || typeof accessibilityUtils.announce !== 'function') {
     throw new Error('[Sidebar] accessibilityUtils is required for accessibility announcements.');
@@ -546,8 +545,8 @@ export function createSidebar({
       if (projectManager?.projects?.length && uiRenderer.renderProjects) {
         uiRenderer.renderProjects(projectManager.projects);
       }
-    } catch (err) {
-      // intentionally ignored: failed project dashboard init. Safe to proceed as fallback.
+    } catch {
+      // no-op
     }
   }
 
@@ -974,3 +973,5 @@ export function createSidebar({
     toggleStarConversation
   };
 }
+
+```

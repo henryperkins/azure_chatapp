@@ -1,0 +1,37 @@
+```text
+fastapi[alembic]
+alembic>=1.7.0
+gitpython>=3.1.0
+uvicorn
+sqlalchemy
+psycopg2-binary
+bcrypt
+PyJWT
+pydantic
+requests
+chardet==5.2.0
+tiktoken
+python-multipart
+python-jose[cryptography]
+aiofiles
+itsdangerous>=2.1.2
+starlette
+python-dotenv
+sqlalchemy[asyncio]
+asyncpg
+httpx
+# Sentry integration
+sentry-sdk[fastapi,sqlalchemy]
+# Cloud storage dependencies (optional)
+azure-storage-blob
+boto3
+# Text extraction dependencies (optional)
+pypdf
+cryptography
+python-docx
+numpy
+slowapi
+jsonschema
+faiss-cpu
+
+```
