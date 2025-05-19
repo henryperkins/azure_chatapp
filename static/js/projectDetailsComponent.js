@@ -826,7 +826,7 @@ class ProjectDetailsComponent {
       messageContainerSelector: "#projectChatMessages",
       inputSelector: "#projectChatInput",
       sendButtonSelector: "#projectChatSendBtn",
-      titleSelector: "#chatTitle",
+      titleSelector: "#projectChatTitle",
       minimizeButtonSelector: "#projectMinimizeChatBtn"
     })
       .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))

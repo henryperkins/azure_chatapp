@@ -56,7 +56,8 @@ export function createChatExtensions(options) {
 
   function init() {
     return domReadinessService.elementsReady(
-      ['#chatTitleEditBtn', '#chatTitle'],
+      ['#chatTitleEditBtn', '#chatTitle',
+       '#projectChatTitleEditBtn', '#projectChatTitle'],
       { timeout: 8000, observeMutations: true, context: 'chatExtensions.init' }
     ).then(() => {
       setupChatTitleEditing();
