@@ -408,6 +408,7 @@ export function createChatUIEnhancements({
     /* remember the active container so showTypingIndicator/… work for both
        the global chat and the per-project chat inside Project Details */
     if (messageContainer) state.messageContainer = messageContainer;
+    state.typingIndicatorVisible = false;   // reset for new pane
 
     // Enhanced submit on Enter (no Shift)
     if (inputField && eventHandlers && typeof eventHandlers.trackListener === 'function') {

@@ -111,7 +111,18 @@ export function createEventHandlers({
     if (typeMap.has(handler))
       return typeMap.get(handler).remove;        // always hand back the “unsubscribe”
 
-    const wrapped = (evt) => handler.call(element, evt);
+    let wrapped = (evt) => handler.call(element, evt);
+
+    if (finalOpts.once) {
+      // make sure our internal maps don’t leak after the handler fires
+      const _wrappedOnce = wrapped;
+      wrapped = (...a) => {
+        try { _wrappedOnce(...a); } finally {
+          // remove record from bookkeeping maps
+          setTimeout(() => untrackListener(element, type, handler), 0);
+        }
+      };
+    }
 
     // domAPI is a required dependency, so domAPI.addEventListener should always be used.
     domAPI.addEventListener(element, type, wrapped, finalOpts);
@@ -535,6 +546,14 @@ export function createEventHandlers({
 
     const details = typeMap.get(handler);
     try {
+      if (details.options.once &&
+          !(el && el.removeEventListener)) {
+        /* already auto-removed by the browser – just delete maps */
+        typeMap.delete(handler);
+        if (typeMap.size === 0) elementMap.delete(evt);
+        if (elementMap.size === 0) trackedListeners.delete(el);
+        return;
+      }
       // domAPI is a required dependency, so domAPI.removeEventListener should always be used.
       domAPI.removeEventListener(el, evt, details.wrappedHandler, details.options);
       typeMap.delete(handler);
@@ -604,7 +623,7 @@ export function createEventHandlers({
     return trackListener(container, eventType, delegatedHandler, {
       ...options,
       description: options.description || `Delegate ${eventType} on ${selector}`,
-      context: options.context || 'eventHandlerDelegate',
+      context: options.context || MODULE,
       module: options.module || MODULE,
       source: options.source || 'delegate'
     });

@@ -820,11 +820,11 @@ export function createProjectManager({
     }
 
     async initialize() {
-      await this.domReadinessService.dependenciesAndElements(
-        ['app'],
-        30000,
-        `${MODULE}_dependenciesAndElements`
-      );
+      await this.domReadinessService.dependenciesAndElements({
+        deps: ['app'],
+        timeout: 30000,
+        context: `${MODULE}_dependenciesAndElements`
+      });
       return true;
     }
 
