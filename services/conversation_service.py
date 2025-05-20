@@ -13,21 +13,18 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func, or_
 from sqlalchemy.orm import joinedload, aliased
-from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.exc import IntegrityError
 
 # Central model helpers
 from utils.model_registry import validate_model_and_params
-from config import settings
 from db import get_async_session
 from models.conversation import Conversation
 from models.message import Message
-from models.project import Project
 from utils.ai_response import generate_ai_response, AIResponseOptions
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
 from services.project_service import validate_project_access
-from models.user import User        # required inside helper
+from models.user import User  # required inside helper
 
 
 logger = logging.getLogger(__name__)
@@ -87,8 +84,7 @@ class ConversationService:
         filters.append(Conversation.project_id == pid)
         # Eager load project and knowledge_base only when project_id is specified
         query = select(Conversation).options(
-            joinedload(Conversation.project),
-            joinedload(Conversation.knowledge_base)
+            joinedload(Conversation.project), joinedload(Conversation.knowledge_base)
         )
 
         result = await self.db.execute(query.where(and_(*filters)))
@@ -111,7 +107,6 @@ class ConversationService:
 
         return conv
 
-
     async def create_conversation(
         self,
         user_id: int,
@@ -125,8 +120,10 @@ class ConversationService:
         project_id = self._require_project_id(project_id)
         try:
             validate_model_and_params(model_id, model_config or {})
-        except (ConversationError, ValueError) as e:
+        except ConversationError as e:
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
         # Validate project access
         user = await self.db.get(User, user_id)
@@ -184,7 +181,7 @@ class ConversationService:
         # Define eager loading options
         load_options = [
             joinedload(Conversation.project),
-            joinedload(Conversation.knowledge_base)
+            joinedload(Conversation.knowledge_base),
         ]
 
         return await get_all_by_condition(
@@ -194,7 +191,7 @@ class ConversationService:
             order_by=Conversation.created_at.desc(),
             limit=limit,
             offset=skip,
-            options=cast(List[Any], load_options)
+            options=cast(List[Any], load_options),
         )
 
     async def update_conversation(
@@ -222,8 +219,10 @@ class ConversationService:
                 validate_model_and_params(model_id, model_config or {})
                 conv.model_id = model_id
                 updated = True
-            except (ConversationError, ValueError) as e:
+            except ConversationError as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
         if model_config is not None:
             conv.model_config = model_config
             updated = True
@@ -344,7 +343,9 @@ class ConversationService:
                     400,
                 )
             try:
-                ctx_mgr = ContextManager(self.db, conv.model_id, enable_web_search or False)
+                ctx_mgr = ContextManager(
+                    self.db, conv.model_id, enable_web_search or False
+                )
                 # History: raw list of message dicts
                 history = await self._get_conversation_context(conversation_id)
                 prompt_msgs, stats = await ctx_mgr.build(conv, content, history)
@@ -403,11 +404,13 @@ class ConversationService:
                     vision_detail=final_vision_detail,
                     enable_thinking=final_enable_thinking,
                     thinking_budget=final_thinking_budget,
-                    enable_markdown_formatting=ai_settings.get("enable_markdown_formatting", False),
+                    enable_markdown_formatting=ai_settings.get(
+                        "enable_markdown_formatting", False
+                    ),
                     max_tokens=final_max_tokens,
                     temperature=final_temperature,
                     reasoning_effort=final_reasoning_effort,
-                    stream=False
+                    stream=False,
                 )
 
                 assistant_msg_obj = await generate_ai_response(
@@ -421,7 +424,9 @@ class ConversationService:
                 if assistant_msg_obj:
                     serialized_assistant_msg = serialize_message(assistant_msg_obj)
                     if hasattr(assistant_msg_obj, "thinking"):
-                        serialized_assistant_msg["thinking"] = assistant_msg_obj.thinking
+                        serialized_assistant_msg["thinking"] = (
+                            assistant_msg_obj.thinking
+                        )
                     if hasattr(assistant_msg_obj, "redacted_thinking"):
                         serialized_assistant_msg["redacted_thinking"] = (
                             assistant_msg_obj.redacted_thinking
@@ -674,7 +679,7 @@ class ConversationService:
                 .distinct()
                 .order_by(c_alias.created_at.desc())
             )
-            total_query = select(func.count()).select_from(  # Corrected: func.count()
+            total_query = select(func.count).select_from(  # Corrected: func.count
                 join_stmt.order_by(None).subquery()
             )
 
@@ -692,7 +697,7 @@ class ConversationService:
                 .where(and_(*base_filters, search_filter))
                 .order_by(Conversation.created_at.desc())
             )
-            count_stmt = select(func.count()).select_from(  # Corrected: func.count()
+            count_stmt = select(func.count).select_from(  # Corrected: func.count
                 query_stmt.order_by(None).subquery()
             )
             result_count = await self.db.execute(count_stmt)
