@@ -568,9 +568,8 @@ export function createChatManager(deps = {}) {
 
       // ---- body expected by backend ----
       const userMsg = {
-        content : messageText,
-        role    : "user",
-        type    : "message"
+        raw_text: messageText,
+        role: "user"
       };
 
       const payload = {

@@ -133,14 +133,14 @@ let sanitizer = browserAPI.getWindow()?.DOMPurify;
 if (!sanitizer) {
   throw new Error('[App] DOMPurify not found - aborting bootstrap for security reasons.');
 }
-DependencySystem.register('sanitizer',  sanitizer);
+DependencySystem.register('sanitizer', sanitizer);
 DependencySystem.register('domPurify', sanitizer);  // legacy alias
 
 // ──  now it is safe to create domAPI  ────────────────────────────
 const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
-  windowObject  : browserAPI.getWindow(),
-  debug         : APP_CONFIG.DEBUG === true,
+  windowObject: browserAPI.getWindow(),
+  debug: APP_CONFIG.DEBUG === true,
   logger,
   sanitizer                      // ← now defined
 });
@@ -151,10 +151,11 @@ const domAPI = createDomAPI({
 DependencySystem.register('domAPI', domAPI);
 
 const errorReporter =
-  { report: (...args) => logger.error('[ErrorReporterStub]', ...args) };
+  { report: (...args) => logger.error('[ErrorReporterStub]', ...args, { context: 'app:ErrorReporterStub' }) };
 DependencySystem.register('errorReporter', errorReporter);
 
 const eventHandlers = createEventHandlers({
+  app,
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
@@ -237,13 +238,13 @@ const appModule = {
     Object.assign(this.state, newLifecycleState);
     // If 'initialized' becomes true, set 'isReady' based on success/failure
     if (newLifecycleState.initialized === true) {
-        if (this.state.currentPhase === 'initialized_idle') {
-            this.state.isReady = true;
-        } else if (this.state.currentPhase === 'failed_idle') {
-            this.state.isReady = false; // Explicitly false if init failed
-        }
+      if (this.state.currentPhase === 'initialized_idle') {
+        this.state.isReady = true;
+      } else if (this.state.currentPhase === 'failed_idle') {
+        this.state.isReady = false; // Explicitly false if init failed
+      }
     } else if (Object.prototype.hasOwnProperty.call(newLifecycleState, 'isReady')) { // Allow direct setting of isReady if needed
-        this.state.isReady = newLifecycleState.isReady;
+      this.state.isReady = newLifecycleState.isReady;
     }
   }
 };
@@ -309,7 +310,7 @@ const htmlTemplateLoader = createHtmlTemplateLoader({
     }
   },
   timerAPI: {
-    setTimeout : (...args) => browserAPI.getWindow().setTimeout(...args),
+    setTimeout: (...args) => browserAPI.getWindow().setTimeout(...args),
     clearTimeout: (...args) => browserAPI.getWindow().clearTimeout(...args)
   }
 });
@@ -319,7 +320,7 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
 // 12) app object & top-level state
 // ---------------------------------------------------------------------------
 let currentUser = null; // This local currentUser is used by renderAuthHeader and fetchCurrentUser.
-                        // It should be kept in sync with appModule.state.currentUser.
+// It should be kept in sync with appModule.state.currentUser.
 
 // The local appState variable has been removed. Its properties are merged into appModule.state.
 // appModule.state is now the single source of truth for these flags.
@@ -509,9 +510,9 @@ export async function init() {
       const rec = phaseTimings[phase] || (phaseTimings[phase] = {});
       rec.end = t;
       const dur = rec.end - (rec.start ?? rec.end);
-      logger.log('[App.init][TIMING]', { phase, duration: Math.round(dur) });
+      logger.log('[App.init][TIMING]', { phase, duration: Math.round(dur), context: 'app:init:timing' });
       if (dur >= SLOW_PHASE) {
-        logger.warn(`[App.init] Phase "${phase}" took ${Math.round(dur)} ms`, { phase, duration: dur });
+        logger.warn(`[App.init] Phase "${phase}" took ${Math.round(dur)} ms`, { phase, duration: dur, context: 'app:init:timing' });
       }
     }
     logger.log('[App.init]', { phase, stage, ts: t, ...extra });
@@ -741,7 +742,7 @@ export async function init() {
     // Log DOM selector wait stats
     const selStats = domReadinessService.getSelectorTimings?.() || {};
     Object.entries(selStats)
-      .sort(([,a],[,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .forEach(([sel, ms]) =>
         logger.info(`[Perf] DOM selector "${sel}" waited ${ms} ms total`));
     domAPI.getDocument()?.dispatchEvent(
@@ -809,9 +810,9 @@ async function initializeCoreSystems() {
     domReadinessService
   });
   DependencySystem.register('auth', authModule);
-logger.log('[initializeCoreSystems] auth module registered', { context: 'app.initializeCoreSystems' });
-// Initialize auth module to set up event listeners
-await authModule.init().catch(err => {
+  logger.log('[initializeCoreSystems] auth module registered', { context: 'app.initializeCoreSystems' });
+  // Initialize auth module to set up event listeners
+  await authModule.init().catch(err => {
     const logMsg = (err && (err.message || err.stack)) ? `Auth module initialization error: ${err.message}\n${err.stack}` : `[App] Auth module initialization error: ${JSON.stringify(err)}`;
     DependencySystem.modules.get('logger').error('[App] ' + logMsg, err);
   });
@@ -829,7 +830,7 @@ await authModule.init().catch(err => {
   // Create or retrieve chatManager
   const chatManager = createOrGetChatManager();
 
-    // Create projectManager
+  // Create projectManager
   const pmFactory = await createProjectManager({
     DependencySystem,
     chatManager,
@@ -867,10 +868,10 @@ await authModule.init().catch(err => {
   function createPlaceholder(name) {
     return {
       state: { initialized: false },
-      initialize: async () => {},
-      show: () => {},
-      hide: () => {},
-      cleanup: () => {},
+      initialize: async () => { },
+      show: () => { },
+      hide: () => { },
+      cleanup: () => { },
       __placeholder: true,
       toString() { return `[Placeholder ${name}]`; }
     };
@@ -970,10 +971,10 @@ await authModule.init().catch(err => {
   if (modalManager.init) {
     try {
       await modalManager.init();
-              } catch (err) {
-                logger.error('[projectList:show]', err, { context: 'app:nav:projectList:show' });
-                return false;
-              }
+    } catch (err) {
+      logger.error('[projectList:show]', err, { context: 'app:nav:projectList:show' });
+      return false;
+    }
   }
 
   return true;
@@ -1008,45 +1009,45 @@ async function initializeUIComponents() {
     });
 
     /* ── Mobile sidebar open/close helpers ───────────────── */
-    const navToggleBtn     = domAPI.getElementById('navToggleBtn');
-    const closeSidebarBtn  = domAPI.getElementById('closeSidebarBtn');
-    const doc              = domAPI.getDocument();
+    const navToggleBtn = domAPI.getElementById('navToggleBtn');
+    const closeSidebarBtn = domAPI.getElementById('closeSidebarBtn');
+    const doc = domAPI.getDocument();
 
-    function setSidebarOpen(open){
+    function setSidebarOpen(open) {
       const sidebar = domAPI.getElementById('mainSidebar');
       // freeze / release background scroll
-      domAPI[open ? 'addClass'    : 'removeClass'](doc.body            ,'sidebar-open');
-      domAPI[open ? 'addClass'    : 'removeClass'](doc.documentElement ,'sidebar-open');
+      domAPI[open ? 'addClass' : 'removeClass'](doc.body, 'sidebar-open');
+      domAPI[open ? 'addClass' : 'removeClass'](doc.documentElement, 'sidebar-open');
 
       // slide sidebar in/out
-      if(sidebar){
-        domAPI[open ? 'addClass'  : 'removeClass'](sidebar,'translate-x-0');
-        domAPI[open ? 'removeClass': 'addClass']  (sidebar,'-translate-x-full');
+      if (sidebar) {
+        domAPI[open ? 'addClass' : 'removeClass'](sidebar, 'translate-x-0');
+        domAPI[open ? 'removeClass' : 'addClass'](sidebar, '-translate-x-full');
         sidebar.setAttribute('aria-hidden', String(!open));
       }
       // update toggle button ARIA
-      if(navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
+      if (navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
     }
 
-    if(navToggleBtn){
+if (navToggleBtn) {
+  eventHandlers.trackListener(
+    navToggleBtn, 'click',
+    safeHandler(() => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
+    { context: 'app:sidebar', description: 'toggleSidebar' }
+  );
+}
+    if (closeSidebarBtn) {
       eventHandlers.trackListener(
-        navToggleBtn,'click',
-        () => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded')!=='true'),
-        {context:'app:sidebar',description:'toggleSidebar'}
-      );
-    }
-    if(closeSidebarBtn){
-      eventHandlers.trackListener(
-        closeSidebarBtn,'click',
+        closeSidebarBtn, 'click',
         () => setSidebarOpen(false),
-        {context:'app:sidebar',description:'closeSidebar'}
+        { context: 'app:sidebar', description: 'closeSidebar' }
       );
     }
     /* close with Esc key when sidebar is open */
     eventHandlers.trackListener(
-      doc,'keydown',
-      (e) => { if(e.key==='Escape') setSidebarOpen(false); },
-      {context:'app:sidebar',description:'escCloseSidebar'}
+      doc, 'keydown',
+      (e) => { if (e.key === 'Escape') setSidebarOpen(false); },
+      { context: 'app:sidebar', description: 'escCloseSidebar' }
     );
     /* ────────────────────────────────────────────────────── */
 
@@ -1074,7 +1075,7 @@ async function initializeUIComponents() {
         if (projectListContainer) {
           loggerInstance.log(
             '[App][initializeUIComponents] #projectListView childElementCount=' +
-              projectListContainer.childElementCount,
+            projectListContainer.childElementCount,
             { context: 'app:loadTemplates' }
           );
         } else {
@@ -1242,19 +1243,19 @@ async function initializeUIComponents() {
     sidebarInstance = createSidebar({
       DependencySystem,
       eventHandlers,
-    app,
-    projectDashboard: DependencySystem.modules.get('projectDashboard'),
-    projectManager: DependencySystem.modules.get('projectManager'),
-    modelConfig: DependencySystem.modules.get('modelConfig'),
-    uiRenderer: uiRendererInstance,
-    storageAPI: DependencySystem.modules.get('storage'),
-    domAPI,
-    viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() },
-    accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
-    logger: DependencySystem.modules.get('logger'), // Pass the DI logger
-    safeHandler: safeHandler, // Pass the safeHandler utility
-    domReadinessService: DependencySystem.modules.get('domReadinessService'),
-    APP_CONFIG // Pass config for sidebar debug logging
+      app,
+      projectDashboard: DependencySystem.modules.get('projectDashboard'),
+      projectManager: DependencySystem.modules.get('projectManager'),
+      modelConfig: DependencySystem.modules.get('modelConfig'),
+      uiRenderer: uiRendererInstance,
+      storageAPI: DependencySystem.modules.get('storage'),
+      domAPI,
+      viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() },
+      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
+      logger: DependencySystem.modules.get('logger'), // Pass the DI logger
+      safeHandler: safeHandler, // Pass the safeHandler utility
+      domReadinessService: DependencySystem.modules.get('domReadinessService'),
+      APP_CONFIG // Pass config for sidebar debug logging
     });
     DependencySystem.register('sidebar', sidebarInstance);
   }
@@ -1340,11 +1341,11 @@ async function createAndRegisterUIComponents() {
     domReadinessService.elementsReady(
       '#knowledgeTab',
       {
-        timeout : APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
-        context : 'app.createAndRegisterUIComponents#knowledgeTab',
-        observeMutations : true
+        timeout: APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
+        context: 'app.createAndRegisterUIComponents#knowledgeTab',
+        observeMutations: true
       }
-    ).catch(()=>{/* non-critical: template not yet injected */});
+    ).catch(() => {/* non-critical: template not yet injected */ });
     try {
       knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
         DependencySystem,
@@ -1358,8 +1359,8 @@ async function createAndRegisterUIComponents() {
       logger.warn('[createAndRegisterUIComponents] KnowledgeBaseComponent creation failed; falling back to placeholder.', { context: 'app:createAndRegisterUIComponents', error: err?.message });
       // Minimal placeholder to satisfy DI until real component can be instantiated by PDC later
       knowledgeBaseComponentInstance = {
-        initialize: async () => {},
-        renderKnowledgeBaseInfo: () => {}
+        initialize: async () => { },
+        renderKnowledgeBaseInfo: () => { }
       };
     }
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
@@ -1383,7 +1384,7 @@ async function createAndRegisterUIComponents() {
   // No re-creation or re-registration needed here.
   const projectListComponent = DependencySystem.modules.get('projectListComponent');
   if (!projectListComponent) {
-     logger.warn('[createAndRegisterUIComponents] projectListComponent not found in DI.', { context: 'app:createAndRegisterUIComponents' });
+    logger.warn('[createAndRegisterUIComponents] projectListComponent not found in DI.', { context: 'app:createAndRegisterUIComponents' });
   }
 
   // Update ProjectDashboard references using the new setter methods
@@ -1596,10 +1597,10 @@ function renderAuthHeader() {
         { description: 'Auth logout button', context: 'app' }
       );
     }
-    } catch (err) {
-      logger.error('[safeInit]', err, { context: 'app:safeInit:AccessibilityUtils' });
-      // Error handled silently
-    }
+  } catch (err) {
+    logger.error('[safeInit]', err, { context: 'app:safeInit:AccessibilityUtils' });
+    // Error handled silently
+  }
 }
 
 async function fetchCurrentUser() {
@@ -1691,7 +1692,7 @@ function setupChatInitializationTrigger() {
 function handleInitError(err) {
   const modalManager = DependencySystem.modules.get?.('modalManager');
   const shownViaModal = modalManager?.show?.('error', {
-    title  : 'Application initialization failed',
+    title: 'Application initialization failed',
     message: err?.message || 'Unknown initialization error',
     showDuringInitialization: true
   });
@@ -1725,14 +1726,14 @@ function handleInitError(err) {
 // ---------------------------------------------------------------------------
 if (typeof window !== 'undefined') {
   // Add global error handler to catch and log any errors
-  window.onerror = function(message, source, lineno, colno, error) {
+  window.onerror = function (message, source, lineno, colno, error) {
     return false;
   };
 
   eventHandlers.trackListener(
     window,
     'unhandledrejection',
-    safeHandler(function(event) {}, 'global unhandledrejection'),
+    safeHandler(function (event) { }, 'global unhandledrejection'),
     { context: 'app' }
   );
 
@@ -1755,18 +1756,4 @@ if (typeof window !== 'undefined') {
     }
   }
 
-  if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', function() {
-      init().then(() => {
-        // After app initializes and modals are ready, force show login
-        setTimeout(forceShowLoginModal, 800);
-      });
-    }, { once: true });
-  } else {
-    setTimeout(() => {
-      init().then(() => {
-        setTimeout(forceShowLoginModal, 800);
-      });
-    }, 0);
-  }
 }

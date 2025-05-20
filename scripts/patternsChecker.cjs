@@ -14,19 +14,22 @@
 /* ───────────────────────── Dependencies ───────────────────────── */
 const fs       = require("fs");
 const path     = require("path");
+const os       = require("os");
 const { parse }  = require("@babel/parser");
 const traverse = require("@babel/traverse").default;
+const chalk    = (()=>{try{return require("chalk");}catch{     // colour fallback
+  const p = t => t; return { red:p, yellow:p, green:p, blue:p, cyan:p, bold:p }; }})();
 
 /* ───────────────────────── Symbols ────────────────────────────── */
 const SYM = {
-  error:  "✖",
-  warn:   "⚠",
-  info:   "ℹ",
-  ok:     "✓",
-  shield: "🛡️",
-  lock:   "🔒",
-  alert:  "🚨",
-  lamp:   "💡",
+  error:  chalk.red("✖"),
+  warn:   chalk.yellow("⚠"),
+  info:   chalk.cyan("ℹ"),
+  ok:     chalk.green("✓"),
+  shield: chalk.blue("🛡️"),
+  lock:   chalk.blue("🔒"),
+  alert:  chalk.redBright("🚨"),
+  lamp:   chalk.yellowBright("💡"),
   bullet: "•",
 };
 
@@ -44,7 +47,7 @@ const RULE_NAME = {
  10: "Navigation Service",
  11: "Single API Client",
  12: "Logger / Observability",
- 0 : "Other Issues",
+  0 : "Other Issues",
 };
 
 const RULE_DESC = {
@@ -61,6 +64,48 @@ const RULE_DESC = {
  11:"All network calls via DI-injected `apiClient`.",
  12:"No `console.*`; all logs via DI logger and include context.",
 };
+
+/* ───────────────────────── Config & Plugins ───────────────────── */
+
+function loadConfig(cwd){
+  const tryPaths = [
+    path.join(cwd,"patterns-checker.config.json"),
+    path.join(cwd,".patterns-checkerrc"),
+    path.join(cwd,"package.json")
+  ];
+  for(const p of tryPaths){
+    if(fs.existsSync(p)){
+      const raw = JSON.parse(fs.readFileSync(p,"utf8"));
+      // package.json nesting support
+      return raw["patternsChecker"] ?? raw;
+    }
+  }
+  return {};
+}
+
+function loadPlugins(dir){
+  if(!dir || !fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter(f=>/\.(c?js|ts)$/.test(f))
+    .map(f=>path.join(dir,f))
+    .map(p=>{
+      try{
+        const mod = require(p);
+        if(typeof mod.visitor!=="function" || typeof mod.ruleId!=="number") {
+          console.warn(`${SYM.warn}  Plugin ${p} ignored – missing visitor() or ruleId`);
+          return null;
+        }
+        // Allow plugins to extend rule name/desc maps
+        if(mod.ruleName)  RULE_NAME[mod.ruleId]=mod.ruleName;
+        if(mod.ruleDesc)  RULE_DESC[mod.ruleId]=mod.ruleDesc;
+        return mod;
+      }catch(err){
+        console.warn(`${SYM.warn}  Failed to load plugin ${p}: ${err.message}`);
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
 
 /* ───────────────────────── Helper Utilities ───────────────────── */
 const read = f => fs.readFileSync(f,"utf8");
@@ -115,10 +160,13 @@ function mergeVisitors (...visitors) {
   return merged;
 }
 
-const hasProp=(objExpr,prop)=>
-  objExpr?.properties?.some(p=>
-    (p.key.type==="Identifier"   && p.key.name  ===prop)||
-    (p.key.type==="StringLiteral"&& p.key.value===prop)
+const hasProp = (objExpr, prop) =>
+  objExpr?.properties?.some(p =>
+    p.key &&
+    (
+      (p.key.type === "Identifier" && p.key.name === prop) ||
+      (p.key.type === "StringLiteral" && p.key.value === prop)
+    )
   );
 
 // ────────────── NEW: Shared util for collecting DI param names ─────────────
@@ -226,321 +274,6 @@ function vDI(err,file){
         const keyNode = pr.key || (pr.value && pr.value.left);
         if (!keyNode) return;
         const name = keyNode.name || keyNode.value;
-        if (name) diParams.add(name);
-      });
-    }
-  }
-
-  return {
-    ImportDeclaration(p){
-      const src=p.node.source.value;
-      bannedS.forEach(s=>{
-        if(src.includes(s))
-          err.push(E(file,p.node.loc.start.line,2,`Importing '${s}' directly is forbidden – inject via DI.`));
-      });
-    },
-    VariableDeclarator(p){
-      if(p.node.id.type==="ObjectPattern")
-        collectDIProps(p.node.id);
-      if(p.node.init?.callee?.name==="require"){
-        const val=p.node.init.arguments?.[0]?.value||"";
-        bannedS.forEach(s=>{
-          if(val.includes(s))
-            err.push(E(file,p.node.loc.start.line,2,`require('${s}') is forbidden – inject via DI.`));
-        });
-      }
-    },
-    FunctionDeclaration(p){
-      p.node.params.forEach(collectDIProps);
-    },
-    FunctionExpression(p){
-      p.node.params.forEach(collectDIProps);
-    },
-    ArrowFunctionExpression(p){
-      p.node.params.forEach(collectDIProps);
-    },
-    ExportNamedDeclaration(p){
-      const d = p.node.declaration;
-      if (d && (d.type === "FunctionDeclaration" || d.type === "ArrowFunctionExpression"))
-        d.params.forEach(collectDIProps);
-    },
-    CallExpression(p) {
-      if(p.node.callee.type==="Identifier" && bannedS.includes(p.node.callee.name))
-        referenced.add(p.node.callee.name);
-    },
-    MemberExpression(p){
-      const obj=p.node.object;
-      if(obj.type==="Identifier"&&bannedG.includes(obj.name))
-        err.push(E(file,p.node.loc.start.line,2,`Use injected abstractions instead of global ${obj.name}.`));
-      if(obj.name && bannedS.includes(obj.name))
-        referenced.add(obj.name);
-    },
-    Program:{exit(){
-      referenced.forEach(s=>{
-        if(!diParams.has(s))
-          err.push(E(file,1,2,`'${s}' used but not provided via DI param.`));
-      });
-    }}
-  };
-}
-
-/* 3. Pure Imports */
-function vPure(err,file){
-  return{
-    Program:{exit(p){
-      p.node.body.forEach(n=>{
-        if(
-          n.type==="ImportDeclaration"||
-          (n.type==="ExpressionStatement"&&n.expression.value==="use strict")||
-          n.type==="ExportNamedDeclaration"
-        ) return;
-        err.push(E(file,n.loc.start.line,3,"Top-level logic found – move inside factory."));
-      });
-    }}
-  };
-}
-
-/* 4 & 5. Event Handling + Context */
-function vEvent(err, file, isAppJs) {
-  const ctx = { track: false, cleanup: false };
-  return {
-    CallExpression(p) {
-      const c = p.node.callee;
-      if (c.type === "MemberExpression" && c.object.name === "eventHandlers") {
-        if (c.property.name === "trackListener") {
-          ctx.track = true;
-          const last = p.node.arguments.at(-1);
-          if (!(last?.type === "ObjectExpression" && hasProp(last, "context"))) {
-            err.push(E(file, p.node.loc.start.line, 5, "Missing { context } in trackListener.",
-                       "eventHandlers.trackListener(btn,'click',handler,{ context:'sidebar' })"));
-          } else {
-            // Additional check: ensure context is a string literal
-            const contextProp = last.properties.find(
-              (pr) => (pr.key.name === "context" || pr.key.value === "context")
-            );
-            if (contextProp && contextProp.value.type !== "StringLiteral") {
-              err.push(E(file, p.node.loc.start.line, 5, "context should be a string literal."));
-            }
-          }
-        }
-        if (c.property.name === "cleanupListeners") ctx.cleanup = true;
-      }
-      if (c.type === "MemberExpression" && c.property.name === "addEventListener") {
-        // Exception for bootstrap DOMContentLoaded in app.js
-        if (isAppJs &&
-            c.object.name === "doc" &&
-            p.node.arguments[0]?.value === "DOMContentLoaded") {
-          return; // Skip this violation for bootstrap
-        }
-        err.push(E(file, p.node.loc.start.line, 4, "Use eventHandlers.trackListener instead of addEventListener."));
-      }
-    },
-    Program: { exit() {
-      if (ctx.track && !ctx.cleanup)
-        err.push(E(file, 1, 4, "trackListener used but no cleanupListeners call."));
-    }}
-  };
-}
-
-/* 6. Sanitize HTML */
-function vSanitize(err,file){
-  const bad=["innerHTML","outerHTML"];
-  const isSanitize=n=>n.type==="CallExpression"&&(
-      n.callee.name==="sanitize"||
-      (n.callee.type==="MemberExpression"&&n.callee.property.name==="sanitize"));
-  return{
-    AssignmentExpression(p){
-      const l=p.node.left;
-      if(l.type==="MemberExpression"&&bad.includes(l.property.name)){
-        if(!isSanitize(p.node.right)&&!(p.node.right.type==="StringLiteral"&&p.node.right.value===""))
-          err.push(E(file,p.node.loc.start.line,6,`.${l.property.name} without sanitizer.sanitize().`));
-      }
-    },
-    CallExpression(p){
-      const c=p.node.callee;
-      if(c.type==="MemberExpression"&&c.property.name==="insertAdjacentHTML"){
-        if(!isSanitize(p.node.arguments[1]))
-          err.push(E(file,p.node.loc.start.line,6,"insertAdjacentHTML without sanitizer.sanitize()."));
-      }
-    }
-  };
-}
-
-/* 7. domReadinessService */
-function vReadiness(err, file, isAppJs) {
-  let ok = false;
-  const bootstrapWaitForLines = new Set(); // Track initial bootstrap waitFor lines
-
-  if (isAppJs) {
-    // Initial DependencySystem.waitFor in app.js bootstrap is allowed
-    // We'll collect these line numbers during analysis
-  }
-
-  return {
-    ImportDeclaration(p) {
-      if (p.node.source.value.includes("domReadinessService")) {
-        // Allow direct import in app.js for service creation
-        if (isAppJs) return;
-
-        err.push(E(file, p.node.loc.start.line, 7, "Do NOT import domReadinessService – inject via DI."));
-      }
-    },
-    CallExpression(p) {
-      const c = p.node.callee;
-      if (c.type === "MemberExpression") {
-        // Check for DependencySystem.waitFor
-        if (c.object.name === "DependencySystem" && c.property.name === "waitFor") {
-          // For app.js, only flag DependencySystem.waitFor after domReadinessService is registered
-          if (isAppJs) {
-            // This is a simplified approach. If we could track actual registration, that would be better.
-            // Instead, we'll allow the first occurrence only and flag subsequent ones.
-            if (bootstrapWaitForLines.size === 0) {
-              bootstrapWaitForLines.add(p.node.loc.start.line);
-              return;
-            }
-          }
-
-          err.push(E(file, p.node.loc.start.line, 7, "Legacy DependencySystem.waitFor() is banned."));
-        }
-
-        // Check for manual readiness listeners
-        if (c.property.name === "addEventListener") {
-          const ev = p.node.arguments[0];
-
-          // Exception for bootstrap DOMContentLoaded in app.js
-          if (isAppJs &&
-            c.object.name === "doc" &&
-            ev?.value === "DOMContentLoaded") {
-            return; // Skip this violation for bootstrap
-          }
-
-          if (ev?.value === "app:ready" || ev?.value === "DOMContentLoaded")
-            err.push(E(file, p.node.loc.start.line, 7, "Manual readiness listeners are banned."));
-        }
-
-        // allowed methods
-        if (c.object.name === "domReadinessService" &&
-          ["waitForEvent", "dependenciesAndElements"].includes(c.property.name))
-          ok = true;
-      }
-    },
-    Program: {
-      exit(path) {
-        // For app.js, don't require domReadinessService usage if it's the one creating it
-        if (!ok && !isAppJs) {
-          err.push(E(file, 1, 7, "No domReadinessService.waitForEvent/dependenciesAndElements call detected."));
-        }
-
-        if (!isAppJs) {
-          let diParamSet = new Set();
-          let factoryLine = 1;
-          path.traverse({
-            FunctionDeclaration(fdPath) {
-              if (/^create[A-Z]/.test(fdPath.node.id?.name)) {
-                factoryLine = fdPath.node.loc.start.line;
-                // Collect destructured DI params (e.g. export function createX({ domReadinessService }) { ... })
-                collectDIParamNamesFromParams(fdPath.node.params, diParamSet);
-
-                // Now, ALSO check destructuring inside the body: const { domReadinessService } = deps;
-                fdPath.traverse({
-                  VariableDeclarator(vdPath) {
-                    if (
-                      vdPath.node.id.type === 'ObjectPattern' &&
-                      vdPath.node.init &&
-                      vdPath.node.init.name === 'deps'
-                    ) {
-                      vdPath.node.id.properties.forEach(pr => {
-                        if (pr.key && pr.key.name === 'domReadinessService') {
-                          diParamSet.add('domReadinessService');
-                        }
-                      });
-                    }
-                  }
-                });
-              }
-            }
-          });
-          if (!diParamSet.has("domReadinessService")) {
-            err.push(E(file, factoryLine, 7, "Missing domReadinessService in DI param."));
-          }
-        }
-      }
-    }
-  };
-}
-
-/* 8. app.state */
-function vState(err,file){
-  return{
-    AssignmentExpression(p){
-      const l=p.node.left;
-      if(l.type==="MemberExpression"&&
-         l.object.type==="MemberExpression"&&
-         l.object.object.name==="app"&&
-         l.object.property.name==="state")
-        err.push(E(file,p.node.loc.start.line,8,"Direct mutation of app.state is forbidden."));
-    }
-  };
-}
-
-/* 9. Module Event Bus */
-function vBus(err,file){
-  let bus=false,ce=false;
-  return{
-    NewExpression(p){ if(p.node.callee.name==="EventTarget") bus=true; },
-    CallExpression(p){
-      const c=p.node.callee;
-      if(c.type==="MemberExpression"&&c.property.name==="dispatchEvent") ce=true;
-    },
-    Program:{exit(){
-      if(ce&&!bus) err.push(E(file,1,9,"Custom events dispatched without dedicated EventTarget."));
-    }}
-  };
-}
-
-/* 10. Navigation Service */
-function vNav(err,file){
-  return{
-    AssignmentExpression(p){
-      const l=p.node.left;
-      if(l.type==="MemberExpression"&&l.object.name==="window"&&l.property.name==="location")
-        err.push(E(file,p.node.loc.start.line,10,"Use navigationService.navigateTo(...) instead of window.location."));
-    },
-    CallExpression(p){
-      const c=p.node.callee;
-      if(c.type==="MemberExpression"&&
-         c.object.type==="MemberExpression"&&
-         c.object.object.name==="window"&&
-         c.object.property.name==="location")
-        err.push(E(file,p.node.loc.start.line,10,"Use navigationService.navigateTo(...)."));
-    }
-  };
-}
-
-/* 11. Single API Client */
-function vAPI(err,file){
-  return{
-    NewExpression(p){
-      if(p.node.callee.name==="XMLHttpRequest")
-        err.push(E(file,p.node.loc.start.line,11,"Use apiClient (DI) instead of XMLHttpRequest."));
-    },
-    CallExpression(p){
-      if(p.node.callee.name==="fetch")
-        err.push(E(file,p.node.loc.start.line,11,"Use apiClient (DI) instead of fetch."));
-    }
-  };
-}
-
-/* 12. Logger / Observability */
-function vLog(err, file, isAppJs) {
-  let diLogger = false;
-
-  function scanParams(list) {
-    list.forEach(param => {
-      if (param && param.type === "ObjectPattern") {
-        param.properties.forEach(pr => {
-          const key = pr.key?.name || pr.key?.value ||
-                      pr.value?.left?.name;
           if (key === "logger") diLogger = true;
         });
       }
