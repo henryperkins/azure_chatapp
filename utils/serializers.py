@@ -99,10 +99,12 @@ def serialize_conversation(conversation: Conversation) -> dict[str, Any]:
         "created_at": serialize_datetime(conversation.created_at if hasattr(conversation, 'created_at') else None),
         "updated_at": serialize_datetime(conversation.updated_at if hasattr(conversation, 'updated_at') else None),
         "is_deleted": conversation.is_deleted if hasattr(conversation, 'is_deleted') else False,
-        "extra_data": conversation.extra_data if hasattr(conversation, 'extra_data') else {},
         "user_id": serialize_uuid(conversation.user_id if hasattr(conversation, 'user_id') else None),
         "knowledge_base_id": serialize_uuid(conversation.knowledge_base_id if hasattr(conversation, 'knowledge_base_id') else None),
-        "use_knowledge_base": conversation.use_knowledge_base if hasattr(conversation, 'use_knowledge_base') else False,
+        "model_config": getattr(conversation, 'model_config', {}) or {},
+        "kb_enabled": getattr(conversation, 'kb_enabled', False),
+        "context_token_usage": getattr(conversation, 'context_token_usage', None),
+        "extra_data": conversation.extra_data if hasattr(conversation, 'extra_data') else {},
     }
 
 
@@ -120,7 +122,10 @@ def serialize_message(message: Message) -> dict[str, Any]:
         "id": serialize_uuid(message.id),
         "conversation_id": serialize_uuid(message.conversation_id),
         "role": message.role,
-        "content": message.content,
+        "raw_text": getattr(message, "raw_text", None),
+        "formatted_text": getattr(message, "formatted_text", None),
+        "token_count": getattr(message, "token_count", None),
+        "content": getattr(message, "raw_text", None),  # TEMP for legacy, remove in future
         "metadata": message.get_metadata_dict(),
         "created_at": serialize_datetime(message.created_at),
         "updated_at": serialize_datetime(message.updated_at),
