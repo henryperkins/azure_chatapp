@@ -336,7 +336,7 @@ export function createSidebar({
     if (authenticated) {
       // On login: ensure projects are loaded and UI is updated
       try {
-        if (logger && logger.info) logger.info(`[Sidebar][auth:stateChanged] Logged in, loading projects and refreshing Projects tab`);
+        if (logger && logger.info) logger.info(`[Sidebar][auth:stateChanged] Logged in, loading projects and refreshing Projects tab`, { context: 'Sidebar' });
         if (projectManager?.loadProjects) {
           await projectManager.loadProjects('all');
         }
