@@ -405,6 +405,10 @@ export function createChatUIEnhancements({
    *   {Function} params.onSend
    */
   function attachEventHandlers({ inputField, sendButton, messageContainer, onSend }) {
+    /* ‼️ Prevent listener duplication when ChatManager re-binds to a new pane */
+    eventHandlers.cleanupListeners({ context: 'chatUIEnhancements' });
+    hideTypingIndicator();               // remove orphan indicator from old pane
+
     /* remember the active container so showTypingIndicator/… work for both
        the global chat and the per-project chat inside Project Details */
     if (messageContainer) state.messageContainer = messageContainer;
