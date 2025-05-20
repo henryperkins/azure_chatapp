@@ -185,6 +185,12 @@
   font-size: 1rem;
   line-height: 1.45;
 }
+/* ─── Active conversation highlight ─── */
+#projectConversationsList > .conversation-item.active{
+  background: var(--color-primary) !important;
+  color: var(--color-primary-content,#fff);
+  box-shadow: 0 2px 8px 0 rgba(85,0,85,.08) !important;
+}
 #projectConversationsList > div:hover,
 #projectConversationsList > .conversation-item:hover {
   background: var(--color-primary) !important;

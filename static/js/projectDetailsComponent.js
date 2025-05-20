@@ -446,6 +446,9 @@ class ProjectDetailsComponent {
       return;
     }
     convs.forEach(cv => { c.appendChild(this._conversationItem(cv)); });
+    if (this.chatManager?.currentConversationId) {
+      this._highlightActiveConversation(this.chatManager.currentConversationId);
+    }
   }
 
   renderArtifacts(arts) {
@@ -484,6 +487,21 @@ class ProjectDetailsComponent {
   }
 
   // --- File/Conversation/Artifact Item DOM (sanitized, event-tracked) ---
+
+  /**
+   * Visually highlight the conversation that is currently open
+   * @param {string|number} activeId
+   */
+  _highlightActiveConversation(activeId) {
+    const list = this.elements?.conversationsList;
+    if (!list) return;
+    Array.from(list.children).forEach(item => {
+      item.classList.toggle(
+        'active',
+        item.dataset.conversationId === String(activeId)
+      );
+    });
+  }
 
   // ─── Desactivar UI de chat en caso de error / KB inactivo ───
   disableChatUI(reason = 'Chat unavailable') {
@@ -541,11 +559,11 @@ class ProjectDetailsComponent {
   _conversationItem(cv) {
     const doc = this.domAPI.getDocument();
     const div = doc.createElement("div");
-    div.className = "p-3 border-b border-base-300 hover:bg-base-200 cursor-pointer transition-colors max-w-full w-full overflow-x-auto";
+    div.className = "conversation-item";
     div.dataset.conversationId = cv.id;
     this._setHTML(div, `
       <h4 class="font-medium truncate mb-1">${this._safeTxt(cv.title || "Untitled conversation")}</h4>
-      <p class="text-sm text-base-content/70 truncate">${this._safeTxt(cv.last_message || "No messages yet")}</p>
+      <p class="text-sm text-base-content/60 truncate mt-1">${this._safeTxt(cv.last_message || "No messages yet")}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
         <span>${this._safeTxt(this._formatDate(cv.updated_at))}</span>
         <span class="badge badge-ghost badge-sm">${this._safeTxt(cv.message_count || 0)} msgs</span>
@@ -670,6 +688,7 @@ class ProjectDetailsComponent {
         if (this.chatManager && typeof this.chatManager.loadConversation === "function") {
           this.chatManager.loadConversation(cv.id);
         }
+        this._highlightActiveConversation(cv.id);
       } catch (_e) {
         if (!operation.canceled) {
           this._logError("Error opening conversation", _e);
