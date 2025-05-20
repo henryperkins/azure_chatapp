@@ -115,16 +115,15 @@ class ConversationService:
         return conv
 
     async def _validate_project_access(self, project_id: UUID, user_id: int) -> Project:
-        """Validate project ownership."""
-        project = await self.db.get(Project, project_id)
-        if not project:
-            raise ConversationError("Project not found", 404)
-        if project.user_id != user_id:
-            logger.warning(
-                f"User {user_id} attempted to access project {project_id} owned by {project.user_id}"
-            )
-            raise ConversationError("Project access denied", 403)
-        return project
+        """
+        Delegate to project_service.validate_project_access to keep
+        permission rules in one place.
+        """
+        project_id = self._require_project_id(project_id)
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise ConversationError("User not found", 404)
+        return await validate_project_access(project_id, user, self.db)
 
     async def create_conversation(
         self,
