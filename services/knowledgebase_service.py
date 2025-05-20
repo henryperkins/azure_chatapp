@@ -262,7 +262,7 @@ async def upload_file_to_project(
 
     # Store file
     storage = StorageManager.get()
-    stored_path = await _store_uploaded_file(
+    stored_path = await __store_uploaded_file(
         storage, contents, project_id, file_info["sanitized_filename"]
     )
 
