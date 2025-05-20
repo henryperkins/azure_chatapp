@@ -52,6 +52,14 @@ __all__ = [
     # Context/window manager + web search
     "ContextManager",
     "search",
+    # Knowledge base helpers
+    "list_knowledge_bases",
+    "get_knowledge_base",
+    "update_knowledge_base",
+    "delete_knowledge_base",
+    "toggle_project_kb",
+    "get_project_file_list",
+    "get_knowledge_base_health",
 ]
 
 # File storage services
@@ -83,6 +91,13 @@ from services.knowledgebase_service import (
     get_project_files_stats,
     search_project_context,
     create_knowledge_base,
+    list_knowledge_bases,
+    get_knowledge_base,
+    update_knowledge_base,
+    delete_knowledge_base,
+    toggle_project_kb,
+    get_project_file_list,
+    get_knowledge_base_health,
 )
 
 # Project services
