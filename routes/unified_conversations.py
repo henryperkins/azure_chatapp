@@ -507,7 +507,7 @@ async def create_project_conversation_message(
             transaction.set_tag("conversation.id", str(conversation_id))
             transaction.set_tag("user.id", str(current_user.id))
             transaction.set_tag("message.role", new_msg.role)
-            transaction.set_data("message_length", len(new_msg.content))
+            transaction.set_data("message_length", len(new_msg.raw_text))
 
             if new_msg.image_data:
                 transaction.set_tag("has_image", True)
