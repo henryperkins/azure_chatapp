@@ -368,6 +368,7 @@ export function createSidebar({
     sidebarProjectSearchInputEl = domAPI.getElementById('sidebarProjectSearch');
 
     if (!el) {
+      logger.error('[Sidebar] Required element #mainSidebar missing', { context: 'Sidebar' });
       throw new Error('[Sidebar] Required element #mainSidebar missing');
     }
     if (!btnToggle) {
