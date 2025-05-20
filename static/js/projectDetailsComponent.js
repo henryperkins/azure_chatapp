@@ -563,7 +563,7 @@ class ProjectDetailsComponent {
     div.dataset.conversationId = cv.id;
     this._setHTML(div, `
       <h4 class="font-medium truncate mb-1">${this._safeTxt(cv.title || "Untitled conversation")}</h4>
-      <p class="text-sm text-base-content/60 truncate mt-1">${this._safeTxt(cv.last_message || "No messages yet")}</p>
+      <p class="text-sm text-base-content/60 truncate leading-tight mt-0.5">${this._safeTxt(cv.last_message || "No messages yet")}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
         <span>${this._safeTxt(this._formatDate(cv.updated_at))}</span>
         <span class="badge badge-ghost badge-sm">${this._safeTxt(cv.message_count || 0)} msgs</span>

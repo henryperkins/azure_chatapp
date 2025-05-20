@@ -185,7 +185,15 @@
   font-size: 1rem;
   line-height: 1.45;
 }
-/* ─── Active conversation highlight ─── */
+
+/* Prevent any stacking/overlap in the conversations list */
+#projectConversationsList > .conversation-item{
+  display:flex;                  /* stacked flow */
+  flex-direction:column;
+  width:100%;
+  overflow:hidden;               /* keeps .truncate working */
+  flex-shrink:0;                 /* never collapse to 0-height */
+}
 #projectConversationsList > .conversation-item.active{
   background: var(--color-primary) !important;
   color: var(--color-primary-content,#fff);
