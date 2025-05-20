@@ -4,6 +4,9 @@ import logging
 from uuid import uuid4
 from config import settings
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy import MetaData
+from utils.serializers import to_serialisable
 
 
 logger = logging.getLogger(__name__)
@@ -18,12 +21,17 @@ async def create_standard_response(
     data=None, message="Success", success=True, status_code=200, headers=None, span_or_transaction=None
 ):
     """Ensure consistent response structure with support for headers and Sentry tracing"""
-    response_data = {
+    # ---------- NEW: robust serialisation ----------
+    safe_data = to_serialisable(data)
+
+    # Let FastAPI handle standard types (datetime, UUID, etc.) and
+    # explicitly tell it how to ignore any leftover MetaData objects.
+    payload = {
         "status": "success" if success else "error",
         "message": message,
-        "data": data if data is not None else ([] if isinstance(data, list) else {}),
+        "data": safe_data if safe_data is not None else ([] if isinstance(data, list) else {}),
         "timestamp": datetime.now().isoformat(),
-        "request_id": str(uuid4()),  # Add unique ID for tracking
+        "request_id": str(uuid4()),
     }
     resp_headers = dict(headers) if headers else {}
 
@@ -38,8 +46,13 @@ async def create_standard_response(
         except Exception:
             pass
 
+    json_ready = jsonable_encoder(
+        payload,
+        custom_encoder={MetaData: lambda _x: None}
+    )
+
     return JSONResponse(
-        content=response_data,
+        content=json_ready,
         status_code=status_code,
         headers=resp_headers
     )
