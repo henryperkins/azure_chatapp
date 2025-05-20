@@ -272,7 +272,7 @@ class ProjectDetailsComponent {
 
   // Main business/event logic wiring:
   _bindEventListeners() {
-    this.eventHandlers.cleanupListeners({ context: this.listenersContext });
+    this.eventHandlers.cleanupListeners({ context: 'Sidebar' });
 
     // Cancel any in-flight async ops to avoid memory-leak / state bleed
     this._cleanupPendingOperations();
@@ -282,7 +282,7 @@ class ProjectDetailsComponent {
       this.eventHandlers.trackListener(
         this.elements.backBtn, "click", this._safeHandler(
           () => { this.navigationService.navigateToProjectList(); }, "BackBtn"
-        ), { context: this.listenersContext, description: "BackButton" });
+        ), { context: 'Sidebar', description: "BackButton" });
     }
     // Tabs
     this.elements.tabBtns?.forEach(btn => {
@@ -291,7 +291,7 @@ class ProjectDetailsComponent {
           const tabName = ev.currentTarget.dataset.tab;
           this.switchTab(tabName);
         }, `Tab:${btn.dataset.tab}`),
-        { context: this.listenersContext, description: `TabBtn:${btn.dataset.tab}` }
+        { context: 'Sidebar', description: `TabBtn:${btn.dataset.tab}` }
       );
     });
 
@@ -299,17 +299,17 @@ class ProjectDetailsComponent {
     const doc = this.domAPI.getDocument();
     // Multi-source event flows for files/convos/artifacts/stats/knowledge
     this.eventHandlers.trackListener(doc, "projectFilesLoaded",
-      this._safeHandler((e) => this.renderFiles(e.detail?.files || []), "ProjectFilesLoaded"),
-      { context: this.listenersContext, description: "FilesLoaded" });
+      this._safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
+      { context: 'Sidebar', description: "FilesLoaded" });
     this.eventHandlers.trackListener(doc, "projectConversationsLoaded",
       this._safeHandler((e) => this.renderConversations(e.detail?.conversations || []), "ConversationsLoaded"),
-      { context: this.listenersContext, description: "ConversationsLoaded" });
+      { context: 'Sidebar', description: "ConversationsLoaded" });
     this.eventHandlers.trackListener(doc, "projectArtifactsLoaded",
       this._safeHandler((e) => this.renderArtifacts(e.detail?.artifacts || []), "ArtifactsLoaded"),
-      { context: this.listenersContext, description: "ArtifactsLoaded" });
+      { context: 'Sidebar', description: "ArtifactsLoaded" });
     this.eventHandlers.trackListener(doc, "projectStatsLoaded",
       this._safeHandler((e) => this.renderStats(e.detail), "StatsLoaded"),
-      { context: this.listenersContext, description: "StatsLoaded" });
+      { context: 'Sidebar', description: "StatsLoaded" });
     this.eventHandlers.trackListener(
       doc,
       "projectKnowledgeBaseLoaded",
@@ -340,7 +340,7 @@ class ProjectDetailsComponent {
         },
         "KnowledgeLoaded"
       ),
-      { context: this.listenersContext, description: "KnowledgeLoaded" }
+      { context: 'Sidebar', description: "KnowledgeLoaded" }
     );
   }
 
@@ -755,7 +755,7 @@ class ProjectDetailsComponent {
       this.elements.container.classList.add("hidden");
       this._logInfo("View hidden.");
     }
-    this.eventHandlers.cleanupListeners({ context: this.listenersContext });
+    this.eventHandlers.cleanupListeners({ context: 'Sidebar' });
   }
 
   destroy() {
