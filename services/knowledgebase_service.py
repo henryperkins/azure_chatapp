@@ -30,6 +30,7 @@ from services.knowledgebase_helpers import (
 )
 from services.project_service import (
     check_knowledge_base_status as get_project_files_stats,
+    validate_project_access,
 )  # Unified export for all code that expects file & chunk stats APIs
 
 from fastapi import (
@@ -495,14 +496,17 @@ async def _validate_project_and_kb(
 async def _validate_user_and_project(
     project_id: UUID, user_id: Optional[int], db: AsyncSession
 ) -> Project:
+    """
+    Re-use project_service.validate_project_access to remove duplicate
+    permission logic.
+    """
     if user_id is not None:
-        from services.project_service import validate_project_access
-
         user = await get_by_id(db, User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        # canonical permission check
         return await validate_project_access(project_id, user, db)
-
+    # anonymous / internal call – just load the project
     project = await get_by_id(db, Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
