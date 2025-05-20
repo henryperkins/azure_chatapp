@@ -53,9 +53,11 @@ class ConversationCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
-    model_config: Optional[dict] = Field(default_factory=dict)
+    model_params: Optional[dict] = Field(default_factory=dict, alias="model_config")  # ← NEW
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
+
+    model_config = {"populate_by_name": True, "extra": "allow"}  # keep aliases working
 
 
 class ConversationUpdate(BaseModel):
@@ -63,9 +65,11 @@ class ConversationUpdate(BaseModel):
 
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
-    model_config: Optional[dict] = Field(default_factory=dict)
+    model_params: Optional[dict] = Field(default_factory=dict, alias="model_config")  # ← NEW
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
+
+    model_config = {"populate_by_name": True, "extra": "allow"}
 
 
 class MessageCreate(BaseModel):
@@ -214,7 +218,7 @@ async def create_conversation(
                         title=conversation_data.title,
                         model_id=conversation_data.model_id,
                         project_id=project_id,
-                        model_config=conversation_data.model_config,
+                        model_config=conversation_data.model_params,   # ← CHANGED
                         kb_enabled=conversation_data.kb_enabled,
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
@@ -381,7 +385,7 @@ async def update_project_conversation(
                 project_id=project_id,
                 title=update_data.title,
                 model_id=update_data.model_id,
-                model_config=update_data.model_config,
+                model_config=update_data.model_params,         # ← CHANGED
                 kb_enabled=update_data.kb_enabled,
             )
 
