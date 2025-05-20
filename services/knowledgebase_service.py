@@ -209,9 +209,13 @@ async def upload_file_to_project(
     background_tasks: Optional[BackgroundTasks] = None,
 ) -> dict[str, Any]:
     """Upload and process a file for a project"""
-    # Ensure KB exists, then validate access and get KB
-    await ensure_project_has_knowledge_base(project_id, db, user_id)
-    project, kb = await _validate_project_and_kb(project_id, user_id, db)
+    # Validate project access
+    project = await _validate_user_and_project(project_id, user_id, db)
+
+    # Ensure (or create) the project's knowledge base
+    kb = project.knowledge_base or await ensure_project_has_knowledge_base(
+        project_id, db, user_id
+    )
 
     # Process file info
     file_info = await _process_upload_file_info(file)

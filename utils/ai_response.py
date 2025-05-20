@@ -35,7 +35,6 @@ async def generate_ai_response(
     """
     Generate an AI response for the given conversation, handling model specifics.
     """
-    logger = logging.getLogger(__name__)
 
     # Validate inputs
     if not db:
