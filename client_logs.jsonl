@@ -30037,3 +30037,2859 @@
   ],
   "ts": 1747733200684
 }
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775217691
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init] Called",
+    {
+      "context": "app:init",
+      "ts": 1747775217698
+    }
+  ],
+  "ts": 1747775217698
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "pre",
+      "ts": 1378.0999999940395
+    }
+  ],
+  "ts": 1747775217698
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747775217699
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] Entering function",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747775217698
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] auth module registered",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747775217699
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747775217701",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747775217701
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "Iubb0wolXmWtRenvAoAbfm4JWo2_JuMWI4DAw5f9iqk",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747775217852
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747775217852
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775218025
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747775218024
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[\"f304c5f9-fd3d-4a21-9073-ce455971943b\"],\"conversation_ids\":[\"c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840\",\"44537c46-82e0-4589-b09d-0d84b2565552\",\"113d2eec-3626-4152-8b2b-90ef5903020a\",\"2fdd55b9-bac5-49f3-99e5-914903d2cb95\",\"fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a\",\"aa92e1d1-8504-41a5-b662-1a5ac4115a08\",\"3a77cb59-0db9-466b-b955-60ef3fa75155\",\"15a4fac0-e9b1-4936-9e98-ac748eb1e8de\",\"6000f962-2933-4382-a9e0-fcb5364f6799\",\"39f36b9b-91b6-486e-92c6-f3aaa3c93fa4\",\"8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1\",\"112470ca-15ec-4f31-926f-496f59fe753c\"]}}"
+  ],
+  "ts": 1747775218025
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775218024
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "timestamp": 1747775218025,
+      "source": "verify_success_with_user_id"
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775218025
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775218024
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectModal] constructed"
+  ],
+  "ts": 1747775218032
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775218026
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] eventHandlers initialization complete",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747775218028
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775218026
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: project (#projectModal)"
+  ],
+  "ts": 1747775226293
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: knowledge (#knowledgeBaseSettingsModal)"
+  ],
+  "ts": 1747775226294
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: login (#loginModal)"
+  ],
+  "ts": 1747775226293
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: confirm (#confirmActionModal)"
+  ],
+  "ts": 1747775226293
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: error (#errorModal)"
+  ],
+  "ts": 1747775226294
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: delete (#deleteConfirmModal)"
+  ],
+  "ts": 1747775226293
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: knowledgeResult (#knowledgeResultModal)"
+  ],
+  "ts": 1747775226294
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: instructions (#instructionsModal)"
+  ],
+  "ts": 1747775226294
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: contentView (#contentViewModal)"
+  ],
+  "ts": 1747775226294
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "initializeCoreSystems",
+      "duration": 8597
+    }
+  ],
+  "ts": 1747775226295
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeCoreSystems\" took 8597 ms",
+    {
+      "phase": "initializeCoreSystems",
+      "duration": 8596.600000023842
+    }
+  ],
+  "ts": 1747775226296
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "post",
+      "ts": 9974.700000017881
+    }
+  ],
+  "ts": 1747775226296
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "stage": "pre",
+      "ts": 9976.200000017881
+    }
+  ],
+  "ts": 1747775226296
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "duration": 0
+    }
+  ],
+  "ts": 1747775226296
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "stage": "post",
+      "ts": 9976.40000000596
+    }
+  ],
+  "ts": 1747775226297
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeAuthSystem",
+      "stage": "pre",
+      "ts": 9976.700000017881
+    }
+  ],
+  "ts": 1747775226297
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init"
+  ],
+  "ts": 1747775226297
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()"
+  ],
+  "ts": 1747775226297
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "source": "init_already_ready",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775226297
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "initializeAuthSystem",
+      "duration": 2
+    }
+  ],
+  "ts": 1747775226298
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775226298
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeAuthSystem",
+      "stage": "post",
+      "ts": 9978.200000017881
+    }
+  ],
+  "ts": 1747775226298
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[fireAppReady] dispatched",
+    {
+      "success": true,
+      "error": null,
+      "context": "app"
+    }
+  ],
+  "ts": 1747775226299
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "fetchCurrentUser",
+      "stage": "pre",
+      "ts": 9978.700000017881,
+      "authed": true
+    }
+  ],
+  "ts": 1747775226299
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[\"f304c5f9-fd3d-4a21-9073-ce455971943b\"],\"conversation_ids\":[\"c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840\",\"44537c46-82e0-4589-b09d-0d84b2565552\",\"113d2eec-3626-4152-8b2b-90ef5903020a\",\"2fdd55b9-bac5-49f3-99e5-914903d2cb95\",\"fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a\",\"aa92e1d1-8504-41a5-b662-1a5ac4115a08\",\"3a77cb59-0db9-466b-b955-60ef3fa75155\",\"15a4fac0-e9b1-4936-9e98-ac748eb1e8de\",\"6000f962-2933-4382-a9e0-fcb5364f6799\",\"39f36b9b-91b6-486e-92c6-f3aaa3c93fa4\",\"8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1\",\"112470ca-15ec-4f31-926f-496f59fe753c\"]}}"
+  ],
+  "ts": 1747775226996
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "fetchCurrentUser",
+      "duration": 697
+    }
+  ],
+  "ts": 1747775226996
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] Loading project_list.html template into #projectListView",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747775226997
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "fetchCurrentUser",
+      "stage": "post",
+      "ts": 10676
+    }
+  ],
+  "ts": 1747775226996
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeUIComponents",
+      "stage": "pre",
+      "ts": 10676.40000000596
+    }
+  ],
+  "ts": 1747775226996
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] #projectListView childElementCount=1",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747775227055
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747775227055
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[initializeUIComponents] ModalManager not ready after 8 s – continuing without blocking.",
+    {
+      "context": "app:initializeUIComponents"
+    }
+  ],
+  "ts": 1747775235060
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] KnowledgeBaseComponent instance received and set.",
+    {
+      "context": "ProjectDetailsComponent",
+      "kbcInstance": true
+    }
+  ],
+  "ts": 1747775235062
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectEnhancements] Project details initialized successfully",
+    {
+      "context": "projectEnhancements"
+    }
+  ],
+  "ts": 1747775235066
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: Starting...",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235068
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[enhanceProjectList] Project list enhancements applied",
+    {
+      "context": "projectEnhancements"
+    }
+  ],
+  "ts": 1747775235067
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectDashboard] Proceeding before app:ready (bootstrap phase).",
+    {
+      "context": "projectDashboard"
+    }
+  ],
+  "ts": 1747775235062
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[initializeProjectList] Project list initialized",
+    {
+      "context": "projectEnhancements"
+    }
+  ],
+  "ts": 1747775235067
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: findDom",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235068
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: initAuthDom",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235069
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar][auth:stateChanged] Logged in, loading projects and refreshing Projects tab",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235071
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: setupInlineAuthForm",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235069
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: restorePersistentState",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235069
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: bindDomEvents",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235069
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: completed successfully",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775235071
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectDashboard] Skipping early ProjectDetailsComponent initialization – waiting for app:ready.",
+    {
+      "context": "projectDashboard"
+    }
+  ],
+  "ts": 1747775235071
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "stage": "pre",
+      "ts": 18753.80000001192
+    }
+  ],
+  "ts": 1747775235074
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeUIComponents\" took 8077 ms",
+    {
+      "phase": "initializeUIComponents",
+      "duration": 8076.5999999940395
+    }
+  ],
+  "ts": 1747775235073
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeUIComponents",
+      "stage": "post",
+      "ts": 18753
+    }
+  ],
+  "ts": 1747775235074
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[UiRenderer][renderProjects] arrayLength=0",
+    {
+      "module": "uiRenderer",
+      "fn": "renderProjects",
+      "projectsSample": []
+    }
+  ],
+  "ts": 1747775235072
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "initializeUIComponents",
+      "duration": 8077
+    }
+  ],
+  "ts": 1747775235073
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "duration": 1
+    }
+  ],
+  "ts": 1747775235075
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "navigationService",
+      "stage": "pre",
+      "ts": 18758
+    }
+  ],
+  "ts": 1747775235078
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "stage": "post",
+      "ts": 18754.70000001788
+    }
+  ],
+  "ts": 1747775235075
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "registerAppListeners",
+      "stage": "post",
+      "ts": 18757.59999999404
+    }
+  ],
+  "ts": 1747775235078
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "registerAppListeners",
+      "stage": "pre",
+      "ts": 18757.20000001788
+    }
+  ],
+  "ts": 1747775235077
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "registerAppListeners",
+      "duration": 0
+    }
+  ],
+  "ts": 1747775235078
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "navigationService",
+      "duration": 2
+    }
+  ],
+  "ts": 1747775235080
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"fetchCurrentUser\" duration: 697 ms"
+  ],
+  "ts": 1747775235081
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"DependencySystem.waitFor\" duration: 0 ms"
+  ],
+  "ts": 1747775235081
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeCoreSystems\" duration: 8597 ms"
+  ],
+  "ts": 1747775235081
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "navigationService",
+      "stage": "post",
+      "ts": 18760.30000001192
+    }
+  ],
+  "ts": 1747775235081
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeAuthSystem\" duration: 2 ms"
+  ],
+  "ts": 1747775235081
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeUIComponents\" duration: 8077 ms"
+  ],
+  "ts": 1747775235082
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectModalForm\" waited 0 ms total"
+  ],
+  "ts": 1747775235083
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"modelConfig.initializeUI\" duration: 1 ms"
+  ],
+  "ts": 1747775235082
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"registerAppListeners\" duration: 0 ms"
+  ],
+  "ts": 1747775235082
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"body\" waited 0 ms total"
+  ],
+  "ts": 1747775235082
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"navigationService\" duration: 2 ms"
+  ],
+  "ts": 1747775235082
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectListView\" waited 0 ms total"
+  ],
+  "ts": 1747775235083
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#knowledgeTab\" waited 0 ms total"
+  ],
+  "ts": 1747775235083
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \".project-details-root\" waited 0 ms total"
+  ],
+  "ts": 1747775235083
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectDetailsView\" waited 0 ms total"
+  ],
+  "ts": 1747775235083
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectFilterTabs\" waited 0 ms total"
+  ],
+  "ts": 1747775235084
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectCardsPanel\" waited 0 ms total"
+  ],
+  "ts": 1747775235084
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectList\" waited 0 ms total"
+  ],
+  "ts": 1747775235083
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#mainContent\" waited 0 ms total"
+  ],
+  "ts": 1747775235084
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#mainSidebar\" waited 0 ms total"
+  ],
+  "ts": 1747775235084
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775249694
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] constructed",
+    {
+      "withApp": true
+    }
+  ],
+  "ts": 1747775249702
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "pre",
+      "ts": 1411.4000000059605
+    }
+  ],
+  "ts": 1747775249700
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] Entering function",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747775249701
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init] Called",
+    {
+      "context": "app:init",
+      "ts": 1747775249700
+    }
+  ],
+  "ts": 1747775249700
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] auth module registered",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747775249704
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching",
+    "/api/auth/csrf?ts=1747775249706",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747775249706
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token",
+    "jD3eGrmsHg8ByuR0SODiRLtYIDRysc9UFGWzU0lLXXY",
+    {
+      "context": "fetchCSRFToken"
+    }
+  ],
+  "ts": 1747775249839
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][REQUEST]",
+    "/api/auth/verify",
+    {
+      "method": "GET",
+      "headers": {
+        "Accept": "application/json"
+      },
+      "credentials": "include"
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747775249840
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][authRequest][RESPONSE]",
+    "/api/auth/verify",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "authRequest"
+    }
+  ],
+  "ts": 1747775249956
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775249960
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "source": "verify_success_with_user_id",
+      "previousAuth": false,
+      "previousUserObject": null
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775249957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"isAuthenticated\":true,\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[\"f304c5f9-fd3d-4a21-9073-ce455971943b\"],\"conversation_ids\":[\"c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840\",\"44537c46-82e0-4589-b09d-0d84b2565552\",\"113d2eec-3626-4152-8b2b-90ef5903020a\",\"2fdd55b9-bac5-49f3-99e5-914903d2cb95\",\"fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a\",\"aa92e1d1-8504-41a5-b662-1a5ac4115a08\",\"3a77cb59-0db9-466b-b955-60ef3fa75155\",\"15a4fac0-e9b1-4936-9e98-ac748eb1e8de\",\"6000f962-2933-4382-a9e0-fcb5364f6799\",\"39f36b9b-91b6-486e-92c6-f3aaa3c93fa4\",\"8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1\",\"112470ca-15ec-4f31-926f-496f59fe753c\"]}}"
+  ],
+  "ts": 1747775249958
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus",
+    {
+      "authenticated": true,
+      "user": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "timestamp": 1747775249958,
+      "source": "verify_success_with_user_id"
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775249959
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state",
+    {
+      "isAuthenticated": true,
+      "currentUser": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775249957
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "source": "init_complete",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775249961
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectModal] constructed"
+  ],
+  "ts": 1747775249967
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[initializeCoreSystems] eventHandlers initialization complete",
+    {
+      "context": "app.initializeCoreSystems"
+    }
+  ],
+  "ts": 1747775249964
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775249962
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: project (#projectModal)"
+  ],
+  "ts": 1747775257975
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: delete (#deleteConfirmModal)"
+  ],
+  "ts": 1747775257976
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: knowledge (#knowledgeBaseSettingsModal)"
+  ],
+  "ts": 1747775257978
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: confirm (#confirmActionModal)"
+  ],
+  "ts": 1747775257977
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: login (#loginModal)"
+  ],
+  "ts": 1747775257975
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: error (#errorModal)"
+  ],
+  "ts": 1747775257977
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: knowledgeResult (#knowledgeResultModal)"
+  ],
+  "ts": 1747775257978
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: instructions (#instructionsModal)"
+  ],
+  "ts": 1747775257979
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ModalManager] Registered modal: contentView (#contentViewModal)"
+  ],
+  "ts": 1747775257979
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "initializeCoreSystems",
+      "duration": 8279
+    }
+  ],
+  "ts": 1747775257979
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeCoreSystems\" took 8279 ms",
+    {
+      "phase": "initializeCoreSystems",
+      "duration": 8279
+    }
+  ],
+  "ts": 1747775257980
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeCoreSystems",
+      "stage": "post",
+      "ts": 9690.40000000596
+    }
+  ],
+  "ts": 1747775257981
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "stage": "pre",
+      "ts": 9692.5
+    }
+  ],
+  "ts": 1747775257981
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "duration": 1
+    }
+  ],
+  "ts": 1747775257982
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeAuthSystem",
+      "stage": "pre",
+      "ts": 9693.800000011921
+    }
+  ],
+  "ts": 1747775257983
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "DependencySystem.waitFor",
+      "stage": "post",
+      "ts": 9693
+    }
+  ],
+  "ts": 1747775257982
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init"
+  ],
+  "ts": 1747775257983
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()"
+  ],
+  "ts": 1747775257984
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] called.",
+    {
+      "authenticated": true,
+      "userObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      },
+      "source": "init_already_ready",
+      "previousAuth": true,
+      "previousUserObject": {
+        "id": 1,
+        "username": "hperkins",
+        "token_version": 0,
+        "project_ids": [
+          "f304c5f9-fd3d-4a21-9073-ce455971943b"
+        ],
+        "conversation_ids": [
+          "c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840",
+          "44537c46-82e0-4589-b09d-0d84b2565552",
+          "113d2eec-3626-4152-8b2b-90ef5903020a",
+          "2fdd55b9-bac5-49f3-99e5-914903d2cb95",
+          "fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a",
+          "aa92e1d1-8504-41a5-b662-1a5ac4115a08",
+          "3a77cb59-0db9-466b-b955-60ef3fa75155",
+          "15a4fac0-e9b1-4936-9e98-ac748eb1e8de",
+          "6000f962-2933-4382-a9e0-fcb5364f6799",
+          "39f36b9b-91b6-486e-92c6-f3aaa3c93fa4",
+          "8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1",
+          "112470ca-15ec-4f31-926f-496f59fe753c"
+        ]
+      }
+    },
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775257984
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting",
+    {
+      "context": "broadcastAuth"
+    }
+  ],
+  "ts": 1747775257984
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeAuthSystem",
+      "stage": "post",
+      "ts": 9696.300000011921
+    }
+  ],
+  "ts": 1747775257986
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "initializeAuthSystem",
+      "duration": 3
+    }
+  ],
+  "ts": 1747775257985
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[fireAppReady] dispatched",
+    {
+      "success": true,
+      "error": null,
+      "context": "app"
+    }
+  ],
+  "ts": 1747775257986
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "fetchCurrentUser",
+      "stage": "pre",
+      "ts": 9697.5,
+      "authed": true
+    }
+  ],
+  "ts": 1747775257986
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "fetchCurrentUser",
+      "duration": 694
+    }
+  ],
+  "ts": 1747775258681
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][appModule.setAuthState]",
+    "{\"currentUser\":{\"id\":1,\"username\":\"hperkins\",\"token_version\":0,\"project_ids\":[\"f304c5f9-fd3d-4a21-9073-ce455971943b\"],\"conversation_ids\":[\"c8b7f7aa-ae5d-4d9b-b50c-2d5b83066840\",\"44537c46-82e0-4589-b09d-0d84b2565552\",\"113d2eec-3626-4152-8b2b-90ef5903020a\",\"2fdd55b9-bac5-49f3-99e5-914903d2cb95\",\"fccfee97-aa2b-4d9c-a46a-83b6d2d8d70a\",\"aa92e1d1-8504-41a5-b662-1a5ac4115a08\",\"3a77cb59-0db9-466b-b955-60ef3fa75155\",\"15a4fac0-e9b1-4936-9e98-ac748eb1e8de\",\"6000f962-2933-4382-a9e0-fcb5364f6799\",\"39f36b9b-91b6-486e-92c6-f3aaa3c93fa4\",\"8b5eb2b0-6db2-41c3-8f8c-c34f405ecbf1\",\"112470ca-15ec-4f31-926f-496f59fe753c\"]}}"
+  ],
+  "ts": 1747775258680
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] Loading project_list.html template into #projectListView",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747775258683
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "fetchCurrentUser",
+      "stage": "post",
+      "ts": 10391.800000011921
+    }
+  ],
+  "ts": 1747775258681
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeUIComponents",
+      "stage": "pre",
+      "ts": 10392.800000011921
+    }
+  ],
+  "ts": 1747775258682
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747775258745
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App][initializeUIComponents] #projectListView childElementCount=1",
+    {
+      "context": "app:loadTemplates"
+    }
+  ],
+  "ts": 1747775258745
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[initializeProjectList] Project list initialized",
+    {
+      "context": "projectEnhancements"
+    }
+  ],
+  "ts": 1747775267289
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[enhanceProjectList] Project list enhancements applied",
+    {
+      "context": "projectEnhancements"
+    }
+  ],
+  "ts": 1747775267288
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] KnowledgeBaseComponent instance received and set.",
+    {
+      "context": "ProjectDetailsComponent",
+      "kbcInstance": true
+    }
+  ],
+  "ts": 1747775267282
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectEnhancements] Project details initialized successfully",
+    {
+      "context": "projectEnhancements"
+    }
+  ],
+  "ts": 1747775267287
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[initializeUIComponents] ModalManager not ready after 8 s – continuing without blocking.",
+    {
+      "context": "app:initializeUIComponents"
+    }
+  ],
+  "ts": 1747775267280
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: Starting...",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267291
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectDashboard] Proceeding before app:ready (bootstrap phase).",
+    {
+      "context": "projectDashboard"
+    }
+  ],
+  "ts": 1747775267283
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: findDom",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267291
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: restorePersistentState",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267293
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: initAuthDom",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267292
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: setupInlineAuthForm",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267293
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar][auth:stateChanged] Logged in, loading projects and refreshing Projects tab",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267296
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: bindDomEvents",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267294
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Sidebar] init: completed successfully",
+    {
+      "context": "Sidebar"
+    }
+  ],
+  "ts": 1747775267297
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "initializeUIComponents",
+      "duration": 8619
+    }
+  ],
+  "ts": 1747775267300
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[UiRenderer][renderProjects] arrayLength=0",
+    {
+      "module": "uiRenderer",
+      "fn": "renderProjects",
+      "projectsSample": []
+    }
+  ],
+  "ts": 1747775267298
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[ProjectDashboard] Skipping early ProjectDetailsComponent initialization – waiting for app:ready.",
+    {
+      "context": "projectDashboard"
+    }
+  ],
+  "ts": 1747775267297
+}
+{
+  "level": "warn",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeUIComponents\" took 8619 ms",
+    {
+      "phase": "initializeUIComponents",
+      "duration": 8618.5
+    }
+  ],
+  "ts": 1747775267301
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "initializeUIComponents",
+      "stage": "post",
+      "ts": 19011.30000001192
+    }
+  ],
+  "ts": 1747775267302
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "stage": "pre",
+      "ts": 19013.30000001192
+    }
+  ],
+  "ts": 1747775267302
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "registerAppListeners",
+      "stage": "pre",
+      "ts": 19015.59999999404
+    }
+  ],
+  "ts": 1747775267305
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "stage": "post",
+      "ts": 19014.80000001192
+    }
+  ],
+  "ts": 1747775267304
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "modelConfig.initializeUI",
+      "duration": 2
+    }
+  ],
+  "ts": 1747775267304
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "registerAppListeners",
+      "duration": 1
+    }
+  ],
+  "ts": 1747775267305
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "registerAppListeners",
+      "stage": "post",
+      "ts": 19016.19999998808
+    }
+  ],
+  "ts": 1747775267306
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "navigationService",
+      "stage": "pre",
+      "ts": 19017.19999998808
+    }
+  ],
+  "ts": 1747775267306
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeCoreSystems\" duration: 8279 ms"
+  ],
+  "ts": 1747775267310
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init][TIMING]",
+    {
+      "phase": "navigationService",
+      "duration": 3
+    }
+  ],
+  "ts": 1747775267309
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[App.init]",
+    {
+      "phase": "navigationService",
+      "stage": "post",
+      "ts": 19019.90000000596
+    }
+  ],
+  "ts": 1747775267309
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"DependencySystem.waitFor\" duration: 1 ms"
+  ],
+  "ts": 1747775267311
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeAuthSystem\" duration: 3 ms"
+  ],
+  "ts": 1747775267311
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"fetchCurrentUser\" duration: 694 ms"
+  ],
+  "ts": 1747775267312
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"registerAppListeners\" duration: 1 ms"
+  ],
+  "ts": 1747775267313
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"modelConfig.initializeUI\" duration: 2 ms"
+  ],
+  "ts": 1747775267313
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"initializeUIComponents\" duration: 8619 ms"
+  ],
+  "ts": 1747775267312
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"body\" waited 0 ms total"
+  ],
+  "ts": 1747775267314
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[App.init] Phase \"navigationService\" duration: 3 ms"
+  ],
+  "ts": 1747775267313
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectModalForm\" waited 0 ms total"
+  ],
+  "ts": 1747775267314
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \".project-details-root\" waited 0 ms total"
+  ],
+  "ts": 1747775267316
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectDetailsView\" waited 0 ms total"
+  ],
+  "ts": 1747775267315
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectListView\" waited 0 ms total"
+  ],
+  "ts": 1747775267315
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectList\" waited 0 ms total"
+  ],
+  "ts": 1747775267316
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#knowledgeTab\" waited 0 ms total"
+  ],
+  "ts": 1747775267316
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectCardsPanel\" waited 0 ms total"
+  ],
+  "ts": 1747775267317
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#mainSidebar\" waited 0 ms total"
+  ],
+  "ts": 1747775267318
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#projectFilterTabs\" waited 0 ms total"
+  ],
+  "ts": 1747775267317
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[Perf] DOM selector \"#mainContent\" waited 0 ms total"
+  ],
+  "ts": 1747775267318
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Loading project details template",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775306237
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] show() invoked",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775306236
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] All critical elements are ready",
+    {
+      "context": "ProjectDetailsComponent"
+    }
+  ],
+  "ts": 1747775306818
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Template loaded: true",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775306817
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Template loaded",
+    {
+      "context": "ProjectDetailsComponent"
+    }
+  ],
+  "ts": 1747775306816
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Fetching project data",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775306819
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Fetching data for project f304c5f9-fd3d-4a21-9073-ce455971943b...",
+    {
+      "context": "ProjectDetailsComponent"
+    }
+  ],
+  "ts": 1747775306819
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Elements ready: true",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775306818
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Project data loaded",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775307164
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Restoring chat manager for project details view",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775307166
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Initializing subcomponents",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775307164
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Event listeners bound for project details view",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775307166
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] View for project f304c5f9-fd3d-4a21-9073-ce455971943b is now visible.",
+    {
+      "context": "ProjectDetailsComponent"
+    }
+  ],
+  "ts": 1747775307169
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Activated tab: details",
+    {
+      "context": "ProjectDetailsComponent"
+    }
+  ],
+  "ts": 1747775307168
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Activated tab: conversations",
+    {
+      "context": "ProjectDetailsComponent"
+    }
+  ],
+  "ts": 1747775308015
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] Initializing chatManager for chat tab",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775308016
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ChatManager][initialize] Starting initialization",
+    {
+      "context": "chatManager.initialize",
+      "options": {
+        "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b",
+        "containerSelector": "#projectChatUI",
+        "messageContainerSelector": "#projectChatMessages",
+        "inputSelector": "#projectChatInput",
+        "sendButtonSelector": "#projectChatSendBtn",
+        "titleSelector": "#projectChatTitle",
+        "minimizeButtonSelector": "#projectMinimizeChatBtn"
+      }
+    }
+  ],
+  "ts": 1747775308017
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ChatManager][_ensureUIAttached] Attaching UI utilities",
+    {
+      "context": "chatManager"
+    }
+  ],
+  "ts": 1747775308018
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ProjectDetailsComponent] chatManager initialized for project details view",
+    {
+      "context": "ProjectDetailsComponent",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b"
+    }
+  ],
+  "ts": 1747775308214
+}
+{
+  "level": "info",
+  "context": "App",
+  "args": [
+    "[ChatManager][initialize] Successfully initialized",
+    {
+      "context": "chatManager.initialize",
+      "projectId": "f304c5f9-fd3d-4a21-9073-ce455971943b",
+      "duration": 195.7999999821186
+    }
+  ],
+  "ts": 1747775308213
+}
+{
+  "level": "log",
+  "context": "App",
+  "args": [
+    "[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value",
+    "jD3eGrmsHg8ByuR0SODiRLtYIDRysc9UFGWzU0lLXXY",
+    {
+      "context": "getCSRFToken"
+    }
+  ],
+  "ts": 1747775317597
+}
+{
+  "level": "error",
+  "context": "App",
+  "args": [
+    "[ChatManager][sending message]",
+    {
+      "status": 422,
+      "data": {
+        "detail": [
+          {
+            "type": "missing",
+            "loc": [
+              "body",
+              "new_msg",
+              "raw_text"
+            ],
+            "msg": "Field required",
+            "input": {
+              "content": "hello",
+              "role": "user",
+              "type": "message"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "context": "chatManager"
+    }
+  ],
+  "ts": 1747775318145
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775674245
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775784741
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775840402
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775844643
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775850244
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775885473
+}
+{
+  "level": "debug",
+  "context": "App",
+  "args": [
+    "[EventHandler] Factory initialized",
+    {
+      "MODULE": "EventHandler",
+      "version": "1.0",
+      "appInjected": false,
+      "context": "EventHandler"
+    }
+  ],
+  "ts": 1747775888880
+}

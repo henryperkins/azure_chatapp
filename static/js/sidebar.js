@@ -566,9 +566,7 @@ export function createSidebar({
     const dock = _ensureMobileDock();
     if (dock) domAPI.removeClass(dock, 'hidden');
 
-    if ('inert' in HTMLElement.prototype && el.inert) {
-      el.inert = false;
-    }
+    el.inert = false;
     el.setAttribute('aria-hidden', 'false');
     if (btnToggle) {
       btnToggle.setAttribute('aria-expanded', 'true');
@@ -602,10 +600,16 @@ export function createSidebar({
         btnToggle.focus();
         focusMoved = (domAPI.getActiveElement() === btnToggle);
       }
-      if (!focusMoved && typeof activeEl.blur === 'function') {
-        activeEl.blur();
-        if (el.contains(domAPI.getActiveElement()) && domAPI.body?.focus) {
+      // Defensive fallback: forcibly move focus outside sidebar to document.body,
+      // or blur activeEl; ARIA requires no focused element inside aria-hidden.
+      if (!focusMoved) {
+        if (domAPI.body && typeof domAPI.body.focus === 'function') {
           domAPI.body.focus();
+          if (el.contains(domAPI.getActiveElement()) && typeof activeEl.blur === 'function') {
+            activeEl.blur();
+          }
+        } else if (typeof activeEl.blur === 'function') {
+          activeEl.blur();
         }
       }
     }
@@ -613,12 +617,8 @@ export function createSidebar({
     visible = false;
     el.classList.add('-translate-x-full');
 
-    const hasFocusable = el.querySelector('button, input, a, [tabindex]:not([tabindex="-1"])');
-    if (hasFocusable && 'inert' in HTMLElement.prototype) {
-      el.inert = true;
-    } else {
-      el.setAttribute('aria-hidden', 'true');
-    }
+    el.inert = true;
+    el.setAttribute('aria-hidden', 'true');
     if (btnToggle) {
       btnToggle.setAttribute('aria-expanded', 'false');
     }
@@ -833,6 +833,7 @@ export function createSidebar({
       el.classList.remove('-translate-x-full');
       el.classList.add('translate-x-0');
       visible = true;
+      el.inert = false;
       el.setAttribute('aria-hidden', 'false');
       if (btnToggle) {
         btnToggle.setAttribute('aria-expanded', 'true');
