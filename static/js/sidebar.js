@@ -64,7 +64,7 @@ export function createSidebar({
   domReadinessService,
   logger,
   safeHandler, // required for event handler wrapping
-  APP_CONFIG = window.APP_CONFIG || {}, // Added for debug flag checks, fallback to global if present
+  APP_CONFIG,
   ...rest
 } = {}) {
   /* ------------------------------------------------------------------ */
@@ -89,8 +89,10 @@ export function createSidebar({
   if (!logger) throw new Error('[Sidebar] DI logger is required.');
   if (!domReadinessService) throw new Error('[Sidebar] DI domReadinessService is required.');
   if (typeof safeHandler !== 'function') throw new Error('[Sidebar] DI safeHandler (function) is required.');
+  if (!APP_CONFIG) throw new Error('[Sidebar] APP_CONFIG is required.');
 
   const MODULE = 'Sidebar';
+  const CONTEXT = 'Sidebar';   // literal required by guardrails
 
   // Gently resolve optional dependencies from the DependencySystem if not explicitly provided
   app = app || tryResolve('app');
@@ -203,7 +205,7 @@ export function createSidebar({
     try {
       modelConfig.renderQuickConfig(panel);
     } catch (err) {
-      logger.error('[Sidebar] renderQuickConfig failed', err, { context: MODULE });
+      logger.error('[Sidebar] renderQuickConfig failed', err, { context: 'Sidebar' });
       domAPI.setTextContent(panel, 'Unable to load model configuration.');
     }
   }
@@ -341,7 +343,7 @@ export function createSidebar({
         // Switch to projects tab or re-render it
         await activateTab('projects');
       } catch (err) {
-        if (logger && logger.error) logger.error(`[Sidebar][auth:stateChanged] Failed to load projects`, err && err.stack ? err.stack : err);
+        if (logger && logger.error) logger.error(`[Sidebar][auth:stateChanged] Failed to load projects`, err && err.stack ? err.stack : err, { context: 'Sidebar' });
       }
     } else {
       // If logged out, revert to login mode
@@ -369,7 +371,7 @@ export function createSidebar({
       throw new Error('[Sidebar] Required element #mainSidebar missing');
     }
     if (!btnToggle) {
-      logger.warn('[Sidebar] #navToggleBtn not found – toggle feature disabled', { context: MODULE });
+      logger.warn('[Sidebar] #navToggleBtn not found – toggle feature disabled', { context: 'Sidebar' });
     }
   }
 
@@ -621,6 +623,7 @@ export function createSidebar({
   }
 
   function createBackdrop() {
+    if (!domReadinessService?.documentReady) return;
     if (backdrop) return;
     if (viewportAPI.getInnerWidth() >= 1024) {
       return;
@@ -636,9 +639,9 @@ export function createSidebar({
     eventHandlers.trackListener(
       backdrop,
       'click',
-      safeHandler(closeSidebar, '[Sidebar] backdrop click'),
+      safeHandler(closeSidebar, 'Sidebar:[Sidebar] backdrop click'),
       {
-        context: MODULE,
+        context: 'Sidebar',
         description: 'Sidebar backdrop click => close'
       }
     );
@@ -675,21 +678,10 @@ export function createSidebar({
   /* ------------------------------------------------------------------ */
   function bindDomEvents() {
     // Wrap a handler so errors are reported via DI logger per frontend guardrails
-    function wrapWithErrorLog(handler, description) {
-      return function (...args) {
-        try {
-          return handler.apply(this, args);
-        } catch (err) {
-          if (logger && logger.error)
-            logger.error(`[Sidebar][${description}]`, err && err.stack ? err.stack : err);
-          throw err; // Re-throw to avoid masking the error
-        }
-      };
-    }
 
     // Resize
-    eventHandlers.trackListener(domAPI.getWindow(), 'resize', wrapWithErrorLog(handleResize, 'resize'), {
-      context: MODULE,
+    eventHandlers.trackListener(domAPI.getWindow(), 'resize', safeHandler(handleResize, 'Sidebar:resize'), {
+      context: 'Sidebar',
       description: 'Sidebar resize => remove backdrop on large screens'
     });
 
@@ -697,8 +689,8 @@ export function createSidebar({
     if (chatSearchInputEl) {
       eventHandlers.trackListener(
         chatSearchInputEl, 'input',
-        wrapWithErrorLog(_debouncedChatSearch, 'chatSearchInput'),
-        { context: MODULE, description: 'Debounced chat search' }
+        safeHandler(_debouncedChatSearch, 'Sidebar:chatSearchInput'),
+        { context: 'Sidebar', description: 'Debounced chat search' }
       );
     }
 
@@ -706,35 +698,35 @@ export function createSidebar({
     if (sidebarProjectSearchInputEl) {
       eventHandlers.trackListener(
         sidebarProjectSearchInputEl, 'input',
-        wrapWithErrorLog(_debouncedProjectSearch, 'projectSearchInput'),
-        { context: MODULE, description: 'Debounced project search' }
+        safeHandler(_debouncedProjectSearch, 'Sidebar:projectSearchInput'),
+        { context: 'Sidebar', description: 'Debounced project search' }
       );
     }
 
     // Conversation created
     eventHandlers.trackListener(
       domAPI.getDocument(), 'chat:conversationCreated',
-      wrapWithErrorLog(() => {
+      safeHandler(() => {
         const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
         if (activeTab === 'recent') _handleChatSearch();
-      }, 'chat:conversationCreated'),
-      { context: MODULE, description: 'Sidebar conversation created => refresh if on "recent" tab' }
+      }, 'Sidebar:chat:conversationCreated'),
+      { context: 'Sidebar', description: 'Sidebar conversation created => refresh if on "recent" tab' }
     );
 
     // Auth state changed  (el AuthModule emite "authStateChanged")
     eventHandlers.trackListener(
       domAPI.getDocument(),
       'authStateChanged',
-      wrapWithErrorLog(handleGlobalAuthStateChange, 'authStateChanged'),
-      { context: MODULE, description: 'Sidebar reacts to auth state changes' }
+      safeHandler(handleGlobalAuthStateChange, 'Sidebar:authStateChanged'),
+      { context: 'Sidebar', description: 'Sidebar reacts to auth state changes' }
     );
 
     // Pin button
     if (btnPin) {
       eventHandlers.trackListener(
         btnPin, 'click',
-        wrapWithErrorLog(togglePin, 'btnPin click'),
-        { context: MODULE, description: 'Toggle sidebar pin' }
+        safeHandler(togglePin, 'Sidebar:btnPin click'),
+        { context: 'Sidebar', description: 'Toggle sidebar pin' }
       );
     }
 
@@ -750,21 +742,21 @@ export function createSidebar({
         eventHandlers.trackListener(
           element,
           'click',
-          wrapWithErrorLog(
+          safeHandler(
             async (e) => {
               if (e.preventDefault) e.preventDefault();
-              if (logger && logger.debug) logger.debug(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`);
+              if (logger && logger.debug) logger.debug(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`, { context: 'Sidebar' });
               try {
                 await activateTab(tab);
                 if (accessibilityUtils?.announce)
                   accessibilityUtils.announce(`Switched to ${tab} tab in sidebar`);
               } catch (error) {
-                if (logger && logger.error) logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`, error && error.stack ? error.stack : error);
+                if (logger && logger.error) logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`, error && error.stack ? error.stack : error, { context: 'Sidebar' });
               }
             },
-            `tabmenu:${id}`
+            `Sidebar:tabmenu:${id}`
           ),
-          { context: MODULE, description: `Sidebar tab button click => activateTab('${tab}')` }
+          { context: 'Sidebar', description: `Sidebar tab button click => activateTab('${tab}')` }
         );
       }
     });
@@ -773,15 +765,15 @@ export function createSidebar({
     if (btnToggle) {
       eventHandlers.trackListener(
         btnToggle, 'click',
-        wrapWithErrorLog(showSidebar, 'navToggleBtn click'),
-        { context: MODULE, description: 'Sidebar open' }
+        safeHandler(showSidebar, 'Sidebar:navToggleBtn click'),
+        { context: 'Sidebar', description: 'Sidebar open' }
       );
     }
     if (btnClose) {
       eventHandlers.trackListener(
         btnClose, 'click',
-        wrapWithErrorLog(closeSidebar, 'closeSidebarBtn click'),
-        { context: MODULE, description: 'Sidebar close' }
+        safeHandler(closeSidebar, 'Sidebar:closeSidebarBtn click'),
+        { context: 'Sidebar', description: 'Sidebar close' }
       );
     }
 
@@ -789,8 +781,8 @@ export function createSidebar({
     if (btnSettings) {
       eventHandlers.trackListener(
         btnSettings, 'click',
-        wrapWithErrorLog(() => toggleSettingsPanel(), 'settingsBtn click'),
-        { context: MODULE, description: 'Toggle sidebar settings panel' }
+        safeHandler(() => toggleSettingsPanel(), 'Sidebar:settingsBtn click'),
+        { context: 'Sidebar', description: 'Toggle sidebar settings panel' }
       );
     }
 
@@ -808,15 +800,15 @@ export function createSidebar({
     eventHandlers.trackListener(
       el,
       'click',
-      wrapWithErrorLog((e) => {
+      safeHandler((e) => {
         const link = e.target.closest('a');
         if (link && el.contains(link)) {
           maybeAutoCloseMobile();
         }
-      }, 'sidebarAnchor click auto-close'),
+      }, 'Sidebar:sidebarAnchor click auto-close'),
       {
         capture: true,                       // early catch before default
-        context: MODULE,
+        context: 'Sidebar',
         description: 'Auto-close sidebar on mobile after link click'
       }
     );
@@ -846,30 +838,30 @@ export function createSidebar({
   /* ------------------------------------------------------------------ */
   async function init() {
     // Use domReadinessService for robust, centralized readiness
-    if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: Starting...");
+    if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: Starting...", { context: 'Sidebar' });
 
     await domReadinessService.dependenciesAndElements({
       deps: ['eventHandlers', 'auth'],
       // El Sidebar puede funcionar sin los botones si se muestran más tarde.
       domSelectors: ['#mainSidebar'],
-      context: MODULE
+      context: 'Sidebar'
     });
 
     try {
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom");
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom", { context: 'Sidebar' });
       findDom();
       _ensureMobileDock();          // create dock if mobile
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initAuthDom");
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initAuthDom", { context: 'Sidebar' });
       initAuthDom();
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: setupInlineAuthForm");
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: setupInlineAuthForm", { context: 'Sidebar' });
       setupInlineAuthForm();
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState");
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState", { context: 'Sidebar' });
       restorePersistentState();
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: bindDomEvents");
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: bindDomEvents", { context: 'Sidebar' });
       bindDomEvents();
 
       // Possibly set current project from the app context
@@ -893,7 +885,7 @@ export function createSidebar({
           detail: { authenticated: authMod?.isAuthenticated?.() }
         });
       } catch (syncErr) {
-        logger.warn('[Sidebar] Auth state sync failed during init', syncErr, { context: MODULE });
+        logger.warn('[Sidebar] Auth state sync failed during init', syncErr, { context: 'Sidebar' });
       }
 
       // Validate doc can dispatch events
@@ -901,11 +893,11 @@ export function createSidebar({
       if (!doc || typeof doc.dispatchEvent !== 'function') {
         throw new Error('[Sidebar] Document from domAPI must support dispatchEvent');
       }
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: completed successfully");
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: completed successfully", { context: 'Sidebar' });
       return true;
     } catch (err) {
       if (logger && logger.error) {
-        logger.error('[Sidebar] init failed', err && err.stack ? err.stack : err);
+        logger.error('[Sidebar] init failed', err && err.stack ? err.stack : err, { context: 'Sidebar' });
       }
       // Surface errors to callers, do not swallow -- recovery plan step 3a
       throw err;
@@ -930,7 +922,11 @@ export function createSidebar({
     }
     // Clean up domReadinessService listeners/observers if auto-created here
     if (domReadinessService && domReadinessService.destroy) {
-      domReadinessService.destroy();
+      try {
+        domReadinessService.destroy();
+      } catch (err) {
+        logger.error('[Sidebar] domReadinessService.destroy failed', err && err.stack ? err.stack : err, { context: 'Sidebar' });
+      }
     }
 
     pinned = false;
