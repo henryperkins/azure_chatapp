@@ -560,32 +560,33 @@ export function createChatManager(deps = {}) {
     }
 
     async _sendMessageToAPI(messageText) {
-      const cfg = this.modelConfigAPI.getConfig();
+      const cfg      = this.modelConfigAPI.getConfig();
+      const modelId  = cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL;   // required by API
+
+      // ---- body expected by backend ----
       const payload = {
-        content: messageText,
-        role: "user",
-        type: "message",
+        new_msg      : messageText,                // <-- renamed (was “content”)
         vision_detail: cfg.visionDetail || "auto"
       };
 
-      // Reasoning summary (concise/detailed) if present in config
-      if (cfg.reasoningSummary) {
-        payload.reasoning_summary = cfg.reasoningSummary;
-      }
+      if (cfg.reasoningSummary) payload.reasoning_summary = cfg.reasoningSummary;
       if (this.currentImage) {
         this._validateImageSize();
         payload.image_data = this.currentImage;
-        this.currentImage = null;
+        this.currentImage  = null;
       }
       if (cfg.extendedThinking) {
-        payload.thinking = {
-          type: "enabled",
-          budget_tokens: cfg.thinkingBudget
-        };
+        payload.thinking = { type: "enabled", budget_tokens: cfg.thinkingBudget };
       }
+
+      // Send model_id as query-parameter, body as JSON
       return this._api(
         apiEndpoints.MESSAGES(this.projectId, this.currentConversationId),
-        { method: "POST", body: payload }
+        {
+          method : "POST",
+          params : { model_id: modelId },   // <-- added
+          body   : payload
+        }
       );
     }
 
