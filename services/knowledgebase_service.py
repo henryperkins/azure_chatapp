@@ -42,6 +42,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from functools import wraps
 from db import get_async_session_context
 
+from sqlalchemy import select, func
+from utils.serializers import (
+    serialize_knowledge_base,
+    serialize_project_file,
+)
+
 from models.project_file import ProjectFile
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
@@ -664,4 +670,75 @@ async def get_kb_status(project_id: UUID, db: AsyncSession):
     """
     file_stats = await get_project_files_stats(project_id, db)
     return {"file_stats": file_stats, "project_id": str(project_id)}
+
+# ──────────────────────────────────────────────────────────────
+#  Public helpers consumed by routes/knowledge_base_routes.py
+# ──────────────────────────────────────────────────────────────
+async def get_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> dict[str, Any]:
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    return serialize_knowledge_base(kb)
+
+async def list_knowledge_bases(db: AsyncSession, active_only: bool = False) -> list[dict[str, Any]]:
+    stmt = select(KnowledgeBase)
+    if active_only:
+        stmt = stmt.where(KnowledgeBase.is_active.is_(True))
+    result = await db.execute(stmt)
+    return [serialize_knowledge_base(k) for k in result.scalars().all()]
+
+async def update_knowledge_base(knowledge_base_id: UUID, update_data: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    for k, v in update_data.items():
+        if hasattr(kb, k):
+            setattr(kb, k, v)
+    await save_model(db, kb)
+    return serialize_knowledge_base(kb)
+
+async def delete_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> dict[str, Any]:
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    await db.delete(kb)
+    await db.commit()
+    return {"deleted_id": str(knowledge_base_id)}
+
+async def toggle_project_kb(project_id: UUID, enable: bool, user_id: Optional[int], db: AsyncSession) -> dict[str, Any]:
+    project = await _validate_user_and_project(project_id, user_id, db)
+    if not project.knowledge_base:
+        raise HTTPException(status_code=404, detail="Project has no knowledge base")
+    project.knowledge_base.is_active = enable
+    await save_model(db, project.knowledge_base)
+    return {"knowledge_base_id": str(project.knowledge_base.id), "is_active": enable}
+
+async def get_knowledge_base_health(knowledge_base_id: UUID, db: AsyncSession) -> dict[str, Any]:
+    kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    vdb = await VectorDBManager.get_for_project(kb.project_id, db=db)
+    stats = await vdb.get_stats()
+    return {"knowledge_base_id": str(kb.id), "vector_db": stats}
+
+async def get_project_file_list(
+    project_id: UUID,
+    user_id: Optional[int],
+    db: AsyncSession,
+    skip: int = 0,
+    limit: int = 100,
+    file_type: Optional[str] = None,
+) -> dict[str, Any]:
+    await _validate_user_and_project(project_id, user_id, db)
+    stmt = select(ProjectFile).where(ProjectFile.project_id == project_id)
+    if file_type:
+        stmt = stmt.where(ProjectFile.file_type == file_type)
+    stmt = stmt.order_by(ProjectFile.created_at.desc()).offset(skip).limit(limit)
+    rows = (await db.execute(stmt)).scalars().all()
+    total = await db.scalar(select(func.count(ProjectFile.id)).where(ProjectFile.project_id == project_id))
+    return {
+        "files": [serialize_project_file(f, include_content=False) for f in rows],
+        "count": len(rows),
+        "total": total or 0,
+    }
 # Restore expected import for API routes and service consumers

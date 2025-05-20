@@ -32,11 +32,11 @@ from db import get_async_session
 
 # Services
 from services.vector_db import (
-    search_project_context,
     process_files_for_project,
     initialize_project_vector_db,
 )
 from services.knowledgebase_service import (
+    search_project_context,          # ← NEW: canonical location
     get_kb_status,
     get_project_files_stats,
     get_knowledge_base_health,
