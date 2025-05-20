@@ -27,7 +27,7 @@
  *    sidebar.destroy();
  */
 
-import { safeParseJSON } from './utils/globalUtils.js';
+import { safeParseJSON, debounce as globalDebounce } from './utils/globalUtils.js';
 
 // Factory function strictly enforces DI for logger and domReadinessService per guardrails.
 /**
@@ -106,16 +106,6 @@ export function createSidebar({
     return undefined;
   }
 
-  /* ------------------------------------------------------------------ */
-  /* 2) Basic Debounce Utility (for searches)                           */
-  /* ------------------------------------------------------------------ */
-  function debounce(fn, ms = 200) {
-    let timeout;
-    return (...args) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => fn(...args), ms);
-    };
-  }
 
   /* ------------------------------------------------------------------ */
   /*   Sidebar Settings panel (gear-icon toggles vertical slide-out)    */
@@ -677,8 +667,8 @@ export function createSidebar({
   /* 6) Debounced Search Wrappers                                       */
   /* ------------------------------------------------------------------ */
   // We replace direct calls with wrapped versions in bindDomEvents
-  const _debouncedChatSearch    = debounce(_handleChatSearch, 200);
-  const _debouncedProjectSearch = debounce(_handleProjectSearch, 200);
+  const _debouncedChatSearch    = globalDebounce(_handleChatSearch, 200);
+  const _debouncedProjectSearch = globalDebounce(_handleProjectSearch, 200);
 
   /* ------------------------------------------------------------------ */
   /* 7) bindDomEvents() – merges sidebar-events + inline auth events    */
