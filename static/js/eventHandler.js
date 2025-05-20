@@ -572,11 +572,12 @@ export function createEventHandlers({
   }
 
   function cleanupListeners(options = {}) {
-    const cleanupContext = options.context;
+    const { context: cleanupContext, target: targetFilter } = options;
 
     const entriesToRemove = [];
 
     trackedListeners.forEach((elementMap, element) => {
+      if (targetFilter && element !== targetFilter) return;
       elementMap.forEach((typeMap, type) => {
         typeMap.forEach((details, originalHandler) => {
           if (!cleanupContext || details.context === cleanupContext) {

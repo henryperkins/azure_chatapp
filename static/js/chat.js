@@ -369,6 +369,9 @@ export function createChatManager(deps = {}) {
     cleanup() {
       this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
       this.eventHandlers.cleanupListeners?.({ context: "chatManager" });
+      // Also clear any listeners injected by chatUIEnhancements
+      const chatUIEnh = this.DependencySystem?.modules?.get?.('chatUIEnhancements');
+      chatUIEnh?.cleanup?.();
       this.isInitialized = false;
       this.currentConversationId = null;
       this.projectId = null;
