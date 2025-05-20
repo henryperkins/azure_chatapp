@@ -1130,7 +1130,7 @@ async function initializeUIComponents() {
 
   // Ya no abortamos si los modales aún no están listos
 
-  createAndRegisterUIComponents();
+  await createAndRegisterUIComponents();
 
   // ── Asegurar que ProjectDashboard registra las vistas reales ──────────
   const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
@@ -1314,7 +1314,7 @@ async function initializeUIComponents() {
   _uiInitialized = true;
 }
 
-function createAndRegisterUIComponents() {
+async function createAndRegisterUIComponents() {
   // Project Details Enhancements - Create and register visual improvements
   const projectDetailsEnhancementsInstance = createProjectDetailsEnhancements({
     domAPI,
