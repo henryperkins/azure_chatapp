@@ -731,3 +731,11 @@
 [data-theme="dracula-enhanced"] .project-details-root .stat-title {
   color: rgba(255, 255, 255, 0.95);
 }
+
+/* ─── Mobile: keep FAB clear of bottom dock / safe-area ─── */
+@media (max-width:640px){
+  .project-fab{
+    bottom:calc(4.5rem + env(safe-area-inset-bottom,0));
+    right:1.25rem;
+  }
+}
