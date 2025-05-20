@@ -23,7 +23,7 @@ from db import get_async_session
 from models.conversation import Conversation
 from models.message import Message
 from models.project import Project
-from utils.ai_response import generate_ai_response
+from utils.ai_response import generate_ai_response, AIResponseOptions
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
 from services.project_service import validate_project_access
@@ -410,21 +410,24 @@ class ConversationService:
 
                 validate_model_and_params(conv.model_id, params_for_validation)
 
+                opts = AIResponseOptions(
+                    image_data=image_data,
+                    vision_detail=final_vision_detail,
+                    enable_thinking=final_enable_thinking,
+                    thinking_budget=final_thinking_budget,
+                    enable_markdown_formatting=ai_settings.get("enable_markdown_formatting", False),
+                    max_tokens=final_max_tokens,
+                    temperature=final_temperature,
+                    reasoning_effort=final_reasoning_effort,
+                    stream=False
+                )
+
                 assistant_msg_obj = await generate_ai_response(
                     conversation_id=conversation_id,
                     messages=prompt_msgs,
                     model_id=str(conv.model_id),
                     db=self.db,
-                    image_data=image_data,
-                    vision_detail=final_vision_detail,
-                    enable_thinking=final_enable_thinking,
-                    thinking_budget=final_thinking_budget,
-                    reasoning_effort=final_reasoning_effort,
-                    temperature=final_temperature,
-                    max_tokens=final_max_tokens,
-                    enable_markdown_formatting=ai_settings.get(
-                        "enable_markdown_formatting", False
-                    ),
+                    options=opts,
                 )
 
                 if assistant_msg_obj:
@@ -594,7 +597,7 @@ class ConversationService:
                 messages=temp_messages,
                 model_id=model_id,
                 db=self.db,
-                enable_markdown_formatting=False,
+                options=AIResponseOptions(enable_markdown_formatting=False),
             )
             if assistant_msg_obj and assistant_msg_obj.content:
                 return assistant_msg_obj.content.strip()
@@ -635,7 +638,7 @@ class ConversationService:
                 messages=temp_messages,
                 model_id=model_id,
                 db=self.db,
-                enable_markdown_formatting=False,
+                options=AIResponseOptions(enable_markdown_formatting=False),
             )
             if assistant_msg_obj and assistant_msg_obj.content:
                 summary_text = assistant_msg_obj.content.strip()
