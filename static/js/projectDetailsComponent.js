@@ -273,6 +273,9 @@ class ProjectDetailsComponent {
   // Main business/event logic wiring:
   _bindEventListeners() {
     this.eventHandlers.cleanupListeners({ context: this.listenersContext });
+
+    // Cancel any in-flight async ops to avoid memory-leak / state bleed
+    this._cleanupPendingOperations();
     if (!this.elements.container) return;
     // Back
     if (this.elements.backBtn) {
@@ -757,6 +760,7 @@ class ProjectDetailsComponent {
 
   destroy() {
     this.hide();
+    this._cleanupPendingOperations();    // safety
     this._logInfo("Destroyed.");
   }
 
