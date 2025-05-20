@@ -74,6 +74,17 @@ def capture_exception(*args: Any, **kwargs: Any) -> None:  # noqa: ANN001
 def capture_message(*args: Any, **kwargs: Any) -> None:  # noqa: ANN001
     pass
 
+# ---------------------------------------------------------------------------
+# Additional no-op helpers required by application code
+# ---------------------------------------------------------------------------
+def set_tag(key: str, value: Any) -> None:        # noqa: D401
+    """Stub for sentry_sdk.set_tag (no-op in stub)."""
+    pass
+
+
+def set_context(key: str, ctx: Any) -> None:      # noqa: D401
+    """Stub for sentry_sdk.set_context (no-op in stub)."""
+    pass
 
 # Configure scope helper -----------------------------------------------------
 
