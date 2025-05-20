@@ -26,6 +26,8 @@ from models.project import Project
 from utils.ai_response import generate_ai_response
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
+from services.project_service import validate_project_access
+from models.user import User        # required inside helper
 
 
 logger = logging.getLogger(__name__)

@@ -375,10 +375,15 @@ async def delete_project_file(
 
 @handle_service_errors("Error searching project context")
 async def search_project_context(
-    project_id: UUID, query: str, db: AsyncSession, top_k: int = 5
+    project_id: UUID,
+    query: str,
+    db: AsyncSession,
+    top_k: int = 5,
+    filters: dict[str, Any] | None = None,     # ← new
 ) -> dict[str, Any]:
     """
     Performs a semantic search against a project's knowledge base and returns relevant results.
+    Accepts optional filters to further constrain the search.
     """
     if not query or len(query.strip()) < 2:
         raise ValueError("Query must be at least 2 characters")
@@ -398,6 +403,8 @@ async def search_project_context(
     filter_metadata = {"project_id": str(project_id)}
     if project.knowledge_base:
         filter_metadata["knowledge_base_id"] = str(project.knowledge_base.id)
+    if filters:                                  # ← new
+        filter_metadata.update(filters)
 
     results = await _execute_search(vector_db, query, filter_metadata, top_k)
     enhanced_results = await _enhance_with_file_info(results, db)
