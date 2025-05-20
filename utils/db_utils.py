@@ -45,8 +45,8 @@ class BaseModelProtocol(Protocol):
 # Type variable for generic database models
 T = TypeVar("T", bound=BaseModelProtocol)
 
-# Global flag to manage concurrent runs of scheduled tasks
-_task_running = False
+# Per-task registry to manage concurrent runs of scheduled tasks
+_running_tasks: set[str] = set()          # keeps track of tasks that are currently running
 
 async def run_periodic_task(
     interval_seconds: int,
@@ -61,16 +61,14 @@ async def run_periodic_task(
         task_func: Async function to run that takes a database session
         task_name: Name of the task for logging
     """
-    global _task_running
-
-    if _task_running:
+    if task_name in _running_tasks:
         logger.warning(
             f"Periodic task '{task_name}' already running, skipping this execution"
         )
         return
 
+    _running_tasks.add(task_name)
     try:
-        _task_running = True
         logger.info(f"Starting periodic task: {task_name}")
 
         while True:
@@ -90,7 +88,7 @@ async def run_periodic_task(
             # Wait until next interval
             await asyncio.sleep(interval_seconds)
     finally:
-        _task_running = False
+        _running_tasks.discard(task_name)
 
 async def schedule_token_cleanup(interval_minutes: int = 60) -> None:
     """
