@@ -36,7 +36,7 @@ from services.vector_db import (
     initialize_project_vector_db,
 )
 from services.knowledgebase_service import (
-    search_project_context,          # ← NEW: canonical location
+    search_project_context,  # ← NEW: canonical location
     get_kb_status,
     get_project_files_stats,
     get_knowledge_base_health,
@@ -298,6 +298,7 @@ async def search_project_knowledge(
             query=search_request.query,
             top_k=search_request.top_k,
             filters=search_request.filters,
+            db=db,  # Added the db parameter that was missing
         )
 
         return await create_standard_response(
@@ -531,7 +532,9 @@ async def attach_github_repository(
         if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
-        github_service = GitHubService(token=getattr(current_user, "github_token", None))
+        github_service = GitHubService(
+            token=getattr(current_user, "github_token", None)
+        )
         branch = repo_data.branch if repo_data.branch else "main"
         repo_path = github_service.clone_repository(
             repo_url=repo_data.repo_url, branch=branch
@@ -583,7 +586,9 @@ async def detach_github_repository(
         if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
-        github_service = GitHubService(token=getattr(current_user, "github_token", None))
+        github_service = GitHubService(
+            token=getattr(current_user, "github_token", None)
+        )
 
         repo_path = github_service.clone_repository(repo_url=repo_data.repo_url)
         file_paths = github_service.fetch_files(repo_path, [])
