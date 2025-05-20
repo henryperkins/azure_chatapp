@@ -49,6 +49,9 @@ __all__ = [
     "ConversationService",
     # User
     "get_user_by_username",
+    # Context/window manager + web search
+    "ContextManager",
+    "search",
 ]
 
 # File storage services
@@ -116,3 +119,7 @@ from services.conversation_service import (
 from services.user_service import (
     get_user_by_username,
 )
+
+# Context/window manager + web search
+from services.context_manager import ContextManager
+from services.web_search_service import search
