@@ -564,8 +564,14 @@ export function createChatManager(deps = {}) {
       const modelId  = cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL;   // required by API
 
       // ---- body expected by backend ----
+      const userMsg = {
+        content : messageText,
+        role    : "user",
+        type    : "message"
+      };
+
       const payload = {
-        new_msg      : messageText,                // <-- renamed (was “content”)
+        new_msg      : userMsg,                   // dict → OK
         vision_detail: cfg.visionDetail || "auto"
       };
 
