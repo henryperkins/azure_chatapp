@@ -1,6 +1,4 @@
-# Azure OpenAI Responses API (Preview)
-
-The Responses API is a new stateful API from Azure OpenAI. It brings together the best capabilities from the chat completions and assistants API in one unified experience. The Responses API also adds support for the new `computer-use-preview` model which powers the [Computer use](../how-to/computer-use.md) capability.
+The Responses API is a new stateful API from Azure OpenAI. It brings together the best capabilities from the chat completions and assistants API in one unified experience. The Responses API also adds support for the new `computer-use-preview` model which powers the [Computer use](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/computer-use) capability.
 
 ## Responses API
 
@@ -20,33 +18,33 @@ The Responses API is a new stateful API from Azure OpenAI. It brings together th
 - `o3` (Version: `2025-04-16`)
 - `o4-mini` (Version: `2025-04-16`)
 
-Not every model is available in the regions supported by the responses API. Check the [models page](../concepts/models.md) for model region availability.
+Not every model is available in the regions supported by the responses API. Check the [models page](https://learn.microsoft.com/en-us/azure/ai-services/openai/concepts/models) for model region availability.
 
-> [!NOTE]
-> Not currently supported:
-> - Structured outputs
-> - image_url pointing to an internet address
-> - The web search tool
-> - Fine-tuned models
->
-> There is also a known issue with vision performance when using the Responses API, particularly with OCR tasks. As a temporary workaround set image detail to `high`. This article will be updated once this issue is resolved and as any additional feature support is added.
+Note
 
+Not currently supported:
+
+- The web search tool
+- Fine-tuned models
 
 ### Reference documentation
 
-- [Responses API reference documentation](/azure/ai-services/openai/reference-preview?#responses-api---create)
+- [Responses API reference documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview?#responses-api---create)
 
 ## Getting started with the responses API
 
 To access the responses API commands, you need to upgrade your version of the OpenAI library.
 
-```cmd
+```
 pip install --upgrade openai
 ```
 
 ## Generate a text response
 
-# [Python (Microsoft Entra ID)](#tab/python-secure)
+- [Python (Microsoft Entra ID)](#tabpanel_1_python-secure)
+- [Python (API Key)](#tabpanel_1_python-key)
+- [REST API](#tabpanel_1_rest-api)
+- [Output](#tabpanel_1_output)
 
 ```python
 from openai import AzureOpenAI
@@ -70,115 +68,14 @@ response = client.responses.create(
 )
 ```
 
-# [Python (API Key)](#tab/python-key)
-
-[!INCLUDE [Azure key vault](~/reusable-content/ce-skilling/azure/includes/ai-services/security/azure-key-vault.md)]
-
-```python
-import os
-from openai import AzureOpenAI
-
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version="2025-03-01-preview",
-    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    )
-
-response = client.responses.create(
-    model="gpt-4o", # replace with your model deployment name
-    input="This is a test."
-    #truncation="auto" required when using computer-use-preview model.
-
-)
-```
-
-# [REST API](#tab/rest-api)
-
-### Microsoft Entra ID
-
-```bash
-curl -X POST "https://YOUR-RESOURCE-NAME.openai.azure.com/openai/responses?api-version=2025-03-01-preview" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AZURE_OPENAI_AUTH_TOKEN" \
-  -d '{
-     "model": "gpt-4o",
-     "input": "This is a test"
-    }'
-```
-
-### API Key
-
-```bash
-curl -X POST https://YOUR-RESOURCE-NAME.openai.azure.com/openai/responses?api-version=2025-03-01-preview \
-  -H "Content-Type: application/json" \
-  -H "api-key: $AZURE_OPENAI_API_KEY" \
-  -d '{
-     "model": "gpt-4o",
-     "input": "This is a test"
-    }'
-```
-
-# [Output](#tab/output)
-
-**Output:**
-
-```json
-{
-  "id": "resp_67cb32528d6881909eb2859a55e18a85",
-  "created_at": 1741369938.0,
-  "error": null,
-  "incomplete_details": null,
-  "instructions": null,
-  "metadata": {},
-  "model": "gpt-4o-2024-08-06",
-  "object": "response",
-  "output": [
-    {
-      "id": "msg_67cb3252cfac8190865744873aada798",
-      "content": [
-        {
-          "annotations": [],
-          "text": "Great! How can I help you today?",
-          "type": "output_text"
-        }
-      ],
-      "role": "assistant",
-      "status": null,
-      "type": "message"
-    }
-  ],
-  "output_text": "Great! How can I help you today?",
-  "parallel_tool_calls": null,
-  "temperature": 1.0,
-  "tool_choice": null,
-  "tools": [],
-  "top_p": 1.0,
-  "max_output_tokens": null,
-  "previous_response_id": null,
-  "reasoning": null,
-  "status": "completed",
-  "text": null,
-  "truncation": null,
-  "usage": {
-    "input_tokens": 20,
-    "output_tokens": 11,
-    "output_tokens_details": {
-      "reasoning_tokens": 0
-    },
-    "total_tokens": 31
-  },
-  "user": null,
-  "reasoning_effort": null
-}
-```
-
----
-
 ## Retrieve a response
 
 To retrieve a response from a previous call to the responses API.
 
-# [Python (Microsoft Entra ID)](#tab/python-secure)
+- [Python (Microsoft Entra ID)](#tabpanel_2_python-secure)
+- [Python (API Key)](#tabpanel_2_python-key)
+- [REST API](#tabpanel_2_rest-api)
+- [Output](#tabpanel_2_output)
 
 ```python
 from openai import AzureOpenAI
@@ -198,94 +95,6 @@ response = client.responses.retrieve("resp_67cb61fa3a448190bcf2c42d96f0d1a8")
 
 print(response.model_dump_json(indent=2))
 ```
-
-# [Python (API Key)](#tab/python-key)
-
-[!INCLUDE [Azure key vault](~/reusable-content/ce-skilling/azure/includes/ai-services/security/azure-key-vault.md)]
-
-```python
-import os
-from openai import AzureOpenAI
-
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    api_version="2025-03-01-preview",
-    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    )
-
-response = client.responses.retrieve("resp_67cb61fa3a448190bcf2c42d96f0d1a8")
-```
-
-# [REST API](#tab/rest-api)
-
-### Microsoft Entra ID
-
-```bash
-curl -X GET "https://YOUR-RESOURCE-NAME.openai.azure.com/openai/responses/{response_id}?api-version=2025-03-01-preview" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $AZURE_OPENAI_AUTH_TOKEN"
-```
-
-### API Key
-
-```bash
-curl -X GET https://YOUR-RESOURCE-NAME.openai.azure.com/openai/responses/{response_id}?api-version=2025-03-01-preview \
-  -H "Content-Type: application/json" \
-  -H "api-key: $AZURE_OPENAI_API_KEY"
-```
-
-# [Output](#tab/output)
-
-```json
-{
-  "id": "resp_67cb61fa3a448190bcf2c42d96f0d1a8",
-  "created_at": 1741382138.0,
-  "error": null,
-  "incomplete_details": null,
-  "instructions": null,
-  "metadata": {},
-  "model": "gpt-4o-2024-08-06",
-  "object": "response",
-  "output": [
-    {
-      "id": "msg_67cb61fa95588190baf22ffbdbbaaa9d",
-      "content": [
-        {
-          "annotations": [],
-          "text": "Hello! How can I assist you today?",
-          "type": "output_text"
-        }
-      ],
-      "role": "assistant",
-      "status": null,
-      "type": "message"
-    }
-  ],
-  "parallel_tool_calls": null,
-  "temperature": 1.0,
-  "tool_choice": null,
-  "tools": [],
-  "top_p": 1.0,
-  "max_output_tokens": null,
-  "previous_response_id": null,
-  "reasoning": null,
-  "status": "completed",
-  "text": null,
-  "truncation": null,
-  "usage": {
-    "input_tokens": 20,
-    "output_tokens": 11,
-    "output_tokens_details": {
-      "reasoning_tokens": 0
-    },
-    "total_tokens": 31
-  },
-  "user": null,
-  "reasoning_effort": null
-}
-```
-
----
 
 ## Delete response
 
@@ -461,7 +270,6 @@ for event in response:
 
 ```
 
-
 ## Function calling
 
 The responses API supports function calling.
@@ -576,8 +384,6 @@ print(response.model_dump_json(indent=2))
 
 ## Image input
 
-There is a known issue with image url based image input. Currently only base64 encoded images are supported.
-
 ### Image url
 
 ```python
@@ -662,23 +468,23 @@ print(response)
 
 ## Reasoning models
 
-For examples of how to use reasoning models with the responses API see the [reasoning models guide](./reasoning.md#reasoning-summary).
+For examples of how to use reasoning models with the responses API see the [reasoning models guide](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/reasoning#reasoning-summary).
 
 ## Computer use
 
 In this section, we provide a simple example script that integrates Azure OpenAI's `computer-use-preview` model with [Playwright](https://playwright.dev/) to automate basic browser interactions. Combining the model with [Playwright](https://playwright.dev/) allows the model to see the browser screen, make decisions, and perform actions like clicking, typing, and navigating websites. You should exercise caution when running this example code. This code is designed to be run locally but should only be executed in a test environment. Use a human to confirm decisions and don't give the model access to sensitive data.
 
-:::image type="content" source="../media/computer-use-preview.gif" alt-text="Animated gif of computer-use-preview model integrated with playwright." lightbox="../media/computer-use-preview.gif":::
+[![Animated gif of computer-use-preview model integrated with playwright.](https://learn.microsoft.com/en-us/azure/ai-services/openai/media/computer-use-preview.gif)](https://learn.microsoft.com/en-us/azure/ai-services/openai/media/computer-use-preview.gif#lightbox)
 
 First you'll need to install the Python library for [Playwright](https://playwright.dev/).
 
-```cmd
+```
 pip install playwright
 ```
 
 Once the package is installed, you'll also need to run
 
-```cmd
+```
 playwright install
 ```
 
@@ -686,7 +492,7 @@ playwright install
 
 First, we import the necessary libraries and define our configuration parameters. Since we're using `asyncio` we'll be executing this code outside of Jupyter notebooks. We'll walk through the code first in chunks and then demonstrate how to use it.
 
-```python
+```
 import os
 import asyncio
 import base64
@@ -715,7 +521,7 @@ Next, we set up mappings for special keys that the model might need to pass to P
 
 This isn't an exhaustive list of possible key mappings. You can expand this list as needed. This dictionary is specific to integrating the model with Playwright. If you were integrating the model with an alternate library to provide API access to your operating systems keyboard/mouse you would need to provide a mapping specific to that library.
 
-```python
+```
 # Key mapping for special keys in Playwright
 KEY_MAPPING = {
     "/": "Slash", "\\": "Backslash", "alt": "Alt", "arrowdown": "ArrowDown",
@@ -732,7 +538,7 @@ This dictionary translates user-friendly key names to the format expected by Pla
 
 To make sure that any mouse actions that are passed from the model stay within the browser window boundaries we'll add the following utility function:
 
-```python
+```
 def validate_coordinates(x, y):
     """Ensure coordinates are within display bounds."""
     return max(0, min(x, DISPLAY_WIDTH)), max(0, min(y, DISPLAY_HEIGHT))
@@ -744,7 +550,7 @@ This simple utility attempts to prevent out-of-bounds errors by clamping coordin
 
 The core of our browser automation is the action handler that processes various types of user interactions and convert them into actions within the browser.
 
-```python
+```
 async def handle_action(page, action):
     """Handle different action types from the model."""
     action_type = action.type
@@ -826,21 +632,21 @@ async def handle_action(page, action):
 
 This function attempts to handle various types of actions. We need to translate between the commands that the `computer-use-preview` will generate and the Playwright library which will execute the actions. For more information refer to the reference documentation for `ComputerAction`.
 
-- [Click](/azure/ai-services/openai/reference-preview#click)
-- [DoubleClick](/azure/ai-services/openai/reference-preview#doubleclick)
-- [Drag](/azure/ai-services/openai/reference-preview#drag)
-- [KeyPress](/azure/ai-services/openai/reference-preview#keypress)
-- [Move](/azure/ai-services/openai/reference-preview#move)
-- [Screenshot](/azure/ai-services/openai/reference-preview#screenshot)
-- [Scroll](/azure/ai-services/openai/reference-preview#scroll)
-- [Type](/azure/ai-services/openai/reference-preview#type)
-- [Wait](/azure/ai-services/openai/reference-preview#wait)
+- [Click](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#click)
+- [DoubleClick](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#doubleclick)
+- [Drag](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#drag)
+- [KeyPress](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#keypress)
+- [Move](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#move)
+- [Screenshot](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#screenshot)
+- [Scroll](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#scroll)
+- [Type](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#type)
+- [Wait](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#wait)
 
 ### Screenshot capture
 
 In order for the model to be able to see what it's interacting with the model needs a way to capture screenshots. For this code we're using Playwright to capture the screenshots and we're limiting the view to just the content in the browser window. The screenshot won't include the url bar or other aspects of the browser GUI. If you need the model to see outside the main browser window you could augment the model by creating your own screenshot function.
 
-```python
+```
 async def take_screenshot(page):
     """Take a screenshot and return base64 encoding with caching for failures."""
     global last_successful_screenshot
@@ -862,7 +668,7 @@ This function captures the current browser state as an image and returns it as a
 
 This function processes the model's responses and executes the requested actions:
 
-```python
+```
 async def process_model_response(client, response, page, max_iterations=ITERATIONS):
     """Process the model's response and execute actions."""
     for iteration in range(max_iterations):
@@ -1022,14 +828,14 @@ In this section we have added code that:
 - Handles potential safety checks requiring user confirmation.
 - Executes the requested action.
 - Captures a new screenshot.
-- Sends the updated state back to the model and defines the [`ComputerTool`](/azure/ai-services/openai/reference-preview#computertool).
+- Sends the updated state back to the model and defines the [`ComputerTool`](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference-preview#computertool).
 - Repeats this process for multiple iterations.
 
 ### Main function
 
 The main function coordinates the entire process:
 
-```python
+```
     # Initialize OpenAI client
     client = AzureOpenAI(
         azure_endpoint=AZURE_ENDPOINT,
@@ -1128,10 +934,11 @@ The main function:
 
 ### Complete script
 
-> [!CAUTION]
-> This code is experimental and for demonstration purposes only. It's only intended to illustrate the basic flow of the responses API and the `computer-use-preview` model. While you can execute this code on your local computer, we strongly recommend running this code on a low privilege virtual machine with no access to sensitive data. This code is for basic testing purposes only.
+Caution
 
-```python
+This code is experimental and for demonstration purposes only. It's only intended to illustrate the basic flow of the responses API and the `computer-use-preview` model. While you can execute this code on your local computer, we strongly recommend running this code on a low privilege virtual machine with no access to sensitive data. This code is for basic testing purposes only.
+
+```
 import os
 import asyncio
 import base64
@@ -1494,6 +1301,3 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
-
-
----

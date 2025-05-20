@@ -7,7 +7,12 @@ __pycache__
 uploads
 uploads/*
 .qodo
-
+codex/
+tests/
+docs/
+scripts/
+storage/
+alembic/
 # Playwright
 /test-results/
 /playwright-report/
