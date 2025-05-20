@@ -34,6 +34,7 @@ from utils.auth_utils import get_current_user_and_token
 from utils.sentry_utils import sentry_span, make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
+from services.conversation_service import validate_model_and_params
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Project Conversations"])
@@ -52,7 +53,8 @@ class ConversationCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
-    ai_settings: Optional[dict] = Field(None, description="AI-specific settings")  # ADDED
+    model_config: Optional[dict] = Field(default_factory=dict)
+    kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
 
@@ -61,13 +63,15 @@ class ConversationUpdate(BaseModel):
 
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
+    model_config: Optional[dict] = Field(default_factory=dict)
+    kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
 
 class MessageCreate(BaseModel):
     """Model for creating a message"""
 
-    content: str = Field(..., description="Message content")
+    raw_text: str = Field(..., description="Markdown/plain text")
     role: str = Field("user", description="'user' or 'assistant'")
     image_data: Optional[str] = Field(None, description="Base64 image data")
     vision_detail: str = Field("auto", description="'low', 'high', or 'auto'")
@@ -76,6 +80,7 @@ class MessageCreate(BaseModel):
     reasoning_effort: Optional[str] = Field(None, description="'low', 'medium', 'high'")
     temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
     max_tokens: Optional[int] = Field(None, ge=100, le=32000)
+    enable_web_search: Optional[bool] = Field(False)
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
 
@@ -209,9 +214,8 @@ async def create_conversation(
                         title=conversation_data.title,
                         model_id=conversation_data.model_id,
                         project_id=project_id,
-                        knowledge_base_id=kb_id,  # ADDED
-                        use_knowledge_base=True,  # ADDED
-                        ai_settings=conversation_data.ai_settings  # CORRECTED from extra_data
+                        model_config=conversation_data.model_config,
+                        kb_enabled=conversation_data.kb_enabled,
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
                 except IntegrityError as db_exc:
@@ -377,6 +381,8 @@ async def update_project_conversation(
                 project_id=project_id,
                 title=update_data.title,
                 model_id=update_data.model_id,
+                model_config=update_data.model_config,
+                kb_enabled=update_data.kb_enabled,
             )
 
             # Record metrics
@@ -481,6 +487,7 @@ async def create_project_conversation_message(
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
     db: AsyncSession = Depends(get_async_session),
+    _valid: None = Depends(validate_model_and_params),
 ):
     """Process message with AI response tracing"""
     transaction = start_transaction(
@@ -528,7 +535,7 @@ async def create_project_conversation_message(
                 response = await conv_service.create_message(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
-                    content=new_msg.content.strip(),
+                    content=new_msg.raw_text.strip(),
                     role=new_msg.role.lower().strip(),
                     project_id=project_id,
                     image_data=new_msg.image_data,
@@ -538,6 +545,7 @@ async def create_project_conversation_message(
                     reasoning_effort=new_msg.reasoning_effort,
                     temperature=new_msg.temperature,
                     max_tokens=new_msg.max_tokens,
+                    enable_web_search=new_msg.enable_web_search,
                 )
 
                 duration = (time.time() - start_time) * 1000
