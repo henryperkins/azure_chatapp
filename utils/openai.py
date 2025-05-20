@@ -286,6 +286,11 @@ async def validate_azure_params(
         capabilities = model_config.get("capabilities", [])
         parameters_config = model_config.get("parameters", {})
 
+        # Markdown formatting support
+        if kwargs.get("enable_markdown_formatting"):
+            if "markdown_formatting" not in capabilities:
+                raise ValueError(f"{model_name} doesn't support markdown formatting")
+
         # Check vision
         if kwargs.get("image_data"):
             if "vision" not in capabilities:
@@ -376,6 +381,11 @@ def build_azure_payload(
         if "temperature" not in unsupported and kwargs.get("temperature") is not None:
             payload["temperature"] = kwargs["temperature"]
         # Similarly handle top_p, presence_penalty, frequency_penalty, etc.
+
+        # Markdown formatting
+        if kwargs.get("enable_markdown_formatting") and \
+           "markdown_formatting" in model_config.get("capabilities", []):
+            payload["enable_markdown_formatting"] = True
 
         # Reasoning (o-series/response APIs): nest effort/summary per API spec
         reasoning_effort = kwargs.get("reasoning_effort")
