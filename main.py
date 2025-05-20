@@ -149,27 +149,6 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
     # but here we skip it to remain on plain HTTP (insecure).
 
 
-# -----------------------------------------------------------------------------
-# Optional: Sentry Filtering (still recommended for data privacy)
-# -----------------------------------------------------------------------------
-def filter_sensitive_event(event: Event, hint: Hint) -> Optional[Event]:
-    """Filter sensitive data from Sentry events (still recommended even in debug)."""
-    try:
-        if "request" in event and isinstance(event["request"], dict):
-            req_data = cast(dict, event["request"])
-            if "headers" in req_data and isinstance(req_data["headers"], dict):
-                headers = req_data["headers"]
-                for header in ["authorization", "cookie", "x-api-key"]:
-                    if header in headers:
-                        headers[header] = "[FILTERED]"
-        if "user" in event and isinstance(event["user"], dict):
-            user = event["user"]
-            if "email" in user:
-                user["email"] = "[FILTERED]"
-        return event
-    except Exception as e:
-        logging.error(f"Error filtering event in debug mode: {str(e)}")
-        return event
 
 
 # -----------------------------------------------------------------------------
@@ -217,7 +196,7 @@ from config import settings  # noqa: E402
 from db import init_db, get_async_session_context  # noqa: E402
 from utils.auth_utils import clean_expired_tokens  # noqa: E402
 from utils.db_utils import schedule_token_cleanup  # noqa: E402
-# from db.schema_manager import SchemaManager # Unused in main.py
+from utils.sentry_utils import filter_sensitive_event  # Canonical Sentry filter
 
 # ----- Ensure ALL models are registered for migrations/table creation -----
 import models  # noqa: E402, F401 # F401: imported but unused - common for model registration
