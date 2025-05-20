@@ -37,6 +37,49 @@
   margin-right: auto;
 }
 
+/* ────────────────────────────────────────────────
+   Compatibility layer for older JS that still
+   emits <div class="message …"> instead of the
+   newer  <div class="chat-message …"> markup.
+   Keeps both variants visually identical.
+   ──────────────────────────────────────────────── */
+.message{
+  display:flex;
+  flex-direction:column;
+  max-width:85%;
+  animation:fadeIn .3s ease-out;
+}
+.message.user-message        {align-self:flex-end; margin-left:auto;}
+.message.assistant-message   {align-self:flex-start; margin-right:auto;}
+.message.system-message      {align-self:center;}
+
+.message-content{
+  padding:1rem;
+  border-radius:1rem;
+  word-break:break-word;
+}
+.user-message    .message-content{
+  background-color:var(--color-primary);
+  color:var(--color-primary-content);
+  border-bottom-right-radius:.25rem;
+}
+.assistant-message .message-content{
+  background-color:var(--color-base-200);
+  color:var(--color-base-content);
+  border-bottom-left-radius:.25rem;
+}
+.system-message  .message-content{
+  background-color:var(--color-info);
+  color:var(--color-info-content);
+}
+
+/* Header metadata (only emitted by legacy code) */
+.message-header{
+  font-size:.75rem;
+  opacity:.7;
+  margin-bottom:.25rem;
+}
+
 /* Message bubble styling */
 .message-bubble {
   padding: 1rem;
