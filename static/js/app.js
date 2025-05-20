@@ -1336,10 +1336,15 @@ async function createAndRegisterUIComponents() {
     // Ensure all required elements for KBC are checked by domReadinessService in initializeUIComponents
     // or that KBC's constructor is robust enough for elRefs to be potentially null initially if lazy loaded.
     // Given the error, #knowledgeTab is critical.
-    await domReadinessService.elementsReady('#knowledgeTab', {
-      timeout : APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
-      context : 'app.createAndRegisterUIComponents#knowledgeTab'
-    });
+    // Don’t block – KnowledgeBaseComponent will wait for its own DOM later.
+    domReadinessService.elementsReady(
+      '#knowledgeTab',
+      {
+        timeout : APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
+        context : 'app.createAndRegisterUIComponents#knowledgeTab',
+        observeMutations : true
+      }
+    ).catch(()=>{/* non-critical: template not yet injected */});
     try {
       knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
         DependencySystem,
