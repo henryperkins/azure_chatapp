@@ -21,7 +21,13 @@ from datetime import datetime
 from typing import Any, Optional, Tuple, List
 from uuid import UUID
 
-from services.knowledgebase_helpers import KBConfig, StorageManager, TokenManager
+from services.knowledgebase_helpers import (
+    KBConfig,
+    StorageManager,
+    TokenManager,
+    VectorDBManager,          # ← NEW (re-uses shared impl)
+    MetadataHelper,           # ← NEW (re-uses shared impl)
+)
 from services.project_service import (
     check_knowledge_base_status as get_project_files_stats,
 )  # Unified export for all code that expects file & chunk stats APIs
@@ -49,45 +55,6 @@ from utils.serializers import serialize_vector_result
 logger = logging.getLogger(__name__)
 
 
-class VectorDBManager:
-    """Manages VectorDB instances and operations"""
-
-    @staticmethod
-    async def get_for_project(
-        project_id: UUID,
-        model_name: Optional[str] = None,
-        db: Optional[AsyncSession] = None,
-    ) -> VectorDB:
-        config = KBConfig.get()
-        return await get_vector_db(
-            model_name=model_name or config["default_embedding_model"],
-            storage_path=os.path.join(
-                config["vector_db_storage_path"], str(project_id)
-            ),
-            load_existing=True,
-        )
-
-
-def extract_file_metadata(
-    file_record: ProjectFile, include_token_count: bool = True
-) -> dict[str, Any]:
-    """Extract standardized metadata from file record"""
-    metadata = {
-        "filename": file_record.filename,
-        "file_type": file_record.file_type,
-        "file_size": file_record.file_size,
-        "created_at": (
-            file_record.created_at.isoformat() if file_record.created_at else None
-        ),
-    }
-
-    if include_token_count and file_record.config:
-        metadata["token_count"] = file_record.config.get("token_count", 0)
-
-    if file_record.config and "search_processing" in file_record.config:
-        metadata["processing"] = file_record.config["search_processing"]
-
-    return metadata
 
 
 # ---------------------------------------------------------------------
@@ -316,7 +283,7 @@ async def upload_file_to_project(
             db=db,
         )
 
-    return extract_file_metadata(project_file)
+    return MetadataHelper.extract_file_metadata(project_file)
 
 
 async def process_single_file_for_search(
@@ -677,7 +644,7 @@ async def _enhance_with_file_info(
                 fid_uuid = UUID(f_id)
                 file_rec = await get_by_id(db, ProjectFile, fid_uuid)
                 if file_rec:
-                    res["file_info"] = extract_file_metadata(
+                    res["file_info"] = MetadataHelper.extract_file_metadata(
                         file_rec, include_token_count=False
                     )
             except Exception as e:
