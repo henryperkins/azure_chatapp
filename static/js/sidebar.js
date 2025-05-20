@@ -456,10 +456,14 @@ export function createSidebar({
       ? allProjects.filter((p) => p.name?.toLowerCase().includes(searchTerm))
       : allProjects;
 
-    uiRenderer.renderProjects(filteredProjects);
-    accessibilityUtils.announce?.(
-      `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
-    );
+    try {
+      uiRenderer.renderProjects(filteredProjects);
+      accessibilityUtils.announce?.(
+        `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
+      );
+    } catch (error) {
+      logger.error('[Sidebar][_handleProjectSearch]', error && error.stack ? error.stack : error, { context: 'Sidebar' });
+    }
   }
 
   function maybeRenderRecentConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || '') {
