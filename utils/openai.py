@@ -15,6 +15,8 @@ from sentry_sdk import (
     metrics
 )
 
+# Reuse central registry helpers
+from utils.model_registry import get_model_config as _central_get_model_config
 from config import settings  # Use centralized settings
 from utils.sentry_utils import sentry_span
 
@@ -29,13 +31,10 @@ CLAUDE_SAMPLE_RATE = 1.0   # Always sample Claude calls
 # Model Config Helpers
 # -----------------------------
 
-def get_model_config(model_name: str) -> Optional[dict[str, Any]]:
-    """Retrieve model configuration from settings."""
-    if model_name in settings.AZURE_OPENAI_MODELS:
-        return settings.AZURE_OPENAI_MODELS[model_name]
-    if model_name in settings.CLAUDE_MODELS:
-        return settings.CLAUDE_MODELS[model_name]
-    return None
+def get_model_config(model_name: str):  # type: ignore[override]
+    """Legacy wrapper routed to utils.model_registry.get_model_config."""
+
+    return _central_get_model_config(model_name, settings)
 
 def get_azure_api_version(model_config: dict[str, Any]) -> str:
     """Get the Azure API version from model config or fallback to default."""
