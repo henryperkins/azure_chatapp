@@ -86,6 +86,24 @@ def set_context(key: str, ctx: Any) -> None:      # noqa: D401
     """Stub for sentry_sdk.set_context (no-op in stub)."""
     pass
 
+# ---------------------------------------------------------------------------
+# Extra helpers required by app code
+# ---------------------------------------------------------------------------
+
+def get_current_span():        # FastAPI tracing wrappers call this
+    """Stub for sentry_sdk.get_current_span (returns None in stub)."""
+    return None
+
+
+def push_scope(*args, **kwargs):        # main.py error handlers call this
+    """
+    Stub for sentry_sdk.push_scope.
+
+    Behaves like configure_scope: returns a context-manager that yields
+    a dummy scope object implementing set_tag / set_extra.
+    """
+    return configure_scope(*args, **kwargs)
+
 # Configure scope helper -----------------------------------------------------
 
 
