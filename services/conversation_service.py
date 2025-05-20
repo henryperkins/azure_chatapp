@@ -67,6 +67,12 @@ class ConversationService:
     ) -> Conversation:
         """Centralized conversation access validation."""
         project_id = self._require_project_id(project_id)
+        user = await self.db.get(User, user_id)
+        if not user:
+            raise ConversationError("User not found", 404)
+        # canonical permission check (raises on failure)
+        await validate_project_access(project_id, user, self.db)
+
         filters = [Conversation.id == conversation_id, Conversation.user_id == user_id]
 
         if not include_deleted:
@@ -103,27 +109,8 @@ class ConversationService:
             )
             raise ConversationError("Conversation not found", 404)
 
-        # If project_id was provided, ensure the loaded conversation's project is accessible
-        if project_id and conv.project:
-            if conv.project.user_id != user_id:
-                logger.error(
-                    f"ACCESS DENIED: Project {project_id} (for conversation {conversation_id}) "
-                    f"belongs to user {conv.project.user_id} but tried by user {user_id}"
-                )
-                raise ConversationError("Access denied to conversation (invalid permissions or ownership)", 403)
-
         return conv
 
-    async def _validate_project_access(self, project_id: UUID, user_id: int) -> Project:
-        """
-        Delegate to project_service.validate_project_access to keep
-        permission rules in one place.
-        """
-        project_id = self._require_project_id(project_id)
-        user = await self.db.get(User, user_id)
-        if not user:
-            raise ConversationError("User not found", 404)
-        return await validate_project_access(project_id, user, self.db)
 
     async def create_conversation(
         self,
@@ -142,7 +129,8 @@ class ConversationService:
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
         # Validate project access
-        await self._validate_project_access(project_id, user_id)
+        user = await self.db.get(User, user_id)
+        await validate_project_access(project_id, user, self.db)
 
         conv = Conversation(
             user_id=user_id,

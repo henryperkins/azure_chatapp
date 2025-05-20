@@ -129,22 +129,6 @@ async def generate_ai_response(
         **opts.to_api_dict(),
     }
 
-    # Adjust parameters based on provider
-    capabilities = model_config.get("capabilities", [])
-    if provider == "azure":
-        if "markdown_formatting" in capabilities and opts.enable_markdown_formatting:
-            api_params["enable_markdown_formatting"] = True
-            # Additional checks or adjustments specific to Azure can be added here
-
-    elif provider == "anthropic":
-        if "extended_thinking" in capabilities:
-            if opts.enable_thinking:
-                api_params["enable_thinking"] = True
-                if opts.thinking_budget is not None:
-                    api_params["thinking_budget"] = opts.thinking_budget
-                else:
-                    api_params["thinking_budget"] = settings.CLAUDE_EXTENDED_THINKING_BUDGET
-
     stream = opts.stream
 
     # Generate AI response
