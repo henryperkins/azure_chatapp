@@ -11,8 +11,6 @@ from models.message import Message
 from utils.openai import openai_chat
 from config import settings
 from utils.db_utils import get_by_id, save_model
-from utils.message_handlers import update_project_token_usage
-
 from utils.ai_helper import get_model_config, retrieve_knowledge_context, calculate_tokens
 
 logger = logging.getLogger(__name__)
@@ -310,11 +308,6 @@ async def generate_ai_response(
                 f"API response missing usage data for model {model_id}. "
                 f"Estimated completion tokens: {completion_tokens}"
             )
-
-        try:
-            await update_project_token_usage(conversation, total_used, db)
-        except Exception as e:
-            logger.error(f"Failed to update token usage: {str(e)}")
 
         return assistant_msg
 
