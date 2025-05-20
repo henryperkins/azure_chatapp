@@ -4883,6 +4883,9 @@
     justify-content: flex-end;
     gap: calc(0.25rem * 2);
   }
+  .mt-0\.5 {
+    margin-top: calc(var(--spacing) * 0.5);
+  }
   .mt-1 {
     margin-top: calc(var(--spacing) * 1);
   }
@@ -6030,9 +6033,6 @@
   }
   .flex-none {
     flex: none;
-  }
-  .flex-shrink {
-    flex-shrink: 1;
   }
   .flex-shrink-0 {
     flex-shrink: 0;
@@ -9582,6 +9582,11 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
+  .md\:flex-nowrap {
+    @media (width >= 48rem) {
+      flex-wrap: nowrap;
+    }
+  }
   .md\:p-0 {
     @media (width >= 48rem) {
       padding: calc(var(--spacing) * 0);
@@ -9880,6 +9885,24 @@
     opacity: 1;
     transform: scale(1);
   }
+}
+:root {
+  --primary: var(--color-primary);
+  --primary-content: var(--color-primary-content);
+  --primary-focus: var(--color-primary-focus, var(--color-primary));
+  --secondary: var(--color-secondary);
+  --secondary-content: var(--color-secondary-content);
+  --secondary-focus: var(--color-secondary-focus, var(--color-secondary));
+  --accent: var(--color-accent);
+  --accent-content: var(--color-accent-content);
+  --base-100: var(--color-base-100);
+  --base-200: var(--color-base-200);
+  --base-300: var(--color-base-300);
+  --base-content: var(--color-base-content);
+  --warning: var(--color-warning);
+  --warning-content: var(--color-warning-content);
+  --error: var(--color-error);
+  --error-content: var(--color-error-content);
 }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .tab:focus-visible, .btn:focus-visible, .menu-item:focus-visible, [role="button"]:focus-visible {
   outline-style: var(--tw-outline-style);
@@ -12128,6 +12151,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-size: 1rem;
   line-height: 1.45;
 }
+#projectConversationsList > .conversation-item {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+#projectConversationsList > .conversation-item.active {
+  background: var(--color-primary) !important;
+  color: var(--color-primary-content,#fff);
+  box-shadow: 0 2px 8px 0 rgba(85,0,85,.08) !important;
+}
 #projectConversationsList > div:hover, #projectConversationsList > .conversation-item:hover {
   background: var(--color-primary) !important;
   color: var(--color-primary-content, #fff);
@@ -12568,6 +12603,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 [data-theme="dracula"] .project-details-root .stat-title, [data-theme="dracula-enhanced"] .project-details-root .stat-title {
   color: rgba(255, 255, 255, 0.95);
 }
+@media (max-width:640px) {
+  .project-fab {
+    bottom: calc(4.5rem + env(safe-area-inset-bottom,0));
+    right: 1.25rem;
+  }
+}
 .project-card {
   border-radius: 1rem !important;
   transition: all 0.25s ease-in-out !important;
@@ -12645,11 +12686,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   animation: float 3s ease-in-out infinite;
 }
 @keyframes float {
-  0%, 100% {
+  0% {
     transform: translateY(0px);
   }
   50% {
     transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
   }
 }
 .project-list-error {
@@ -12721,9 +12765,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   gap: 0.25rem;
 }
 .project-card .metadata-icon {
-  width: 0.875rem;
-  height: 0.875rem;
-  opacity: 0.7;
+  width: .875rem;
+  height: .875rem;
+  opacity: .7;
+  fill: currentColor;
+  stroke: currentColor;
 }
 .project-card:hover .project-name::after {
   content: '';
@@ -12763,6 +12809,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 #projectListCreateBtn:hover::after {
   animation: ripple 0.6s ease-out;
+}
+.enhanced-btn {
+  position: relative;
+  overflow: hidden;
+  transition: all .25s ease;
+}
+.enhanced-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: rgba(255,255,255,.3);
+  opacity: 0;
+  border-radius: 50%;
+  transform: scale(1) translate(-50%,-50%);
+  transform-origin: 0 0;
+}
+.enhanced-btn:hover::after {
+  animation: ripple .6s ease-out;
 }
 @keyframes ripple {
   0% {

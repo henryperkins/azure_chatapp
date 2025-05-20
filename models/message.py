@@ -5,7 +5,7 @@ Defines the Message model for storing messages associated with a Conversation.
 Tracks role ("user", "assistant", "system"), content, metadata for tokens.
 """
 
-from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, event, CheckConstraint
+from sqlalchemy import String, Text, TIMESTAMP, text, ForeignKey, event, CheckConstraint, Integer
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from typing import Optional
@@ -42,6 +42,13 @@ class Message(Base):
         comment="Message role: user, assistant, or system",
         server_default="user",
     )
+    # Raw markdown/user content
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, comment="Original message raw Markdown/text")
+    # Server-rendered and sanitized HTML
+    formatted_text: Mapped[str] = mapped_column(Text, nullable=False, comment="Sanitized HTML produced from raw_text")
+    # Token count for this message
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, comment="Number of tokens in message")
+    # Optionally keep legacy 'content' for migration/read-compat only
     content: Mapped[str] = mapped_column(Text, nullable=False)
     extra_data: Mapped[Optional[dict]] = mapped_column(
         JSONB(none_as_null=True), default=dict

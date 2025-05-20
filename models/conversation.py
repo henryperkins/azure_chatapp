@@ -63,14 +63,22 @@ class Conversation(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         TIMESTAMP(timezone=False), nullable=True, index=True
     )
+    # New per-conversation model config (canonical snapshot)
+    model_config: Mapped[dict] = mapped_column(
+        JSONB(none_as_null=True), default=dict, nullable=False, comment="Per-conversation model configuration"
+    )
+    # Track current context token usage (rolling total)
+    context_token_usage: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, comment="Current total of tokens in context window"
+    )
     extra_data: Mapped[Optional[dict]] = mapped_column(
         JSONB(none_as_null=True), default=dict
     )
     knowledge_base_id: Mapped[Optional[UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("knowledge_bases.id"), nullable=True
     )
-    use_knowledge_base: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
+    kb_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, comment="Enable knowledge base RAG for this conversation"
     )
     search_results: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True))
 
@@ -132,7 +140,7 @@ class Conversation(Base):
                     f"upload files to enable knowledge base for project {self.project_id}"
                 )
 
-    @validates("use_knowledge_base")
+    @validates("kb_enabled")
     def validate_kb_flag(self, _, value):
         """Validate knowledge base flag is consistent with project association"""
         if value and not self.project_id:

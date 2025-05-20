@@ -15,6 +15,7 @@ from typing import Union, Any, Optional, BinaryIO, List, Tuple
 from utils.file_validation import FileValidator
 import mimetypes
 import chardet
+from utils.tokens import count_tokens_text
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +51,9 @@ except ImportError:
             "Install with 'pip install pypdf' to enable PDF file support."
         )
 
-# Try to import tiktoken
-TIKTOKEN_AVAILABLE = False
-tiktoken = None
-try:
-    import tiktoken
-
-    TIKTOKEN_AVAILABLE = True
-except ImportError:
-    logger.warning(
-        "Token counting will be approximate: tiktoken not installed. "
-        "Install with 'pip install tiktoken' for accurate token counts."
-    )
-
 
 class TextExtractionError(Exception):
     """Exception raised for errors during text extraction."""
-
 
 class TextExtractor:
     """
@@ -82,10 +69,6 @@ class TextExtractor:
         if not DOCX_AVAILABLE:
             logger.warning(
                 "DOCX extraction features limited: python-docx not installed. Install with 'pip install python-docx'"
-            )
-        if not TIKTOKEN_AVAILABLE:
-            logger.warning(
-                "Token counting will be approximate: tiktoken not installed. Install with 'pip install tiktoken'"
             )
 
     def get_file_info(self, filename: str) -> dict[str, Any]:
@@ -104,20 +87,6 @@ class TextExtractor:
             "category": file_info["category"],
             "extension": file_info["extension"],
         }
-
-    def _count_tokens(self, text: str) -> int:
-        """Counts tokens using tiktoken if available, otherwise estimates."""
-        if TIKTOKEN_AVAILABLE and tiktoken is not None:
-            try:
-                encoding = tiktoken.get_encoding("cl100k_base")
-                return len(encoding.encode(text))
-            except Exception as e:
-                logger.error(
-                    f"tiktoken encoding error: {e}. Falling back to character estimate."
-                )
-                return len(text) // 4  # Fallback to char estimation
-        else:
-            return len(text) // 4  # Char estimation
 
     def _create_chunks(
         self, text: str, chunk_size: int = 1000, overlap: int = 200
@@ -368,7 +337,7 @@ class TextExtractor:
         # Count lines and words for metadata
         line_count = text.count("\n") + 1
         word_count = len(re.findall(r"\b\w+\b", text))
-        token_count = self._count_tokens(text)  # Use the token counter
+        token_count = count_tokens_text(text)
 
         metadata = {
             **file_info,
@@ -425,7 +394,7 @@ class TextExtractor:
             # Cleanup any excessive whitespace
             text = re.sub(r"\s+", " ", text).strip()
 
-            token_count = self._count_tokens(text)  # Use the token counter
+            token_count = count_tokens_text(text)  # Use the token counter
 
             metadata = {
                 **file_info,
@@ -476,7 +445,7 @@ class TextExtractor:
             paragraphs = [p.text for p in doc.paragraphs]
             text = "\n".join(paragraphs)
 
-            token_count = self._count_tokens(text)  # Use the token counter
+            token_count = count_tokens_text(text)  # Use the token counter
 
             metadata = {
                 **file_info,
@@ -537,7 +506,7 @@ class TextExtractor:
             else:
                 formatted_text = text
 
-            token_count = self._count_tokens(formatted_text)  # Use the token counter
+            token_count = count_tokens_text(formatted_text)  # Use the canonical token counter
 
             metadata = {
                 **file_info,
@@ -553,7 +522,7 @@ class TextExtractor:
         except json.JSONDecodeError:
             # If JSON parsing fails, just return the text
 
-            token_count = self._count_tokens(text)  # Token count on raw text
+            token_count = count_tokens_text(text)  # Token count on raw text
             return text, {
                 **file_info,
                 "parsing_error": "Invalid JSON",
@@ -586,7 +555,7 @@ class TextExtractor:
             rows = list(csv_reader)
 
             if not rows:
-                token_count = self._count_tokens(text)  # Use the token counter
+                token_count = count_tokens_text(text)  # Use the token counter
                 return text, {
                     **file_info,
                     "char_count": len(text),
@@ -599,7 +568,7 @@ class TextExtractor:
             # Format as text with headers and sample data
             formatted_text = text
 
-            token_count = self._count_tokens(formatted_text)  # Use the token counter
+            token_count = count_tokens_text(formatted_text)  # Use the token counter
 
             metadata = {
                 **file_info,
@@ -618,7 +587,7 @@ class TextExtractor:
                 text = content.decode("utf-8", errors="replace")
             except Exception:
                 text = str(content)
-            token_count = self._count_tokens(text)  # Use the token counter
+            token_count = count_tokens_text(text)  # Use the token counter
 
             return text, {
                 **file_info,
@@ -646,7 +615,7 @@ class TextExtractor:
             ext = file_info.get("extension", "")
 
             # Basic code structure analysis
-            token_count = self._count_tokens(text)  # Use the token counter
+            token_count = count_tokens_text(text)  # Use the token counter
 
             metadata = {
                 **file_info,
@@ -737,7 +706,7 @@ class TextExtractor:
             except Exception:
                 text = str(content)
 
-            token_count = self._count_tokens(text)  # Token count
+            token_count = count_tokens_text(text)  # Token count
 
             return text, {
                 **file_info,

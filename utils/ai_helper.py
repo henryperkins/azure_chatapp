@@ -9,19 +9,50 @@ knowledge retrieval, and token estimation.
 """
 
 import logging
-from typing import Any
-from uuid import UUID
-import tiktoken  # Import tiktoken globally as it's used conditionally
 
-# SQLAlchemy related imports
+from typing import Any, List, Optional, Union
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
-
-# Project-specific imports (ensure these paths are correct in your project structure)
 from config import settings, Settings
 from models.conversation import Conversation
-from services.knowledgebase_service import search_project_context
-from utils.context import estimate_token_count  # Used in augment_with_knowledge
+from utils.model_registry import (
+    get_model_config as _central_get_model_config,
+    validate_model_and_params as _central_validate,
+)
+from utils.tokens import count_tokens_messages, count_tokens_text  # Canonical token counters
+
+# Forward-compat shim – most helpers now live in *utils.model_registry* and
+# *utils.tokens*.  We re-export them here so existing imports keep working.
+
+# Central wrappers -----------------------------------------------------------
+
+def get_model_config(model_name: str, config: Settings = settings):  # type: ignore[override]
+    return _central_get_model_config(model_name, config)
+
+validate_model_and_params = _central_validate  # alias for callers
+
+# --- Backward compatibility: token counting wrapper ---
+
+async def calculate_tokens(
+    content: Union[str, List[dict[str, Any]]],
+    model_id: Optional[str] = None,
+) -> int:
+    """
+    Back-compat token estimator.
+
+    Accepts either raw text or a list of message dicts and forwards to
+    utils.tokens helpers.
+    """
+    if isinstance(content, list):
+        return count_tokens_messages(content, model_id=model_id)
+    return count_tokens_text(str(content), model_id=model_id)
+
+
+# tiktoken is optional; utils.tokens handles absence gracefully.
+# Remove this unused import if nothing in this file calls tiktoken directly.
+# import tiktoken  # type: ignore  # noqa: F401 – retained for callers that import directly
 
 # from utils.openai import count_claude_tokens # Keep if you implement specific Claude counting
 
@@ -38,138 +69,7 @@ logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
-# --- Core Functions ---
-
-
-def get_model_config(
-    model_name: str, config: Settings = settings
-) -> dict[str, Any] | None:
-    """
-    Retrieve model configuration (provider, specific settings) from application settings.
-
-    Args:
-        model_name: The identifier string for the model.
-        config: The application settings object (defaults to imported settings).
-
-    Returns:
-        A dictionary containing the model's configuration, or None if not found.
-    """
-    # Normalize model name to handle case sensitivity and extra whitespace
-    normalized_name = model_name.strip()
-    all_azure_models = config.AZURE_OPENAI_MODELS
-    all_claude_models = config.CLAUDE_MODELS
-
-    # Expand Azure aliases for reliable matching (e.g. "gpt-4.1" might be input as "gpt-4-1")
-    alias_map = {
-        "gpt-4.1": "gpt-4.1",
-        "gpt-4.1-mini": "gpt-4.1-mini",
-        "gpt-4-1": "gpt-4.1",
-        "gpt-4-1-mini": "gpt-4.1-mini",
-        # Backwards compatible aliasing - extend as needed
-    }
-    alias = alias_map.get(normalized_name.lower(), normalized_name)
-
-    # Check for direct match first
-    if alias in all_azure_models:
-        logger.debug(f"Found Azure OpenAI model config for: {alias}")
-        return all_azure_models[alias]
-    if alias in all_claude_models:
-        logger.debug(f"Found Claude model config for: {alias}")
-        return all_claude_models[alias]
-
-    # Lowercase fallback for all Azure/Claude models
-    for name, m in all_azure_models.items():
-        if name.lower() == alias.lower():
-            logger.debug(f"Found Azure OpenAI model config (case-insensitive) for: {alias} -> {name}")
-            return m
-    for name, m in all_claude_models.items():
-        if name.lower() == alias.lower():
-            logger.debug(f"Found Claude model config (case-insensitive) for: {alias} -> {name}")
-            return m
-
-    logger.warning(f"No configuration found for model: {normalized_name}")
-    return None
-
-
-async def calculate_tokens(
-    content: str,
-    model_id: str,
-    # db: Optional[AsyncSession] = None, # db parameter seems unused, consider removing if not needed
-) -> int:
-    """
-    Calculate token usage for a given content string and model.
-
-    Uses provider-specific methods (like tiktoken for Azure/OpenAI) if available,
-    otherwise falls back to a general estimate.
-
-    Args:
-        content: The text content for which to calculate tokens.
-        model_id: The identifier string for the model.
-        # db: The database session (currently unused).
-
-    Returns:
-        The estimated or calculated number of tokens.
-    """
-    model_config = get_model_config(model_id)  # Uses default settings
-    if not model_config:
-        logger.warning(
-            f"Unknown model '{model_id}' for token calculation. Using estimate."
-        )
-        # Basic estimate: average 4 chars per token
-        return (len(content) + 3) // 4
-
-    provider = model_config.get("provider")
-    token_count = -1  # Default to -1 to indicate failure before estimate
-
-    try:
-        if provider == "anthropic":
-            # TODO: Integrate count_claude_tokens if available and accurate
-            # from utils.openai import count_claude_tokens
-            # try:
-            #     token_count = count_claude_tokens(content)
-            #     logger.debug(f"Used Claude specific counter for model {model_id}")
-            # except ImportError:
-            #      logger.warning("count_claude_tokens not available.")
-            # except Exception as claude_err:
-            #      logger.warning(f"Claude token counting failed: {claude_err}")
-            pass  # Fall through to estimate if specific counter fails or isn't used
-
-        elif provider == "azure":
-            try:
-                # Common encoding for recent OpenAI/Azure models
-                encoding = tiktoken.get_encoding("cl100k_base")
-                token_count = len(encoding.encode(content))
-                logger.debug(f"Used tiktoken (cl100k_base) for model {model_id}")
-            except Exception as tiktoken_error:
-                logger.warning(
-                    f"Tiktoken encoding failed for model {model_id}: {tiktoken_error}. "
-                    "Falling back to estimate."
-                )
-                # Fall through to estimate
-
-        else:
-            logger.warning(
-                f"Token calculation not implemented for provider '{provider}'. "
-                "Using estimate."
-            )
-            # Fall through to estimate
-
-    except Exception as e:
-        logger.error(
-            f"Unexpected error during token calculation for model {model_id}: {e}",
-            exc_info=True,
-        )
-        # Fall through to estimate
-
-    # Fallback estimate if specific calculation failed or wasn't applicable
-    if token_count == -1:
-        token_count = (len(content) + 3) // 4
-        logger.debug(
-            f"Using estimate ({token_count} tokens) for model {model_id}, provider {provider}."
-        )
-
-    return token_count
-
+# --- Core Functions (legacy implementations kept for backward compatibility) ---
 
 async def retrieve_knowledge_context(
     query: str,
@@ -195,6 +95,8 @@ async def retrieve_knowledge_context(
         A formatted string containing the relevant context and sources,
         or None if no suitable context is found or an error occurs.
     """
+    from services.knowledgebase_service import search_project_context  # noqa: E402
+
     if not all([query, project_id, db]):
         logger.warning("retrieve_knowledge_context called with missing arguments.")
         return None
@@ -302,6 +204,7 @@ async def augment_with_knowledge(
     db: AsyncSession,
     max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS,
     model_config_override: dict[str, Any] | None = None,  # Allow passing specific model config
+    results_limit: int = 5,
 ) -> list[dict[str, Any]]:
     """
     Augments a conversation prompt by retrieving and formatting relevant knowledge.
@@ -363,9 +266,13 @@ async def augment_with_knowledge(
 
         # --- Search Knowledge Base ---
         logger.debug(f"Searching knowledge base for project {project.id}...")
+
+        # Import here to fix Flake8/Pylint E402 outside-toplevel import error.
+        from services.knowledgebase_service import search_project_context  # noqa: E402
+
         try:
             search_results_data = await search_project_context(
-                project_id=project.id,  # Use the UUID directly from the project object
+                project_id=project.id,
                 query=user_message,
                 db=db,
                 top_k=DEFAULT_KB_SEARCH_TOP_K,
@@ -405,9 +312,9 @@ async def augment_with_knowledge(
             results_list,
             key=lambda x: x.get("score", 0.0) if isinstance(x, dict) else 0.0,
             reverse=True,
-        )
+        )[:results_limit]
 
-        for result in sorted_results:
+        for idx, result in enumerate(sorted_results):
             # Stop if token budget is exceeded
             if total_tokens >= max_context_tokens:
                 logger.info(
@@ -449,7 +356,7 @@ async def augment_with_knowledge(
             try:
                 # Using estimate_token_count from utils.context as per original snippet
                 # Consider switching to calculate_tokens defined above for consistency if appropriate
-                result_tokens = estimate_token_count(
+                result_tokens = count_tokens_messages(
                     [{"role": "system", "content": text}]
                 )
                 # result_tokens = await calculate_tokens(text, model_id="<relevant_model_id>") # Alternative
@@ -467,44 +374,37 @@ async def augment_with_knowledge(
                 continue
 
             # --- Format the context message ---
-            context_msg_metadata = {
+            file_meta = {
                 "kb_context": True,
                 "source": source,
-                "file_id": str(file_id) if file_id else None,  # Ensure string or None
+                "file_id": str(file_id) if file_id else None,
                 "score": float(score),
                 "tokens": result_tokens,
-                "chunk_index": metadata.get("chunk_index"),  # Include if available
-                # Placeholder fields for potential downstream processing
+                "chunk_index": metadata.get("chunk_index"),
                 "thinking_validated": False,
                 "redacted_thinking": None,
             }
-
             # Handle extended thinking budget validation if enabled via model config
             current_model_config = model_config_override or get_model_config(
                 project.default_model
-            )  # Example: use project default model
+            )
             if current_model_config and current_model_config.get("extended_thinking"):
                 if result_tokens < MIN_EXTENDED_THINKING_TOKENS:
                     logger.warning(
                         f"Context chunk from '{source}' has insufficient tokens ({result_tokens}) "
                         f"for extended thinking (min {MIN_EXTENDED_THINKING_TOKENS})."
                     )
-                    # Decide: skip chunk, or include without extended thinking flags?
-                    # Option: Include without flags
-                    pass
                 else:
                     logger.debug(
                         f"Adding extended thinking metadata for chunk from '{source}'."
                     )
-                    context_msg_metadata["thinking_budget"] = result_tokens
-                    context_msg_metadata["requires_signature_verification"] = (
-                        True  # Placeholder
-                    )
+                    file_meta["thinking_budget"] = result_tokens
+                    file_meta["requires_signature_verification"] = True
 
             context_msg = {
                 "role": "system",
                 "content": f"Relevant context from {source} (Score: {score:.2f}):\n{text}",
-                "metadata": context_msg_metadata,
+                "metadata": {"citation": f"[{idx}]", **file_meta},
             }
 
             context_messages.append(context_msg)

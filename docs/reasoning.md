@@ -61,24 +61,30 @@ These models [don't currently support the same set of parameters](#api--feature-
 - [Python (key-based auth)](#tabpanel_1_python)
 - [C#](#tabpanel_1_csharp)
 
-You might need to upgrade your version of the OpenAI Python library to take advantage of the new parameters like `max_completion_tokens`.
+You'll need to upgrade your OpenAI client library for access to the latest parameters.
 
-```bash
+```
 pip install openai --upgrade
 ```
 
-```python
+If you're new to using Microsoft Entra ID for authentication see [How to configure Azure OpenAI in Azure AI Foundry Models with Microsoft Entra ID authentication](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity).
 
+```
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
+token_provider = get_bearer_token_provider(
+    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+)
 
 client = AzureOpenAI(
   azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"),
-  api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+  azure_ad_token_provider=token_provider,
   api_version="2025-03-01-preview"
 )
 
 response = client.chat.completions.create(
-    model="o1-new", # replace with the model deployment name of your o1 deployment.
+    model="o1-new", # replace with the model deployment name of your o1-preview, or o1-mini model
     messages=[
         {"role": "user", "content": "What steps should I think about when writing my first Python API?"},
     ],
@@ -91,7 +97,7 @@ print(response.model_dump_json(indent=2))
 
 **Python Output:**
 
-```json
+```
 {
   "id": "chatcmpl-AEj7pKFoiTqDPHuxOcirA9KIvf3yz",
   "choices": [
@@ -201,30 +207,37 @@ Adding a developer message to the previous code example would look as follows:
 - [Python (key-based auth)](#tabpanel_2_python)
 - [C#](#tabpanel_2_csharp)
 
-You might need to upgrade your version of the OpenAI Python library to take advantage of the new parameters like `max_completion_tokens`.
+You'll need to upgrade your OpenAI client library for access to the latest parameters.
 
-```bash
+```
 pip install openai --upgrade
 ```
 
-```python
+If you're new to using Microsoft Entra ID for authentication see [How to configure Azure OpenAI with Microsoft Entra ID authentication](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity).
 
+```
 from openai import AzureOpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+
+token_provider = get_bearer_token_provider(
+    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+)
 
 client = AzureOpenAI(
   azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT"),
-  api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+  azure_ad_token_provider=token_provider,
   api_version="2025-03-01-preview"
 )
 
 response = client.chat.completions.create(
-    model="o1-new", # replace with the model deployment name of your o1 deployment.
+    model="o1-new", # replace with the model deployment name of your o1-preview, or o1-mini model
     messages=[
         {"role": "developer","content": "You are a helpful assistant."}, # optional equivalent to a system message for reasoning models
         {"role": "user", "content": "What steps should I think about when writing my first Python API?"},
     ],
     max_completion_tokens = 5000,
     reasoning_effort = "medium" # low, medium, or high
+
 )
 
 print(response.model_dump_json(indent=2))
@@ -243,11 +256,11 @@ Even when enabled, reasoning summaries are not generated for every step/request.
 
 You'll need to upgrade your OpenAI client library for access to the latest parameters.
 
-```bash
+```
 pip install openai --upgrade
 ```
 
-```python
+```
 from openai import AzureOpenAI
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
@@ -273,7 +286,7 @@ response = client.responses.create(
 print(response.model_dump_json(indent=2))
 ```
 
-```json
+```
 {
   "id": "resp_68007e26b2cc8190b83361014f3a78c50ae9b88522c3ad24",
   "created_at": 1744862758.0,
@@ -353,6 +366,7 @@ print(response.model_dump_json(indent=2))
 By default the `o3-mini` and `o1` models will not attempt to produce output that includes markdown formatting. A common use case where this behavior is undesirable is when you want the model to output code contained within a markdown code block. When the model generates output without markdown formatting you lose features like syntax highlighting, and copyable code blocks in interactive playground experiences. To override this new default behavior and encourage markdown inclusion in model responses, add the string `Formatting re-enabled` to the beginning of your developer message.
 
 Adding `Formatting re-enabled` to the beginning of your developer message does not guarantee that the model will include markdown formatting in its response, it only increases the likelihood. We have found from internal testing that `Formatting re-enabled` is less effective by itself with the `o1` model than with `o3-mini`.
+
 To improve the performance of `Formatting re-enabled` you can further augment the beginning of the developer message which will often result in the desired output. Rather than just adding `Formatting re-enabled` to the beginning of your developer message, you can experiment with adding a more descriptive initial instruction like one of the examples below:
 
 - `Formatting re-enabled - please enclose code blocks with appropriate markdown tags.`

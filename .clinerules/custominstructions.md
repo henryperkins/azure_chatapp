@@ -2,6 +2,9 @@
 
 Apply these guardrails whenever you (the LLM) generate, refactor, or review **JavaScript/TypeScript frontend code** in this repository. Enforce them strictly; flag any violation and propose a compliant fix.
 
+## **MOST IMPORTANT RULE:**
+## DO NOT UNDER ANY CIRCUMSTANCES, CREATE A NEW MODULE FOR ANY FUCKING REASON
+
 1. **Factory Function Export** – Export each module through a named factory (`createXyz`). Validate all dependencies at the top and expose a cleanup API. _No top‑level logic._
 2. **Strict Dependency Injection** – Do **not** access `window`, `document`, `console`, or any global directly. Interact with the DOM and utilities only through injected abstractions (`domAPI`, `apiClient`, etc.).
 3. **Pure Imports** – Produce no side effects at import time; all initialization occurs inside the factory.

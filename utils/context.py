@@ -13,8 +13,11 @@ and response_utils.py.
 """
 
 import logging
-import tiktoken
-from typing import List, Optional, Any, Union, AsyncGenerator, cast
+# NOTE: utils.context keeps legacy helpers; new code should prefer utils.tokens
+from typing import List, Any, Union, AsyncGenerator, cast
+
+# Unified token helpers
+from utils.tokens import count_tokens_messages
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
@@ -22,9 +25,6 @@ from utils.openai import openai_chat
 
 
 logger = logging.getLogger(__name__)
-
-# Flag for tiktoken availability
-TIKTOKEN_AVAILABLE = True
 
 # Recommended token threshold for summarization
 CONVERSATION_TOKEN_LIMIT = 3000
@@ -105,56 +105,25 @@ class ContextTokenTracker:
         self.used_tokens += tokens
 
 
-async def manage_context(
-    messages: List[dict[str, str]],
-    user_message: Optional[str] = None,
-    search_results: Optional[dict[str, Any]] = None,
-    max_tokens: Optional[int] = None,
-) -> List[dict[str, str]]:
+async def trim_context_to_window(
+    msgs: list[dict],
+    model_id: str,
+    max_ctx: int,
+) -> tuple[list[dict], int]:
     """
-    Ensures conversation messages do not exceed a token threshold by summarizing earlier segments.
-    This modifies the conversation in-place by replacing older messages with a single summary if needed.
-
-    :param messages: List of messages in chronological order.
-    :return: Potentially reduced list of messages, with older parts summarized if necessary.
+    Trims a list of message dicts so the total token count (by model) does not exceed max_ctx.
+    Returns (trimmed_msgs, removed_tokens): dropped oldest messages as needed.
     """
-    total_tokens = estimate_token_count(messages)
-    if total_tokens <= CONVERSATION_TOKEN_LIMIT:
-        return messages
+    total_tokens = count_tokens_messages(msgs, model_id)
+    if total_tokens <= max_ctx:
+        return msgs, 0
 
-    half_idx = len(messages) // 2
-    partial_msgs = messages[:half_idx]
-
-    # Summarize them using async summarization
-    summary_text = await do_summarization(partial_msgs, model_name="o1")
-
-    summary_system_msg = {
-        "role": "system",
-        "content": f"[Conversation so far summarized]: {summary_text}",
-    }
-
-    remainder = messages[half_idx:]
-    new_conversation = [summary_system_msg] + remainder
-    logger.info("Conversation was too large; older messages summarized.")
-    # Store which chunks were used in the first new message
-    if len(remainder) > 0 and remainder[0]["role"] == "user":
-        # Type the message dictionary directly
-        msg: dict[str, Any] = remainder[0]
-        # Ensure search_results exists and has results
-        chunk_ids = []
-        if search_results and search_results.get("results"):
-            chunk_ids = [
-                str(r["id"]) for r in search_results["results"] if r and "id" in r
-            ]
-
-        msg["context_used"] = {
-            "query": user_message,
-            "chunk_ids": chunk_ids,
-            "token_count": total_tokens,
-            "summary": summary_text,
-        }
-
-    return new_conversation
+    trimmed = list(msgs)  # preserve input
+    removed_tokens = 0
+    while trimmed and count_tokens_messages(trimmed, model_id) > max_ctx:
+        msg = trimmed.pop(0)
+        removed_tokens += count_tokens_messages([msg], model_id)
+    return trimmed, removed_tokens
 
 
 async def token_limit_check(chat_id: str, db: AsyncSession):
@@ -177,12 +146,11 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
     rows = result.mappings().all()
     messages = [{"role": r["role"], "content": r["content"]} for r in rows]
 
-    total_tokens = estimate_token_count(messages)
+    total_tokens = count_tokens_messages(messages)
     if total_tokens and total_tokens > CONVERSATION_TOKEN_LIMIT:
-        await manage_context(messages)
-        # Replace older messages in DB or handle them as needed
+        # Context trimming (summarization) moved to trim_context_to_window; implement as needed in downstream code.
         logger.info(
-            f"Summarization triggered for chat_id={chat_id}, tokens={total_tokens}"
+            f"Context tokens {total_tokens} exceed limit for chat_id={chat_id}, but no legacy summarization performed."
         )
     else:
         logger.debug(
@@ -190,42 +158,7 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
         )
 
 
-def estimate_token_count(
-    messages: List[dict[str, str]], model: str = "claude-3-sonnet-20240229"
-) -> int:
-    """
-    Count tokens using available methods with proper fallback handling.
-
-    Args:
-        messages: List of message dicts with role/content
-        model: Model name (for future model-specific handling)
-
-    Returns:
-        Token count estimate
-    """
-    # First try tiktoken if available
-    if TIKTOKEN_AVAILABLE:
-        try:
-            encoding = tiktoken.get_encoding("cl100k_base")
-            return sum(len(encoding.encode(msg.get("content", ""))) for msg in messages)
-        except Exception as e:
-            logger.debug(f"tiktoken failed: {str(e)}")
-
-    # Fallback to rough estimate (4 chars ≈ 1 token)
-    total = 0
-    for msg in messages:
-        content = msg.get("content", "")
-        # Add message content tokens
-        total += len(content) // 4
-        # Add metadata tokens if present
-        if "metadata" in msg and isinstance(msg["metadata"], dict):
-            total += len(str(msg["metadata"])) // 8  # Rough estimate for metadata
-
-    return total
-
-
-async def estimate_tokens(text: str, model: str = "claude-3-sonnet-20240229") -> int:
-    """Simplified version for single text strings"""
-    if not text:
-        return 0
-    return estimate_token_count([{"role": "user", "content": text}], model)
+# NOTE: The following token calculation functions were removed by refactor:
+#   - estimate_token_count
+#   - estimate_tokens
+# Refactor all code to use count_tokens_messages or count_tokens_text from utils.tokens directly.
