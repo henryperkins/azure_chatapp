@@ -288,6 +288,7 @@ export function createSidebar({
         await authModule.login(username, password);
       }
     } catch (err) {
+      logger.error('[Sidebar][authSubmit]', err && err.stack ? err.stack : err, { context: 'Sidebar' });
       domAPI.setTextContent(
         sidebarAuthErrorEl,
         err?.message || (isRegisterMode ? 'Registration failed.' : 'Login failed.')
@@ -540,6 +541,7 @@ export function createSidebar({
         uiRenderer.renderProjects(projectManager.projects);
       }
     } catch (err) {
+      logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar' });
       // intentionally ignored: failed project dashboard init. Safe to proceed as fallback.
     }
   }
@@ -624,6 +626,7 @@ export function createSidebar({
   }
 
   function createBackdrop() {
+    if (!domReadinessService) return;  // DI-safety
     if (!domReadinessService?.documentReady) return;
     if (backdrop) return;
     if (viewportAPI.getInnerWidth() >= 1024) {
@@ -886,7 +889,7 @@ export function createSidebar({
           detail: { authenticated: authMod?.isAuthenticated?.() }
         });
       } catch (syncErr) {
-        logger.warn('[Sidebar] Auth state sync failed during init', syncErr, { context: 'Sidebar' });
+        logger.error('[Sidebar] Auth state sync failed during init', syncErr && syncErr.stack ? syncErr.stack : syncErr, { context: 'Sidebar' });
       }
 
       // Validate doc can dispatch events
