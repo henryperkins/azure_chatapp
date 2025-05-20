@@ -16,12 +16,14 @@ from sqlalchemy.orm import joinedload, aliased
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.exc import IntegrityError
 
+# Central model helpers
+from utils.model_registry import validate_model_and_params
 from config import settings
 from db import get_async_session
 from models.conversation import Conversation
 from models.message import Message
 from models.project import Project
-from utils.ai_response import generate_ai_response, get_model_config
+from utils.ai_response import generate_ai_response
 from utils.db_utils import get_all_by_condition, save_model
 from utils.serializers import serialize_conversation, serialize_message
 
@@ -38,62 +40,7 @@ class ConversationError(Exception):
         super().__init__(message)
 
 
-def validate_model_and_params(model_id: str, params: dict[str, Any]) -> None:
-    """
-    Validate if the model exists in config and if provided params are supported.
-    Raises ConversationError on failure.
-    """
-    model_config = get_model_config(model_id, settings)
-    if not model_config:
-        raise ConversationError(
-            f"Unsupported or unknown model ID: {model_id}", status_code=400
-        )
-
-    capabilities = model_config.get("capabilities", [])
-    parameters_config = model_config.get("parameters", {})
-
-    # Validate Vision parameters
-    if params.get("image_data"):
-        if "vision" not in capabilities:
-            raise ConversationError(f"Model {model_id} does not support vision.", 400)
-        vision_detail = params.get("vision_detail", "auto")
-        valid_details = parameters_config.get("vision_detail")
-        if valid_details and vision_detail not in valid_details:
-            raise ConversationError(
-                f"Invalid vision_detail '{vision_detail}' for {model_id}. Valid: {valid_details}",
-                400,
-            )
-
-    # Validate Reasoning Effort
-    if params.get("reasoning_effort"):
-        if "reasoning_effort" not in capabilities:
-            raise ConversationError(
-                f"Model {model_id} does not support reasoning_effort.", 400
-            )
-        reasoning_effort = params.get("reasoning_effort")
-        valid_efforts = parameters_config.get("reasoning_effort")
-        if valid_efforts and reasoning_effort not in valid_efforts:
-            raise ConversationError(
-                f"Invalid reasoning_effort '{reasoning_effort}' for {model_id}. Valid: {valid_efforts}",
-                400,
-            )
-
-    # Validate Extended Thinking (Claude)
-    if params.get("enable_thinking"):
-        if "extended_thinking" not in capabilities:
-            raise ConversationError(
-                f"Model {model_id} does not support extended thinking.", 400
-            )
-        thinking_budget = params.get("thinking_budget")
-        extended_thinking_config = model_config.get("extended_thinking_config")
-        if thinking_budget and extended_thinking_config:
-            min_budget = extended_thinking_config.get("min_budget", 0)
-            if thinking_budget < min_budget:
-                raise ConversationError(
-                    f"Thinking budget ({thinking_budget}) is below minimum ({min_budget}) for {model_id}.",
-                    400,
-                )
-    # Additional validations (temperature, max_tokens, etc.) can be added here.
+# NOTE: conversation_service now relies on utils.model_registry.validate_model_and_params.
 
 
 class ConversationService:
@@ -183,39 +130,26 @@ class ConversationService:
         title: str,
         model_id: str,
         project_id: UUID,
-        knowledge_base_id: Optional[UUID] = None,
-        use_knowledge_base: bool = False,
-        ai_settings: Optional[dict[str, Any]] = None,
+        model_config: dict | None = None,
+        kb_enabled: bool = False,
     ) -> Conversation:
-        """Create new conversation with validation and optional AI settings."""
+        """Create new conversation with validation and new Conversation columns."""
         project_id = self._require_project_id(project_id)
         try:
-            validate_model_and_params(model_id, ai_settings or {})
-        except ConversationError as e:
+            validate_model_and_params(model_id, model_config or {})
+        except (ConversationError, ValueError) as e:
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
-        # Validate project access and KB consistency if project_id is provided
-        project = await self._validate_project_access(project_id, user_id)
-        if use_knowledge_base:
-            await self.db.refresh(project, ['knowledge_base'])
-            if not project.knowledge_base:
-                raise ConversationError("Project has no knowledge base, cannot set use_knowledge_base=True.", 400)
-            if knowledge_base_id != project.knowledge_base.id:
-                # This should ideally be caught by the route, but as a safeguard:
-                logger.error(f"KnowledgeBase ID mismatch for project {project_id}. "
-                             f"Passed: {knowledge_base_id}, Project's KB: {project.knowledge_base.id}")
-                raise ConversationError("Knowledge base ID mismatch for the specified project.", 400)
-        elif knowledge_base_id is not None:
-            raise ConversationError("knowledge_base_id should not be provided if use_knowledge_base is False for a project.", 400)
+        # Validate project access
+        await self._validate_project_access(project_id, user_id)
 
         conv = Conversation(
             user_id=user_id,
             title=title.strip(),
             model_id=model_id,
             project_id=project_id,
-            knowledge_base_id=knowledge_base_id,
-            use_knowledge_base=use_knowledge_base,
-            extra_data={"ai_settings": ai_settings} if ai_settings else None,
+            model_config=model_config or {},
+            kb_enabled=kb_enabled,
         )
 
         try:
@@ -281,10 +215,10 @@ class ConversationService:
         project_id: Optional[UUID] = None,
         title: Optional[str] = None,
         model_id: Optional[str] = None,
-        use_knowledge_base: Optional[bool] = None,
-        ai_settings: Optional[dict[str, Any]] = None,
+        model_config: Optional[dict] = None,
+        kb_enabled: Optional[bool] = None,
     ) -> dict:
-        """Update conversation attributes."""
+        """Update conversation attributes in new schema."""
         project_id = self._require_project_id(project_id)
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
@@ -296,61 +230,16 @@ class ConversationService:
             updated = True
         if model_id is not None and model_id != conv.model_id:
             try:
-                validate_model_and_params(
-                    model_id,
-                    (
-                        (ai_settings or conv.extra_data.get("ai_settings", {}))
-                        if conv.extra_data
-                        else {}
-                    ),
-                )
+                validate_model_and_params(model_id, model_config or {})
                 conv.model_id = model_id
                 updated = True
-            except ConversationError as e:
+            except (ConversationError, ValueError) as e:
                 raise HTTPException(status_code=e.status_code, detail=e.message) from e
-
-        # Only for project conversations if toggling KB
-        if (
-            use_knowledge_base is not None
-            and conv.use_knowledge_base != use_knowledge_base
-        ):
-            project = await self._validate_project_access(
-                UUID(str(conv.project_id)), user_id
-            )
-            # Access knowledge base through the relationship
-            if project.knowledge_base and not use_knowledge_base:
-                logger.warning(
-                    f"Attempt to disable KB for project conversation {conv.id} is ignored."
-                )
-            elif project.knowledge_base:
-                conv.use_knowledge_base = True
-                conv.knowledge_base_id = project.knowledge_base.id
-                updated = True
-            else:
-                # If project has no KB, we cannot enable it
-                if use_knowledge_base:
-                    raise ConversationError(
-                        "Cannot enable knowledge base: Project has no associated knowledge base.",
-                        400,
-                    )
-
-        if ai_settings is not None:
-            current_model_id = model_id or conv.model_id
-            if not current_model_id:
-                raise ConversationError("Model ID is required", 400)
-            try:
-                validate_model_and_params(str(current_model_id), ai_settings)
-            except ConversationError as e:
-                raise HTTPException(status_code=e.status_code, detail=e.message) from e
-
-            if conv.extra_data is None:
-                conv.extra_data = {}
-            conv.extra_data["ai_settings"] = {
-                **conv.extra_data.get("ai_settings", {}),
-                **ai_settings,
-            }
-
-            flag_modified(conv, "extra_data")
+        if model_config is not None:
+            conv.model_config = model_config
+            updated = True
+        if kb_enabled is not None:
+            conv.kb_enabled = kb_enabled
             updated = True
 
         if updated:
@@ -444,8 +333,11 @@ class ConversationService:
         reasoning_effort: Optional[str] = None,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        enable_web_search: Optional[bool] = False,
     ) -> dict:
         """Create a new message in the conversation and, if role=user, generate AI response."""
+        from services.context_manager import ContextManager
+
         conv = await self._validate_conversation_access(
             conversation_id, user_id, project_id
         )
@@ -463,9 +355,10 @@ class ConversationService:
                     400,
                 )
             try:
-                message_history = await self._get_conversation_context(
-                    conversation_id, include_system_prompt=True
-                )
+                ctx_mgr = ContextManager(self.db, conv.model_id, enable_web_search or False)
+                # History: raw list of message dicts
+                history = await self._get_conversation_context(conversation_id)
+                prompt_msgs, stats = await ctx_mgr.build(conv, content, history)
                 ai_settings = (
                     conv.extra_data.get("ai_settings", {}) if conv.extra_data else {}
                 )
@@ -509,7 +402,6 @@ class ConversationService:
                     "thinking_budget": final_thinking_budget,
                     "reasoning_effort": final_reasoning_effort,
                 }
-                # We can also pass temperature, max_tokens if needed in the config
                 if final_temperature is not None:
                     params_for_validation["temperature"] = final_temperature
                 if final_max_tokens is not None:
@@ -519,7 +411,7 @@ class ConversationService:
 
                 assistant_msg_obj = await generate_ai_response(
                     conversation_id=conversation_id,
-                    messages=message_history,
+                    messages=prompt_msgs,
                     model_id=str(conv.model_id),
                     db=self.db,
                     image_data=image_data,
@@ -536,11 +428,8 @@ class ConversationService:
 
                 if assistant_msg_obj:
                     serialized_assistant_msg = serialize_message(assistant_msg_obj)
-                    # Attach thinking or redacted_thinking if present
                     if hasattr(assistant_msg_obj, "thinking"):
-                        serialized_assistant_msg["thinking"] = (
-                            assistant_msg_obj.thinking
-                        )
+                        serialized_assistant_msg["thinking"] = assistant_msg_obj.thinking
                     if hasattr(assistant_msg_obj, "redacted_thinking"):
                         serialized_assistant_msg["redacted_thinking"] = (
                             assistant_msg_obj.redacted_thinking
@@ -553,6 +442,17 @@ class ConversationService:
                     response["assistant_error"] = {
                         "message": "Failed to generate AI response."
                     }
+
+                # Update conv.context_token_usage after assistant message saved
+                conv.context_token_usage = stats["prompt_tokens"]
+                await save_model(self.db, conv)
+
+                # Attach stats (and truncation warning if any) to API response
+                response["token_stats"] = stats
+                if stats["removed_tokens"] > 0:
+                    response["truncation_warning"] = (
+                        f"Context trimmed by {stats['removed_tokens']} tokens"
+                    )
             except HTTPException as http_exc:
                 logger.error(
                     f"HTTP error during AI generation for conv {conversation_id}: "
@@ -579,7 +479,10 @@ class ConversationService:
         role: str,
         image_data: Optional[Union[str, List[str]]] = None,
     ) -> Message:
-        """Create and save a message, handling image data if present."""
+        """Create and save a message with new columns, handling image data if present."""
+        from utils.message_render import render_markdown_to_html
+        from utils.tokens import count_tokens_text
+
         extra_data = {}
         if image_data:
             images_to_store = []
@@ -609,10 +512,20 @@ class ConversationService:
                 extra_data["image_formats"] = [img["format"] for img in images_to_store]
                 logger.info(f"User message includes {len(images_to_store)} images.")
 
+        # Retrieve the conversation to get model_id for token counting.
+        conv = await self.db.get(Conversation, conversation_id)
+        model_id = conv.model_id if conv else None
+
+        msg_text = content.strip() if content else ""
+        html = render_markdown_to_html(msg_text)
+        token_count = count_tokens_text(msg_text, model_id)
+
         message = Message(
             conversation_id=conversation_id,
-            content=content.strip() if content else "",
+            raw_text=msg_text,
+            formatted_text=html,
             role=role,
+            token_count=token_count,
             extra_data=extra_data if extra_data else None,
         )
         await save_model(self.db, message)
@@ -646,7 +559,7 @@ class ConversationService:
             context.append({"role": "system", "content": system_prompt})
 
         for msg in messages:
-            message_dict = {"role": msg.role, "content": msg.content}
+            message_dict = {"role": msg.role, "content": getattr(msg, "raw_text", None)}
             # Additional logic for images could go here, but currently we only pass text
             context.append(message_dict)
 
