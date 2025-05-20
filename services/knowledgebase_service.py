@@ -528,7 +528,7 @@ async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
 
 
 async def _estimate_file_tokens(
-    contents: bytes, filename: str, file: UploadFile, project: Project
+    contents: bytes, filename: str, _unused_file: UploadFile, _unused_project: Project
 ) -> dict[str, Any]:
     from services.text_extraction import get_text_extractor
 
@@ -555,7 +555,7 @@ async def _estimate_file_tokens(
     return {"token_estimate": tok_count, "metadata": tok_metadata}
 
 
-async def _store_uploaded_file(
+async def __store_uploaded_file(
     storage: Any, content: bytes, project_id: UUID, filename: str
 ) -> str:
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -611,7 +611,7 @@ async def _execute_search(
     vector_db: VectorDB, query: str, filter_metadata: dict[str, Any], top_k: int
 ) -> List[dict[str, Any]]:
     clean_query = (
-        await _expand_query(query) if len(query.split()) > 3 else query.strip()
+        await MetadataHelper.expand_query(query) if len(query.split()) > 3 else query.strip()
     ) or query[:100]
 
     results = await vector_db.search(
@@ -653,19 +653,6 @@ async def _enhance_with_file_info(
     return enhanced
 
 
-async def _expand_query(original_query: str) -> str:
-    try:
-        keywords = set()
-        for word in original_query.lower().split():
-            if len(word) > 3:
-                keywords.add(word)
-                if word in ["how", "what", "why"]:
-                    keywords.update(["method", "process", "reason"])
-                elif word in ["best", "good"]:
-                    keywords.add("effective")
-        return " ".join(keywords) + " " + original_query[:100]
-    except Exception:
-        return original_query[:150]
 
 
 # --- Minimal status export for API route compatibility ---
