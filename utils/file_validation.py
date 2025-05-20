@@ -181,9 +181,6 @@ class FileValidator:
         return file_info
 
 
-def validate_file_size(file_size: int) -> bool:
-    """Validate file size is within limits."""
-    return file_size <= FileValidator.MAX_FILE_SIZE
 
 
 def sanitize_filename(filename: str) -> str:
