@@ -258,3 +258,44 @@ def serialize_vector_result(result: dict[str, Any]) -> dict[str, Any]:
         "metadata": result.get("metadata", {}),
         "file_info": result.get("file_info", {}),
     }
+
+# ------------------------------------------------------------------
+# Generic helper: convert any SQLAlchemy ORM object / collection to
+# plain serialisable Python primitives, skipping MetaData objects.
+# ------------------------------------------------------------------
+from sqlalchemy import MetaData    # ← add import near top if not present
+from datetime import date         # (datetime already imported above)
+from uuid import UUID
+from collections.abc import Mapping, Iterable
+
+def to_serialisable(obj):  # noqa: N802  (keep snake-case for local helper)
+    """Recursively convert ORM instances / collections to JSON-safe data."""
+    # primitives already OK
+    if obj is None or isinstance(obj, (str, int, float, bool)):
+        return obj
+    if isinstance(obj, (datetime, date)):
+        return serialize_datetime(obj)
+    if isinstance(obj, UUID):
+        return serialize_uuid(obj)
+
+    # SQLAlchemy MetaData → drop
+    if isinstance(obj, MetaData):
+        return None
+
+    # list / tuple / set
+    if isinstance(obj, (list, tuple, set)):
+        return [to_serialisable(x) for x in obj]
+
+    # mapping / dict
+    if isinstance(obj, Mapping):
+        return {k: to_serialisable(v) for k, v in obj.items()}
+
+    # SQLAlchemy mapped instance (has __table__)
+    if hasattr(obj, "__table__"):
+        return {
+            col.name: to_serialisable(getattr(obj, col.name))
+            for col in obj.__table__.columns
+        }
+
+    # fallback – best-effort string representation
+    return str(obj)
