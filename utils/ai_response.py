@@ -1,6 +1,7 @@
 import logging
 from typing import Optional, List, Any, Union, AsyncGenerator
 from uuid import UUID
+from dataclasses import dataclass, field
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,26 +16,49 @@ from utils.ai_helper import get_model_config, retrieve_knowledge_context, calcul
 
 logger = logging.getLogger(__name__)
 
+@dataclass(slots=True)
+class AIResponseOptions:
+    image_data: Optional[Union[str, List[str]]] = None
+    vision_detail: str = "auto"
+    enable_thinking: Optional[bool] = None
+    thinking_budget: Optional[int] = None
+    enable_markdown_formatting: bool = False
+    stream: bool = False
+    max_tokens: Optional[int] = None
+    reasoning_effort: Optional[str] = None
+    temperature: Optional[float] = None
+    extra_params: dict[str, Any] = field(default_factory=dict)
+
+    def to_api_dict(self) -> dict[str, Any]:
+        d = {
+            "image_data"               : self.image_data,
+            "vision_detail"            : self.vision_detail,
+            "enable_thinking"          : self.enable_thinking,
+            "thinking_budget"          : self.thinking_budget,
+            "enable_markdown_formatting": self.enable_markdown_formatting,
+            "stream"                   : self.stream,
+            "max_tokens"               : self.max_tokens,
+            "reasoning_effort"         : self.reasoning_effort,
+            "temperature"              : self.temperature,
+            **self.extra_params,
+        }
+        # strip Nones
+        return {k: v for k, v in d.items() if v is not None}
+
 
 async def generate_ai_response(
     conversation_id: UUID,
     messages: List[dict[str, Any]],
     model_id: str,
     db: AsyncSession,
-    image_data: Optional[Union[str, List[str]]] = None,
-    vision_detail: Optional[str] = "auto",
-    enable_thinking: Optional[bool] = None,
-    thinking_budget: Optional[int] = None,
-    enable_markdown_formatting: Optional[bool] = False,
-    stream: bool = False,
-    max_tokens: Optional[int] = None,
-    reasoning_effort: Optional[str] = None,
-    temperature: Optional[float] = None,
-    **kwargs,
+    *,
+    options: AIResponseOptions | None = None,
 ) -> Optional[Message]:
     """
     Generate an AI response for the given conversation, handling model specifics.
     """
+
+    opts = options or AIResponseOptions()
 
     # Validate inputs
     if not db:
@@ -98,48 +122,30 @@ async def generate_ai_response(
             except Exception as e:
                 logger.error(f"Failed to inject knowledge context: {e}")
 
-    # Prepare API parameters with type hints
+    # Prepare API parameters
     api_params: dict[str, Any] = {
-        "messages": final_messages,  # List[dict[str, Any]]
-        "model_name": str(model_id),  # str
-        "stream": stream,  # bool
+        "messages": final_messages,
+        "model_name": str(model_id),
+        **opts.to_api_dict(),
     }
-
-    # Add optional parameters only if they are not None
-    if image_data is not None:
-        api_params["image_data"] = image_data
-    if vision_detail is not None:
-        api_params["vision_detail"] = vision_detail
-    if max_tokens is not None:
-        api_params["max_tokens"] = max_tokens
-    if temperature is not None:
-        api_params["temperature"] = temperature
-
-    # Add any additional parameters
-    api_params.update({k: v for k, v in kwargs.items() if v is not None})
 
     # Adjust parameters based on provider
     capabilities = model_config.get("capabilities", [])
     if provider == "azure":
-        if "markdown_formatting" in capabilities and enable_markdown_formatting:
+        if "markdown_formatting" in capabilities and opts.enable_markdown_formatting:
             api_params["enable_markdown_formatting"] = True
             # Additional checks or adjustments specific to Azure can be added here
 
     elif provider == "anthropic":
         if "extended_thinking" in capabilities:
-            final_enable_thinking = (
-                enable_thinking
-                if enable_thinking is not None
-                else settings.CLAUDE_EXTENDED_THINKING_ENABLED
-            )
-            if final_enable_thinking:
+            if opts.enable_thinking:
                 api_params["enable_thinking"] = True
-                final_thinking_budget = (
-                    thinking_budget
-                    if thinking_budget is not None
-                    else settings.CLAUDE_EXTENDED_THINKING_BUDGET
-                )
-                api_params["thinking_budget"] = final_thinking_budget
+                if opts.thinking_budget is not None:
+                    api_params["thinking_budget"] = opts.thinking_budget
+                else:
+                    api_params["thinking_budget"] = settings.CLAUDE_EXTENDED_THINKING_BUDGET
+
+    stream = opts.stream
 
     # Generate AI response
     try:
