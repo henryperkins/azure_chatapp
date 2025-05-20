@@ -892,36 +892,6 @@ async def process_files_for_project(
     return results
 
 
-async def search_project_context(
-    project_id: UUID, query: str, top_k: int = 5, filters: Optional[dict] = None
-) -> List[dict[str, Any]]:
-    """Project-scoped search with automatic vector DB setup.
-
-    Performs search within a specific project context with automatic vector DB
-    initialization. Applies project filtering by default along with any
-    additional filters specified.
-
-    Args:
-        project_id: UUID of the project to search within
-        query: Search query text
-        top_k: Maximum number of results to return
-        filters: Optional additional metadata filters to apply
-
-    Returns:
-        List of search results with metadata and relevance scores
-    """
-    vector_db = await initialize_project_vector_db(project_id)
-
-    # Always filter by project_id
-    base_filters = {"project_id": str(project_id)}
-
-    # Add any additional filters
-    if filters:
-        base_filters.update(filters)
-
-    return await vector_db.search(
-        query=query, top_k=top_k, filter_metadata=base_filters
-    )
 
 
 async def get_vector_db(
