@@ -754,6 +754,24 @@ class ProjectDetailsComponent {
     this._renderProjectData();
     this._logInfo("Initializing subcomponents", { projectId });
     await this._initSubComponents();
+
+    /* ── Ensure UI-polish module runs (idempotent) ── */
+    try {
+      const pde =
+        this.eventHandlers?.DependencySystem?.modules?.get?.(
+          'projectDetailsEnhancements'
+        );
+      if (pde?.initialize) {
+        // Safe to call multiple times – module early-exits if already done
+        await pde.initialize();
+      }
+    } catch (err) {
+      this._logError(
+        'Failed to invoke projectDetailsEnhancements.initialize',
+        err
+      );
+    }
+
     this._bindEventListeners();
     this._logInfo("Event listeners bound for project details view", { projectId });
 
