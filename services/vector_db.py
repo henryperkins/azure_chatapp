@@ -363,8 +363,7 @@ class VectorDB:
         self,
         query: str,
         top_k: int = 5,
-        filter_metadata: Optional[dict[str, Any]] = None,
-        query_expansion: bool = True,
+        filter_metadata: dict[str, Any] | None = None,
     ) -> List[dict[str, Any]]:
         """Search for documents similar to the query text."""
         if not query:

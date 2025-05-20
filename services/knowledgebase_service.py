@@ -237,9 +237,7 @@ async def upload_file_to_project(
     # Estimate tokens
     token_data = await _estimate_file_tokens(
         contents,
-        file_info["sanitized_filename"],
-        file,
-        project,  # file and project args are kept for signature compatibility but not used
+        file_info["sanitized_filename"]
     )
 
     # Check if token estimation itself returned an error in its metadata
@@ -262,9 +260,9 @@ async def upload_file_to_project(
 
     # Store file
     storage = StorageManager.get()
-    stored_path = await __store_uploaded_file(
-        storage, contents, project_id, file_info["sanitized_filename"]
-    )
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    rel_path  = f"{project_id}/{timestamp}_{file_info['sanitized_filename']}"
+    stored_path = await storage.save_file(contents, rel_path, project_id=project_id)
 
     # Create file record
     project_file = await _create_file_record(
@@ -353,7 +351,7 @@ async def delete_project_file(
 
     # Delete vectors
     if project.knowledge_base:
-        await _delete_file_vectors(project_id, file_id)
+        await _delete_file_vectors(project_id, file_id, db)
 
     # Delete record and update tokens
     token_count = file_record.config.get("token_count", 0) if file_record.config else 0
@@ -528,8 +526,18 @@ async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
 
 
 async def _estimate_file_tokens(
-    contents: bytes, filename: str, _unused_file: UploadFile, _unused_project: Project
+    contents: bytes, filename: str
 ) -> dict[str, Any]:
+    """
+    Estimate the number of tokens in the file contents.
+
+    Args:
+        contents: File contents as bytes
+        filename: Name of the file
+
+    Returns:
+        Dictionary with token estimate and metadata
+    """
     from services.text_extraction import get_text_extractor
 
     text_extractor = get_text_extractor()
@@ -555,13 +563,6 @@ async def _estimate_file_tokens(
     return {"token_estimate": tok_count, "metadata": tok_metadata}
 
 
-async def __store_uploaded_file(
-    storage: Any, content: bytes, project_id: UUID, filename: str
-) -> str:
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    safe_name = filename.replace(" ", "_")
-    rel_path = f"{project_id}/{timestamp}_{safe_name}"
-    return await storage.save_file(content, rel_path, project_id=project_id)
 
 
 async def _create_file_record(
@@ -599,9 +600,9 @@ async def _delete_file_from_storage(storage: Any, file_path: str) -> str:
         return "storage_deletion_failed"
 
 
-async def _delete_file_vectors(project_id: UUID, file_id: UUID) -> None:
+async def _delete_file_vectors(project_id: UUID, file_id: UUID, db: AsyncSession) -> None:
     try:
-        vector_db = await VectorDBManager.get_for_project(project_id)
+        vector_db = await VectorDBManager.get_for_project(project_id, db=db)
         await vector_db.delete_by_filter({"file_id": str(file_id)})
     except Exception as e:
         logger.error(f"Error removing file vectors: {e}")
