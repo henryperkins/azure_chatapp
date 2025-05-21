@@ -265,11 +265,6 @@ def serialize_vector_result(result: dict[str, Any]) -> dict[str, Any]:
 # Generic helper: convert any SQLAlchemy ORM object / collection to
 # plain serialisable Python primitives, skipping MetaData objects.
 # ------------------------------------------------------------------
-from sqlalchemy import MetaData    # ← add import near top if not present
-from datetime import date         # (datetime already imported above)
-from uuid import UUID
-from collections.abc import Mapping, Iterable
-
 def to_serialisable(obj):  # noqa: N802  (keep snake-case for local helper)
     """Recursively convert ORM instances / collections to JSON-safe data."""
     # primitives already OK
