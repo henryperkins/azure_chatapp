@@ -14,6 +14,7 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 from models.knowledge_base import KnowledgeBase
 from models.conversation import Conversation
