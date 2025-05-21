@@ -498,7 +498,22 @@ export function createChatManager(deps = {}) {
           { method: "POST", body: payload, returnFullResponse: true }
         );
 
-        let { data: conversation, headers = {} } = response ?? {};
+        // ------------------------------------------------------------------
+        // Robust response-shape normalisation
+        // ------------------------------------------------------------------
+        const headers = response?.headers || {};
+        let conversation =
+          response?.data?.conversation      // { data:{conversation:{…}} }
+          ?? response?.data                 // { data:{…} }
+          ?? response?.conversation         // { conversation:{…} }
+          ?? response                       // { …direct object… }
+          ?? {};
+
+        // If the object still wraps the actual convo in `conversation` key, unwrap it
+        if (conversation?.conversation && typeof conversation.conversation === 'object') {
+          conversation = conversation.conversation;
+        }
+
         let convId =
           conversation?.id ??
           conversation?.conversation_id ??
