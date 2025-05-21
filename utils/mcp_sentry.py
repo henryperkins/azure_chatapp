@@ -447,15 +447,16 @@ def enable_mcp_integrations() -> bool:
             pass
 
         if not mcp_enabled:
-            logger.info("Sentry MCP integration is DISABLED. Set SENTRY_MCP_SERVER_ENABLED=true to activate MCP features.")
-            logger.info("Sentry MCP integration is DISABLED.")
+            logger.info(
+                "Sentry MCP integration is DISABLED. "
+                "Set SENTRY_MCP_SERVER_ENABLED=true to activate MCP features."
+            )
             return False
 
         # Verify MCP server is accessible by getting its status
         status = get_mcp_status()
         if not status:
             logger.error("Cannot enable MCP integrations: Server not available")
-            logger.error("Sentry MCP integration could NOT START (server unavailable).")
             return False
 
         # Configure the SDK to use the MCP server
@@ -472,8 +473,7 @@ def enable_mcp_integrations() -> bool:
         return True
 
     except Exception as e:
-        logger.error(f"Failed to enable MCP integrations: {e}")
-        logger.error("Sentry MCP integration failed during enablement: %s", e)
+        logger.error("Failed to enable MCP integrations: %s", e)
         return False
 
 
