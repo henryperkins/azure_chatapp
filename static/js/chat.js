@@ -49,6 +49,19 @@ export function createChatManager(deps = {}) {
     APP_CONFIG                // ← NEW (DI)
   } = deps;
 
+  // Dependency-injected global replacements with defaults
+  const {
+    clock = { now: () => performance.now() },
+    urlFactory = (base, search = {}) => {
+      const u = new URL(base, navAPI?.getHref?.() || "/");
+      Object.entries(search).forEach(([k, v]) => u.searchParams.set(k, v));
+      return u;
+    },
+    eventBusFactory = () => new EventTarget(),
+    URLSearchParams = globalThis.URLSearchParams,
+    DateCtor = globalThis.Date,
+  } = deps;
+
   if (!apiRequest) throw new Error('Missing apiRequest in createChatManager');
   if (!app) throw new Error('Missing app in createChatManager');
   if (!isValidProjectId) throw new Error('Missing isValidProjectId in createChatManager');
@@ -69,6 +82,10 @@ export function createChatManager(deps = {}) {
       }
     };
   }
+
+  // --- Live Token Estimation Logic ---
+  // (patch instance after construction, see after ChatManager)
+
 
   function createDefaultDomAPI() {
     throw new Error("[ChatManager] No domAPI provided. All DOM operations must be injected.");
@@ -118,7 +135,10 @@ export function createChatManager(deps = {}) {
       this.isProcessing = true;
       const { task, resolve } = this.queue.shift();
       try {
-        const result = await task();
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000);
+        const result = await task(controller.signal);
+        clearTimeout(timeout);
         resolve(result);
       } finally {
         this.isProcessing = false;
@@ -135,8 +155,7 @@ export function createChatManager(deps = {}) {
     _api(endpoint, opts = {}, ctx = 'chatManager') {
       const { params, ...rest } = opts;
       if (params && typeof params === 'object') {
-        const u = new URL(endpoint, this.navAPI?.getHref?.() || '/');
-        Object.entries(params).forEach(([k, v]) => u.searchParams.set(k, v));
+        const u = urlFactory(endpoint, params);
         endpoint = String(u);
       }
       return this.apiRequest(endpoint, rest, ctx);
@@ -153,7 +172,7 @@ export function createChatManager(deps = {}) {
       this.isValidProjectId = isValidProjectId;
       this.isAuthenticated = isAuthenticated;
       this.DOMPurify = DOMPurify;
-      this.chatBus = new EventTarget();
+      this.chatBus = eventBusFactory();
       this.projectId = null;
       this.currentConversationId = null;
       this.isInitialized = false;
@@ -201,7 +220,7 @@ export function createChatManager(deps = {}) {
      * Initialize the chat manager with optional UI selectors or overrides.
      */
     async initialize(options = {}) {
-      const _initStart = performance.now();
+      const _initStart = clock.now();
       logger.info("[ChatManager][initialize] Starting initialization", { context: "chatManager.initialize", options });
 
       await domReadinessService.dependenciesAndElements({
@@ -348,7 +367,7 @@ export function createChatManager(deps = {}) {
         logger.info("[ChatManager][initialize] Successfully initialized", {
           context: "chatManager.initialize",
           projectId: this.projectId,
-          duration: performance.now() - _initStart
+          duration: clock.now() - _initStart
         });
 
         return true;
@@ -465,7 +484,7 @@ export function createChatManager(deps = {}) {
         const currentUser = this.app?.state?.currentUser || {};
 
         const payload = {
-          title: `New Chat ${new Date().toLocaleString()}`,
+          title: `New Chat ${(new DateCtor()).toLocaleString()}`,
           model_id: cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL
         };
         if (currentUser.id) payload.user_id = currentUser.id;
@@ -523,7 +542,7 @@ export function createChatManager(deps = {}) {
         return;
       }
 
-      return this.messageQueue.add(async () => {
+      return this.messageQueue.add(async (abortSignal) => {
         if (!this.isAuthenticated()) {
           return;
         }
@@ -550,7 +569,7 @@ export function createChatManager(deps = {}) {
         this._showThinkingIndicator();
 
         try {
-          const response = await this._sendMessageToAPI(messageText);
+          const response = await this._sendMessageToAPI(messageText, abortSignal);
           this._processAssistantResponse(response);
           return response.data;
         } catch (error) {
@@ -562,9 +581,9 @@ export function createChatManager(deps = {}) {
       });
     }
 
-    async _sendMessageToAPI(messageText) {
-      const cfg      = this.modelConfigAPI.getConfig();
-      const modelId  = cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL;   // required by API
+    async _sendMessageToAPI(messageText, abortSignal) {
+      const cfg = this.modelConfigAPI.getConfig();
+      const modelId = cfg.modelName || CHAT_CONFIG.DEFAULT_MODEL;   // required by API
 
       // ---- body expected by backend ----
       const userMsg = {
@@ -573,7 +592,7 @@ export function createChatManager(deps = {}) {
       };
 
       const payload = {
-        new_msg      : userMsg,                   // dict → OK
+        new_msg: userMsg,                   // dict → OK
         vision_detail: cfg.visionDetail || "auto"
       };
 
@@ -581,25 +600,33 @@ export function createChatManager(deps = {}) {
       if (this.currentImage) {
         this._validateImageSize();
         payload.image_data = this.currentImage;
-        this.currentImage  = null;
+        this.currentImage = null;
       }
       if (cfg.extendedThinking) {
         payload.thinking = { type: "enabled", budget_tokens: cfg.thinkingBudget };
+      }
+      // Attach enable_web_search if present in config (frontend)
+      if (cfg.enable_web_search !== undefined) {
+        payload.enable_web_search = !!cfg.enable_web_search;
       }
 
       // Send model_id as query-parameter, body as JSON
       return this._api(
         apiEndpoints.MESSAGES(this.projectId, this.currentConversationId),
         {
-          method : "POST",
-          params : { model_id: modelId },   // <-- added
-          body   : payload
+          method: "POST",
+          params: { model_id: modelId },   // <-- added
+          body: payload,
+          signal: abortSignal
         }
       );
     }
 
     _validateImageSize() {
-      if (typeof this.currentImage === 'string' && this.currentImage.startsWith("data:")) {
+      if (
+        typeof this.currentImage === "string" &&
+        /^data:image\/(png|jpeg|webp|gif);base64,/i.test(this.currentImage)
+      ) {
         const commaIdx = this.currentImage.indexOf(',');
         const b64 = commaIdx !== -1 ? this.currentImage.slice(commaIdx + 1) : this.currentImage;
         const sizeBytes = Math.floor((b64.length * 3) / 4);
@@ -621,6 +648,35 @@ export function createChatManager(deps = {}) {
           thinking,
           redacted_thinking
         );
+
+        // --- BEGIN: Token stats + truncation UI wiring ---
+        const uiStats = assistant_message.token_stats || response.data.token_stats || {};
+        const trunc = assistant_message.truncation_details || response.data.truncation_details || {};
+
+        // Set token counts if UI elements exist
+        if (this.domAPI.getElementById) {
+          if (uiStats) {
+            if (this.domAPI.getElementById('tokenStatInput')) this.domAPI.getElementById('tokenStatInput').textContent = uiStats.prompt_tokens_for_last_exchange || uiStats.prompt_tokens || "0";
+            if (this.domAPI.getElementById('tokenStatCompletion')) this.domAPI.getElementById('tokenStatCompletion').textContent = uiStats.completion_tokens_for_last_exchange || "0";
+            if (this.domAPI.getElementById('tokenStatContext')) this.domAPI.getElementById('tokenStatContext').textContent = uiStats.total_context_tokens_in_conversation || uiStats.current_tokens || "0";
+            if (this.domAPI.getElementById('tokenStatContextMax')) this.domAPI.getElementById('tokenStatContextMax').textContent = uiStats.max_context_tokens_for_model || "0";
+            if (this.domAPI.getElementById('tokenStatContextMessages')) this.domAPI.getElementById('tokenStatContextMessages').textContent = uiStats.message_count_in_context || "0";
+          }
+
+          // Handle UI truncation warning
+          const warningEl = this.domAPI.getElementById('truncationWarning');
+          if (warningEl) {
+            if (trunc && trunc.is_truncated) {
+              warningEl.textContent = `Context trimmed: ${trunc.messages_removed_count || 0} older msgs removed.`;
+              this.domAPI.removeClass(warningEl, 'hidden');
+            } else {
+              this.domAPI.addClass(warningEl, 'hidden');
+              warningEl.textContent = "";
+            }
+          }
+        }
+        // --- END: Token stats + truncation UI wiring ---
+
       } else if (response.data?.assistant_error) {
         const errMsg = this._extractErrorMessage(response.data.assistant_error);
         throw new Error(errMsg);
@@ -640,7 +696,18 @@ export function createChatManager(deps = {}) {
         this._showErrorMessage("Cannot delete conversation: invalid/missing project ID.");
         return false;
       }
+
+      // Confirm via DI modal from chatUIEnhancements
       try {
+        const chatUIEnh = this.DependencySystem?.modules?.get?.('chatUIEnhancements');
+        let confirmDelete = true;
+        if (chatUIEnh?.confirmDeleteConversationModal) {
+          // Use titleElement for title if present
+          const convoTitle = this.titleElement?.textContent || undefined;
+          confirmDelete = await chatUIEnh.confirmDeleteConversationModal(convoTitle);
+        }
+        if (!confirmDelete) return false;
+
         await this._api(
           apiEndpoints.CONVERSATION(this.projectId, this.currentConversationId),
           { method: "DELETE" }
@@ -760,7 +827,7 @@ export function createChatManager(deps = {}) {
 
       const header = this.domAPI.createElement("div");
       header.className = "message-header";
-      const nowStr = new Date().toLocaleTimeString();
+      const nowStr = (new DateCtor()).toLocaleTimeString();
 
       this.domAPI.setInnerHTML(
         header,
@@ -1112,6 +1179,78 @@ export function createChatManager(deps = {}) {
   }
 
   const instance = new ChatManager();
+
+  // --- Live Token Estimation Logic ---
+  // Add debounced event listener to input field after UI setup
+  // (called from initialize or _setupUIElements)
+  instance._estimateCurrentInputTokens = async function () {
+    // Only proceed if inputField, projectId, currentConversationId are set
+    if (!this.inputField || !this.projectId || !this.currentConversationId) return;
+    const currentInputText = this.inputField.value;
+    if (!currentInputText.trim()) {
+      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+      if (liveTokenCountEl) liveTokenCountEl.textContent = "0";
+      return;
+    }
+    // Debounced call to backend endpoint for token estimation
+    try {
+      const resp = await this.apiRequest(
+        `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/estimate-tokens`,
+        { method: "POST", body: { current_input: currentInputText } }
+      );
+      const est = (resp && resp.estimated_tokens_for_input !== undefined)
+        ? resp.estimated_tokens_for_input
+        : (resp && resp.data && resp.data.estimated_tokens_for_input) || null;
+      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+      if (liveTokenCountEl && est !== null) liveTokenCountEl.textContent = String(est);
+    } catch (e) {
+      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+      if (liveTokenCountEl) liveTokenCountEl.textContent = "N/A";
+    }
+  };
+
+  // Attach debounced token estimator to chat input after UI is ready
+  const addLiveTokenEstimationListener = (managerInstance) => {
+    // Only if input field and required fields present
+    if (
+      managerInstance.inputField &&
+      typeof managerInstance.inputField.addEventListener === "function" &&
+      typeof managerInstance._estimateCurrentInputTokens === "function"
+    ) {
+      // Simple debounce helper, only attach ONCE
+      if (!managerInstance._liveTokenListenerAttached) {
+        let debounceTimeout = null;
+        managerInstance.inputField.addEventListener("input", function () {
+          clearTimeout(debounceTimeout);
+          debounceTimeout = setTimeout(() => {
+            managerInstance._estimateCurrentInputTokens();
+          }, 400);
+        });
+        managerInstance._liveTokenListenerAttached = true;
+      }
+    }
+  };
+
+  // Patch chat manager initialize to add live token estimation wireup
+  const origInit = instance.initialize.bind(instance);
+  instance.initialize = async function (...args) {
+    const out = await origInit(...args);
+    // Try to wire up after UI elements are available
+    if (this.inputField) {
+      addLiveTokenEstimationListener(this);
+    } else {
+      // Fallback: try again after _setupUIElements
+      const origSetup = this._setupUIElements?.bind(this);
+      if (origSetup) {
+        this._setupUIElements = async (...a) => {
+          const z = await origSetup(...a);
+          addLiveTokenEstimationListener(this);
+          return z;
+        };
+      }
+    }
+    return out;
+  };
 
   return {
     initialize: instance.initialize.bind(instance),
