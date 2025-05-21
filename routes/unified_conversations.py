@@ -817,6 +817,43 @@ async def batch_delete_conversations(
 # Utility Endpoints
 # =============================================================================
 
+# --- Token Estimation Endpoint for Live Chat Input ---
+
+class TokenEstimationRequest(BaseModel):
+    current_input: str
+
+class TokenEstimationResponse(BaseModel):
+    estimated_tokens_for_input: int
+
+@router.post(
+    "/{project_id}/conversations/{conversation_id}/estimate-tokens",
+    response_model=TokenEstimationResponse,
+    summary="Estimate tokens for current input in a conversation",
+    tags=["Conversations"]
+)
+async def estimate_tokens_for_input_in_conversation(
+    project_id: UUID,
+    conversation_id: UUID,
+    request_data: TokenEstimationRequest,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+    conv_service: ConversationService = Depends(get_conversation_service),
+):
+    """Estimate token count for a chat input against a conversation/model context."""
+    try:
+        current_user = current_user_tuple[0]
+        await validate_project_access(project_id, current_user, db)
+        conv = await conv_service.get_conversation(conversation_id, current_user.id, project_id)
+        import utils.ai_helper as ai_helper
+        model_id = conv.get("model_id") or conv.get("model_config", {}).get("model_id")
+        if not model_id:
+            raise HTTPException(status_code=400, detail="Model not set for conversation.")
+        input_tokens = ai_helper.count_tokens_text(request_data.current_input, model_id)
+        return TokenEstimationResponse(estimated_tokens_for_input=input_tokens)
+    except Exception as e:
+        logger.exception(f"Token estimation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to estimate tokens: {str(e)}")
+
 
 @router.get(
     "/{project_id}/conversations/{conversation_id}/messages", response_model=dict

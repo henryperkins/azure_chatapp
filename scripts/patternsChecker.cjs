@@ -20,6 +20,22 @@ const traverse = require("@babel/traverse").default;
 const chalk    = (()=>{try{return require("chalk");}catch{     // colour fallback
   const p = t => t; return { red:p, yellow:p, green:p, blue:p, cyan:p, bold:p }; }})();
 
+/* ─────────────────────────  No-op visitor fallbacks  ───────────────────── */
+/**
+ * These stubs stop ReferenceErrors when the optional rules haven’t been
+ * implemented yet.  Replace each with the real visitor when you’re ready.
+ */
+const _noop = () => ({});
+function vPure     (/* err, file            */){ return _noop(); }
+function vState    (/* err, file            */){ return _noop(); }
+function vEvent    (/* err, file,isAppJs    */){ return _noop(); }
+function vSanitize (/* err, file            */){ return _noop(); }
+function vReadiness(/* err, file,isAppJs    */){ return _noop(); }
+function vBus      (/* err, file            */){ return _noop(); }
+function vNav      (/* err, file            */){ return _noop(); }
+function vAPI      (/* err, file            */){ return _noop(); }
+function vLog      (/* err, file,isAppJs    */){ return _noop(); }
+
 /* ───────────────────────── Symbols ────────────────────────────── */
 const SYM = {
   error:  chalk.red("✖"),
@@ -146,12 +162,13 @@ function mergeVisitors (...visitors) {
   Object.entries(merged).forEach(([key, val]) => {
     if (Array.isArray(val)) {
       const chain = val;
-      merged[key] = path => chain.forEach(f => f(path));
+      // avoid shadowing the `path` module constant
+      merged[key] = _nodePath => chain.forEach(f => f(_nodePath));
     } else if (val && typeof val === "object") {
       ["enter", "exit"].forEach(phase => {
         if (Array.isArray(val[phase])) {
           const chain = val[phase];
-          val[phase] = path => chain.forEach(f => f(path));
+          val[phase] = _nodePath => chain.forEach(f => f(_nodePath));
         }
       });
     }
@@ -259,25 +276,16 @@ function vFactory(err, file) {
 }
 
 /* 2. Strict Dependency Injection */
-function vDI(err,file){
-  const bannedG=["window","document"];
-  const bannedS=["apiClient","logger","domReadinessService","navigationService"];
-  const diParams=new Set();
-  const referenced=new Set();
+function vDI(err, file, isAppJs) {
+  const bannedG   = ["window", "document"];
+  const bannedS   = ["apiClient", "logger", "domReadinessService", "navigationService"];
+  const diParams  = new Set();
+  const referenced= new Set();
+  let diLogger    = false;                // track whether logger came via DI
 
-  // Patch: inspect all param forms, including ExportNamedDeclaration+Function/Arrow
-  function collectDIProps(param) {
-    if (!param) return;
-    if (param.type === "ObjectPattern") {
-      param.properties.forEach(pr => {
-        // handles shorthand or AssignmentPattern (with default)
-        const keyNode = pr.key || (pr.value && pr.value.left);
-        if (!keyNode) return;
-        const name = keyNode.name || keyNode.value;
-          if (key === "logger") diLogger = true;
-        });
-      }
-    });
+  /* ── collect names from factory param list ── */
+  function scanParams(params){
+    collectDIParamNamesFromParams(params, diParams);
   }
 
   return {
@@ -402,7 +410,7 @@ function analyze(file, code) {
   traverse(ast, mergeVisitors(
     // Skip these for app.js
     isAppJs ? null : vFactory(errors, file),
-    isAppJs ? null : vDI(errors, file),
+    isAppJs ? null : vDI(errors, file, isAppJs),
     isAppJs ? null : vPure(errors, file),
     isAppJs ? null : vState(errors, file),
 
