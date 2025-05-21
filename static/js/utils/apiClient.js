@@ -119,9 +119,16 @@ export function createApiClient({
         }
 
         // ----- non-OK: throw rich error object -----
-        const err = new Error(`HTTP ${resp.status}`);
+        // Preserve backend-provided details so callers can display them
+        const humanMsg =
+          (payload?.detail) ? String(payload.detail) :
+          (typeof payload === 'string') ? payload :
+          (payload?.message) ? String(payload.message) :
+          `HTTP ${resp.status}`;
+
+        const err = new Error(humanMsg);
         err.status = resp.status;
-        err.data   = payload;
+        err.data   = payload;          // keep full payload for callers
         throw err;
       } finally {
         clearTimeout(timer);

@@ -1051,6 +1051,10 @@ export function createChatManager(deps = {}) {
     }
 
     _extractErrorMessage(err) {
+      if (typeof err?.data === 'string')            return err.data;
+      if (typeof err?.response?.data === 'string')  return err.response.data;
+      if (err?.data?.message)                       return String(err.data.message);
+      if (err?.response?.data?.message)            return String(err.response.data.message);
       if (err?.data?.detail)           return String(err.data.detail);
       if (err?.response?.data?.detail) return String(err.response.data.detail);
       if (err?.detail)                 return String(err.detail);
