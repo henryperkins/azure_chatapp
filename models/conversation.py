@@ -80,6 +80,13 @@ class Conversation(Base):
     kb_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, comment="Enable knowledge base RAG for this conversation"
     )
+    use_knowledge_base: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        server_default=text("false"),
+        comment="DEPRECATED – kept only for db-compat; use kb_enabled",
+    )
     search_results: Mapped[Optional[dict]] = mapped_column(JSONB(none_as_null=True))
 
     user = relationship("User", back_populates="conversations")
@@ -95,7 +102,7 @@ class Conversation(Base):
 
     async def validate_knowledge_base(self, db: AsyncSession) -> None:
         """Validate KB with actual database content"""
-        if self.use_knowledge_base and self.knowledge_base_id:
+        if (self.kb_enabled or self.use_knowledge_base) and self.knowledge_base_id:
             kb = await db.get(KnowledgeBase, self.knowledge_base_id)
 
             # Check if KB exists and active
