@@ -1117,18 +1117,17 @@ if (navToggleBtn) {
         (“modalmanager:initialized”).  Si no llega NO abortamos la
         inicialización de la UI: simplemente continuamos con una
         advertencia. */
-    await Promise.race([
-      domReadinessService.waitForEvent('modalmanager:initialized', {
-        timeout: 8000,
-        context: 'app:initializeUIComponents:modalmanagerReady'
-      }).catch(() => {
+    const modalMgr = DependencySystem.modules.get('modalManager');
+    if (modalMgr?.isReadyPromise) {
+      await Promise.race([
+        modalMgr.isReadyPromise(),
+        new Promise(res => browserAPI.getWindow().setTimeout(res, 8000))
+      ]).catch(() => {
         logger.warn('[initializeUIComponents] ModalManager not ready after 8 s – continuing without blocking.', {
           context: 'app:initializeUIComponents'
         });
-      }),
-      // Fallback de tiempo (misma duración) para no colgar el await
-      new Promise(resolve => browserAPI.getWindow().setTimeout(resolve, 8000))
-    ]);
+      });
+    }
 
     domAndModalsReady = true;   //  siempre continuamos; los modales pueden cargarse después
   } catch (err) {
