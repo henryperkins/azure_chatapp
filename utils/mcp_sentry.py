@@ -447,7 +447,7 @@ def enable_mcp_integrations() -> bool:
             pass
 
         if not mcp_enabled:
-            print("Sentry MCP integration is DISABLED. Set SENTRY_MCP_SERVER_ENABLED=true to activate MCP features.")
+            logger.info("Sentry MCP integration is DISABLED. Set SENTRY_MCP_SERVER_ENABLED=true to activate MCP features.")
             logger.info("Sentry MCP integration is DISABLED.")
             return False
 
@@ -455,7 +455,7 @@ def enable_mcp_integrations() -> bool:
         status = get_mcp_status()
         if not status:
             logger.error("Cannot enable MCP integrations: Server not available")
-            print("ERROR: Sentry MCP integration could NOT START (server unavailable).")
+            logger.error("Sentry MCP integration could NOT START (server unavailable).")
             return False
 
         # Configure the SDK to use the MCP server
@@ -466,14 +466,14 @@ def enable_mcp_integrations() -> bool:
                 {"enabled": True, "server_version": status.get("version", "unknown")},
             )
 
-        print(f"Sentry MCP integration is ENABLED. MCP Status: {json.dumps(status) if status else 'UNKNOWN'}")
-        logger.info(f"Sentry MCP integration is ENABLED. MCP Status: {json.dumps(status) if status else 'UNKNOWN'}")
+        logger.info("Sentry MCP integration is ENABLED. MCP Status: %s",
+                    json.dumps(status) if status else "UNKNOWN")
         logger.info("Sentry MCP integrations enabled successfully")
         return True
 
     except Exception as e:
         logger.error(f"Failed to enable MCP integrations: {e}")
-        print(f"ERROR: Sentry MCP integration failed during enablement: {e}")
+        logger.error("Sentry MCP integration failed during enablement: %s", e)
         return False
 
 
