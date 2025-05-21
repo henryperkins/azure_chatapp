@@ -99,8 +99,9 @@ if (!DependencySystem?.modules?.get) {
 import { createLogger } from './logger.js';
 
 const logger = createLogger({
-  context: 'App',
-  debug: APP_CONFIG && APP_CONFIG.DEBUG === true
+  context : 'App',
+  debug   : APP_CONFIG && APP_CONFIG.DEBUG === true,
+  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info'
 });
 DependencySystem.register('logger', logger);
 
