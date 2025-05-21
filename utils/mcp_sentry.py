@@ -53,8 +53,6 @@ def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: dict[str, An
         raise ServerConnectionError(f"Failed to use MCP tool {tool_name}: {str(e)}") from e
 
 
-logger = logging.getLogger(__name__)
-
 # Constants for MCP server operations
 DEFAULT_TIMEOUT = 10  # seconds
 MAX_RETRIES = 3
