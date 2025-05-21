@@ -63,11 +63,21 @@ class ModalManager {
       { report: () => {} };
     this.app = this.DependencySystem?.modules?.get?.('app') || null;
 
+    // ─── Deferred “fully-ready” promise ─────────────────────────
+    this._readyResolve = null;
+    this._readyReject  = null;
+    this._readyPromise = new Promise((res, rej) => {
+      this._readyResolve = res;
+      this._readyReject  = rej;
+    });
+
     this.activeModal = null;
     this._scrollLockY = undefined;
 
     this.logger.debug?.('[ModalManager] constructed', { withApp: !!this.app });
   }
+
+  isReadyPromise() { return this._readyPromise; }
 
   _isDebug() {
     return !!this.app?.config?.debug;
@@ -187,60 +197,64 @@ class ModalManager {
   }
 
   async init() {
-    const depSys = this.DependencySystem;
-    if (!depSys) {
-      throw new Error('[ModalManager] DependencySystem missing in init');
-    }
-
-    // Attempt to get the domReadinessService from DI
-    const domReadinessService = depSys.modules?.get('domReadinessService');
-    if (!domReadinessService) {
-      throw new Error('[ModalManager] Missing domReadinessService in DI. Make sure it is registered.');
-    }
-
-    // NEW – wait for required dependencies via domReadinessService
-    await domReadinessService.dependenciesAndElements({
-      deps: ['eventHandlers', 'domAPI'],
-      timeout: 5000,
-      context: 'modalManager.init'
-    });
-
-    // Wait for body readiness
-    await domReadinessService.dependenciesAndElements({
-      deps: [],
-      domSelectors: ['body'],
-      timeout: 5000,
-      context: 'modalManager.init'
-    });
-
-    // Optionally, wait for 'modalsLoaded' event. If it times out, we proceed anyway
     try {
-      await domReadinessService.waitForEvent('modalsLoaded', {
-        timeout: 8000,
+      const depSys = this.DependencySystem;
+      if (!depSys) throw new Error('[ModalManager] DependencySystem missing in init');
+
+      // Attempt to get the domReadinessService from DI
+      const domReadinessService = depSys.modules?.get('domReadinessService');
+      if (!domReadinessService) {
+        throw new Error('[ModalManager] Missing domReadinessService in DI. Make sure it is registered.');
+      }
+
+      // NEW – wait for required dependencies via domReadinessService
+      await domReadinessService.dependenciesAndElements({
+        deps: ['eventHandlers', 'domAPI'],
+        timeout: 5000,
         context: 'modalManager.init'
       });
-    } catch (_err) {
-      // We do not fail if modalsLoaded never fires
-    }
 
-    // One-time listener to re-scan after templates are injected
-    this.eventHandlers.trackListener(
-      this.domAPI.getDocument(),
-      'modalsLoaded',
-      () => this._registerAvailableModals(),
-      { once: true, context: 'modalManager', description: 'late modal registration' }
-    );
+      // Wait for body readiness
+      await domReadinessService.dependenciesAndElements({
+        deps: [],
+        domSelectors: ['body'],
+        timeout: 5000,
+        context: 'modalManager.init'
+      });
 
-    // Register any currently available modals
-    this._registerAvailableModals();
+      // Optionally, wait for 'modalsLoaded' event. If it times out, we proceed anyway
+      try {
+        await domReadinessService.waitForEvent('modalsLoaded', {
+          timeout: 8000,
+          context: 'modalManager.init'
+        });
+      } catch (_err) {
+        // We do not fail if modalsLoaded never fires
+      }
 
-    // Dispatch an initialization success event
-    const doc = this.domAPI.getDocument();
-    if (doc && typeof this.domAPI.dispatchEvent === 'function') {
+      // One-time listener to re-scan after templates are injected
+      this.eventHandlers.trackListener(
+        this.domAPI.getDocument(),
+        'modalsLoaded',
+        () => this._registerAvailableModals(),
+        { once: true, context: 'modalManager', description: 'late modal registration' }
+      );
+
+      // Register any currently available modals
+      this._registerAvailableModals();
+
+      // Dispatch success event
+      const doc = this.domAPI.getDocument();
       this.domAPI.dispatchEvent(
         doc,
         new CustomEvent('modalmanager:initialized', { detail: { success: true } })
       );
+
+      // Mark ready
+      this._readyResolve?.(true);
+    } catch (err) {
+      this._readyReject?.(err);
+      throw err;
     }
   }
 
