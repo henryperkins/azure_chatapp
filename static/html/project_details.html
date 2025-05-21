@@ -216,6 +216,15 @@
           </div>
         <div class="chat-container">
           <div id="projectChatMessages" class="chat-message-container" aria-live="polite" tabindex="0"></div>
+          <!-- BEGIN: Token stats and truncation warning UI -->
+          <div id="chatTokenStats" class="text-xs text-gray-500 flex gap-4 px-4 py-1 items-center border-t bg-base-100/90">
+              <span>Input: <span id="tokenStatInput">0</span></span> |
+              <span>Completion: <span id="tokenStatCompletion">0</span></span> |
+              <span>Context: <span id="tokenStatContext">0</span>/<span id="tokenStatContextMax">0</span></span>
+              (<span id="tokenStatContextMessages">0</span> msgs)
+              <span id="truncationWarning" class="text-warning hidden ml-2"></span>
+          </div>
+          <!-- END: Token stats and truncation warning UI -->
           <div class="flex items-center border-t border-base-200 p-2 bg-base-100 sticky bottom-0 z-10 rounded-b-box shadow-xs join">
             <input id="projectChatInput"
                    type="text"

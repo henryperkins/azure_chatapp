@@ -17,10 +17,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from config import settings, Settings
 from models.conversation import Conversation
-from utils.model_registry import (
-    get_model_config as _central_get_model_config,
-    validate_model_and_params as _central_validate,
-)
+# The utils.model_registry module may be stubbed or monkey-patched in unit tests
+# (e.g. tests that only need get_model_config).  Access to
+# `validate_model_and_params` is optional for those scenarios.  We therefore
+# import it defensively so that the absence of the symbol does **not** break
+# import-time execution – the missing function will only raise if actually
+# called at runtime.
+
+from utils.model_registry import get_model_config as _central_get_model_config
+
+try:
+    from utils.model_registry import validate_model_and_params as _central_validate  # type: ignore
+except (ImportError, AttributeError):  # pragma: no cover
+    # Provide a stub that immediately raises to preserve call-site semantics
+    def _central_validate(*_a, **_kw):  # type: ignore[override]
+        raise RuntimeError(
+            "validate_model_and_params is unavailable in the current "
+            "test context. This stub should never be invoked – if you see "
+            "this error, adjust the test or provide a suitable monkeypatch."
+        )
 from utils.tokens import count_tokens_messages, count_tokens_text  # Canonical token counters
 
 # Forward-compat shim – most helpers now live in *utils.model_registry* and
