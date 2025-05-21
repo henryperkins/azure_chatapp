@@ -29,11 +29,17 @@ _tiktoken_spec = importlib.util.find_spec("tiktoken")
 if _tiktoken_spec is not None:  # pragma: no cover – environment-dependent
     import tiktoken  # type: ignore
 
-    def _encode(text: str) -> int:
+    # Cache the encoder so we don’t re-initialise it on every call
+    _ENCODER = tiktoken.get_encoding("cl100k_base")      # NEW
+
+    def _encode(text: str) -> int:                       # UPDATED
+        """
+        Return the token count for *text* using tiktoken.
+        A cached encoder is reused for performance.
+        """
         try:
-            enc = tiktoken.get_encoding("cl100k_base")
-            return len(enc.encode(text))
-        except Exception as exc:  # pragma: no cover – unlikely branch
+            return len(_ENCODER.encode(text))
+        except Exception as exc:        # pragma: no cover – unlikely branch
             logger.debug("tiktoken failure: %s", exc)
             return -1
 

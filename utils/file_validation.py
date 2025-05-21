@@ -120,7 +120,17 @@ class FileValidator:
         - Size validation
         """
         original_filename = file.filename or "untitled"
-        file_size = file.size
+
+        # Starlette’s UploadFile doesn’t expose `.size` by default – fallback
+        # to a manual calculation when the attribute is missing.
+        file_size = getattr(file, "size", None)               # UPDATED
+        if file_size is None:                                 # NEW
+            try:
+                # Seek to end to obtain size, then reset pointer to start
+                file_size = await file.seek(0, os.SEEK_END)
+                await file.seek(0)
+            except Exception:
+                file_size = None
 
         # Validate extension first
         if not cls.validate_extension(original_filename):
