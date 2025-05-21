@@ -52,6 +52,91 @@ export function createBrowserService({ windowObject, logger } = {}) {
     throw new Error('browserService: windowObject must be injected (no global fallback)');
   if (!windowObject?.location) throw new Error('browserService: windowObject is required');
 
+  /* --------------------------------------------------------------
+   *  DependencySystem bootstrap (runtime fallback)
+   * --------------------------------------------------------------
+   *  The production build expects the hosting HTML page to expose a
+   *  fully-featured `window.DependencySystem` **before** any of the
+   *  application modules execute.  In unit-tests or server-side
+   *  rendering scenarios this global often does not exist which used
+   *  to make the very first access (`browserAPI.getDependencySystem()` in
+   *  app.js) throw and abort the whole bootstrap.
+   *
+   *  To keep the contract intact while still allowing execution in
+   *  non-browser contexts we lazily create a *minimal* implementation
+   *  that fulfils just the subset of the API used across the codebase.
+   *  The implementation lives *inside* browserService so we respect the
+   *  guardrail that forbids creation of new top-level modules.
+   * -------------------------------------------------------------- */
+
+  function createFallbackDependencySystem() {
+    const modules = new Map();
+    const pendingResolvers = new Map(); // depName -> [resolveFns]
+
+    function register(name, value) {
+      modules.set(name, value);
+      if (pendingResolvers.has(name)) {
+        pendingResolvers.get(name).forEach((r) => r(value));
+        pendingResolvers.delete(name);
+      }
+      return value;
+    }
+
+    function waitFor(deps = [], _ctx = null, timeout = 15000) {
+      const required = Array.isArray(deps) ? deps : [deps];
+      const remaining = required.filter((d) => !modules.has(d));
+      if (remaining.length === 0) return Promise.resolve(true);
+
+      return new Promise((resolve, reject) => {
+        const satisfied = new Set();
+
+        const maybeResolve = () => {
+          if (satisfied.size === remaining.length) resolve(true);
+        };
+
+        const timerId = timeout
+          ? setTimeout(
+              () => reject(new Error(`DependencySystem.waitFor timeout: [${remaining.join(', ')}]`)),
+              timeout,
+            )
+          : null;
+
+        remaining.forEach((dep) => {
+          const arr = pendingResolvers.get(dep) || [];
+          arr.push(() => {
+            satisfied.add(dep);
+            if (timerId && satisfied.size === remaining.length) clearTimeout(timerId);
+            maybeResolve();
+          });
+          pendingResolvers.set(dep, arr);
+        });
+      });
+    }
+
+    function has(dep) {
+      return modules.has(dep);
+    }
+
+    function cleanupModuleListeners(context = '') {
+      const evHandlers = modules.get('eventHandlers');
+      if (evHandlers && typeof evHandlers.cleanupListeners === 'function') {
+        evHandlers.cleanupListeners({ context });
+      }
+    }
+
+    return {
+      modules,
+      register,
+      waitFor,
+      has,
+      cleanupModuleListeners,
+    };
+  }
+
+  if (!windowObject.DependencySystem || typeof windowObject.DependencySystem.register !== 'function') {
+    windowObject.DependencySystem = createFallbackDependencySystem();
+  }
+
   function _buildUrl(params = {}) {
     const url = new URL(windowObject.location.href);
     Object.entries(params).forEach(([k, v]) => {
