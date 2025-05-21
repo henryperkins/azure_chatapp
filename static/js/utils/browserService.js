@@ -25,16 +25,18 @@ export function buildUrl(params = {}, baseHref) {
   const sorted = Array.from(url.searchParams.entries())
                       .sort(([a], [b]) => a.localeCompare(b));
   url.search = new URLSearchParams(sorted).toString();
-  return url.pathname + (url.search ? `?${url.search}` : '');
+  const raw = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+  const path = raw || '/';          // guarantee leading “/”
+  return path + (url.search ? `?${url.search}` : '');
 }
 
 export function normaliseUrl(u = '') {
   try {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
     // url.search already includes '?' if params exist, or is empty string otherwise.
-    const path = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
-    const fixed = (path || '/');
-    return fixed + url.search + url.hash;
+    const raw   = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+    const path  = raw || '/';
+    return path + url.search + url.hash;
   } catch (err) {
     return u;
   }
@@ -146,7 +148,9 @@ export function createBrowserService({ windowObject, logger } = {}) {
     // Normalise: keep pathname, sorted params
     const sorted = Array.from(url.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
     url.search = new URLSearchParams(sorted).toString();
-    return url.pathname + (url.search ? `?${url.search}` : '');
+    const raw  = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+    const path = raw || '/';
+    return path + (url.search ? `?${url.search}` : '');
   }
 
   // --------- DI wrappers for browser APIs ---------
