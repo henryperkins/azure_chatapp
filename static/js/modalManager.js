@@ -192,14 +192,18 @@ class ModalManager {
       throw new Error('[ModalManager] DependencySystem missing in init');
     }
 
-    // Wait for both eventHandlers and domAPI
-    await depSys.waitFor(['eventHandlers', 'domAPI'], null, 5000);
-
     // Attempt to get the domReadinessService from DI
     const domReadinessService = depSys.modules?.get('domReadinessService');
     if (!domReadinessService) {
       throw new Error('[ModalManager] Missing domReadinessService in DI. Make sure it is registered.');
     }
+
+    // NEW – wait for required dependencies via domReadinessService
+    await domReadinessService.dependenciesAndElements({
+      deps: ['eventHandlers', 'domAPI'],
+      timeout: 5000,
+      context: 'modalManager.init'
+    });
 
     // Wait for body readiness
     await domReadinessService.dependenciesAndElements({
