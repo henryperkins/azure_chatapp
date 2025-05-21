@@ -164,10 +164,10 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         # Generate context IDs for structured logging
         request_id = str(uuid.uuid4())
-        trace_id   = transaction.trace_id if hasattr(transaction, "trace_id") else ""
+        trace_id = transaction.trace_id if hasattr(transaction, "trace_id") else ""
 
         tag_transaction("request.id", request_id)
-        tag_transaction("trace.id",  trace_id)
+        tag_transaction("trace.id", trace_id)
 
         # --- propagate into logging ContextVars ---
         req_token = request_id_var.set(request_id)
