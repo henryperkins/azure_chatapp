@@ -127,9 +127,9 @@ class GitHubRepoDetach(BaseModel):
 async def create_project_knowledge_base(
     project_id: UUID,
     kb_data: KnowledgeBaseCreate,
+    background_tasks: BackgroundTasks,
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    background_tasks: BackgroundTasks,
 ):
     """
     Create a new knowledge base for a project and optionally process
@@ -324,9 +324,9 @@ async def search_project_knowledge(
 async def upload_knowledge_base_file(
     project_id: UUID,
     file: UploadFile = File(...),
+    background_tasks: BackgroundTasks,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    background_tasks: BackgroundTasks,
 ):
     """
     Upload and process a file for the project's knowledge base.
