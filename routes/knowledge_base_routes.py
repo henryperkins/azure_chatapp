@@ -41,7 +41,6 @@ from services.knowledgebase_service import (
     get_kb_status,
     get_project_files_stats,
     get_knowledge_base_health,
-    list_knowledge_bases,
     get_knowledge_base,
     create_knowledge_base as kb_service_create_kb,
     update_knowledge_base as kb_service_update_kb,
@@ -58,6 +57,7 @@ from models.project import Project
 from utils.auth_utils import get_current_user_and_token
 from utils.response_utils import create_standard_response
 from services.project_service import validate_project_access
+from utils.serializers import serialize_knowledge_base
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Knowledge Base"])
@@ -129,7 +129,7 @@ async def create_project_knowledge_base(
     kb_data: KnowledgeBaseCreate,
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
 ):
     """
     Create a new knowledge base for a project and optionally process
@@ -205,10 +205,10 @@ async def get_project_knowledge_bases(
         current_user = current_user_tuple[0]
 
         # Validate project access
-        await validate_project_access(project_id, current_user, db)
+        project: Project = await validate_project_access(project_id, current_user, db)
 
-        # Get knowledge bases (active only)
-        kbs = await list_knowledge_bases(db=db, active_only=True)
+        kb = project.knowledge_base if project and project.knowledge_base and project.knowledge_base.is_active else None
+        kbs = [serialize_knowledge_base(kb)] if kb else []
 
         return await create_standard_response(
             {"knowledge_bases": kbs, "count": len(kbs), "project_id": str(project_id)}
@@ -326,7 +326,7 @@ async def upload_knowledge_base_file(
     file: UploadFile = File(...),
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
+    background_tasks: BackgroundTasks,
 ):
     """
     Upload and process a file for the project's knowledge base.
