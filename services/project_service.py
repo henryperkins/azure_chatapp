@@ -330,6 +330,90 @@ async def get_default_project(user: User, db: AsyncSession) -> Project:
 
 
 # =======================================================
+#  Project/KnowledgeBase/Conversation Atomic Creation
+# =======================================================
+
+async def create_project_with_initial_conversation(
+    user_id: int,
+    name: str,
+    db: AsyncSession,
+    description: Optional[str] = None,
+    goals: Optional[str] = None,
+    max_tokens: int = 200000,
+    default_model: str = "claude-3-sonnet-20240229",
+    initial_conversation_title: Optional[str] = None,
+    initial_model_id: Optional[str] = None,
+    initial_message: Optional[str] = None,
+) -> dict:
+    """
+    Creates a new project, its active knowledge base, and an initial conversation ALL at once.
+    Returns a dictionary: {project, knowledge_base, conversation}
+    Raises ValueError if name empty or system invariant violated.
+    """
+    name = name.strip()
+    if not name:
+        raise ValueError("Project name cannot be empty")
+    async with db.begin():
+        # 1. Create project
+        project = Project(
+            user_id=user_id,
+            name=name,
+            description=description,
+            goals=goals,
+            max_tokens=max_tokens,
+            default_model=default_model,
+        )
+        db.add(project)
+        await db.flush()  # project.id now available
+
+        # 2. Create KB (ensure linked after flush)
+        from services.knowledgebase_service import ensure_project_has_knowledge_base
+        kb = await ensure_project_has_knowledge_base(project.id, db, user_id=user_id)
+        await db.flush()
+        # Reload to guarantee FK is set for project
+        await db.refresh(project)
+
+        # 3. Create initial Conversation linked to project and KB
+        from models.conversation import Conversation
+        conversation = Conversation(
+            user_id=user_id,
+            title=initial_conversation_title or "New Chat",
+            project_id=project.id,
+            knowledge_base_id=project.knowledge_base_id,  # link to KB
+            kb_enabled=True,
+            model_id=initial_model_id or default_model,
+            model_config={},
+        )
+        db.add(conversation)
+        await db.flush()
+        await db.refresh(conversation)
+        # Optionally: add initial message
+        if initial_message:
+            from models.message import Message
+            msg = Message(
+                conversation_id=conversation.id,
+                raw_text=initial_message,
+                formatted_text=initial_message,
+                role="user",
+                token_count=0,
+                extra_data=None,
+                content=initial_message,
+            )
+            db.add(msg)
+            await db.flush()
+
+        # Final commit for all
+        await db.commit()
+        await db.refresh(project, ["knowledge_base"])
+        await db.refresh(conversation)
+
+    return {
+        "project": project,
+        "knowledge_base": project.knowledge_base,
+        "conversation": conversation,
+    }
+
+# =======================================================
 #  Project Creation
 # =======================================================
 
