@@ -7,6 +7,7 @@ and provides enhanced Sentry functionality through the MCP server.
 """
 
 import logging
+logger = logging.getLogger(__name__)          # NEW – moved up
 import json
 import os
 import time
