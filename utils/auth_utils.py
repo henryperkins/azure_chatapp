@@ -25,8 +25,6 @@ from models.user import User, TokenBlacklist
 
 logger = logging.getLogger(__name__)
 
-import secrets
-
 # -----------------------------------------------------------------------------
 # JWT Configuration
 # -----------------------------------------------------------------------------
