@@ -323,8 +323,8 @@ async def search_project_knowledge(
 )
 async def upload_knowledge_base_file(
     project_id: UUID,
-    file: UploadFile = File(...),
     background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
