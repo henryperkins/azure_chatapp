@@ -20,8 +20,6 @@ from typing import Any, List, Optional
 
 import importlib
 
-from utils.model_registry import get_model_config
-
 logger = logging.getLogger(__name__)
 
 
