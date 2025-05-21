@@ -10,6 +10,7 @@ Consolidated routes for knowledge base management with improved:
 """
 
 import logging
+import io, os
 from uuid import UUID
 from typing import Any, Optional, Dict, List
 
@@ -174,9 +175,9 @@ async def create_project_knowledge_base(
         if kb_data.process_existing_files:
             file_stats = await get_project_files_stats(project_id, db)
             result["file_stats"] = file_stats
-            background_tasks.add_task(
-                process_files_for_project, project_id=project_id, db=db
-            )
+            # process_files_for_project opens its own DB session when no
+            # session is supplied – safe for background tasks.
+            background_tasks.add_task(process_files_for_project, project_id=project_id)
 
         return await create_standard_response(
             result, "Knowledge base created successfully"
@@ -433,7 +434,7 @@ async def reindex_knowledge_base(
                 )
                 await vector_db.delete_by_filter({"project_id": str(project_id)})
 
-        result = await process_files_for_project(project_id=project_id, db=db)
+        result = await process_files_for_project(project_id=project_id)
         return await create_standard_response(result, "Reindexing complete")
 
     except HTTPException:
@@ -543,15 +544,16 @@ async def attach_github_repository(
         file_paths = repo_data.file_paths or []
         fetched_files = github_service.fetch_files(repo_path, file_paths)
 
-        for file_path in fetched_files:
-            with open(file_path, "rb") as file_obj:
-                upload_file = UploadFile(filename=file_path, file=file_obj)
-                await upload_file_to_project(
-                    project_id=project_id,
-                    file=upload_file,
-                    db=db,
-                    user_id=current_user.id,
-                )
+        for abs_path in fetched_files:
+            filename = os.path.basename(abs_path)
+            data = open(abs_path, "rb").read()
+            upload_file = UploadFile(filename=filename, file=io.BytesIO(data))
+            await upload_file_to_project(
+                project_id=project_id,
+                file=upload_file,
+                db=db,
+                user_id=current_user.id,
+            )
 
         return await create_standard_response(
             {
