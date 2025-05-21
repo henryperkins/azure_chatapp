@@ -575,9 +575,18 @@ export function createChatManager(deps = {}) {
         } catch (error) {
           logger.error("[ChatManager][sending message]", error, { context: "chatManager" });
           this._hideThinkingIndicator();
+
           const msg = this._extractErrorMessage(error);
           this._showErrorMessage(msg);
-          this.projectDetails?.disableChatUI?.("Chat error: " + msg);
+
+          /* Only disable chat UI for unrecoverable conditions */
+          const critical =
+            msg.toLowerCase().includes("knowledge base") ||
+            String(error?.status).startsWith("4");          // auth / permission / missing KB
+
+          if (critical) {
+            this.projectDetails?.disableChatUI?.("Chat error: " + msg);
+          }
         }
       });
     }
