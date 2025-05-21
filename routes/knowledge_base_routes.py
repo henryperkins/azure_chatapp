@@ -294,7 +294,7 @@ async def search_project_knowledge(
         if not project.knowledge_base:
             raise HTTPException(status_code=400, detail="Project has no knowledge base")
 
-        results = await search_project_context(
+        search_data = await search_project_context(
             project_id=project_id,
             query=search_request.query,
             top_k=search_request.top_k,
@@ -302,9 +302,7 @@ async def search_project_knowledge(
             db=db,  # Added the db parameter that was missing
         )
 
-        return await create_standard_response(
-            {"results": results, "count": len(results), "project_id": str(project_id)}
-        )
+        return await create_standard_response(search_data, "Search completed")
 
     except HTTPException:
         raise
