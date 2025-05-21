@@ -8,24 +8,25 @@
  *   DependencySystem.register('logger', logger);
  */
 
+const LVL = { debug: 10, info: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
+
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
-  debug = false,
-  context = 'App'
+  debug       = false,
+  context     = 'App',
+  minLevel    = 'info'            // NEW – default threshold
 } = {}) {
+  const THRESHOLD = LVL[minLevel] ?? LVL.info;
   async function send(level, args) {
     if (!enableServer) return;
+    if (LVL[level] < THRESHOLD) return;          // NEW
     try {
       const response = await fetch(endpoint, {
-        method: 'POST',
+        method : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          level,
-          context,
-          args,
-          ts: Date.now()
-        })
+        credentials: 'include',                   // NEW – carry cookies / CSRF exempt
+        body   : JSON.stringify({ level, context, args, ts: Date.now() })
       });
       if (!response.ok) {
         // Surface server-side log ingestion failures

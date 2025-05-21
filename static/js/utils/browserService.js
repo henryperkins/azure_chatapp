@@ -152,6 +152,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
   // --------- DI wrappers for browser APIs ---------
   function FormDataImpl(form) {
     if (!windowObject.FormData) {
+      _logger?.error?.('browserService: windowObject.FormData is not available. This may occur in test/mocked environments.');
       throw new Error('browserService: windowObject.FormData is not available. This may occur in test/mocked environments.');
     }
     return new windowObject.FormData(form);
@@ -159,6 +160,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
 
   function MutationObserverImpl(callback) {
     if (!windowObject.MutationObserver) {
+      _logger?.error?.('browserService: windowObject.MutationObserver is not available. This may occur in test/mocked environments.');
       throw new Error('browserService: windowObject.MutationObserver is not available. This may occur in test/mocked environments.');
     }
     return new windowObject.MutationObserver(callback);
@@ -178,7 +180,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
     try {
       response = await windowObject.fetch(...args);
       if (!response.ok && _logger) {
-        _logger.warn('[browserService][fetchImpl] Non-OK response: ' + response.status, {
+        _logger?.warn?.('[browserService][fetchImpl] Non-OK response: ' + response.status, {
           context: 'browserService:fetchImpl',
           url: args[0],
           status: response.status
@@ -187,7 +189,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
       return response;
     } catch (err) {
       if (_logger) {
-        _logger.error('[browserService][fetchImpl] Error during fetch', err, {
+        _logger?.error?.('[browserService][fetchImpl] Error during fetch', err, {
           context: 'browserService:fetchImpl',
           url: args[0]
         });
@@ -219,6 +221,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
     // Timing helpers
     setTimeout: (...args) => {
       if (!windowObject.setTimeout) {
+        _logger?.error?.('browserService: windowObject.setTimeout is not available. This may occur in test/mocked environments.');
         throw new Error('browserService: windowObject.setTimeout is not available. This may occur in test/mocked environments.');
       }
       return windowObject.setTimeout(...args);
@@ -227,12 +230,14 @@ export function createBrowserService({ windowObject, logger } = {}) {
     /* Auth & other modules need interval helpers – expose via DI */
     setInterval: (...args) => {
       if (!windowObject.setInterval) {
+        _logger?.error?.('browserService: windowObject.setInterval is not available. This may occur in test/mocked environments.');
         throw new Error('browserService: windowObject.setInterval is not available. This may occur in test/mocked environments.');
       }
       return windowObject.setInterval(...args);
     },
     clearInterval: (...args) => {
       if (!windowObject.clearInterval) {
+        _logger?.error?.('browserService: windowObject.clearInterval is not available. This may occur in test/mocked environments.');
         throw new Error('browserService: windowObject.clearInterval is not available. This may occur in test/mocked environments.');
       }
       return windowObject.clearInterval(...args);
@@ -243,7 +248,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
         ? windowObject.requestAnimationFrame(cb)
         : (windowObject.setTimeout
             ? windowObject.setTimeout(cb, 0)
-            : (() => { throw new Error('browserService: windowObject.setTimeout is not available for requestAnimationFrame fallback.'); })()),
+            : (() => { _logger?.error?.('browserService: windowObject.setTimeout is not available for requestAnimationFrame fallback.'); throw new Error('browserService: windowObject.setTimeout is not available for requestAnimationFrame fallback.'); })()),
 
     // Location / navigation helpers
     setLocation: (url) => { windowObject.location.assign(url); },
