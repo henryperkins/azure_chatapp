@@ -501,15 +501,26 @@ export function createChatManager(deps = {}) {
           ?? response?.conversation
           ?? response;
 
-        if (!conversation?.id) {
+        // Accept alternative ID field names returned by backend
+        const convId =
+          conversation?.id ??
+          conversation?.conversation_id ??
+          conversation?.uuid ??
+          conversation?.conversationId ??
+          null;
+
+        if (!convId) {
           throw new Error('Server response missing conversation ID');
         }
 
-        this.currentConversationId = conversation.id;
+        // Normalise id so downstream code always finds .id
+        if (!('id' in conversation)) conversation.id = convId;
+
+        this.currentConversationId = convId;
         if (this.titleElement) {
           this.titleElement.textContent = conversation.title || "New Conversation";
         }
-        this._updateURLWithConversationId(conversation.id);
+        this._updateURLWithConversationId(convId);
 
         const event = new CustomEvent('chat:conversationCreated', {
           detail: {
