@@ -18,6 +18,8 @@ import uuid
 from typing import List, Any, Optional, Callable
 from uuid import UUID
 
+from db import get_async_session_context
+
 import numpy as np
 import httpx
 
@@ -801,25 +803,23 @@ async def process_files_for_project(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
 ) -> dict[str, Any]:
-    """Batch process project files with progress tracking.
-
-    Processes files associated with a project for search indexing.
-    Handles the complete workflow from database fetching to vector storage.
-
-    Args:
-        project_id: UUID of the project
-        file_ids: Optional list of specific file IDs to process, processes all if None
-        db: SQLAlchemy AsyncSession for database access
-        chunk_size: Size of text chunks for processing
-        chunk_overlap: Overlap between chunks
-
-    Returns:
-        Dictionary with processing results including:
-        - processed: Count of successfully processed files
-        - failed: Count of failed files
-        - errors: List of specific error messages
-        - details: List of detailed results per file
     """
+    Batch process project files with progress tracking.
+
+    If *db* is None we open/close our own AsyncSession so the
+    helper is safe to call from background tasks.
+    """
+    if db is None:
+        async with get_async_session_context() as session:
+            return await process_files_for_project(
+                project_id,
+                file_ids=file_ids,
+                db=session,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
+
+    # --------- existing body of the function goes here ---------
     from sqlalchemy import select
 
     # Initialize vector DB for project
