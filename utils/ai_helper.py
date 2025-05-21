@@ -279,202 +279,36 @@ async def augment_with_knowledge(
             )
             return []
 
-        # --- Search Knowledge Base ---
-        logger.debug(f"Searching knowledge base for project {project.id}...")
-
-        # Import here to fix Flake8/Pylint E402 outside-toplevel import error.
-        from services.knowledgebase_service import search_project_context  # noqa: E402
-
-        try:
-            search_results_data = await search_project_context(
-                project_id=project.id,
-                query=user_message,
-                db=db,
-                top_k=DEFAULT_KB_SEARCH_TOP_K,
-            )
-            if not search_results_data or not isinstance(search_results_data, dict):
-                logger.info(
-                    f"No valid search results structure returned for project {project.id}."
-                )
-                return []
-
-            results_list = search_results_data.get("results")
-            if not isinstance(results_list, list):
-                logger.warning(
-                    f"Search results 'results' key is not a list for project {project.id}: {type(results_list)}"
-                )
-                return []
-            if not results_list:
-                logger.info(
-                    f"No knowledge context search results found for query in project {project.id}"
-                )
-                return []
-
-        except Exception as search_error:
-            logger.error(
-                f"Error searching knowledge base for project {project.id}: {search_error}",
-                exc_info=True,
-            )
-            return []  # Stop augmentation if search fails
-
-        # --- Format and Filter Results ---
-        context_messages = []
-        total_tokens = 0
-        seen_sources = set()  # Simple deduplication based on source file and text hash
-
-        # Sort by score descending to prioritize most relevant results
-        sorted_results = sorted(
-            results_list,
-            key=lambda x: x.get("score", 0.0) if isinstance(x, dict) else 0.0,
-            reverse=True,
-        )[:results_limit]
-
-        for idx, result in enumerate(sorted_results):
-            # Stop if token budget is exceeded
-            if total_tokens >= max_context_tokens:
-                logger.info(
-                    f"Reached max context token limit ({max_context_tokens}) for conversation {conversation_id}."
-                )
-                break
-
-            # Validate result structure
-            if not isinstance(result, dict):
-                logger.warning(
-                    f"Skipping invalid search result item (not a dict): {result}"
-                )
-                continue
-
-            text = result.get("text", "").strip()
-            metadata = result.get("metadata", {})
-            score = result.get("score", 0.0)
-
-            if not text or not isinstance(metadata, dict):
-                logger.warning(
-                    f"Skipping result with missing text or invalid metadata: {result}"
-                )
-                continue
-
-            # Optional: Apply score threshold here as well if desired (retrieve_knowledge_context already does)
-            # if score < DEFAULT_SCORE_THRESHOLD: continue
-
-            source = metadata.get("file_name", "Unknown Source")
-            file_id = metadata.get("file_id")  # Can be None
-
-            # Deduplication check
-            source_key = f"{source}:{hash(text) % 10000}"  # Simple hash-based key
-            if source_key in seen_sources:
-                logger.debug(f"Skipping duplicate content from source '{source}'.")
-                continue
-            seen_sources.add(source_key)
-
-            # Calculate tokens for this chunk
-            try:
-                # Using estimate_token_count from utils.context as per original snippet
-                # Consider switching to calculate_tokens defined above for consistency if appropriate
-                result_tokens = count_tokens_messages(
-                    [{"role": "system", "content": text}]
-                )
-                # result_tokens = await calculate_tokens(text, model_id="<relevant_model_id>") # Alternative
-            except Exception as token_error:
-                logger.warning(
-                    f"Could not estimate token count for context chunk: {token_error}. Using estimate."
-                )
-                result_tokens = (len(text) + 3) // 4  # Fallback estimate
-
-            # Check if adding this chunk exceeds the budget
-            if total_tokens + result_tokens > max_context_tokens:
-                logger.debug(
-                    f"Skipping result due to token limit: Current {total_tokens}, Result {result_tokens}, Max {max_context_tokens}"
-                )
-                continue
-
-            # --- Format the context message ---
-            file_meta = {
-                "kb_context": True,
-                "source": source,
-                "file_id": str(file_id) if file_id else None,
-                "score": float(score),
-                "tokens": result_tokens,
-                "chunk_index": metadata.get("chunk_index"),
-                "thinking_validated": False,
-                "redacted_thinking": None,
-            }
-            # Handle extended thinking budget validation if enabled via model config
-            current_model_config = model_config_override or get_model_config(
-                project.default_model
-            )
-            if current_model_config and current_model_config.get("extended_thinking"):
-                if result_tokens < MIN_EXTENDED_THINKING_TOKENS:
-                    logger.warning(
-                        f"Context chunk from '{source}' has insufficient tokens ({result_tokens}) "
-                        f"for extended thinking (min {MIN_EXTENDED_THINKING_TOKENS})."
-                    )
-                else:
-                    logger.debug(
-                        f"Adding extended thinking metadata for chunk from '{source}'."
-                    )
-                    file_meta["thinking_budget"] = result_tokens
-                    file_meta["requires_signature_verification"] = True
-
-            context_msg = {
-                "role": "system",
-                "content": f"Relevant context from {source} (Score: {score:.2f}):\n{text}",
-                "metadata": {"citation": f"[{idx}]", **file_meta},
-            }
-
-            context_messages.append(context_msg)
-            total_tokens += result_tokens
-
-        # --- Store results (optional, depends on requirements) ---
-        # Storing results on the conversation object might have persistence implications.
-        # Ensure the Conversation model supports this attribute and that changes are saved.
-        if hasattr(conversation, "search_results"):
-            try:
-                conversation.search_results = {
-                    "query": user_message,
-                    "results_retrieved": len(results_list),
-                    "results_used": len(context_messages),
-                    "token_count": total_tokens,
-                    # Optionally store the raw results_list if needed for debugging
-                    # "raw_results": results_list
-                }
-                # IMPORTANT: If using SQLAlchemy, changes to the conversation object
-                # might need explicit commit depending on session management.
-                # Consider if this update should happen here or elsewhere.
-                # Example:
-                # db.add(conversation) # Add instance to session if modified
-                # await db.flush() # Flush changes to DB if needed immediately
-                # await db.commit() # Commit transaction if appropriate here
-                logger.debug(
-                    f"Stored search result summary on conversation {conversation_id}."
-                )
-            except Exception as store_err:
-                logger.error(
-                    f"Failed to store search results on conversation {conversation_id}: {store_err}",
-                    exc_info=True,
-                )
-        else:
-            logger.warning(
-                f"Conversation object {conversation_id} does not have 'search_results' attribute for storing summary."
-            )
-
-        if context_messages:
-            logger.info(
-                f"Successfully augmented conversation {conversation_id} with {len(context_messages)} knowledge context messages ({total_tokens} tokens)."
-            )
-        else:
-            logger.info(
-                f"No suitable knowledge context found or added for conversation {conversation_id}."
-            )
-
-        return context_messages
-
-    except Exception as e:
-        logger.error(
-            f"Critical error during knowledge augmentation for conversation {conversation_id}: {e}",
-            exc_info=True,
+        # --- Retrieve KB context via shared helper ------------------------
+        ctx_text = await retrieve_knowledge_context(
+            query=user_message,
+            project_id=project.id,        # type: ignore[arg-type]
+            db=db,
+            top_k=results_limit,
+            score_threshold=DEFAULT_SCORE_THRESHOLD,
         )
-        return []  # Return empty list on unexpected errors
+        if not ctx_text:
+            logger.info(
+                f"No suitable knowledge context found for conversation {conversation_id}."
+            )
+            return []
+
+        token_count = count_tokens_text(ctx_text)
+        logger.debug(
+            f"Injecting knowledge context into conversation {conversation_id} "
+            f"({token_count} tokens)."
+        )
+
+        return [
+            {
+                "role": "system",
+                "content": ctx_text,
+                "metadata": {
+                    "kb_context": True,
+                    "tokens": token_count,
+                },
+            }
+        ]
 
 
 # --- End of Module ---
