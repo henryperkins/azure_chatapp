@@ -519,10 +519,25 @@ export function createChatManager(deps = {}) {
             convoEndpoint,
             { method: "GET", params: { limit: 1, sort: "desc" } }
           );
-          const conversations = getResp?.conversations || (Array.isArray(getResp) ? getResp : []);
-          if (conversations && conversations.length > 0) {
-            convId = conversations[0].id;
-            conversation = conversations[0];
+          const conversations =
+            getResp?.conversations                     // { conversations: [...] }
+            ?? getResp?.data?.conversations            // { data: { conversations: [...] } }
+            ?? (Array.isArray(getResp?.data)           // { data: [...] }
+                  ? getResp.data
+                  : Array.isArray(getResp)             // plain array response
+                    ? getResp
+                    : []);
+
+          if (conversations.length) {
+            const latest = conversations[0];
+            convId =
+              latest?.id ??
+              latest?.conversation_id ??
+              latest?.uuid ??
+              latest?.conversationId ??
+              null;
+
+            if (!conversation) conversation = latest;
           }
         }
 
