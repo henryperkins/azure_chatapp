@@ -122,8 +122,13 @@ let _appReadyDispatched = false;
 function fireAppReady(success = true, error = null) {
   if (_appReadyDispatched) return;
   _appReadyDispatched = true;
-  // Register 'app' in DI if successful, before emitting readiness
-  if (success && DependencySystem && typeof DependencySystem.register === "function") {
+  // Register 'app' in DI once (skip if already present)
+  if (
+    success &&
+    DependencySystem &&
+    typeof DependencySystem.register === "function" &&
+    !(DependencySystem.modules?.has?.('app'))
+  ) {
     DependencySystem.register('app', app);
   }
   const detail = success ? { success } : { success, error };
