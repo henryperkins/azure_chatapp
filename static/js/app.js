@@ -122,6 +122,10 @@ let _appReadyDispatched = false;
 function fireAppReady(success = true, error = null) {
   if (_appReadyDispatched) return;
   _appReadyDispatched = true;
+  // Register 'app' in DI if successful, before emitting readiness
+  if (success && DependencySystem && typeof DependencySystem.register === "function") {
+    DependencySystem.register('app', app);
+  }
   const detail = success ? { success } : { success, error };
   AppBus.dispatchEvent(new CustomEvent('app:ready', { detail }));
   domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail }));
@@ -157,6 +161,7 @@ DependencySystem.register('errorReporter', errorReporter);
 // ---------------------------------------------------------------------------
 // The app variable is already declared and registered above (before eventHandlers)
 
+let app = {};
 const eventHandlers = createEventHandlers({
   app,
   DependencySystem,
@@ -1755,4 +1760,29 @@ if (typeof window !== 'undefined') {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // 🚀 Auto-bootstrap the application
+  // ---------------------------------------------------------------------
+  // app.js is the only file in the codebase allowed to run side-effects at
+  // import time.  Previous refactors accidentally removed the automatic
+  // invocation of `init()`, leaving the loading spinner visible forever
+  // because initialization never started.  We restore the behaviour by
+  // kicking off the async init sequence once the module is evaluated in the
+  // browser environment.  Any error is surfaced through the DI-provided
+  // logger so that it reaches the unified logging pipeline.
+
+  (async () => {
+    try {
+      await init();
+    } catch (err) {
+      const log = DependencySystem?.modules?.get?.('logger');
+      if (log?.error) {
+        log.error('[app.js][bootstrap] init() failed', err, { context: 'app:bootstrap' });
+      }
+      // Fire app:ready with failure so external listeners are unblocked
+      try {
+        fireAppReady(false, err);
+      } catch (e) { /* no-op */ }
+    }
+  })();
 }
