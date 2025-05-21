@@ -56,84 +56,22 @@ async def receive_logs(request: Request):
         # Pretty-print to log file in addition to console (append mode)
         try:
             with open("client_logs.jsonl", "a", encoding="utf-8") as logfile:
-                logfile.write(json.dumps(log_entry, ensure_ascii=False, indent=2))
+                logfile.write(json.dumps(log_entry, ensure_ascii=False))
                 logfile.write("\n")
         except Exception as log_exc:
             print(f"{Fore.YELLOW}[CLIENT LOG WARNING] Failed to write log file: {str(log_exc)}{reset}", file=sys.stderr, flush=True)
 
+        # Skip Sentry for noise-level logs
+        if level in ("debug", "info"):
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+
         # Integration: Forward client log to Sentry as a message (retaining details)
         try:
             msg = f"[{ctx}] {level.upper()}: {summary}"
-            if level == "fatal":
+            if level in ("warning", "warn", "error", "critical", "fatal"):
                 capture_custom_message(
                     message=msg,
-                    level="fatal",
-                    extra={
-                        "browser": True,
-                        "source": ctx,
-                        "args": args,
-                        "raw": log_entry
-                    }
-                )
-            elif level == "critical":
-                capture_custom_message(
-                    message=msg,
-                    level="critical",
-                    extra={
-                        "browser": True,
-                        "source": ctx,
-                        "args": args,
-                        "raw": log_entry
-                    }
-                )
-            elif level == "error":
-                capture_custom_message(
-                    message=msg,
-                    level="error",
-                    extra={
-                        "browser": True,
-                        "source": ctx,
-                        "args": args,
-                        "raw": log_entry
-                    }
-                )
-            elif level == "warning" or level == "warn":
-                capture_custom_message(
-                    message=msg,
-                    level="warning",
-                    extra={
-                        "browser": True,
-                        "source": ctx,
-                        "args": args,
-                        "raw": log_entry
-                    }
-                )
-            elif level == "info":
-                capture_custom_message(
-                    message=msg,
-                    level="info",
-                    extra={
-                        "browser": True,
-                        "source": ctx,
-                        "args": args,
-                        "raw": log_entry
-                    }
-                )
-            elif level == "debug":
-                capture_custom_message(
-                    message=msg,
-                    level="debug",
-                    extra={
-                        "browser": True,
-                        "source": ctx,
-                        "args": args,
-                        "raw": log_entry
-                    }
-                )
-            else:
-                capture_custom_message(
-                    message=msg,
-                    level="info",
+                    level=level,
                     extra={
                         "browser": True,
                         "source": ctx,
