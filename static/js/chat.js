@@ -575,8 +575,9 @@ export function createChatManager(deps = {}) {
         } catch (error) {
           logger.error("[ChatManager][sending message]", error, { context: "chatManager" });
           this._hideThinkingIndicator();
-          this._showErrorMessage(error.message);
-          this.projectDetails?.disableChatUI?.("Chat error: " + (error.message || error));
+          const msg = this._extractErrorMessage(error);
+          this._showErrorMessage(msg);
+          this.projectDetails?.disableChatUI?.("Chat error: " + msg);
         }
       });
     }
@@ -1050,6 +1051,9 @@ export function createChatManager(deps = {}) {
     }
 
     _extractErrorMessage(err) {
+      if (err?.data?.detail)           return String(err.data.detail);
+      if (err?.response?.data?.detail) return String(err.response.data.detail);
+      if (err?.detail)                 return String(err.detail);
       if (!err) return "Unknown error occurred";
       if (typeof err === "string") return err;
       if (err.message) return err.message;
