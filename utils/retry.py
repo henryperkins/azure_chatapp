@@ -32,7 +32,7 @@ def with_retry(func):
                 delay = (
                     RETRY_DELAY * (2 ** (retries - 1)) * (0.9 + 0.2 * (time.time() % 1))
                 )
-                logger.warning(f"Retry {retries}/{MAX_RETRIES} after {delay:.2f}s: {e}")
+                logger.warning("Retry %s/%s after %.2fs", retries, MAX_RETRIES, delay, exc_info=e)
                 time.sleep(delay)
                 last_exception = e
         if last_exception:
