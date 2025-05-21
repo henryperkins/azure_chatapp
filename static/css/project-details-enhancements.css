@@ -168,6 +168,9 @@
   padding: 0.5rem 0.5rem 0.5rem 0.5rem;
   max-height: 50vh !important;
   gap: 0.5rem;
+  /* NEW → make gap work and avoid child overlap */
+  display: flex;
+  flex-direction: column;
 }
 #projectConversationsList > div,
 #projectConversationsList > .conversation-item,
