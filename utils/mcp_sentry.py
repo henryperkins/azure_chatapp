@@ -467,6 +467,7 @@ def enable_mcp_integrations() -> bool:
             )
 
         print(f"Sentry MCP integration is ENABLED. MCP Status: {json.dumps(status) if status else 'UNKNOWN'}")
+        logger.info(f"Sentry MCP integration is ENABLED. MCP Status: {json.dumps(status) if status else 'UNKNOWN'}")
         logger.info("Sentry MCP integrations enabled successfully")
         return True
 

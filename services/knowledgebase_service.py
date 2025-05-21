@@ -145,6 +145,8 @@ async def create_knowledge_base(
     return kb
 
 
+# TODO-deduplicate: this helper mostly duplicates project_service.validate_project_access.
+# Replace calls with the shared version and delete this local copy.
 async def ensure_project_has_knowledge_base(
     project_id: UUID, db: AsyncSession, user_id: Optional[int] = None
 ) -> KnowledgeBase:
