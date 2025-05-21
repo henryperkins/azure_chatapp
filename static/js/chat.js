@@ -493,28 +493,40 @@ export function createChatManager(deps = {}) {
           ? apiEndpoints.CONVERSATIONS(this.projectId)
           : String(apiEndpoints.CONVERSATIONS).replace('{id}', this.projectId);
 
-        const response = await this._api(convoEndpoint, { method: "POST", body: payload });
+        const response = await this._api(
+          convoEndpoint,
+          { method: "POST", body: payload, returnFullResponse: true }
+        );
 
-        const conversation =
-          response?.data?.conversation
-          ?? response?.data
-          ?? response?.conversation
-          ?? response;
-
-        // Accept alternative ID field names returned by backend
-        const convId =
+        let { data: conversation, headers = {} } = response ?? {};
+        let convId =
           conversation?.id ??
           conversation?.conversation_id ??
           conversation?.uuid ??
           conversation?.conversationId ??
           null;
 
-        if (!convId) {
-          throw new Error('Server response missing conversation ID');
+        // NEW ─ look at Location header if we still don’t have it
+        if (!convId && headers.location) {
+          const loc = headers.location;               // e.g. “…/conversations/<uuid>"
+          convId = loc.split('/').filter(Boolean).pop();
         }
 
-        // Normalise id so downstream code always finds .id
-        if (!('id' in conversation)) conversation.id = convId;
+        // Normalise & fallback (old GET logic stays the same)
+        if (!convId) {
+          // fallback: try GET as before
+          const getResp = await this._api(
+            convoEndpoint,
+            { method: "GET", params: { limit: 1, sort: "desc" } }
+          );
+          const conversations = getResp?.conversations || (Array.isArray(getResp) ? getResp : []);
+          if (conversations && conversations.length > 0) {
+            convId = conversations[0].id;
+            conversation = conversations[0];
+          }
+        }
+
+        if (!('id' in conversation) && convId) conversation = { ...(conversation || {}), id: convId };
 
         this.currentConversationId = convId;
         if (this.titleElement) {
