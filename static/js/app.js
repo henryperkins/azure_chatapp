@@ -162,6 +162,8 @@ DependencySystem.register('errorReporter', errorReporter);
 // The app variable is already declared and registered above (before eventHandlers)
 
 let app = {};
+// Early DI-registration so any later waitFor('app') succeeds
+DependencySystem.register('app', app);
 const eventHandlers = createEventHandlers({
   app,
   DependencySystem,
