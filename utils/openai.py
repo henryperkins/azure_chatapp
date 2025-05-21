@@ -284,46 +284,24 @@ async def validate_azure_params(
     model_config: dict[str, Any],
     kwargs: dict
 ) -> None:
-    """Validate Azure-specific parameters against model capabilities."""
+    """Validate Azure-specific parameters.  
+    Runs the generic validator first, then applies Azure-only rules
+    (markdown formatting & reasoning-summary)."""
     with sentry_span(op="ai.azure.validate_params", description="Validate Azure Chat Params"):
-        capabilities = model_config.get("capabilities", [])
-        parameters_config = model_config.get("parameters", {})
+        # ---------------- Generic validation ----------------
+        try:
+            _validate_model_params(model_name, kwargs)
+        except ValueError as exc:
+            raise
 
-        # Markdown formatting support
-        if kwargs.get("enable_markdown_formatting"):
-            if "markdown_formatting" not in capabilities:
-                raise ValueError(f"{model_name} doesn't support markdown formatting")
+        # ---------------- Azure-only checks ----------------
+        capabilities       = model_config.get("capabilities", [])
+        parameters_config  = model_config.get("parameters", {})
 
-        # Check vision
-        if kwargs.get("image_data"):
-            if "vision" not in capabilities:
-                raise ValueError(f"{model_name} doesn't support vision")
-            vision_detail = kwargs.get("vision_detail", "auto")
-            valid_details = parameters_config.get("vision_detail", [])
-            if valid_details and vision_detail not in valid_details:
-                raise ValueError(
-                    f"Invalid vision_detail: {vision_detail}. Must be one of {valid_details}"
-                )
-            max_images = model_config.get("max_images", 1)
-            num_images = (
-                len(kwargs["image_data"]) if isinstance(kwargs["image_data"], list) else 1
-            )
-            if num_images > max_images:
-                raise ValueError(
-                    f"{model_name} supports max {max_images} images, but got {num_images}"
-                )
+        if kwargs.get("enable_markdown_formatting") and "markdown_formatting" not in capabilities:
+            raise ValueError(f"{model_name} doesn't support markdown formatting")
 
-        # Reasoning effort
-        if kwargs.get("reasoning_effort"):
-            if "reasoning_effort" not in capabilities:
-                raise ValueError(f"{model_name} doesn't support reasoning_effort")
-            valid_efforts = parameters_config.get("reasoning_effort", [])
-            if valid_efforts and kwargs["reasoning_effort"] not in valid_efforts:
-                raise ValueError(
-                    f"Invalid reasoning_effort '{kwargs['reasoning_effort']}', must be in {valid_efforts}"
-                )
-
-        # Reasoning summary support (o-series/response APIs)
+        # Reasoning summary support (o-series / Responses API)
         # The parameter may be named reasoning_summary (external) or summary (API).
         reasoning_summary = kwargs.get("reasoning_summary") or kwargs.get("summary")
         if reasoning_summary:
