@@ -191,8 +191,6 @@ class FileValidator:
         return file_info
 
 
-
-
 def sanitize_filename(filename: str) -> str:
     """
     Sanitize filename to prevent path traversal and special chars.
