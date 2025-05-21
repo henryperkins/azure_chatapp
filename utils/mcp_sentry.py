@@ -16,6 +16,7 @@ from typing import Any, Optional, Union, List, Tuple, Callable
 import sentry_sdk
 from sentry_sdk import configure_scope
 from config import settings as config_settings
+from utils.retry import with_retry
 
 logger = logging.getLogger(__name__)          # NEW – moved up
 
@@ -88,50 +89,6 @@ class CacheMissError(SentryMCPError):
     """Raised when requested data is not in cache"""
 
 
-def with_retry(func: Callable) -> Callable:
-    """
-    Decorator that adds retry logic to functions that interact with the MCP server.
-    Will retry up to MAX_RETRIES times with exponential backoff.
-    Handles rate limiting and specific error cases differently.
-    """
-
-    def wrapper(*args, **kwargs):
-        retries = 0
-        last_exception = None
-
-        while retries < MAX_RETRIES:
-            try:
-                return func(*args, **kwargs)
-            except RateLimitError as e:
-                # For rate limits, use the Retry-After header if available
-                retry_after = getattr(e, "retry_after", RETRY_DELAY * (2**retries))
-                logger.warning(f"Rate limited, retrying after {retry_after}s")
-                time.sleep(retry_after)
-                retries += 1
-                last_exception = e
-            except (ServerConnectionError, ServerResponseError) as e:
-                retries += 1
-                if retries >= MAX_RETRIES:
-                    logger.error(f"Failed after {MAX_RETRIES} retries: {e}")
-                    raise
-
-                # Exponential backoff with jitter
-                delay = (
-                    RETRY_DELAY * (2 ** (retries - 1)) * (0.9 + 0.2 * (time.time() % 1))
-                )
-                logger.warning(f"Retry {retries}/{MAX_RETRIES} after {delay:.2f}s: {e}")
-                time.sleep(delay)
-                last_exception = e
-            except Exception as e:
-                # Don't retry other types of exceptions
-                logger.error(f"Unrecoverable error in {func.__name__}: {e}")
-                raise
-
-        if last_exception:
-            raise last_exception
-        raise SentryMCPError("Max retries reached without attempting")
-
-    return wrapper
 
 
 # Cache configuration

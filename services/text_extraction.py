@@ -16,6 +16,7 @@ from utils.file_validation import FileValidator
 import mimetypes
 import chardet
 from utils.tokens import count_tokens_text
+from utils.io_utils import to_binary_io
 
 logger = logging.getLogger(__name__)
 
@@ -152,27 +153,6 @@ class TextExtractor:
 
         return chunks
 
-    def _get_file_obj(
-        self, file_content: Union[bytes, BinaryIO, str, bytearray, memoryview]
-    ) -> BinaryIO:
-        """Helper function to convert file_content to a BinaryIO object."""
-        if isinstance(file_content, str):
-            if os.path.exists(file_content):
-                return open(file_content, "rb")
-            else:
-                raise ValueError(f"File path does not exist: {file_content}")
-        elif isinstance(file_content, (bytes, bytearray, memoryview)):
-            return io.BytesIO(file_content)
-        elif isinstance(file_content, BinaryIO):
-            file_content.seek(0)
-            return file_content
-        elif hasattr(file_content, "read") and hasattr(file_content, "seek"):
-            file_content.seek(0)
-            return file_content
-        else:
-            raise TypeError(
-                "Invalid file_content type. Must be bytes, bytearray, memoryview, BinaryIO, or a valid file path string."
-            )
 
     async def extract_text(
         self,
@@ -195,7 +175,7 @@ class TextExtractor:
         Returns:
             Tuple of (extracted_text_chunks, metadata_dict)
         """
-        file_obj = self._get_file_obj(file_content)
+        file_obj = to_binary_io(file_content)
 
         # Determine file type from filename or mimetype
         file_info = {}
