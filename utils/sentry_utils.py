@@ -46,6 +46,8 @@ from fastapi import Response
 from fastapi.responses import JSONResponse
 from fastapi import Request as FastAPIRequest
 import sentry_sdk
+
+from utils.logging_config import request_id_var, trace_id_var   # NEW
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
@@ -56,6 +58,14 @@ from sentry_sdk.types import Event, Hint
 # ------------------------------------------------------------------------- #
 # Structured logging context-vars (imported – do NOT create a second copy). #
 # ------------------------------------------------------------------------- #
+
+__all__ = [
+    "configure_sentry", "sentry_span", "set_sentry_tag",
+    "set_sentry_user", "set_sentry_context", "get_current_trace_id",
+    "create_background_task",
+    "request_id_var",          # NEW
+    "trace_id_var",            # NEW
+]
 
 # ------------------------------------------------------------------------- #
 # Constants                                                                 #
