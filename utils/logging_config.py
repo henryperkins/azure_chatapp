@@ -44,9 +44,15 @@ class CustomJsonFormatter(logging.Formatter):
         if hasattr(record, 'trace_id') and record.trace_id:
             log_record['trace_id'] = record.trace_id
 
-        # Add any extra fields from the record
-        if hasattr(record, 'extra'):
-            for key, value in record.extra.items():
+        # Preserve attributes supplied via logging extra={...}
+        for key, value in record.__dict__.items():
+            if key not in (
+                'name', 'msg', 'args', 'levelname', 'levelno', 'pathname',
+                'filename', 'module', 'exc_info', 'exc_text', 'stack_info',
+                'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
+                'thread', 'threadName', 'processName', 'process',
+                'timestamp', 'level', 'message', 'request_id', 'trace_id'
+            ):
                 log_record[key] = value
 
         # Add exception info if present

@@ -5,8 +5,10 @@ Provides standardized functions for serializing database models to dictionaries.
 Ensures consistent response formats across endpoints.
 """
 
-from datetime import datetime
-from typing import Any, Optional, List, Sequence, Union
+from datetime import datetime, date
+from typing import Any, Optional, List, Sequence, Union, Mapping
+from sqlalchemy import MetaData
+from uuid import UUID
 
 from models.project import Project
 from models.conversation import Conversation
