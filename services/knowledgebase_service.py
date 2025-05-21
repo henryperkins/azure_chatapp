@@ -510,20 +510,20 @@ async def _validate_user_and_project(
     project_id: UUID, user_id: Optional[int], db: AsyncSession
 ) -> Project:
     """
-    Re-use project_service.validate_project_access to remove duplicate
-    permission logic.
+    Wrapper – forwards to project_service.validate_project_access to avoid code duplication.
     """
+    from services.project_service import validate_project_access
+    user = None
     if user_id is not None:
         user = await get_by_id(db, User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        # canonical permission check
-        return await validate_project_access(project_id, user, db)
-    # anonymous / internal call – just load the project
-    project = await get_by_id(db, Project, project_id)
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return project
+    return await validate_project_access(
+        project_id=project_id,
+        user=user,               # None ⇒ skip ownership check
+        db=db,
+        skip_ownership_check=user is None,
+    )
 
 
 async def _validate_file_access(

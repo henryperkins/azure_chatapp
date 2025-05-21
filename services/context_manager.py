@@ -1,4 +1,5 @@
-from utils.context import trim_context_to_window, count_tokens_messages
+from utils.context import trim_context_to_window
+from utils.tokens import count_tokens_messages
 from utils.ai_helper import augment_with_knowledge
 from utils.model_registry import get_model_config
 
@@ -25,7 +26,12 @@ class ContextManager:
             {"role": "user", "content": incoming_user_text}
         ]
         # 4️⃣ Trim
-        max_ctx = get_model_config(self.model_id)["max_ctx"]
+        model_cfg = get_model_config(self.model_id) or {}
+        max_ctx   = (
+            model_cfg.get("max_context_tokens")      # ← canonical key
+            or model_cfg.get("max_ctx")              # ← legacy fallback
+            or 8192                                  # ← hard-stop default
+        )
         orig_msg_count = len(msgs)
         msgs, removed = await trim_context_to_window(msgs, self.model_id, max_ctx)
         token_usage = count_tokens_messages(msgs, self.model_id)
