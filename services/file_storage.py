@@ -56,31 +56,7 @@ else:
 # Define a clear union for the file content
 # ----------------------------------------------------
 FileContent = Union[bytes, bytearray, memoryview, BinaryIO]
-
-
-def ensure_bytes(file_content: FileContent) -> bytes:
-    """
-    Convert various input types to raw bytes:
-    - bytes, bytearray, memoryview => direct conversion
-    - file-like objects => read from them
-    """
-    if isinstance(file_content, (bytes, bytearray, memoryview)):
-        return bytes(file_content)  # memoryview/bytearray -> bytes
-
-    # If it's a file-like object
-    # (BinaryIO typically extends IOBase, but checking IOBase is more general)
-    if isinstance(file_content, IOBase):
-        content = file_content.read()
-        if not isinstance(content, bytes):
-            raise TypeError("File-like object did not return bytes when read()")
-        # Reset pointer if seekable
-        if file_content.seekable():
-            file_content.seek(0)
-        return content
-
-    raise TypeError(
-        "file_content must be bytes-like or a file-like object returning bytes"
-    )
+from utils.io_utils import ensure_bytes
 
 
 def format_bytes(size: float) -> str:

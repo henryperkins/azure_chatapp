@@ -12,7 +12,9 @@ from models.message import Message
 from utils.openai import openai_chat
 from config import settings
 from utils.db_utils import get_by_id, save_model
-from utils.ai_helper import get_model_config, retrieve_knowledge_context, calculate_tokens
+from utils.model_registry import get_model_config
+from utils.tokens import count_tokens_text
+from utils.ai_helper import retrieve_knowledge_context
 
 logger = logging.getLogger(__name__)
 
@@ -291,7 +293,7 @@ async def generate_ai_response(
         total_used = completion_tokens + reasoning_tokens
 
         if not response_usage and assistant_content:
-            completion_tokens = await calculate_tokens(assistant_content, model_id)
+            completion_tokens = count_tokens_text(assistant_content, model_id)
             total_used = completion_tokens
             logger.warning(
                 f"API response missing usage data for model {model_id}. "
