@@ -136,6 +136,7 @@ class ConversationService:
             project_id=project_id,
             model_config=model_config or {},
             kb_enabled=kb_enabled,
+            use_knowledge_base=kb_enabled,
         )
 
         try:
@@ -228,6 +229,7 @@ class ConversationService:
             updated = True
         if kb_enabled is not None:
             conv.kb_enabled = kb_enabled
+            conv.use_knowledge_base = kb_enabled
             updated = True
 
         if updated:
@@ -523,6 +525,7 @@ class ConversationService:
             formatted_text=html,
             role=role,
             token_count=token_count,
+            content=msg_text,
             extra_data=extra_data if extra_data else None,
         )
         await save_model(self.db, message)
