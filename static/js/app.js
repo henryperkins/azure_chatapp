@@ -154,6 +154,9 @@ const errorReporter =
   { report: (...args) => logger.error('[ErrorReporterStub]', ...args, { context: 'app:ErrorReporterStub' }) };
 DependencySystem.register('errorReporter', errorReporter);
 
+// ---------------------------------------------------------------------------
+// The app variable is already declared and registered above (before eventHandlers)
+
 const eventHandlers = createEventHandlers({
   app,
   DependencySystem,
@@ -251,11 +254,7 @@ const appModule = {
 DependencySystem.register('appModule', appModule);
 
 // ---------------------------------------------------------------------------
-// Temporary stub: register an empty "app" early so any
-// DependencySystem.waitFor('app') calls in factories executed below
-// succeed immediately. The full App API is assigned later.
-const app = {};
-DependencySystem.register('app', app);
+// The app variable is already declared and registered above (before eventHandlers)
 
 // ---------------------------------------------------------------------------
 // 7.5) Create API client
