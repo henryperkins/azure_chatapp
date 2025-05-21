@@ -280,7 +280,7 @@ async def validate_azure_params(
     model_config: dict[str, Any],
     kwargs: dict
 ) -> None:
-    """Validate Azure-specific parameters.  
+    """Validate Azure-specific parameters.
     Runs the generic validator first, then applies Azure-only rules
     (markdown formatting & reasoning-summary)."""
     with sentry_span(op="ai.azure.validate_params", description="Validate Azure Chat Params"):
@@ -291,8 +291,8 @@ async def validate_azure_params(
             raise
 
         # ---------------- Azure-only checks ----------------
-        capabilities       = model_config.get("capabilities", [])
-        parameters_config  = model_config.get("parameters", {})
+        capabilities = model_config.get("capabilities", [])
+        parameters_config = model_config.get("parameters", {})
 
         if kwargs.get("enable_markdown_formatting") and "markdown_formatting" not in capabilities:
             raise ValueError(f"{model_name} doesn't support markdown formatting")
