@@ -26,7 +26,8 @@ export function createApiClient({
 
   // Define the main request function
   const mainApiRequest = async function apiRequest(url, opts = {}, skipCache = false) {
-    const method = (opts.method || "GET").toUpperCase();
+    const { returnFullResponse = false, ...restOpts } = opts;
+    const method = (restOpts.method || "GET").toUpperCase();
 
     if (!skipCache && method === "GET" && globalUtils.shouldSkipDedup(url)) {
       skipCache = true;
@@ -35,9 +36,9 @@ export function createApiClient({
     const auth = getAuthModule?.();
     let fullUrl = globalUtils.isAbsoluteUrl(url) ? url : `${BASE_URL}${url}`;
 
-    // Handle opts.params for GET requests
-    if (method === "GET" && opts.params && typeof opts.params === 'object') {
-      const queryParams = new URLSearchParams(opts.params).toString();
+    // Handle restOpts.params for GET requests
+    if (method === "GET" && restOpts.params && typeof restOpts.params === 'object') {
+      const queryParams = new URLSearchParams(restOpts.params).toString();
       if (queryParams) {
         fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryParams;
       }
@@ -51,35 +52,35 @@ export function createApiClient({
     }
 
     const bodyKey =
-      opts.body instanceof FormData
+      restOpts.body instanceof FormData
         ? `[form-data-${Date.now()}]`
-        : globalUtils.stableStringify(opts.body || {});
+        : globalUtils.stableStringify(restOpts.body || {});
     const key = `${method}-${normUrl}-${bodyKey}`;
 
     if (!skipCache && method === "GET" && pending.has(key)) {
       return pending.get(key);
     }
 
-    opts.headers = { Accept: "application/json", ...(opts.headers || {}) };
+    restOpts.headers = { Accept: "application/json", ...(restOpts.headers || {}) };
     // Always send cookies unless caller over-rides
-    if (!('credentials' in opts)) opts.credentials = 'include';
+    if (!('credentials' in restOpts)) restOpts.credentials = 'include';
 
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
       const csrf = auth.getCSRFToken();
       if (csrf) {
-        opts.headers["X-CSRF-Token"] = csrf;
+        restOpts.headers["X-CSRF-Token"] = csrf;
       } else if (auth?.logger && typeof auth.logger.warn === "function") {
         auth.logger.warn("[apiClient] Missing CSRF token for " + normUrl, { context: "apiClient:csrf" });
       }
     }
 
     // JSON stringify body if plain object (not FormData)
-    if (opts.body && typeof opts.body === "object" && !(opts.body instanceof FormData)) {
-      opts.headers["Content-Type"] ??= "application/json;charset=UTF-8";
-      if (opts.headers["Content-Type"].includes("application/json")) {
+    if (restOpts.body && typeof restOpts.body === "object" && !(restOpts.body instanceof FormData)) {
+      restOpts.headers["Content-Type"] ??= "application/json;charset=UTF-8";
+      if (restOpts.headers["Content-Type"].includes("application/json")) {
         try {
-          opts.body = JSON.stringify(opts.body);
+          restOpts.body = JSON.stringify(restOpts.body);
         } catch (err) {
           return Promise.reject(new Error("Failed to serialize request body."));
         }
@@ -91,7 +92,7 @@ export function createApiClient({
       (browserService?.getWindow?.() || browserService?.windowObject)?.AbortController
       || AbortController;
     const abortCtl = new AbortControllerImpl();
-    opts.signal = abortCtl.signal;
+    restOpts.signal = abortCtl.signal;
     const apiTimeout = APP_CONFIG?.TIMEOUTS?.API_REQUEST || 15000;
     const timer = setTimeout(
       () => abortCtl.abort(new Error(`API Timeout (${apiTimeout}ms)`)),
@@ -100,7 +101,7 @@ export function createApiClient({
 
     const p = (async () => {
       try {
-        const resp = await (browserService?.fetch || fetch)(normUrl, opts);
+        const resp = await (browserService?.fetch || fetch)(normUrl, restOpts);
 
         // ---------- NEW unified response handling ----------
         const contentType = resp.headers.get('content-type') || '';
@@ -115,6 +116,13 @@ export function createApiClient({
         }
 
         if (resp.ok) {                     // 2xx
+          if (returnFullResponse) {
+            return {
+              data   : payload,                       // may be null
+              status : resp.status,
+              headers: Object.fromEntries(resp.headers.entries())
+            };
+          }
           return payload;                  // <- what callers will receive
         }
 
