@@ -1,4 +1,4 @@
-markdown2>=2.4.14
-bleach>=6.1.0
-sqlalchemy>=2.0.41
-greenlet>=1.1
+markdown2
+bleach
+sqlalchemy
+greenlet
