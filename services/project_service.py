@@ -13,16 +13,22 @@ from typing import Optional, Any, List, Type, Union  # Added Union to imports
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import asc, desc, func
 from sqlalchemy.orm import joinedload
 
 from models.knowledge_base import KnowledgeBase
 from models.conversation import Conversation
 from models.project_file import ProjectFile
-from utils.serializers import serialize_list
 from enum import Enum
 from models.user import User, UserRole
 from models.project import Project, ProjectUserAssociation
+
+# NEW IMPORTS
+from utils.db_utils import (
+    validate_resource_access as _core_validate_resource_access,
+    get_all_by_condition as _core_get_all_by_condition,
+)
+from utils.serializers import serialize_list        # needed below
+from sqlalchemy import asc, desc                    # local sort helper
 
 
 # ---- ID normaliser --------------------------------------------------------
@@ -565,6 +571,7 @@ async def get_project_conversations(project_id: Union[UUID, int], db: AsyncSessi
 # =======================================================
 
 
+# ── Back-compat pagination helper (uses db_utils core) ────────────────
 async def get_paginated_resources(
     db: AsyncSession,
     model_class: Type,
@@ -573,46 +580,38 @@ async def get_paginated_resources(
     sort_desc: bool = True,
     skip: int = 0,
     limit: int = 100,
-    additional_filters: Optional[Any] = None,
+    additional_filters=None,
     serializer_func=None,
-) -> List[dict[str, Any]]:
+):
     """
-    Generic method to retrieve items for a given project,
-    sorted & paginated. We assume the model has a project_id field.
-
-    Args:
-        db: SQLAlchemy async session
-        model_class: SQLAlchemy model class to query
-        project_id: UUID of the project
-        sort_by: Field to sort by
-        sort_desc: True for descending order
-        skip: Number of items to skip
-        limit: Maximum number of items to return
-        additional_filters: Additional SQLAlchemy filters to apply
-        serializer_func: Function to serialize each item. If None, returns raw ORM objects.
-
-    Returns:
-        List of serialized items (if serializer_func is provided) or raw ORM objects
+    Legacy entry point → now reuses utils.db_utils.get_all_by_condition.
     """
-    query = select(model_class).where(model_class.project_id == project_id)
-
-    if additional_filters:
-        query = query.where(additional_filters)
-
-    if hasattr(model_class, sort_by):
-        sort_field = getattr(model_class, sort_by)
-        query = query.order_by(desc(sort_field) if sort_desc else asc(sort_field))
+    # Determine order_by column safely
+    order_attr = getattr(model_class, sort_by, None)
+    if order_attr is not None:
+        order_by = desc(order_attr) if sort_desc else asc(order_attr)
     else:
-        query = query.order_by(
-            desc(model_class.created_at) if sort_desc else asc(model_class.created_at)
+        # fallback to created_at if present
+        order_by = desc(getattr(model_class, "created_at")) if sort_desc else asc(
+            getattr(model_class, "created_at")
         )
 
-    query = query.offset(skip).limit(limit)
-    result = await db.execute(query)
-    items = result.scalars().all()
+    # Build base where-clause
+    where_clauses = [model_class.project_id == project_id]
+    if additional_filters is not None:
+        where_clauses.append(additional_filters)
 
-    if serializer_func:
-        return serialize_list(items, serializer_func)
+    items = await _core_get_all_by_condition(
+        db,
+        model_class,
+        *where_clauses,
+        order_by=order_by,
+        limit=limit,
+        offset=skip,
+    )
 
-    # Return raw items if no serializer provided
-    return list(items)
+    return (
+        serialize_list(items, serializer_func)
+        if serializer_func
+        else list(items)
+    )
