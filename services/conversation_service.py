@@ -386,7 +386,8 @@ class ConversationService:
                     else ai_settings.get("max_tokens")
                 )
 
-                # Validate final parameters with the model
+                # Validate final parameters with the model – gracefully downgrade if
+                # the model lacks extended-thinking support.
                 params_for_validation = {
                     "image_data": image_data,
                     "vision_detail": final_vision_detail,
@@ -399,7 +400,29 @@ class ConversationService:
                 if final_max_tokens is not None:
                     params_for_validation["max_tokens"] = final_max_tokens
 
-                validate_model_and_params(conv.model_id, params_for_validation)
+                try:
+                    validate_model_and_params(conv.model_id, params_for_validation)
+                except ValueError as ve:
+                    # Detect the specific “extended thinking” capability error
+                    if "extended thinking" in str(ve):
+                        logger.info(
+                            "[create_message] Model %s does not support extended thinking – "
+                            "disabling feature and retrying validation",
+                            conv.model_id,
+                        )
+                        # Force-disable related flags and re-validate
+                        final_enable_thinking = False
+                        final_thinking_budget = None
+                        final_reasoning_effort = None
+                        params_for_validation.update(
+                            enable_thinking=False,
+                            thinking_budget=None,
+                            reasoning_effort=None,
+                        )
+                        validate_model_and_params(conv.model_id, params_for_validation)
+                    else:
+                        # Propagate unrelated validation errors
+                        raise
 
                 opts = AIResponseOptions(
                     image_data=image_data,
