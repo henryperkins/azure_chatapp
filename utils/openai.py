@@ -34,10 +34,6 @@ CLAUDE_SAMPLE_RATE = 1.0   # Always sample Claude calls
 # Model Config Helpers
 # -----------------------------
 
-def get_model_config(model_name: str):  # type: ignore[override]
-    """Legacy wrapper routed to utils.model_registry.get_model_config."""
-
-    return _central_get_model_config(model_name, settings)
 
 def get_azure_api_version(model_config: dict[str, Any]) -> str:
     """Get the Azure API version from model config or fallback to default."""
@@ -73,7 +69,7 @@ async def openai_chat(
             request_start = time.time()
 
             # Retrieve model config
-            model_config = get_model_config(model_name)
+            model_config = _central_get_model_config(model_name, settings)
             if not model_config:
                 supported = list(settings.AZURE_OPENAI_MODELS.keys()) + list(settings.CLAUDE_MODELS.keys())
                 raise HTTPException(
