@@ -115,6 +115,8 @@ export function createModelConfig({
       extendedThinking: api.store.getItem("extendedThinking") === "true",
       thinkingBudget: parseInt(api.store.getItem("thinkingBudget") || "16000", 10),
       customInstructions: api.store.getItem("globalCustomInstructions") || "",
+      // NEW: web search checkbox state (default false)
+      enable_web_search: api.store.getItem("enableWebSearch") === "true",
       azureParams: {
         maxCompletionTokens: parseInt(api.store.getItem("azureMaxCompletionTokens") || "5000", 10),
         reasoningEffort: api.store.getItem("azureReasoningEffort") || "medium",
@@ -251,6 +253,10 @@ export function createModelConfig({
         config.customInstructions !== undefined
           ? config.customInstructions
           : state.customInstructions,
+      enable_web_search:
+        config.enable_web_search !== undefined
+          ? !!config.enable_web_search
+          : state.enable_web_search,
       azureParams: {
         maxCompletionTokens: clampInt(
           config.azureParams?.maxCompletionTokens,
@@ -275,6 +281,7 @@ export function createModelConfig({
     api.store.setItem("extendedThinking", state.extendedThinking.toString());
     api.store.setItem("thinkingBudget", state.thinkingBudget.toString());
     api.store.setItem("globalCustomInstructions", state.customInstructions);
+    api.store.setItem("enableWebSearch", state.enable_web_search ? "true" : "false");
     api.store.setItem(
       "azureMaxCompletionTokens",
       state.azureParams.maxCompletionTokens.toString()
@@ -342,6 +349,41 @@ export function createModelConfig({
     setupReasoningSummaryUI(api, state);
     setupExtendedThinkingUI(api, state);
     setupCustomInstructionsUI(api, state);
+
+    // NEW: Enable Web Search Checkbox UI
+    const webSearchConfigPanel = domAPI.getElementById("webSearchConfigPanel")
+      || domAPI.getElementById("modelConfigPanel")
+      || domAPI.getElementById("modelSidebarPanel")
+      || null;
+    if (webSearchConfigPanel) {
+      const outerDiv = domAPI.createElement("div");
+      outerDiv.className = "form-control mb-2";
+      const label = domAPI.createElement("label");
+      label.className = "label cursor-pointer";
+      const labelText = domAPI.createElement("span");
+      labelText.className = "label-text";
+      labelText.textContent = "Enable Web Search";
+      const input = domAPI.createElement("input");
+      input.type = "checkbox";
+      input.id = "enableWebSearch";
+      input.className = "toggle toggle-primary";
+      input.checked = state.enable_web_search;
+      // Track with event handler
+      registerListener(
+        api,
+        input,
+        "change",
+        () => {
+          updateModelConfig(api, state, { enable_web_search: input.checked });
+        },
+        { description: "web search toggle change" }
+      );
+      label.appendChild(labelText);
+      label.appendChild(input);
+      outerDiv.appendChild(label);
+      webSearchConfigPanel.appendChild(outerDiv);
+    }
+
     updateModelDisplay(api, state);
 
     // Another internal event dispatch

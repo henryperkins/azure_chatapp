@@ -26,6 +26,22 @@ class ContextManager:
         ]
         # 4️⃣ Trim
         max_ctx = get_model_config(self.model_id)["max_ctx"]
+        orig_msg_count = len(msgs)
         msgs, removed = await trim_context_to_window(msgs, self.model_id, max_ctx)
         token_usage = count_tokens_messages(msgs, self.model_id)
-        return msgs, {"removed_tokens": removed, "prompt_tokens": token_usage}
+        messages_removed_count = orig_msg_count - len(msgs)
+        tokens_removed_count = removed if isinstance(removed, int) else removed.get("tokens", 0)
+        truncation_details = {
+            "is_truncated": messages_removed_count > 0 or tokens_removed_count > 0,
+            "messages_removed_count": messages_removed_count,
+            "tokens_removed_count": tokens_removed_count
+        }
+        stats = {
+            "removed_tokens": tokens_removed_count,
+            "prompt_tokens": token_usage,
+            "current_tokens": token_usage,
+            "max_tokens_for_model": max_ctx,
+            "message_count_in_context": len(msgs),
+            "truncation_details": truncation_details
+        }
+        return msgs, stats

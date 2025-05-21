@@ -444,12 +444,12 @@ class ConversationService:
                 conv.context_token_usage = stats["prompt_tokens"]
                 await save_model(self.db, conv)
 
-                # Attach stats (and truncation warning if any) to API response
+                # Attach stats and structured truncation details to API response and assistant_message
                 response["token_stats"] = stats
-                if stats["removed_tokens"] > 0:
-                    response["truncation_warning"] = (
-                        f"Context trimmed by {stats['removed_tokens']} tokens"
-                    )
+                response["truncation_details"] = stats.get("truncation_details")
+                if "assistant_message" in response and response["assistant_message"]:
+                    response["assistant_message"]["token_stats"] = stats
+                    response["assistant_message"]["truncation_details"] = stats.get("truncation_details")
             except HTTPException as http_exc:
                 logger.error(
                     f"HTTP error during AI generation for conv {conversation_id}: "

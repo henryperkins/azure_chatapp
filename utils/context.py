@@ -118,10 +118,22 @@ async def trim_context_to_window(
     if total_tokens <= max_ctx:
         return msgs, 0
 
-    trimmed = list(msgs)  # preserve input
+    trimmed = list(msgs)  # shallow copy to preserve caller's list
     removed_tokens = 0
+
+    # Preferential trimming strategy:
+    #   1. Drop *non-system* messages (oldest first) to preserve knowledge-base
+    #      context that is usually encoded as `role == "system"`.
+    #   2. If only system messages remain and we still exceed the window, fall
+    #      back to FIFO trimming.
     while trimmed and count_tokens_messages(trimmed, model_id) > max_ctx:
-        msg = trimmed.pop(0)
+        # Locate first candidate that is *not* a system-level message.
+        idx_to_remove = next(
+            (i for i, m in enumerate(trimmed) if m.get("role") != "system"),
+            0,  # Fallback to oldest message (idx 0) if all are system
+        )
+
+        msg = trimmed.pop(idx_to_remove)
         removed_tokens += count_tokens_messages([msg], model_id)
     return trimmed, removed_tokens
 
