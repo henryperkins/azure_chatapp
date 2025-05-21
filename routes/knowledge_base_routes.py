@@ -129,7 +129,7 @@ async def create_project_knowledge_base(
     kb_data: KnowledgeBaseCreate,
     current_user_and_token: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    background_tasks: BackgroundTasks = Depends(),
+    background_tasks: BackgroundTasks,
 ):
     """
     Create a new knowledge base for a project and optionally process
@@ -326,7 +326,7 @@ async def upload_knowledge_base_file(
     file: UploadFile = File(...),
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
-    background_tasks: BackgroundTasks = Depends(),
+    background_tasks: BackgroundTasks,
 ):
     """
     Upload and process a file for the project's knowledge base.
