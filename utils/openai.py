@@ -17,6 +17,9 @@ from sentry_sdk import (
 
 # Reuse central registry helpers
 from utils.model_registry import get_model_config as _central_get_model_config
+# Re-use the *generic* parameter validator and token counters
+from utils.model_registry import validate_model_and_params as _validate_model_params   # NEW
+from utils.tokens           import count_tokens_messages                               # NEW
 from config import settings  # Use centralized settings
 from utils.sentry_utils import sentry_span
 
@@ -758,15 +761,8 @@ async def claude_stream_generator(payload: dict[str, Any], headers: dict[str, st
 # -----------------------------
 
 async def count_claude_tokens(messages: List[dict[str, Any]], model_name: str) -> int:
-    """
-    Rough token estimation for Claude if official token counting isn't available.
-    """
-    total_chars = 0
-    for msg in messages:
-        c = msg.get("content")
-        if isinstance(c, str):
-            total_chars += len(c)
-    return total_chars // 4  # ~4 chars per token
+    """Delegate to the unified token helper (avoids duplicated heuristics)."""
+    return count_tokens_messages(messages, model_id=model_name)          # NEW
 
 async def get_moderation(text: str) -> dict[str, Any]:
     """
