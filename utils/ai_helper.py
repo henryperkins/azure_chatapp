@@ -309,6 +309,3 @@ async def augment_with_knowledge(
                 },
             }
         ]
-
-
-# --- End of Module ---
