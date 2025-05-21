@@ -34,7 +34,6 @@ from utils.auth_utils import get_current_user_and_token
 from utils.sentry_utils import sentry_span, make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
-from services.conversation_service import validate_model_and_params
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Project Conversations"])
@@ -490,8 +489,7 @@ async def create_project_conversation_message(
     new_msg: MessageCreate,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
-    db: AsyncSession = Depends(get_async_session),
-    _valid: None = Depends(validate_model_and_params),
+    db: AsyncSession = Depends(get_async_session)
 ):
     """Process message with AI response tracing"""
     transaction = start_transaction(
