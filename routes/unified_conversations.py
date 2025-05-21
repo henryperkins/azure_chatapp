@@ -844,11 +844,11 @@ async def estimate_tokens_for_input_in_conversation(
         current_user = current_user_tuple[0]
         await validate_project_access(project_id, current_user, db)
         conv = await conv_service.get_conversation(conversation_id, current_user.id, project_id)
-        import utils.ai_helper as ai_helper
+        from utils.tokens import count_tokens_text
         model_id = conv.get("model_id") or conv.get("model_config", {}).get("model_id")
         if not model_id:
             raise HTTPException(status_code=400, detail="Model not set for conversation.")
-        input_tokens = ai_helper.count_tokens_text(request_data.current_input, model_id)
+        input_tokens = count_tokens_text(request_data.current_input, model_id)
         return TokenEstimationResponse(estimated_tokens_for_input=input_tokens)
     except Exception as e:
         logger.exception(f"Token estimation failed: {str(e)}")
