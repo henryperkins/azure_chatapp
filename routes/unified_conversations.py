@@ -14,8 +14,8 @@ import time
 from uuid import UUID
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select  # Add this import
 from sqlalchemy.orm import selectinload  # Add this import
@@ -486,7 +486,7 @@ async def delete_project_conversation(
 async def create_project_conversation_message(
     project_id: UUID,
     conversation_id: UUID,
-    new_msg: MessageCreate,
+    payload: dict = Body(...),
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
     db: AsyncSession = Depends(get_async_session)
@@ -500,6 +500,26 @@ async def create_project_conversation_message(
 
     try:
         with transaction:
+            # ---- Extract/validate message payload (supports wrapper or flat) ----
+            msg_dict = payload.get("new_msg") or payload
+            try:
+                new_msg = MessageCreate(**msg_dict)
+            except ValidationError as ve:
+                raise HTTPException(status_code=422, detail=ve.errors()) from ve
+
+            # Optional: allow top-level overrides
+            for fld in (
+                "vision_detail",
+                "enable_web_search",
+                "enable_thinking",
+                "thinking_budget",
+                "reasoning_effort",
+                "temperature",
+                "max_tokens",
+            ):
+                if fld in payload:
+                    setattr(new_msg, fld, payload[fld])
+
             current_user = current_user_tuple[0]
             # Set context from frontend if available
             if new_msg.sentry_trace:
