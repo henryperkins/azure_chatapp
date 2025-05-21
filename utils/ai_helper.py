@@ -244,68 +244,67 @@ async def augment_with_knowledge(
         f"Attempting to augment conversation {conversation_id} with knowledge context."
     )
 
-    try:
-        # Load conversation with its project relationship eagerly
-        conversation = await db.get(
-            Conversation,
-            conversation_id,
-            options=[joinedload(Conversation.project)],  # Eager load project details
+    # Load conversation with its project relationship eagerly
+    conversation = await db.get(
+        Conversation,
+        conversation_id,
+        options=[joinedload(Conversation.project)],  # Eager load project details
+    )
+
+    # --- Pre-checks ---
+    if not conversation:
+        logger.warning(f"Conversation {conversation_id} not found.")
+        return []
+    if not conversation.project_id:
+        logger.warning(
+            f"Conversation {conversation_id} is not associated with a project."
         )
-
-        # --- Pre-checks ---
-        if not conversation:
-            logger.warning(f"Conversation {conversation_id} not found.")
-            return []
-        if not conversation.project_id:
-            logger.warning(
-                f"Conversation {conversation_id} is not associated with a project."
-            )
-            return []
-        if not conversation.use_knowledge_base:
-            logger.info(
-                f"Knowledge base usage is disabled for conversation {conversation_id}."
-            )
-            return []
-
-        project = conversation.project  # Access the eagerly loaded project
-        if not project:
-            logger.error(
-                f"Project data could not be loaded for conversation {conversation_id}, project_id {conversation.project_id}."
-            )
-            return []
-        if not project.knowledge_base_id:
-            logger.info(
-                f"Project {project.id} associated with conversation {conversation_id} does not have an active knowledge base ID."
-            )
-            return []
-
-        # --- Retrieve KB context via shared helper ------------------------
-        ctx_text = await retrieve_knowledge_context(
-            query=user_message,
-            project_id=project.id,        # type: ignore[arg-type]
-            db=db,
-            top_k=results_limit,
-            score_threshold=DEFAULT_SCORE_THRESHOLD,
+        return []
+    if not conversation.use_knowledge_base:
+        logger.info(
+            f"Knowledge base usage is disabled for conversation {conversation_id}."
         )
-        if not ctx_text:
-            logger.info(
-                f"No suitable knowledge context found for conversation {conversation_id}."
-            )
-            return []
+        return []
 
-        token_count = count_tokens_text(ctx_text)
-        logger.debug(
-            f"Injecting knowledge context into conversation {conversation_id} "
-            f"({token_count} tokens)."
+    project = conversation.project  # Access the eagerly loaded project
+    if not project:
+        logger.error(
+            f"Project data could not be loaded for conversation {conversation_id}, project_id {conversation.project_id}."
         )
+        return []
+    if not project.knowledge_base_id:
+        logger.info(
+            f"Project {project.id} associated with conversation {conversation_id} does not have an active knowledge base ID."
+        )
+        return []
 
-        return [
-            {
-                "role": "system",
-                "content": ctx_text,
-                "metadata": {
-                    "kb_context": True,
-                    "tokens": token_count,
-                },
-            }
-        ]
+    # --- Retrieve KB context via shared helper ------------------------
+    ctx_text = await retrieve_knowledge_context(
+        query=user_message,
+        project_id=project.id,        # type: ignore[arg-type]
+        db=db,
+        top_k=results_limit,
+        score_threshold=DEFAULT_SCORE_THRESHOLD,
+    )
+    if not ctx_text:
+        logger.info(
+            f"No suitable knowledge context found for conversation {conversation_id}."
+        )
+        return []
+
+    token_count = count_tokens_text(ctx_text)
+    logger.debug(
+        f"Injecting knowledge context into conversation {conversation_id} "
+        f"({token_count} tokens)."
+    )
+
+    return [
+        {
+            "role": "system",
+            "content": ctx_text,
+            "metadata": {
+                "kb_context": True,
+                "tokens": token_count,
+            },
+        }
+    ]
