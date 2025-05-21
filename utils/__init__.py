@@ -3,4 +3,7 @@
 __all__ = [
     "retry",
     "io_utils",
+    "tokens",
+    "model_registry",
+    "mcp_sentry",
 ]
