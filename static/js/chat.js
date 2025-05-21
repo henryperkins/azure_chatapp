@@ -536,10 +536,11 @@ export function createChatManager(deps = {}) {
         logger.error("[ChatManager][creating new conversation]", error, { context: "chatManager" });
         const errorMessage = this._extractErrorMessage(error);
 
-        if (errorMessage.includes("Project has no knowledge base")) {
-          const specificMessage = "Project has no knowledge base. Please add one to enable chat.";
-          this._showErrorMessage(specificMessage);
-          this.projectDetails?.disableChatUI?.(specificMessage);
+        if (errorMessage.includes("project has no knowledge base".toLowerCase())) {
+          /* KB will be auto-created and ChatManager will be retried by
+             ProjectManager ⇒ do NOT disable the chat UI now. */
+          const msg = "Project has no knowledge base. Creating one…";
+          this._showErrorMessage(msg);
         } else {
           this._showErrorMessage("Failed to create conversation: " + errorMessage);
           this.projectDetails?.disableChatUI?.("Chat error: " + errorMessage);
