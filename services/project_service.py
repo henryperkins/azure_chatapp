@@ -511,43 +511,28 @@ async def get_project_token_usage(project_id: Union[UUID, int], db: AsyncSession
 # =======================================================
 
 
+# ── Delegates to canonical helper in utils.db_utils ───────────────────
 async def validate_resource_access(
     resource_id: UUID,
     model_class,
     user: User,
     db: AsyncSession,
     resource_name: str = "Resource",
-    additional_conditions=None,
-) -> Any:
+    additional_conditions=None,          # keep legacy param name
+):
     """
-    Generic method for validating access to any resource.
-    We check:
-      - Resource with given UUID
-      - resource.user_id == user.id (if user_id is a field)
-      - Not archived (if archived is a field)
-    Raises 404 if not found, 400 if archived.
+    Thin wrapper kept for backward-compatibility.
+    All logic now lives in utils.db_utils.validate_resource_access.
     """
-    query = select(model_class).where(model_class.id == resource_id)
-
-    if hasattr(model_class, "user_id"):
-        query = query.where(model_class.user_id == user.id)
-
-    if additional_conditions:
-        for condition in additional_conditions:
-            query = query.where(condition)
-
-    result = await db.execute(query)
-    resource = result.scalars().first()
-
-    if not resource:
-        raise HTTPException(
-            status_code=404, detail=f"{resource_name} not found or unauthorized access"
-        )
-
-    if hasattr(resource, "archived") and resource.archived:
-        raise HTTPException(status_code=400, detail=f"{resource_name} is archived")
-
-    return resource
+    return await _core_validate_resource_access(
+        resource_id=resource_id,
+        model_class=model_class,
+        user=user,
+        db=db,
+        resource_name=resource_name,
+        additional_filters=additional_conditions,
+        require_ownership=True,
+    )
 
 
 # =======================================================
