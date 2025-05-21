@@ -7,7 +7,6 @@ and provides enhanced Sentry functionality through the MCP server.
 """
 
 import logging
-logger = logging.getLogger(__name__)          # NEW – moved up
 import json
 import os
 import time
@@ -16,6 +15,9 @@ from typing import Any, Optional, Union, List, Tuple, Callable
 
 import sentry_sdk
 from sentry_sdk import configure_scope
+from config import settings as config_settings
+
+logger = logging.getLogger(__name__)          # NEW – moved up
 
 # Helper function to safely use MCP tools
 def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -483,7 +485,6 @@ def enable_mcp_integrations() -> bool:
         # Check environment variable/config before proceeding
         mcp_enabled = os.getenv("SENTRY_MCP_SERVER_ENABLED", "").lower() == "true"
         try:
-            from config import settings as config_settings
             mcp_enabled = getattr(config_settings, "SENTRY_MCP_SERVER_ENABLED", mcp_enabled)
         except Exception:
             pass
