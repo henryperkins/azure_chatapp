@@ -190,7 +190,13 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       for (const key in this.elementSelectors) {
         // Remap legacy 'knowledgeNoResults' property everywhere to 'noResultsSection'
-        this.elements[key === "noResultsSection" ? "noResultsSection" : key] = reqEl(key, this.elementSelectors[key]);
+        const selector = this.elementSelectors[key];
+        const sel = typeof selector === 'string'
+          ? (selector.startsWith('#') || selector.startsWith('.')
+              ? selector
+              : `#${selector}`)
+          : selector;
+        this.elements[key === "noResultsSection" ? "noResultsSection" : key] = this.elRefs[key] || this.domAPI.querySelector(sel);
       }
     }
 
