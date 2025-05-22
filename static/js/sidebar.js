@@ -332,7 +332,8 @@ export function createSidebar({
     const authenticated = event?.detail?.authenticated ?? authModule?.isAuthenticated?.();
 
     domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', !!authenticated);
-    domAPI.toggleClass(el, 'hidden', !authenticated);
+    // Ensure the sidebar itself is always visible, independent of auth state
+    domAPI.toggleClass(el, 'hidden', false);
 
     if (authenticated) {
       // On login: ensure projects are loaded and UI is updated
