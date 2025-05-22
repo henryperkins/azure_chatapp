@@ -173,7 +173,7 @@
   </style>
 </head>
 
-<body class="bg-base-200 text-base-content min-h-screen mobile-safe flex flex-col font-sans overflow-hidden">
+<body class="bg-base-200 text-base-content min-h-screen mobile-safe flex flex-col font-sans">
   <!-- ========================================================= -->
   <!-- Potential top-level error display from original base.html -->
   <!-- ========================================================= -->
@@ -419,6 +419,12 @@
             <div class="project-list grid gap-4 p-4">
               <!-- Example placeholder -->
               <div class="text-base-content/60 text-center py-8">No projects loaded.</div>
+            </div>
+          </div>
+          <div id="projectDetailsView" class="flex flex-col min-h-0 hidden">
+            <!-- Insert dynamic project details content here -->
+            <div class="project-details p-4">
+              <!-- Project details template will be loaded here -->
             </div>
           </div>
         </section>

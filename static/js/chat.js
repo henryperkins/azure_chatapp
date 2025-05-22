@@ -559,10 +559,10 @@ export function createChatManager(deps = {}) {
             getResp?.conversations                     // { conversations: [...] }
             ?? getResp?.data?.conversations            // { data: { conversations: [...] } }
             ?? (Array.isArray(getResp?.data)           // { data: [...] }
-                  ? getResp.data
-                  : Array.isArray(getResp)             // plain array response
-                    ? getResp
-                    : []);
+              ? getResp.data
+              : Array.isArray(getResp)             // plain array response
+                ? getResp
+                : []);
 
           if (conversations.length) {
             const latest = conversations[0];
@@ -1003,13 +1003,13 @@ export function createChatManager(deps = {}) {
     }
 
     _extractErrorMessage(err) {
-      if (typeof err?.data === 'string')            return err.data;
-      if (typeof err?.response?.data === 'string')  return err.response.data;
-      if (err?.data?.message)                       return String(err.data.message);
-      if (err?.response?.data?.message)            return String(err.response.data.message);
-      if (err?.data?.detail)           return String(err.data.detail);
+      if (typeof err?.data === 'string') return err.data;
+      if (typeof err?.response?.data === 'string') return err.response.data;
+      if (err?.data?.message) return String(err.data.message);
+      if (err?.response?.data?.message) return String(err.response.data.message);
+      if (err?.data?.detail) return String(err.data.detail);
       if (err?.response?.data?.detail) return String(err.response.data.detail);
-      if (err?.detail)                 return String(err.detail);
+      if (err?.detail) return String(err.detail);
       if (!err) return "Unknown error occurred";
       if (typeof err === "string") return err;
       if (err.message) return err.message;
@@ -1143,43 +1143,43 @@ export function createChatManager(deps = {}) {
   // --- Live Token Estimation Logic ---
   // Add debounced event listener to input field after UI setup
   // (called from initialize or _setupUIElements)
-    instance._estimateCurrentInputTokens = async function () {
-      // Only proceed if inputField, projectId, currentConversationId are set
-      if (!this.inputField || !this.projectId || !this.currentConversationId) return;
-      const currentInputText = this.inputField.value;
-      if (!currentInputText.trim()) {
-        const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
-        if (liveTokenCountEl) liveTokenCountEl.textContent = "0";
-        // Update token stats manager if available
-        const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
-        if (tokenStatsManager?.setInputTokenCount) {
-          tokenStatsManager.setInputTokenCount(0);
-        }
-        return;
+  instance._estimateCurrentInputTokens = async function () {
+    // Only proceed if inputField, projectId, currentConversationId are set
+    if (!this.inputField || !this.projectId || !this.currentConversationId) return;
+    const currentInputText = this.inputField.value;
+    if (!currentInputText.trim()) {
+      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+      if (liveTokenCountEl) liveTokenCountEl.textContent = "0";
+      // Update token stats manager if available
+      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+      if (tokenStatsManager?.setInputTokenCount) {
+        tokenStatsManager.setInputTokenCount(0);
       }
-      // Debounced call to backend endpoint for token estimation
-      try {
-        const resp = await this.apiRequest(
-          `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/estimate-tokens`,
-          { method: "POST", body: { current_input: currentInputText } }
-        );
-        const est = (resp && resp.estimated_tokens_for_input !== undefined)
-          ? resp.estimated_tokens_for_input
-          : (resp && resp.data && resp.data.estimated_tokens_for_input) || null;
-        const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
-        if (liveTokenCountEl && est !== null) liveTokenCountEl.textContent = String(est);
+      return;
+    }
+    // Debounced call to backend endpoint for token estimation
+    try {
+      const resp = await this.apiRequest(
+        `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/estimate-tokens`,
+        { method: "POST", body: { current_input: currentInputText } }
+      );
+      const est = (resp && resp.estimated_tokens_for_input !== undefined)
+        ? resp.estimated_tokens_for_input
+        : (resp && resp.data && resp.data.estimated_tokens_for_input) || null;
+      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+      if (liveTokenCountEl && est !== null) liveTokenCountEl.textContent = String(est);
 
-        // Update token stats manager if available
-        const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
-        if (tokenStatsManager?.setInputTokenCount && est !== null) {
-          tokenStatsManager.setInputTokenCount(est);
-        }
-      } catch (e) {
-        logger.error("[ChatManager][_estimateCurrentInputTokens] Token estimation failed", e, { context: "chatManager" });
-        const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
-        if (liveTokenCountEl) liveTokenCountEl.textContent = "N/A";
+      // Update token stats manager if available
+      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+      if (tokenStatsManager?.setInputTokenCount && est !== null) {
+        tokenStatsManager.setInputTokenCount(est);
       }
-    };
+    } catch (e) {
+      logger.error("[ChatManager][_estimateCurrentInputTokens] Token estimation failed", e, { context: "chatManager" });
+      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+      if (liveTokenCountEl) liveTokenCountEl.textContent = "N/A";
+    }
+  };
 
   // Attach debounced token estimator to chat input after UI is ready
   const addLiveTokenEstimationListener = (managerInstance) => {
