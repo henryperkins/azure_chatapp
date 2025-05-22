@@ -369,5 +369,31 @@ export function createDomAPI({
      * Acceso al window inyectado (algunos módulos lo usan vía domAPI).
      */
     getWindow: () => windowObject,
+
+    /* ───────────── Additional helpers (vNext) ───────────── */
+    createDocumentFragment : ()           => documentObject.createDocumentFragment(),
+    createTextNode         : (txt = '')   => documentObject.createTextNode(txt),
+
+    setElementId   : (el, id)   => { if (el) el.id         = id;   },
+    setClassName   : (el, cls)  => { if (el) el.className  = cls;  },
+
+    /* attribute / dataset shorthands already exist for setDataAttribute
+       – add the missing remove variant if not present */
+    removeDataAttribute    : (el, k) => { if (el?.dataset) delete el.dataset[k]; },
+
+    /* selection helpers required by copy-to-clipboard code */
+    selectElement  : (el)        => { try { el?.select?.(); } catch { } },
+
+    /* parent / insertion helpers used by chat UI modules */
+    getParentNode  : (el)        => el?.parentNode ?? null,
+    insertBefore   : (parent, node, refNode = null) =>
+                       parent?.insertBefore?.(node, refNode),
+
+    /* SVG creator required by token-stats & chat extensions */
+    createSVGElement : (tag) =>
+      documentObject.createElementNS('http://www.w3.org/2000/svg', tag),
+
+    /* generic getter */
+    getProperty : (el, prop) => el?.[prop],
   };
 }
