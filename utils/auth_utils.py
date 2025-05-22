@@ -461,3 +461,13 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
         user.id,
     )
     return user, token
+
+# -----------------------------------------------------------------------------
+# FastAPI Dependency: Current User Only
+# -----------------------------------------------------------------------------
+async def get_current_user(request: Request) -> User:
+    """
+    FastAPI dependency that returns only the authenticated User object.
+    """
+    user, _ = await get_current_user_and_token(request)
+    return user

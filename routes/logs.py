@@ -5,7 +5,8 @@ import os
 import re
 import time
 from utils.sentry_utils import capture_custom_message
-from utils.auth_utils import get_current_user_and_token
+from utils.auth_utils import get_current_user
+from models.user import User
 
 import aiofiles
 
@@ -47,7 +48,7 @@ def get_color_for_level(level: str):
 
 @router.post('/api/logs', status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("100/minute")
-async def receive_logs(request: Request, user_and_token=Depends(get_current_user_and_token)):
+async def receive_logs(request: Request, current_user: User = Depends(get_current_user)):
     try:
         log_entry = await request.json()
         level = str(log_entry.get("level", "info")).lower()
