@@ -364,6 +364,9 @@ export function createEventHandlers({
     }
     const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10000;
 
+    // Ensure the DOM is fully loaded before initialization
+    await _domReadinessService.documentReady();
+
     // Wait for core dependencies and the body to exist
     await _domReadinessService.dependenciesAndElements({
       deps: [
@@ -392,7 +395,7 @@ export function createEventHandlers({
     runDomDependentSetup();
 
     // -- Project modal form (wait for element to exist)
-    _domReadinessService.elementsReady('#projectModalForm', {
+    await _domReadinessService.elementsReady('#projectModalForm', {
       timeout: dependencyWaitTimeout,
       context: 'eventHandler.init:modalForm'
     }).then(() => {

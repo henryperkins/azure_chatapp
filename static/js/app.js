@@ -490,6 +490,9 @@ function safeHandler(handler, description) {
 export async function init() {
   logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
 
+  // Ensure the DOM is fully loaded before initialization
+  await domReadinessService.documentReady();
+
   // ────────── timing helpers ──────────
   const phaseTimings = Object.create(null);     // { [phase]: { start, end } }
   const SLOW_PHASE = 4_000;                     // ms – warn if phase ≥ 4 s
