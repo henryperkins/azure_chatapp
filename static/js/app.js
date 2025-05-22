@@ -18,6 +18,7 @@ import { createBrowserService, normaliseUrl } from './utils/browserService.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
+import { createCoreInitializer } from './init/coreInit.js';
 
 import {
   shouldSkipDedup,
@@ -936,222 +937,18 @@ export async function init() {
 // ---------------------------------------------------------------------------
 // 15) Core systems initialization
 // ---------------------------------------------------------------------------
-async function initializeCoreSystems() {
-  logger.log('[initializeCoreSystems] Entering function', { context: 'app.initializeCoreSystems' });
-  // Wait for minimal DOM readiness
-  await domReadinessService.dependenciesAndElements({
-    deps: ['domAPI'],
-    domSelectors: ['body'],
-    timeout: 10000,
-    context: 'app.js:initializeCoreSystems'
-  });
-
-  // Create & init modal manager
-  const modalManager = createModalManager({
-    domAPI,
-    browserService: browserServiceInstance,
-    eventHandlers,
-    DependencySystem,
-    modalMapping: MODAL_MAPPINGS,
-    domPurify: sanitizer
-  });
-  DependencySystem.register('modalManager', modalManager);
-
-  // Create auth module
-  const authModule = createAuthModule({
-    DependencySystem,
-    apiClient: apiRequest,
-    eventHandlers,
-    domAPI,
-    sanitizer,
-    APP_CONFIG,           // pass full app configuration
-    modalManager,
-    apiEndpoints,
-    // logger will be injected after creation below
-    domReadinessService
-  });
-  DependencySystem.register('auth', authModule);
-
-  // Now create logger with authModule injected
-  logger = createLogger({
-    context: 'App',
-    debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
-    minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-    fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
-    authModule // <-- inject authModule for auth-aware logging
-  });
-  DependencySystem.register('logger', logger); // Re-register to update DI
-
-  logger.log('[initializeCoreSystems] auth module registered', { context: 'app.initializeCoreSystems' });
-  // Initialize auth module to set up event listeners
-  await authModule.init().catch(err => {
-    const logMsg = (err && (err.message || err.stack)) ? `Auth module initialization error: ${err.message}\n${err.stack}` : `[App] Auth module initialization error: ${JSON.stringify(err)}`;
-    DependencySystem.modules.get('logger').error('[App] ' + logMsg, err);
-  });
-
-  // Create model config
-  const modelConfigInstance = createModelConfig({
-    dependencySystem: DependencySystem,          // mandatory (note lower-camel case)
-    domReadinessService: DependencySystem.modules.get('domReadinessService'),
-    eventHandler: eventHandlers,                 // centralised listener tracker
-    storageHandler: DependencySystem.modules.get('storage'),
-    sanitizer: DependencySystem.modules.get('sanitizer')
-  });
-  DependencySystem.register('modelConfig', modelConfigInstance);
-
-  // Create or retrieve chatManager
-  const chatManager = createOrGetChatManager();
-
-  // Create projectManager
-  const pmFactory = await createProjectManager({
-    DependencySystem,
-    chatManager,
-    app,
-    modelConfig: modelConfigInstance,
-    apiRequest,
-    apiEndpoints,
-    storage: DependencySystem.modules.get('storage'),
-    listenerTracker: {
-      add: (el, type, handler, description) =>
-        eventHandlers.trackListener(el, type, handler, {
-          description,
-          context: 'projectManager'
-        }),
-      remove: () => eventHandlers.cleanupListeners({ context: 'projectManager' })
-    },
-    domAPI,
-    domReadinessService,
-    logger // Ensures strict DI per guardrails/compliance for projectManager
-  });
-  const projectManager = pmFactory.instance;
-  eventHandlers.setProjectManager?.(projectManager);
-
-  // Initialize eventHandlers now that its downstream deps exist
-  if (eventHandlers?.init) {
-    await eventHandlers.init();
-    logger.log('[initializeCoreSystems] eventHandlers initialization complete', { context: 'app.initializeCoreSystems' });
-  }
-
-  // ------------------------------------------------------------------------
-  // Early stub/component registration for projectListComponent and projectDetailsComponent
-  // To avoid "Optional module ... not found" warnings in ProjectDashboard constructor,
-  // instantiate and register placeholder or real component objects before dashboard creation
-  // ------------------------------------------------------------------------
-  function createPlaceholder(name) {
-    return {
-      state: { initialized: false },
-      initialize: async () => { },
-      show: () => { },
-      hide: () => { },
-      cleanup: () => { },
-      __placeholder: true,
-      toString() { return `[Placeholder ${name}]`; }
-    };
-  }
-
-  if (!DependencySystem.modules.has('projectListComponent')) {
-    // Safe to construct the real instance early as its constructor does not touch the DOM yet,
-    // but you may also opt to use createPlaceholder('projectListComponent') if real dependencies might be incomplete here.
-    const earlyPLC = createProjectListComponent({
-      projectManager,
-      eventHandlers,
-      modalManager: DependencySystem.modules.get('modalManager'),
-      app,
-      router: DependencySystem.modules.get('navigationService'),
-      storage: DependencySystem.modules.get('storage'),
-      sanitizer: DependencySystem.modules.get('sanitizer'),
-      htmlSanitizer: DependencySystem.modules.get('sanitizer'),
-      apiClient: DependencySystem.modules.get('apiRequest'),
-      domAPI,
-      domReadinessService,
-      browserService: browserServiceInstance,
-      globalUtils: DependencySystem.modules.get('globalUtils'),
-      APP_CONFIG,
-      logger
-    });
-    DependencySystem.register('projectListComponent', earlyPLC);
-  }
-
-  if (!DependencySystem.modules.has('projectDetailsComponent')) {
-    const earlyPDC = createProjectDetailsComponent({
-      projectManager,
-      eventHandlers,
-      modalManager: DependencySystem.modules.get('modalManager'),
-      FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
-      domAPI,
-      sanitizer: DependencySystem.modules.get('sanitizer'),
-      app,
-      navigationService: DependencySystem.modules.get('navigationService'),
-      htmlTemplateLoader,               // ensures template loading available
-      logger,                           // DI-provided logger
-      APP_CONFIG,                       // optional but useful for PDC
-      chatManager: DependencySystem.modules.get('chatManager'),
-      modelConfig: DependencySystem.modules.get('modelConfig'),
-      knowledgeBaseComponent: null,     // injected later in UI phase
-      apiClient: apiRequest,            // optional helper for sub-components
-      domReadinessService
-    });
-    DependencySystem.register('projectDetailsComponent', earlyPDC);
-  }
-  // ------------------------------------------------------------------------
-
-  // Create project dashboard with strict dependency injection
-  const projectDashboard = createProjectDashboard({
-    dependencySystem: DependencySystem,
-    domAPI,
-    browserService: browserServiceInstance,
-    eventHandlers,
-    logger, // Inject logger DI as required by dashboard
-    sanitizer,
-    APP_CONFIG,           // pass full app configuration
-    domReadinessService
-  });
-  DependencySystem.register('projectDashboard', projectDashboard);
-
-  // Create project modal
-  const projectModal = createProjectModal({
-    DependencySystem,
-    eventHandlers,
-    domAPI,
-    browserService: browserServiceInstance,
-    domPurify: sanitizer
-  });
-  DependencySystem.register('projectModal', projectModal);
-
-  // Wait for modals to load
-  let modalsLoadedSuccess = false;
-
-  // If the HTML was injected before this code ran, skip the event wait
-  const injected = domAPI.getElementById('modalsContainer')?.childElementCount > 0;
-  if (injected) {
-    modalsLoadedSuccess = true;
-  } else {
-    await new Promise((res) => {
-      eventHandlers.trackListener(
-        domAPI.getDocument(),
-        'modalsLoaded',
-        (e) => {
-          modalsLoadedSuccess = !!(e?.detail?.success);
-          res(true);
-        },
-        { once: true, description: 'modalsLoaded for app init', context: 'app' }
-      );
-    });
-  }
-
-  // modalManager.init
-  if (modalManager.init) {
-    try {
-      await modalManager.init();
-    } catch (err) {
-      logger.error('[projectList:show]', err, { context: 'app:nav:projectList:show' });
-      logger.error('[initializeCoreSystems] Error in modalManager.init', err, { context: 'app:initializeCoreSystems:modalManager:init' });
-      throw err;
-    }
-  }
-
-  return true;
-}
+const {
+  initializeCoreSystems
+} = createCoreInitializer({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  eventHandlers,
+  sanitizer,
+  logger,
+  APP_CONFIG,
+  domReadinessService
+});
 
 // ---------------------------------------------------------------------------
 // 16) Moved UI creation to the UI init phase
