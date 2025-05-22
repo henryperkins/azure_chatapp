@@ -116,7 +116,7 @@ export function createAuthInitializer({
       const navService = DependencySystem.modules.get('navigationService');
       const appReadyDispatched = DependencySystem.modules.get('app')?._appReadyDispatched;
       const readyNow = appReadyDispatched || appModule.state.isReady;
-      
+
       const proceed = () => {
         if (navService?.navigateToProjectList) {
           navService.navigateToProjectList().catch(() => {
@@ -128,7 +128,7 @@ export function createAuthInitializer({
           });
         }
       };
-      
+
       if (readyNow) {
         proceed();
       } else {

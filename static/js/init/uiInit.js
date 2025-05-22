@@ -36,94 +36,279 @@ export function createUIInitializer({
 
   let _uiInitialized = false;
 
-  async function initializeUIComponents() {
-    if (_uiInitialized) return;
-    let domAndModalsReady = false;
+  async function setupSidebarControls() {
+    const navToggleBtn = domAPI.getElementById('navToggleBtn');
+    const closeSidebarBtn = domAPI.getElementById('closeSidebarBtn');
+    const doc = domAPI.getDocument();
+
+    function setSidebarOpen(open) {
+      const sidebar = domAPI.getElementById('mainSidebar');
+      // freeze / release background scroll
+      domAPI[open ? 'addClass' : 'removeClass'](doc.body, 'sidebar-open');
+      domAPI[open ? 'addClass' : 'removeClass'](doc.documentElement, 'sidebar-open');
+
+      // slide sidebar in/out
+      if (sidebar) {
+        domAPI[open ? 'addClass' : 'removeClass'](sidebar, 'translate-x-0');
+        domAPI[open ? 'removeClass' : 'addClass'](sidebar, '-translate-x-full');
+        sidebar.setAttribute('aria-hidden', String(!open));
+      }
+      // update toggle button ARIA
+      if (navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
+    }
+
+    if (navToggleBtn) {
+      eventHandlers.trackListener(
+        navToggleBtn,
+        'click',
+        safeHandler(() => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
+        { context: 'uiInit:sidebar', description: 'toggleSidebar' }
+      );
+    }
+    if (closeSidebarBtn) {
+      eventHandlers.trackListener(
+        closeSidebarBtn, 'click',
+        () => setSidebarOpen(false),
+        { context: 'uiInit:sidebar', description: 'closeSidebar' }
+      );
+    }
+
+    // Global escape key listener
+    eventHandlers.trackListener(
+      doc,
+      'keydown',
+      (e) => { if (e.key === 'Escape') setSidebarOpen(false); },
+      { context: 'uiInit:sidebar', description: 'escCloseSidebar' }
+    );
+  }
+
+  async function loadProjectTemplates() {
+    const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
+    if (!htmlLoader?.loadTemplate) {
+      logger.error('[UIInit] htmlTemplateLoader.loadTemplate unavailable', { context: 'uiInit:loadTemplates' });
+      return;
+    }
+
     try {
+      logger.log('[UIInit] Loading project templates', { context: 'uiInit:loadTemplates' });
+
+      // project_list.html
+      await htmlLoader.loadTemplate({
+        url: '/static/html/project_list.html',
+        containerSelector: '#projectListView',
+        eventName: 'projectListHtmlLoaded'
+      });
+
+      // project_details.html
+      await htmlLoader.loadTemplate({
+        url: '/static/html/project_details.html',
+        containerSelector: '#projectDetailsView',
+        eventName: 'projectDetailsHtmlLoaded'
+      });
+
+      logger.log('[UIInit] Project templates loaded successfully', { context: 'uiInit:loadTemplates' });
+    } catch (err) {
+      logger.error('[UIInit] Failed to load project templates', err, { context: 'uiInit:loadTemplates' });
+      throw err;
+    }
+  }
+
+  async function waitForModalReadiness() {
+    const modalMgr = DependencySystem.modules.get('modalManager');
+    if (modalMgr?.isReadyPromise) {
+      await Promise.race([
+        modalMgr.isReadyPromise(),
+        new Promise(res => browserService.getWindow().setTimeout(res, 8000))
+      ]).catch(() => {
+        logger.warn('[UIInit] ModalManager not ready after 8s – continuing', { context: 'uiInit' });
+      });
+    }
+  }
+
+  async function createAndRegisterUIComponents() {
+    logger.log('[UIInit] Creating and registering UI components', { context: 'uiInit:createAndRegisterUIComponents' });
+
+    // Project Details Enhancements - Create and register visual improvements
+    if (createProjectDetailsEnhancements) {
+      const projectDetailsEnhancementsInstance = createProjectDetailsEnhancements({
+        domAPI,
+        browserService,
+        eventHandlers,
+        domReadinessService,
+        logger,
+        sanitizer
+      });
+      DependencySystem.register('projectDetailsEnhancements', projectDetailsEnhancementsInstance);
+
+      // Initialize if available
+      if (projectDetailsEnhancementsInstance.initialize) {
+        await projectDetailsEnhancementsInstance.initialize().catch(err =>
+          logger.error('[UIInit] ProjectDetailsEnhancements init failed', err, { context: 'uiInit:projectDetailsEnhancements' })
+        );
+      }
+    }
+
+    // Token Stats Manager - Create and register token stats functionality
+    if (createTokenStatsManager) {
+      const tokenStatsManagerInstance = createTokenStatsManager({
+        apiClient: apiRequest,
+        domAPI,
+        eventHandlers,
+        browserService,
+        modalManager: DependencySystem.modules.get('modalManager'),
+        sanitizer,
+        logger,
+        projectManager: DependencySystem.modules.get('projectManager'),
+        app: DependencySystem.modules.get('app'),
+        chatManager: DependencySystem.modules.get('chatManager'),
+        domReadinessService
+      });
+      DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
+    }
+
+    // Knowledge Base Component - Create and register if not already present
+    let knowledgeBaseComponentInstance = DependencySystem.modules.get('knowledgeBaseComponent');
+    if (!knowledgeBaseComponentInstance && createKnowledgeBaseComponent) {
+      try {
+        knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
+          DependencySystem,
+          apiRequest,
+          projectManager: DependencySystem.modules.get('projectManager'),
+          uiUtils,
+          sanitizer: DependencySystem.modules.get('sanitizer')
+        });
+        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+      } catch (err) {
+        logger.warn('[UIInit] KnowledgeBaseComponent creation failed; falling back to placeholder.', { context: 'uiInit:createAndRegisterUIComponents', error: err?.message });
+        logger.error('[UIInit] KnowledgeBaseComponent creation failed', err, { context: 'uiInit:createAndRegisterUIComponents:KnowledgeBaseComponent' });
+        throw err;
+      }
+    }
+
+    // Project Details Component - Inject KnowledgeBaseComponent into it
+    const projectDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
+    if (projectDetailsComponent && knowledgeBaseComponentInstance) {
+      if (typeof projectDetailsComponent.setKnowledgeBaseComponent === 'function') {
+        projectDetailsComponent.setKnowledgeBaseComponent(knowledgeBaseComponentInstance);
+      } else {
+        logger.warn('[UIInit] projectDetailsComponent is missing setKnowledgeBaseComponent method.', { context: 'uiInit:createAndRegisterUIComponents' });
+      }
+    } else if (!projectDetailsComponent) {
+      logger.warn('[UIInit] projectDetailsComponent not found in DI. Cannot inject KBC.', { context: 'uiInit:createAndRegisterUIComponents' });
+    }
+
+    // Update ProjectDashboard references using the setter methods
+    const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
+    if (projectDashboardInstance) {
+      const pdcForDashboard = DependencySystem.modules.get('projectDetailsComponent');
+      const plcForDashboard = DependencySystem.modules.get('projectListComponent');
+
+      if (pdcForDashboard && typeof projectDashboardInstance.setProjectDetailsComponent === 'function') {
+        projectDashboardInstance.setProjectDetailsComponent(pdcForDashboard);
+      } else if (pdcForDashboard) {
+        logger.warn('[UIInit] projectDashboardInstance missing setProjectDetailsComponent method.', { context: 'uiInit:createAndRegisterUIComponents' });
+        // Fallback to direct assignment if setter is missing but component exists (less ideal)
+        if (projectDashboardInstance.components) projectDashboardInstance.components.projectDetails = pdcForDashboard;
+      }
+
+      if (plcForDashboard && typeof projectDashboardInstance.setProjectListComponent === 'function') {
+        projectDashboardInstance.setProjectListComponent(plcForDashboard);
+      } else if (plcForDashboard) {
+        logger.warn('[UIInit] projectDashboardInstance missing setProjectListComponent method.', { context: 'uiInit:createAndRegisterUIComponents' });
+        // Fallback
+        if (projectDashboardInstance.components) projectDashboardInstance.components.projectList = plcForDashboard;
+      }
+    } else {
+      logger.warn('[UIInit] projectDashboardInstance not found. Cannot set sub-components.', { context: 'uiInit:createAndRegisterUIComponents' });
+    }
+
+    logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });
+  }
+
+  async function registerNavigationViews() {
+    const navigationService = DependencySystem.modules.get('navigationService');
+    if (!navigationService || typeof navigationService.registerView !== 'function') {
+      logger.warn('[UIInit] NavigationService not available or missing registerView method', { context: 'uiInit:registerNavigationViews' });
+      return;
+    }
+
+    try {
+      // Wait for project list elements to be ready
       await domReadinessService.dependenciesAndElements({
-        domSelectors: ['#projectListView', '#projectDetailsView'],
-        timeout: 10000,
+        domSelectors: ['#projectListContainer'],
+        timeout: APP_CONFIG.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 5000,
+        context: 'uiInit:registerNavigationViews:projectListElements'
+      });
+
+      navigationService.registerView('projectList', {
+        selector: '#projectListView',
+        onActivate: async () => {
+          logger.log('[UIInit] Activating project list view', { context: 'uiInit:navigation:projectList' });
+          // Additional activation logic can go here
+        }
+      });
+
+      // Wait for project details elements to be ready
+      await domReadinessService.dependenciesAndElements({
+        domSelectors: ['#projectDetailsContainer'],
+        timeout: APP_CONFIG.TIMEOUTS?.PROJECT_DETAILS_ELEMENTS ?? 5000,
+        context: 'uiInit:registerNavigationViews:projectDetailsElements'
+      });
+
+      navigationService.registerView('projectDetails', {
+        selector: '#projectDetailsView',
+        onActivate: async () => {
+          logger.log('[UIInit] Activating project details view', { context: 'uiInit:navigation:projectDetails' });
+          // Additional activation logic can go here
+        }
+      });
+
+      logger.log('[UIInit] Navigation views registered', { context: 'uiInit:navigation' });
+    } catch (err) {
+      logger.error('[UIInit] Failed to register navigation views', err, { context: 'uiInit:registerNavigationViews' });
+      // Don't throw - this is not critical for app functionality
+    }
+  }
+
+  async function initializeUIComponents() {
+    if (_uiInitialized) {
+      return;
+    }
+
+    try {
+      logger.log('[UIInit] Starting UI component initialization', { context: 'uiInit:initializeUIComponents' });
+
+      // First, wait for critical DOM elements
+      await domReadinessService.dependenciesAndElements({
+        domSelectors: [
+          '#projectListView',     // contenedor que ya existe en el HTML base
+          '#projectDetailsView'   // idem
+        ],
+        timeout: 10000, // Adjusted timeout for clarity
         context: 'uiInit:initializeUIComponents:domCheck'
       });
 
-      // Mobile/sidebar UI helpers
-      const navToggleBtn = domAPI.getElementById('navToggleBtn');
-      const closeSidebarBtn = domAPI.getElementById('closeSidebarBtn');
-      const doc = domAPI.getDocument();
+      // Setup sidebar functionality
+      await setupSidebarControls();
 
-      function setSidebarOpen(open) {
-        const sidebar = domAPI.getElementById('mainSidebar');
-        domAPI[open ? 'addClass' : 'removeClass'](doc.body, 'sidebar-open');
-        domAPI[open ? 'addClass' : 'removeClass'](doc.documentElement, 'sidebar-open');
-        if (sidebar) {
-          domAPI[open ? 'addClass' : 'removeClass'](sidebar, 'translate-x-0');
-          domAPI[open ? 'removeClass' : 'addClass'](sidebar, '-translate-x-full');
-          sidebar.setAttribute('aria-hidden', String(!open));
-        }
-        if (navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
-      }
+      // Load templates
+      await loadProjectTemplates();
 
-      if (navToggleBtn) {
-        eventHandlers.trackListener(
-          navToggleBtn,
-          'click',
-          safeHandler(() => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
-          { context: 'uiInit:sidebar', description: 'toggleSidebar' }
-        );
-      }
-      if (closeSidebarBtn) {
-        eventHandlers.trackListener(
-          closeSidebarBtn, 'click',
-          () => setSidebarOpen(false),
-          { context: 'uiInit:sidebar', description: 'closeSidebar' }
-        );
-      }
-      eventHandlers.trackListener(
-        doc,
-        'keydown',
-        (e) => { if (e.key === 'Escape') setSidebarOpen(false); },
-        { context: 'uiInit:sidebar', description: 'escCloseSidebar' }
-      );
+      // Wait for modal readiness
+      await waitForModalReadiness();
 
-      // Project List Template Loader
-      const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
-      if (htmlLoader?.loadTemplate) {
-        try {
-          logger.log('[UIInit] Loading project_list.html template into #projectListView', { context: 'uiInit:loadTemplates' });
-          await htmlLoader.loadTemplate({
-            url: '/static/html/project_list.html',
-            containerSelector: '#projectListView',
-            eventName: 'projectListHtmlLoaded'
-          });
-          logger.log('[UIInit] project_list.html loaded; event projectListHtmlLoaded dispatched.', { context: 'uiInit:loadTemplates' });
-        } catch (err) {
-          logger.error('[UIInit] Failed to load project_list.html template', err, { context: 'uiInit:loadTemplates' });
-        }
-      } else {
-        logger.error('[UIInit] htmlTemplateLoader.loadTemplate unavailable', { context: 'uiInit:loadTemplates' });
-      }
+      // Create and register UI components
+      await createAndRegisterUIComponents();
 
-      // Wait for ModalManager readiness up to 8s, warn but do not abort
-      const modalMgr = DependencySystem.modules.get('modalManager');
-      if (modalMgr?.isReadyPromise) {
-        await Promise.race([
-          modalMgr.isReadyPromise(),
-          new Promise(res => browserService.getWindow().setTimeout(res, 8000))
-        ]).catch(() => {
-          logger.warn('[UIInit] ModalManager not ready after 8s – continuing', { context: 'uiInit' });
-        });
-      }
-      domAndModalsReady = true;
+      // Register navigation views
+      await registerNavigationViews();
+
+      logger.log('[UIInit] UI component initialization completed successfully', { context: 'uiInit:initializeUIComponents' });
+      _uiInitialized = true;
     } catch (err) {
-      logger.error('[UIInit] Error during DOM/modal readiness', err, { context: 'uiInit:readinessError' });
+      logger.error('[UIInit] Error during UI initialization', err, { context: 'uiInit:initializeUIComponents' });
+      throw err;
     }
-
-    // NOTE: createAndRegisterUIComponents is left to future extraction as subfactory for clarity
-
-    // Register ProjectDashboard views, initialize accessibility, ChatExtensions, etc.
-    // ... OMITTED: Detailed per original app.js to be filled-in on deeper split extraction
-
-    _uiInitialized = true;
   }
 
   return { initializeUIComponents };

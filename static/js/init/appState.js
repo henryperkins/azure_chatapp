@@ -1,7 +1,7 @@
 /**
  * appState.js
  * Factory for application state management module.
- * 
+ *
  * Provides centralized state management for authentication status, user information,
  * app lifecycle state, and initialization status.
  *
@@ -27,18 +27,18 @@ export function createAppStateManager({ DependencySystem, logger }) {
       initializing: false, // True if init() is currently executing
       currentPhase: 'idle' // e.g., 'idle', 'starting_init_process', 'initialized_idle', 'failed_idle'
     },
-    
+
     // Method to update authentication-related state
     setAuthState(newAuthState) {
       logger.log('[appState][setAuthState]', JSON.stringify(newAuthState), { context: 'appState:setAuthState' });
       Object.assign(this.state, newAuthState);
     },
-    
+
     // Method to update general app lifecycle state
     setAppLifecycleState(newLifecycleState) {
       logger.log('[appState][setAppLifecycleState]', JSON.stringify(newLifecycleState), { context: 'appState:setAppLifecycleState' });
       Object.assign(this.state, newLifecycleState);
-      
+
       // If 'initialized' becomes true, set 'isReady' based on success/failure
       if (newLifecycleState.initialized === true) {
         if (this.state.currentPhase === 'initialized_idle') {
