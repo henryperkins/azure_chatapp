@@ -7,8 +7,7 @@ Sentry helper utilities for spans, tags, user context, and background tasks.
 import asyncio
 import contextlib
 import logging
-from contextvars import copy_context
-from typing import Any, Callable, Generator, Union
+from typing import Any, Callable, Generator, Union, Awaitable
 
 import sentry_sdk
 from sentry_sdk.tracing import Span, Transaction
@@ -55,11 +54,11 @@ def sentry_span(
     desc = description or op
     try:
         if parent is None:
-            with sentry_sdk.start_transaction(op=op, name=desc) as tx:
+            with sentry_sdk.start_transaction(op=op, name=desc) as tx:  # type: ignore
                 _set_span_data(tx, data)
                 yield tx
         else:
-            with parent.start_child(op=op, description=desc) as sp:
+            with parent.start_child(op=op, description=desc) as sp:  # type: ignore
                 _set_span_data(sp, data)
                 yield sp
     except Exception:
@@ -82,29 +81,36 @@ def inject_sentry_trace_headers(response) -> None:
 
 def make_sentry_trace_response(
     payload: dict[str, Any],
-    transaction: Span | Transaction,
+    transaction: Span | Transaction | None,
     status_code: int = 200,
 ):
     from fastapi.responses import JSONResponse
     resp = JSONResponse(content=payload, status_code=status_code)
     try:
-        resp.headers["sentry-trace"] = transaction.to_traceparent()
-        if hasattr(transaction, "containing_transaction"):
-            parent = transaction.containing_transaction()
-            if getattr(parent, "_baggage", None):
+        if transaction is not None and hasattr(transaction, "to_traceparent"):
+            trace_parent = transaction.to_traceparent()  # type: ignore
+            if isinstance(trace_parent, str):
+                resp.headers["sentry-trace"] = trace_parent
+            parent = None
+            if hasattr(transaction, "containing_transaction"):
+                parent = transaction.containing_transaction()
+            if parent and hasattr(parent, "_baggage") and parent._baggage:
                 resp.headers["baggage"] = parent._baggage.serialize()
     except Exception:
         pass
     return resp
 
 def create_background_task(
-    coro_func: Callable[..., "asyncio.Future[Any]"] | Callable[..., "asyncio.AsyncGenerator[Any, None]"],
+    coro_func: Callable[..., Awaitable[Any]],
     *args: Any,
     **kwargs: Any,
-) -> asyncio.Task[Any]:
-    ctx = copy_context()
+) -> asyncio.Task[caAny]:
     loop = asyncio.get_running_loop()
-    return loop.create_task(ctx.run(coro_func, *args, **kwargs))
+
+    async def runner() -> Any:
+        return await coro_func(*args, **kwargs)
+
+    return loop.create_task(runner())  # type: ignore
 
 def extract_sentry_trace(request) -> dict[str, str]:
     trace_headers = {}

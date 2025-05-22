@@ -264,6 +264,7 @@ _setState(partial) { this.state = { ...this.state, ...partial }; }
         projectManager: this.projectManager,
         app: this.eventHandlers.DependencySystem.modules.get("app"),
         domReadinessService: this.domReadinessService,      // ← NEW
+        logger: this.logger,
         onUploadComplete: this._safeHandler(async () => {
           if (!this.projectId) return;
           await this.projectManager.loadProjectFiles(this.projectId);

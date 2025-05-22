@@ -34,6 +34,7 @@ from typing import Dict, Any, Optional, cast
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
+
 # from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration # Unused
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.types import Event, Hint
@@ -45,6 +46,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from fastapi.routing import APIRoute
 
 # Dev helper: always deliver fresh JS/CSS/HTML – disables browser cache
+
 
 class NoCacheStatic(StaticFiles):
     async def get_response(self, path, scope):
@@ -83,8 +85,13 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             # Handle any other data type by converting to a single-item list
             allowed_origins = [str(allowed_origins).strip()]
     else:
-        # Allow specific origin for local development when credentials are true
-        allowed_origins = ["http://localhost:8000"]  # Assuming default port
+        # Allow multiple common local development origins
+        allowed_origins = [
+            "http://localhost:8000",
+            "http://localhost:3000",
+            "http://127.0.0.1:8000",
+            "http://127.0.0.1:3000"
+        ]
 
     if is_production:
         # Extra hard lock—never allow this CORS in prod!
@@ -147,8 +154,6 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
 
     # If you still want to test or see behavior, you could add HTTPSRedirectMiddleware,
     # but here we skip it to remain on plain HTTP (insecure).
-
-
 
 
 # -----------------------------------------------------------------------------
@@ -420,6 +425,7 @@ async def debug_routes() -> list[Dict[str, Any]]:
 # -----------------------------------------------------------------------------
 # Request ID Logging Middleware
 # -----------------------------------------------------------------------------
+
 
 # -----------------------------------------------------------------------------
 # DB Down Middleware (friendly error if DB unavailable)
