@@ -65,9 +65,7 @@ export function createTokenStatsManager({
   function _logError(msg, err, meta = {}) {
     try { 
       logger.error(`[${MODULE_CONTEXT}] ${msg}`, err && err.stack ? err : err, { context: MODULE_CONTEXT, ...meta }); 
-    } catch (e) { 
-      console.error(`[${MODULE_CONTEXT}] ${msg}`, err);
-    }
+    } catch {/* secondary logging failure – deliberately ignored (no console) */}
   }
   
   /**
