@@ -748,6 +748,14 @@ class ProjectDetailsComponent {
     this._logInfo("Initializing subcomponents", { projectId });
     await this._initSubComponents();
 
+      /* ── Token-stats UI exists now → start manager ── */
+      try {
+        const tsm = this.eventHandlers.DependencySystem?.modules?.get?.('tokenStatsManager');
+        if (tsm?.initialize) await tsm.initialize();
+      } catch (e) {
+        this._logWarn('TokenStatsManager initialise failed (non-blocking)', { err: e?.message });
+      }
+
     /* ── Ensure UI-polish module runs (idempotent) ── */
     try {
       const pde =
