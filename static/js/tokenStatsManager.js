@@ -99,6 +99,22 @@ export function createTokenStatsManager({
       try {
         _logInfo('Initializing token stats manager');
 
+        /* If token-stats UI isn’t in the DOM yet, skip init (ProjectDetailsComponent
+           will retry once the template is loaded). */
+        const requiredSel = [
+          '#tokenUsageStat',
+          '#tokenStatsBtn',
+          '#tokenStatsCurrentUsage'
+        ];
+        const uiPresent = requiredSel.every(sel => domAPI.querySelector(sel));
+        if (!uiPresent) {
+          _logInfo('Token-stats UI not found – deferring initialization', {
+            missing: requiredSel.filter(sel => !domAPI.querySelector(sel))
+          });
+          state.initializing = null;   // allow future retries
+          return false;                // non-fatal
+        }
+
         await domReadinessService.dependenciesAndElements({
           domSelectors: [
             '#tokenUsageStat', '#tokenStatsBtn',
