@@ -708,9 +708,9 @@ export function createChatUIEnhancements({
 
     const chatContainer =
       state.messageContainer || domAPI.getElementById('chatMessages');
-      // Find the indicator element using querySelector on the container
+    // Find the indicator element using querySelector on the container
     const indicator =
-      chatContainer?.querySelector('#typingIndicator');
+      domAPI.querySelector(chatContainer, '#typingIndicator');
     if (indicator && indicator.parentNode) {
       domAPI.removeChild(indicator.parentNode, indicator); // Use domAPI for removeChild
       logger.info(`[${MODULE_CONTEXT}] Typing indicator hidden`, {
