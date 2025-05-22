@@ -16,7 +16,8 @@ export function createTokenStatsManager({
   logger,
   projectManager,
   app,
-  chatManager
+  chatManager,
+  domReadinessService
 } = {}) {
   const MODULE_CONTEXT = 'tokenStatsManager';
   
@@ -27,6 +28,8 @@ export function createTokenStatsManager({
   if (!sanitizer) throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: sanitizer`);
   if (!logger) throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: logger`);
   if (!modalManager) throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: modalManager`);
+  if (!domReadinessService)
+    throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: domReadinessService`);
   
   // Module state
   const state = {
@@ -91,7 +94,16 @@ export function createTokenStatsManager({
     state.initializing = (async () => {
       try {
         _logInfo('Initializing token stats manager');
-        
+
+        await domReadinessService.dependenciesAndElements({
+          domSelectors: [
+            '#tokenUsageStat', '#tokenStatsBtn',
+            '#tokenStatsCurrentUsage'
+          ],
+          timeout : 8000,
+          context : MODULE_CONTEXT + '::init'
+        });
+
         // Bind event listeners
         _bindEventListeners();
         
@@ -390,7 +402,7 @@ export function createTokenStatsManager({
       link.click();
       
       // Clean up
-      setTimeout(() => {
+      browserService.setTimeout(() => {
         URL.revokeObjectURL(url);
         if (link.parentNode) {
           domAPI.removeChild(link.parentNode, link);
