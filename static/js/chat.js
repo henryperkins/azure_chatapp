@@ -223,6 +223,8 @@ export function createChatManager(deps = {}) {
       const _initStart = clock.now();
       logger.info("[ChatManager][initialize] Starting initialization", { context: "chatManager.initialize", options });
 
+      await this.domReadinessService.documentReady();
+
       await domReadinessService.dependenciesAndElements({
         deps: ['app', 'domAPI', 'eventHandlers'],
         context: 'ChatManager.init:core'
