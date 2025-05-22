@@ -35,9 +35,10 @@ export function createEventHandlers({
   navigate,
   storage,
   logger,           // STRICT: must be provided via DI
-  errorReporter    // STRICT: must be provided via DI
+  errorReporter,    // STRICT: must be provided via DI
+  domReadinessService // Optional, but if provided, must be validated
 } = {}) {
-  const MODULE = 'EventHandler';
+  // === Dependency validation block (must be at the very top for pattern checker) ===
   if (!DependencySystem) {
     throw new Error('[eventHandler] Missing DependencySystem');
   }
@@ -51,13 +52,15 @@ export function createEventHandlers({
     throw new Error('[eventHandler] Missing APP_CONFIG');
   }
   if (!logger) {
-    throw new Error('[eventHandler] DI logger is required.');
+    throw new Error('[eventHandler] Missing logger');
   }
   if (!errorReporter) {
-    throw new Error('[eventHandler] DI errorReporter is required.');
+    throw new Error('[eventHandler] Missing errorReporter');
   }
-  // domReadinessService will be provided via setter for DI circularity
-  let _domReadinessService = null;
+  // domReadinessService is optional at factory, but required at init
+  // ================================================================
+  const MODULE = 'EventHandler';
+  let _domReadinessService = domReadinessService || null;
   function setDomReadinessService(svc) { _domReadinessService = svc; }
 
   logger.debug('[EventHandler] Factory initialized', {
@@ -104,7 +107,7 @@ export function createEventHandlers({
     const finalOpts = { capture, once, signal, passive: typeof passive === 'boolean' ? passive : !nonPassive.includes(type) };
 
     // bookkeeping (prevents duplicates)
-    const elMap  = trackedListeners.get(element) || new Map();
+    const elMap = trackedListeners.get(element) || new Map();
     const typeMap = elMap.get(type) || new Map();
     if (!trackedListeners.has(element)) trackedListeners.set(element, elMap);
     if (!elMap.has(type)) elMap.set(type, typeMap);
@@ -128,14 +131,18 @@ export function createEventHandlers({
     domAPI.addEventListener(element, type, wrapped, finalOpts);
 
     const remove = () => {               // función de des-registro
-      try { untrackListener(element, type, handler); } catch {/* noop */}
+      try {
+        untrackListener(element, type, handler);
+      } catch (err) {
+        logger.error(`[${MODULE}][trackListener][remove] Failed to untrackListener`, err, { context: MODULE, element, type });
+      }
     };
 
     typeMap.set(handler, {
       wrappedHandler: wrapped,
-      options       : finalOpts,
-      context       : options.context,
-      remove        : remove          // <- new
+      options: finalOpts,
+      context: options.context,
+      remove: remove          // <- new
     });
 
     return remove;                       // ← ahora devolvemos la función “unsubscribe”
@@ -199,7 +206,7 @@ export function createEventHandlers({
     const closeBtn = closeBtnId ? domAPI.getElementById(closeBtnId) : null;
 
     if (!modal) {
-      return { open: () => {}, close: () => {} };
+      return { open: () => { }, close: () => { } };
     }
 
     const open = () => {
@@ -309,7 +316,14 @@ export function createEventHandlers({
         }
       } catch (error) {
         if (options.onError) {
-          options.onError(error);
+          try {
+            options.onError(error);
+          } catch (err) {
+            logger.error(`[${MODULE}][setupForm][handleSubmit][onError]`, err, {
+              context: 'form-submit',
+              formId: form?.id || formId
+            });
+          }
         }
         logger.error(`[${MODULE}][setupForm][handleSubmit]`, error, {
           context: 'form-submit',
@@ -383,7 +397,9 @@ export function createEventHandlers({
       context: 'eventHandler.init:modalForm'
     }).then(() => {
       setupProjectModalForm();
-    }).catch(() => { /* fail silently if not found after timeout */ });
+    }).catch((error) => {
+      logger.error(`[${MODULE}][init] elementsReady('#projectModalForm') failed`, error, { context: 'eventHandler.init:modalForm' });
+    });
 
     // LOGIN BUTTON / MODAL HANDLING
     function bindAuthButtonDelegate() {
@@ -498,7 +514,9 @@ export function createEventHandlers({
       },
       {
         resetOnSuccess: true,
-        onError: (err) => {}
+        onError: (err) => {
+          logger.error(`[${MODULE}][setupProjectModalForm] Error in project form submit`, err, { context: 'projectModalForm' });
+        }
       }
     );
   }
@@ -547,7 +565,7 @@ export function createEventHandlers({
     const details = typeMap.get(handler);
     try {
       if (details.options.once &&
-          !(el && el.removeEventListener)) {
+        !(el && el.removeEventListener)) {
         /* already auto-removed by the browser – just delete maps */
         typeMap.delete(handler);
         if (typeMap.size === 0) elementMap.delete(evt);
@@ -560,11 +578,10 @@ export function createEventHandlers({
       if (typeMap.size === 0) elementMap.delete(evt);
       if (elementMap.size === 0) trackedListeners.delete(el);
     } catch (error) {
-      logger.error(`[EventHandler][untrackListener] Failed to remove event listener:`, {
+      logger.error(`[${MODULE}][untrackListener] Failed to remove event listener`, error, {
         element: el,
         evt,
         handler,
-        error,
         context: details.context
       });
       errorReporter.report?.(error, { module: MODULE, evt, fn: 'untrackListener' });
@@ -586,8 +603,8 @@ export function createEventHandlers({
               domAPI.removeEventListener(element, type, details.wrappedHandler, details.options);
               entriesToRemove.push({ element, type, originalHandler });
             } catch (error) {
-              logger.error(`[${MODULE}][cleanupListeners] Error removing event listener:`, {
-                element, type, details, error, context: cleanupContext
+              logger.error(`[${MODULE}][cleanupListeners] Error removing event listener`, error, {
+                element, type, details, context: cleanupContext
               });
               errorReporter.report?.(error, { module: MODULE, evt: type, fn: 'cleanupListeners', context: cleanupContext });
             }
@@ -643,8 +660,8 @@ export function createEventHandlers({
       '#modalLoginTab',
       (event, tabElement) => {
         const registerTabElement = domAPI.querySelector(loginModal, '#modalRegisterTab');
-        const loginPanel         = domAPI.querySelector(loginModal, '#loginPanel');
-        const registerPanel      = domAPI.querySelector(loginModal, '#registerPanel');
+        const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
+        const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
 
         if (!registerTabElement || !loginPanel || !registerPanel) {
           return;
@@ -667,8 +684,8 @@ export function createEventHandlers({
       '#modalRegisterTab',
       (event, tabElement) => {
         const loginTabElement = domAPI.querySelector(loginModal, '#modalLoginTab');
-        const loginPanel      = domAPI.querySelector(loginModal, '#loginPanel');
-        const registerPanel   = domAPI.querySelector(loginModal, '#registerPanel');
+        const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
+        const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
 
         if (!loginTabElement || !loginPanel || !registerPanel) {
           return;

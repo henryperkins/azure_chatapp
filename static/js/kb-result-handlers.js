@@ -9,25 +9,39 @@
  * ## Dependencies (all via DI, none global!)
  *   - eventHandlers: REQUIRED ({ trackListener })
  *   - DOMPurify: REQUIRED (sanitizer function/class instance for innerHTML)
- *   - domAPI: OPTIONAL (for window/document access, default: window/document)
+ *   - domAPI: REQUIRED (for window/document access)
+ *   - logger: REQUIRED (for error logging)
  *
  * ## Usage
- *   import createKbResultHandlers from './kb-result-handlers.js';
- *   const kbResultHandlers = createKbResultHandlers({ eventHandlers, DOMPurify, domAPI });
+ *   import { createKbResultHandlers } from './kb-result-handlers.js';
+ *   const kbResultHandlers = createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logger });
  *   kbResultHandlers.init();
  *
  *  - DO NOT use as a global script or legacy script tag.
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI } = {}) {
-  if (!eventHandlers) {
-    throw new Error('[kb-result-handlers] eventHandlers dependency required');
+export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logger } = {}) {
+  // === Dependency validation block ===
+  if (!eventHandlers) throw new Error('[kb-result-handlers] eventHandlers dependency required');
+  if (!DOMPurify) throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
+  if (!domAPI) throw new Error('[kb-result-handlers] domAPI dependency required');
+  if (!logger) throw new Error('[kb-result-handlers] logger dependency required');
+
+  const MODULE_CONTEXT = 'KbResultHandlers';
+  const wnd = domAPI.window || (typeof window !== 'undefined' ? window : null);
+
+  // Safe handler wrapper for all event handlers
+  function safeHandler(handler, description) {
+    return function (...args) {
+      try {
+        return handler.apply(this, args);
+      } catch (err) {
+        logger.error(`[${MODULE_CONTEXT}][${description}]`, err, { context: MODULE_CONTEXT });
+        throw err;
+      }
+    };
   }
-  if (!DOMPurify) {
-    throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
-  }
-  const wnd = (domAPI && domAPI.window) || (typeof window !== 'undefined' ? window : null);
 
   // -- Init function, call once when DOM is ready and deps are injected
   function init() {
@@ -40,14 +54,14 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
     // Tracked listener via eventHandlers -- never direct addEventListener
     const copyBtn = domAPI.getElementById('copyContentBtn');
     if (copyBtn) {
-      eventHandlers.trackListener(copyBtn, 'click', () => {
+      eventHandlers.trackListener(copyBtn, 'click', safeHandler(() => {
         copyKnowledgeContent();
-      });
+      }, 'copyBtn click'));
     }
 
     const kbModal = domAPI.getElementById('knowledgeResultModal');
     if (kbModal) {
-      eventHandlers.trackListener(kbModal, 'keydown', (e) => {
+      eventHandlers.trackListener(kbModal, 'keydown', safeHandler((e) => {
         if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
           const selection = wnd.getSelection && wnd.getSelection();
           if (!selection || selection.toString().trim() === '') {
@@ -55,7 +69,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
             copyKnowledgeContent();
           }
         }
-      });
+      }, 'kbModal keydown'));
     }
   }
 
@@ -65,11 +79,12 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
 
     const textToCopy = contentElement.textContent;
 
-    navigator.clipboard.writeText(textToCopy)
+    wnd.navigator.clipboard.writeText(textToCopy)
       .then(() => {
         showCopyFeedback(true);
       })
-      .catch(() => {
+      .catch((err) => {
+        logger.error(`[${MODULE_CONTEXT}][copyKnowledgeContent] Clipboard write failed`, err, { context: MODULE_CONTEXT });
         showCopyFeedback(false);
       });
   }
@@ -102,7 +117,6 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
     feedbackEl.classList.remove('hidden');
 
     // Hide after delay (reset state)
-    // Timing hack: Ensure feedback is visible for a fixed period to all users (including keyboard and screen reader users)
     setTimeout(() => {
       feedbackEl.classList.add('hidden');
     }, 3000);
@@ -114,7 +128,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
     if (!kbModal) return;
 
     // Enhance style on open attribute change
-    const observer = new MutationObserver((mutations) => {
+    const observer = new MutationObserver(safeHandler((mutations) => {
       mutations.forEach((mutation) => {
         if (
           mutation.type === 'attributes' &&
@@ -125,7 +139,7 @@ export default function createKbResultHandlers({ eventHandlers, DOMPurify, domAP
           updateResultStyleByRelevance();
         }
       });
-    });
+    }, 'MutationObserver callback'));
     observer.observe(kbModal, { attributes: true });
   }
 

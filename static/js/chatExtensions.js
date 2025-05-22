@@ -12,9 +12,16 @@
  */
 
 export function createChatExtensions(options) {
-  if (!options) {
-    throw new Error("[chatExtensions] Missing options object.");
-  }
+  // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
+  if (!options) throw new Error('Missing options');
+  if (!options.DependencySystem) throw new Error('Missing DependencySystem');
+  if (!options.eventHandlers) throw new Error('Missing eventHandlers');
+  if (!options.chatManager) throw new Error('Missing chatManager');
+  if (!options.auth) throw new Error('Missing auth');
+  if (!options.app) throw new Error('Missing app');
+  if (!options.domAPI) throw new Error('Missing domAPI');
+  if (!options.domReadinessService) throw new Error('Missing domReadinessService');
+  if (!options.logger) throw new Error('Missing logger');
 
   // Strict Dependency Injection — all dependencies must be passed in via options
   const {
@@ -24,32 +31,9 @@ export function createChatExtensions(options) {
     auth,
     app,
     domAPI,
-    domReadinessService,   // NEW
-    logger                 // NEW
+    domReadinessService,
+    logger
   } = options;
-
-  if (!DependencySystem) {
-    throw new Error("[chatExtensions] DependencySystem is required as a dependency.");
-  }
-  if (!eventHandlers || typeof eventHandlers.trackListener !== "function") {
-    throw new Error("[chatExtensions] eventHandlers.trackListener is required (DI only).");
-  }
-  if (!chatManager) {
-    throw new Error("[chatExtensions] chatManager dependency is required (DI only).");
-  }
-  if (!auth) {
-    throw new Error("[chatExtensions] auth dependency is required (DI only).");
-  }
-  if (!app) {
-    throw new Error("[chatExtensions] app dependency is required (DI only).");
-  }
-  if (!domAPI) {
-    throw new Error("[chatExtensions] domAPI dependency is required (DI only).");
-  }
-  if (!domReadinessService)
-    throw new Error('[chatExtensions] domReadinessService dependency is required (DI only).');
-  if (!logger)
-    throw new Error('[chatExtensions] logger dependency is required (DI only).');
 
   var trackListener = eventHandlers.trackListener.bind(eventHandlers);
   var MODULE_CONTEXT = "chatExtensions";
@@ -207,8 +191,13 @@ export function createChatExtensions(options) {
     }
   }
 
+  function cleanup() {
+    destroy();
+  }
+
   return {
     init: init,
-    destroy: destroy
+    destroy: destroy,
+    cleanup: cleanup
   };
 }

@@ -12,13 +12,16 @@
 "use strict";
 
 /* ───────────────────────── Dependencies ───────────────────────── */
-const fs       = require("fs");
-const path     = require("path");
-const os       = require("os");
-const { parse }  = require("@babel/parser");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const { parse } = require("@babel/parser");
 const traverse = require("@babel/traverse").default;
-const chalk    = (()=>{try{return require("chalk");}catch{     // colour fallback
-  const p = t => t; return { red:p, yellow:p, green:p, blue:p, cyan:p, bold:p }; }})();
+const chalk = (() => {
+  try { return require("chalk"); } catch {     // colour fallback
+    const p = t => t; return { red: p, yellow: p, green: p, blue: p, cyan: p, bold: p };
+  }
+})();
 
 /* ─────────────────────────  No-op visitor fallbacks  ───────────────────── */
 /**
@@ -26,26 +29,26 @@ const chalk    = (()=>{try{return require("chalk");}catch{     // colour fallbac
  * implemented yet.  Replace each with the real visitor when you’re ready.
  */
 const _noop = () => ({});
-function vPure     (/* err, file            */){ return _noop(); }
-function vState    (/* err, file            */){ return _noop(); }
-function vEvent    (/* err, file,isAppJs    */){ return _noop(); }
-function vSanitize (/* err, file            */){ return _noop(); }
-function vReadiness(/* err, file,isAppJs    */){ return _noop(); }
-function vBus      (/* err, file            */){ return _noop(); }
-function vNav      (/* err, file            */){ return _noop(); }
-function vAPI      (/* err, file            */){ return _noop(); }
-function vLog      (/* err, file,isAppJs    */){ return _noop(); }
+function vPure(/* err, file            */) { return _noop(); }
+function vState(/* err, file            */) { return _noop(); }
+function vEvent(/* err, file,isAppJs    */) { return _noop(); }
+function vSanitize(/* err, file            */) { return _noop(); }
+function vReadiness(/* err, file,isAppJs    */) { return _noop(); }
+function vBus(/* err, file            */) { return _noop(); }
+function vNav(/* err, file            */) { return _noop(); }
+function vAPI(/* err, file            */) { return _noop(); }
+function vLog(/* err, file,isAppJs    */) { return _noop(); }
 
 /* ───────────────────────── Symbols ────────────────────────────── */
 const SYM = {
-  error:  chalk.red("✖"),
-  warn:   chalk.yellow("⚠"),
-  info:   chalk.cyan("ℹ"),
-  ok:     chalk.green("✓"),
+  error: chalk.red("✖"),
+  warn: chalk.yellow("⚠"),
+  info: chalk.cyan("ℹ"),
+  ok: chalk.green("✓"),
   shield: chalk.blue("🛡️"),
-  lock:   chalk.blue("🔒"),
-  alert:  chalk.redBright("🚨"),
-  lamp:   chalk.yellowBright("💡"),
+  lock: chalk.blue("🔒"),
+  alert: chalk.redBright("🚨"),
+  lamp: chalk.yellowBright("💡"),
   bullet: "•",
 };
 
@@ -60,10 +63,10 @@ const RULE_NAME = {
   7: "domReadinessService Only",
   8: "Central app.state Only",
   9: "Module Event Bus",
- 10: "Navigation Service",
- 11: "Single API Client",
- 12: "Logger / Observability",
-  0 : "Other Issues",
+  10: "Navigation Service",
+  11: "Single API Client",
+  12: "Logger / Observability",
+  0: "Other Issues",
 };
 
 const RULE_DESC = {
@@ -76,22 +79,22 @@ const RULE_DESC = {
   7: "DOM/app readiness handled *only* by DI-injected domReadinessService.",
   8: "Never mutate `app.state` directly; use dedicated setters.",
   9: "Dispatch custom events through a dedicated `EventTarget` bus.",
- 10:"All routing via DI-injected `navigationService.navigateTo()`.",
- 11:"All network calls via DI-injected `apiClient`.",
- 12:"No `console.*`; all logs via DI logger and include context.",
+  10: "All routing via DI-injected `navigationService.navigateTo()`.",
+  11: "All network calls via DI-injected `apiClient`.",
+  12: "No `console.*`; all logs via DI logger and include context.",
 };
 
 /* ───────────────────────── Config & Plugins ───────────────────── */
 
-function loadConfig(cwd){
+function loadConfig(cwd) {
   const tryPaths = [
-    path.join(cwd,"patterns-checker.config.json"),
-    path.join(cwd,".patterns-checkerrc"),
-    path.join(cwd,"package.json")
+    path.join(cwd, "patterns-checker.config.json"),
+    path.join(cwd, ".patterns-checkerrc"),
+    path.join(cwd, "package.json")
   ];
-  for(const p of tryPaths){
-    if(fs.existsSync(p)){
-      const raw = JSON.parse(fs.readFileSync(p,"utf8"));
+  for (const p of tryPaths) {
+    if (fs.existsSync(p)) {
+      const raw = JSON.parse(fs.readFileSync(p, "utf8"));
       // package.json nesting support
       return raw["patternsChecker"] ?? raw;
     }
@@ -99,23 +102,23 @@ function loadConfig(cwd){
   return {};
 }
 
-function loadPlugins(dir){
-  if(!dir || !fs.existsSync(dir)) return [];
+function loadPlugins(dir) {
+  if (!dir || !fs.existsSync(dir)) return [];
   return fs.readdirSync(dir)
-    .filter(f=>/\.(c?js|ts)$/.test(f))
-    .map(f=>path.join(dir,f))
-    .map(p=>{
-      try{
+    .filter(f => /\.(c?js|ts)$/.test(f))
+    .map(f => path.join(dir, f))
+    .map(p => {
+      try {
         const mod = require(p);
-        if(typeof mod.visitor!=="function" || typeof mod.ruleId!=="number") {
+        if (typeof mod.visitor !== "function" || typeof mod.ruleId !== "number") {
           console.warn(`${SYM.warn}  Plugin ${p} ignored – missing visitor() or ruleId`);
           return null;
         }
         // Allow plugins to extend rule name/desc maps
-        if(mod.ruleName)  RULE_NAME[mod.ruleId]=mod.ruleName;
-        if(mod.ruleDesc)  RULE_DESC[mod.ruleId]=mod.ruleDesc;
+        if (mod.ruleName) RULE_NAME[mod.ruleId] = mod.ruleName;
+        if (mod.ruleDesc) RULE_DESC[mod.ruleId] = mod.ruleDesc;
         return mod;
-      }catch(err){
+      } catch (err) {
         console.warn(`${SYM.warn}  Failed to load plugin ${p}: ${err.message}`);
         return null;
       }
@@ -124,11 +127,11 @@ function loadPlugins(dir){
 }
 
 /* ───────────────────────── Helper Utilities ───────────────────── */
-const read = f => fs.readFileSync(f,"utf8");
+const read = f => fs.readFileSync(f, "utf8");
 const splitLines = code => code.split(/\r?\n/);
-const getLine = (code,n)=>splitLines(code)[n-1]??"";
+const getLine = (code, n) => splitLines(code)[n - 1] ?? "";
 
-function mergeVisitors (...visitors) {
+function mergeVisitors(...visitors) {
   /** Result shape:
    *   {
    *     Identifier()        -> chained fn
@@ -201,10 +204,10 @@ function collectDIParamNamesFromParam(param, namesSet) {
   }
 }
 function collectDIParamNamesFromParams(params, namesSet) {
-  (params||[]).forEach(param=>collectDIParamNamesFromParam(param, namesSet));
+  (params || []).forEach(param => collectDIParamNamesFromParam(param, namesSet));
 }
 /* Factory to create error objects with hint support */
-function E(file,line,ruleId,msg,hint=""){return{file,line,ruleId,message:msg,hint};}
+function E(file, line, ruleId, msg, hint = "") { return { file, line, ruleId, message: msg, hint }; }
 
 /* ───────────────────────── Visitors (Guardrails) ─────────────── */
 
@@ -245,16 +248,19 @@ function vFactory(err, file) {
                 (test.right.type === "UnaryExpression" && test.right.operator === "typeof")
               ))
             ) {
-              // If error message matches "Missing ..."
-              if (
-                q.node.argument &&
-                q.node.argument.type === "NewExpression" &&
+              /* Accept both StringLiteral **and** TemplateLiteral:
+                 - StringLiteral: "Missing …"
+                 - TemplateLiteral: `[Module] Missing …`                */
+              if (q.node.argument?.type === "NewExpression" &&
                 q.node.argument.callee.name === "Error" &&
-                q.node.argument.arguments.length &&
-                q.node.argument.arguments[0].type === "StringLiteral" &&
-                /^Missing\b/.test(q.node.argument.arguments[0].value)
-              ) {
-                depCheck = true;
+                q.node.argument.arguments.length) {
+                const arg0 = q.node.argument.arguments[0];
+                const text = arg0.type === "StringLiteral"
+                  ? arg0.value
+                  : (arg0.type === "TemplateLiteral"
+                    ? arg0.quasis.map(t => t.value.raw).join("")
+                    : "");
+                if (/Missing\b/.test(text)) depCheck = true;
               }
             }
           }
@@ -264,27 +270,29 @@ function vFactory(err, file) {
     FunctionDeclaration(p) {
       if (["cleanup", "teardown"].includes(p.node.id?.name)) cleanup = true;
     },
-    Program: { exit() {
-      if (!found)
-        err.push(E(file, 1, 1, "Missing factory export.", "export function createXyz(deps){…}"));
-      if (found && !depCheck)
-        err.push(E(file, factoryLine, 1, "Factory must validate deps.", "throw new Error('Missing …')"));
-      if (found && !cleanup)
-        err.push(E(file, factoryLine, 1, "Factory must expose cleanup API.", "function cleanup() { … }"));
-    } }
+    Program: {
+      exit() {
+        if (!found)
+          err.push(E(file, 1, 1, "Missing factory export.", "export function createXyz(deps){…}"));
+        if (found && !depCheck)
+          err.push(E(file, factoryLine, 1, "Factory must validate deps.", "throw new Error('Missing …')"));
+        if (found && !cleanup)
+          err.push(E(file, factoryLine, 1, "Factory must expose cleanup API.", "function cleanup() { … }"));
+      }
+    }
   };
 }
 
 /* 2. Strict Dependency Injection */
 function vDI(err, file, isAppJs) {
-  const bannedG   = ["window", "document"];
-  const bannedS   = ["apiClient", "logger", "domReadinessService", "navigationService"];
-  const diParams  = new Set();
-  const referenced= new Set();
-  let diLogger    = false;                // track whether logger came via DI
+  const bannedG = ["window", "document"];
+  const bannedS = ["apiClient", "logger", "domReadinessService", "navigationService"];
+  const diParams = new Set();
+  const referenced = new Set();
+  let diLogger = false;                // track whether logger came via DI
 
   /* ── collect names from factory param list ── */
-  function scanParams(params){
+  function scanParams(params) {
     collectDIParamNamesFromParams(params, diParams);
   }
 
@@ -311,12 +319,26 @@ function vDI(err, file, isAppJs) {
     ExportNamedDeclaration(p) {
       const d = p.node.declaration;
       if (d && (d.type === "FunctionDeclaration" || d.type === "ArrowFunctionExpression"))
-          scanParams(d.params);
+        scanParams(d.params);
     },
     CallExpression(p) {
       const c = p.node.callee;
-      if (c.type === "MemberExpression" && c.object.name === "console")
-        err.push(E(file, p.node.loc.start.line, 12, "console.* is forbidden – use DI logger."));
+      if (c.type === "MemberExpression" && c.object.name === "console") {
+        const bad = p.node.callee.property.name;
+        const hint = [
+          "/* BAD */",
+          `${bad === "error" ? "console.error(err)" : "console." + bad + "(...)"}\n`,
+          "/* GOOD */",
+          `logger.${bad === "error" ? "error" : "info"}(`,
+          `  '[${moduleCtx}] message',`,
+          bad === "error" ? "  err," : "  /* data */,",
+          `  { context: '${moduleCtx}' }`,
+          ");"
+        ].join("\n");
+        err.push(E(file, p.node.loc.start.line, 12,
+          "console.* is forbidden – use DI logger.",
+          hint));
+      }
       // Accept logger.withContext({}) factory as a valid logger usage
       if (c.type === "MemberExpression" && c.object.name === "logger" && c.property.name === "withContext") {
         return;
@@ -327,82 +349,120 @@ function vDI(err, file, isAppJs) {
           err.push(E(file, p.node.loc.start.line, 12, "logger call missing { context } meta."));
       }
     },
-    Program: { exit() {
-      // Don't require DI logger in app.js which creates the logger
-      if (!diLogger && !isAppJs)
-        err.push(E(file, 1, 12, "Logger not injected via DI param in factory."));
-    }}
+    Program: {
+      exit() {
+        // 1) mark logger injected if param list contained 'logger'
+        if (!diLogger) diLogger = diParams.has("logger");
+        // 2) still allow bootstrap exception
+        if (!diLogger && !isAppJs)
+          err.push(E(file, 1, 12,
+            "Logger not injected via DI param in factory.",
+            "export function createX({ logger, ...deps }) { /* … */ }"));
+      }
+    }
   };
 }
 
 /* 12-b. Error logging in catch blocks & event handlers                */
-function vErrorLog(err,file){
-  const handledFns=new Set();          // safeHandler(...) CallExpressions
-  const trackHandlers=new Set();       // handler by ref passed to trackListener
+function vErrorLog(err, file, moduleCtx = "Module") {
+  const handledFns = new Set();          // safeHandler(...) CallExpressions
+  const trackHandlers = new Set();       // handler by ref passed to trackListener
 
-  return{
+  return {
     /* mark safeHandler wrappers */
-    CallExpression(p){
-      if(p.node.callee.name==="safeHandler"){
+    CallExpression(p) {
+      if (p.node.callee.name === "safeHandler") {
         handledFns.add(p.node); // store the CallExpression node itself (the wrapper)
       }
       /* collect event-handler arg */
-      const c=p.node.callee;
-      if(c.type==="MemberExpression"&&c.object.name==="eventHandlers"&&c.property.name==="trackListener"){
-        const handler=p.node.arguments[2];
-        if(handler) trackHandlers.add(handler);
+      const c = p.node.callee;
+      if (c.type === "MemberExpression" && c.object.name === "eventHandlers" && c.property.name === "trackListener") {
+        const handler = p.node.arguments[2];
+        // (handler tracking logic can be implemented here if needed)
       }
     },
 
-    /* every catch must logger.error(err, { context }) */
-    CatchClause(p){
-      const errId=p.node.param?.name;
-      let logged=false;
+    /* every catch must logger.error(err, { context }) – except
+       tiny “swallow” blocks that **only** contain a final try/catch
+       without additional logic                                    */
+    CatchClause(p) {
+      const errId = p.node.param?.name;
+      let logged = false;
+      let hasNestedTry = false;
       p.traverse({
-        CallExpression(q){
-          const cal=q.node.callee;
-          if(cal.type==="MemberExpression"&&cal.object.name==="logger"&&cal.property.name==="error"){
+        CallExpression(q) {
+          const cal = q.node.callee;
+          if (cal.type === "MemberExpression" && cal.object.name === "logger" && cal.property.name === "error") {
             // Accept error variable in any arg position:
-            if(q.node.arguments.some(a=>a.type==="Identifier" && a.name===errId)) logged=true;
+            if (q.node.arguments.some(a => a.type === "Identifier" && a.name === errId)) logged = true;
           }
-        }
+        },
+        TryStatement() { hasNestedTry = true; }
       });
-      if(!logged)
-        err.push(E(file,p.node.loc.start.line,12,"Caught errors must be re-logged via logger.error(...).",
-           "logger.error('context msg', err, { context:'Module' })"));
+      /* Exempt “finalErr/logErr” swallow blocks with empty body */
+      const isSwallow =
+        /^(finalErr|logErr)$/i.test(errId || "") &&
+        p.node.body.body.length === 0;
+
+      /* Exempt defensive catch that only wraps another try/catch         */
+      if (!logged && !hasNestedTry && !isSwallow) {
+        const hint = [
+          "try {",
+          "  // risky work",
+          `} catch (${errId}) {`,
+          `  logger.error('[${moduleCtx}] something failed', ${errId}, { context: '${moduleCtx}' });`,
+          `  throw ${errId};`,
+          "}"
+        ].join("\n");
+        err.push(E(file, p.node.loc.start.line, 12,
+          "Caught errors must be re-logged via logger.error(...).",
+          hint));
+      }
     },
 
-    Program:{exit(){
-      // Compare handlers to see if any are safeHandler wrappers by location in code
-      trackHandlers.forEach(h=>{
-        const isWrapped = [...handledFns].some(wrap =>
-          wrap === h ||
-          (
-            wrap.loc && h.loc &&
-            wrap.loc.start.line === h.loc.start.line &&
-            wrap.loc.start.column === h.loc.start.column
-          )
-        );
-        if(!isWrapped)
-          err.push(E(file,h.loc.start.line,12,"Event handler must be wrapped by safeHandler(...).",
-            "eventHandlers.trackListener(btn,'click', safeHandler(handler,'click'),{ context:'btn' })"));
-      });
-    }}
+    Program: {
+      exit() {
+        // Compare handlers to see if any are safeHandler wrappers by location in code
+        trackHandlers.forEach(h => {
+          const isWrapped = [...handledFns].some(wrap =>
+            wrap === h ||
+            (
+              wrap.loc && h.loc &&
+              wrap.loc.start.line === h.loc.start.line &&
+              wrap.loc.start.column === h.loc.start.column
+            )
+          );
+          if (!isWrapped)
+            err.push(E(file, h.loc.start.line, 12, "Event handler must be wrapped by safeHandler(...).",
+              "eventHandlers.trackListener(btn,'click', safeHandler(handler,'click'),{ context:'btn' })"));
+        });
+      }
+    }
   };
 }
 
 /* ───────────────────────── Analyzer ─────────────────────────── */
 function analyze(file, code) {
   const errors = [];
+
+  /* ── ❶ Try to capture a module-level  MODULE_CONTEXT  value ───────── */
+  let moduleCtx = "Module";
+  {
+    const m = code.match(/const\s+MODULE_CONTEXT\s*=\s*['"`]([^'"`]+)['"`]/);
+    if (m) moduleCtx = m[1];
+  }
+
   // Check if this is app.js or contains the bootstrap exception marker
   const isAppJs = /\/app\.js$/.test(file) ||
-                  code.includes('WARNING: BOOTSTRAP EXCEPTION');
+    code.includes('WARNING: BOOTSTRAP EXCEPTION');
 
   let ast;
   try {
-    ast = parse(code, { sourceType: "module",
-      plugins: ["jsx", "typescript", "classProperties", "decorators-legacy", "dynamicImport", "optionalChaining", "nullishCoalescingOperator"] });
-  } catch(e) {
+    ast = parse(code, {
+      sourceType: "module",
+      plugins: ["jsx", "typescript", "classProperties", "decorators-legacy", "dynamicImport", "optionalChaining", "nullishCoalescingOperator"]
+    });
+  } catch (e) {
     return [E(file, 1, 0, `Parse error: ${e.message}`)];
   }
 
@@ -430,78 +490,88 @@ function analyze(file, code) {
 }
 
 /* ───────────────────────── CLI Drawing Helpers ──────────────── */
-function pad(s,l){return s+" ".repeat(Math.max(0,l-s.length));}
-function drawBox(title,w=80){
-  const top="┌"+"─".repeat(w-2)+"┐";
-  const side="│";
-  const empty=side+" ".repeat(w-2)+side;
-  const mid=side+pad("",Math.floor((w-2-title.length)/2))+title+
-            pad("",Math.ceil((w-2-title.length)/2))+side;
-  console.log(`${top}\n${empty}\n${mid}\n${empty}\n└${"─".repeat(w-2)}┘\n`);
+function pad(s, l) { return s + " ".repeat(Math.max(0, l - s.length)); }
+function drawBox(title, w = 80) {
+  const top = "┌" + "─".repeat(w - 2) + "┐";
+  const side = "│";
+  const empty = side + " ".repeat(w - 2) + side;
+  const mid = side + pad("", Math.floor((w - 2 - title.length) / 2)) + title +
+    pad("", Math.ceil((w - 2 - title.length) / 2)) + side;
+  console.log(`${top}\n${empty}\n${mid}\n${empty}\n└${"─".repeat(w - 2)}┘\n`);
 }
-function drawTable(rows,hdr,widths){
-  const headerRow=hdr.map((h,i)=>pad(h,widths[i])).join(" │ ");
-  const sep=widths.map(w=>"─".repeat(w)).join("─┼─");
-  console.log("┌─"+sep+"─┐");
-  console.log("│ "+headerRow+" │");
-  console.log("├─"+sep+"─┤");
-  rows.forEach(r=>console.log("│ "+r.map((c,i)=>pad(c,widths[i])).join(" │ ")+" │"));
-  console.log("└─"+sep+"─┘\n");
+function drawTable(rows, hdr, widths) {
+  const headerRow = hdr.map((h, i) => pad(h, widths[i])).join(" │ ");
+  const sep = widths.map(w => "─".repeat(w)).join("─┼─");
+  console.log("┌─" + sep + "─┐");
+  console.log("│ " + headerRow + " │");
+  console.log("├─" + sep + "─┤");
+  rows.forEach(r => console.log("│ " + r.map((c, i) => pad(c, widths[i])).join(" │ ") + " │"));
+  console.log("└─" + sep + "─┘\n");
 }
 
-function groupByRule(errs){
-  const g={};
-  errs.forEach(e=>(g[e.ruleId]??=[]).push(e));
+function groupByRule(errs) {
+  const g = {};
+  errs.forEach(e => (g[e.ruleId] ??= []).push(e));
   return g;
 }
 
 /* ───────────────────────── Main CLI ─────────────────────────── */
-(function main(){
-  const argv=process.argv.slice(2);
-  const ruleFilterArg=argv.find(a=>a.startsWith("--rule="));
-  const ruleFilter=ruleFilterArg?parseInt(ruleFilterArg.split("=")[1],10):null;
-  const files=argv.filter(a=>!a.startsWith("--"));
-  if(!files.length){
+(function main() {
+  const argv = process.argv.slice(2);
+  const ruleFilterArg = argv.find(a => a.startsWith("--rule="));
+  const ruleFilter = ruleFilterArg ? parseInt(ruleFilterArg.split("=")[1], 10) : null;
+  const files = argv.filter(a => !a.startsWith("--"));
+  if (!files.length) {
     console.log("\nFrontend Pattern Checker\nUsage: node patternChecker.cjs [--rule=N] <file1.js> …\n");
     process.exit(0);
   }
 
-  let total=0,report=[];
-  files.forEach(f=>{
-    const abs=path.resolve(f);
-    if(!fs.existsSync(abs)){console.error(`${SYM.error} File not found: ${abs}`);return;}
-    const code=read(abs);
-    let errs=analyze(abs,code);
-    if(ruleFilter) errs=errs.filter(e=>e.ruleId===ruleFilter);
-    if(errs.length){total+=errs.length;report.push({file:abs,errs});}
+  let total = 0, report = [];
+  files.forEach(f => {
+    const abs = path.resolve(f);
+    if (!fs.existsSync(abs)) { console.error(`${SYM.error} File not found: ${abs}`); return; }
+    const code = read(abs);
+    let errs = analyze(abs, code);
+    if (ruleFilter) errs = errs.filter(e => e.ruleId === ruleFilter);
+    if (errs.length) { total += errs.length; report.push({ file: abs, errs }); }
   });
 
-  if(!total){
-    drawBox(`${SYM.ok} No pattern violations found!`,60);
+  if (!total) {
+    drawBox(`${SYM.ok} No pattern violations found!`, 60);
     return;
   }
 
-  report.forEach(({file,errs})=>{
-    drawBox(`${SYM.shield} Frontend Patterns: ${path.basename(file)}`,80);
-    const grouped=groupByRule(errs);
+  report.forEach(({ file, errs }) => {
+    drawBox(`${SYM.shield} Frontend Patterns: ${path.basename(file)}`, 80);
+    const grouped = groupByRule(errs);
     drawTable(
-      Object.entries(grouped).map(([id,v])=>[`${id}. ${RULE_NAME[id]}`,String(v.length)]),
-      ["Pattern","Violations"],[55,10]);
+      Object.entries(grouped).map(([id, v]) => [`${id}. ${RULE_NAME[id]}`, String(v.length)]),
+      ["Pattern", "Violations"], [55, 10]);
 
     console.log("Detailed Violations\n");
-    Object.entries(grouped).forEach(([id,vList])=>{
+    Object.entries(grouped).forEach(([id, vList]) => {
       console.log(`${SYM.lock} ${RULE_NAME[id]}\n${RULE_DESC[id]}\n`);
-      vList.forEach((v,i)=>{
-        console.log(`Line ${v.line}: ${v.actualLine}`);
-        console.log(`${SYM.error} ${v.message}`);
-        if(i===0&&v.hint){
-          console.log(`${SYM.lamp} Pattern:`);
-          v.hint.split("\n").forEach(l=>console.log("   "+l));
+      vList.forEach((violation, idx) => {
+        /* ① offending code */
+        const lineStr = chalk.redBright(`Line ${violation.line}: `) +
+          chalk.red(violation.actualLine.trim());
+        console.log(lineStr);
+
+        /* ② explicit violation msg */
+        console.log(chalk.bold(`${SYM.error}  Violation:`),
+          chalk.yellow(violation.message));
+
+        /* ③ suggested fix (if provided) */
+        if (violation.hint) {
+          console.log(chalk.greenBright("🔧 Suggested fix:"));
+          violation.hint
+            .split("\n")
+            .forEach(l => console.log("   " + l));
         }
         console.log("");
       });
     });
   });
-  drawBox(`${SYM.alert} Found ${total} pattern violation(s)!`,80);
+  drawBox(`${SYM.alert} Found ${total} pattern violation(s)!`, 80);
   process.exit(1);
 })();

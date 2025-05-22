@@ -12,10 +12,19 @@
  */
 
 export function createAuthModule(deps) {
-  // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately) ===
+  // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
   if (!deps || typeof deps !== "object") {
     throw new Error("[AuthModule] 'deps' DI object is required as argument to createAuthModule");
   }
+  if (!deps.apiClient) throw new Error("[AuthModule] DI param 'apiClient' is required.");
+  if (!deps.logger) throw new Error("[AuthModule] DI param 'logger' is required.");
+  if (!deps.domReadinessService) throw new Error("[AuthModule] DI param 'domReadinessService' is required.");
+  if (!deps.eventHandlers) throw new Error("[AuthModule] DI param 'eventHandlers' is required.");
+  if (!deps.domAPI) throw new Error("[AuthModule] DI param 'domAPI' is required.");
+  if (!deps.sanitizer) throw new Error("[AuthModule] DI param 'sanitizer' is required.");
+  if (!deps.apiEndpoints) throw new Error("[AuthModule] DI param 'apiEndpoints' is required.");
+  // DependencySystem and modalManager may be undefined
+
   const {
     apiClient,
     eventHandlers,
@@ -27,15 +36,6 @@ export function createAuthModule(deps) {
     logger,
     domReadinessService
   } = deps;
-  // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately) ===
-  if (!apiClient) throw new Error("[AuthModule] DI param 'apiClient' is required.");
-  if (!logger) throw new Error("[AuthModule] DI param 'logger' is required.");
-  if (!domReadinessService) throw new Error("[AuthModule] DI param 'domReadinessService' is required.");
-  if (!eventHandlers) throw new Error("[AuthModule] DI param 'eventHandlers' is required.");
-  if (!domAPI) throw new Error("[AuthModule] DI param 'domAPI' is required.");
-  if (!sanitizer) throw new Error("[AuthModule] DI param 'sanitizer' is required.");
-  if (!apiEndpoints) throw new Error("[AuthModule] DI param 'apiEndpoints' is required.");
-  // DependencySystem and modalManager may be undefined
 
   // === safeHandler: For all event handlers (logging errors) ===
   function safeHandler(handler, description) {
