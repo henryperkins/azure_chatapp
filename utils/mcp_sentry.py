@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)          # NEW – moved up
 # Helper function to safely use MCP tools
 def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """
-    Safely use an MCP tool without direct imports, handling the case when the function
-    is not available in the global scope.
+    Safely use an MCP tool by importing the mcp_client module and calling use_mcp_tool.
+    Raises ServerConnectionError if the MCP client is not available.
 
     Args:
         server_name: Name of the MCP server
@@ -38,18 +38,10 @@ def _safe_use_mcp_tool(server_name: str, tool_name: str, arguments: dict[str, An
         ServerConnectionError: If MCP tools are not available
     """
     try:
-        # First try to use the global use_mcp_tool function that should be available at runtime
         try:
-            # Access the global use_mcp_tool function that should be injected by the MCP system
-            global_use_mcp_tool = globals().get('use_mcp_tool')
-            if global_use_mcp_tool:
-                return global_use_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
-
-            # Try importing it if not in globals
             mcp_client = importlib.import_module("mcp_client")
             return mcp_client.use_mcp_tool(server_name=server_name, tool_name=tool_name, arguments=arguments)
         except (ImportError, AttributeError) as exc:
-            # Fallback when running outside MCP - mainly for testing
             logger.warning(f"MCP tools not available for call to {tool_name}")
             raise ServerConnectionError(f"MCP tools not available for {tool_name}") from exc
     except Exception as e:

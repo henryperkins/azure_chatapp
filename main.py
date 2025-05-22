@@ -196,7 +196,7 @@ from config import settings  # noqa: E402
 from db import init_db, get_async_session_context  # noqa: E402
 from utils.auth_utils import clean_expired_tokens  # noqa: E402
 from utils.db_utils import schedule_token_cleanup  # noqa: E402
-from utils.sentry_utils import filter_sensitive_event  # Canonical Sentry filter
+from utils.sentry_config import filter_sensitive_event  # Canonical Sentry filter
 
 # ----- Ensure ALL models are registered for migrations/table creation -----
 import models  # noqa: E402, F401 # F401: imported but unused - common for model registration
