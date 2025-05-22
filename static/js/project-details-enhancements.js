@@ -31,7 +31,7 @@ function createProjectDetailsEnhancements(deps) {
   const state = {
     initialized: false,
     // Token stats removed for mobile refactor
-    activeTab: 'details',
+    activeTab: 'chat',
     // Project list state
     projectListInitialized: false,
     currentFilter: 'all',
@@ -123,7 +123,7 @@ function createProjectDetailsEnhancements(deps) {
             // Trigger file upload
             targetBtn = domAPI.getElementById('uploadFileBtn');
             break;
-          case 'conversations':
+          case 'chat':
             // Create new conversation
             targetBtn = domAPI.getElementById('newConversationBtn');
             break;
@@ -267,7 +267,7 @@ function createProjectDetailsEnhancements(deps) {
    */
   function setupTabTracking() {
     try {
-      const tabButtons = domAPI.querySelectorAll('.project-tab-btn');
+      const tabButtons = domAPI.querySelectorAll('.project-tab');
 
       tabButtons.forEach(button => {
         const tabHandler = (e) => {
@@ -281,7 +281,7 @@ function createProjectDetailsEnhancements(deps) {
               // Always show FAB, but change its appearance based on context
               const tabToIconMap = {
                 files: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>',
-                conversations: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>',
+                chat: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>',
                 knowledge: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>',
                 details: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>',
                 artifacts: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>'
@@ -295,7 +295,7 @@ function createProjectDetailsEnhancements(deps) {
               // Update title/aria-label based on tab
               const tabToTitleMap = {
                 files: 'Upload Files',
-                conversations: 'New Conversation',
+                chat: 'New Conversation',
                 knowledge: 'Search Knowledge Base',
                 details: 'Edit Project Details',
                 artifacts: 'View Artifacts'
