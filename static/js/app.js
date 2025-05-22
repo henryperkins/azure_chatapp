@@ -179,8 +179,8 @@ const eventHandlers = createEventHandlers({
   browserService: browserServiceInstance,
   APP_CONFIG,
   sanitizer,
-  logger,
-  errorReporter
+  logger,          // Pass logger dependency explicitly
+  errorReporter    // Pass errorReporter dependency explicitly
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
