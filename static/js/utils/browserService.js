@@ -263,6 +263,9 @@ export function createBrowserService({ windowObject, logger } = {}) {
     MutationObserver: MutationObserverImpl,
     fetch: fetchImpl,
 
+    /* Native constructor needed by Auth & other modules */
+    URLSearchParams: windowObject.URLSearchParams,
+
     // Passthroughs for test harnesses
     getLocationHref: () => windowObject.location.href,
     setHistory: (...a) => windowObject.history.pushState(...a),
