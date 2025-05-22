@@ -9,7 +9,7 @@
       document.dispatchEvent(new CustomEvent('modalsLoaded', { detail: { success: true }}));
     } catch (err) {
       // Optionally, handle the error or log
-      if (window.console && console.error) console.error('[Roo] Failed to load modals.html:', err);
+      if (window.logger?.error) window.logger.error('[modals.html]', err, { context:'modals' });
     }
   }
 })();
