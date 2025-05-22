@@ -99,11 +99,11 @@ function createProjectDetailsEnhancements(deps) {
       fabElement.setAttribute('aria-label', 'Quick Actions');
 
       // Create FAB icon
-      fabElement.innerHTML = sanitizer.sanitize(`
+      domAPI.setInnerHTML(fabElement, sanitizer.sanitize(`
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
         </svg>
-      `);
+      `));
 
       // Append to project-details-root
       const projectRoot = domAPI.querySelector('.project-details-root');
@@ -139,13 +139,13 @@ function createProjectDetailsEnhancements(deps) {
 
         if (targetBtn) {
           // Add haptic feedback on mobile if available
-          if (browserService && browserService.isMobile && navigator.vibrate) {
-            navigator.vibrate(50); // Short vibration for feedback
+          if (browserService && browserService.isMobile && browserService.getWindow()?.navigator?.vibrate) {
+            browserService.getWindow().navigator.vibrate(50); // Short vibration for feedback
           }
 
           // Visual feedback - temporary animation
           fabElement.classList.add('active');
-          setTimeout(() => fabElement.classList.remove('active'), 300);
+          browserService.setTimeout(() => fabElement.classList.remove('active'), 300);
 
           targetBtn.click();
         }
@@ -248,11 +248,11 @@ function createProjectDetailsEnhancements(deps) {
         }
 
         // Construct the enhanced empty state HTML
-        enhancedEmptyState.innerHTML = sanitizer.sanitize(`
+        domAPI.setInnerHTML(enhancedEmptyState, sanitizer.sanitize(`
           <div class="empty-state-icon">${icon}</div>
           <h4 class="empty-state-title">${title}</h4>
           <p class="empty-state-description">${description}</p>
-        `);
+        `));
 
         // Replace the original empty state with the enhanced one
         emptyState.replaceWith(enhancedEmptyState);
@@ -367,9 +367,9 @@ function createProjectDetailsEnhancements(deps) {
           // Clear button for mobile
           const clearBtn = domAPI.createElement('button');
           clearBtn.className = 'input-clear-btn';
-          clearBtn.innerHTML = sanitizer.sanitize(`
+          domAPI.setInnerHTML(clearBtn, sanitizer.sanitize(`
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          `);
+          `));
 
           // Insert clear button after search input
           searchInput.parentNode.insertBefore(clearBtn, searchInput.nextSibling);
@@ -432,20 +432,20 @@ function createProjectDetailsEnhancements(deps) {
             // Replace emoji-based badges with styled badges
             if (tip === 'Pinned') {
               badge.classList.add('badge', 'badge-pinned');
-              badge.innerHTML = sanitizer.sanitize(`
+              domAPI.setInnerHTML(badge, sanitizer.sanitize(`
                 <svg xmlns="http://www.w3.org/2000/svg" class="metadata-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
                 <span>Pinned</span>
-              `);
+              `));
             } else if (tip === 'Archived') {
               badge.classList.add('badge', 'badge-archived');
-              badge.innerHTML = sanitizer.sanitize(`
+              domAPI.setInnerHTML(badge, sanitizer.sanitize(`
                 <svg xmlns="http://www.w3.org/2000/svg" class="metadata-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
                 <span>Archived</span>
-              `);
+              `));
             }
           });
         }
@@ -462,14 +462,14 @@ function createProjectDetailsEnhancements(deps) {
             // Append metadata about activity/date (using existing date if available)
             const dateText = footer.textContent?.trim() || '';
             if (dateText) {
-              metadataDiv.innerHTML = sanitizer.sanitize(`
+              domAPI.setInnerHTML(metadataDiv, sanitizer.sanitize(`
                 <div class="metadata-item">
                   <svg xmlns="http://www.w3.org/2000/svg" class="metadata-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                   <span>${dateText}</span>
                 </div>
-              `);
+              `));
             }
 
             footer.appendChild(metadataDiv);
