@@ -89,7 +89,7 @@ export function createKnowledgeBaseComponent(options = {}) {
 
   function _safeSetInnerHTML(el, html) {
     if (!el) return;
-    el.innerHTML = sanitizer.sanitize(html);
+    domAPI.setInnerHTML(el, html);
   }
 
   class KnowledgeBaseComponent {
