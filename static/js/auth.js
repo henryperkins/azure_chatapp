@@ -135,7 +135,7 @@ export function createAuthModule(deps) {
     const current = readCookie('csrf_token');
     if (current && current !== csrfToken) csrfToken = current;
     if (current) {
-      logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value', current, { context: 'getCSRFToken' });
+      logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value [masked]', { context: 'getCSRFToken' });
     } else {
       logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] no CSRF cookie found', { context: 'getCSRFToken' });
     }
@@ -158,7 +158,7 @@ export function createAuthModule(deps) {
       logger.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data, { context: 'fetchCSRFToken' });
       throw new Error('CSRF token missing');
     }
-    logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received token', data.token, { context: 'fetchCSRFToken' });
+    logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received CSRF token (masked)', { context: 'fetchCSRFToken' });
     return data.token;
   }
   async function getCSRFTokenAsync(forceFetch = false) {
@@ -200,7 +200,7 @@ export function createAuthModule(deps) {
       const token = getCSRFToken() || (await getCSRFTokenAsync());
       if (token) {
         options.headers['X-CSRF-Token'] = token;
-        logger.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header', token, 'for', endpoint, { context: 'authRequest' });
+        logger.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header [masked] for', endpoint, { context: 'authRequest' });
       } else {
         logger.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint, { context: 'authRequest' });
       }
@@ -456,7 +456,7 @@ export function createAuthModule(deps) {
       try {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string') {
-          logger.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login:', doc.cookie, { context: 'loginUser' });
+          logger.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login: [masked]', { context: 'loginUser' });
         } else {
           logger.log('[DIAGNOSTIC][auth.js][loginUser] Unable to read document.cookie', { context: 'loginUser' });
         }
