@@ -41,7 +41,8 @@ export function createDomReadinessService({
   domAPI,
   browserService,
   eventHandlers,
-  APP_CONFIG
+  APP_CONFIG,
+  logger: injectedLogger = null        // ← NEW
 } = {}) {
   // Track selectors that never appeared (for UI diagnostics)
   const _missingSelectors = new Set();
@@ -54,6 +55,12 @@ export function createDomReadinessService({
 
   // Default timeout from APP_CONFIG or fallback
   const DEFAULT_TIMEOUT = APP_CONFIG?.TIMEOUTS?.DOM_READY ?? 10000;
+
+  // ───── unified logger ─────
+  const _logger =
+    injectedLogger ||
+    DependencySystem?.modules?.get?.('logger') ||
+    { info: ()=>{}, warn: ()=>{}, error: ()=>{} };
 
   // ───── instrumentation – selector wait times ─────
   const _SEL_STATS = new Map();                // sel ➜ { total, waits:[{start,end,duration}] }
@@ -146,8 +153,10 @@ export function createDomReadinessService({
         const nowPresent = selectorArray.map((sel) => domAPI.querySelector(sel));
         if (nowPresent.every((el) => el !== null)) {
           _markEnd(selectorArray);
-          const logger = DependencySystem?.modules?.get?.('logger') || {};
-          logger.info?.(`[domReadinessService] selectors [${selectorArray.join(', ')}] ready in ${Math.round(_nowPerf()-startTime)} ms`);
+          _logger.info?.(
+            '[domReadinessService] selectors ready',
+            { selectors: selectorArray, duration: Math.round(_nowPerf() - startTime) }
+          );
           return resolve(nowPresent);
         }
 
@@ -159,8 +168,10 @@ export function createDomReadinessService({
 
           const missing = selectorArray.filter((sel) => domAPI.querySelector(sel) === null);
           missing.forEach((sel) => _missingSelectors.add(sel));
-          const logger = DependencySystem?.modules?.get?.('logger') || {};
-          logger.error?.(`[domReadinessService] TIMEOUT – missing selectors: ${missing.join(', ')} (context: ${context})`);
+          _logger.warn?.(
+            '[domReadinessService] Timeout waiting for selectors',
+            { selectors: missing, context, waitedMs: timeout }
+          );
           reject(
             new Error(
               `[domReadinessService] Timed out after ${timeout}ms for selectors: ${
@@ -182,8 +193,10 @@ export function createDomReadinessService({
                 pendingPromises.delete(key);
                 appearanceListeners.delete(key);
                 _markEnd(selectorArray);
-                const logger = DependencySystem?.modules?.get?.('logger') || {};
-                logger.info?.(`[domReadinessService] selectors [${selectorArray.join(', ')}] ready in ${Math.round(_nowPerf()-startTime)} ms`);
+                _logger.info?.(
+                  '[domReadinessService] selectors ready',
+                  { selectors: selectorArray, duration: Math.round(_nowPerf() - startTime) }
+                );
                 resolve(newAppear);
               }
             }
