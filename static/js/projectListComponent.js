@@ -471,11 +471,16 @@ export function createProjectListComponent(deps) {
         if (!modalManager) return;
         if (!eventHandlers?.trackListener)
             throw new Error("[ProjectListComponent] eventHandlers.trackListener is required for button events.");
-        eventHandlers.delegate(
-            domAPI.getDocument(),
-            'click',
-            '#createProjectBtn',
-            () => _openNewProjectModal()
+
+        // Event-delegation via a single tracked listener
+        eventHandlers.trackListener(
+          domAPI.getDocument(),
+          'click',
+          (e) => {
+            const btn = e.target.closest('#createProjectBtn');
+            if (btn) _openNewProjectModal();
+          },
+          { context: MODULE_CONTEXT, description: 'delegate:createProjectBtn' }
         );
     }
     function _openNewProjectModal() {

@@ -106,6 +106,11 @@ export function createDomAPI({
       documentObject.documentElement ||
       documentObject.body,
     appendChild: (parent, child) => parent && child && parent.appendChild(child),
+    removeChild: (parent, child) => {
+      if (parent && child && typeof parent.removeChild === 'function') {
+        parent.removeChild(child);
+      }
+    },
     replaceChildren: (parent, ...nodes) => parent && parent.replaceChildren && parent.replaceChildren(...nodes),
     setInnerHTML: (el, html) => {
       if (!el) return;
