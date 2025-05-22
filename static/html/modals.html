@@ -638,7 +638,8 @@
             })
             .catch(err => {
               notify('error', `Failed to save settings: ${err.message}`);
-               if (window.logger?.error) window.logger.error('[modals.html]', err, { context:'modals' });
+               (window.DependencySystem?.modules?.get?.('logger') || window.logger || { error:()=>{} })
+                 .error('[modals.html] GitHub attach failed', err, { context:'modals:github' });
             })
             .finally(() => {
                 setButtonLoading(submitButton, false);
