@@ -19,7 +19,13 @@ export function createUIInitializer({
   domReadinessService,
   logger,
   APP_CONFIG,
-  safeHandler
+  safeHandler,
+  sanitizer,
+  createProjectDetailsEnhancements,
+  createTokenStatsManager,
+  createKnowledgeBaseComponent,
+  apiRequest,
+  uiUtils
 }) {
   if (
     !DependencySystem || !domAPI || !browserService ||

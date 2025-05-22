@@ -19,6 +19,9 @@ import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
 import { createCoreInitializer } from './init/coreInit.js';
+import { createAuthInitializer } from './init/authInit.js';
+import { createAppStateManager } from './init/appState.js';
+import { createErrorInitializer } from './init/errorInit.js';
 
 import {
   shouldSkipDedup,
@@ -237,38 +240,9 @@ const globalConsole = (typeof console !== 'undefined') ? console : {};
 // (Removed old appLogger: replaced by DI-registered logger above)
 
 // ---------------------------------------------------------------------------
-// 4) Early app module
+// 4) Early app module (using factory)
 // ---------------------------------------------------------------------------
-const appModule = {
-  state: {
-    isAuthenticated: false,
-    currentUser: null,
-    isReady: false, // True when app is fully initialized and safe for interaction
-    disableErrorTracking: false,
-    initialized: false, // True when the main init() sequence has completed (success or fail)
-    initializing: false, // True if init() is currently executing
-    currentPhase: 'idle' // e.g., 'idle', 'starting_init_process', 'initialized_idle', 'failed_idle'
-  },
-  // Method to update authentication-related state
-  setAuthState(newAuthState) {
-    DependencySystem.modules.get('logger').log('[DIAGNOSTIC][appModule.setAuthState]', JSON.stringify(newAuthState));
-    Object.assign(this.state, newAuthState);
-  },
-  // Method to update general app lifecycle state
-  setAppLifecycleState(newLifecycleState) {
-    Object.assign(this.state, newLifecycleState);
-    // If 'initialized' becomes true, set 'isReady' based on success/failure
-    if (newLifecycleState.initialized === true) {
-      if (this.state.currentPhase === 'initialized_idle') {
-        this.state.isReady = true;
-      } else if (this.state.currentPhase === 'failed_idle') {
-        this.state.isReady = false; // Explicitly false if init failed
-      }
-    } else if (Object.prototype.hasOwnProperty.call(newLifecycleState, 'isReady')) { // Allow direct setting of isReady if needed
-      this.state.isReady = newLifecycleState.isReady;
-    }
-  }
-};
+const appModule = createAppStateManager({ DependencySystem, logger });
 DependencySystem.register('appModule', appModule);
 
 // ---------------------------------------------------------------------------
@@ -486,6 +460,34 @@ function safeHandler(handler, description) {
     }
   };
 }
+
+// ---------------------------------------------------------------------------
+// Create auth initializer (after safeHandler is defined)
+// ---------------------------------------------------------------------------
+const authInit = createAuthInitializer({
+  DependencySystem,
+  domAPI,
+  eventHandlers,
+  logger,
+  sanitizer,
+  safeHandler,
+  domReadinessService,
+  APP_CONFIG
+});
+DependencySystem.register('authInit', authInit);
+
+// ---------------------------------------------------------------------------
+// Create error initializer (after safeHandler is defined)
+// ---------------------------------------------------------------------------
+const errorInit = createErrorInitializer({
+  DependencySystem,
+  browserService: browserServiceInstance,
+  eventHandlers,
+  logger,
+  safeHandler
+});
+DependencySystem.register('errorInit', errorInit);
+
 
 /* ---------------------------------------------------------------------------
    Utility functions required by init and other top-level logic
@@ -718,7 +720,7 @@ export async function init() {
     // 3) Initialize auth system
     logStep('initializeAuthSystem', 'pre');
     await Promise.race([
-      initializeAuthSystem(),
+      authInit.initializeAuthSystem(),
       new Promise((_, reject) =>
         browserAPI.getWindow().setTimeout(
           () => reject(new Error('Timeout in initializeAuthSystem')),
@@ -951,14 +953,9 @@ const {
 });
 
 // ---------------------------------------------------------------------------
-// 16) Moved UI creation to the UI init phase
+// 16) UI component initialization
 // ---------------------------------------------------------------------------
 let _uiInitialized = false;
-if (import.meta?.hot) {
-  import.meta.hot.dispose(() => {
-    _uiInitialized = false;
-  });
-}
 
 async function initializeUIComponents() {
   if (_uiInitialized) {
@@ -1013,260 +1010,79 @@ async function initializeUIComponents() {
         { context: 'app:sidebar', description: 'closeSidebar' }
       );
     }
-    /* close with Esc key when sidebar is open */
-    eventHandlers.trackListener(
-      doc, 'keydown',
-      (e) => { if (e.key === 'Escape') setSidebarOpen(false); },
-      { context: 'app:sidebar', description: 'escCloseSidebar' }
-    );
-    /* ────────────────────────────────────────────────────── */
 
-    // Load project list template into #projectListView
+    domAndModalsReady = true;
+
+    // Call template injection now that DOM selectors are available
     const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
-    const loggerInstance = DependencySystem.modules.get('logger'); // Get logger for this operation
+    logger.log('[App] About to load project templates', { context: 'app.js:templateLoading' });
 
+    // project_list.html
     if (htmlLoader && typeof htmlLoader.loadTemplate === 'function') {
-      try {
-        loggerInstance.log(
-          '[App][initializeUIComponents] Loading project_list.html template into #projectListView',
-          { context: 'app:loadTemplates' }
-        );
-        await htmlLoader.loadTemplate({
-          url: '/static/html/project_list.html',
-          containerSelector: '#projectListView', // This element is confirmed to exist by the domReadinessService call above
-          eventName: 'projectListHtmlLoaded'     // Event ProjectDashboard waits for
-        });
-        loggerInstance.log(
-          '[App][initializeUIComponents] project_list.html template loaded and event projectListHtmlLoaded dispatched.',
-          { context: 'app:loadTemplates' }
-        );
-
-        const projectListContainer = domAPI.getElementById('projectListView');
-        if (projectListContainer) {
-          loggerInstance.log(
-            '[App][initializeUIComponents] #projectListView childElementCount=' +
-            projectListContainer.childElementCount,
-            { context: 'app:loadTemplates' }
-          );
-        } else {
-          loggerInstance.warn(
-            '[App][initializeUIComponents] #projectListView not found after injection',
-            { context: 'app:loadTemplates' }
-          );
-        }
-
-        // --- Load global chat UI template ----------------------------------
-
-      } catch (err) {
-        loggerInstance.error(
-          '[App][initializeUIComponents] Failed to load project_list.html template',
-          err,
-          { context: 'app:loadTemplates' }
-        );
-        // Potentially re-throw or handle critical failure if this template is essential for app operation
-      }
-    } else {
-      loggerInstance.error(
-        '[App][initializeUIComponents] htmlTemplateLoader.loadTemplate is not available. Cannot load project_list.html.',
-        { context: 'app:loadTemplates' }
-      );
-    }
-
-    /*  Esperamos, como máximo 8 s, al evento disparado por ModalManager
-        (“modalmanager:initialized”).  Si no llega NO abortamos la
-        inicialización de la UI: simplemente continuamos con una
-        advertencia. */
-    const modalMgr = DependencySystem.modules.get('modalManager');
-    if (modalMgr?.isReadyPromise) {
-      await Promise.race([
-        modalMgr.isReadyPromise(),
-        new Promise(res => browserAPI.getWindow().setTimeout(res, 8000))
-      ]).catch(() => {
-        logger.warn('[initializeUIComponents] ModalManager not ready after 8 s – continuing without blocking.', {
-          context: 'app:initializeUIComponents'
-        });
+      await htmlLoader.loadTemplate({
+        url: '/static/html/project_list.html',
+        containerSelector: '#projectListView',
+        eventName: 'projectListLoaded'
       });
     }
 
-    domAndModalsReady = true;   //  siempre continuamos; los modales pueden cargarse después
-  } catch (err) {
-    logger.error(
-      '[initializeUIComponents] Error during DOM/modal readiness check',
-      err,
-      { context: 'app:initializeUIComponents:readinessError' }
-    );
-    // domAndModalsReady remains false
-  }
-
-  // Ya no abortamos si los modales aún no están listos
-
-  await createAndRegisterUIComponents();
-
-  // ── Asegurar que ProjectDashboard registra las vistas reales ──────────
-  const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
-  if (projectDashboardInstance) {
-    // no esperamos (fire-and-forget) para evitar dead-lock con ‘app:ready’
-    safeInit(projectDashboardInstance, 'ProjectDashboard', 'initialize');
-  }
-
-  // Initialize accessibility
-  await safeInit(accessibilityUtils, 'AccessibilityUtils', 'init');
-
-  // Create chat extensions
-  const chatExtensionsInstance = createChatExtensions({
-    DependencySystem,
-    eventHandlers,
-    chatManager: DependencySystem.modules.get('chatManager'),
-    auth: DependencySystem.modules.get('auth'),
-    app: DependencySystem.modules.get('app'),
-    domAPI,
-    domReadinessService,   // NEW
-    logger                 // NEW
-  });
-  DependencySystem.register('chatExtensions', chatExtensionsInstance);
-
-  // Create chat UI enhancements
-  const chatUIEnhancementsInstance = createChatUIEnhancements({
-    domAPI,
-    eventHandlers,
-    browserService: browserServiceInstance,
-    domReadinessService,
-    logger,
-    sanitizer                      // ← NEW injection
-  });
-  DependencySystem.register('chatUIEnhancements', chatUIEnhancementsInstance);
-
-  const chatMgr = DependencySystem.modules.get('chatManager');
-  const authMod = DependencySystem.modules.get('auth');
-
-  // Initialize chat components if already ready
-  if (chatMgr?.isInitialized && authMod?.isAuthenticated?.()) {
-    safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
-    safeInit(chatUIEnhancementsInstance, 'ChatUIEnhancements', 'initialize');
-  } else if (chatMgr?.chatBus) {
-    eventHandlers.trackListener(
-      chatMgr.chatBus,
-      'chatManagerReady',
-      () => {
-        if (authMod?.isAuthenticated?.()) {
-          safeInit(chatExtensionsInstance, 'ChatExtensions', 'init');
-          safeInit(chatUIEnhancementsInstance, 'ChatUIEnhancements', 'initialize');
-        }
-      },
-      {
-        once: true,
-        context: 'app.initializeUIComponents',
-        description: 'deferred ChatExtensions.init'
-      }
-    );
-  }
-
-  // Create project dashboard utils
-  const projectDashboardUtilsInstance = createProjectDashboardUtils({ DependencySystem });
-  DependencySystem.register('projectDashboardUtils', projectDashboardUtilsInstance);
-
-  // Create UI renderer
-  const uiRendererInstance = createUiRenderer({
-    domAPI,
-    eventHandlers,
-    apiRequest,
-    apiEndpoints,
-    onConversationSelect: async (conversationId) => {
-      const chatManager = DependencySystem.modules.get('chatManager');
-      if (chatManager?.loadConversation) {
-        try {
-          await chatManager.loadConversation(conversationId);
-        } catch (err) {
-          logger.error(
-            '[onConversationSelect]',
-            err,
-            { context: 'app:uiRenderer:onConversationSelect' }
-          );
-          return false;
-        }
-      }
-    },
-    onProjectSelect: async (projectId) => {
-      const projectDashboardDep = DependencySystem.modules.get('projectDashboard');
-      if (projectDashboardDep?.showProjectDetails) {
-        try {
-          await projectDashboardDep.showProjectDetails(projectId);
-        } catch (err) {
-          logger.error(
-            '[projectDetails:hide]',
-            err,
-            { context: 'app:nav:projectDetails:hide' }
-          );
-          return false;
-        }
-      }
-    },
-    domReadinessService, // Added missing dependency
-    logger // Already present, but good to ensure all deps are listed together if reordering
-  });
-  DependencySystem.register('uiRenderer', uiRendererInstance);
-
-  // Create sidebar
-  let sidebarInstance = DependencySystem.modules.get('sidebar');
-  if (!sidebarInstance) {
-    sidebarInstance = createSidebar({
-      DependencySystem,
-      eventHandlers,
-      app,
-      projectDashboard: DependencySystem.modules.get('projectDashboard'),
-      projectManager: DependencySystem.modules.get('projectManager'),
-      modelConfig: DependencySystem.modules.get('modelConfig'),
-      uiRenderer: uiRendererInstance,
-      storageAPI: DependencySystem.modules.get('storage'),
-      domAPI,
-      viewportAPI: { getInnerWidth: () => browserAPI.getInnerWidth() },
-      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
-      logger: DependencySystem.modules.get('logger'), // Pass the DI logger
-      safeHandler: safeHandler, // Pass the safeHandler utility
-      domReadinessService: DependencySystem.modules.get('domReadinessService'),
-      APP_CONFIG // Pass config for sidebar debug logging
-    });
-    DependencySystem.register('sidebar', sidebarInstance);
-  }
-
-  // Instrumentation: explicitly log sidebar init result and report failure visibly.
-  let sidebarInitSuccess = false;
-  try {
-    sidebarInitSuccess = await safeInit(sidebarInstance, 'Sidebar', 'init');
-    if (!sidebarInitSuccess && logger && logger.error) {
-      logger.error('[App] Sidebar init did not complete successfully.');
+    // project_details.html
+    if (htmlLoader && typeof htmlLoader.loadTemplate === 'function') {
+      await htmlLoader.loadTemplate({
+        url: '/static/html/project_details.html',
+        containerSelector: '#projectDetailsView',
+        eventName: 'projectDetailsLoaded'
+      });
     }
+
+    logger.log('[App] Templates loaded, proceeding with component registration', { context: 'app.js:templateLoading' });
+
+    // Register navigation views with the navigation service
+    const navigationService = DependencySystem.modules.get('navigationService');
+    if (navigationService && typeof navigationService.registerView === 'function') {
+      // Wait for project list elements to be ready
+      await domReadinessService.dependenciesAndElements({
+        domSelectors: ['#projectListContainer'],
+        timeout: APP_CONFIG.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 5000,
+        context: 'app.js:initializeUIComponents:projectListElements'
+      });
+
+      navigationService.registerView('projectList', {
+        selector: '#projectListView',
+        onActivate: async () => {
+          logger.log('[App] Activating project list view', { context: 'app.js:navigation:projectList' });
+          // Additional activation logic can go here
+        }
+      });
+
+      // Wait for project details elements to be ready
+      await domReadinessService.dependenciesAndElements({
+        domSelectors: ['#projectDetailsContainer'],
+        timeout: APP_CONFIG.TIMEOUTS?.PROJECT_DETAILS_ELEMENTS ?? 5000,
+        context: 'app.js:initializeUIComponents:projectDetailsElements'
+      });
+
+      navigationService.registerView('projectDetails', {
+        selector: '#projectDetailsView',
+        onActivate: async () => {
+          logger.log('[App] Activating project details view', { context: 'app.js:navigation:projectDetails' });
+          // Additional activation logic can go here
+        }
+      });
+
+      logger.log('[App] Navigation views registered', { context: 'app.js:navigation' });
+    }
+
+    // Wait for additional components to be loaded and then create them
+    await createAndRegisterUIComponents();
+
   } catch (err) {
-    if (logger && logger.error)
-      logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
-    logger.error('[App] Sidebar init failed', err, { context: 'app:sidebar:init' });
+    logger.error('[App] Error during UI initialization', err, { context: 'app.js:initializeUIComponents' });
     throw err;
   }
-}
 
-  // If authenticated, load projects. Read from canonical state.
-  if (appModule.state.isAuthenticated) {
-    const pm = DependencySystem.modules.get('projectManager');
-    pm?.loadProjects?.('all').catch(err => {
-      // Error handled silently
-    });
-  }
-
-  // External enhancements
-  const w = browserAPI.getWindow();
-  w?.initAccessibilityEnhancements?.({ domAPI });
-  w?.initSidebarEnhancements?.({ domAPI, eventHandlers });
-
-  // ── UI Diagnostics ─────────────────────────────────────────────
-  if (APP_CONFIG.DEBUG_UI) {
-    const unresolved = domReadinessService.getMissingSelectors?.() || [];
-    if (unresolved.length) {
-      logger.warn('[UI-Diagnostics] Unresolved selectors:', unresolved);
-    } else {
-      logger.info('[UI-Diagnostics] All selectors resolved.');
-    }
-  }
   _uiInitialized = true;
+}
 
 async function createAndRegisterUIComponents() {
   // Project Details Enhancements - Create and register visual improvements
@@ -1296,7 +1112,6 @@ async function createAndRegisterUIComponents() {
   });
   DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
 
-  // Initialize project details enhancements
   safeInit(projectDetailsEnhancementsInstance, 'ProjectDetailsEnhancements', 'initialize')
     .catch(err => logger.error('[createAndRegisterUIComponents]', err, { context: 'app:createAndRegisterUIComponents:projectDetailsEnhancements' }));
 
@@ -1368,216 +1183,14 @@ async function createAndRegisterUIComponents() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 17) Auth system initialization
-// ---------------------------------------------------------------------------
-async function initializeAuthSystem() {
-  const auth = DependencySystem.modules.get('auth');
-  if (!auth?.init) {
-    throw new Error('[App] Auth module is missing or invalid.');
-  }
-
-  // === DIAGNOSTIC: REGISTER AUTH EVENTS BEFORE INIT ===
-  if (auth.AuthBus) {
-    DependencySystem.modules.get('logger').log('[DIAGNOSTIC][initializeAuthSystem] Registering AuthBus listeners before auth.init');
-    eventHandlers.trackListener(
-      auth.AuthBus,
-      'authStateChanged',
-      (event) => {
-        DependencySystem.modules.get('logger').log('[DIAGNOSTIC][AuthBus] Received authStateChanged', event?.detail);
-        handleAuthStateChange(event);
-      },
-      { description: '[App] AuthBus authStateChanged', context: 'app' }
-    );
-    eventHandlers.trackListener(
-      auth.AuthBus,
-      'authReady',
-      (event) => {
-        DependencySystem.modules.get('logger').log('[DIAGNOSTIC][AuthBus] Received authReady', event?.detail);
-        handleAuthStateChange(event);
-      },
-      { description: '[App] AuthBus authReady', context: 'app' }
-    );
-  } else {
-    DependencySystem.modules.get('logger').warn('[DIAGNOSTIC][initializeAuthSystem] No AuthBus instance for auth event registration');
-  }
-  try {
-    // auth.init() is responsible for verifying auth and calling broadcastAuth,
-    // which in turn calls appModule.setAuthState().
-    // So, appModule.state.isAuthenticated will be updated by auth.init() itself.
-    DependencySystem.modules.get('logger').log('[DIAGNOSTIC][initializeAuthSystem] Calling auth.init()');
-    await auth.init();
-
-    renderAuthHeader(); // Ensure this renders based on the now canonical appModule.state (via local currentUser sync)
-    return true;
-  } catch (err) {
-    if (logger && logger.error)
-      logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
-    logger.error('[App] Sidebar init failed', err, { context: 'app:sidebar:init' });
-    logger.error('[initializeUIComponents] Error in sidebarInstance init', err, { context: 'app:initializeUIComponents:sidebarInstance:init' });
-    throw err;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 18) Additional helpers
-// ---------------------------------------------------------------------------
-function handleAuthStateChange(event) {
-  // auth.js's broadcastAuth (via app.setAuthState) has already updated appModule.state
-  // before this event listener is triggered.
-  // This function now primarily reacts to that pre-established state.
-
-  DependencySystem.modules.get('logger').log('[DIAGNOSTIC][handleAuthStateChange]', {
-    eventDetail: event?.detail,
-    appModuleState: JSON.stringify(appModule.state)
-  });
-
-  const isAuthenticated = appModule.state.isAuthenticated; // Read from canonical source
-  const user = appModule.state.currentUser; // Read from canonical source
-
-  // Update the local `currentUser` variable which might be used by renderAuthHeader or other legacy parts.
-  currentUser = user;
-
-  renderAuthHeader(); // Renders based on the local `currentUser`
-
-  const chatManager = DependencySystem.modules.get('chatManager');
-  if (chatManager?.setAuthState) {
-    chatManager.setAuthState(isAuthenticated);
-  }
-  const projectManager = DependencySystem.modules.get('projectManager');
-  if (projectManager?.setAuthState) {
-    projectManager.setAuthState(isAuthenticated);
-  }
-
-  if (isAuthenticated) {
-    const navService = DependencySystem.modules.get('navigationService');
-    const drs = domReadinessService;
-    const readyNow = _appReadyDispatched || appModule.state.isReady;
-    const proceed = () => {
-      if (navService?.navigateToProjectList) {
-        navService.navigateToProjectList().catch(() => {
-          // Error handled silently
-        });
-      } else if (projectManager?.loadProjects) {
-        projectManager.loadProjects('all').catch(() => {
-          // Error handled silently
-        });
-      }
-    };
-    if (readyNow) {
-      proceed();
-    } else {
-      drs.waitForEvent('app:ready', {
-        timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
-        context: 'app:handleAuthStateChange'
-      }).then(proceed).catch(() => {
-        // Error handled silently
-      });
-    }
-  }
-}
-
-function renderAuthHeader() {
-  try {
-    const authMod = DependencySystem.modules.get('auth');
-    const isAuth = authMod?.isAuthenticated?.();
-    const user = currentUser || { username: authMod?.getCurrentUser?.() };
-
-    const authBtn = domAPI.getElementById('authButton');
-    const userMenu = domAPI.getElementById('userMenu');
-    const logoutBtn = domAPI.getElementById('logoutBtn');
-    const userInitialsEl = domAPI.getElementById('userInitials');
-    const authStatus = domAPI.getElementById('authStatus');
-    const userStatus = domAPI.getElementById('userStatus');
-
-    if (isAuth) {
-      if (authBtn) domAPI.addClass(authBtn, 'hidden');
-      if (userMenu) domAPI.removeClass(userMenu, 'hidden');
-    } else {
-      if (authBtn) domAPI.removeClass(authBtn, 'hidden');
-      if (userMenu) domAPI.addClass(userMenu, 'hidden');
-      const orphan = domAPI.getElementById('headerLoginForm');
-      if (orphan) orphan.remove();
-    }
-
-    if (isAuth && userMenu && userInitialsEl) {
-      let initials = '?';
-      if (user?.name) {
-        initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
-      } else if (user?.username) {
-        initials = user.username.trim().slice(0, 2).toUpperCase();
-      }
-      domAPI.setTextContent(userInitialsEl, initials);
-    }
-
-    if (authStatus) {
-      domAPI.setTextContent(authStatus, isAuth
-        ? (user?.username ? `Signed in as ${user.username}` : 'Authenticated')
-        : 'Not Authenticated'
-      );
-    }
-
-    if (userStatus) {
-      domAPI.setTextContent(userStatus, isAuth && user?.username
-        ? `Hello, ${user.name ?? user.username}`
-        : 'Offline'
-      );
-    }
-
-    if (logoutBtn) {
-      eventHandlers.trackListener(
-        logoutBtn,
-        'click',
-        safeHandler((e) => {
-          domAPI.preventDefault(e);
-          authMod?.logout?.();
-        }, 'Auth logout button'),
-        { description: 'Auth logout button', context: 'app' }
-      );
-    }
-  } catch (err) {
-    logger.error('[safeInit]', err, { context: 'app:safeInit:AccessibilityUtils' });
-    // Error handled silently
-  }
-}
-
 
 if (typeof window !== 'undefined') {
-  // Add global error handler to catch and log any errors
-  window.onerror = function (message, source, lineno, colno, error) {
-    const log = DependencySystem?.modules?.get?.('logger');
-    log?.error?.('[window.onerror]',
-      { message, source, lineno, colno, err: error?.stack || error },
-      { context: 'global.onerror' }
-    );
-    return false;                     // keep default browser behaviour
-  };
-
-  eventHandlers.trackListener(
-    window,
-    'unhandledrejection',
-    safeHandler(function (event) { }, 'global unhandledrejection'),
-    { context: 'app' }
-  );
+  // Setup global error handling using errorInit module
+  errorInit.initializeErrorHandling();
 
   const doc = browserAPI.getDocument();
-  function forceShowLoginModal() {
-    // Only show login modal if not authenticated
-    const authMod = DependencySystem.modules.get?.('auth');
-    if (authMod && !authMod.isAuthenticated?.()) {
-      // Open the modal using modalManager if available
-      const modalManager = DependencySystem.modules.get?.('modalManager');
-      if (modalManager && typeof modalManager.show === 'function') {
-        modalManager.show('login');
-      } else {
-        // Fallback: try the native dialog element directly
-        const loginDlg = doc.getElementById('loginModal');
-        if (loginDlg && typeof loginDlg.showModal === 'function') {
-          loginDlg.showModal();
-        }
-      }
-    }
-  }
+  // Use forceShowLoginModal from authInit module
+  const forceShowLoginModal = authInit.forceShowLoginModal;
 
   // ---------------------------------------------------------------------
   // 🚀 Auto-bootstrap the application
