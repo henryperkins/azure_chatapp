@@ -49,6 +49,11 @@ export function createAuthModule(deps) {
     };
   }
 
+  // --- bearer token storage ---------------------------------
+  let accessToken  = null;           // stores latest JWT / bearer
+  let tokenType    = 'Bearer';       // e.g. "Bearer"
+  let refreshToken = null;           // optional refresh token
+
   // === 2) INTERNAL UTILITIES & HELPERS ===
 
   function extendProps(target, props) {
@@ -205,6 +210,10 @@ export function createAuthModule(deps) {
         logger.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint, { context: 'authRequest' });
       }
     }
+    // Bearer-auth header when we already hold an access token
+    if (accessToken && !options.headers['Authorization']) {
+      options.headers['Authorization'] = `${tokenType} ${accessToken}`;
+    }
     if (body) {
       options.body = JSON.stringify(body);
       options.headers['Content-Type'] = 'application/json';
@@ -231,6 +240,12 @@ export function createAuthModule(deps) {
       try {
         await getCSRFTokenAsync();
         const response = await authRequest(apiEndpoints.AUTH_REFRESH, 'POST');
+        // Store bearer tokens if present
+        if (response && response.access_token) {
+          accessToken  = response.access_token;
+          tokenType    = response.token_type || 'Bearer';
+          refreshToken = response.refresh_token || refreshToken;
+        }
         return { success: true, response };
       } catch (error) {
         if (logger && logger.error) logger.error('[refreshTokens] error', error, { context: 'refreshTokens' });
@@ -246,6 +261,8 @@ export function createAuthModule(deps) {
     return tokenRefreshPromise;
   }
   async function clearTokenState(options = { source: 'unknown' }) {
+    accessToken  = null;
+    refreshToken = null;
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
   }
 
@@ -453,6 +470,12 @@ export function createAuthModule(deps) {
         password
       });
       logger.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response, { context: 'loginUser' });
+      // Store bearer tokens if present
+      if (response && response.access_token) {
+        accessToken  = response.access_token;
+        tokenType    = response.token_type || 'Bearer';
+        refreshToken = response.refresh_token || null;
+      }
       try {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string') {
@@ -505,6 +528,8 @@ export function createAuthModule(deps) {
 
   async function logout() {
     logger.log('[DIAGNOSTIC][auth.js][logout] Logging out', { context: 'logout' });
+    accessToken  = null;
+    refreshToken = null;
     await clearTokenState({ source: 'logout_manual' });
     try {
       await getCSRFTokenAsync();
