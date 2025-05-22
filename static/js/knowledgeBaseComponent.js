@@ -164,7 +164,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         'kbGitHubAttachedRepoInfo', 'kbAttachedRepoUrlDisplay',
         'kbAttachedRepoBranchDisplay', 'kbDetachRepoBtn',
         'kbNameDisplay', // extend later if needed
-        'knowledgeFileCount', 'knowledgeChunkCount', 'knowledgeFileSize'
+        'knowledgeFileCount', 'knowledgeChunkCount', 'knowledgeFileSize',
+        'noResultsSection'      // ← add this line
       ]);
       const reqEl = (key, selector) => {
         // Prioritize elRefs if provided for a key
