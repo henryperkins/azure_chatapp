@@ -439,7 +439,12 @@ export function createKnowledgeBaseComponent(options = {}) {
         const btn = this.domAPI.createElement("button");
         btn.className = "btn btn-xs btn-ghost btn-circle";
         btn.textContent = "✕";
-        btn.onclick = () => alertDiv.remove();
+        this.eventHandlers.trackListener(
+          btn,
+          'click',
+          () => this.domAPI.removeChild(alertDiv, btn),
+          { context: MODULE, description: 'dismissStatusAlert' }
+        );
         alertDiv.appendChild(btn);
       }
       statusIndicator.appendChild(alertDiv);
