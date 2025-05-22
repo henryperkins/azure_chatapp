@@ -32,7 +32,7 @@ from db import get_async_session
 from services.conversation_service import ConversationService, get_conversation_service
 from services.token_service import estimate_input_tokens
 from utils.auth_utils import get_current_user_and_token
-from utils.sentry_utils import sentry_span, make_sentry_trace_response
+from utils.sentry_helpers import sentry_span, make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
 
@@ -931,14 +931,14 @@ async def get_conversation_token_stats(
 
             # Validate access
             await validate_project_access(project_id, current_user, db)
-            
+
             # Get conversation data with context token usage
             conv_data = await conv_service.get_conversation(
                 conversation_id=conversation_id,
                 user_id=current_user.id,
                 project_id=project_id,
             )
-            
+
             # Get messages to calculate token breakdowns
             messages = await conv_service.list_messages(
                 conversation_id=conversation_id,
@@ -947,21 +947,21 @@ async def get_conversation_token_stats(
                 skip=0,
                 limit=9999,
             )
-            
+
             # Calculate token breakdowns
             user_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "user")
             ai_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "assistant")
             system_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "system")
-            
+
             # Get knowledge tokens from metadata if available
             knowledge_tokens = 0
             for msg in messages:
                 if msg.get("role") == "system" and msg.get("extra_data", {}).get("used_knowledge_context"):
                     knowledge_tokens += msg.get("token_count", 0)
-            
+
             # Calculate total tokens
             total_tokens = user_msg_tokens + ai_msg_tokens + system_msg_tokens
-            
+
             # Return token stats
             return TokenStatsResponse(
                 context_token_usage=conv_data.get("context_token_usage", 0),
@@ -972,7 +972,7 @@ async def get_conversation_token_stats(
                 knowledge_tokens=knowledge_tokens,
                 total_tokens=total_tokens,
             )
-        
+
         except HTTPException:
             raise
         except Exception as e:

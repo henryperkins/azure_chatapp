@@ -46,7 +46,7 @@ from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
 from services.file_storage import get_file_storage
-from utils.sentry_utils import sentry_span
+from utils.sentry_helpers import sentry_span
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
