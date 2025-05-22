@@ -1,4 +1,4 @@
-import { attachChatUI } from "./chat-ui-utils.js";
+import { createChatUIUtils } from "./chat-ui-utils.js";
 
 /**
  * @typedef {Object} DomAPI
@@ -71,6 +71,15 @@ export function createChatManager(deps = {}) {
   if (!domReadinessService) throw new Error('Missing domReadinessService in createChatManager');
   if (!logger) throw new Error('Missing logger in createChatManager');
   if (!APP_CONFIG) throw new Error('Missing APP_CONFIG in createChatManager');
+
+  // --- Chat UI Utilities (DI) ---
+  const chatUIUtils = createChatUIUtils({
+    logger,
+    domAPI,
+    DOMPurify,
+    eventHandlers: _EH,
+    domReadinessService
+  });
 
   function safeHandler(fn, description) {
     return (...args) => {
@@ -208,12 +217,7 @@ export function createChatManager(deps = {}) {
     _ensureUIAttached() {
       if (!this._uiAttached) {
         logger.info("[ChatManager][_ensureUIAttached] Attaching UI utilities", { context: "chatManager" });
-        attachChatUI(this, {
-          domAPI: this.domAPI,
-          DOMPurify: this.DOMPurify,
-          eventHandlers: this.eventHandlers,
-          domReadinessService: this.domReadinessService
-        });
+        chatUIUtils.attachChatUI(this);
         this._uiAttached = true;
       }
     }

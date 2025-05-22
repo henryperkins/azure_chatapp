@@ -48,7 +48,7 @@ import { createChatUIEnhancements } from './chatUIEnhancements.js';
 import { createTokenStatsManager } from './tokenStatsManager.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
-import { FileUploadComponent } from './FileUploadComponent.js';
+import { createFileUploadComponent } from './FileUploadComponent.js';
 
 // ---------------------------------------------------------------------------
 // UI helpers for KnowledgeBaseComponent
@@ -99,11 +99,13 @@ if (!DependencySystem?.modules?.get) {
 // Logger: Import first for early DI registration
 import { createLogger } from './logger.js';
 
-const logger = createLogger({
+// PHASE 1: Create a basic logger for early DI (no authModule yet)
+let logger = createLogger({
   context: 'App',
   debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
   minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-  fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null
+  fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
+  enableServer: false // Prevent backend POSTs before authModule is available
 });
 DependencySystem.register('logger', logger);
 
@@ -211,7 +213,7 @@ const globalUtils = {
 DependencySystem.register('globalUtils', globalUtils);
 
 // (NO duplicate sanitizer declaration/registration here)
-DependencySystem.register('FileUploadComponent', FileUploadComponent);
+DependencySystem.register('FileUploadComponent', createFileUploadComponent);
 
 // Register apiEndpoints
 const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
@@ -482,6 +484,143 @@ function safeHandler(handler, description) {
       throw err;
     }
   };
+}
+
+/* ---------------------------------------------------------------------------
+   Utility functions required by init and other top-level logic
+--------------------------------------------------------------------------- */
+async function safeInit(instance, name, methodName) {
+  const logger = DependencySystem.modules.get('logger');
+  if (!instance) {
+    logger?.warn(`[safeInit] Instance ${name} is null/undefined. Cannot call ${methodName}.`, { context: `app:safeInit:${name}` });
+    return false;
+  }
+  if (typeof instance[methodName] !== 'function') {
+    logger?.warn(`[safeInit] Method ${methodName} not found on ${name}.`, { context: `app:safeInit:${name}` });
+    return false;
+  }
+  try {
+    const result = await instance[methodName]();
+    return result === undefined ? true : !!result;
+  } catch (err) {
+    logger?.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `app:safeInit:${name}:${methodName}` });
+    throw err;
+  }
+}
+
+async function fetchCurrentUser() {
+  try {
+    const authModule = DependencySystem.modules.get('auth');
+    if (!authModule) {
+      return null;
+    }
+
+    if (authModule.fetchCurrentUser) {
+      const userObj = await authModule.fetchCurrentUser();
+      if (userObj?.id) {
+        return userObj;
+      }
+    }
+
+    if (authModule.getCurrentUserObject) {
+      const userObjFromGetter = authModule.getCurrentUserObject();
+      if (userObjFromGetter?.id) {
+        return userObjFromGetter;
+      }
+    }
+
+    if (authModule.getCurrentUserAsync) {
+      const userObjAsync = await authModule.getCurrentUserAsync();
+      if (userObjAsync?.id) {
+        return userObjAsync;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('[fetchCurrentUser]', error, { context: 'app:fetchCurrentUser' });
+    return null;
+  }
+}
+
+function setupChatInitializationTrigger() {
+  const projectManager = DependencySystem.modules.get('projectManager');
+  const chatManager = DependencySystem.modules.get('chatManager');
+  const auth = DependencySystem.modules.get('auth');
+
+  if (!projectManager || !chatManager || !auth) {
+    return;
+  }
+
+  eventHandlers.trackListener(
+    domAPI.getDocument(),
+    'projectSelected',
+    safeHandler(async (e) => {
+      const projectId = e?.detail?.projectId;
+      if (!projectId) return;
+
+      if (auth.isAuthenticated() && chatManager?.initialize) {
+        try {
+          await chatManager.initialize({
+            projectId,
+            containerSelector: "#projectChatContainer",
+            messageContainerSelector: "#projectChatMessages",
+            inputSelector: "#projectChatInput",
+            sendButtonSelector: "#projectChatSendBtn"
+          });
+        } catch (err) {
+          logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
+          throw err;
+        }
+      }
+    }, 'projectSelected/init chat'),
+    { description: 'Initialize ChatManager on projectSelected', context: 'app' }
+  );
+}
+
+function registerAppListeners() {
+  domReadinessService.dependenciesAndElements({
+    deps: ['auth', 'chatManager', 'projectManager', 'eventHandlers'],
+    context: 'app.js:registerAppListeners'
+  })
+    .then(() => {
+      setupChatInitializationTrigger();
+    })
+    .catch(() => {
+      // Error handled silently
+    });
+}
+
+function handleInitError(err) {
+  const modalManager = DependencySystem.modules.get?.('modalManager');
+  const shownViaModal = modalManager?.show?.('error', {
+    title: 'Application initialization failed',
+    message: err?.message || 'Unknown initialization error',
+    showDuringInitialization: true
+  });
+
+  // Emitir evento centralizado para otros módulos
+  domAPI.dispatchEvent(
+    domAPI.getDocument(),
+    new CustomEvent('app:initError', { detail: { error: err } })
+  );
+
+  // Fallback visible sólo si no existe el modal
+  if (!shownViaModal) {
+    try {
+      const errorContainer = domAPI.getElementById('appInitError');
+      if (errorContainer) {
+        domAPI.setTextContent(
+          errorContainer,
+          `Application initialization failed: ${err?.message || 'Unknown error'}`
+        );
+        domAPI.removeClass(errorContainer, 'hidden');
+      }
+    } catch (displayErr) {
+      logger.error('[handleInitError]', displayErr, { context: 'app:handleInitError' });
+      // Error handled silently
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -828,10 +967,21 @@ async function initializeCoreSystems() {
     APP_CONFIG,           // pass full app configuration
     modalManager,
     apiEndpoints,
-    logger, // Pass the DI logger (registered above)
+    // logger will be injected after creation below
     domReadinessService
   });
   DependencySystem.register('auth', authModule);
+
+  // Now create logger with authModule injected
+  logger = createLogger({
+    context: 'App',
+    debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
+    minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
+    fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
+    authModule // <-- inject authModule for auth-aware logging
+  });
+  DependencySystem.register('logger', logger); // Re-register to update DI
+
   logger.log('[initializeCoreSystems] auth module registered', { context: 'app.initializeCoreSystems' });
   // Initialize auth module to set up event listeners
   await authModule.init().catch(err => {
@@ -1470,29 +1620,11 @@ async function initializeAuthSystem() {
     logger.error('[initializeUIComponents] Error in sidebarInstance init', err, { context: 'app:initializeUIComponents:sidebarInstance:init' });
     throw err;
   }
+}
 
 // ---------------------------------------------------------------------------
 // 18) Additional helpers
 // ---------------------------------------------------------------------------
-async function safeInit(instance, name, methodName) {
-  const logger = DependencySystem.modules.get('logger');
-  if (!instance) {
-    logger?.warn(`[safeInit] Instance ${name} is null/undefined. Cannot call ${methodName}.`, { context: `app:safeInit:${name}` });
-    return false;
-  }
-  if (typeof instance[methodName] !== 'function') {
-    logger?.warn(`[safeInit] Method ${methodName} not found on ${name}.`, { context: `app:safeInit:${name}` });
-    return false;
-  }
-  try {
-    const result = await instance[methodName]();
-    return result === undefined ? true : !!result;
-  } catch (err) {
-    logger?.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `app:safeInit:${name}:${methodName}` });
-    throw err;
-  }
-}
-
 function handleAuthStateChange(event) {
   // auth.js's broadcastAuth (via app.setAuthState) has already updated appModule.state
   // before this event listener is triggered.
@@ -1612,127 +1744,7 @@ function renderAuthHeader() {
   }
 }
 
-async function fetchCurrentUser() {
-  try {
-    const authModule = DependencySystem.modules.get('auth');
-    if (!authModule) {
-      return null;
-    }
 
-    if (authModule.fetchCurrentUser) {
-      const userObj = await authModule.fetchCurrentUser();
-      if (userObj?.id) {
-        return userObj;
-      }
-    }
-
-    if (authModule.getCurrentUserObject) {
-      const userObjFromGetter = authModule.getCurrentUserObject();
-      if (userObjFromGetter?.id) {
-        return userObjFromGetter;
-      }
-    }
-
-    if (authModule.getCurrentUserAsync) {
-      const userObjAsync = await authModule.getCurrentUserAsync();
-      if (userObjAsync?.id) {
-        return userObjAsync;
-      }
-    }
-
-    return null;
-  } catch (error) {
-    logger.error('[fetchCurrentUser]', error, { context: 'app:fetchCurrentUser' });
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 21) App listeners and error handling
-// ---------------------------------------------------------------------------
-function registerAppListeners() {
-  domReadinessService.dependenciesAndElements({
-    deps: ['auth', 'chatManager', 'projectManager', 'eventHandlers'],
-    context: 'app.js:registerAppListeners'
-  })
-    .then(() => {
-      setupChatInitializationTrigger();
-    })
-    .catch(() => {
-      // Error handled silently
-    });
-}
-
-function setupChatInitializationTrigger() {
-  const projectManager = DependencySystem.modules.get('projectManager');
-  const chatManager = DependencySystem.modules.get('chatManager');
-  const auth = DependencySystem.modules.get('auth');
-
-  if (!projectManager || !chatManager || !auth) {
-    return;
-  }
-
-  eventHandlers.trackListener(
-    domAPI.getDocument(),
-    'projectSelected',
-    safeHandler(async (e) => {
-      const projectId = e?.detail?.projectId;
-      if (!projectId) return;
-
-      if (auth.isAuthenticated() && chatManager?.initialize) {
-        try {
-          await chatManager.initialize({
-            projectId,
-            containerSelector: "#projectChatContainer",
-            messageContainerSelector: "#projectChatMessages",
-            inputSelector: "#projectChatInput",
-            sendButtonSelector: "#projectChatSendBtn"
-          });
-        } catch (err) {
-          logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
-          throw err;
-        }
-      }
-    }, 'projectSelected/init chat'),
-    { description: 'Initialize ChatManager on projectSelected', context: 'app' }
-  );
-}
-
-function handleInitError(err) {
-  const modalManager = DependencySystem.modules.get?.('modalManager');
-  const shownViaModal = modalManager?.show?.('error', {
-    title: 'Application initialization failed',
-    message: err?.message || 'Unknown initialization error',
-    showDuringInitialization: true
-  });
-
-  // Emitir evento centralizado para otros módulos
-  domAPI.dispatchEvent(
-    domAPI.getDocument(),
-    new CustomEvent('app:initError', { detail: { error: err } })
-  );
-
-  // Fallback visible sólo si no existe el modal
-  if (!shownViaModal) {
-    try {
-      const errorContainer = domAPI.getElementById('appInitError');
-      if (errorContainer) {
-        domAPI.setTextContent(
-          errorContainer,
-          `Application initialization failed: ${err?.message || 'Unknown error'}`
-        );
-        domAPI.removeClass(errorContainer, 'hidden');
-      }
-    } catch (displayErr) {
-      logger.error('[handleInitError]', displayErr, { context: 'app:handleInitError' });
-      // Error handled silently
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Boot if in browser
-// ---------------------------------------------------------------------------
 if (typeof window !== 'undefined') {
   // Add global error handler to catch and log any errors
   window.onerror = function (message, source, lineno, colno, error) {
@@ -1799,5 +1811,4 @@ if (typeof window !== 'undefined') {
     }
   }
   })();
-}
 }
