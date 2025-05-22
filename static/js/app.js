@@ -1,3 +1,18 @@
+// --- Roo insert: Ensure modals.html loaded before readiness gating ---
+(async () => {
+  const modalsContainer = document.getElementById('modalsContainer');
+  if (modalsContainer && modalsContainer.childElementCount === 0) {
+    try {
+      const resp = await fetch('/static/html/modals.html');
+      const html = await resp.text();
+      modalsContainer.innerHTML = html;
+      document.dispatchEvent(new CustomEvent('modalsLoaded', { detail: { success: true }}));
+    } catch (err) {
+      // Optionally, handle the error or log
+      if (window.console && console.error) console.error('[Roo] Failed to load modals.html:', err);
+    }
+  }
+})();
 /**
  * app.js - Main application orchestration.
  *
@@ -1338,7 +1353,7 @@ async function createAndRegisterUIComponents() {
     sanitizer
   });
   DependencySystem.register('projectDetailsEnhancements', projectDetailsEnhancementsInstance);
-  
+
   // Token Stats Manager - Create and register token stats functionality
   const tokenStatsManagerInstance = createTokenStatsManager({
     apiClient: apiRequest,
@@ -1350,14 +1365,15 @@ async function createAndRegisterUIComponents() {
     logger,
     projectManager: DependencySystem.modules.get('projectManager'),
     app,
-    chatManager: DependencySystem.modules.get('chatManager')
+    chatManager: DependencySystem.modules.get('chatManager'),
+    domReadinessService
   });
   DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
 
   // Initialize project details enhancements
   safeInit(projectDetailsEnhancementsInstance, 'ProjectDetailsEnhancements', 'initialize')
     .catch(err => logger.error('[createAndRegisterUIComponents]', err, { context: 'app:createAndRegisterUIComponents:projectDetailsEnhancements' }));
-    
+
   // Initialize token stats manager
   safeInit(tokenStatsManagerInstance, 'TokenStatsManager', 'initialize')
     .catch(err => logger.error('[createAndRegisterUIComponents]', err, { context: 'app:createAndRegisterUIComponents:tokenStatsManager' }));

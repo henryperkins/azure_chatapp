@@ -659,3 +659,36 @@
 
 <!-- Token Stats Modal -->
 <!-- Token Stats Modal removed for mobile refactor -->
+
+<!-- Project Create/Edit Modal: Roo-compliant and matches ProjectModal.js DI usage -->
+<dialog id="projectModal" class="modal">
+  <form id="projectModalForm" method="dialog" autocomplete="off">
+    <input type="hidden" id="projectModalIdInput" name="projectId" />
+
+    <h3 id="projectModalTitle">Create Project</h3>
+    <label>
+      Name *
+      <input id="projectModalNameInput" name="name" type="text" required minlength="1" maxlength="200" />
+    </label>
+    <label>
+      Description
+      <textarea id="projectModalDescInput" name="description" maxlength="2000"></textarea>
+    </label>
+    <label>
+      Goals
+      <textarea id="projectModalGoalsInput" name="goals" maxlength="1000"></textarea>
+    </label>
+    <label>
+      Custom Instructions
+      <textarea id="projectModalCustomInstructionsInput" name="custom_instructions" maxlength="5000"></textarea>
+    </label>
+    <label>
+      Max Tokens
+      <input id="projectModalMaxTokensInput" name="maxTokens" type="number" min="50000" max="500000" value="200000" />
+    </label>
+    <div class="modal-actions">
+      <button id="projectSaveBtn" type="submit" class="btn btn-primary">Save</button>
+      <button id="projectCancelBtn" type="button" class="btn btn-ghost" data-modal-dismiss>Cancel</button>
+    </div>
+  </form>
+</dialog>
