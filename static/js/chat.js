@@ -72,6 +72,11 @@ export function createChatManager(deps = {}) {
   if (!logger) throw new Error('Missing logger in createChatManager');
   if (!APP_CONFIG) throw new Error('Missing APP_CONFIG in createChatManager');
 
+  // --- Dependency-injected global replacements with defaults (moved up) ---
+  const _domAPI = domAPI || createDefaultDomAPI();
+  const _navAPI = navAPI || createDefaultNavAPI();
+  const _EH = eventHandlers || createDefaultEventHandlers({ domReadinessService, logger });
+
   // --- Chat UI Utilities (DI) ---
   const chatUIUtils = createChatUIUtils({
     logger,
@@ -155,10 +160,6 @@ export function createChatManager(deps = {}) {
       }
     }
   }
-
-  const _domAPI = domAPI || createDefaultDomAPI();
-  const _navAPI = navAPI || createDefaultNavAPI();
-  const _EH = eventHandlers || createDefaultEventHandlers({ domReadinessService, logger });
 
   class ChatManager {
     _api(endpoint, opts = {}, ctx = 'chatManager') {
