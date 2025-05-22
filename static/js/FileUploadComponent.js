@@ -93,7 +93,11 @@ export class FileUploadComponent {
       });
     }
     if (!this._findElements()) {
-      return;
+      const log = this.eventHandlers?.DependencySystem?.modules?.get?.('logger');
+      log?.error?.('[FileUploadComponent] Required DOM elements not found', {
+        context: MODULE_CONTEXT, projectId: this.projectId || 'unknown'
+      });
+      throw new Error('[FileUploadComponent] Initialization failed: required DOM elements not found');
     }
     this._bindEvents();
     this._handlersBound = true;
