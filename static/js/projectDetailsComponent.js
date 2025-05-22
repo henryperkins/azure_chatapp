@@ -733,7 +733,10 @@ class ProjectDetailsComponent {
     if (!elementsReady) {
       this._logError("Project details UI elements not ready, aborting show", new Error("Elements not ready"), { projectId });
       if (this.elements.container) {
-        this.elements.container.innerHTML = `<div class="p-4 text-error">Failed to initialize project details UI elements.</div>`;
+        this.domAPI.setInnerHTML(
+          this.elements.container,
+          `<div class="p-4 text-error">Failed to initialize project details UI elements.</div>`
+        );
       }
       return this._setState({ loading: false });
     }
