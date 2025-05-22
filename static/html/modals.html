@@ -171,6 +171,43 @@
    </form>
 </dialog>
 
+<!-- Error Modal -->
+<dialog id="errorModal" class="modal" aria-labelledby="errorModalTitle">
+  <div class="modal-box max-w-md w-full">
+    <form method="dialog">
+        <!-- Close button top right -->
+        <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 min-w-[44px] min-h-[44px]" aria-label="Close dialog">
+          <span class="sr-only">Close</span>✕
+        </button>
+    </form>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="text-error">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+      </div>
+      <h3 id="errorModalTitle" class="font-bold text-lg text-error">Error</h3>
+    </div>
+    <div class="mb-4">
+      <p id="errorModalMessage" class="text-base-content">An error has occurred.</p>
+      <div id="errorModalDetails" class="mt-2 text-sm text-base-content/70 hidden">
+        <details class="collapse collapse-arrow">
+          <summary class="collapse-title text-xs font-medium">Technical Details</summary>
+          <div class="collapse-content">
+            <pre id="errorModalDetailsContent" class="text-xs bg-base-200 p-2 rounded whitespace-pre-wrap overflow-auto max-h-32"></pre>
+          </div>
+        </details>
+      </div>
+    </div>
+    <div class="modal-action">
+      <button id="errorModalOkBtn" type="button" class="btn btn-primary">OK</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop">
+    <button>close</button>
+  </form>
+</dialog>
+
 
 <!-- Content View Modal (for files and artifacts) -->
 <div id="contentViewModal" class="modal hidden">

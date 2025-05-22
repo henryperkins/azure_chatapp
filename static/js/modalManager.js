@@ -108,10 +108,12 @@ class ModalManager {
   _showModalElement(modalEl) {
     if (typeof modalEl.showModal === 'function') {
       modalEl.showModal();
+      modalEl.style.zIndex = '9999';
       this._manageBodyScroll(false);
     } else {
       modalEl.classList.remove('hidden');
       modalEl.style.display = 'flex';
+      modalEl.style.zIndex = '9999';
       modalEl.setAttribute('open', 'true');
       this._manageBodyScroll(false);
     }

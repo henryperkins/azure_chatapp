@@ -16,7 +16,7 @@ export function createProjectListComponent(deps) {
     if (!deps) throw new Error('[ProjectListComponent] Missing dependencies object to factory.');
 
     const {
-        projectManager,
+        projectManager: initialProjectManager,
         eventHandlers,
         modalManager,
         app,
@@ -32,10 +32,14 @@ export function createProjectListComponent(deps) {
         logger
     } = deps;
 
+    // Allow projectManager to be reassigned later via setProjectManager()
+    let projectManager = initialProjectManager;
+
     const MODULE_CONTEXT = "ProjectListComponent";
 
-    if (!projectManager || !eventHandlers || !router || !storage || !htmlSanitizer)
-        throw new Error("[ProjectListComponent] Missing required dependencies: projectManager, eventHandlers, router, storage, sanitizer.");
+    // Allow projectManager to be null initially - it gets set later via setProjectManager()
+    if (!eventHandlers || !router || !storage || !htmlSanitizer)
+        throw new Error("[ProjectListComponent] Missing required dependencies: eventHandlers, router, storage, sanitizer.");
     if (!domAPI)
         throw new Error("[ProjectListComponent] domAPI injection is mandatory.");
     if (!domReadinessService)
@@ -74,14 +78,14 @@ export function createProjectListComponent(deps) {
         try {
             // Check app readiness using only DI domReadinessService
             await domReadinessService.dependenciesAndElements({
-                deps            : ['projectManager', 'eventHandlers'],
-                domSelectors    : [
+                deps: ['projectManager', 'eventHandlers'],
+                domSelectors: [
                     '#projectListView',        // primary container
                     '.project-list-container'  // legacy fallback
                 ],
                 observeMutations: true,   // wait for template injection
-                timeout         : APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
-                context         : MODULE_CONTEXT + '_init'
+                timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
+                context: MODULE_CONTEXT + '_init'
             });
         } catch (err) {
             logger.error('[ProjectListComponent][initialize] dependenciesAndElements failed', err, { context: MODULE_CONTEXT });
@@ -93,21 +97,21 @@ export function createProjectListComponent(deps) {
 
         // Try primary id, then legacy, then any matching selector
         element =
-          domAPI.getElementById(elementId) ||
-          domAPI.getElementById(ELEMENT_IDS[1]) ||
-          domAPI.querySelector('#projectListView, .project-list-container');
+            domAPI.getElementById(elementId) ||
+            domAPI.getElementById(ELEMENT_IDS[1]) ||
+            domAPI.querySelector('#projectListView, .project-list-container');
 
         if (!element) {
             logger.error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`, null, { context: MODULE_CONTEXT });
             throw new Error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`);
         }
-            if (element.classList.contains('mobile-grid')) {
-                gridElement = element;
-            } else if (domAPI?.querySelector) {
-                gridElement = domAPI.querySelector('.mobile-grid', element);
-            } else {
-                gridElement = element.querySelector('.mobile-grid');
-            }
+        if (element.classList.contains('mobile-grid')) {
+            gridElement = element;
+        } else if (domAPI?.querySelector) {
+            gridElement = domAPI.querySelector('.mobile-grid', element);
+        } else {
+            gridElement = element.querySelector('.mobile-grid');
+        }
 
         if (!gridElement) {
             logger.error(`'.mobile-grid' container not found within .project-list-container.`, null, { context: MODULE_CONTEXT });
@@ -208,19 +212,19 @@ export function createProjectListComponent(deps) {
 
         // Re-bind when template HTML arrives
         eventHandlers.trackListener(
-          domAPI.getDocument(),
-          'projectListHtmlLoaded',
-          () => {
-            _bindFilterEvents();
-            if (!gridElement) {
-              const parent =
-                element ||
-                domAPI.getElementById(elementId) ||
-                domAPI.querySelector('#projectListView, .project-list-container');
-              if (parent) gridElement = domAPI.querySelector('.mobile-grid', parent);
-            }
-          },
-          { once: true, context: MODULE_CONTEXT, description: 'rebindFilterTabsAfterTemplate' }
+            domAPI.getDocument(),
+            'projectListHtmlLoaded',
+            () => {
+                _bindFilterEvents();
+                if (!gridElement) {
+                    const parent =
+                        element ||
+                        domAPI.getElementById(elementId) ||
+                        domAPI.querySelector('#projectListView, .project-list-container');
+                    if (parent) gridElement = domAPI.querySelector('.mobile-grid', parent);
+                }
+            },
+            { once: true, context: MODULE_CONTEXT, description: 'rebindFilterTabsAfterTemplate' }
         );
     }
     function _bindFilterEvents() {
@@ -496,13 +500,13 @@ export function createProjectListComponent(deps) {
 
         // Event-delegation via a single tracked listener
         eventHandlers.trackListener(
-          domAPI.getDocument(),
-          'click',
-          (e) => {
-            const btn = e.target.closest('#createProjectBtn');
-            if (btn) _openNewProjectModal();
-          },
-          { context: MODULE_CONTEXT, description: 'delegate:createProjectBtn' }
+            domAPI.getDocument(),
+            'click',
+            (e) => {
+                const btn = e.target.closest('#createProjectBtn');
+                if (btn) _openNewProjectModal();
+            },
+            { context: MODULE_CONTEXT, description: 'delegate:createProjectBtn' }
         );
     }
     function _openNewProjectModal() {
@@ -532,7 +536,7 @@ export function createProjectListComponent(deps) {
                         onCancel: () => resolve(false)
                     });
                 });
-            } catch(err) {
+            } catch (err) {
                 logger.error('[ProjectListComponent][_confirmDelete]', err, { context: MODULE_CONTEXT });
             }
             if (ok) _executeDelete(project.id);
@@ -543,7 +547,7 @@ export function createProjectListComponent(deps) {
         try {
             await projectManager.deleteProject(projectId);
             _loadProjects();
-        } catch(err) {
+        } catch (err) {
             logger.error('[ProjectListComponent][_executeDelete]', err, { context: MODULE_CONTEXT });
         }
     }
@@ -603,21 +607,21 @@ export function createProjectListComponent(deps) {
         const loginBtn = domAPI.getElementById("loginButton");
         if (loginBtn) {
             eventHandlers.trackListener(
-              loginBtn,
-              "click",
-              (e) => {
-                e.preventDefault();
+                loginBtn,
+                "click",
+                (e) => {
+                    e.preventDefault();
 
-                // Bubble the request up to global listeners so ModalManager can react
-                const doc = domAPI.getDocument();
-                if (doc && typeof domAPI.dispatchEvent === 'function') {
-                  domAPI.dispatchEvent(doc, new CustomEvent('requestLogin'));
-                }
+                    // Bubble the request up to global listeners so ModalManager can react
+                    const doc = domAPI.getDocument();
+                    if (doc && typeof domAPI.dispatchEvent === 'function') {
+                        domAPI.dispatchEvent(doc, new CustomEvent('requestLogin'));
+                    }
 
-                // Keep local bus notification (optional, component-internal)
-                eventBus.dispatchEvent(new CustomEvent('requestLogin'));
-              },
-              { context: MODULE_CONTEXT, description: 'loginBtn:requestLogin' }
+                    // Keep local bus notification (optional, component-internal)
+                    eventBus.dispatchEvent(new CustomEvent('requestLogin'));
+                },
+                { context: MODULE_CONTEXT, description: 'loginBtn:requestLogin' }
             );
         }
     }
@@ -849,7 +853,10 @@ export function createProjectListComponent(deps) {
         renderProjects, // for test/debug
         show,
         onViewProject, // can be overridden
-        eventBus
+        eventBus,
+        setProjectManager: (pm) => {
+            projectManager = pm;
+        }
     };
 }
 
