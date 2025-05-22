@@ -246,7 +246,7 @@ export function createFileUploadComponent({
     const BATCH_SIZE = 3;
     for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
       const batch = validFiles.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map file => _uploadFile(pid, file)));
+      await Promise.all(batch.map(file => _uploadFile(pid, file)));
     }
 
     if (typeof _onUploadComplete === 'function') {
@@ -275,7 +275,22 @@ export function createFileUploadComponent({
     const validFiles = [];
     const invalidFiles = [];
     for (let file of files) {
-      const sanitizedName = file.name.replace(/[<>:"/\\|?*#%\s\u0000-\u001F\u007F]/g, '_');
+      // Replace forbidden characters and control chars with '_'
+      const sanitizedName = file.name
+        .split('')
+        .map(c => {
+          const code = c.charCodeAt(0);
+          // Forbidden: < > : " / \ | ? * # % whitespace, DEL, or ASCII control chars
+          if (
+            '<>:"/\\|?*#%'.includes(c) ||
+            /\s/.test(c) ||
+            code < 32 || code === 127
+          ) {
+            return '_';
+          }
+          return c;
+        })
+        .join('');
       if (sanitizedName !== file.name) {
         try {
           const tempFile = new File([file], sanitizedName, { type: file.type });
