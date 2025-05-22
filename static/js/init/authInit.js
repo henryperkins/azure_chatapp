@@ -158,12 +158,28 @@ export function createAuthInitializer({
       const authStatus = domAPI.getElementById('authStatus');
       const userStatus = domAPI.getElementById('userStatus');
 
-      if (isAuth) {
-        if (authBtn) domAPI.addClass(authBtn, 'hidden');
-        if (userMenu) domAPI.removeClass(userMenu, 'hidden');
-      } else {
-        if (authBtn) domAPI.removeClass(authBtn, 'hidden');
-        if (userMenu) domAPI.addClass(userMenu, 'hidden');
+      /* ── login-button / user-menu visibility ─────────────────── */
+      if (authBtn) {
+        if (isAuth) {
+          domAPI.addClass   (authBtn, 'hidden');
+          domAPI.setStyle   (authBtn, 'display', 'none');
+          domAPI.setAttribute(authBtn, 'hidden', 'hidden');
+        } else {
+          domAPI.removeClass(authBtn, 'hidden');
+          domAPI.setStyle   (authBtn, 'display', '');
+          domAPI.removeAttribute(authBtn, 'hidden');
+        }
+      }
+
+      if (userMenu) {
+        domAPI.toggleClass(userMenu, 'hidden', !isAuth);
+        domAPI.setStyle   (userMenu, 'display', isAuth ? '' : 'none');
+        isAuth
+          ? userMenu.removeAttribute?.('hidden')
+          : userMenu.setAttribute?.('hidden', 'hidden');
+      }
+
+      if (!isAuth) {
         const orphan = domAPI.getElementById('headerLoginForm');
         if (orphan) orphan.remove();
       }
