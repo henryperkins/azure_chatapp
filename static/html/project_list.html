@@ -1,7 +1,5 @@
 <!-- Mobile-First Project List -->
 <div id="project-list-container" class="project-list-container">
-<!-- Added for ProjectListComponent → domReadinessService -->
-<div id="projectFilterTabs" class="tabs hidden"></div>
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-bold">Projects</h1>
@@ -15,11 +13,11 @@
   </div>
 
   <!-- Filters -->
-  <div class="flex gap-2 mb-4 overflow-x-auto scrollbar-none">
-    <button class="btn btn-ghost btn-sm active">All</button>
-    <button class="btn btn-ghost btn-sm">Recent</button>
-    <button class="btn btn-ghost btn-sm">Pinned</button>
-    <button class="btn btn-ghost btn-sm">Archived</button>
+  <div id="projectFilterTabs" class="flex gap-2 mb-4 overflow-x-auto scrollbar-none" role="tablist">
+    <button class="tab btn btn-ghost btn-sm active"   data-filter="all"      id="filterTabAll"      aria-selected="true">All</button>
+    <button class="tab btn btn-ghost btn-sm"          data-filter="recent"   id="filterTabRecent"   aria-selected="false">Recent</button>
+    <button class="tab btn btn-ghost btn-sm"          data-filter="pinned"   id="filterTabPinned"   aria-selected="false">Pinned</button>
+    <button class="tab btn btn-ghost btn-sm"          data-filter="archived" id="filterTabArchived" aria-selected="false">Archived</button>
   </div>
 
   <!-- Search -->

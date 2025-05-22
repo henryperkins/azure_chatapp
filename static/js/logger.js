@@ -15,14 +15,23 @@ export function createLogger({
   enableServer = true,
   debug       = false,
   context     = 'App',
-  minLevel    = 'info'            // NEW – default threshold
+  minLevel    = 'info',           // default threshold
+  fetcher     = null,             // ← NEW injectable fetch
+  browserService = null           // ← NEW optional DI
 } = {}) {
   const THRESHOLD = LVL[minLevel] ?? LVL.info;
   async function send(level, args) {
     if (!enableServer) return;
     if (LVL[level] < THRESHOLD) return;          // NEW
     try {
-      const response = await fetch(endpoint, {
+      const _fetch =
+        fetcher ||
+        browserService?.fetch ||
+        (typeof window !== 'undefined' && window.fetch) ||
+        (typeof fetch === 'function' ? fetch : null);
+      if (!_fetch) return;                   // no fetch available
+
+      const response = await _fetch(endpoint, {
         method : 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',                   // NEW – carry cookies / CSRF exempt
