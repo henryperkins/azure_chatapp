@@ -8,7 +8,7 @@
  *   DependencySystem.register('logger', logger);
  */
 
-const LVL = { debug: 10, info: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
+const LVL = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
 
 export function createLogger({
   endpoint = '/api/logs',
