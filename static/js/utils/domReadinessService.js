@@ -249,7 +249,12 @@ export function createDomReadinessService({
     if (observers.length > 0) return;
 
     // Create a MutationObserver to watch the entire body subtree
-    const observer = new browserService.MutationObserver((mutations) => {
+    const MutationObserverImpl =
+      browserService?.getWindow?.()?.MutationObserver ||
+      (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
+    if (!MutationObserverImpl) return;                 // env without MO
+
+    const observer = new MutationObserverImpl((mutations) => {
       if (appearanceListeners.size === 0) return;
       // Trigger each appearance listener to see if their elements are now present
       appearanceListeners.forEach((listener) => {
