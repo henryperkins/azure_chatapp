@@ -1,18 +1,3 @@
-// --- Roo insert: Ensure modals.html loaded before readiness gating ---
-(async () => {
-  const modalsContainer = document.getElementById('modalsContainer');
-  if (modalsContainer && modalsContainer.childElementCount === 0) {
-    try {
-      const resp = await fetch('/static/html/modals.html');
-      const html = await resp.text();
-      modalsContainer.innerHTML = html;
-      document.dispatchEvent(new CustomEvent('modalsLoaded', { detail: { success: true }}));
-    } catch (err) {
-      // Optionally, handle the error or log
-      if (window.logger?.error) window.logger.error('[modals.html]', err, { context:'modals' });
-    }
-  }
-})();
 /**
  * app.js - Main application orchestration.
  *
@@ -344,6 +329,24 @@ const htmlTemplateLoader = createHtmlTemplateLoader({
   }
 });
 DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
+
+// --- Deferred modals.html injection (now DOM-readiness-safe) ---
+domReadinessService
+  .dependenciesAndElements({
+    domSelectors: ['#modalsContainer'],
+    timeout : APP_CONFIG.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
+    context : 'app:injectModalsHtml'
+  })
+  .then(() =>
+    htmlTemplateLoader.loadTemplate({
+      url: '/static/html/modals.html',
+      containerSelector: '#modalsContainer',
+      eventName: 'modalsLoaded'
+    })
+  )
+  .catch(err =>
+    logger.error('[app.js][injectModalsHtml]', err, { context: 'app:injectModalsHtml' })
+  );
 
 // ---------------------------------------------------------------------------
 // 12) app object & top-level state
