@@ -587,7 +587,7 @@
         window.showNotification(message, type);
       } else {
         if (type === "error") alert(message);
-        else console.log(message);
+        else if (window.logger?.warn) window.logger.warn('[modals.html]', message);
       }
     }
 
@@ -635,7 +635,7 @@
             })
             .catch(err => {
               notify('error', `Failed to save settings: ${err.message}`);
-               console.error("Error saving KB settings:", err);
+               if (window.logger?.error) window.logger.error('[modals.html]', err, { context:'modals' });
             })
             .finally(() => {
                 setButtonLoading(submitButton, false);

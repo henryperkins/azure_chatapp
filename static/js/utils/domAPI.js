@@ -30,7 +30,9 @@ export function createDomAPI({
   documentObject,
   windowObject,
   debug = false,
-  sanitizer = null
+  sanitizer = null,
+  logger = null,                 // ← NEW
+  DependencySystem = null        // ← NEW: fallback resolution
 } = {}) {
 
   if (!documentObject || !windowObject) {
@@ -42,6 +44,12 @@ export function createDomAPI({
     if (!debug) return;
     // Silent debugging when enabled
   };
+
+  // unified warn/error sink (no direct console)
+  const _logger =
+    logger ||
+    DependencySystem?.modules?.get?.('logger') ||
+    { warn: ()=>{}, error: ()=>{} };
 
   return {
     getElementById(id) {
@@ -107,9 +115,7 @@ export function createDomAPI({
         el.innerHTML = sanitizer.sanitize(html);
       } else {
         // SECURITY WARNING: Setting innerHTML without a sanitizer is dangerous!
-        if (typeof console !== 'undefined' && console.warn) {
-          console.warn('[domAPI] WARNING: setInnerHTML called without sanitizer. This is a security risk.');
-        }
+        _logger.warn('[domAPI] setInnerHTML called without sanitizer (unsafe)');
         el.innerHTML = html;
       }
     },
@@ -127,9 +133,7 @@ export function createDomAPI({
       (windowObject?.getComputedStyle)
         ? windowObject.getComputedStyle(el)
         : (() => {
-            if (typeof console !== 'undefined' && console.warn) {
-              console.warn('[domAPI] WARNING: getComputedStyle fallback returns minimal object. This may break code expecting CSSStyleDeclaration.');
-            }
+            _logger.warn('[domAPI] getComputedStyle fallback returned stub');
             return { visibility: '', display: '' };
           })(),
 
@@ -245,7 +249,7 @@ export function createDomAPI({
       try {
         if (prop in el)           el[prop] = value;         // preferencia a propiedad DOM
         else                      el.setAttribute(prop, value); // fallback atributo
-      } catch {/* silencioso */}
+      } catch {}
     },
 
     /**
