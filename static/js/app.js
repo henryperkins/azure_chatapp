@@ -564,22 +564,14 @@ export async function init() {
     ]);
     logStep('initializeCoreSystems', 'post');
 
-    // 2) Wait for critical dependencies
-    logStep('DependencySystem.waitFor', 'pre');
-    await Promise.race([
-      DependencySystem.waitFor(
-        ['auth', 'eventHandlers', 'modalManager'],
-        null,
-        APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT
-      ),
-      new Promise((_, reject) =>
-        browserAPI.getWindow().setTimeout(
-          () => reject(new Error('Timeout in DependencySystem.waitFor')),
-          PHASE_TIMEOUT
-        )
-      )
-    ]);
-    logStep('DependencySystem.waitFor', 'post');
+    /* ── Wait for critical DI modules via domReadinessService ─────────── */
+    logStep('depsReady', 'pre');
+    await domReadinessService.dependenciesAndElements({
+      deps    : ['auth', 'eventHandlers', 'modalManager'],
+      timeout : APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? PHASE_TIMEOUT,
+      context : 'app.init:depsReady'
+    });
+    logStep('depsReady', 'post');
 
     // 3) Initialize auth system
     logStep('initializeAuthSystem', 'pre');
