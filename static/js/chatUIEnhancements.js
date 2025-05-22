@@ -86,7 +86,7 @@ export function createChatUIEnhancements({
       const doc = domAPI.getDocument();
       if (doc) {
         for (const sel of domSelectors) {
-          if (!doc.querySelector(sel)) {
+          if (!domAPI.querySelector(sel)) {
             logger.error(`[${MODULE_CONTEXT}] Selector ${sel} still missing after readiness wait`, {
               context
             });

@@ -642,9 +642,9 @@ export function createEventHandlers({
       'click',
       '#modalLoginTab',
       (event, tabElement) => {
-        const registerTabElement = loginModal.querySelector('#modalRegisterTab');
-        const loginPanel = loginModal.querySelector('#loginPanel');
-        const registerPanel = loginModal.querySelector('#registerPanel');
+        const registerTabElement = domAPI.querySelector(loginModal, '#modalRegisterTab');
+        const loginPanel         = domAPI.querySelector(loginModal, '#loginPanel');
+        const registerPanel      = domAPI.querySelector(loginModal, '#registerPanel');
 
         if (!registerTabElement || !loginPanel || !registerPanel) {
           return;
@@ -666,9 +666,9 @@ export function createEventHandlers({
       'click',
       '#modalRegisterTab',
       (event, tabElement) => {
-        const loginTabElement = loginModal.querySelector('#modalLoginTab');
-        const loginPanel = loginModal.querySelector('#loginPanel');
-        const registerPanel = loginModal.querySelector('#registerPanel');
+        const loginTabElement = domAPI.querySelector(loginModal, '#modalLoginTab');
+        const loginPanel      = domAPI.querySelector(loginModal, '#loginPanel');
+        const registerPanel   = domAPI.querySelector(loginModal, '#registerPanel');
 
         if (!loginTabElement || !loginPanel || !registerPanel) {
           return;
