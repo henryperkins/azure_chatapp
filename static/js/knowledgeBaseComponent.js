@@ -20,6 +20,9 @@ export function createKnowledgeBaseComponent(options = {}) {
   const uiUtils = getDep("uiUtils") || getDep("uiUtilsInstance");
   const modalManager = getDep("modalManager");
   const domAPI = getDep("domAPI");
+  const domReadinessService = getDep("domReadinessService");
+  if (!domReadinessService)
+    throw new Error(`${MODULE} requires 'domReadinessService' DI`);
   if (!sanitizer || typeof sanitizer.sanitize !== 'function')
     throw new Error("KnowledgeBaseComponent requires 'sanitizer' (object with .sanitize).");
   if (!app || !projectManager || !eventHandlers || !uiUtils || !modalManager) {
@@ -105,6 +108,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.domAPI = domAPI;
       this.getDep = getDep;
       this.DependencySystem = DS; // Assign DependencySystem to the instance
+      this.domReadinessService = domReadinessService;
 
       this.elementSelectors = elementSelectors; // Store selectors from factory
       this.elements = {}; // Will be populated by _initElements
@@ -191,6 +195,14 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async initialize(isVisible, kbData = null, projectId = null) {
+      // Wait for all KB DOM elements before any query/mutation
+      await this.domReadinessService.dependenciesAndElements({
+        domSelectors: Object.values(this.elementSelectors)
+          .filter(Boolean)
+          .map(sel => (sel.startsWith('#') || sel.startsWith('.')) ? sel : `#${sel}`),
+        context : MODULE + '::initialize',
+        timeout : this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000
+      });
       try {
         this._initElements(); // Resolve DOM elements now
       } catch (error) {

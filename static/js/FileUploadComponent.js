@@ -35,6 +35,7 @@ export class FileUploadComponent {
     this.eventHandlers = getDep('eventHandlers');
     this.projectManager = getDep('projectManager');
     this.domAPI = getDep('domAPI'); // Inject domAPI
+    this.domReadinessService = getDep('domReadinessService', false); // optional
 
     // Deterministic timers (DI-friendly)
     this.scheduler = getDep('scheduler', false) || { setTimeout, clearTimeout }; // Optional dep
@@ -83,8 +84,14 @@ export class FileUploadComponent {
    * Initialize component: Find elements, bind events.
    * Should be called only when the DOM context (e.g., project details view) is ready.
    */
-  init() {
+  async init() {
     if (this._handlersBound) return;
+    if (this.domReadinessService) {
+      await this.domReadinessService.dependenciesAndElements({
+        domSelectors: Object.values(this.elements.selectors),
+        context : MODULE_CONTEXT + '::init'
+      });
+    }
     if (!this._findElements()) {
       return;
     }

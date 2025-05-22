@@ -247,11 +247,12 @@ class ProjectDetailsComponent {
     if (this.FileUploadComponentClass && !this.fileUploadComponent && this.elements.fileInput) {
       try {
         this.fileUploadComponent = new this.FileUploadComponentClass({
-          eventHandlers: this.eventHandlers,
-          domAPI: this.domAPI,
+          eventHandlers : this.eventHandlers,
+          domAPI        : this.domAPI,
           projectManager: this.projectManager,
-          app: this.eventHandlers.DependencySystem.modules.get("app"),
-          onUploadComplete: this._safeHandler(async () => {
+          app           : this.eventHandlers.DependencySystem.modules.get("app"),
+          domReadinessService: this.domReadinessService,      // ← NEW
+          onUploadComplete : this._safeHandler(async () => {
             if (!this.projectId) return;
             await this.projectManager.loadProjectFiles(this.projectId);
           }, "UploadComplete"),
