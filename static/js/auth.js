@@ -490,7 +490,7 @@ export function createAuthModule(deps) {
       try {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
-          logger.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after provisional login! Backend may not be setting cookies.', { context: 'loginUser' });
+          logger.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login: [masked]', { context: 'loginUser' });
         }
       } catch (cookieCheckErr) {
         logger.error('[AuthModule] Cookie check after provisional login failed (non-critical):', cookieCheckErr, { context: 'loginUser' });
