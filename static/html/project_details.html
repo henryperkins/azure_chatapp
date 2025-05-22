@@ -32,7 +32,12 @@
     </div>
     <!-- Mobile-Optimized Stats -->
     <div class="project-stats">
-      <!-- Token usage mobile stat removed -->
+      <!-- Token usage (hook for TokenStatsManager) -->
+      <div id="tokenUsageStat" class="project-stat">
+        <div id="tokenStatsCurrentUsage" class="text-2xl font-bold text-warning">0</div>
+        <div class="text-sm text-base-content/70">Tokens</div>
+        <button id="tokenStatsBtn" class="btn btn-ghost btn-xs" aria-label="Token stats">⋯</button>
+      </div>
       <div class="project-stat">
         <div class="text-2xl font-bold text-success" id="fileCount">0</div>
         <div class="text-sm text-base-content/70">Files</div>
