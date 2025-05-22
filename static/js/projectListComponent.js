@@ -128,28 +128,7 @@ export function createProjectListComponent(deps) {
     }
 
     function _safeSetInnerHTML(el, rawHtml) {
-        if (!htmlSanitizer || typeof htmlSanitizer.sanitize !== "function") {
-            logger.error('[ProjectListComponent] Missing htmlSanitizer implementation', null, { context: MODULE_CONTEXT });
-            throw new Error("[ProjectListComponent] Missing htmlSanitizer implementation");
-        }
-        if (typeof rawHtml !== "string" || !rawHtml.trim()) {
-            logger.error('[ProjectListComponent] _safeSetInnerHTML expected non-empty string', null, { context: MODULE_CONTEXT });
-            throw new Error("[ProjectListComponent] _safeSetInnerHTML expected non-empty string");
-        }
-        try {
-            el.innerHTML = htmlSanitizer.sanitize(rawHtml);
-        } catch (err) {
-            logger.error('[ProjectListComponent] sanitize failed (fallback to text)', err, { context: MODULE_CONTEXT });
-            try {
-                const plain = typeof rawHtml === "string"
-                    ? rawHtml.replace(/<[^>]*>/g, "")
-                    : String(rawHtml);
-                el.textContent = plain;
-            } catch (innerErr) {
-                logger.error('[ProjectListComponent] _safeSetInnerHTML (fallback inner error)', innerErr, { context: MODULE_CONTEXT });
-                el.textContent = "";
-            }
-        }
+        domAPI.setInnerHTML(el, rawHtml);
     }
     function _clearElement(el) {
         el.textContent = "";
