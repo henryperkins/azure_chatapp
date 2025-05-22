@@ -76,10 +76,8 @@ export function createProjectListComponent(deps) {
             await domReadinessService.dependenciesAndElements({
                 deps            : ['projectManager', 'eventHandlers'],
                 domSelectors    : [
-                    '#projectListView',        // new template id
-                    '.project-list-container', // legacy class
-                    '.mobile-grid',
-                    '#projectFilterTabs'
+                    '#projectListView',        // primary container
+                    '.project-list-container'  // legacy fallback
                 ],
                 observeMutations: true,   // wait for template injection
                 timeout         : APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
@@ -207,6 +205,23 @@ export function createProjectListComponent(deps) {
         eventHandlers.trackListener(doc, "auth:stateChanged", safe(handleAuthStateChange, 'auth:stateChanged'), { context: MODULE_CONTEXT });
 
         _bindFilterEvents();
+
+        // Re-bind when template HTML arrives
+        eventHandlers.trackListener(
+          domAPI.getDocument(),
+          'projectListHtmlLoaded',
+          () => {
+            _bindFilterEvents();
+            if (!gridElement) {
+              const parent =
+                element ||
+                domAPI.getElementById(elementId) ||
+                domAPI.querySelector('#projectListView, .project-list-container');
+              if (parent) gridElement = domAPI.querySelector('.mobile-grid', parent);
+            }
+          },
+          { once: true, context: MODULE_CONTEXT, description: 'rebindFilterTabsAfterTemplate' }
+        );
     }
     function _bindFilterEvents() {
         const container = domAPI?.getElementById ? domAPI.getElementById("projectFilterTabs") : domAPI.getElementById("projectFilterTabs");
