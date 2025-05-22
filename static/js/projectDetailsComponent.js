@@ -158,7 +158,7 @@ class ProjectDetailsComponent {
       return true;
     } catch (err) {
       this._logError(`Failed to load template`, err);
-      if (container) container.innerHTML = `<div class="p-4 text-error">Failed to load project details view.</div>`;
+      if (container) this.domAPI.setInnerHTML(container, `<div class="p-4 text-error">Failed to load project details view.</div>`);
       this._setState({ loading: false });
       return false;
     }
@@ -414,9 +414,9 @@ class ProjectDetailsComponent {
     if (!this.elements.container || !this.projectData) return;
     const { name, description, goals, customInstructions } = this.projectData;
     if (this.elements.title)  this.elements.title.textContent = name || "Untitled Project";
-    if (this.elements.description)    this.elements.description.innerHTML = this.sanitizer.sanitize(description || "No description.");
-    if (this.elements.goals)          this.elements.goals.innerHTML = this.sanitizer.sanitize(goals || "No goals specified.");
-    if (this.elements.instructions)   this.elements.instructions.innerHTML = this.sanitizer.sanitize(customInstructions || "No custom instructions.");
+    if (this.elements.description)    this.domAPI.setInnerHTML(this.elements.description, this.sanitizer.sanitize(description || "No description."));
+    if (this.elements.goals)          this.domAPI.setInnerHTML(this.elements.goals, this.sanitizer.sanitize(goals || "No goals specified."));
+    if (this.elements.instructions)   this.domAPI.setInnerHTML(this.elements.instructions, this.sanitizer.sanitize(customInstructions || "No custom instructions."));
     // MAY trigger tab data reloads/rendering here for first view
   }
 
@@ -424,9 +424,9 @@ class ProjectDetailsComponent {
   renderFiles(files) {
     const c = this.elements.filesList;
     if (!c) return;
-    c.innerHTML = "";
+    this.domAPI.replaceChildren(c);
     if (!files.length) {
-      c.innerHTML = this.sanitizer.sanitize(`<div class="text-center py-8 text-base-content/60">
+      this.domAPI.setInnerHTML(c, `<div class="text-center py-8 text-base-content/60">
         <p>No files uploaded yet.</p>
         <p class="text-sm mt-1">Drag & drop or click Upload.</p>
       </div>`);
@@ -438,9 +438,9 @@ class ProjectDetailsComponent {
   renderConversations(convs) {
     const c = this.elements.conversationsList;
     if (!c) return;
-    c.innerHTML = "";
+    this.domAPI.replaceChildren(c);
     if (!convs.length) {
-      c.innerHTML = this.sanitizer.sanitize(`<div class="text-center py-8">
+      this.domAPI.setInnerHTML(c, `<div class="text-center py-8">
         <p>No conversations yet. Click “New Chat”.</p>
       </div>`);
       return;
@@ -454,9 +454,9 @@ class ProjectDetailsComponent {
   renderArtifacts(arts) {
     const c = this.elements.artifactsList;
     if (!c) return;
-    c.innerHTML = "";
+    this.domAPI.replaceChildren(c);
     if (!arts.length) {
-      c.innerHTML = this.sanitizer.sanitize(`<div class="py-8 text-center">No artifacts yet.</div>`);
+      this.domAPI.setInnerHTML(c, `<div class="py-8 text-center">No artifacts yet.</div>`);
       return;
     }
     arts.forEach(a => { c.appendChild(this._artifactItem(a)); });
