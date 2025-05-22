@@ -38,7 +38,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     inactiveSection: "knowledgeBaseInactive",
     statusBadge: "kbStatusBadge",
     searchInput: "knowledgeSearchInput",
-    searchButton: "runKnowledgeSearchBtn",
+    searchButton: "searchKnowledgeBtn",
     resultsContainer: "knowledgeResults",
     resultsSection: "knowledgeResults",
     noResultsSection: "noResults",

@@ -171,14 +171,13 @@ class ProjectDetailsComponent {
     }
     const coreSelectors = [
       '#projectTitle','#backToProjectsBtn',
-      '.project-tab-btn','#detailsTab','#filesTab',
-      '#conversationsTab','#artifactsTab'
+      '.project-tab','#chatTab','#filesTab','#knowledgeTab','#settingsTab'
     ];
     const optionalSelectors = [
       "#knowledgeTab",
       "#projectDescription", "#projectGoals", "#projectInstructions",
       "#knowledgeBaseActive", "#knowledgeBaseInactive", "#kbStatusBadge",
-      "#knowledgeSearchInput", "#runKnowledgeSearchBtn",
+      "#knowledgeSearchInput", "#searchKnowledgeBtn",
       "#knowledgeResultsList", "#knowledgeResults", "#noResults",
       "#knowledgeTopK",
       "#knowledgeBaseEnabled", "#reprocessFilesBtn", "#setupKnowledgeBaseBtn",
@@ -213,11 +212,12 @@ class ProjectDetailsComponent {
       const $ = (sel) => this.elements.container.querySelector(sel);
       this.elements.title = $("#projectTitle");
       this.elements.backBtn = $("#backToProjectsBtn");
-      this.elements.tabBtns = this.elements.container.querySelectorAll(".project-tab-btn");
+      this.elements.tabBtns = this.elements.container.querySelectorAll(".project-tab");
       this.elements.tabs = {
-        details: $("#detailsTab"), files: $("#filesTab"),
-        conversations: $("#conversationsTab"), artifacts: $("#artifactsTab"),
-        knowledge: $("#knowledgeTab")
+        chat      : $("#chatTab"),
+        files     : $("#filesTab"),
+        knowledge : $("#knowledgeTab"),
+        settings  : $("#settingsTab")
       };
       this.elements.description = $("#projectDescription");
       this.elements.goals = $("#projectGoals");
@@ -374,7 +374,7 @@ class ProjectDetailsComponent {
       case "files":
         this.projectManager.loadProjectFiles(this.projectId);
         break;
-      case "conversations":
+      case "chat":
         this.projectManager.loadProjectConversations(this.projectId);
         break;
       case "artifacts":
@@ -772,7 +772,7 @@ class ProjectDetailsComponent {
     this._restoreKnowledgeTab();
     this._restoreStatsCounts();
 
-    this.switchTab(activeTab || "details");
+    this.switchTab(activeTab || "chat");
     this._setState({ loading: false });
     this._logInfo(`View for project ${this.projectId} is now visible.`);
   }
