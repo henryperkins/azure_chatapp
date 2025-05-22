@@ -62,10 +62,16 @@ export function createTokenStatsManager({
     catch (e) { /* silent fail */ }
   }
   
-  function _logError(msg, err, meta = {}) {
-    try { 
-      logger.error(`[${MODULE_CONTEXT}] ${msg}`, err && err.stack ? err : err, { context: MODULE_CONTEXT, ...meta }); 
-    } catch {/* secondary logging failure – deliberately ignored (no console) */}
+  function _logError(message, err, meta = {}) {
+    try {
+      const details = err instanceof Error
+        ? { message: err.message, stack: err.stack }
+        : { error: err };
+      logger.error(
+        `[${MODULE_CONTEXT}] ${message}`,
+        { ...details, context: MODULE_CONTEXT, ...meta }
+      );
+    } catch {/* swallow to avoid cascading failures */}
   }
   
   /**
