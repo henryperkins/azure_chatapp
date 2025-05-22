@@ -1,0 +1,68 @@
+/* =============================================================================
+   tailwind-mobile.css - Mobile-First Aggregator
+   Replaces the bloated 8-file CSS system with 3 focused files
+============================================================================= */
+
+@import "tailwindcss";
+
+/* DaisyUI Configuration */
+@plugin "daisyui" {
+  themes: azure-light --default, dracula-enhanced --prefersdark;
+}
+
+/* Enhanced Dracula Theme */
+@plugin "daisyui/theme" {
+  name: "dracula-enhanced";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+  --color-base-100: oklch(28.8% 0.025 277.5);
+  --color-base-200: oklch(25.8% 0.023 277.5);
+  --color-base-300: oklch(22.8% 0.021 277.5);
+  --color-base-content: oklch(98% 0.01 106.5);
+  --color-primary: oklch(76% 0.19 346.8);
+  --color-primary-content: oklch(15% 0.036 346.8);
+  --color-secondary: oklch(75% 0.155 301.9);
+  --color-accent: oklch(84% 0.13 66.6);
+  --color-success: oklch(87.1% 0.22 148);
+  --color-warning: oklch(95.5% 0.14 112.8);
+  --color-error: oklch(68.2% 0.21 24.4);
+}
+
+/* Light Theme */
+@plugin "daisyui/theme" {
+  name: "azure-light";
+  default: true;
+  color-scheme: light;
+  --color-base-100: oklch(98% 0.01 270);
+  --color-base-200: oklch(95% 0.02 270);
+  --color-base-300: oklch(92% 0.03 270);
+  --color-primary: oklch(60% 0.18 275);
+  --color-secondary: oklch(70% 0.15 240);
+  --color-accent: oklch(65% 0.16 210);
+}
+
+/* Global Mobile-First Animations */
+@keyframes mobile-fade-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes mobile-slide-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes mobile-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Global Mobile Utilities */
+.animate-mobile-fade-in { animation: mobile-fade-in 0.3s ease-out forwards; }
+.animate-mobile-slide-in { animation: mobile-slide-in 0.3s ease-out forwards; }
+.animate-mobile-pulse { animation: mobile-pulse 2s infinite; }
+
+/* Import focused component files */
+@import "./mobile-components.css";
+@import "./mobile-layouts.css";

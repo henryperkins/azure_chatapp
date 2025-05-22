@@ -1,59 +1,49 @@
-<!-- Chat interface container -->
-<div id="globalChatContainer" class="mt-4 transition-all duration-300 ease-in-out">
-    <div id="globalChatUI" class="bg-base-100 rounded-box shadow-lg border border-base-200 overflow-hidden">
-        <div class="chat-title-row flex items-center justify-between py-2 px-4 border-b border-base-200 bg-base-100/60">
-            <div class="flex items-center gap-2">
-                <span id="chatTitle">Current Conversation Title</span>
-                <div class="dropdown dropdown-hover dropdown-end">
-                    <label tabindex="0" class="badge badge-outline badge-sm cursor-help hover:bg-base-200" title="Conversation token stats">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span id="conversationTokenCount">0</span>
-                    </label>
-                    <div tabindex="0" class="dropdown-content z-[1] card card-compact shadow bg-base-100 rounded-box w-64 p-2">
-                        <div class="card-body p-3">
-                            <h3 class="text-sm font-semibold mb-1">Token Usage</h3>
-                            <div class="grid grid-cols-2 gap-1 text-xs">
-                                <div>Current Context:</div>
-                                <div class="text-right"><span id="contextTokenCount">0</span> tokens</div>
-                                <div>Total Used:</div>
-                                <div class="text-right"><span id="totalTokenCount">0</span> tokens</div>
-                                <div>Project Limit:</div>
-                                <div class="text-right"><span id="projectTokenLimit">0</span> tokens</div>
-                            </div>
-                            <button id="tokenStatsBtn" class="btn btn-xs btn-outline mt-2 w-full">View Detailed Stats</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Enhanced input area with better styling -->
-            <div class="flex items-center border-t border-base-200 p-3 bg-base-200/30 backdrop-blur-sm">
-                <div class="relative flex-1 mr-2">
-                    <input id="chatUIInput" type="text"
-                        class="w-full input input-bordered rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-                        placeholder="Type your message...">
-                    <svg xmlns="http://www.w3.org/2000/svg"
-                        class="h-5 w-5 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50" fill="none"
-                        viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                    <!-- Live token count display -->
-                    <div class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-base-content/60 bg-base-100/80 px-2 py-1 rounded">
-                        <span id="liveTokenCount">0</span> tokens
-                    </div>
-                </div>
-                <button id="globalChatSendBtn" type="button"
-                    class="btn btn-primary rounded-lg px-6 flex items-center gap-2 hover:shadow-md transition-all">
-                    <span>Send</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                </button>
-            </div>
+<!-- Mobile-First Chat Interface -->
+<div class="chat-container">
+  <!-- Chat Header -->
+  <div class="bg-base-100 border-b border-base-200 p-4 sticky top-0 z-10">
+    <div class="flex items-center justify-between">
+      <h2 id="chatTitle" class="font-semibold truncate">New Conversation</h2>
+      <div class="flex items-center gap-2">
+        <div class="badge badge-outline badge-sm">
+          <span id="tokenCount">0</span> tokens
         </div>
+        <button class="btn btn-ghost btn-square btn-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+          </svg>
+        </button>
+      </div>
     </div>
+  </div>
+
+  <!-- Chat Messages -->
+  <div id="chatMessages" class="chat-messages">
+    <!-- Messages will be inserted here -->
+  </div>
+
+  <!-- Chat Input -->
+  <div class="chat-input-container">
+    <div class="chat-input-row">
+      <input
+        id="chatInput"
+        class="chat-input"
+        type="text"
+        placeholder="Type your message..."
+        autocomplete="off"
+        inputmode="text"
+        enterkeyhint="send"
+      >
+      <button id="chatSendBtn" class="chat-send-btn">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+        </svg>
+      </button>
+    </div>
+    <!-- Token counter for mobile -->
+    <div class="flex justify-between items-center text-xs text-base-content/60 mt-2">
+      <span id="liveTokenCount">0 tokens</span>
+      <span id="inputHint">Press Enter to send</span>
+    </div>
+  </div>
+</div>

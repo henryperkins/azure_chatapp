@@ -1,0 +1,180 @@
+/* =============================================================================
+   mobile-components.css - Mobile-First Component Library
+   Consolidated from enhanced-components.css (600+ lines) to focused components
+============================================================================= */
+
+/* Mobile-First Foundation */
+:root {
+  --mobile-touch-target: 44px;
+  --mobile-safe-font: 16px;
+  --mobile-border-radius: 12px;
+  --mobile-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* CRITICAL: Touch Target Compliance */
+.btn, button, [role="button"], a[href],
+input[type="button"], input[type="submit"],
+.tab, .project-card .btn-ghost, [data-action],
+.file-preview-delete, .message-action-btn {
+  min-width: var(--mobile-touch-target);
+  min-height: var(--mobile-touch-target);
+  @apply flex items-center justify-center;
+  @apply touch-manipulation;
+  -webkit-tap-highlight-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Mobile-Safe Typography */
+html { font-size: var(--mobile-safe-font); }
+input, select, textarea {
+  font-size: var(--mobile-safe-font);
+  min-height: var(--mobile-touch-target);
+}
+
+/* Button System - Single Source of Truth */
+.btn {
+  @apply relative overflow-hidden;
+  @apply px-4 py-2 rounded-xl font-medium;
+  @apply transition-all duration-200;
+  @apply border border-transparent;
+  @apply active:scale-95;
+}
+
+.btn-primary {
+  @apply bg-primary text-primary-content;
+  @apply hover:bg-primary/90 active:bg-primary/80;
+  @apply shadow-md hover:shadow-lg;
+}
+
+.btn-ghost {
+  @apply hover:bg-base-200 active:bg-base-300;
+}
+
+.btn-square {
+  @apply w-11 h-11 p-0;
+  @apply rounded-xl;
+}
+
+/* Form Controls */
+.input, .select, .textarea {
+  @apply w-full px-4 py-3;
+  @apply border border-base-300 rounded-xl;
+  @apply bg-base-100 text-base-content;
+  @apply focus:ring-2 focus:ring-primary focus:border-primary;
+  @apply transition-all duration-200;
+}
+
+/* Modal System */
+.modal-box {
+  @apply bg-base-100 rounded-2xl shadow-2xl;
+  @apply max-w-md w-full mx-4;
+  @apply max-h-[90vh] overflow-y-auto;
+}
+
+@media (max-width: 640px) {
+  .modal-box {
+    @apply max-w-none w-screen h-screen;
+    @apply rounded-none m-0;
+    padding-top: env(safe-area-inset-top, 0);
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* Card System */
+.card, .project-card {
+  @apply bg-base-100 rounded-2xl shadow-sm;
+  @apply border border-base-200;
+  @apply p-4 transition-all duration-200;
+  @apply hover:shadow-md hover:-translate-y-1;
+}
+
+/* Chat Components */
+.chat-message-container {
+  @apply flex flex-col gap-3 p-4;
+  @apply overflow-y-auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.chat-message,
+.file-preview-item {
+  @apply max-w-[85%] p-3 rounded-2xl;
+  @apply break-words;
+  /* Custom animation: fade in on entry */
+  animation: mobile-fade-in 0.3s ease-out forwards;
+}
+
+.user-message {
+  @apply self-end bg-primary text-primary-content;
+  @apply rounded-br-md;
+}
+
+.ai-message {
+  @apply self-start bg-base-200 text-base-content;
+  @apply rounded-bl-md;
+}
+
+/* File Upload */
+.file-upload-container {
+  @apply border-2 border-dashed border-base-300;
+  @apply rounded-2xl p-6 bg-base-200/50;
+  @apply transition-colors duration-300;
+  @apply hover:border-primary/70 hover:bg-primary/5;
+}
+
+.file-preview-item {
+  @apply p-3 bg-base-100 rounded-xl shadow-sm;
+  @apply flex items-center gap-3 border border-base-300;
+}
+
+/* Loading States */
+.loading-spinner {
+  @apply inline-block w-6 h-6 border-2 border-current;
+  @apply border-t-transparent rounded-full animate-spin;
+}
+
+.skeleton {
+  @apply bg-base-300 rounded;
+  /* Custom animation: subtle pulse to indicate loading */
+  animation: mobile-pulse 2s infinite;
+}
+
+/* Status Indicators */
+.status-indicator {
+  @apply inline-flex items-center gap-2;
+}
+
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-success { @apply bg-success; }
+.status-warning { @apply bg-warning; }
+.status-error { @apply bg-error; }
+
+/* Accessibility */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden;
+  @apply whitespace-nowrap border-0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-mobile-fade-in,
+  .animate-mobile-slide-in,
+  .transition-all {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Focus Management */
+.focus-trap:focus-within {
+  @apply ring-2 ring-primary ring-offset-2;
+}
+
+/* Mobile Safe Areas */
+.mobile-safe {
+  padding-top: env(safe-area-inset-top, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+}

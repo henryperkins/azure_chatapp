@@ -119,9 +119,9 @@ export function createChatUIEnhancements({
 
     // Project-only selectors for chat UI
     const CHAT_SELECTORS = [
-      '#projectChatInput',
-      '#projectChatMessages',
-      '#projectChatSendBtn'
+      '#chatInput',
+      '#chatMessages',
+      '#chatSendBtn'
     ];
     const context = `${MODULE_CONTEXT}::initialize`;
 
@@ -139,9 +139,9 @@ export function createChatUIEnhancements({
         return; // allow another “initialize()” call later
       }
 
-      const chatInput = domAPI.getElementById('projectChatInput');
-      const sendBtn = domAPI.getElementById('projectChatSendBtn');
-      const chatContainer = domAPI.getElementById('projectChatMessages');
+      const chatInput = domAPI.getElementById('chatInput');
+      const sendBtn = domAPI.getElementById('chatSendBtn');
+      const chatContainer = domAPI.getElementById('chatMessages');
       const doc = domAPI.getDocument();
 
       // Cache default container
@@ -235,8 +235,8 @@ export function createChatUIEnhancements({
 
     const messageEl = createMessageElement(message, sender, timestamp, messageId);
     const chatContainer =
-      state.messageContainer || domAPI.getElementById('projectChatMessages'); // Use cached or find default
-    if (chatContainer && messageEl) {
+      state.messageContainer || domAPI.getElementById('chatMessages'); // Use cached or find default
+      if (chatContainer && messageEl) {
       domAPI.appendChild(chatContainer, messageEl); // Use domAPI for append
       scrollToBottom(chatContainer);
       logger.info(`[${MODULE_CONTEXT}] Message appended to container`, {
@@ -616,7 +616,7 @@ export function createChatUIEnhancements({
     // Submit on Enter (without Shift)
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault(); // Prevent default form submission or newline
-      const sendBtn = domAPI.getElementById('projectChatSendBtn'); // Use domAPI
+      const sendBtn = domAPI.getElementById('chatSendBtn'); // Use domAPI
       if (sendBtn) {
         // Trigger click on the send button. Assumes another handler (like in attachEventHandlers or external)
         // is listening to this click event to perform the actual message sending.
@@ -645,8 +645,8 @@ export function createChatUIEnhancements({
     }
 
     const chatContainer =
-      state.messageContainer || domAPI.getElementById('projectChatMessages');
-    if (!chatContainer) {
+      state.messageContainer || domAPI.getElementById('chatMessages');
+      if (!chatContainer) {
       logger.warn(`[${MODULE_CONTEXT}] Chat container not found for typing indicator`, {
         context
       });
@@ -707,8 +707,8 @@ export function createChatUIEnhancements({
     }
 
     const chatContainer =
-      state.messageContainer || domAPI.getElementById('projectChatMessages');
-    // Find the indicator element using querySelector on the container
+      state.messageContainer || domAPI.getElementById('chatMessages');
+      // Find the indicator element using querySelector on the container
     const indicator =
       chatContainer?.querySelector('#typingIndicator');
     if (indicator && indicator.parentNode) {
