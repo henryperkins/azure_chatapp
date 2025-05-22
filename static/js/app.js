@@ -45,6 +45,7 @@ import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 import { createChatUIEnhancements } from './chatUIEnhancements.js';
+import { createTokenStatsManager } from './tokenStatsManager.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { FileUploadComponent } from './FileUploadComponent.js';
@@ -1337,10 +1338,29 @@ async function createAndRegisterUIComponents() {
     sanitizer
   });
   DependencySystem.register('projectDetailsEnhancements', projectDetailsEnhancementsInstance);
+  
+  // Token Stats Manager - Create and register token stats functionality
+  const tokenStatsManagerInstance = createTokenStatsManager({
+    apiClient: apiRequest,
+    domAPI,
+    eventHandlers,
+    browserService: browserServiceInstance,
+    modalManager: DependencySystem.modules.get('modalManager'),
+    sanitizer,
+    logger,
+    projectManager: DependencySystem.modules.get('projectManager'),
+    app,
+    chatManager: DependencySystem.modules.get('chatManager')
+  });
+  DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
 
   // Initialize project details enhancements
   safeInit(projectDetailsEnhancementsInstance, 'ProjectDetailsEnhancements', 'initialize')
     .catch(err => logger.error('[createAndRegisterUIComponents]', err, { context: 'app:createAndRegisterUIComponents:projectDetailsEnhancements' }));
+    
+  // Initialize token stats manager
+  safeInit(tokenStatsManagerInstance, 'TokenStatsManager', 'initialize')
+    .catch(err => logger.error('[createAndRegisterUIComponents]', err, { context: 'app:createAndRegisterUIComponents:tokenStatsManager' }));
 
   // Knowledge Base Component - Create and register if not already present.
   let knowledgeBaseComponentInstance = DependencySystem.modules.get('knowledgeBaseComponent');

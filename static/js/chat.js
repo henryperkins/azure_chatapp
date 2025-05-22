@@ -408,6 +408,12 @@ export function createChatManager(deps = {}) {
         this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
         return false;
       }
+      
+      // Update the current conversation ID in token stats manager
+      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+      if (tokenStatsManager?.fetchConversationTokenStats) {
+        tokenStatsManager.fetchConversationTokenStats(conversationId);
+      }
 
       const requestId = ++this.currentRequestId;
       if (this.loadPromise) {
@@ -445,6 +451,12 @@ export function createChatManager(deps = {}) {
           }
           this._renderMessages(messages);
           this._updateURLWithConversationId(conversationId);
+          
+          // Update token stats for loaded conversation
+          const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+          if (tokenStatsManager?.fetchConversationTokenStats) {
+            tokenStatsManager.fetchConversationTokenStats(conversationId);
+          }
 
           return true;
         } catch (error) {
@@ -625,6 +637,13 @@ export function createChatManager(deps = {}) {
         try {
           const response = await this._sendMessageToAPI(messageText, abortSignal);
           this._processAssistantResponse(response);
+          
+          // Update token stats for the conversation after sending a message
+          const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+          if (tokenStatsManager?.fetchConversationTokenStats && this.currentConversationId) {
+            tokenStatsManager.fetchConversationTokenStats(this.currentConversationId);
+          }
+          
           return response.data;
         } catch (error) {
           logger.error("[ChatManager][sending message]", error, { context: "chatManager" });
@@ -1122,6 +1141,11 @@ export function createChatManager(deps = {}) {
     if (!currentInputText.trim()) {
       const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
       if (liveTokenCountEl) liveTokenCountEl.textContent = "0";
+      // Update token stats manager if available
+      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+      if (tokenStatsManager?.setInputTokenCount) {
+        tokenStatsManager.setInputTokenCount(0);
+      }
       return;
     }
     // Debounced call to backend endpoint for token estimation
@@ -1135,6 +1159,12 @@ export function createChatManager(deps = {}) {
         : (resp && resp.data && resp.data.estimated_tokens_for_input) || null;
       const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
       if (liveTokenCountEl && est !== null) liveTokenCountEl.textContent = String(est);
+      
+      // Update token stats manager if available
+      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+      if (tokenStatsManager?.setInputTokenCount && est !== null) {
+        tokenStatsManager.setInputTokenCount(est);
+      }
     } catch (e) {
       const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
       if (liveTokenCountEl) liveTokenCountEl.textContent = "N/A";

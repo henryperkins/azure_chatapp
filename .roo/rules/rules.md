@@ -69,3 +69,245 @@ Apply these guardrails whenever you (the LLM) generate, refactor, or review **Ja
 ---
 
 Please ensure all frontend code contributions comply with these guardrails.
+
+
+---
+
+Here's a refined and simplified version of your Python Backend Code Guardrails, optimized specifically to be easily understood by humans and clearly interpretable by LLMs. This version emphasizes actionable instructions and explicitly highlights common anti-patterns for each guideline.
+
+---
+
+# 🛡️ Python Backend Code Guardrails
+
+These guardrails ensure consistent, secure, and maintainable Python backend code across this project. They are mandatory for human and AI-assisted development.
+
+## ✅ **1. Application Structure**
+
+* **FastAPI Initialization**:
+
+  * **Required**: Define FastAPI initialization explicitly in `main.py`.
+  * **Required**: Modularize routes using separate `APIRouter` files per domain.
+  * **Anti-Pattern**: Defining routes directly in `main.py`; mixing unrelated routes.
+
+* **Route Handlers (Thin Controllers)**:
+
+  * **Required**: Handlers ONLY parse requests, call services, and format responses.
+  * **Anti-Pattern**: Implementing DB queries or business logic directly in route handlers.
+
+* **Pydantic Response Models**:
+
+  * **Required**: Always specify concrete Pydantic models for responses (`response_model`).
+  * **Anti-Pattern**: Returning raw dictionaries or generic types (`dict`).
+
+---
+
+## ✅ **2. Dependency Injection (DI)**
+
+* **Explicit DI**:
+
+  * **Required**: Inject dependencies explicitly using FastAPI’s `Depends()`.
+  * **Anti-Pattern**: Importing global or singleton dependencies directly at module-level.
+
+* **Avoid Global State**:
+
+  * **Required**: Resources like DB sessions, API clients, or configuration MUST be injected.
+  * **Anti-Pattern**: Module-level initialization (e.g., `client = SomeClient(settings.KEY)`).
+
+---
+
+## ✅ **3. Services and Business Logic**
+
+* **Domain Isolation**:
+
+  * **Required**: Clearly isolate services by domain (`project_service.py`, `chat_service.py`).
+  * **Anti-Pattern**: Mixed or vague boundaries across domains (e.g., embedding logic in route handlers).
+
+* **Business Logic Encapsulation**:
+
+  * **Required**: All business logic, including DB interactions, validation, and state changes, MUST reside in services.
+  * **Anti-Pattern**: Direct business logic or database calls within routers or utilities.
+
+* **Service Errors**:
+
+  * **Required**: Raise application-specific exceptions from services (e.g., `ProjectNotFoundError`).
+  * **Anti-Pattern**: Raising FastAPI `HTTPException` directly from services.
+
+---
+
+## ✅ **4. Database Management**
+
+* **Async ORM Usage**:
+
+  * **Required**: Use Async SQLAlchemy ORM exclusively via `db_utils.py`.
+  * **Anti-Pattern**: Using synchronous SQLAlchemy or raw SQL in routers/services.
+
+* **Database Logic Confinement**:
+
+  * **Required**: Keep all DB operations confined strictly within services or repositories.
+  * **Anti-Pattern**: Database calls directly inside route handlers or utilities.
+
+---
+
+## ✅ **5. Authentication & Security**
+
+* **Cookie-Based Sessions**:
+
+  * **Required**: Use HttpOnly, Secure, and SameSite cookies. Implement CSRF protection explicitly.
+  * **Anti-Pattern**: JWTs stored in localStorage; omitting CSRF protection.
+
+* **Explicit User Validation**:
+
+  * **Required**: Always validate user permissions against the authenticated session context.
+  * **Anti-Pattern**: Trusting client-supplied user or resource identifiers without server-side checks.
+
+---
+
+## ✅ **6. Configuration Handling**
+
+* **Pydantic BaseSettings**:
+
+  * **Required**: Manage all config via environment variables using Pydantic's `BaseSettings`.
+  * **Anti-Pattern**: Hard-coding API keys or sensitive configuration values.
+
+* **Injection over Global Access**:
+
+  * **Required**: Inject configuration explicitly via DI.
+  * **Anti-Pattern**: Globally importing configuration (`from config import settings`).
+
+---
+
+## ✅ **7. Logging & Monitoring**
+
+* **Structured Logging**:
+
+  * **Required**: Use structured JSON logs (`logging_config.py`).
+  * **Anti-Pattern**: Using raw `print()` statements or inconsistent log formatting.
+
+* **Contextual Logs**:
+
+  * **Required**: Include Request IDs, User IDs, etc., using context variables.
+  * **Anti-Pattern**: Logs lacking contextual metadata.
+
+---
+
+## ✅ **8. Validation & Serialization**
+
+* **Mandatory Pydantic**:
+
+  * **Required**: Use strict Pydantic models for request and response validation.
+  * **Anti-Pattern**: Hand-written validation logic or weakly typed models (`dict`).
+
+---
+
+## ✅ **9. Background Tasks**
+
+* **Dedicated Task Modules**:
+
+  * **Required**: Isolate long-running tasks in dedicated Celery tasks or FastAPI BackgroundTasks.
+  * **Anti-Pattern**: Executing synchronous, long-running logic directly inside route handlers.
+
+---
+
+## ✅ **10. External Integrations**
+
+* **Dedicated Client Modules**:
+
+  * **Required**: Use dedicated modules/classes for external APIs (`openai.py`).
+  * **Anti-Pattern**: Scattered or duplicated external API logic.
+
+* **Error Abstraction**:
+
+  * **Required**: Abstract external errors into custom app exceptions.
+  * **Anti-Pattern**: Exposing external library exceptions directly.
+
+---
+
+## ✅ **11. Utility Modules & Shared Code**
+
+* **Import-Safe Modules**:
+
+  * **Required**: Modules must avoid I/O, external calls, or heavy computation at import time.
+  * **Anti-Pattern**: Executing HTTP requests, DB connections, or loading ML models at import.
+
+* **Async-Friendly Design**:
+
+  * **Required**: Avoid blocking calls (`time.sleep`, synchronous I/O). Use `aiofiles`, `asyncio.sleep`, and `asyncio.to_thread` as necessary.
+  * **Anti-Pattern**: Synchronous blocking operations within async paths.
+
+---
+
+## ✅ **12. Middleware**
+
+* **Scoped Middleware**:
+
+  * **Required**: Clearly scoped middleware in dedicated modules (`middlewares.py`).
+  * **Anti-Pattern**: Implementing complex business logic inside middleware.
+
+---
+
+## ✅ **13. Testing**
+
+* **Comprehensive pytest Suite**:
+
+  * **Required**: Use `pytest`, including `pytest-asyncio` for async code paths.
+  * **Anti-Pattern**: Untested or poorly tested code; test gaps.
+
+* **Dependency Mocking**:
+
+  * **Required**: Mock dependencies in tests explicitly.
+  * **Anti-Pattern**: Tight coupling, hindering mocking during tests.
+
+---
+
+## ✅ **14. Performance**
+
+* **Non-blocking Async Operations**:
+
+  * **Required**: Strictly use async code in all critical I/O paths.
+  * **Anti-Pattern**: Blocking operations (`time.sleep`, synchronous file or DB calls) in async contexts.
+
+* **Database Query Optimization**:
+
+  * **Required**: Prevent N+1 queries using eager-loading strategies (`selectinload`, etc.).
+  * **Anti-Pattern**: Unoptimized ORM queries causing performance degradation.
+
+---
+
+## ✅ **15. DRY (Don't Repeat Yourself)**
+
+* **Eliminate Duplication**:
+
+  * **Required**: Extract common logic into utilities, services, or FastAPI dependencies.
+  * **Anti-Pattern**: Similar logic scattered across multiple files.
+
+---
+
+## 🚩 **Common Anti-Patterns Checklist (for AI Interpretation)**
+
+LLMs MUST actively detect and avoid the following anti-patterns:
+
+* Database or heavy logic in route handlers
+* Global imports of configuration objects
+* Blocking operations in async code paths
+* External resources initialized at module import
+* Generic response types (`dict`) in API responses
+* Hard-coded secrets/configuration values
+* Middleware used for business logic
+* Unhandled or external exceptions directly exposed
+* Unclear or overlapping domain/service boundaries
+* Unmockable dependencies causing testing friction
+
+---
+
+## 🔍 **Document Purpose**
+
+These guardrails clearly outline **what to do**, **what to avoid**, and explicitly flag **common anti-patterns**. They are designed explicitly for:
+
+* **Easy comprehension** by developers.
+* **Clear, unambiguous interpretation** by LLMs or code-generation tools.
+* **Maintaining quality, security, and performance** of the backend codebase.
+
+Regularly revisit this document to evolve alongside the project’s needs and discoveries.
+
+---
+
