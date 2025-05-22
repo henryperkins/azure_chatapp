@@ -7,25 +7,29 @@
  * Provides UI gating helpers for safe DOM event binding (esp. chat UI) per project/timing.
  */
 
-export function createChatUIEnhancements({
-  domAPI,
-  eventHandlers,
-  browserService,
-  domReadinessService,
-  logger,
-  sanitizer,
-  chatManager,
-  modalManager // ← NEW: DI for confirmation modal
-} = {}) {
-  const MODULE_CONTEXT = 'chatUIEnhancements';
+export function createChatUIEnhancements(deps = {}) {
+  // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
+  if (!deps) throw new Error('Missing deps');
+  if (!deps.domAPI) throw new Error('Missing domAPI');
+  if (!deps.eventHandlers) throw new Error('Missing eventHandlers');
+  if (!deps.browserService) throw new Error('Missing browserService');
+  if (!deps.domReadinessService) throw new Error('Missing domReadinessService');
+  if (!deps.logger) throw new Error('Missing logger');
+  if (!deps.sanitizer) throw new Error('Missing sanitizer');
+  // chatManager and modalManager are optional
 
-  if (!domAPI || !domAPI.getElementById || !domAPI.createElement || !domAPI.getDocument) throw new Error(`[${MODULE_CONTEXT}] domAPI required with getElementById, createElement, getDocument methods`);
-  if (!eventHandlers?.trackListener || !eventHandlers?.cleanupListeners) throw new Error(`[${MODULE_CONTEXT}] eventHandlers required with trackListener, cleanupListeners methods`);
-  if (!browserService?.setTimeout || !browserService?.getWindow) throw new Error(`[${MODULE_CONTEXT}] browserService required with setTimeout, getWindow methods`);
-  if (!domReadinessService?.dependenciesAndElements) throw new Error(`[${MODULE_CONTEXT}] domReadinessService required with dependenciesAndElements method`);
-  if (!logger?.error || !logger?.warn || !logger?.info) throw new Error(`[${MODULE_CONTEXT}] logger required with error, warn, info methods`);
-  if (!sanitizer?.sanitize) throw new Error(`[${MODULE_CONTEXT}] sanitizer required with sanitize method`);
-  // chatManager and modalManager are optional for core functionality, but their presence is checked before use.
+  const {
+    domAPI,
+    eventHandlers,
+    browserService,
+    domReadinessService,
+    logger,
+    sanitizer,
+    chatManager,
+    modalManager
+  } = deps;
+
+  const MODULE_CONTEXT = 'chatUIEnhancements';
 
   const state = {
     initialized: false,

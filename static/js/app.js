@@ -100,10 +100,10 @@ if (!DependencySystem?.modules?.get) {
 import { createLogger } from './logger.js';
 
 const logger = createLogger({
-  context : 'App',
-  debug   : APP_CONFIG && APP_CONFIG.DEBUG === true,
+  context: 'App',
+  debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
   minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-  fetcher : browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null
+  fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null
 });
 DependencySystem.register('logger', logger);
 
@@ -334,8 +334,8 @@ DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
 domReadinessService
   .dependenciesAndElements({
     domSelectors: ['#modalsContainer'],
-    timeout : APP_CONFIG.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
-    context : 'app:injectModalsHtml'
+    timeout: APP_CONFIG.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
+    context: 'app:injectModalsHtml'
   })
   .then(() =>
     htmlTemplateLoader.loadTemplate({
@@ -425,7 +425,6 @@ function toggleLoadingSpinner(show) {
     }
   }
 }
-
 function createOrGetChatManager() {
   const existing = DependencySystem.modules.get('chatManager');
   if (existing) return existing;
@@ -567,9 +566,9 @@ export async function init() {
     /* ── Wait for critical DI modules via domReadinessService ─────────── */
     logStep('depsReady', 'pre');
     await domReadinessService.dependenciesAndElements({
-      deps    : ['auth', 'eventHandlers', 'modalManager'],
-      timeout : APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? PHASE_TIMEOUT,
-      context : 'app.init:depsReady'
+      deps: ['auth', 'eventHandlers', 'modalManager'],
+      timeout: APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? PHASE_TIMEOUT,
+      context: 'app.init:depsReady'
     });
     logStep('depsReady', 'post');
 
@@ -743,7 +742,8 @@ export async function init() {
                 }
                 return false;
               } catch (err) {
-                return false;
+                logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:hide' });
+                throw err;
               }
             }
           });
@@ -779,13 +779,8 @@ export async function init() {
     }
     return true;
   } catch (err) {
-    if (!globalInitTimeoutFired) {
-      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-      logger.error('[init]', err, { context: 'app:init', ts: Date.now() });
-      handleInitError(err);
-      fireAppReady(false, err);
-    }
-    return false;
+    logger.error('[init]', err, { context: 'app:init', ts: Date.now() });
+    throw err;
   } finally {
     _globalInitInProgress = false;
     appModule.setAppLifecycleState({
@@ -997,7 +992,8 @@ async function initializeCoreSystems() {
       await modalManager.init();
     } catch (err) {
       logger.error('[projectList:show]', err, { context: 'app:nav:projectList:show' });
-      return false;
+      logger.error('[initializeCoreSystems] Error in modalManager.init', err, { context: 'app:initializeCoreSystems:modalManager:init' });
+      throw err;
     }
   }
 
@@ -1053,13 +1049,13 @@ async function initializeUIComponents() {
       if (navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
     }
 
-if (navToggleBtn) {
-  eventHandlers.trackListener(
-    navToggleBtn, 'click',
-    safeHandler(() => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
-    { context: 'app:sidebar', description: 'toggleSidebar' }
-  );
-}
+    if (navToggleBtn) {
+      eventHandlers.trackListener(
+        navToggleBtn, 'click',
+        safeHandler(() => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
+        { context: 'app:sidebar', description: 'toggleSidebar' }
+      );
+    }
     if (closeSidebarBtn) {
       eventHandlers.trackListener(
         closeSidebarBtn, 'click',
@@ -1293,25 +1289,10 @@ if (navToggleBtn) {
   } catch (err) {
     if (logger && logger.error)
       logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
-    // Visibly banner error in UI
-    try {
-      const errorBanner = domAPI.getElementById('appInitError');
-      if (errorBanner) {
-        const errorBannerText = domAPI.getElementById('appInitErrorText');
-        if (errorBannerText) {
-          domAPI.setTextContent(
-            errorBannerText,
-            `Sidebar initialization failed: ${err?.message || err}`
-          );
-        }
-        domAPI.removeClass(errorBanner, 'hidden');
-      }
-    } catch (e) {
-      // Last-resort: console
-      if (logger && logger.error)
-        logger.error('[App] Failed to display sidebar error in banner', e && e.stack ? e.stack : e);
-    }
+    logger.error('[App] Sidebar init failed', err, { context: 'app:sidebar:init' });
+    throw err;
   }
+}
 
   // If authenticated, load projects. Read from canonical state.
   if (appModule.state.isAuthenticated) {
@@ -1336,7 +1317,6 @@ if (navToggleBtn) {
     }
   }
   _uiInitialized = true;
-}
 
 async function createAndRegisterUIComponents() {
   // Project Details Enhancements - Create and register visual improvements
@@ -1384,11 +1364,9 @@ async function createAndRegisterUIComponents() {
       });
     } catch (err) {
       logger.warn('[createAndRegisterUIComponents] KnowledgeBaseComponent creation failed; falling back to placeholder.', { context: 'app:createAndRegisterUIComponents', error: err?.message });
-      // Minimal placeholder to satisfy DI until real component can be instantiated by PDC later
-      knowledgeBaseComponentInstance = {
-        initialize: async () => { },
-        renderKnowledgeBaseInfo: () => { }
-      };
+      logger.error('[createAndRegisterUIComponents] KnowledgeBaseComponent creation failed', err, { context: 'app:createAndRegisterUIComponents:KnowledgeBaseComponent' });
+      logger.error('[createAndRegisterUIComponents] Error in createKnowledgeBaseComponent', err, { context: 'app:createAndRegisterUIComponents:createKnowledgeBaseComponent' });
+      throw err;
     }
     DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
   }
@@ -1483,11 +1461,12 @@ async function initializeAuthSystem() {
     renderAuthHeader(); // Ensure this renders based on the now canonical appModule.state (via local currentUser sync)
     return true;
   } catch (err) {
-    // If auth.init() fails, ensure canonical state reflects non-authenticated.
-    appModule.setAuthState({ isAuthenticated: false, currentUser: null });
+    if (logger && logger.error)
+      logger.error('[App] Sidebar init failed', err && err.stack ? err.stack : err);
+    logger.error('[App] Sidebar init failed', err, { context: 'app:sidebar:init' });
+    logger.error('[initializeUIComponents] Error in sidebarInstance init', err, { context: 'app:initializeUIComponents:sidebarInstance:init' });
     throw err;
   }
-}
 
 // ---------------------------------------------------------------------------
 // 18) Additional helpers
@@ -1507,7 +1486,7 @@ async function safeInit(instance, name, methodName) {
     return result === undefined ? true : !!result;
   } catch (err) {
     logger?.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `app:safeInit:${name}:${methodName}` });
-    return false;
+    throw err;
   }
 }
 
@@ -1708,7 +1687,7 @@ function setupChatInitializationTrigger() {
           });
         } catch (err) {
           logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
-          // Error handled silently
+          throw err;
         }
       }
     }, 'projectSelected/init chat'),
@@ -1810,7 +1789,12 @@ if (typeof window !== 'undefined') {
       // Fire app:ready with failure so external listeners are unblocked
       try {
         fireAppReady(false, err);
-      } catch (e) { /* no-op */ }
+    } catch (e) {
+      logger.error('[App] Failed to display sidebar error in banner', e && e.stack ? e.stack : e, { context: 'app:sidebar:errorBanner' });
+      logger.error('[app.js][bootstrap] Error in fireAppReady', e, { context: 'app:bootstrap:fireAppReady' });
+      throw e;
     }
+  }
   })();
+}
 }

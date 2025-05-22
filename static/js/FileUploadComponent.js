@@ -3,122 +3,114 @@
  * @description Handles file upload UI and logic for projects using strict Dependency Injection.
  * Manages drag-and-drop, file selection, validation, and upload progress display.
  *
- * @param {Object} options - Dependency Injection options.
- * @param {Object} options.app - Required. App core utilities (validateUUID).
- * @param {Object} options.eventHandlers - Required. Event listener management (trackListener).
- * @param {Object} options.projectManager - Required. Handles the actual file upload API calls.
- * @param {Object} options.domAPI - Required. DOM manipulation abstraction.
- * @param {Object} [options.scheduler] - Optional. Timing utilities (setTimeout, clearTimeout).
- * @param {string} [options.projectId] - Optional initial project ID.
- * @param {Function} [options.onUploadComplete] - Optional callback after uploads finish.
- * @param {Object} [options.elements] - Optional pre-resolved DOM element references.
- * @returns {FileUploadComponent} Instance of the component.
+ * @param {Object} deps - Dependency Injection options.
+ * @param {Object} deps.app - Required. App core utilities (validateUUID).
+ * @param {Object} deps.eventHandlers - Required. Event listener management (trackListener).
+ * @param {Object} deps.projectManager - Required. Handles the actual file upload API calls.
+ * @param {Object} deps.domAPI - Required. DOM manipulation abstraction.
+ * @param {Object} deps.logger - Required. Logging utility.
+ * @param {Object} [deps.domReadinessService] - Optional. DOM readiness service.
+ * @param {Object} [deps.scheduler] - Optional. Timing utilities (setTimeout, clearTimeout).
+ * @param {string} [deps.projectId] - Optional initial project ID.
+ * @param {Function} [deps.onUploadComplete] - Optional callback after uploads finish.
+ * @param {Object} [deps.elements] - Optional pre-resolved DOM element references.
+ * @returns {Object} FileUploadComponent API.
  */
 
-const MODULE_CONTEXT = "FileUploadComponentContext"; // P1-B: Define module context
+const MODULE_CONTEXT = "FileUploadComponentContext";
 
-export class FileUploadComponent {
-  /**
-   * @param {Object} options - Constructor options (see factory function JSDoc).
-   */
-  constructor(options = {}) {
-    // --- Dependency resolution & Validation (Guideline #2) ---
-    const getDep = (name, isRequired = true) => {
-      const dep = options[name];
-      if (isRequired && !dep) {
-        throw new Error(`[FileUploadComponent] Missing required dependency: ${name}`);
-      }
-      return dep;
-    };
+export function createFileUploadComponent({
+  app,
+  eventHandlers,
+  projectManager,
+  domAPI,
+  logger,
+  domReadinessService,
+  scheduler,
+  projectId,
+  onUploadComplete,
+  elements
+} = {}) {
+  // === Dependency validation block ===
+  if (!app) throw new Error("[FileUploadComponent] Missing app");
+  if (!eventHandlers) throw new Error("[FileUploadComponent] Missing eventHandlers");
+  if (!projectManager) throw new Error("[FileUploadComponent] Missing projectManager");
+  if (!domAPI) throw new Error("[FileUploadComponent] Missing domAPI");
+  if (!logger) throw new Error("[FileUploadComponent] Missing logger");
+  // domReadinessService and scheduler are optional
 
-    this.app = getDep('app');
-    this.eventHandlers = getDep('eventHandlers');
-    this.projectManager = getDep('projectManager');
-    this.domAPI = getDep('domAPI'); // Inject domAPI
-    this.domReadinessService = getDep('domReadinessService', false); // optional
+  // --- Configuration ---
+  const fileConstants = {
+    allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css', '.ini'],
+    maxSizeMB: 30
+  };
 
-    // Deterministic timers (DI-friendly)
-    this.scheduler = getDep('scheduler', false) || { setTimeout, clearTimeout }; // Optional dep
+  // --- Elements (Lookup via domAPI on init) ---
+  const _elements = {
+    fileInput: null, uploadBtn: null, dragZone: null,
+    uploadProgress: null, progressBar: null, uploadStatus: null,
+    selectors: {
+      fileInput: elements?.fileInput || '#fileInput',
+      uploadBtn: elements?.uploadBtn || '#uploadFileBtn',
+      dragZone: elements?.dragZone || '#dragDropZone',
+      uploadProgress: elements?.uploadProgress || '#filesUploadProgress',
+      progressBar: elements?.progressBar || '#fileProgressBar',
+      uploadStatus: elements?.uploadStatus || '#uploadStatus'
+    }
+  };
 
-    this.projectId = options.projectId || null;
-    this.onUploadComplete = options.onUploadComplete || (() => { });
+  let _projectId = projectId || null;
+  let _onUploadComplete = typeof onUploadComplete === 'function' ? onUploadComplete : () => {};
+  let uploadState = { total: 0, completed: 0, failed: 0 };
+  let _handlersBound = false;
 
-    // --- Configuration ---
-    this.fileConstants = {
-      allowedExtensions: ['.txt', '.md', '.csv', '.json', '.pdf', '.doc', '.docx', '.py', '.js', '.html', '.css', '.ini'],
-      maxSizeMB: 30
-    };
+  // Deterministic timers (DI-friendly)
+  const _scheduler = scheduler || { setTimeout, clearTimeout };
 
-    // --- Elements (Lookup via domAPI on init, Guideline #2) ---
-    this.elements = {
-      fileInput: null, uploadBtn: null, dragZone: null,
-      uploadProgress: null, progressBar: null, uploadStatus: null,
-      // Store selectors from options or use defaults
-      selectors: {
-        fileInput: options.elements?.fileInput || '#fileInput',
-        uploadBtn: options.elements?.uploadBtn || '#uploadFileBtn',
-        dragZone: options.elements?.dragZone || '#dragDropZone',
-        uploadProgress: options.elements?.uploadProgress || '#filesUploadProgress',
-        progressBar: options.elements?.progressBar || '#fileProgressBar',
-        uploadStatus: options.elements?.uploadStatus || '#uploadStatus'
-      }
-    };
+  // --- API Methods ---
 
-    this.uploadState = { total: 0, completed: 0, failed: 0 }; // Renamed from uploadStatus
-    this._handlersBound = false;
-    this._listeners = []; // Guideline #3: Internal tracking for cleanup
-
-    // Track listener cleanup (patchplan #4)
-    this._unsubs = [];
+  function setProjectId(pid) {
+    _projectId = pid;
   }
 
-  /**
-   * Set the current project ID for uploads.
-   * @param {string} projectId
-   */
-  setProjectId(projectId) {
-    this.projectId = projectId;
-  }
+  async function init() {
+    if (_handlersBound) return;
+    try {
+      if (domReadinessService) {
+        await domReadinessService.dependenciesAndElements({
+          domSelectors: Object.values(_elements.selectors),
+          context: MODULE_CONTEXT + '::init'
+        });
+      }
+      if (!_findElements()) {
+        logger.error('[FileUploadComponent] Required DOM elements not found', {
+          context: MODULE_CONTEXT, projectId: _projectId || 'unknown'
+        });
+        throw new Error('[FileUploadComponent] Initialization failed: required DOM elements not found');
+      }
+      _bindEvents();
+      _handlersBound = true;
 
-  /**
-   * Initialize component: Find elements, bind events.
-   * Should be called only when the DOM context (e.g., project details view) is ready.
-   */
-  async init() {
-    if (this._handlersBound) return;
-    if (this.domReadinessService) {
-      await this.domReadinessService.dependenciesAndElements({
-        domSelectors: Object.values(this.elements.selectors),
-        context : MODULE_CONTEXT + '::init'
-      });
-    }
-    if (!this._findElements()) {
-      const log = this.eventHandlers?.DependencySystem?.modules?.get?.('logger');
-      log?.error?.('[FileUploadComponent] Required DOM elements not found', {
-        context: MODULE_CONTEXT, projectId: this.projectId || 'unknown'
-      });
-      throw new Error('[FileUploadComponent] Initialization failed: required DOM elements not found');
-    }
-    this._bindEvents();
-    this._handlersBound = true;
-
-    // --- Standardized "fileuploadcomponent:initialized" event ---
-    const doc = this.domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-    if (doc) {
-      if (this.domAPI?.dispatchEvent) {
-        this.domAPI.dispatchEvent(doc,
-          new CustomEvent('fileuploadcomponent:initialized',
+      // Standardized "fileuploadcomponent:initialized" event
+      const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
+      if (doc) {
+        if (domAPI?.dispatchEvent) {
+          domAPI.dispatchEvent(doc,
+            new CustomEvent('fileuploadcomponent:initialized',
+              { detail: { success: true } }));
+        } else {
+          doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
             { detail: { success: true } }));
-      } else {
-        doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
-          { detail: { success: true } }));
+        }
       }
+    } catch (error) {
+      logger.error('[FileUploadComponent][init] Initialization failed', error, { context: MODULE_CONTEXT });
+      throw error;
     }
   }
 
-  /** Find elements using injected domAPI */
-  _findElements() {
-    const els = this.elements;
+  function _findElements() {
+    const els = _elements;
     const sources = els.selectors;
     const elementKeys = [
       'fileInput',
@@ -137,18 +129,14 @@ export class FileUploadComponent {
         value !== null &&
         typeof value.nodeType === "number"
       ) {
-        // It's a DOM element instance
         els[key] = value;
       } else if (typeof value === "string") {
-        // It's a selector
-        els[key] = this.domAPI.querySelector(value);
+        els[key] = domAPI.querySelector(value);
       } else {
-        // Unexpected type
         els[key] = null;
       }
     }
 
-    // Check if critical elements were found
     if (
       !(
         els.fileInput &&
@@ -164,48 +152,37 @@ export class FileUploadComponent {
     return true;
   }
 
-
-  /** Bind event listeners via eventHandlers (Guideline #3) */
-  _bindEvents() {
-    const { fileInput, uploadBtn, dragZone } = this.elements;
-    const EH = this.eventHandlers;
+  function _bindEvents() {
+    const { fileInput, uploadBtn, dragZone } = _elements;
+    const EH = eventHandlers;
 
     const track = (el, type, handler, description) => {
       if (!el) return;
-      // Use Guideline #3 pattern: track locally for specific component cleanup
-      const remover = EH.trackListener(el, type, handler, {
+      EH.trackListener(el, type, handler, {
         description: `FileUpload: ${description}`,
-        module: 'FileUploadComponent', // For logging/debug purposes in eventHandler
-        context: MODULE_CONTEXT // P1-B: Use defined context for cleanup
+        module: 'FileUploadComponent',
+        context: MODULE_CONTEXT
       });
-      // this._unsubs.push(remover); // No longer needed if relying on context cleanup
-      // Keep prior logic for full safety - actually, this is not needed if context cleanup is robust
-      // if (remover && typeof remover.remove === 'function') {
-      //   this._listeners.push(remover);
-      // } else {
-      //   this._listeners.push({ element: el, type, handler: handler, description });
-      // }
     };
 
-    // --- File input ---
-    track(fileInput, 'change', (e) => this._handleFileSelection(e), 'File Input Change');
+    // File input
+    track(fileInput, 'change', (e) => _handleFileSelection(e), 'File Input Change');
 
-    // --- Upload button ---
+    // Upload button
     track(uploadBtn, 'click', () => fileInput?.click(), 'Upload Button Click');
 
-    // --- Drag-n-drop ---
+    // Drag-n-drop
     if (dragZone) {
       ["dragenter", "dragover", "dragleave", "drop"].forEach(eventName => {
         track(dragZone, eventName, (e) => {
           e.preventDefault();
           e.stopPropagation();
-          // Use domAPI compatible classList access if needed, but direct is usually fine here
           if (eventName === 'dragenter' || eventName === 'dragover') {
             dragZone.classList.add('border-primary');
           } else {
             dragZone.classList.remove('border-primary');
             if (eventName === 'drop') {
-              this._handleFileDrop(e);
+              _handleFileDrop(e);
             }
           }
         }, `DragZone ${eventName}`);
@@ -214,114 +191,100 @@ export class FileUploadComponent {
     }
   }
 
-  /** Cleanup listeners (Guideline #3) */
-  destroy() {
-    if (this.eventHandlers && typeof this.eventHandlers.cleanupListeners === 'function') {
-      this.eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+  function destroy() {
+    if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+      eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
     }
-    this._handlersBound = false;
+    _handlersBound = false;
   }
 
-  /**
-   * Teardown listeners and refs (external compatible, Guideline #3)
-   */
-  cleanup() {
-    this.destroy();
+  function cleanup() {
+    destroy();
   }
 
-  /**
-   * TEMP alias – kept until all callers switch to .init().
-   * Delegates to .init() so old code keeps working.
-   */
-  initialize(...args) {
-    return this.init(...args);
+  function initialize(...args) {
+    return init(...args);
   }
 
-  /** @private */
-  _handleFileSelection(e) {
-    const files = e.target?.files; // Safely access files
+  function _handleFileSelection(e) {
+    const files = e.target?.files;
     if (!files || files.length === 0) return;
-    this._uploadFiles(files);
-    // Reset input so same file can be selected again
+    _uploadFiles(files);
     if (e.target) e.target.value = null;
   }
 
-  /** @private */
-  _handleFileDrop(e) {
+  function _handleFileDrop(e) {
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
-    this._uploadFiles(files);
+    _uploadFiles(files);
   }
 
-  /** Main upload flow (Guideline #4 for notifications) */
-  async _uploadFiles(files) {
-    const projectId = this.projectId || this.app.getProjectId?.();
-    if (!projectId || !this.app.validateUUID?.(projectId)) {
+  async function _uploadFiles(files) {
+    const pid = _projectId || app.getProjectId?.();
+    if (!pid || !app.validateUUID?.(pid)) {
+      logger.error('[FileUploadComponent][_uploadFiles] Invalid or missing projectId', { context: MODULE_CONTEXT });
       return;
     }
 
-    const { validFiles, invalidFiles } = this._validateFiles(files);
+    const { validFiles, invalidFiles } = _validateFiles(files);
 
     invalidFiles.forEach(({ file, error }) => {
+      logger.error('[FileUploadComponent][_uploadFiles] Invalid file', {
+        fileName: file?.name,
+        error,
+        context: MODULE_CONTEXT
+      });
     });
 
     if (validFiles.length === 0) {
       return;
     }
 
-    this._setupUploadProgress(validFiles.length);
+    _setupUploadProgress(validFiles.length);
 
     // Batching logic remains the same
     const BATCH_SIZE = 3;
     for (let i = 0; i < validFiles.length; i += BATCH_SIZE) {
       const batch = validFiles.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(file => this._uploadFile(projectId, file)));
+      await Promise.all(batch.map file => _uploadFile(pid, file)));
     }
 
-    // Check if onUploadComplete is a function before calling
-    if (typeof this.onUploadComplete === 'function') {
-      this.onUploadComplete();
+    if (typeof _onUploadComplete === 'function') {
+      _onUploadComplete();
     }
   }
 
-  /** Upload a single file (Guideline #4, #5) */
-  async _uploadFile(projectId, file) {
-    const { projectManager } = this;
-
+  async function _uploadFile(pid, file) {
     try {
       if (typeof projectManager.uploadFileWithRetry !== "function") {
         throw new Error('projectManager.uploadFileWithRetry function not available');
       }
-      // Use projectManager's method which should handle API calls and retries
-      await projectManager.uploadFileWithRetry(projectId, { file });
-
-      this._updateUploadProgress(1, 0);
+      await projectManager.uploadFileWithRetry(pid, { file });
+      _updateUploadProgress(1, 0);
     } catch (error) {
-      this._updateUploadProgress(0, 1);
+      logger.error('[FileUploadComponent][_uploadFile] Upload failed', error, {
+        fileName: file?.name,
+        context: MODULE_CONTEXT
+      });
+      _updateUploadProgress(0, 1);
     }
   }
 
-  /** File validation logic remains the same */
-  _validateFiles(files) {
-    const { allowedExtensions, maxSizeMB } = this.fileConstants;
+  function _validateFiles(files) {
+    const { allowedExtensions, maxSizeMB } = fileConstants;
     const validFiles = [];
     const invalidFiles = [];
-    // eslint-disable-next-line no-control-regex
     for (let file of files) {
-      // Basic sanitization - replace potentially problematic characters
-      // A more robust library might be needed for complex cases, but this covers common issues.
-      const sanitizedName = file.name.replace(/[<>:"/\\|?*#%\s\x00-\x1F\x7F]/g, '_'); // eslint-disable-line no-control-regex
-
+      const sanitizedName = file.name.replace(/[<>:"/\\|?*#%\s\u0000-\u001F\u007F]/g, '_');
       if (sanitizedName !== file.name) {
-        // Use a temporary File object with the sanitized name for validation checks
-        // Note: This doesn't change the actual File object being uploaded,
-        // the backend MUST perform its own robust sanitization.
-        // This client-side check is mainly for early feedback.
         try {
           const tempFile = new File([file], sanitizedName, { type: file.type });
-          file = tempFile; // Use the sanitized version for checks below
-        } catch {
-          // If File constructor fails (e.g., in older envs or due to name issues)
+          file = tempFile;
+        } catch (err) {
+          logger.error('[FileUploadComponent][_validateFiles] File name sanitization failed', err, {
+            fileName: file?.name,
+            context: MODULE_CONTEXT
+          });
           invalidFiles.push({ file: file, error: `Filename contains invalid characters` });
           continue;
         }
@@ -347,37 +310,34 @@ export class FileUploadComponent {
           error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`
         });
       } else {
-        validFiles.push(file); // Add the original file if valid
+        validFiles.push(file);
       }
     }
     return { validFiles, invalidFiles };
   }
 
-
-  /** Show initial progress */
-  _setupUploadProgress(total) {
-    this.uploadState = { total, completed: 0, failed: 0 };
-    const { uploadProgress, progressBar, uploadStatus: statusEl } = this.elements;
-    if (uploadProgress) this.domAPI.removeClass(uploadProgress, 'hidden');
+  function _setupUploadProgress(total) {
+    uploadState = { total, completed: 0, failed: 0 };
+    const { uploadProgress, progressBar, uploadStatus: statusEl } = _elements;
+    if (uploadProgress) domAPI.removeClass(uploadProgress, 'hidden');
     if (progressBar) {
-      this.domAPI.setProperty(progressBar, 'value', 0);
-      this.domAPI.setProperty(progressBar, 'max', 100); // Ensure max is set
-      this.domAPI.setProperty(progressBar, 'className', 'progress progress-info'); // Use daisyUI classes
+      domAPI.setProperty(progressBar, 'value', 0);
+      domAPI.setProperty(progressBar, 'max', 100);
+      domAPI.setProperty(progressBar, 'className', 'progress progress-info');
     }
-    if (statusEl) this.domAPI.setTextContent(statusEl, `Uploading 0/${total} files...`);
+    if (statusEl) domAPI.setTextContent(statusEl, `Uploading 0/${total} files...`);
   }
 
-  /** Update progress */
-  _updateUploadProgress(successCount, failedCount) {
-    this.uploadState.completed += successCount;
-    this.uploadState.failed += failedCount;
-    const { total, completed, failed } = this.uploadState;
-    const { progressBar, uploadStatus: statusEl, uploadProgress } = this.elements;
+  function _updateUploadProgress(successCount, failedCount) {
+    uploadState.completed += successCount;
+    uploadState.failed += failedCount;
+    const { total, completed, failed } = uploadState;
+    const { progressBar, uploadStatus: statusEl, uploadProgress } = _elements;
 
     const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     if (progressBar) {
-      this.domAPI.setProperty(progressBar, 'value', String(percent));
+      domAPI.setProperty(progressBar, 'value', String(percent));
 
       let newClassName = 'progress';
       if (failed > 0) {
@@ -387,22 +347,28 @@ export class FileUploadComponent {
       } else {
         newClassName += ' progress-info';
       }
-      this.domAPI.setProperty(progressBar, 'className', newClassName);
+      domAPI.setProperty(progressBar, 'className', newClassName);
     }
 
     if (statusEl) {
-      this.domAPI.setTextContent(statusEl, `Uploaded ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}.`);
+      domAPI.setTextContent(statusEl, `Uploaded ${completed}/${total} files${failed > 0 ? ` (${failed} failed)` : ''}.`);
     }
 
     if (completed === total && uploadProgress) {
-      // Delay hiding the upload progress bar to allow users to see the completion status before it disappears.
-      // This ensures the UI feedback is not too abrupt after the upload finishes.
-      this.scheduler.setTimeout(() => {
-        if (uploadProgress) this.domAPI.addClass(uploadProgress, 'hidden');
-      }, 2500); // Slightly longer delay
+      _scheduler.setTimeout(() => {
+        if (uploadProgress) domAPI.addClass(uploadProgress, 'hidden');
+      }, 2500);
     }
   }
 
+  // Expose API
+  return {
+    setProjectId,
+    init,
+    initialize,
+    destroy,
+    cleanup,
+    _handleFileSelection,
+    _handleFileDrop
+  };
 }
-
-export const createFileUploadComponent = (opts) => new FileUploadComponent(opts);

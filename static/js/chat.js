@@ -408,7 +408,7 @@ export function createChatManager(deps = {}) {
         this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
         return false;
       }
-      
+
       // Update the current conversation ID in token stats manager
       const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
       if (tokenStatsManager?.fetchConversationTokenStats) {
@@ -451,7 +451,7 @@ export function createChatManager(deps = {}) {
           }
           this._renderMessages(messages);
           this._updateURLWithConversationId(conversationId);
-          
+
           // Update token stats for loaded conversation
           const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
           if (tokenStatsManager?.fetchConversationTokenStats) {
@@ -637,13 +637,13 @@ export function createChatManager(deps = {}) {
         try {
           const response = await this._sendMessageToAPI(messageText, abortSignal);
           this._processAssistantResponse(response);
-          
+
           // Update token stats for the conversation after sending a message
           const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
           if (tokenStatsManager?.fetchConversationTokenStats && this.currentConversationId) {
             tokenStatsManager.fetchConversationTokenStats(this.currentConversationId);
           }
-          
+
           return response.data;
         } catch (error) {
           logger.error("[ChatManager][sending message]", error, { context: "chatManager" });
@@ -1134,42 +1134,43 @@ export function createChatManager(deps = {}) {
   // --- Live Token Estimation Logic ---
   // Add debounced event listener to input field after UI setup
   // (called from initialize or _setupUIElements)
-  instance._estimateCurrentInputTokens = async function () {
-    // Only proceed if inputField, projectId, currentConversationId are set
-    if (!this.inputField || !this.projectId || !this.currentConversationId) return;
-    const currentInputText = this.inputField.value;
-    if (!currentInputText.trim()) {
-      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
-      if (liveTokenCountEl) liveTokenCountEl.textContent = "0";
-      // Update token stats manager if available
-      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
-      if (tokenStatsManager?.setInputTokenCount) {
-        tokenStatsManager.setInputTokenCount(0);
+    instance._estimateCurrentInputTokens = async function () {
+      // Only proceed if inputField, projectId, currentConversationId are set
+      if (!this.inputField || !this.projectId || !this.currentConversationId) return;
+      const currentInputText = this.inputField.value;
+      if (!currentInputText.trim()) {
+        const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+        if (liveTokenCountEl) liveTokenCountEl.textContent = "0";
+        // Update token stats manager if available
+        const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+        if (tokenStatsManager?.setInputTokenCount) {
+          tokenStatsManager.setInputTokenCount(0);
+        }
+        return;
       }
-      return;
-    }
-    // Debounced call to backend endpoint for token estimation
-    try {
-      const resp = await this.apiRequest(
-        `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/estimate-tokens`,
-        { method: "POST", body: { current_input: currentInputText } }
-      );
-      const est = (resp && resp.estimated_tokens_for_input !== undefined)
-        ? resp.estimated_tokens_for_input
-        : (resp && resp.data && resp.data.estimated_tokens_for_input) || null;
-      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
-      if (liveTokenCountEl && est !== null) liveTokenCountEl.textContent = String(est);
-      
-      // Update token stats manager if available
-      const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
-      if (tokenStatsManager?.setInputTokenCount && est !== null) {
-        tokenStatsManager.setInputTokenCount(est);
+      // Debounced call to backend endpoint for token estimation
+      try {
+        const resp = await this.apiRequest(
+          `/api/projects/${this.projectId}/conversations/${this.currentConversationId}/estimate-tokens`,
+          { method: "POST", body: { current_input: currentInputText } }
+        );
+        const est = (resp && resp.estimated_tokens_for_input !== undefined)
+          ? resp.estimated_tokens_for_input
+          : (resp && resp.data && resp.data.estimated_tokens_for_input) || null;
+        const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+        if (liveTokenCountEl && est !== null) liveTokenCountEl.textContent = String(est);
+
+        // Update token stats manager if available
+        const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
+        if (tokenStatsManager?.setInputTokenCount && est !== null) {
+          tokenStatsManager.setInputTokenCount(est);
+        }
+      } catch (e) {
+        logger.error("[ChatManager][_estimateCurrentInputTokens] Token estimation failed", e, { context: "chatManager" });
+        const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
+        if (liveTokenCountEl) liveTokenCountEl.textContent = "N/A";
       }
-    } catch (e) {
-      const liveTokenCountEl = this.domAPI.getElementById && this.domAPI.getElementById('liveTokenCount');
-      if (liveTokenCountEl) liveTokenCountEl.textContent = "N/A";
-    }
-  };
+    };
 
   // Attach debounced token estimator to chat input after UI is ready
   const addLiveTokenEstimationListener = (managerInstance) => {
@@ -1185,7 +1186,11 @@ export function createChatManager(deps = {}) {
         managerInstance.inputField.addEventListener("input", function () {
           clearTimeout(debounceTimeout);
           debounceTimeout = setTimeout(() => {
-            managerInstance._estimateCurrentInputTokens();
+            try {
+              managerInstance._estimateCurrentInputTokens();
+            } catch (e) {
+              logger.error("[ChatManager][addLiveTokenEstimationListener] Debounced estimation failed", e, { context: "chatManager" });
+            }
           }, 400);
         });
         managerInstance._liveTokenListenerAttached = true;

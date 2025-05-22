@@ -34,27 +34,35 @@ export function createAccessibilityEnhancements({
   createDebugTools,
   errorReporter
 }) {
-  // For static check: immediately reference all DI params so linter detects usage.
-  if (!logger) { throw new Error('Logger is required as DI param'); }
-  if (!domReadinessService) { throw new Error('domReadinessService required as DI param'); }
+  // Factory-level dependency validation (must be at the very top)
+  if (!logger) throw new Error('Missing required dependency: logger');
+  if (!domReadinessService) throw new Error('Missing required dependency: domReadinessService');
+  if (!domAPI) throw new Error('Missing required dependency: domAPI');
+  if (!eventHandlers) throw new Error('Missing required dependency: eventHandlers');
 
   const MODULE_CONTEXT = 'accessibilityUtils';
 
-  // Factory-level dependency validation
-  if (!domAPI || typeof domAPI.getElementById !== 'function' || typeof domAPI.getDocument !== 'function') {
-    throw new Error('domAPI with core methods (getElementById, getDocument) required.');
-  }
-  if (!eventHandlers || typeof eventHandlers.trackListener !== 'function' ||
-      typeof eventHandlers.cleanupListeners !== 'function') {
-    throw new Error('eventHandlers with trackListener and cleanupListeners required.');
-  }
-  if (!logger || typeof logger.error !== 'function' || typeof logger.info !== 'function') {
+  // Validate logger and domReadinessService methods
+  if (typeof logger.error !== 'function' || typeof logger.info !== 'function') {
     throw new Error('DI logger with .error/.info must be provided.');
   }
-  if (!domReadinessService ||
-      typeof domReadinessService.waitForEvent !== 'function' ||
-      typeof domReadinessService.dependenciesAndElements !== 'function') {
+  if (
+    typeof domReadinessService.waitForEvent !== 'function' ||
+    typeof domReadinessService.dependenciesAndElements !== 'function'
+  ) {
     throw new Error('domReadinessService DI with waitForEvent/dependenciesAndElements required.');
+  }
+  if (
+    typeof domAPI.getElementById !== 'function' ||
+    typeof domAPI.getDocument !== 'function'
+  ) {
+    throw new Error('domAPI with core methods (getElementById, getDocument) required.');
+  }
+  if (
+    typeof eventHandlers.trackListener !== 'function' ||
+    typeof eventHandlers.cleanupListeners !== 'function'
+  ) {
+    throw new Error('eventHandlers with trackListener and cleanupListeners required.');
   }
   if (typeof domAPI.getComputedStyle !== 'function') {
     throw new Error('domAPI.getComputedStyle must be provided via DI; no fallback to window allowed.');
