@@ -289,7 +289,7 @@ function createProjectDetailsEnhancements(deps) {
 
               // Update icon based on tab
               if (tabToIconMap[tabId]) {
-                fab.innerHTML = sanitizer.sanitize(tabToIconMap[tabId]);
+                domAPI.setInnerHTML(fab, sanitizer.sanitize(tabToIconMap[tabId]));
               }
 
               // Update title/aria-label based on tab

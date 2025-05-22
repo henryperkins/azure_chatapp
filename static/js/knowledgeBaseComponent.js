@@ -442,12 +442,12 @@ export function createKnowledgeBaseComponent(options = {}) {
         this.eventHandlers.trackListener(
           btn,
           'click',
-          () => this.domAPI.removeChild(alertDiv, btn),
+          () => this.domAPI.removeChild(statusIndicator, alertDiv),
           { context: MODULE, description: 'dismissStatusAlert' }
         );
-        alertDiv.appendChild(btn);
+        this.domAPI.appendChild(alertDiv, btn);
       }
-      statusIndicator.appendChild(alertDiv);
+      this.domAPI.appendChild(statusIndicator, alertDiv);
     }
 
     _debounce(fn, wait) {
