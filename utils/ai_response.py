@@ -31,7 +31,7 @@ class AIResponseOptions:
     temperature: Optional[float] = None
     extra_params: dict[str, Any] = field(default_factory=dict)
 
-    def to_api_dict(self) -> dict[str, Any]:
+    def to_api_dict(self, force_reasoning_for_model: Optional[str] = None) -> dict[str, Any]:
         d = {
             "image_data"               : self.image_data,
             "vision_detail"            : self.vision_detail,
@@ -44,6 +44,12 @@ class AIResponseOptions:
             "temperature"              : self.temperature,
             **self.extra_params,
         }
+        # Inject reasoning param for o-series models if requested
+        if force_reasoning_for_model and (force_reasoning_for_model.startswith("o") or "o" in force_reasoning_for_model):
+            d["reasoning"] = {
+                "effort": self.reasoning_effort or "medium",
+                "summary": "detailed"
+            }
         # strip Nones
         return {k: v for k, v in d.items() if v is not None}
 
@@ -124,11 +130,11 @@ async def generate_ai_response(
             except Exception as e:
                 logger.error(f"Failed to inject knowledge context: {e}")
 
-    # Prepare API parameters
+    # Prepare API parameters (inject reasoning for o-series models)
     api_params: dict[str, Any] = {
         "messages": final_messages,
         "model_name": str(model_id),
-        **opts.to_api_dict(),
+        **opts.to_api_dict(force_reasoning_for_model=model_id),
     }
 
     stream = opts.stream
@@ -287,14 +293,10 @@ async def generate_ai_response(
         completion_tokens = (
             response_usage.get("completion_tokens", 0) if response_usage else 0
         )
-        reasoning_tokens = (
-            response_usage.get("reasoning_tokens", 0) if response_usage else 0
-        )
-        total_used = completion_tokens + reasoning_tokens
+        # reasoning_tokens assignment removed: unused
 
         if not response_usage and assistant_content:
             completion_tokens = count_tokens_text(assistant_content, model_id)
-            total_used = completion_tokens
             logger.warning(
                 f"API response missing usage data for model {model_id}. "
                 f"Estimated completion tokens: {completion_tokens}"

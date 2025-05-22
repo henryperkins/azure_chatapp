@@ -9,14 +9,11 @@ from typing import List, Optional, Any, AsyncGenerator, Union
 
 import httpx
 from fastapi import HTTPException
-from sentry_sdk import (
-    start_transaction,
-    capture_exception,
-    metrics
-)
+from sentry_sdk import start_transaction, capture_exception, metrics
 
 # Reuse central registry helpers
 from utils.model_registry import get_model_config as _central_get_model_config
+
 # Re-use the *generic* parameter validator and token counters
 from utils.model_registry import validate_model_and_params as _validate_model_params
 from utils.tokens import count_tokens_messages
@@ -27,26 +24,37 @@ logger = logging.getLogger(__name__)
 
 # Replace or supplement these with environment-based sampling if desired
 OPENAI_SAMPLE_RATE = 0.5  # 50% sampling for top-level calls
-AZURE_SAMPLE_RATE = 1.0    # Always sample Azure calls
-CLAUDE_SAMPLE_RATE = 1.0   # Always sample Claude calls
+AZURE_SAMPLE_RATE = 1.0  # Always sample Azure calls
+CLAUDE_SAMPLE_RATE = 1.0  # Always sample Claude calls
 
 # -----------------------------
 # Model Config Helpers
 # -----------------------------
 
+def is_reasoning_model(model_name: str) -> bool:
+    # Recognize o-series and gpt-4.x, o3, o4-mini, gpt-4.1, etc.
+    name = model_name.lower()
+    return (
+        name.startswith("o")
+        or name.startswith("gpt-4.1")
+        or "o3" in name
+        or "o4" in name
+        or "o4-mini" in name
+        or "reasoning" in name
+    )
 
 def get_azure_api_version(model_config: dict[str, Any]) -> str:
     """Get the Azure API version from model config or fallback to default."""
     return model_config.get("api_version", settings.AZURE_DEFAULT_API_VERSION)
 
+
 # -----------------------------
 # Unified Chat Entry Point
 # -----------------------------
 
+
 async def openai_chat(
-    messages: List[dict[str, Any]],
-    model_name: str,
-    **kwargs
+    messages: List[dict[str, Any]], model_name: str, **kwargs
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """
     Route to the appropriate provider handler based on the model_name.
@@ -55,7 +63,7 @@ async def openai_chat(
     transaction = start_transaction(
         op="ai",
         name=f"OpenAI Chat - {model_name}",
-        sampled=random.random() < OPENAI_SAMPLE_RATE
+        sampled=random.random() < OPENAI_SAMPLE_RATE,
     )
 
     try:
@@ -71,10 +79,12 @@ async def openai_chat(
             # Retrieve model config
             model_config = _central_get_model_config(model_name, settings)
             if not model_config:
-                supported = list(settings.AZURE_OPENAI_MODELS.keys()) + list(settings.CLAUDE_MODELS.keys())
+                supported = list(settings.AZURE_OPENAI_MODELS.keys()) + list(
+                    settings.CLAUDE_MODELS.keys()
+                )
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Unsupported model: {model_name}. Valid: {supported}"
+                    detail=f"Unsupported model: {model_name}. Valid: {supported}",
                 )
             transaction.set_tag("ai.provider", model_config.get("provider"))
 
@@ -87,7 +97,7 @@ async def openai_chat(
             else:
                 raise HTTPException(
                     status_code=500,
-                    detail=f"Unknown provider '{provider}' for model {model_name}"
+                    detail=f"Unknown provider '{provider}' for model {model_name}",
                 )
 
             # Record success metrics
@@ -96,7 +106,7 @@ async def openai_chat(
                 "ai.request.duration",
                 duration_ms,
                 unit="millisecond",
-                tags={"model": model_name, "provider": provider or "unknown"}
+                tags={"model": model_name, "provider": provider or "unknown"},
             )
 
             return result
@@ -104,34 +114,37 @@ async def openai_chat(
     except HTTPException as http_exc:
         transaction.set_tag("error.type", "http")
         transaction.set_data("status_code", http_exc.status_code)
-        metrics.incr("ai.request.failure", tags={
-            "model": model_name,
-            "reason": "http_error",
-            "status_code": http_exc.status_code
-        })
+        metrics.incr(
+            "ai.request.failure",
+            tags={
+                "model": model_name,
+                "reason": "http_error",
+                "status_code": http_exc.status_code,
+            },
+        )
         raise
     except Exception as e:
         transaction.set_tag("error", True)
         capture_exception(e)
-        metrics.incr("ai.request.failure", tags={
-            "model": model_name,
-            "reason": "exception"
-        })
+        metrics.incr(
+            "ai.request.failure", tags={"model": model_name, "reason": "exception"}
+        )
         logger.error(f"Unified conversation error: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"AI request failed: {str(e)}"
+            status_code=500, detail=f"AI request failed: {str(e)}"
         ) from e
+
 
 # -----------------------------
 # Azure Chat Handler
 # -----------------------------
 
+
 async def azure_chat(
     messages: List[dict[str, Any]],
     model_name: str,
     model_config: dict[str, Any],
-    **kwargs
+    **kwargs,
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """
     Handle Azure OpenAI chat or responses API calls with Sentry-based monitoring.
@@ -139,7 +152,7 @@ async def azure_chat(
     transaction = start_transaction(
         op="ai.azure",
         name=f"Azure Chat - {model_name}",
-        sampled=random.random() < AZURE_SAMPLE_RATE
+        sampled=random.random() < AZURE_SAMPLE_RATE,
     )
 
     # Define which models must use the responses API.
@@ -155,34 +168,44 @@ async def azure_chat(
             # Branch: decide which API to use for this model
             if model_name in RESPONSES_API_MODELS:
                 # -- Use Azure Responses API for o3 and gpt-4.1 --
-                payload = build_azure_payload(messages, model_name, model_config, **kwargs)
+                payload = build_azure_payload(
+                    messages, model_name, model_config, **kwargs
+                )
                 api_version = get_azure_api_version(model_config)
                 transaction.set_tag("azure.api_version", api_version)
-                resp_data = await _send_azure_responses_request(payload, model_name, api_version)
+                resp_data = await _send_azure_responses_request(
+                    payload, model_name, api_version
+                )
                 return resp_data
             else:
                 # -- Use Chat Completions API (original path) --
-                payload = build_azure_payload(messages, model_name, model_config, **kwargs)
+                payload = build_azure_payload(
+                    messages, model_name, model_config, **kwargs
+                )
                 api_version = get_azure_api_version(model_config)
                 transaction.set_tag("azure.api_version", api_version)
-                if kwargs.get("stream") and "streaming" in model_config.get("capabilities", []):
+                if kwargs.get("stream") and "streaming" in model_config.get(
+                    "capabilities", []
+                ):
                     return _stream_azure_response(payload, model_name, api_version)
                 else:
-                    response = await _send_azure_request(payload, model_name, api_version)
+                    response = await _send_azure_request(
+                        payload, model_name, api_version
+                    )
                     # Check usage
                     if response.get("usage"):
                         if "completion_tokens" in response["usage"]:
                             metrics.distribution(
                                 "ai.azure.completion_tokens",
                                 response["usage"]["completion_tokens"],
-                                tags={"model": model_name}
+                                tags={"model": model_name},
                             )
                         # Reasoning tokens for advanced capability
                         if response["usage"].get("reasoning_tokens"):
                             metrics.distribution(
                                 "ai.azure.reasoning_tokens",
                                 response["usage"]["reasoning_tokens"],
-                                tags={"model": model_name}
+                                tags={"model": model_name},
                             )
                     return response
 
@@ -193,7 +216,9 @@ async def azure_chat(
         logger.error(f"Azure chat error ({model_name}): {str(e)}")
         raise
 
+
 # --- RESPONSES API SUPPORT ---
+
 
 async def _send_azure_responses_request(
     payload: dict[str, Any],
@@ -204,14 +229,11 @@ async def _send_azure_responses_request(
     Call the Azure OpenAI Responses API endpoint (for o3, gpt-4.1).
     """
     if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Azure configuration missing"
-        )
+        raise HTTPException(status_code=500, detail="Azure configuration missing")
     url = f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/responses?api-version={api_version}"
     headers = {
         "Content-Type": "application/json",
-        "api-key": settings.AZURE_OPENAI_API_KEY
+        "api-key": settings.AZURE_OPENAI_API_KEY,
     }
 
     # Required fields for responses API
@@ -225,7 +247,7 @@ async def _send_azure_responses_request(
 
     # Max output tokens mapping for o3 (and future models)
     # If present, remap max_completion_tokens to max_output_tokens for model 'o3'
-    if model_name.startswith('o3'):
+    if model_name.startswith("o3"):
         mct = payload.get("max_completion_tokens")
         if mct is not None:
             responses_payload["max_output_tokens"] = mct
@@ -241,24 +263,53 @@ async def _send_azure_responses_request(
 
     # Better logging with pretty print for debugging
     import json
-    logger.debug(f"Responses API request to {url} with payload: {json.dumps(responses_payload, indent=2)}")
+
+    logger.debug(
+        f"Responses API request to {url} with payload: {json.dumps(responses_payload, indent=2)}"
+    )
 
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url,
-                json=responses_payload,
-                headers=headers,
-                timeout=120
+                url, json=responses_payload, headers=headers, timeout=120
             )
             response.raise_for_status()
             data = response.json()
+            # --- Reasoning output extraction for Responses API ---
+            if data.get("object") == "response" and "output" in data:
+                output_items = data["output"]
+                # Extract assistant message
+                message_item = next((item for item in output_items if item.get("type") == "message"), None)
+                message_text = None
+                if message_item and "content" in message_item:
+                    output_text_block = next((block for block in message_item.get("content", []) if block.get("type") == "output_text"), None)
+                    if output_text_block:
+                        message_text = output_text_block.get("text", "")
+                # Extract summary/reasoning chain
+                reasoning_item = next((item for item in output_items if item.get("type") == "reasoning"), None)
+                reasoning_summary = None
+                if reasoning_item and "summary" in reasoning_item:
+                    summary_texts = [s.get("text") for s in reasoning_item.get("summary", []) if s.get("text")]
+                    if summary_texts:
+                        reasoning_summary = "\n".join(summary_texts)
+                # Usage
+                usage = data.get("usage", {})
+                reasoning_tokens = None
+                if usage.get("output_tokens_details"):
+                    reasoning_tokens = usage.get("output_tokens_details", {}).get("reasoning_tokens")
+                # Expose these as additional structured fields
+                return {
+                    "assistant_content": message_text,
+                    "reasoning_summary": reasoning_summary,
+                    "usage": usage,
+                    "reasoning_tokens": reasoning_tokens,
+                    "raw_response": data,  # preserve original for downstream
+                }
             return data
     except httpx.RequestError as e:
         logger.error(f"Azure Responses API request error: {str(e)}")
         raise HTTPException(
-            status_code=503,
-            detail="Unable to reach Azure OpenAI Responses API"
+            status_code=503, detail="Unable to reach Azure OpenAI Responses API"
         ) from e
     except httpx.HTTPStatusError as e:
         detail = f"Azure Responses API request failed ({e.response.status_code})"
@@ -271,19 +322,21 @@ async def _send_azure_responses_request(
         logger.error(detail)
         raise HTTPException(status_code=e.response.status_code, detail=detail) from e
 
+
 # -----------------------------
 # Azure Parameter Validation
 # -----------------------------
 
+
 async def validate_azure_params(
-    model_name: str,
-    model_config: dict[str, Any],
-    kwargs: dict
+    model_name: str, model_config: dict[str, Any], kwargs: dict
 ) -> None:
     """Validate Azure-specific parameters.
     Runs the generic validator first, then applies Azure-only rules
     (markdown formatting & reasoning-summary)."""
-    with sentry_span(op="ai.azure.validate_params", description="Validate Azure Chat Params"):
+    with sentry_span(
+        op="ai.azure.validate_params", description="Validate Azure Chat Params"
+    ):
         # ---------------- Generic validation ----------------
         try:
             _validate_model_params(model_name, kwargs)
@@ -294,27 +347,36 @@ async def validate_azure_params(
         capabilities = model_config.get("capabilities", [])
         parameters_config = model_config.get("parameters", {})
 
-        if kwargs.get("enable_markdown_formatting") and "markdown_formatting" not in capabilities:
+        if (
+            kwargs.get("enable_markdown_formatting")
+            and "markdown_formatting" not in capabilities
+        ):
             raise ValueError(f"{model_name} doesn't support markdown formatting")
 
         # Reasoning summary support (o-series / Responses API)
         # The parameter may be named reasoning_summary (external) or summary (API).
         reasoning_summary = kwargs.get("reasoning_summary") or kwargs.get("summary")
         if reasoning_summary:
-            if "reasoning_summary" not in capabilities and "reasoning" not in capabilities:
+            if (
+                "reasoning_summary" not in capabilities
+                and "reasoning" not in capabilities
+            ):
                 raise ValueError(f"{model_name} doesn't support reasoning summaries.")
-            valid_summaries = parameters_config.get("reasoning_summary", []) or parameters_config.get("reasoning_summary_values", [])
+            valid_summaries = parameters_config.get(
+                "reasoning_summary", []
+            ) or parameters_config.get("reasoning_summary_values", [])
             # Azure spec uses 'concise' and 'detailed', check against config if defined
             if valid_summaries and reasoning_summary not in valid_summaries:
                 raise ValueError(
                     f"Invalid reasoning_summary '{reasoning_summary}', must be one of {valid_summaries}"
                 )
 
+
 def build_azure_payload(
     messages: List[dict[str, Any]],
     model_name: str,
     model_config: dict[str, Any],
-    **kwargs
+    **kwargs,
 ) -> dict[str, Any]:
     """
     Construct the Azure request payload with error handling and default logic.
@@ -334,7 +396,8 @@ def build_azure_payload(
         if model_max_completion is not None:
             payload["max_completion_tokens"] = (
                 min(client_max_tokens, model_max_completion)
-                if client_max_tokens else model_max_completion
+                if client_max_tokens
+                else model_max_completion
             )
             # Do NOT send max_tokens if max_completion_tokens is supported
             payload.pop("max_tokens", None)
@@ -360,27 +423,26 @@ def build_azure_payload(
         # Similarly handle top_p, presence_penalty, frequency_penalty, etc.
 
         # Markdown formatting
-        if kwargs.get("enable_markdown_formatting") and \
-           "markdown_formatting" in model_config.get("capabilities", []):
+        if kwargs.get(
+            "enable_markdown_formatting"
+        ) and "markdown_formatting" in model_config.get("capabilities", []):
             payload["enable_markdown_formatting"] = True
 
-        # Reasoning (o-series/response APIs): nest effort/summary per API spec
-        reasoning_effort = kwargs.get("reasoning_effort")
-        reasoning_summary = kwargs.get("reasoning_summary") or kwargs.get("summary")
-        reasoning_obj = {}
-        if reasoning_effort and "reasoning_effort" in model_config.get("capabilities", []):
-            reasoning_obj["effort"] = reasoning_effort
-        if reasoning_summary:
-            reasoning_obj["summary"] = reasoning_summary
-        if reasoning_obj:
-            payload["reasoning"] = reasoning_obj
+        # Reasoning: always inject for reasoning models (o-series, gpt-4.1, etc)
+        if is_reasoning_model(model_name):
+            payload["reasoning"] = {
+                "effort": kwargs.get("reasoning_effort", "medium"),
+                "summary": kwargs.get("reasoning_summary") or kwargs.get("summary") or "detailed"
+            }
 
         # Vision
-        if kwargs.get("image_data") and "vision" in model_config.get("capabilities", []):
+        if kwargs.get("image_data") and "vision" in model_config.get(
+            "capabilities", []
+        ):
             payload["messages"] = process_vision_messages(
                 payload["messages"],
                 kwargs["image_data"],
-                kwargs.get("vision_detail", "auto")
+                kwargs.get("vision_detail", "auto"),
             )
 
         # Streaming
@@ -395,10 +457,11 @@ def build_azure_payload(
 
         return payload
 
+
 def process_vision_messages(
     messages: List[dict[str, Any]],
     image_data: Union[str, List[str]],
-    vision_detail: str = "auto"
+    vision_detail: str = "auto",
 ) -> List[dict[str, Any]]:
     """
     Insert images into the last user message for Azure vision models.
@@ -424,15 +487,18 @@ def process_vision_messages(
     for img_data in images_to_process:
         base64_str = extract_base64_data(img_data)
         if base64_str:
-            user_msg["content"].append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{base64_str}",
-                    "detail": vision_detail
+            user_msg["content"].append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_str}",
+                        "detail": vision_detail,
+                    },
                 }
-            })
+            )
     messages[last_user_index] = user_msg
     return messages
+
 
 def extract_base64_data(image_data: str) -> Optional[str]:
     """Extract base64 data from a data URI or raw base64 string."""
@@ -446,23 +512,19 @@ def extract_base64_data(image_data: str) -> Optional[str]:
     logger.warning("Could not parse base64 data from image_data.")
     return None
 
+
 async def _send_azure_request(
-    payload: dict[str, Any],
-    model_name: str,
-    api_version: str
+    payload: dict[str, Any], model_name: str, api_version: str
 ) -> dict[str, Any]:
     """Send non-streaming Azure request with Sentry context."""
     if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Azure configuration missing"
-        )
+        raise HTTPException(status_code=500, detail="Azure configuration missing")
 
     deployment_name = model_name
     url = f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/deployments/{deployment_name}/chat/completions?api-version={api_version}"
     headers = {
         "Content-Type": "application/json",
-        "api-key": settings.AZURE_OPENAI_API_KEY
+        "api-key": settings.AZURE_OPENAI_API_KEY,
     }
 
     logger.debug(f"Azure request to {url} with payload: {payload}")
@@ -470,10 +532,7 @@ async def _send_azure_request(
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=120
+                url, json=payload, headers=headers, timeout=120
             )
             response.raise_for_status()
             data = response.json()
@@ -482,8 +541,7 @@ async def _send_azure_request(
     except httpx.RequestError as e:
         logger.error(f"Azure request error: {str(e)}")
         raise HTTPException(
-            status_code=503,
-            detail="Unable to reach Azure OpenAI service"
+            status_code=503, detail="Unable to reach Azure OpenAI service"
         ) from e
     except httpx.HTTPStatusError as e:
         detail = f"Azure request failed ({e.response.status_code})"
@@ -496,30 +554,28 @@ async def _send_azure_request(
         logger.error(detail)
         raise HTTPException(status_code=e.response.status_code, detail=detail) from e
 
+
 async def _stream_azure_response(
-    payload: dict[str, Any],
-    model_name: str,
-    api_version: str
+    payload: dict[str, Any], model_name: str, api_version: str
 ) -> AsyncGenerator[bytes, None]:
     """Handle streaming Azure responses via an async generator."""
     if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="Azure configuration missing"
-        )
+        raise HTTPException(status_code=500, detail="Azure configuration missing")
 
     deployment_name = model_name
     url = f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/openai/deployments/{deployment_name}/chat/completions?api-version={api_version}"
     headers = {
         "Content-Type": "application/json",
-        "api-key": settings.AZURE_OPENAI_API_KEY
+        "api-key": settings.AZURE_OPENAI_API_KEY,
     }
 
     logger.debug(f"Streaming Azure request to {url} with payload: {payload}")
 
     try:
         async with httpx.AsyncClient() as client:
-            async with client.stream("POST", url, json=payload, headers=headers, timeout=180) as resp:
+            async with client.stream(
+                "POST", url, json=payload, headers=headers, timeout=180
+            ) as resp:
                 resp.raise_for_status()
                 async for chunk in resp.aiter_bytes():
                     yield chunk
@@ -527,25 +583,31 @@ async def _stream_azure_response(
         logger.error(f"Error streaming from Azure OpenAI: {str(e)}")
         raise RuntimeError(f"Unable to stream from Azure: {e}") from e
     except httpx.HTTPStatusError as e:
-        logger.error(f"Streaming HTTP error {e.response.status_code}: {e.response.text}")
-        detail = f"Azure streaming error: {e.response.status_code} - {e.response.text[:200]}"
+        logger.error(
+            f"Streaming HTTP error {e.response.status_code}: {e.response.text}"
+        )
+        detail = (
+            f"Azure streaming error: {e.response.status_code} - {e.response.text[:200]}"
+        )
         raise RuntimeError(detail) from e
+
 
 # -----------------------------
 # Claude Chat Handler
 # -----------------------------
 
+
 async def claude_chat(
     messages: List[dict[str, Any]],
     model_name: str,
     model_config: dict[str, Any],
-    **kwargs
+    **kwargs,
 ) -> Union[dict[str, Any], AsyncGenerator[bytes, None]]:
     """Handle Claude requests with Sentry-based tracing."""
     transaction = start_transaction(
         op="ai.claude",
         name=f"Claude Chat - {model_name}",
-        sampled=random.random() < CLAUDE_SAMPLE_RATE
+        sampled=random.random() < CLAUDE_SAMPLE_RATE,
     )
     try:
         with transaction:
@@ -577,7 +639,7 @@ async def claude_chat(
                         settings.CLAUDE_BASE_URL,
                         json=payload,
                         headers=headers,
-                        timeout=120
+                        timeout=120,
                     )
                     response.raise_for_status()
                     response_data = response.json()
@@ -587,11 +649,12 @@ async def claude_chat(
         transaction.set_tag("error", True)
         capture_exception(e)
         raise HTTPException(
-            status_code=503,
-            detail="Unable to reach Claude service"
+            status_code=503, detail="Unable to reach Claude service"
         ) from e
     except httpx.HTTPStatusError as e:
-        detail = f"Claude request failed ({e.response.status_code}): {e.response.text[:200]}"
+        detail = (
+            f"Claude request failed ({e.response.status_code}): {e.response.text[:200]}"
+        )
         transaction.set_tag("error", True)
         capture_exception(e)
         raise HTTPException(e.response.status_code, detail=detail) from e
@@ -599,15 +662,15 @@ async def claude_chat(
         transaction.set_tag("error", True)
         capture_exception(e)
         raise HTTPException(
-            status_code=500,
-            detail=f"Claude chat error: {str(e)}"
+            status_code=500, detail=f"Claude chat error: {str(e)}"
         ) from e
+
 
 def build_claude_payload(
     messages: List[dict[str, Any]],
     model_name: str,
     model_config: dict[str, Any],
-    **kwargs
+    **kwargs,
 ) -> dict[str, Any]:
     """Construct the payload for Claude requests, including extended thinking and streaming."""
     with sentry_span(op="ai.claude.build_payload", description="Build Claude Payload"):
@@ -627,7 +690,9 @@ def build_claude_payload(
         if kwargs.get("enable_thinking"):
             thinking_config = model_config.get("extended_thinking_config", {})
             if "extended_thinking" in model_config.get("capabilities", []):
-                budget = kwargs.get("thinking_budget") or thinking_config.get("default_budget", 16000)
+                budget = kwargs.get("thinking_budget") or thinking_config.get(
+                    "default_budget", 16000
+                )
                 min_budget = thinking_config.get("min_budget", 1024)
                 if budget < min_budget:
                     budget = min_budget
@@ -636,7 +701,9 @@ def build_claude_payload(
                 if "temperature" in kwargs:
                     logger.debug("Removing temperature param due to thinking enabled.")
             else:
-                logger.warning("Thinking requested but not supported by this Claude model.")
+                logger.warning(
+                    "Thinking requested but not supported by this Claude model."
+                )
 
         # Temperature
         if kwargs.get("temperature") is not None:
@@ -644,6 +711,7 @@ def build_claude_payload(
         # Support top_p, top_k, etc. if relevant
 
         return payload
+
 
 def _filter_claude_messages(messages: List[dict[str, Any]]) -> List[dict[str, Any]]:
     """
@@ -659,6 +727,7 @@ def _filter_claude_messages(messages: List[dict[str, Any]]) -> List[dict[str, An
             continue
         filtered.append({"role": role, "content": content})
     return filtered
+
 
 def _parse_claude_response(response_data: dict[str, Any]) -> dict[str, Any]:
     """Parse a non-streaming Claude response into a standard format."""
@@ -710,33 +779,39 @@ def _parse_claude_response(response_data: dict[str, Any]) -> dict[str, Any]:
         # Unexpected
         parsed["choices"] = [
             {
-                "message": {"content": "Error: Invalid Claude response format", "role": "assistant"},
-                "finish_reason": "error"
+                "message": {
+                    "content": "Error: Invalid Claude response format",
+                    "role": "assistant",
+                },
+                "finish_reason": "error",
             }
         ]
     return parsed
 
-async def claude_stream_generator(payload: dict[str, Any], headers: dict[str, str]) -> AsyncGenerator[bytes, None]:
+
+async def claude_stream_generator(
+    payload: dict[str, Any], headers: dict[str, str]
+) -> AsyncGenerator[bytes, None]:
     """Return a streaming async generator for Claude responses."""
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            settings.CLAUDE_BASE_URL,
-            json=payload,
-            headers=headers,
-            timeout=180
+            settings.CLAUDE_BASE_URL, json=payload, headers=headers, timeout=180
         )
         resp.raise_for_status()
 
         async for chunk in resp.aiter_bytes():
             yield chunk
 
+
 # -----------------------------
 # Misc Utilities
 # -----------------------------
 
+
 async def count_claude_tokens(messages: List[dict[str, Any]], model_name: str) -> int:
     """Delegate to the unified token helper (avoids duplicated heuristics)."""
-    return count_tokens_messages(messages, model_id=model_name)          # NEW
+    return count_tokens_messages(messages, model_id=model_name)  # NEW
+
 
 async def get_moderation(text: str) -> dict[str, Any]:
     """
@@ -752,7 +827,7 @@ async def get_moderation(text: str) -> dict[str, Any]:
     url = f"{settings.AZURE_OPENAI_ENDPOINT.rstrip('/')}/{endpoint_path}"
     headers = {
         "Content-Type": "application/json",
-        "api-key": settings.AZURE_OPENAI_API_KEY
+        "api-key": settings.AZURE_OPENAI_API_KEY,
     }
     payload = {"input": text}
 
@@ -765,11 +840,9 @@ async def get_moderation(text: str) -> dict[str, Any]:
         logger.error(f"Moderation call failed: {str(e)}")
         return {"error": str(e), "flagged": False}
 
+
 async def get_completion(
-    prompt: str,
-    model_name: str = "o3-mini",
-    max_tokens: int = 500,
-    **kwargs
+    prompt: str, model_name: str = "o3-mini", max_tokens: int = 500, **kwargs
 ) -> str:
     """
     Simple helper to retrieve a text completion without streaming.
@@ -777,10 +850,7 @@ async def get_completion(
     messages = [{"role": "user", "content": prompt}]
     try:
         response_data = await openai_chat(
-            messages=messages,
-            model_name=model_name,
-            max_tokens=max_tokens,
-            **kwargs
+            messages=messages, model_name=model_name, max_tokens=max_tokens, **kwargs
         )
         if isinstance(response_data, AsyncGenerator):
             # If streaming was triggered inadvertently

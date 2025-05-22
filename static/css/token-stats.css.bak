@@ -1,0 +1,80 @@
+/* Token stats UI elements */
+.token-stats-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  background-color: var(--color-base-200);
+  color: var(--color-base-content);
+  cursor: pointer;
+}
+
+.token-stats-badge:hover {
+  background-color: var(--color-base-300);
+}
+
+.token-count-display {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.75rem;
+  color: var(--color-base-content-secondary);
+  background-color: var(--color-base-100);
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  opacity: 0.8;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.token-count-display.active {
+  opacity: 1;
+}
+
+/* Token stats modal styling */
+.token-stats-card {
+  background-color: var(--color-base-200);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.token-stats-card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.token-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.token-stats-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.token-stats-label {
+  font-size: 0.75rem;
+  color: var(--color-base-content-secondary);
+}
+
+.token-stats-value {
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.token-stats-desc {
+  font-size: 0.75rem;
+  color: var(--color-base-content-secondary);
+}
+
+.token-stats-progress {
+  height: 0.5rem;
+  border-radius: 9999px;
+  margin-top: 0.5rem;
+}
