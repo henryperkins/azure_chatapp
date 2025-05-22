@@ -123,11 +123,13 @@ class FileValidator:
 
         # Starlette’s UploadFile doesn’t expose `.size` by default – fallback
         # to a manual calculation when the attribute is missing.
-        file_size = getattr(file, "size", None)               # UPDATED
-        if file_size is None:                                 # NEW
+        file_size = getattr(file, "size", None)  # UPDATED
+        if file_size is None:  # NEW
             try:
-                # Seek to end to obtain size, then reset pointer to start
-                file_size = await file.seek(0, os.SEEK_END)
+                # Read the entire file content to get its size
+                content = await file.read()
+                file_size = len(content)
+                # Reset pointer to start
                 await file.seek(0)
             except Exception:
                 file_size = None
