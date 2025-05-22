@@ -201,13 +201,23 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     async initialize(isVisible, kbData = null, projectId = null) {
-      // Wait for all KB DOM elements before any query/mutation
+      // Build selector list and keep only existing elements to avoid
+      // false time-outs when the mobile template omits some IDs
+      const allSelectors = Object.values(this.elementSelectors)
+        .filter(Boolean)
+        .map(sel => (sel.startsWith('#') || sel.startsWith('.')) ? sel : `#${sel}`);
+
+      const presentSelectors = allSelectors.filter(sel => this.domAPI.querySelector(sel));
+
+      // Always ensure the main container participates
+      if (this.domAPI.querySelector('#knowledgeTab') && !presentSelectors.includes('#knowledgeTab')) {
+        presentSelectors.push('#knowledgeTab');
+      }
+
       await this.domReadinessService.dependenciesAndElements({
-        domSelectors: Object.values(this.elementSelectors)
-          .filter(Boolean)
-          .map(sel => (sel.startsWith('#') || sel.startsWith('.')) ? sel : `#${sel}`),
-        context : MODULE + '::initialize',
-        timeout : this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000
+        domSelectors: presentSelectors,   // ← filtered list
+        context    : MODULE + '::initialize',
+        timeout    : this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000
       });
       try {
         this._initElements(); // Resolve DOM elements now

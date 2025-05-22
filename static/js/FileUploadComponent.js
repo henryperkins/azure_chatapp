@@ -31,6 +31,13 @@ export function createFileUploadComponent({
   onUploadComplete,
   elements
 } = {}) {
+  // --- Attempt auto-resolution of `logger` when not injected ---
+  if (!logger) {
+    try {
+      const ds = eventHandlers?.DependencySystem;
+      logger = ds?.modules?.get?.('logger');
+    } catch { /* ignore – will be re-checked below */ }
+  }
   // === Dependency validation block ===
   if (!app) throw new Error("[FileUploadComponent] Missing app");
   if (!eventHandlers) throw new Error("[FileUploadComponent] Missing eventHandlers");
