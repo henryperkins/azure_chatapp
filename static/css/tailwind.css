@@ -27,6 +27,7 @@
 }
 
 /* Move notification-accordion.css higher in import order */
+/* Legacy bundles (removed for mobile-first refactor)
 @import "./enhanced-components.css";
 @import "./file-upload-enhanced.css";
 @import "./chat-styles.css";
@@ -34,6 +35,7 @@
 @import "./project-details-enhancements.css";
 @import "./project-list-enhancements.css";
 @import "./token-stats.css";
+*/
 
 /* =============================================================================
    End of Aggregate Stylesheet

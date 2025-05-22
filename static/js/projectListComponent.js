@@ -46,7 +46,7 @@ export function createProjectListComponent(deps) {
         throw new Error("[ProjectListComponent] htmlSanitizer must provide a .sanitize(html) method.");
 
     // ----- Internal State -----
-    let elementId = "projectList";
+    let elementId = "project-list-container";
     let _doc = null;
     let element = null;
     let gridElement = null;
@@ -74,7 +74,7 @@ export function createProjectListComponent(deps) {
             await domReadinessService.dependenciesAndElements({
                 deps        : ['projectManager', 'eventHandlers'],
                 domSelectors: [
-                    '#projectList', '#projectCardsPanel', '#projectFilterTabs'
+                    '.project-list-container', '.mobile-grid', '#projectFilterTabs'
                 ],
                 timeout     : 10000,
                 context     : MODULE_CONTEXT + '_init'
@@ -95,18 +95,17 @@ export function createProjectListComponent(deps) {
             logger.error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`, null, { context: MODULE_CONTEXT });
             throw new Error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`);
         }
-
-        if (element.classList.contains('grid')) {
-            gridElement = element;
-        } else if (domAPI?.querySelector) {
-            gridElement = domAPI.querySelector('.grid', element);
-        } else {
-            gridElement = element.querySelector('.grid');
-        }
+            if (element.classList.contains('mobile-grid')) {
+                gridElement = element;
+            } else if (domAPI?.querySelector) {
+                gridElement = domAPI.querySelector('.mobile-grid', element);
+            } else {
+                gridElement = element.querySelector('.mobile-grid');
+            }
 
         if (!gridElement) {
-            logger.error(`'.grid' container not found within #${elementId}.`, null, { context: MODULE_CONTEXT });
-            throw new Error(`'.grid' container not found within #${elementId}.`);
+            logger.error(`'.mobile-grid' container not found within .project-list-container.`, null, { context: MODULE_CONTEXT });
+            throw new Error(`'.mobile-grid' container not found within .project-list-container.`);
         }
 
         _bindEventListeners();
@@ -198,7 +197,7 @@ export function createProjectListComponent(deps) {
                     await domReadinessService.dependenciesAndElements({
                         deps: ['app', 'projectManager', 'eventHandlers', 'auth'],
                         domSelectors: [
-                            '#projectList', '#projectCardsPanel', '#projectFilterTabs'
+                            '.project-list-container', '.mobile-grid', '#projectFilterTabs'
                         ],
                         timeout: 10000,
                         context: MODULE_CONTEXT + '_authStateChange'
@@ -286,11 +285,11 @@ export function createProjectListComponent(deps) {
             if (isActive) activeTabId = tab.id;
         });
 
-        const projectCardsPanel = domAPI?.getElementById
-            ? domAPI.getElementById("projectCardsPanel")
-            : domAPI.getElementById("projectCardsPanel");
-        if (projectCardsPanel && activeTabId) {
-            projectCardsPanel.setAttribute("aria-labelledby", activeTabId);
+        const mobileGridPanel = domAPI?.querySelector
+            ? domAPI.querySelector(".mobile-grid", element)
+            : element.querySelector(".mobile-grid");
+        if (mobileGridPanel && activeTabId) {
+            mobileGridPanel.setAttribute("aria-labelledby", activeTabId);
         }
     }
     function _updateUrl(filter) {
@@ -383,13 +382,12 @@ export function createProjectListComponent(deps) {
         if (!gridElement) {
             const parentElement = element || domAPI.getElementById(elementId) || domAPI.getElementById(elementId);
             if (parentElement) {
-                gridElement = parentElement.querySelector('.grid');
+                gridElement = parentElement.querySelector('.mobile-grid');
                 if (!gridElement) {
                     const grid = domAPI?.createElement ?
                         domAPI.createElement('div') :
                         domAPI.createElement('div');
-                    grid.className = "grid gap-6 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 py-2";
-                    grid.setAttribute('id', 'projectCardsPanel');
+                    grid.className = "mobile-grid";
                     grid.setAttribute('role', 'tabpanel');
                     grid.setAttribute('aria-labelledby', 'filterTabAll');
                     grid.setAttribute('tabindex', '0');
@@ -397,7 +395,7 @@ export function createProjectListComponent(deps) {
                     gridElement = grid;
                 }
             } else {
-                logger.error('[ProjectListComponent][show] failed to create/find gridElement', null, { context: MODULE_CONTEXT });
+                logger.error('[ProjectListComponent][show] failed to create/find mobileGridElement', null, { context: MODULE_CONTEXT });
                 return;
             }
         }
@@ -463,7 +461,7 @@ export function createProjectListComponent(deps) {
         if (!projectId) { return; }
         const actionBtn = e.target.closest("[data-action]");
         if (actionBtn) { e.stopPropagation(); return; }
-        const isCreateButton = e.target.closest('#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn');
+        const isCreateButton = e.target.closest('#createProjectBtn');
         if (isCreateButton) { return; }
         const auth = app?.DependencySystem?.modules?.get?.('auth') ?? null;
         if (auth && auth.isAuthenticated()) {
@@ -496,7 +494,7 @@ export function createProjectListComponent(deps) {
         eventHandlers.delegate(
             domAPI.getDocument(),
             'click',
-            '#projectListCreateBtn, #sidebarNewProjectBtn, #emptyStateCreateBtn',
+            '#createProjectBtn',
             () => _openNewProjectModal()
         );
     }
@@ -545,7 +543,7 @@ export function createProjectListComponent(deps) {
     function _showLoadingState() {
         if (!gridElement) return;
         _clearElement(gridElement);
-        gridElement.classList.add("grid", "project-list");
+        gridElement.classList.add("mobile-grid");
         for (let i = 0; i < 6; i++) {
             const skeleton = domAPI.createElement("div");
             skeleton.className = "bg-base-200 animate-pulse rounded-box p-4 mb-2 max-w-full w-full";
@@ -563,7 +561,7 @@ export function createProjectListComponent(deps) {
         _makeVisible();
         if (!gridElement) return;
         _clearElement(gridElement);
-        gridElement.classList.add("grid", "project-list");
+        gridElement.classList.add("mobile-grid");
         const emptyDiv = domAPI.createElement("div");
         emptyDiv.className = "project-list-empty";
         _safeSetInnerHTML(emptyDiv, `
@@ -572,10 +570,10 @@ export function createProjectListComponent(deps) {
           </svg>
           <p class="mt-4 text-lg text-base-content">No projects found</p>
           <p class="mt-1">Create a new project to get started</p>
-          <button id="emptyStateCreateBtn" class="btn btn-primary mt-4">Create Project</button>
+          <button id="createProjectBtn" class="btn btn-primary mt-4">Create Project</button>
         `);
         gridElement.appendChild(emptyDiv);
-        const createBtn = domAPI.getElementById("emptyStateCreateBtn");
+        const createBtn = domAPI.getElementById("createProjectBtn");
         if (createBtn) {
             eventHandlers.trackListener(
                 createBtn,

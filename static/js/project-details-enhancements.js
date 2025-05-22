@@ -30,9 +30,7 @@ function createProjectDetailsEnhancements(deps) {
   // State management
   const state = {
     initialized: false,
-    tokenUsage: 0,
-    maxTokens: 200000,
-    hasStats: false,
+    // Token stats removed for mobile refactor
     activeTab: 'details',
     // Project list state
     projectListInitialized: false,
@@ -46,61 +44,7 @@ function createProjectDetailsEnhancements(deps) {
   /**
    * Convert linear progress to circular progress for token usage
    */
-  function enhanceTokenUsageIndicator() {
-    try {
-      const statContainer = domAPI.querySelector('.stat:first-child');
-      if (!statContainer) return;
-
-      const tokenUsage = domAPI.getElementById('tokenUsage');
-      const maxTokens = domAPI.getElementById('maxTokens');
-      const tokenPercentage = domAPI.getElementById('tokenPercentage');
-      const linearProgress = domAPI.getElementById('tokenProgressBar');
-
-      if (!tokenUsage || !maxTokens || !linearProgress) return;
-
-      // Get current values
-      const currentUsage = parseInt(tokenUsage.textContent || '0', 10);
-      const maxValue = parseInt(maxTokens.textContent || '200000', 10);
-      const percentage = Math.floor((currentUsage / maxValue) * 100) || 0;
-
-      // Create circular progress container
-      const circularContainer = domAPI.createElement('div');
-      circularContainer.className = 'circular-progress mt-2';
-
-      // SVG for circular progress
-      const progressRadius = 24;
-      const progressCircumference = 2 * Math.PI * progressRadius;
-      const dashOffset = progressCircumference - (percentage / 100) * progressCircumference;
-
-      const svgContent = `
-        <svg width="60" height="60" viewBox="0 0 60 60">
-          <circle cx="30" cy="30" r="${progressRadius}" class="background" />
-          <circle cx="30" cy="30" r="${progressRadius}" class="progress"
-                  style="stroke-dasharray: ${progressCircumference}; stroke-dashoffset: ${dashOffset}" />
-        </svg>
-        <div class="percentage">${percentage}%</div>
-      `;
-
-      circularContainer.innerHTML = sanitizer.sanitize(svgContent);
-
-      // Replace linear progress with circular progress
-      linearProgress.style.display = 'none';
-      linearProgress.insertAdjacentElement('afterend', circularContainer);
-
-      // Add sparkline visualization below
-      const sparklineDiv = domAPI.createElement('div');
-      sparklineDiv.className = 'sparkline mt-2';
-      const sparkContent = generateSparkline(5, percentage); // Generate random sparkline with 5 points
-      sparklineDiv.innerHTML = sanitizer.sanitize(sparkContent);
-
-      circularContainer.insertAdjacentElement('afterend', sparklineDiv);
-
-      // Update state
-      state.hasStats = true;
-    } catch (error) {
-      logger.error('[enhanceTokenUsageIndicator]', error, { context: CONTEXT });
-    }
-  }
+  // (Mobile refactor) Legacy token usage indicator removed
 
   /**
    * Generate a simple sparkline visualization with random data
@@ -181,7 +125,7 @@ function createProjectDetailsEnhancements(deps) {
             break;
           case 'conversations':
             // Create new conversation
-            targetBtn = domAPI.getElementById('projectNewConversationBtn');
+            targetBtn = domAPI.getElementById('newConversationBtn');
             break;
           case 'knowledge':
             // Search knowledge base
@@ -198,11 +142,11 @@ function createProjectDetailsEnhancements(deps) {
           if (browserService && browserService.isMobile && navigator.vibrate) {
             navigator.vibrate(50); // Short vibration for feedback
           }
-          
+
           // Visual feedback - temporary animation
           fabElement.classList.add('active');
           setTimeout(() => fabElement.classList.remove('active'), 300);
-          
+
           targetBtn.click();
         }
       };
@@ -213,7 +157,7 @@ function createProjectDetailsEnhancements(deps) {
         handleFabClick,
         { context: CONTEXT }
       );
-      
+
       // For mobile: Add reminder pulse after 5 seconds of inactivity
       // to subtly draw attention to the FAB
       if (browserService && browserService.isMobile) {
@@ -225,7 +169,7 @@ function createProjectDetailsEnhancements(deps) {
             setTimeout(() => fabElement.classList.remove('reminder-pulse'), 5000);
           }
         }, 5000);
-        
+
         // Add touch feedback
         eventHandlers.trackListener(
           fabElement,
@@ -236,7 +180,7 @@ function createProjectDetailsEnhancements(deps) {
           },
           { context: CONTEXT }
         );
-        
+
         eventHandlers.trackListener(
           fabElement,
           'touchend',
@@ -400,7 +344,7 @@ function createProjectDetailsEnhancements(deps) {
 
       // Make sure list is visible with a smooth fade-in
       projectList.style.opacity = '1';
-      
+
       // Mobile-specific enhancements
       if (browserService && browserService.isMobile) {
         // Improve touch targets
@@ -409,30 +353,30 @@ function createProjectDetailsEnhancements(deps) {
             btn.style.minHeight = '44px'; // Ensure minimum touch target size
           }
         });
-        
+
         // Improve keyboard experience for search input
         const searchInput = domAPI.getElementById('projectSearchInput');
         if (searchInput) {
           // Prevent iOS zoom by ensuring font size is at least 16px
           searchInput.style.fontSize = '16px';
-          
+
           // Add proper mobile keyboard support
           searchInput.setAttribute('inputmode', 'search');
           searchInput.setAttribute('enterkeyhint', 'search');
-          
+
           // Clear button for mobile
           const clearBtn = domAPI.createElement('button');
           clearBtn.className = 'input-clear-btn';
           clearBtn.innerHTML = sanitizer.sanitize(`
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           `);
-          
+
           // Insert clear button after search input
           searchInput.parentNode.insertBefore(clearBtn, searchInput.nextSibling);
-          
+
           // Initially hidden
           clearBtn.style.display = 'none';
-          
+
           // Show/hide clear button based on input content
           eventHandlers.trackListener(
             searchInput,
@@ -442,7 +386,7 @@ function createProjectDetailsEnhancements(deps) {
             },
             { context: CONTEXT }
           );
-          
+
           // Clear input when button is clicked
           eventHandlers.trackListener(
             clearBtn,
@@ -639,148 +583,158 @@ function createProjectDetailsEnhancements(deps) {
    * Add mobile-specific pull-to-refresh for the conversation list
    */
   function setupPullToRefresh() {
+    const CONTEXT = 'project-details:pull-to-refresh';
     try {
       // Only apply on mobile devices
       if (!browserService || !browserService.isMobile) return;
-      
-      const conversationsList = domAPI.getElementById('projectConversationsList');
+
+      const conversationsList = domAPI.getElementById('conversationsList');
       if (!conversationsList) return;
-      
+
       // Create pull indicator element
       const pullIndicator = domAPI.createElement('div');
       pullIndicator.className = 'pull-indicator';
-      pullIndicator.innerHTML = sanitizer.sanitize(`
+      domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
         <div class="mobile-loading-indicator"></div>
         <span class="ml-2">Pull to refresh</span>
-      `);
-      
+      `));
+
       // Insert at the top of the conversations list
-      conversationsList.insertBefore(pullIndicator, conversationsList.firstChild);
-      
-      // Track touch events for pull detection
+      domAPI.insertBefore(conversationsList, pullIndicator, domAPI.getProperty(conversationsList, 'firstChild'));
+
+      // State variables for tracking pull gesture
       let startY = 0;
       let currentY = 0;
       let isPulling = false;
       let refreshTriggered = false;
-      
+
+      // Touch event handlers using strict DI practices
       const onTouchStart = (e) => {
-        // Only activate if we're at the top of the list
-        if (conversationsList.scrollTop <= 5) {
-          startY = e.touches[0].clientY;
-          isPulling = true;
-        }
-      };
-      
-      const onTouchMove = (e) => {
-        if (!isPulling) return;
-        
-        currentY = e.touches[0].clientY;
-        const pullDistance = currentY - startY;
-        
-        // Only allow pulling down, not up
-        if (pullDistance <= 0) {
-          isPulling = false;
-          return;
-        }
-        
-        // Apply resistance to the pull
-        const resistance = 0.4;
-        const transformY = Math.min(pullDistance * resistance, 80);
-        
-        pullIndicator.style.transform = `translateY(${transformY}px)`;
-        pullIndicator.classList.add('visible');
-        
-        // If pulled far enough, mark as ready to refresh
-        if (transformY > 60 && !refreshTriggered) {
-          pullIndicator.innerHTML = sanitizer.sanitize(`
-            <div class="mobile-loading-indicator"></div>
-            <span class="ml-2">Release to refresh</span>
-          `);
-          refreshTriggered = true;
-        } else if (transformY <= 60 && refreshTriggered) {
-          pullIndicator.innerHTML = sanitizer.sanitize(`
-            <div class="mobile-loading-indicator"></div>
-            <span class="ml-2">Pull to refresh</span>
-          `);
-          refreshTriggered = false;
-        }
-        
-        // Prevent default scrolling
-        e.preventDefault();
-      };
-      
-      const onTouchEnd = () => {
-        if (!isPulling) return;
-        
-        // If we pulled far enough, trigger refresh
-        if (refreshTriggered) {
-          pullIndicator.innerHTML = sanitizer.sanitize(`
-            <div class="mobile-loading-indicator"></div>
-            <span class="ml-2">Refreshing...</span>
-          `);
-          
-          // Reload conversation list data
-          const projectId = domAPI.querySelector('[data-project-id]')?.dataset?.projectId;
-          if (projectId && eventHandlers.DependencySystem?.modules?.get('projectManager')) {
-            const projectManager = eventHandlers.DependencySystem.modules.get('projectManager');
-            
-            // Refresh conversations
-            projectManager.loadProjectConversations(projectId)
-              .finally(() => {
-                // Reset the pull indicator after refresh
-                setTimeout(() => {
-                  pullIndicator.style.transform = 'translateY(-50px)';
-                  pullIndicator.classList.remove('visible');
-                  isPulling = false;
-                  refreshTriggered = false;
-                }, 1000);
-              });
-          } else {
-            // No project ID or project manager, reset
-            setTimeout(() => {
-              pullIndicator.style.transform = 'translateY(-50px)';
-              pullIndicator.classList.remove('visible');
-              isPulling = false;
-              refreshTriggered = false;
-            }, 1000);
+        try {
+          const scrollTop = domAPI.getProperty(conversationsList, 'scrollTop');
+          if (scrollTop <= 5) {
+            const touches = domAPI.getProperty(e, 'touches');
+            startY = domAPI.getProperty(touches[0], 'clientY');
+            isPulling = true;
           }
-        } else {
-          // Not pulled far enough, reset
-          pullIndicator.style.transform = 'translateY(-50px)';
-          pullIndicator.classList.remove('visible');
+        } catch (err) {
+          logger.error('[setupPullToRefresh][onTouchStart]', err, { context: CONTEXT });
         }
-        
-        isPulling = false;
-        refreshTriggered = false;
       };
-      
-      // Track touch events
+
+      const onTouchMove = (e) => {
+        try {
+          if (!isPulling) return;
+          const touches = domAPI.getProperty(e, 'touches');
+          currentY = domAPI.getProperty(touches[0], 'clientY');
+          const pullDistance = currentY - startY;
+
+          // Only allow pulling down, not up
+          if (pullDistance <= 0) {
+            isPulling = false;
+            return;
+          }
+
+          // Apply resistance to the pull
+          const resistance = 0.4;
+          const transformY = Math.min(pullDistance * resistance, 80);
+
+          domAPI.setStyle(pullIndicator, 'transform', `translateY(${transformY}px)`);
+          domAPI.addClass(pullIndicator, 'visible');
+
+          // If pulled far enough, mark as ready to refresh
+          if (transformY > 60 && !refreshTriggered) {
+            domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
+              <div class="mobile-loading-indicator"></div>
+              <span class="ml-2">Release to refresh</span>
+            `));
+            refreshTriggered = true;
+          } else if (transformY <= 60 && refreshTriggered) {
+            domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
+              <div class="mobile-loading-indicator"></div>
+              <span class="ml-2">Pull to refresh</span>
+            `));
+            refreshTriggered = false;
+          }
+
+          // Prevent default scrolling
+          domAPI.preventDefault(e);
+        } catch (err) {
+          logger.error('[setupPullToRefresh][onTouchMove]', err, { context: CONTEXT });
+        }
+      };
+
+      const onTouchEnd = () => {
+        try {
+          if (!isPulling) return;
+
+          // If we pulled far enough, trigger refresh
+          if (refreshTriggered) {
+            domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
+              <div class="mobile-loading-indicator"></div>
+              <span class="ml-2">Refreshing...</span>
+            `));
+
+            // Reload conversation list data
+            const projectIdEl = domAPI.querySelector('[data-project-id]');
+            const DependencySystem = eventHandlers.DependencySystem;
+            if (projectIdEl && DependencySystem?.modules?.get('projectManager')) {
+              const projectId = domAPI.getDataAttribute(projectIdEl, 'projectId');
+              const projectManager = DependencySystem.modules.get('projectManager');
+              // Refresh conversations
+              projectManager.loadProjectConversations(projectId)
+                .finally(() => {
+                  browserService.setTimeout(() => {
+                    domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+                    domAPI.removeClass(pullIndicator, 'visible');
+                    isPulling = false;
+                    refreshTriggered = false;
+                  }, 1000);
+                });
+            } else {
+              browserService.setTimeout(() => {
+                domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+                domAPI.removeClass(pullIndicator, 'visible');
+                isPulling = false;
+                refreshTriggered = false;
+              }, 1000);
+            }
+          } else {
+            // Not pulled far enough, reset
+            domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+            domAPI.removeClass(pullIndicator, 'visible');
+          }
+          isPulling = false;
+          refreshTriggered = false;
+        } catch (err) {
+          logger.error('[setupPullToRefresh][onTouchEnd]', err, { context: CONTEXT });
+        }
+      };
+
+      // Track touch events with proper context tagging
       eventHandlers.trackListener(
         conversationsList,
         'touchstart',
         onTouchStart,
         { context: CONTEXT }
       );
-      
       eventHandlers.trackListener(
         conversationsList,
         'touchmove',
         onTouchMove,
         { context: CONTEXT }
       );
-      
       eventHandlers.trackListener(
         conversationsList,
         'touchend',
         onTouchEnd,
         { context: CONTEXT }
       );
-      
     } catch (error) {
-      logger.error('[setupPullToRefresh]', error, { context: CONTEXT });
+      logger.error('[setupPullToRefresh]', error, { context: 'project-details:pull-to-refresh' });
     }
   }
-  
+
   /**
    * Apply all enhancements
    */
@@ -800,15 +754,14 @@ function createProjectDetailsEnhancements(deps) {
         });
 
         // Apply project details enhancements
-        enhanceTokenUsageIndicator();
         addFloatingActionButton();
         enhanceEmptyStates();
         setupTabTracking();
-        
+
         // Mobile-specific enhancements
         if (browserService && browserService.isMobile) {
           setupPullToRefresh();
-          
+
           // Improve touch target sizes for mobile
           domAPI.querySelectorAll('.btn, button').forEach(btn => {
             if (!btn.classList.contains('btn-lg') && !btn.classList.contains('project-fab')) {
