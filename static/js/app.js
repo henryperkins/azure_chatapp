@@ -117,7 +117,8 @@ import { createLogger } from './logger.js';
 const logger = createLogger({
   context : 'App',
   debug   : APP_CONFIG && APP_CONFIG.DEBUG === true,
-  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info'
+  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
+  fetcher : browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null
 });
 DependencySystem.register('logger', logger);
 

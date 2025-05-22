@@ -115,8 +115,9 @@ export function createDomAPI({
         el.innerHTML = sanitizer.sanitize(html);
       } else {
         // SECURITY WARNING: Setting innerHTML without a sanitizer is dangerous!
-        _logger.warn('[domAPI] setInnerHTML called without sanitizer (unsafe)');
-        el.innerHTML = html;
+        _logger.warn('[domAPI] setInnerHTML called without sanitizer (auto-escaped)');
+        // Basic escape to avoid XSS when sanitizer missing
+        el.textContent = String(html).replace(/<[^>]*>?/gm, '');
       }
     },
     isDocumentHidden: () => documentObject.hidden === true,
