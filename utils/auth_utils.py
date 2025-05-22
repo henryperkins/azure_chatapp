@@ -34,9 +34,8 @@ logger = logging.getLogger(__name__)
 #   2) environment variable JWT_SECRET
 #   3) fixed dev-only fallback (never use in prod)
 # -------------------------------------------------------------------------
-JWT_SECRET: Optional[str] = (
-    getattr(settings, "JWT_SECRET", None)
-    or os.getenv("JWT_SECRET")
+JWT_SECRET: Optional[str] = getattr(settings, "JWT_SECRET", None) or os.getenv(
+    "JWT_SECRET"
 )
 
 if not JWT_SECRET:
@@ -94,7 +93,6 @@ def create_access_token(data: dict) -> str:
 async def verify_token(
     token: str,
     expected_type: Optional[str] = None,
-    request: Optional[Request] = None,
     db_session: Optional[AsyncSession] = None,
 ) -> dict[str, Any]:
     """
@@ -118,9 +116,15 @@ async def verify_token(
         sub = decoded.get("sub")
         if sub:
             # Check user
-            user_result = await db_session.execute(select(User).where(User.username == sub))
+            user_result = await db_session.execute(
+                select(User).where(User.username == sub)
+            )
             user = user_result.scalars().first()
-            if user and user.token_version is not None and decoded.get("version") != user.token_version:
+            if (
+                user
+                and user.token_version is not None
+                and decoded.get("version") != user.token_version
+            ):
                 logger.warning(
                     "[TOKEN_VERSION_MISMATCH] user=%s tok_ver=%s db_ver=%s jti=%s exp=%s iat=%s",
                     sub,
@@ -132,7 +136,9 @@ async def verify_token(
                 )
 
         if expected_type and token_type != expected_type:
-            raise HTTPException(status_code=401, detail=f"Invalid token type: expected {expected_type}")
+            raise HTTPException(
+                status_code=401, detail=f"Invalid token type: expected {expected_type}"
+            )
 
         # Check blacklist
         blacklisted = await db_session.execute(
@@ -143,13 +149,13 @@ async def verify_token(
 
         return decoded
 
-    except ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
+    except ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token has expired") from exc
     except InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}") from e
     except Exception as e:
         logger.error(f"Unexpected error during token verification: {str(e)}")
-        raise HTTPException(status_code=500, detail="Token verification failed")
+        raise HTTPException(status_code=500, detail="Token verification failed") from e
 
 
 # -----------------------------------------------------------------------------
@@ -171,17 +177,17 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
     # Log active token counts by type
     token_count_query = (
-        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))
+        select(TokenBlacklist.token_type, func.count('*'))
         .where(TokenBlacklist.expires >= now)
         .group_by(TokenBlacklist.token_type)
     )
     result = await db.execute(token_count_query)
     token_counts = result.all() if hasattr(result, "all") else []
     for token_type, count in token_counts:
-        logger.info(f"Active blacklisted tokens of type '{token_type}': {count}")
+        logger.info("Active blacklisted tokens of type '%s': %s", token_type, count)
 
     if deleted_count > 0:
-        logger.info(f"Cleaned up {deleted_count} expired blacklisted tokens.")
+        logger.info("Cleaned up %s expired blacklisted tokens.", deleted_count)
     return deleted_count
 
 
@@ -195,16 +201,13 @@ def validate_csrf_token(request: Request) -> None:
     - Raises HTTPException(403) if missing or mismatched.
     - Always logs the received tokens for troubleshooting.
     """
-    debugging = hasattr(settings, "DEBUG") and settings.DEBUG
-
     # Only validate on unsafe methods
     if request.method in ("GET", "HEAD", "OPTIONS"):
         return
     csrf_cookie = request.cookies.get("csrf_token")
     csrf_header = request.headers.get("x-csrf-token")
     logger.warning(
-        "[CSRF CHECK] request.method=%s "
-        "csrf_cookie=%r csrf_header=%r raw_cookies=%r",
+        "[CSRF CHECK] request.method=%s csrf_cookie=%r csrf_header=%r raw_cookies=%r",
         request.method,
         csrf_cookie,
         csrf_header,
@@ -219,8 +222,9 @@ def validate_csrf_token(request: Request) -> None:
         )
         raise HTTPException(
             status_code=403,
-            detail=f"CSRF token missing or incorrect (cookie={csrf_cookie!r} header={csrf_header!r})"
+            detail=f"CSRF token missing or incorrect (cookie={csrf_cookie!r} header={csrf_header!r})",
         )
+
 
 # -----------------------------------------------------------------------------
 # Cookie Extraction for HTTP / WebSocket
@@ -243,9 +247,13 @@ def extract_token(request_or_websocket, token_type="access"):
 
     # --- BEGIN ADDED LOGGING ---
     if hasattr(request_or_websocket, "headers"):
-        raw_cookie_header = request_or_websocket.headers.get("cookie", "[No Cookie Header]")
+        raw_cookie_header = request_or_websocket.headers.get(
+            "cookie", "[No Cookie Header]"
+        )
         if debugging:
-            logger.debug(f"[AUTH_EXTRACT] Incoming raw cookie header for {token_type}: {raw_cookie_header}")
+            logger.debug(
+                f"[AUTH_EXTRACT] Incoming raw cookie header for {token_type}: {raw_cookie_header}"
+            )
     # --- END ADDED LOGGING ---
 
     # First check standard cookies (HTTP)
@@ -274,8 +282,9 @@ def extract_token(request_or_websocket, token_type="access"):
         cookie_header = request_or_websocket.headers.get("cookie", "")
         if cookie_header:
             # Use SimpleCookie for robust cookie parsing
-            import http.cookies
             try:
+                import http.cookies
+
                 parsed_cookies = http.cookies.SimpleCookie()
                 parsed_cookies.load(cookie_header)
                 if cookie_name in parsed_cookies:
@@ -283,18 +292,26 @@ def extract_token(request_or_websocket, token_type="access"):
                     source = "ws_cookie_header"
                     # --- BEGIN ADDED LOGGING ---
                     if debugging:
-                        logger.debug(f"[AUTH_EXTRACT] Found '{cookie_name}' via manual header parse.")
+                        logger.debug(
+                            f"[AUTH_EXTRACT] Found '{cookie_name}' via manual header parse."
+                        )
                     # --- END ADDED LOGGING ---
             except Exception as parse_err:
                 if debugging:
-                    logger.warning(f"[AUTH_EXTRACT] Error parsing cookie header: {parse_err}")
+                    logger.warning(
+                        f"[AUTH_EXTRACT] Error parsing cookie header: {parse_err}"
+                    )
 
     # Log outcome in debug mode
     if debugging:
         if token:
-            logger.debug(f"[AUTH_EXTRACT_RESULT] Token ({token_type}) found via {source}: {token[:10]}...")
+            logger.debug(
+                f"[AUTH_EXTRACT_RESULT] Token ({token_type}) found via {source}: {token[:10]}..."
+            )
         else:
-            logger.debug(f"[AUTH_EXTRACT_RESULT] No {token_type} token found in request. Raw Header: {raw_cookie_header}")
+            logger.debug(
+                f"[AUTH_EXTRACT_RESULT] No {token_type} token found in request. Raw Header: {raw_cookie_header}"
+            )
 
     return token
 
@@ -313,7 +330,9 @@ async def get_user_from_token(
     Retrieve and verify a JWT token, then load the user from the database.
     Raises HTTPException if the token is invalid, revoked, expired, or if the user is not found/disabled.
     """
-    logger.info(f"[GET_USER_FROM_TOKEN] Attempting to get user from token. Expected type: {expected_type}. Token (first 10 chars): {token[:10] if token else 'None'}")
+    logger.info(
+        f"[GET_USER_FROM_TOKEN] Attempting to get user from token. Expected type: {expected_type}. Token (first 10 chars): {token[:10] if token else 'None'}"
+    )
 
     if not token:
         logger.warning(f"[GET_USER_FROM_TOKEN] No {expected_type} token provided.")
@@ -324,16 +343,22 @@ async def get_user_from_token(
         )
 
     # Verify token and decode its payload
-    decoded = await verify_token(token, expected_type, request, db_session=db)
+    decoded = await verify_token(token, expected_type=expected_type, db_session=db)
     if not decoded:
-        logger.warning("[GET_USER_FROM_TOKEN] Token verification failed or token was None after verify_token call.")
+        logger.warning(
+            "[GET_USER_FROM_TOKEN] Token verification failed or token was None after verify_token call."
+        )
         # verify_token itself should raise HTTPException, but as a safeguard:
         raise HTTPException(
             status_code=401,
             detail="Invalid token (verify_token returned None/False)",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info(f"[GET_USER_FROM_TOKEN] Token decoded: {decoded.get('sub')}, jti: {decoded.get('jti')}")
+    logger.info(
+        "[GET_USER_FROM_TOKEN] Token decoded: %s, jti: %s",
+        decoded.get("sub"),
+        decoded.get("jti"),
+    )
 
     username = decoded.get("sub")
     if not username:
@@ -343,29 +368,37 @@ async def get_user_from_token(
             detail="Invalid token payload: missing subject",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info(f"[GET_USER_FROM_TOKEN] Username from token: {username}")
+    logger.info("[GET_USER_FROM_TOKEN] Username from token: %s", username)
 
     # Fetch user from DB
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalars().first()
 
     if not user:
-        logger.warning(f"[GET_USER_FROM_TOKEN] User '{username}' from token not found in database.")
+        logger.warning(
+            f"[GET_USER_FROM_TOKEN] User '{username}' from token not found in database."
+        )
         raise HTTPException(
             status_code=401,
             detail="User not found",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info(f"[GET_USER_FROM_TOKEN] User '{username}' found in database. ID: {user.id}")
+    logger.info(
+        "[GET_USER_FROM_TOKEN] User '%s' found in database. ID: %s",
+        username,
+        user.id,
+    )
 
     if not user.is_active:
-        logger.warning(f"[GET_USER_FROM_TOKEN] Attempt to use token for disabled account: {username}")
+        logger.warning(
+            "[GET_USER_FROM_TOKEN] Attempt to use token for disabled account: %s", username
+        )
         raise HTTPException(
             status_code=403,
             detail="Account disabled",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info(f"[GET_USER_FROM_TOKEN] User '{username}' is active.")
+    logger.info("[GET_USER_FROM_TOKEN] User '%s' is active.", username)
 
     # Attach token metadata to the user object (optional)
     user.jti = decoded.get("jti")
@@ -394,25 +427,37 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
       3. Returns (User, token) if authenticated, or raises an HTTPException otherwise.
     """
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
-    logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Attempting to extract access token. Request cookies: {request.cookies}")
+    logger.info(
+        f"[GET_CURRENT_USER_AND_TOKEN] Attempting to extract access token. Request cookies: {request.cookies}"
+    )
 
     token = extract_token(request)  # extract_token already has good logging
     if not token:
-        logger.warning("[GET_CURRENT_USER_AND_TOKEN] Access token not found after extract_token call.")
+        logger.warning(
+            "[GET_CURRENT_USER_AND_TOKEN] Access token not found after extract_token call."
+        )
         # Log headers for more context if debugging is enabled
         if debugging:
-            logger.debug(f"[GET_CURRENT_USER_AND_TOKEN] Request headers for missing token: {request.headers}")
+            logger.debug(
+                f"[GET_CURRENT_USER_AND_TOKEN] Request headers for missing token: {request.headers}"
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated (token not found by extract_token)",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Token extracted (first 10 chars): {token[:10]}")
+    logger.info(
+        f"[GET_CURRENT_USER_AND_TOKEN] Token extracted (first 10 chars): {token[:10]}"
+    )
 
     # Token verification + user load within a single DB session
     async with get_async_session_context() as db:
         user = await get_user_from_token(
-            token=token, db=db, request=request, expected_type="access"
+            token, db, request=request, expected_type="access"
         )
-    logger.info(f"[GET_CURRENT_USER_AND_TOKEN] Successfully retrieved user: {user.username} (ID: {user.id})")
+    logger.info(
+        "[GET_CURRENT_USER_AND_TOKEN] Successfully retrieved user: %s (ID: %s)",
+        user.username,
+        user.id,
+    )
     return user, token

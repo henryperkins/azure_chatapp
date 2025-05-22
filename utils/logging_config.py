@@ -3,20 +3,24 @@ import sys
 import os
 import json
 from contextvars import ContextVar
-from typing import Optional
+from typing import Optional, Any, Dict
 
 # ContextVars for request_id and trace_id
 request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 trace_id_var: ContextVar[Optional[str]] = ContextVar("trace_id", default=None)
 
+
 class ContextFilter(logging.Filter):
     """
     A logging filter to add request_id and trace_id from contextvars to log records.
     """
-    def filter(self, record):
-        record.request_id = request_id_var.get()
-        record.trace_id = trace_id_var.get()
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Add attributes dynamically to the LogRecord object
+        setattr(record, "request_id", request_id_var.get())
+        setattr(record, "trace_id", trace_id_var.get())
         return True
+
 
 class CustomJsonFormatter(logging.Formatter):
     """
@@ -24,42 +28,67 @@ class CustomJsonFormatter(logging.Formatter):
     Ensures standard fields like timestamp, level, message, request_id, trace_id,
     and any fields passed in `extra` are present.
     """
-    def format(self, record):
-        log_record = {}
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_record: Dict[str, Any] = {}
 
         # Add basic fields
-        log_record['timestamp'] = self.formatTime(record, self.datefmt)
-        log_record['level'] = record.levelname
-        log_record['message'] = record.getMessage()
+        log_record["timestamp"] = self.formatTime(record, self.datefmt)
+        log_record["level"] = record.levelname
+        log_record["message"] = record.getMessage()
 
         # Add logger name, module, and line info
-        log_record['name'] = record.name
-        log_record['module'] = record.module
-        log_record['funcName'] = record.funcName
-        log_record['lineno'] = record.lineno
+        log_record["name"] = record.name
+        log_record["module"] = record.module
+        log_record["funcName"] = record.funcName
+        log_record["lineno"] = record.lineno
 
-        # Ensure contextvars are included if available
-        if hasattr(record, 'request_id') and record.request_id:
-            log_record['request_id'] = record.request_id
-        if hasattr(record, 'trace_id') and record.trace_id:
-            log_record['trace_id'] = record.trace_id
+        # Ensure contextvars are included if available - use getattr with default to avoid type checking issues
+        request_id = getattr(record, "request_id", None)
+        if request_id:
+            log_record["request_id"] = request_id
+
+        trace_id = getattr(record, "trace_id", None)
+        if trace_id:
+            log_record["trace_id"] = trace_id
 
         # Preserve attributes supplied via logging extra={...}
         for key, value in record.__dict__.items():
             if key not in (
-                'name', 'msg', 'args', 'levelname', 'levelno', 'pathname',
-                'filename', 'module', 'exc_info', 'exc_text', 'stack_info',
-                'lineno', 'funcName', 'created', 'msecs', 'relativeCreated',
-                'thread', 'threadName', 'processName', 'process',
-                'timestamp', 'level', 'message', 'request_id', 'trace_id'
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "timestamp",
+                "level",
+                "message",
+                "request_id",
+                "trace_id",
             ):
                 log_record[key] = value
 
         # Add exception info if present
         if record.exc_info:
-            log_record['exc_info'] = self.formatException(record.exc_info)
+            log_record["exc_info"] = self.formatException(record.exc_info)
 
         return json.dumps(log_record)
+
 
 def init_structured_logging():
     """
@@ -88,7 +117,7 @@ def init_structured_logging():
 
     # Create and set the custom JSON formatter
     formatter = CustomJsonFormatter(
-        '%(timestamp)s %(level)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s %(request_id)s %(trace_id)s'
+        "%(timestamp)s %(level)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s %(request_id)s %(trace_id)s"
     )
     stream_handler.setFormatter(formatter)
 
@@ -98,7 +127,7 @@ def init_structured_logging():
     logging.info("Structured JSON logging initialized.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Example usage (for testing this module directly)
     init_structured_logging()
 
@@ -108,7 +137,9 @@ if __name__ == '__main__':
 
     logger = logging.getLogger("my_app_test")
     logger.info("This is an info message.")
-    logger.warning("This is a warning message.", extra={"user_id": "user_xyz", "action": "login"})
+    logger.warning(
+        "This is a warning message.", extra={"user_id": "user_xyz", "action": "login"}
+    )
     try:
         1 / 0
     except ZeroDivisionError:
