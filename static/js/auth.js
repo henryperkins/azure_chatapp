@@ -412,23 +412,18 @@ export function createAuthModule(deps) {
       }
       const hasCookies = publicAuth.hasAuthCookies();
       if (hasCookies) {
-        const tempUser = hasLoginParams
-          ? { username: urlParams.get('username'), id: 'temp-id-' + Date.now() }
-          : null;
-        broadcastAuth(true, tempUser, 'verify_auth_based_on_cookies');
-        const browserServiceForTimeoutReverify = DependencySystem?.modules?.get('browserService');
-        if (!browserServiceForTimeoutReverify || typeof browserServiceForTimeoutReverify.setTimeout !== 'function') {
-          logger.error('[AuthModule] browserService.setTimeout is required for guardrail compliance (verifyAuthState re-verify).', { context: 'verifyAuthState' });
-        } else {
-          browserServiceForTimeoutReverify.setTimeout(() => {
-            if (authState.isAuthenticated) {
-              verifyAuthState(true).catch((err) => {
-                logger.debug('[AuthModule] Silent failure during re-verify auth state:', err, { context: 'verifyAuthState' });
-              });
-            }
-          }, 2000);
-        }
-        return true;
+        // We still have auth cookies, but the backend did **not** confirm the
+        // session.  Treat them as stale rather than assuming the user is
+        // logged-in; clear the tokens and continue down the unauthenticated
+        // path so the login UI becomes visible.
+        logger.warn(
+          '[AuthModule][verifyAuthState] Auth cookies found but backend ' +
+          'verification failed – clearing stale cookies.',
+          { context: 'verifyAuthState' }
+        );
+        await clearTokenState({ source: 'stale_auth_cookies' });
+        // Do NOT `return true` here – allow the function to fall through so
+        // it eventually broadcasts `authenticated:false`.
       }
       await clearTokenState({ source: 'verify_negative_after_all_checks' });
       broadcastAuth(false, null, 'verify_negative_after_all_checks');
