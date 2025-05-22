@@ -127,8 +127,6 @@ The frontend uses a modular ES6 architecture with strict dependency injection:
 
 ### Frontend Guardrails
 
-**IMPORTANT: DO NOT CREATE NEW MODULES**
-
 1. **Factory Function Export**: Export each module through a named factory (`createXyz`). Validate all dependencies at the top and expose a cleanup API. No top-level logic.
 2. **Strict Dependency Injection**: No direct access to `window`, `document`, `console`, or any global directly. Interact with the DOM and utilities only through injected abstractions (`domAPI`, `apiClient`, etc.).
 3. **Pure Imports**: No side effects at import time; all initialization occurs inside the factory.
