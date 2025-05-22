@@ -1,4 +1,3 @@
-// chatExtensions.js
 /**
  * chatExtensions.js
  * DependencySystem/DI refactored modular extension for chat UI enhancements:
@@ -38,18 +37,25 @@ export function createChatExtensions(options) {
   var trackListener = eventHandlers.trackListener.bind(eventHandlers);
   var MODULE_CONTEXT = "chatExtensions";
 
-  function init() {
-    return domReadinessService.elementsReady(
+  async function init() {
+    await domReadinessService.documentReady();
+    await domReadinessService.elementsReady(
       ['#projectChatTitleEditBtn', '#projectChatTitle'],
       { timeout: 8000, observeMutations: true, context: 'chatExtensions.init' }
-    ).then(() => {
-      setupChatTitleEditing();
-
-      const doc = domAPI.getDocument?.();
-      doc?.dispatchEvent(
-        new CustomEvent('chatextensions:initialized', { detail: { success: true } })
-      );
+    );
+    await domReadinessService.dependenciesAndElements({
+      deps: ['chatManager', 'auth', 'app'],
+      domSelectors: ['#projectChatTitleEditBtn', '#projectChatTitle'],
+      timeout: 8000,
+      context: 'chatExtensions.init'
     });
+
+    setupChatTitleEditing();
+
+    const doc = domAPI.getDocument?.();
+    doc?.dispatchEvent(
+      new CustomEvent('chatextensions:initialized', { detail: { success: true } })
+    );
   }
 
   function setupChatTitleEditing() {
