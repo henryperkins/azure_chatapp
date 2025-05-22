@@ -158,7 +158,9 @@ export function createChatManager(deps = {}) {
         const u = urlFactory(endpoint, params);
         endpoint = String(u);
       }
-      return this.apiRequest(endpoint, rest, ctx);
+      return this.apiRequest(endpoint,
+        { credentials: 'include', ...rest },
+        ctx);
     }
 
     constructor() {
