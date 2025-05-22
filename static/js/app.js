@@ -1759,7 +1759,12 @@ function handleInitError(err) {
 if (typeof window !== 'undefined') {
   // Add global error handler to catch and log any errors
   window.onerror = function (message, source, lineno, colno, error) {
-    return false;
+    const log = DependencySystem?.modules?.get?.('logger');
+    log?.error?.('[window.onerror]',
+      { message, source, lineno, colno, err: error?.stack || error },
+      { context: 'global.onerror' }
+    );
+    return false;                     // keep default browser behaviour
   };
 
   eventHandlers.trackListener(
