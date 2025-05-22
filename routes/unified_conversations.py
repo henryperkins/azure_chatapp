@@ -30,6 +30,7 @@ from sentry_sdk import (
 
 from db import get_async_session
 from services.conversation_service import ConversationService, get_conversation_service
+from services.token_service import estimate_input_tokens
 from utils.auth_utils import get_current_user_and_token
 from utils.sentry_utils import sentry_span, make_sentry_trace_response
 from services.project_service import validate_project_access
@@ -205,8 +206,6 @@ async def create_conversation(
                 transaction.set_tag("error.type", "validation")
                 metrics.incr("conversation.create.failure", tags={"reason": "kb_missing"})
                 raise HTTPException(status_code=400, detail="Project has no knowledge base")
-            kb_id = project.knowledge_base.id
-
             # Create conversation
             with sentry_span(op="db.create", description="Create conversation record"):
                 from sqlalchemy.exc import IntegrityError
@@ -218,7 +217,7 @@ async def create_conversation(
                         model_id=conversation_data.model_id,
                         project_id=project_id,
                         model_config=conversation_data.model_params,   # ← CHANGED
-                        kb_enabled=conversation_data.kb_enabled,
+                        kb_enabled=conversation_data.kb_enabled or False,
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
                 except IntegrityError as db_exc:
@@ -502,13 +501,9 @@ async def create_project_conversation_message(
         with transaction:
             # ---- Extract/validate message payload (supports wrapper or flat) ----
             msg_dict = payload.get("new_msg") or payload
-            try:
-                new_msg = MessageCreate(**msg_dict)
-            except ValidationError as ve:
-                raise HTTPException(status_code=422, detail=ve.errors()) from ve
 
-            # Optional: allow top-level overrides
-            for fld in (
+            # Merge top-level overrides into msg_dict before instantiation
+            override_fields = (
                 "vision_detail",
                 "enable_web_search",
                 "enable_thinking",
@@ -516,9 +511,23 @@ async def create_project_conversation_message(
                 "reasoning_effort",
                 "temperature",
                 "max_tokens",
-            ):
+            )
+            merged_dict = dict(msg_dict)
+            for fld in override_fields:
                 if fld in payload:
-                    setattr(new_msg, fld, payload[fld])
+                    merged_dict[fld] = payload[fld]
+
+            # Defensive: Replace any FieldInfo values with their default or a safe fallback
+            from pydantic.fields import FieldInfo
+            for k, v in merged_dict.items():
+                if isinstance(v, FieldInfo):
+                    # Use default if available, else sensible fallback
+                    merged_dict[k] = v.default if v.default is not None else ("" if k in ["raw_text", "role", "vision_detail", "reasoning_effort", "sentry_trace", "image_data"] else False)
+
+            try:
+                new_msg = MessageCreate(**merged_dict)
+            except ValidationError as ve:
+                raise HTTPException(status_code=422, detail=ve.errors()) from ve
 
             current_user = current_user_tuple[0]
             # Set context from frontend if available
@@ -554,11 +563,19 @@ async def create_project_conversation_message(
             ) as span:
                 start_time = time.time()
 
+                # Defensive: ensure raw_text and role are strings before using .strip()/.lower()
+                raw_text_val = new_msg.raw_text
+                if not isinstance(raw_text_val, str):
+                    raw_text_val = "" if raw_text_val is None else str(raw_text_val)
+                role_val = new_msg.role
+                if not isinstance(role_val, str):
+                    role_val = "user" if role_val is None else str(role_val)
+
                 response = await conv_service.create_message(
                     conversation_id=conversation_id,
                     user_id=current_user.id,
-                    content=new_msg.raw_text.strip(),
-                    role=new_msg.role.lower().strip(),
+                    content=raw_text_val.strip(),
+                    role=role_val.lower().strip(),
                     project_id=project_id,
                     image_data=new_msg.image_data,
                     vision_detail=new_msg.vision_detail,
@@ -575,7 +592,10 @@ async def create_project_conversation_message(
                 message_metrics["processing_time_ms"] = duration
 
             # AI response processing
-            if new_msg.role.lower() == "user":
+            role_val = new_msg.role
+            if not isinstance(role_val, str):
+                role_val = "user" if role_val is None else str(role_val)
+            if role_val.lower() == "user":
                 with sentry_span(
                     op="ai.response", description="Generate AI response"
                 ) as ai_span:
@@ -861,16 +881,108 @@ async def estimate_tokens_for_input_in_conversation(
     try:
         current_user = current_user_tuple[0]
         await validate_project_access(project_id, current_user, db)
-        conv = await conv_service.get_conversation(conversation_id, current_user.id, project_id)
-        from utils.tokens import count_tokens_text
-        model_id = conv.get("model_id") or conv.get("model_config", {}).get("model_id")
-        if not model_id:
-            raise HTTPException(status_code=400, detail="Model not set for conversation.")
-        input_tokens = count_tokens_text(request_data.current_input, model_id)
+        input_tokens = await estimate_input_tokens(
+            conversation_id=conversation_id,
+            input_text=request_data.current_input,
+            db=db,
+            user_id=current_user.id,
+            project_id=project_id,
+        )
         return TokenEstimationResponse(estimated_tokens_for_input=input_tokens)
     except Exception as e:
         logger.exception(f"Token estimation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to estimate tokens: {str(e)}")
+
+
+class TokenStatsResponse(BaseModel):
+    """Response model for token statistics API"""
+    context_token_usage: int
+    message_count: int
+    user_msg_tokens: int
+    ai_msg_tokens: int
+    system_msg_tokens: int
+    knowledge_tokens: int
+    total_tokens: int
+
+@router.get(
+    "/{project_id}/conversations/{conversation_id}/token-stats",
+    response_model=TokenStatsResponse,
+    summary="Get detailed token statistics for a conversation",
+    tags=["Conversations"]
+)
+async def get_conversation_token_stats(
+    project_id: UUID,
+    conversation_id: UUID,
+    current_user_tuple: tuple = Depends(get_current_user_and_token),
+    db: AsyncSession = Depends(get_async_session),
+    conv_service: ConversationService = Depends(get_conversation_service),
+):
+    """Get detailed token usage statistics for a conversation"""
+    with sentry_span(
+        op="conversation",
+        name="Get Token Stats",
+        description=f"Get token stats for conversation {conversation_id}",
+    ) as span:
+        try:
+            current_user = current_user_tuple[0]
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("conversation.id", str(conversation_id))
+            span.set_tag("user.id", str(current_user.id))
+
+            # Validate access
+            await validate_project_access(project_id, current_user, db)
+            
+            # Get conversation data with context token usage
+            conv_data = await conv_service.get_conversation(
+                conversation_id=conversation_id,
+                user_id=current_user.id,
+                project_id=project_id,
+            )
+            
+            # Get messages to calculate token breakdowns
+            messages = await conv_service.list_messages(
+                conversation_id=conversation_id,
+                user_id=current_user.id,
+                project_id=project_id,
+                skip=0,
+                limit=9999,
+            )
+            
+            # Calculate token breakdowns
+            user_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "user")
+            ai_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "assistant")
+            system_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "system")
+            
+            # Get knowledge tokens from metadata if available
+            knowledge_tokens = 0
+            for msg in messages:
+                if msg.get("role") == "system" and msg.get("extra_data", {}).get("used_knowledge_context"):
+                    knowledge_tokens += msg.get("token_count", 0)
+            
+            # Calculate total tokens
+            total_tokens = user_msg_tokens + ai_msg_tokens + system_msg_tokens
+            
+            # Return token stats
+            return TokenStatsResponse(
+                context_token_usage=conv_data.get("context_token_usage", 0),
+                message_count=len(messages),
+                user_msg_tokens=user_msg_tokens,
+                ai_msg_tokens=ai_msg_tokens,
+                system_msg_tokens=system_msg_tokens,
+                knowledge_tokens=knowledge_tokens,
+                total_tokens=total_tokens,
+            )
+        
+        except HTTPException:
+            raise
+        except Exception as e:
+            span.set_tag("error", True)
+            capture_exception(e)
+            metrics.incr("conversation.token_stats.failure")
+            logger.error(f"Failed to get token stats: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve token statistics"
+            ) from e
 
 
 @router.get(

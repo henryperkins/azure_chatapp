@@ -143,6 +143,7 @@ function createProjectDetailsEnhancements(deps) {
 
   /**
    * Add a floating action button (FAB) to the project details page
+   * with enhanced mobile interactions
    */
   function addFloatingActionButton() {
     try {
@@ -192,7 +193,18 @@ function createProjectDetailsEnhancements(deps) {
             break;
         }
 
-        if (targetBtn) targetBtn.click();
+        if (targetBtn) {
+          // Add haptic feedback on mobile if available
+          if (browserService && browserService.isMobile && navigator.vibrate) {
+            navigator.vibrate(50); // Short vibration for feedback
+          }
+          
+          // Visual feedback - temporary animation
+          fabElement.classList.add('active');
+          setTimeout(() => fabElement.classList.remove('active'), 300);
+          
+          targetBtn.click();
+        }
       };
 
       const fabClickUnsub = eventHandlers.trackListener(
@@ -201,6 +213,39 @@ function createProjectDetailsEnhancements(deps) {
         handleFabClick,
         { context: CONTEXT }
       );
+      
+      // For mobile: Add reminder pulse after 5 seconds of inactivity
+      // to subtly draw attention to the FAB
+      if (browserService && browserService.isMobile) {
+        setTimeout(() => {
+          // Only add pulse if user hasn't interacted with FAB yet
+          if (!fabElement.classList.contains('active')) {
+            fabElement.classList.add('reminder-pulse');
+            // Remove pulse after 5 seconds
+            setTimeout(() => fabElement.classList.remove('reminder-pulse'), 5000);
+          }
+        }, 5000);
+        
+        // Add touch feedback
+        eventHandlers.trackListener(
+          fabElement,
+          'touchstart',
+          () => {
+            fabElement.style.transform = 'scale(0.95)';
+            fabElement.classList.remove('reminder-pulse');
+          },
+          { context: CONTEXT }
+        );
+        
+        eventHandlers.trackListener(
+          fabElement,
+          'touchend',
+          () => {
+            fabElement.style.transform = '';
+          },
+          { context: CONTEXT }
+        );
+      }
     } catch (error) {
       logger.error('[addFloatingActionButton]', error, { context: CONTEXT });
     }
@@ -355,6 +400,62 @@ function createProjectDetailsEnhancements(deps) {
 
       // Make sure list is visible with a smooth fade-in
       projectList.style.opacity = '1';
+      
+      // Mobile-specific enhancements
+      if (browserService && browserService.isMobile) {
+        // Improve touch targets
+        domAPI.querySelectorAll('#projectList .btn, #projectList button').forEach(btn => {
+          if (!btn.classList.contains('btn-lg')) {
+            btn.style.minHeight = '44px'; // Ensure minimum touch target size
+          }
+        });
+        
+        // Improve keyboard experience for search input
+        const searchInput = domAPI.getElementById('projectSearchInput');
+        if (searchInput) {
+          // Prevent iOS zoom by ensuring font size is at least 16px
+          searchInput.style.fontSize = '16px';
+          
+          // Add proper mobile keyboard support
+          searchInput.setAttribute('inputmode', 'search');
+          searchInput.setAttribute('enterkeyhint', 'search');
+          
+          // Clear button for mobile
+          const clearBtn = domAPI.createElement('button');
+          clearBtn.className = 'input-clear-btn';
+          clearBtn.innerHTML = sanitizer.sanitize(`
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          `);
+          
+          // Insert clear button after search input
+          searchInput.parentNode.insertBefore(clearBtn, searchInput.nextSibling);
+          
+          // Initially hidden
+          clearBtn.style.display = 'none';
+          
+          // Show/hide clear button based on input content
+          eventHandlers.trackListener(
+            searchInput,
+            'input',
+            () => {
+              clearBtn.style.display = searchInput.value ? 'flex' : 'none';
+            },
+            { context: CONTEXT }
+          );
+          
+          // Clear input when button is clicked
+          eventHandlers.trackListener(
+            clearBtn,
+            'click',
+            () => {
+              searchInput.value = '';
+              searchInput.dispatchEvent(new Event('input'));
+              searchInput.focus();
+            },
+            { context: CONTEXT }
+          );
+        }
+      }
 
       state.projectListInitialized = true;
       logger.debug('[enhanceProjectList] Project list enhancements applied', { context: CONTEXT });
@@ -535,6 +636,152 @@ function createProjectDetailsEnhancements(deps) {
   }
 
   /**
+   * Add mobile-specific pull-to-refresh for the conversation list
+   */
+  function setupPullToRefresh() {
+    try {
+      // Only apply on mobile devices
+      if (!browserService || !browserService.isMobile) return;
+      
+      const conversationsList = domAPI.getElementById('projectConversationsList');
+      if (!conversationsList) return;
+      
+      // Create pull indicator element
+      const pullIndicator = domAPI.createElement('div');
+      pullIndicator.className = 'pull-indicator';
+      pullIndicator.innerHTML = sanitizer.sanitize(`
+        <div class="mobile-loading-indicator"></div>
+        <span class="ml-2">Pull to refresh</span>
+      `);
+      
+      // Insert at the top of the conversations list
+      conversationsList.insertBefore(pullIndicator, conversationsList.firstChild);
+      
+      // Track touch events for pull detection
+      let startY = 0;
+      let currentY = 0;
+      let isPulling = false;
+      let refreshTriggered = false;
+      
+      const onTouchStart = (e) => {
+        // Only activate if we're at the top of the list
+        if (conversationsList.scrollTop <= 5) {
+          startY = e.touches[0].clientY;
+          isPulling = true;
+        }
+      };
+      
+      const onTouchMove = (e) => {
+        if (!isPulling) return;
+        
+        currentY = e.touches[0].clientY;
+        const pullDistance = currentY - startY;
+        
+        // Only allow pulling down, not up
+        if (pullDistance <= 0) {
+          isPulling = false;
+          return;
+        }
+        
+        // Apply resistance to the pull
+        const resistance = 0.4;
+        const transformY = Math.min(pullDistance * resistance, 80);
+        
+        pullIndicator.style.transform = `translateY(${transformY}px)`;
+        pullIndicator.classList.add('visible');
+        
+        // If pulled far enough, mark as ready to refresh
+        if (transformY > 60 && !refreshTriggered) {
+          pullIndicator.innerHTML = sanitizer.sanitize(`
+            <div class="mobile-loading-indicator"></div>
+            <span class="ml-2">Release to refresh</span>
+          `);
+          refreshTriggered = true;
+        } else if (transformY <= 60 && refreshTriggered) {
+          pullIndicator.innerHTML = sanitizer.sanitize(`
+            <div class="mobile-loading-indicator"></div>
+            <span class="ml-2">Pull to refresh</span>
+          `);
+          refreshTriggered = false;
+        }
+        
+        // Prevent default scrolling
+        e.preventDefault();
+      };
+      
+      const onTouchEnd = () => {
+        if (!isPulling) return;
+        
+        // If we pulled far enough, trigger refresh
+        if (refreshTriggered) {
+          pullIndicator.innerHTML = sanitizer.sanitize(`
+            <div class="mobile-loading-indicator"></div>
+            <span class="ml-2">Refreshing...</span>
+          `);
+          
+          // Reload conversation list data
+          const projectId = domAPI.querySelector('[data-project-id]')?.dataset?.projectId;
+          if (projectId && eventHandlers.DependencySystem?.modules?.get('projectManager')) {
+            const projectManager = eventHandlers.DependencySystem.modules.get('projectManager');
+            
+            // Refresh conversations
+            projectManager.loadProjectConversations(projectId)
+              .finally(() => {
+                // Reset the pull indicator after refresh
+                setTimeout(() => {
+                  pullIndicator.style.transform = 'translateY(-50px)';
+                  pullIndicator.classList.remove('visible');
+                  isPulling = false;
+                  refreshTriggered = false;
+                }, 1000);
+              });
+          } else {
+            // No project ID or project manager, reset
+            setTimeout(() => {
+              pullIndicator.style.transform = 'translateY(-50px)';
+              pullIndicator.classList.remove('visible');
+              isPulling = false;
+              refreshTriggered = false;
+            }, 1000);
+          }
+        } else {
+          // Not pulled far enough, reset
+          pullIndicator.style.transform = 'translateY(-50px)';
+          pullIndicator.classList.remove('visible');
+        }
+        
+        isPulling = false;
+        refreshTriggered = false;
+      };
+      
+      // Track touch events
+      eventHandlers.trackListener(
+        conversationsList,
+        'touchstart',
+        onTouchStart,
+        { context: CONTEXT }
+      );
+      
+      eventHandlers.trackListener(
+        conversationsList,
+        'touchmove',
+        onTouchMove,
+        { context: CONTEXT }
+      );
+      
+      eventHandlers.trackListener(
+        conversationsList,
+        'touchend',
+        onTouchEnd,
+        { context: CONTEXT }
+      );
+      
+    } catch (error) {
+      logger.error('[setupPullToRefresh]', error, { context: CONTEXT });
+    }
+  }
+  
+  /**
    * Apply all enhancements
    */
   async function initialize() {
@@ -557,6 +804,18 @@ function createProjectDetailsEnhancements(deps) {
         addFloatingActionButton();
         enhanceEmptyStates();
         setupTabTracking();
+        
+        // Mobile-specific enhancements
+        if (browserService && browserService.isMobile) {
+          setupPullToRefresh();
+          
+          // Improve touch target sizes for mobile
+          domAPI.querySelectorAll('.btn, button').forEach(btn => {
+            if (!btn.classList.contains('btn-lg') && !btn.classList.contains('project-fab')) {
+              btn.style.minHeight = '44px'; // Ensure minimum touch target size
+            }
+          });
+        }
 
         state.initialized = true;
         logger.debug('[ProjectEnhancements] Project details initialized successfully', { context: CONTEXT });
