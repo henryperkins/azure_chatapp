@@ -36,18 +36,27 @@ export function createServiceInitializer({
     throw new Error('[serviceInit] Missing required dependencies for service initialization.');
   }
 
+  // Helper: register only if not already present
+  function safeRegister(name, value) {
+    if (!DependencySystem?.modules?.has?.(name)) {
+      DependencySystem.register(name, value);
+    } else {
+      logger?.debug?.(`[serviceInit] "${name}" already registered – skipping`, { context: 'serviceInit:safeRegister' });
+    }
+  }
+
   /**
    * Register all basic services that were scattered in app.js
    */
   function registerBasicServices() {
     try {
       // Register core browser and DOM services
-      DependencySystem.register('domAPI', domAPI);
-      DependencySystem.register('browserAPI', browserServiceInstance);
-      DependencySystem.register('browserService', browserServiceInstance);
-      DependencySystem.register('storage', browserServiceInstance);
-      DependencySystem.register('eventHandlers', eventHandlers);
-      DependencySystem.register('domReadinessService', domReadinessService);
+      safeRegister('domAPI', domAPI);
+      safeRegister('browserAPI',         browserServiceInstance);
+      safeRegister('browserService',     browserServiceInstance);
+      safeRegister('storage',            browserServiceInstance);
+      safeRegister('eventHandlers',      eventHandlers);
+      safeRegister('domReadinessService',domReadinessService);
 
       // Wire circular dependency with setter (post-construction)
       eventHandlers.setDomReadinessService(domReadinessService);
@@ -56,17 +65,17 @@ export function createServiceInitializer({
       const errorReporter = {
         report: (...args) => logger.error('[ErrorReporterStub]', ...args, { context: 'serviceInit:ErrorReporterStub' })
       };
-      DependencySystem.register('errorReporter', errorReporter);
+      safeRegister('errorReporter', errorReporter);
 
       // Register utility services
-      if (uiUtils) DependencySystem.register('uiUtils', uiUtils);
-      if (globalUtils) DependencySystem.register('globalUtils', globalUtils);
-      DependencySystem.register('sanitizer', sanitizer);
-      DependencySystem.register('domPurify', sanitizer); // legacy alias
+      if (uiUtils) safeRegister('uiUtils', uiUtils);
+      if (globalUtils) safeRegister('globalUtils', globalUtils);
+      safeRegister('sanitizer', sanitizer);
+      safeRegister('domPurify', sanitizer); // legacy alias
 
       // Register file upload component factory
       if (createFileUploadComponent) {
-        DependencySystem.register('FileUploadComponent', createFileUploadComponent);
+        safeRegister('FileUploadComponent', createFileUploadComponent);
       }
 
       // Register API endpoints configuration
@@ -84,7 +93,7 @@ export function createServiceInitializer({
         CONVERSATION: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}`,
         MESSAGES: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/messages`
       };
-      DependencySystem.register('apiEndpoints', apiEndpoints);
+      safeRegister('apiEndpoints', apiEndpoints);
 
       logger.log('[serviceInit] Basic services registered', { context: 'serviceInit:registerBasicServices' });
     } catch (err) {

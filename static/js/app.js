@@ -18,6 +18,7 @@ import { createBrowserService, normaliseUrl } from './utils/browserService.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
+import { createServiceInitializer }   from './init/serviceInit.js';
 import { createCoreInitializer } from './init/coreInit.js';
 import { createAuthInitializer } from './init/authInit.js';
 import { createAppStateManager } from './init/appState.js';
@@ -214,6 +215,28 @@ const globalUtils = {
   shouldSkipDedup,
   stableStringify
 };
+
+// ---------------------------------------------------------------------------
+// Service-level registration (replaces manual DependencySystem.register calls)
+// ---------------------------------------------------------------------------
+const serviceInit = createServiceInitializer({
+  DependencySystem,
+  domAPI,
+  browserServiceInstance,
+  eventHandlers,
+  domReadinessService,
+  logger,
+  sanitizer,
+  APP_CONFIG,
+  uiUtils,
+  globalUtils,
+  createFileUploadComponent,
+  createApiClient,
+  createAccessibilityEnhancements,
+  createNavigationService,
+  createHtmlTemplateLoader
+});
+serviceInit.registerBasicServices();
 DependencySystem.register('globalUtils', globalUtils);
 
 // (NO duplicate sanitizer declaration/registration here)
