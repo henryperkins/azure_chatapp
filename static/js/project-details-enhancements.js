@@ -108,7 +108,7 @@ function createProjectDetailsEnhancements(deps) {
       // Append to project-details-root
       const projectRoot = domAPI.querySelector('.project-details-root');
       if (projectRoot) {
-        projectRoot.appendChild(fabElement);
+        domAPI.appendChild(projectRoot, fabElement);
       }
 
       // Add click handler
@@ -372,7 +372,11 @@ function createProjectDetailsEnhancements(deps) {
           `));
 
           // Insert clear button after search input
-          searchInput.parentNode.insertBefore(clearBtn, searchInput.nextSibling);
+          domAPI.insertBefore(
+            searchInput.parentNode,
+            clearBtn,
+            domAPI.getProperty(searchInput, 'nextSibling')
+          );
 
           // Initially hidden
           clearBtn.style.display = 'none';
