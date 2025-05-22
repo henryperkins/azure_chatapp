@@ -72,12 +72,13 @@ export function createProjectListComponent(deps) {
         try {
             // Check app readiness using only DI domReadinessService
             await domReadinessService.dependenciesAndElements({
-                deps        : ['projectManager', 'eventHandlers'],
-                domSelectors: [
+                deps            : ['projectManager', 'eventHandlers'],
+                domSelectors    : [
                     '.project-list-container', '.mobile-grid', '#projectFilterTabs'
                 ],
-                timeout     : 10000,
-                context     : MODULE_CONTEXT + '_init'
+                observeMutations: true,   // wait for template injection
+                timeout         : APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
+                context         : MODULE_CONTEXT + '_init'
             });
         } catch (err) {
             logger.error('[ProjectListComponent][initialize] dependenciesAndElements failed', err, { context: MODULE_CONTEXT });
