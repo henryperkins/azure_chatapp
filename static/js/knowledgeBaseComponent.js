@@ -34,7 +34,7 @@ export function createKnowledgeBaseComponent(options = {}) {
   // Removed reqEl function from factory scope. It will be part of _initElements.
   const elementSelectors = { // Renamed from 'elements'
     container: "knowledgeTab", // Store selectors (strings)
-    activeSection: "knowledgeBaseActive",
+    activeSection: "knowledgeStatus",
     inactiveSection: "knowledgeBaseInactive",
     statusBadge: "kbStatusBadge",
     searchInput: "knowledgeSearchInput",
@@ -160,6 +160,14 @@ export function createKnowledgeBaseComponent(options = {}) {
 
     _initElements() {
       const OPTIONAL_KEYS = new Set([
+        'activeSection','inactiveSection','statusBadge',
+        'kbToggle','reprocessButton','setupButton','settingsButton',
+        'kbNameDisplay','kbModelDisplay','kbVersionDisplay','kbLastUsedDisplay',
+        'knowledgeBaseFilesSection','knowledgeBaseFilesListContainer',
+        'kbGitHubAttachedRepoInfo','kbAttachedRepoUrlDisplay',
+        'kbAttachedRepoBranchDisplay','kbDetachRepoBtn',
+        'kbGitHubAttachForm','kbGitHubRepoUrlInput',
+        'kbGitHubBranchInput','kbGitHubFilePathsTextarea','kbAttachRepoBtn',
         'kbModelDisplay', 'kbVersionDisplay', 'kbLastUsedDisplay',
         'kbGitHubAttachedRepoInfo', 'kbAttachedRepoUrlDisplay',
         'kbAttachedRepoBranchDisplay', 'kbDetachRepoBtn',
@@ -200,8 +208,8 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       if (this.state.isInitialized && !isVisible) {
         this.elements.activeSection?.classList.add("hidden");
-        this.elements.inactiveSection?.classList.add("hidden");
-        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+        this.elements.inactiveSection?.classList?.add("hidden");
+        this.elements.knowledgeBaseFilesSection?.classList?.add("hidden");
         return;
       }
 
@@ -304,15 +312,15 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.state.knowledgeBase = kbData;
 
       const pid = projectId || kbData.project_id || this._getCurrentProjectId();
-      if (this.elements.activeSection) {
+      if (this.elements.activeSection?.dataset) {
         this.elements.activeSection.dataset.projectId = pid || "";
       }
       this._updateBasicInfo(kbData);
       this.manager._updateModelSelection(kbData.embedding_model);
       this._updateStatusIndicator(kbData.is_active !== false);
 
-      this.elements.activeSection.classList.remove("hidden");
-      this.elements.inactiveSection.classList.add("hidden");
+      this.elements.activeSection?.classList.remove("hidden");
+      this.elements.inactiveSection?.classList?.add("hidden");
       if (this.elements.kbToggle) {
         this.elements.kbToggle.checked = kbData.is_active !== false;
       }
@@ -323,7 +331,7 @@ export function createKnowledgeBaseComponent(options = {}) {
             .catch(() => {});
           this.manager.loadKnowledgeBaseFiles(pid, kbData.id);
         } else {
-          this.elements.knowledgeBaseFilesSection.classList.add("hidden");
+          this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
           if (this.manager._renderKnowledgeBaseFiles) {
             this.manager._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
           } else {

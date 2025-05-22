@@ -99,7 +99,7 @@ class ProjectDetailsComponent {
       initialized: false,
       templateLoaded: false,
       loading: false,
-      activeTab: "details",
+      activeTab: "chat",
       projectDataLoaded: false
     };
     this.projectId = null;
