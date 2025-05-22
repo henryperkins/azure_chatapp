@@ -4,7 +4,7 @@ import json
 import os
 import re
 import time
-from utils.sentry_utils import capture_custom_message
+from utils.sentry_helpers import capture_custom_message
 from utils.auth_utils import get_current_user
 from models.user import User
 
@@ -59,6 +59,24 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
         reset = Style.RESET_ALL if hasattr(Style, "RESET_ALL") else ""
 
         # --- Sanitize sensitive fields ---
+        def sanitize_args(args):
+            sensitive_patterns = [
+                r"password.*",
+                r".*token.*",
+                r".*key.*",
+                r".*secret.*"
+            ]
+            def is_sensitive(key):
+                return any(re.match(pattern, key, re.IGNORECASE) for pattern in sensitive_patterns)
+            result = []
+            for arg in args:
+                if isinstance(arg, dict):
+                    sanitized = {k: "[REDACTED]" if is_sensitive(k) else v for k, v in arg.items()}
+                    result.append(sanitized)
+                else:
+                    result.append(arg)
+            return result
+
         def sanitize(entry):
             sensitive_patterns = [
                 r"password.*",
@@ -66,18 +84,15 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
                 r".*key.*",
                 r".*secret.*"
             ]
+            def is_sensitive(key):
+                return any(re.match(pattern, key, re.IGNORECASE) for pattern in sensitive_patterns)
             sanitized = dict(entry)
             for key in list(sanitized.keys()):
-                if any(re.match(pattern, key, re.IGNORECASE) for pattern in sensitive_patterns):
+                if is_sensitive(key):
                     sanitized[key] = "[REDACTED]"
             # Also sanitize nested dicts in 'args' if present
             if isinstance(sanitized.get("args"), list):
-                sanitized["args"] = [
-                    {k: "[REDACTED]" if any(re.match(p, k, re.IGNORECASE) for p in sensitive_patterns) else v
-                     for k, v in (a.items() if isinstance(a, dict) else [])}
-                    if isinstance(a, dict) else a
-                    for a in sanitized["args"]
-                ]
+                sanitized["args"] = sanitize_args(sanitized["args"])
             return sanitized
 
         sanitized_entry = sanitize(log_entry)
