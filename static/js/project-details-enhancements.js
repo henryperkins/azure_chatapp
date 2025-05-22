@@ -161,12 +161,12 @@ function createProjectDetailsEnhancements(deps) {
       // For mobile: Add reminder pulse after 5 seconds of inactivity
       // to subtly draw attention to the FAB
       if (browserService && browserService.isMobile) {
-        setTimeout(() => {
+        browserService.setTimeout(() => {
           // Only add pulse if user hasn't interacted with FAB yet
           if (!fabElement.classList.contains('active')) {
             fabElement.classList.add('reminder-pulse');
             // Remove pulse after 5 seconds
-            setTimeout(() => fabElement.classList.remove('reminder-pulse'), 5000);
+            browserService.setTimeout(() => fabElement.classList.remove('reminder-pulse'), 5000);
           }
         }, 5000);
 
