@@ -17,12 +17,20 @@ export function createLogger({
   context     = 'App',
   minLevel    = 'info',           // default threshold
   fetcher     = null,             // ← NEW injectable fetch
-  browserService = null           // ← NEW optional DI
+  browserService = null,          // ← NEW optional DI
+  authModule = null               // ← NEW optional DI: AuthModule for auth check
 } = {}) {
   const THRESHOLD = LVL[minLevel] ?? LVL.info;
   async function send(level, args) {
     if (!enableServer) return;
     if (LVL[level] < THRESHOLD) return;          // NEW
+
+    // Only send logs to backend if authenticated (if authModule is provided)
+    if (authModule && typeof authModule.isAuthenticated === 'function' && !authModule.isAuthenticated()) {
+      // Optionally, could log to browser only
+      return;
+    }
+
     try {
       const _fetch =
         fetcher ||
