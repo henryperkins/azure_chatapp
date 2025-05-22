@@ -332,6 +332,13 @@ export function createSidebar({
     const authenticated = event?.detail?.authenticated ?? authModule?.isAuthenticated?.();
 
     domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', !!authenticated);
+    // Ensure DaisyUI/Dual-class elements really hide
+    if (sidebarAuthFormContainerEl) {
+      domAPI.setStyle(sidebarAuthFormContainerEl, 'display', authenticated ? 'none' : '');
+      authenticated
+        ? sidebarAuthFormContainerEl.setAttribute?.('hidden', 'hidden')
+        : sidebarAuthFormContainerEl.removeAttribute?.('hidden');
+    }
     // Ensure the sidebar itself is always visible, independent of auth state
     domAPI.toggleClass(el, 'hidden', false);
 
