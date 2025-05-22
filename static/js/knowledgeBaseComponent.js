@@ -39,9 +39,9 @@ export function createKnowledgeBaseComponent(options = {}) {
     statusBadge: "kbStatusBadge",
     searchInput: "knowledgeSearchInput",
     searchButton: "runKnowledgeSearchBtn",
-    resultsContainer: "knowledgeResultsList",
-    resultsSection: "knowledgeSearchResults",
-    noResultsSection: "knowledgeNoResults",
+    resultsContainer: "knowledgeResults",
+    resultsSection: "knowledgeResults",
+    noResultsSection: "noResults",
     topKSelect: "knowledgeTopK",
     kbToggle: "knowledgeBaseEnabled",
     reprocessButton: "reprocessFilesBtn",
@@ -176,7 +176,8 @@ export function createKnowledgeBaseComponent(options = {}) {
       };
 
       for (const key in this.elementSelectors) {
-        this.elements[key] = reqEl(key, this.elementSelectors[key]);
+        // Remap legacy 'knowledgeNoResults' property everywhere to 'noResultsSection'
+        this.elements[key === "noResultsSection" ? "noResultsSection" : key] = reqEl(key, this.elementSelectors[key]);
       }
     }
 
@@ -370,6 +371,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
       if (this.elements.inactiveSection && this.elements.inactiveSection.classList) {
         this.elements.inactiveSection.classList.remove("hidden");
+        // If there was an old reference to this.elements.knowledgeNoResults, update to .noResultsSection
       }
       if (this.elements.knowledgeBaseFilesSection && this.elements.knowledgeBaseFilesSection.classList) {
         this.elements.knowledgeBaseFilesSection.classList.add("hidden");

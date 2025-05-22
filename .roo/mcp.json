@@ -17,22 +17,6 @@
       ],
       "transportType": "stdio"
     },
-    "github.com/modelcontextprotocol/servers/tree/main/src/aws-kb-retrieval-server": {
-      "autoApprove": [
-        "retrieve_from_aws_kb"
-      ],
-      "disabled": false,
-      "timeout": 60,
-      "command": "node",
-      "args": [
-        "/home/azureuser/Cline/MCP/aws-kb-retrieval-server/index.js"
-      ],
-      "env": {
-        "AWS_PROFILE": "default",
-        "AWS_REGION": "us-east-1"
-      },
-      "transportType": "stdio"
-    },
     "github.com/awslabs/mcp/tree/main/src/core-mcp-server": {
       "autoApprove": [
         "prompt_understanding",
@@ -129,20 +113,6 @@
       },
       "transportType": "stdio"
     },
-    "github.com/smithery-ai/mcp-obsidian": {
-      "autoApprove": [
-        "read_notes",
-        "search_notes"
-      ],
-      "disabled": false,
-      "timeout": 60,
-      "command": "node",
-      "args": [
-        "/home/azureuser/Cline/MCP/obsidian-mcp/mcp-obsidian/dist/index.js",
-        "/home/azureuser/Cline/MCP/obsidian-vault"
-      ],
-      "transportType": "stdio"
-    },
     "github.com/awslabs/mcp/tree/main/src/aws-documentation-mcp-server": {
       "autoApprove": [
         "read_documentation",
@@ -175,20 +145,6 @@
         "AWS_REGION": "us-east-1",
         "FASTMCP_LOG_LEVEL": "ERROR"
       },
-      "transportType": "stdio"
-    },
-    "github.com/modelcontextprotocol/servers/tree/main/src/postgres": {
-      "autoApprove": [
-        "query"
-      ],
-      "disabled": false,
-      "timeout": 60,
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-postgres",
-        "postgresql://postgres:newpassword@localhost/postgres"
-      ],
       "transportType": "stdio"
     },
     "github.com/mendableai/firecrawl-mcp-server": {
@@ -380,37 +336,8 @@
       "env": {
         "MEMORY_FILE_PATH": "/home/azureuser/Cline/MCP/memory/memory.json"
       },
-      "transportType": "stdio"
-    },
-    "github.com/modelcontextprotocol/servers/tree/main/src/sentry": {
-      "autoApprove": [
-        "get_sentry_issue"
-      ],
-      "disabled": false,
-      "timeout": 60,
-      "command": "/home/azureuser/azure_chatapp/venv/bin/python3",
-      "args": [
-        "-m",
-        "mcp_server_sentry",
-        "--auth-token",
-        "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"
-      ],
-      "transportType": "stdio"
-    },
-    "github.com/zcaceres/fetch-mcp": {
-      "autoApprove": [
-        "fetch_html",
-        "fetch_markdown",
-        "fetch_txt",
-        "fetch_json"
-      ],
-      "disabled": false,
-      "timeout": 60,
-      "command": "node",
-      "args": [
-        "/home/azureuser/Cline/MCP/fetch-mcp/dist/index.js"
-      ],
-      "transportType": "stdio"
+      "transportType": "stdio",
+      "alwaysAllow": []
     },
     "awslabs.nova-canvas-mcp-server": {
       "command": "uvx",

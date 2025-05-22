@@ -179,7 +179,7 @@ class ProjectDetailsComponent {
       "#projectDescription", "#projectGoals", "#projectInstructions",
       "#knowledgeBaseActive", "#knowledgeBaseInactive", "#kbStatusBadge",
       "#knowledgeSearchInput", "#runKnowledgeSearchBtn",
-      "#knowledgeResultsList", "#knowledgeSearchResults", "#knowledgeNoResults",
+      "#knowledgeResultsList", "#knowledgeResults", "#noResults",
       "#knowledgeTopK",
       "#knowledgeBaseEnabled", "#reprocessFilesBtn", "#setupKnowledgeBaseBtn",
       "#knowledgeBaseSettingsBtn",
@@ -223,9 +223,9 @@ class ProjectDetailsComponent {
       this.elements.goals = $("#projectGoals");
       this.elements.instructions = $("#projectInstructions");
       // Optional: lists/containers for subcomponents
-      this.elements.filesList = $("#projectFilesList");
-      this.elements.conversationsList = $("#projectConversationsList");
-      this.elements.artifactsList = $("#projectArtifactsList");
+      this.elements.filesList = $("#filesList");
+      this.elements.conversationsList = $("#conversationsList");
+      this.elements.artifactsList = $("#artifactsList");
       // Upload/drag zone
       this.elements.fileInput = $("#fileInput");
       this.elements.uploadBtn = $("#uploadFileBtn");
@@ -473,17 +473,7 @@ class ProjectDetailsComponent {
     if (sel('#conversationCount')&& s.conversationCount!== undefined) sel('#conversationCount').textContent = s.conversationCount;
     if (sel('#artifactCount')    && s.artifactCount    !== undefined) sel('#artifactCount').textContent     = s.artifactCount;
 
-    // Token usage
-    if (s.tokenUsage !== undefined && s.maxTokens !== undefined && s.maxTokens > 0) {
-      const pct = Math.min(100, Math.round((s.tokenUsage / s.maxTokens) * 100));
-      if (sel('#tokenUsage'))       sel('#tokenUsage').textContent       = s.tokenUsage;
-      if (sel('#maxTokens'))        sel('#maxTokens').textContent        = s.maxTokens;
-      if (sel('#tokenPercentage'))  sel('#tokenPercentage').textContent  = pct + '%';
-      if (sel('#tokenProgressBar')) {
-        sel('#tokenProgressBar').value = pct;
-        sel('#tokenProgressBar').max   = 100;
-      }
-    }
+    // (mobile refactor) Token usage UI removed — stats now handled elsewhere
   }
 
   // --- File/Conversation/Artifact Item DOM (sanitized, event-tracked) ---
@@ -506,8 +496,8 @@ class ProjectDetailsComponent {
   // ─── Desactivar UI de chat en caso de error / KB inactivo ───
   disableChatUI(reason = 'Chat unavailable') {
     try {
-      const input = this.domAPI.getElementById('projectChatInput');
-      const send  = this.domAPI.getElementById('projectChatSendBtn');
+      const input = this.domAPI.getElementById('chatInput');
+      const send  = this.domAPI.getElementById('chatSendBtn');
       [input, send].forEach(el => {
         if (!el) return;
         el.disabled = true;
@@ -515,7 +505,7 @@ class ProjectDetailsComponent {
         this.domAPI.addClass(el, 'cursor-not-allowed');
         this.domAPI.addClass(el, 'opacity-50');
       });
-      const chatBox = this.domAPI.getElementById('projectChatUI');
+      const chatBox = this.domAPI.querySelector('#chatTab .chat-container');
       if (chatBox) this.domAPI.addClass(chatBox, 'opacity-40');
     } catch {/* silent */ }
   }
@@ -810,7 +800,7 @@ class ProjectDetailsComponent {
 
   // --- Button state for new conversation ---
   _updateNewChatButtonState() {
-    const newChatBtn = this.elements.container?.querySelector("#projectNewConversationBtn");
+    const newChatBtn = this.elements.container?.querySelector("#newConversationBtn");
     if (!newChatBtn) return;
 
     const alreadyBound = newChatBtn.hasAttribute('data-newchat-bound');
@@ -863,12 +853,12 @@ class ProjectDetailsComponent {
         this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
     this.chatManager.initialize({
       projectId: this.projectId,
-      containerSelector: "#projectChatUI",
-      messageContainerSelector: "#projectChatMessages",
-      inputSelector: "#projectChatInput",
-      sendButtonSelector: "#projectChatSendBtn",
-      titleSelector: "#projectChatTitle",
-      minimizeButtonSelector: "#projectMinimizeChatBtn"
+      containerSelector: "#chatTab .chat-container",
+      messageContainerSelector: "#chatMessages",
+      inputSelector: "#chatInput",
+      sendButtonSelector: "#chatSendBtn",
+      titleSelector: "#chatTitle",
+      minimizeButtonSelector: "#minimizeChatBtn"
     })
       .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))
       .catch((err) => { this._logError("Error initializing chatManager", err); });
