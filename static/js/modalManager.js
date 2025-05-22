@@ -281,6 +281,15 @@ class ModalManager {
   }
 
   show(modalName, options = {}) {
+    // --- Ensure the injected modals container is visible -----------------
+    const containerEl = this.domAPI.getElementById('modalsContainer');
+    if (containerEl) {
+      // Remove utility `hidden` class (Tailwind/DaisyUI) or standard `hidden` attr
+      this.domAPI.removeClass(containerEl, 'hidden');
+      containerEl.removeAttribute?.('hidden');
+      if (containerEl.style.display === 'none') containerEl.style.display = '';
+    }
+
     if (this.app?.isInitializing && !options.showDuringInitialization) {
       return false;
     }
