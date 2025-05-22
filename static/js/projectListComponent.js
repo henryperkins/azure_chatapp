@@ -602,10 +602,23 @@ export function createProjectListComponent(deps) {
         element.appendChild(loginDiv);
         const loginBtn = domAPI.getElementById("loginButton");
         if (loginBtn) {
-            eventHandlers.trackListener(loginBtn, "click", (e) => {
+            eventHandlers.trackListener(
+              loginBtn,
+              "click",
+              (e) => {
                 e.preventDefault();
-                eventBus.dispatchEvent(new CustomEvent("requestLogin"));
-            });
+
+                // Bubble the request up to global listeners so ModalManager can react
+                const doc = domAPI.getDocument();
+                if (doc && typeof domAPI.dispatchEvent === 'function') {
+                  domAPI.dispatchEvent(doc, new CustomEvent('requestLogin'));
+                }
+
+                // Keep local bus notification (optional, component-internal)
+                eventBus.dispatchEvent(new CustomEvent('requestLogin'));
+              },
+              { context: MODULE_CONTEXT, description: 'loginBtn:requestLogin' }
+            );
         }
     }
     function _showErrorState(message) {
