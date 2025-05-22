@@ -69,13 +69,8 @@ export function createHtmlTemplateLoader({
 
       const html = await resp.text();
 
-      if (sanitizer && typeof sanitizer.sanitize === 'function') {
-        container.innerHTML = sanitizer.sanitize(html);
-      } else {
-        // SECURITY WARNING: Injecting raw HTML without a sanitizer is dangerous!
-        logger.warn('[HtmlTemplateLoader] No sanitizer provided. Injecting raw HTML is a security risk.');
-        container.innerHTML = html;
-      }
+      // Always inject via domAPI to respect DI & built-in sanitiser
+      domAPI.setInnerHTML(container, html);
 
       success = true;
 
