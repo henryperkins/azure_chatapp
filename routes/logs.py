@@ -1,7 +1,18 @@
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, Request, Response, status, Depends
 import sys
 import json
+import os
+import re
+import time
 from utils.sentry_utils import capture_custom_message
+from utils.auth_utils import get_current_user_and_token
+
+import aiofiles
+
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 # Add colorama and initialize (safe even if multiple imports)
 try:
@@ -35,7 +46,8 @@ def get_color_for_level(level: str):
     return Style.NORMAL
 
 @router.post('/api/logs', status_code=status.HTTP_204_NO_CONTENT)
-async def receive_logs(request: Request):
+@limiter.limit("100/minute")
+async def receive_logs(request: Request, user_and_token=Depends(get_current_user_and_token)):
     try:
         log_entry = await request.json()
         level = str(log_entry.get("level", "info")).lower()
@@ -45,19 +57,50 @@ async def receive_logs(request: Request):
         color = get_color_for_level(level)
         reset = Style.RESET_ALL if hasattr(Style, "RESET_ALL") else ""
 
+        # --- Sanitize sensitive fields ---
+        def sanitize(entry):
+            sensitive_patterns = [
+                r"password.*",
+                r".*token.*",
+                r".*key.*",
+                r".*secret.*"
+            ]
+            sanitized = dict(entry)
+            for key in list(sanitized.keys()):
+                if any(re.match(pattern, key, re.IGNORECASE) for pattern in sensitive_patterns):
+                    sanitized[key] = "[REDACTED]"
+            # Also sanitize nested dicts in 'args' if present
+            if isinstance(sanitized.get("args"), list):
+                sanitized["args"] = [
+                    {k: "[REDACTED]" if any(re.match(p, k, re.IGNORECASE) for p in sensitive_patterns) else v
+                     for k, v in (a.items() if isinstance(a, dict) else [])}
+                    if isinstance(a, dict) else a
+                    for a in sanitized["args"]
+                ]
+            return sanitized
+
+        sanitized_entry = sanitize(log_entry)
+
+        # --- Log rotation: if file >10MB, rotate ---
+        log_path = "client_logs.jsonl"
+        max_bytes = 10 * 1024 * 1024
+        if os.path.exists(log_path) and os.path.getsize(log_path) > max_bytes:
+            ts = time.strftime("%Y%m%d-%H%M%S")
+            rotated = f"client_logs_{ts}.jsonl"
+            os.rename(log_path, rotated)
+
         # Output: colored header, Route-style log (single line, all context and summary)
-        # Example: [CLIENT LOG] [App] [LOG] [DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching /api/auth/csrf?ts=...
         main_args = ' '.join(str(a) for a in args)
         print(
             f"{color}[CLIENT LOG] [{ctx}] [{level.upper()}] {main_args}{reset}",
             file=sys.stdout, flush=True
         )
 
-        # Pretty-print to log file in addition to console (append mode)
+        # --- Async write to log file ---
         try:
-            with open("client_logs.jsonl", "a", encoding="utf-8") as logfile:
-                logfile.write(json.dumps(log_entry, ensure_ascii=False))
-                logfile.write("\n")
+            async with aiofiles.open(log_path, "a", encoding="utf-8") as logfile:
+                await logfile.write(json.dumps(sanitized_entry, ensure_ascii=False))
+                await logfile.write("\n")
         except Exception as log_exc:
             print(f"{Fore.YELLOW}[CLIENT LOG WARNING] Failed to write log file: {str(log_exc)}{reset}", file=sys.stderr, flush=True)
 
@@ -76,7 +119,7 @@ async def receive_logs(request: Request):
                         "browser": True,
                         "source": ctx,
                         "args": args,
-                        "raw": log_entry
+                        "raw": sanitized_entry
                     }
                 )
         except Exception as sentry_exc:
