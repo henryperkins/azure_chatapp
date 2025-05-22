@@ -1052,21 +1052,33 @@ export function createProjectDashboard(deps) {
   // ─────────────────────────────────────────────────────────────────────────
   const dashboard = new ProjectDashboard();
 
-  // ==== Speculative/Eager Project Details Template Loading (Fire & Forget) ====
+  // ==== Speculative/Eager Project Details Template Loading (wait for container) ====
   // Try to find htmlTemplateLoader in dependency system and trigger load
   try {
     const htmlTemplateLoader =
       dependencySystem?.modules?.get?.('htmlTemplateLoader') ||
       (dashboard.components.projectDetails && dashboard.components.projectDetails.htmlTemplateLoader);
-    if (htmlTemplateLoader && typeof htmlTemplateLoader.loadTemplate === 'function') {
-      // Do not await; fire and forget to prime event readiness
-      htmlTemplateLoader
-        .loadTemplate({
+    if (htmlTemplateLoader?.loadTemplate) {
+      const drs = dependencySystem?.modules?.get?.('domReadinessService');
+
+      const loadDetailsTemplate = () =>
+        htmlTemplateLoader.loadTemplate({
           url: '/static/html/project_details.html',
           containerSelector: '#projectDetailsView',
           eventName: 'projectDetailsTemplateLoaded'
+        });
+
+      /* Ensure #projectDetailsView exists before loading template */
+      if (drs?.elementsReady) {
+        drs.elementsReady('#projectDetailsView', {
+          timeout: 8000,
+          context: 'ProjectDashboard::detailsTplContainer'
         })
-        .catch(() => {});
+        .then(loadDetailsTemplate)
+        .catch(loadDetailsTemplate);          // fallback – still attempt
+      } else {
+        loadDetailsTemplate().catch(() => {});
+      }
     }
   } catch (err) {
     logger.warn('[ProjectDashboard] Unable to fire-and-forget details template load', err, { context: 'projectDashboard' });
