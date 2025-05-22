@@ -535,7 +535,7 @@ export function createChatUIEnhancements({
 
       try {
         domAPI.selectElement(textarea); // Use domAPI wrapper for select
-        const successful = doc.execCommand && doc.execCommand('copy');
+        const successful = domAPI.callMethod(doc, 'execCommand', 'copy');
         if (!successful) {
           logger.error(`[${MODULE_CONTEXT}] doc.execCommand('copy') failed`, {
             context
