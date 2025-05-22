@@ -587,7 +587,10 @@
         window.showNotification(message, type);
       } else {
         if (type === "error") alert(message);
-        else if (window.logger?.warn) window.logger.warn('[modals.html]', message);
+        else (window.DependencySystem?.modules?.get?.('logger')
+                || window.logger
+                || { warn:()=>{} }
+             ).warn('[modals.html]', message, { context: 'modals:notify' });
       }
     }
 

@@ -47,7 +47,11 @@
       if (window.Sentry && typeof window.initSentry === 'function') {
         window.initSentry();
       } else {
-        console.warn('Sentry or initSentry function not available');
+        (window.DependencySystem?.modules?.get?.('logger')
+            || window.logger
+            || { warn:()=>{} }
+        ).warn('[base.html] Sentry or initSentry function not available',
+               { context: 'base:sentry' });
       }
     };
   </script>
