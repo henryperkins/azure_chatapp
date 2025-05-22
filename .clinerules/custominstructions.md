@@ -1,6 +1,30 @@
 # 🛡️ Unified Code Guardrails
 
 These guidelines apply strictly to **all** backend (Python/FastAPI) and frontend (JavaScript/TypeScript) development, maintenance, and AI-assisted code generation within this project. They ensure consistency, maintainability, performance, and security throughout the codebase.
+Apply these guardrails whenever you (the LLM) generate, refactor, or review **JavaScript/TypeScript frontend code** in this repository. Enforce them strictly; flag any violation and propose a compliant fix.
+
+
+1. **Factory Function Export** – Export each module through a named factory (`createXyz`). Validate all dependencies at the top and expose a cleanup API. _No top‑level logic._
+2. **Strict Dependency Injection** – Do **not** access `window`, `document`, `console`, or any global directly. Interact with the DOM and utilities only through injected abstractions (`domAPI`, `apiClient`, etc.).
+3. **Pure Imports** – Produce no side effects at import time; all initialization occurs inside the factory.
+4. **Centralized Event Handling** – Register listeners with `eventHandlers.trackListener(..., { context })` and remove them with `eventHandlers.cleanupListeners({ context })`.
+5. **Context Tags** – Supply a unique `context` string for every listener.
+6. **Sanitize All User HTML** – Always call `sanitizer.sanitize()` before inserting user content into the DOM.
+7. **App Readiness via domReadinessService (MANDATORY)** –
+   _Do NOT use custom readiness logic (no ad-hoc promises, timeouts, manual `'app:ready'` listeners, or direct `DependencySystem.waitFor([…])` calls)._
+   **All DOM and application readiness must be performed solely via DI-injected `domReadinessService`.**
+   - Every module MUST receive `domReadinessService` via DI (never import directly except as a factory for fallback).
+   - Use ONLY:
+     ```js
+     await this.domReadinessService.waitForEvent(...);
+     await this.domReadinessService.dependenciesAndElements(...);
+     ```
+   - Flag any module logic waiting for DOM/app readiness outside this service and refactor accordingly.
+
+8. **Central `app.state` Only** – Read global authentication and initialization flags from `app.state`; do **not** mutate them directly.
+9. **Module Event Bus** – When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.
+10. **Navigation Service** – Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.
+11. **Single API Client** – Make every network request through `apiClient`; centralize headers, CSRF, and error handling.
 
 ---
 
