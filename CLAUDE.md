@@ -201,3 +201,45 @@ This tool validates:
 - Event handling
 - Proper error logging
 - And more according to the frontend guardrails
+
+## Recent Refactoring Progress (app.js)
+
+### Completed Refactoring (24% Size Reduction)
+
+**Original**: 1,611 lines → **Current**: 1,224 lines (**387 lines removed**)
+
+#### Successful Extractions (Following Guardrails):
+
+1. **authInit.js** (239 lines)
+   - Auth system initialization
+   - Auth state change handling  
+   - Auth header rendering
+   - Login modal management
+
+2. **appState.js** (86 lines)
+   - Centralized app state management
+   - Authentication state tracking
+   - Lifecycle state management
+   - Helper methods for state access
+
+3. **errorInit.js** (108 lines)  
+   - Global error handling setup
+   - Unhandled promise rejection tracking
+   - Centralized error logging
+
+#### Key Guardrails Compliance Lessons:
+
+- **CRITICAL**: Never create new modules (.clinerules/custominstructions.md Rule #6)
+- **Use existing structure**: Work within `init/` directory modules only
+- **Extend, don't create**: Populate existing empty init files rather than creating new ones
+- **Preserve patterns**: Follow existing factory function exports and DI patterns
+
+#### Remaining Opportunities:
+
+While respecting the "no new modules" rule, further reduction is possible by:
+- Moving utility functions within existing modules
+- Consolidating duplicate patterns (70+ `DependencySystem.modules.get()` calls)
+- Refactoring within the existing init structure
+- Simplifying the main init() function complexity
+
+The refactoring successfully reduced app.js complexity while maintaining all functionality and strictly following project guardrails.
