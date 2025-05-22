@@ -193,7 +193,14 @@ export function createProjectManager({
       if (typeof this.apiRequest !== 'function') {
         throw new Error('[ProjectManager] apiRequest missing');
       }
-      return this.apiRequest(url, opts, contextLabel);
+      /* Always include cookies so authenticated calls reach the server.
+         Merge with caller-supplied opts without overwriting them.          */
+      const mergedOpts =
+        opts && typeof opts === 'object'
+          ? { credentials: 'include', ...opts }
+          : { credentials: 'include' };
+
+      return this.apiRequest(url, mergedOpts, contextLabel);
     }
 
     _emit(event, detail) {
