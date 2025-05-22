@@ -46,7 +46,9 @@ export function createProjectListComponent(deps) {
         throw new Error("[ProjectListComponent] htmlSanitizer must provide a .sanitize(html) method.");
 
     // ----- Internal State -----
-    let elementId = "project-list-container";
+    // Primary container used by the new template plus legacy fallback
+    const ELEMENT_IDS = ["projectListView", "project-list-container"];
+    let elementId = ELEMENT_IDS[0];
     let _doc = null;
     let element = null;
     let gridElement = null;
@@ -74,7 +76,10 @@ export function createProjectListComponent(deps) {
             await domReadinessService.dependenciesAndElements({
                 deps            : ['projectManager', 'eventHandlers'],
                 domSelectors    : [
-                    '.project-list-container', '.mobile-grid', '#projectFilterTabs'
+                    '#projectListView',        // new template id
+                    '.project-list-container', // legacy class
+                    '.mobile-grid',
+                    '#projectFilterTabs'
                 ],
                 observeMutations: true,   // wait for template injection
                 timeout         : APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
@@ -88,9 +93,11 @@ export function createProjectListComponent(deps) {
         _doc = domAPI.getDocument?.();
         if (state.initialized) return;
 
-        element = domAPI.getElementById
-            ? domAPI.getElementById(elementId)
-            : _doc.getElementById(elementId);
+        // Try primary id, then legacy, then any matching selector
+        element =
+          domAPI.getElementById(elementId) ||
+          domAPI.getElementById(ELEMENT_IDS[1]) ||
+          domAPI.querySelector('#projectListView, .project-list-container');
 
         if (!element) {
             logger.error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`, null, { context: MODULE_CONTEXT });
