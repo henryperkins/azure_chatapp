@@ -39,7 +39,9 @@ export function createNavigationService({
    * @param {Object} detail - Event details
    */
   function emitNavigationEvent(eventName, detail = {}) {
-    const event = new CustomEvent(`navigation:${eventName}`, {
+    const CustomEventCtor = browserService.getWindow?.()?.CustomEvent;
+    if (!CustomEventCtor) return;
+    const event = new CustomEventCtor(`navigation:${eventName}`, {
       detail: {
         ...detail,
         timestamp: Date.now(),

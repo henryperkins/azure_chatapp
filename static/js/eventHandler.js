@@ -122,7 +122,7 @@ export function createEventHandlers({
       wrapped = (...a) => {
         try { _wrappedOnce(...a); } finally {
           // remove record from bookkeeping maps
-          setTimeout(() => untrackListener(element, type, handler), 0);
+          browserService.setTimeout(() => untrackListener(element, type, handler), 0);
         }
       };
     }
