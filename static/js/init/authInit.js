@@ -181,13 +181,16 @@ export function createAuthInitializer({
         domAPI.toggleClass(userMenu, 'hidden', !isAuth);
         domAPI.setStyle(userMenu, 'display', isAuth ? '' : 'none');
         isAuth
-          ? userMenu.removeAttribute?.('hidden')
-          : userMenu.setAttribute?.('hidden', 'hidden');
+          ? domAPI.removeAttribute(userMenu, 'hidden')
+          : domAPI.setAttribute(userMenu, 'hidden', 'hidden');
       }
 
       if (!isAuth) {
         const orphan = domAPI.getElementById('headerLoginForm');
-        if (orphan) orphan.remove();
+        if (orphan) {
+          const p = domAPI.getParentNode(orphan);
+          if (p) domAPI.removeChild(p, orphan);
+        }
       }
 
       if (isAuth && userMenu && userInitialsEl) {
@@ -253,9 +256,7 @@ export function createAuthInitializer({
         // Fallback: try the native dialog element directly
         const doc = DependencySystem.modules.get('domAPI')?.getDocument?.();
         const loginDlg = doc?.getElementById('loginModal');
-        if (loginDlg && typeof loginDlg.showModal === 'function') {
-          loginDlg.showModal();
-        }
+        if (loginDlg) domAPI.callMethod(loginDlg, 'showModal');
       }
     }
   }

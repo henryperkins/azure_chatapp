@@ -51,17 +51,17 @@ export function createUIInitializer({
       if (sidebar) {
         domAPI[open ? 'addClass' : 'removeClass'](sidebar, 'translate-x-0');
         domAPI[open ? 'removeClass' : 'addClass'](sidebar, '-translate-x-full');
-        sidebar.setAttribute('aria-hidden', String(!open));
+        domAPI.setAttribute(sidebar, 'aria-hidden', String(!open));
       }
       // update toggle button ARIA
-      if (navToggleBtn) navToggleBtn.setAttribute('aria-expanded', String(open));
+      if (navToggleBtn) domAPI.setAttribute(navToggleBtn, 'aria-expanded', String(open));
     }
 
     if (navToggleBtn) {
       eventHandlers.trackListener(
         navToggleBtn,
         'click',
-        safeHandler(() => setSidebarOpen(navToggleBtn.getAttribute('aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
+        safeHandler(() => setSidebarOpen(domAPI.getAttribute(navToggleBtn, 'aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
         { context: 'uiInit:sidebar', description: 'toggleSidebar' }
       );
     }
