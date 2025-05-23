@@ -469,8 +469,9 @@ export function createProjectListComponent(deps) {
         if (actionBtn) { e.stopPropagation(); return; }
         const isCreateButton = e.target.closest('#createProjectBtn');
         if (isCreateButton) { return; }
-        const auth = app?.DependencySystem?.modules?.get?.('auth') ?? null;
-        if (auth && auth.isAuthenticated()) {
+        // CONSOLIDATED: Single source of truth - only check app.state
+        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
+        if (appModule?.state?.isAuthenticated) {
             onViewProject(projectId);
         } else {
             eventBus.dispatchEvent(new CustomEvent("requestLogin"));

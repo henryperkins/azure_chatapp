@@ -21,10 +21,50 @@ Apply these guardrails whenever you (the LLM) generate, refactor, or review **Ja
      ```
    - Flag any module logic waiting for DOM/app readiness outside this service and refactor accordingly.
 
-8. **Central `app.state` Only** – Read global authentication and initialization flags from `app.state`; do **not** mutate them directly.
+8. **Central State Access** – Read global authentication and initialization flags from `appModule.state` (or its alias `app.state`); do **not** mutate them directly.
 9. **Module Event Bus** – When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.
 10. **Navigation Service** – Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.
 11. **Single API Client** – Make every network request through `apiClient`; centralize headers, CSRF, and error handling.
+
+## 🚨 **CRITICAL: Authentication Pattern Change**
+
+**⚠️ BREAKING CHANGE ALERT: Dual Authentication State ELIMINATED**
+
+As of **December 2024**, the authentication system has been **completely consolidated** to eliminate dual state management:
+
+### **✅ NEW PATTERN (MANDATORY):**
+- **Single Source of Truth**: `appModule.state` is the ONLY place authentication state exists
+- **Read Authentication**: `appModule.state.isAuthenticated` and `appModule.state.currentUser`
+- **Listen for Changes**: Subscribe to `'authStateChanged'` events on `AuthBus`
+- **No Local State**: Never store authentication state in individual modules
+
+### **❌ OLD PATTERN (FORBIDDEN):**
+- ~~`authState` object~~ - **ELIMINATED**
+- ~~`auth.isAuthenticated()` fallback checks~~ - **REMOVED**
+- ~~Individual module `setAuthState()` methods~~ - **REMOVED**
+- ~~Dual authentication state synchronization~~ - **ELIMINATED**
+
+### **🔧 Required Implementation:**
+```javascript
+// ✅ CORRECT: Read from canonical source
+const appModule = DependencySystem.modules.get('appModule');
+const isAuthenticated = appModule.state.isAuthenticated;
+const currentUser = appModule.state.currentUser;
+
+// ✅ CORRECT: Listen for auth changes
+auth.AuthBus.addEventListener('authStateChanged', (event) => {
+  const { authenticated, user } = event.detail;
+  // React to auth state changes
+});
+
+// ❌ FORBIDDEN: No local authState variables
+// const authState = { isAuthenticated: false }; // DON'T DO THIS
+
+// ❌ FORBIDDEN: No fallback auth checks
+// if (appModule.state.isAuthenticated || auth.isAuthenticated()) // DON'T DO THIS
+```
+
+**Any code using the old dual authentication pattern will be flagged as a violation and must be refactored immediately.**
 
 ---
 
@@ -156,7 +196,7 @@ Apply these guardrails whenever you (the LLM) generate, refactor, or review **Ja
 * **Context Tags** – Provide a unique context tag for each listener.
 * **Sanitize User HTML** – Always sanitize via `sanitizer.sanitize()` before DOM insertion.
 * **DOM Readiness (Mandatory)** – Use DI-provided `domReadinessService`; never ad-hoc readiness checks.
-* **Centralized State Access** – Access global state via `app.state`; never mutate it directly.
+* **Centralized State Access** – Access global state via `appModule.state`; never mutate it directly.
 * **Module Event Bus** – Use dedicated `EventTarget` instances for module events.
 * **Navigation Service** – Route all URL/navigation changes through injected `navigationService.navigateTo`.
 * **Single API Client** – Centralize API requests via injected `apiClient`.
@@ -207,6 +247,14 @@ Actively detect and eliminate these anti-patterns:
 * DOM readiness checks performed outside `domReadinessService`.
 * Direct DOM manipulation without sanitization.
 * Missing context tags for event listeners.
+
+**Authentication anti-patterns (CRITICAL):**
+
+* Creating local `authState` variables or objects.
+* Using dual authentication state patterns (old + new).
+* Fallback authentication checks (`auth.isAuthenticated()` when `appModule.state` exists).
+* Individual module `setAuthState()` methods.
+* Any authentication state storage outside `appModule.state`.
 
 ---
 

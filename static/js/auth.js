@@ -75,15 +75,23 @@ export function createAuthModule(deps) {
   }
 
   // === 3) DOM/COOKIE & STATE MANAGEMENT ===
-
-  const authState = {
-    isAuthenticated: false,
-    username: null,
-    userObject: null,
-    isReady: false
-  };
+  // CONSOLIDATED: No local authState - appModule.state is the single source of truth
 
   const AuthBus = new EventTarget();
+
+  // Helper to get the canonical app state
+  function getAppState() {
+    const appModuleRef = DependencySystem?.modules?.get('appModule');
+    if (!appModuleRef?.state) {
+      logger.warn('[AuthModule] appModule.state not available. Using fallback empty state.', { context: 'getAppState' });
+      return {
+        isAuthenticated: false,
+        currentUser: null,
+        isReady: false
+      };
+    }
+    return appModuleRef.state;
+  }
 
   function readCookie(name) {
     const doc = domAPI.getDocument?.();
@@ -290,38 +298,42 @@ export function createAuthModule(deps) {
    * If no change in authentication state or user object is detected, no events are dispatched and the UI is not updated.
    */
   function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
-    // KILOCODE: Added detailed logging for broadcastAuth entry
-    logger.debug('[AuthModule][broadcastAuth] ENTRY:', { authenticated, userObjectIsNotNull: !!userObject, userObjectName: userObject?.username, source, currentAuthState: JSON.parse(JSON.stringify(authState)) });
+    const appModuleRef = DependencySystem?.modules?.get('appModule');
+    if (!appModuleRef?.setAuthState) {
+      logger.error('[AuthModule][broadcastAuth] appModule.setAuthState not available. Cannot update authentication state.', { source, context: 'broadcastAuth' });
+      return;
+    }
+
+    const currentState = appModuleRef.state;
+    const previousAuth = currentState.isAuthenticated;
+    const previousUserObject = currentState.currentUser;
 
     logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] called.', {
       authenticated, userObject, source,
-      previousAuth: authState.isAuthenticated,
-      previousUserObject: authState.userObject
+      previousAuth,
+      previousUserObject
     }, { context: 'broadcastAuth' });
-    const previousAuth = authState.isAuthenticated;
-    const previousUserObject = authState.userObject;
+
     const changed =
       authenticated !== previousAuth ||
       JSON.stringify(userObject) !== JSON.stringify(previousUserObject);
-    authState.isAuthenticated = authenticated;
-    authState.userObject = userObject;
-    authState.username = userObject?.username || null;
-    if (changed) {
-      const appModuleRef = DependencySystem?.modules?.get('appModule');
-      if (appModuleRef && typeof appModuleRef.setAuthState === 'function') {
-          logger.info('[AuthModule][broadcastAuth] Updating appModule state.', {
-            authenticated,
-            userId: userObject?.id,
-            source,
-            context: 'broadcastAuth:appModuleUpdate'
-          });
-        appModuleRef.setAuthState({ isAuthenticated: authenticated, currentUser: userObject });
-      } else {
-          logger.warn('[AuthModule][broadcastAuth] appModuleRef.setAuthState not available. Cannot update central app state.', { source, context: 'broadcastAuth' });
-      }
 
-        // Event dispatching should happen AFTER appModule state is updated.
-        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Broadcasting authStateChanged event', { source, authenticated, userId: userObject?.id, context: 'broadcastAuth:dispatchEvents' });
+    if (changed) {
+      logger.info('[AuthModule][broadcastAuth] Updating canonical app state.', {
+        authenticated,
+        userId: userObject?.id,
+        source,
+        context: 'broadcastAuth:appModuleUpdate'
+      });
+
+      // SINGLE SOURCE OF TRUTH: Update only appModule.state
+      appModuleRef.setAuthState({
+        isAuthenticated: authenticated,
+        currentUser: userObject
+      });
+
+      // Event dispatching should happen AFTER appModule state is updated.
+      logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Broadcasting authStateChanged event', { source, authenticated, userId: userObject?.id, context: 'broadcastAuth:dispatchEvents' });
 
       // Custom: Update username in header's userMenu for a single-line greeting. (No double "Hello,")
       try {
@@ -401,8 +413,9 @@ export function createAuthModule(deps) {
     // Remove the early return that was causing issues with page refresh
     // Always check auth state on page load/refresh regardless of recent login timestamp
     if (authCheckInProgress && !forceVerify) {
-      logger.debug('[AuthModule][verifyAuthState] Verification already in progress and not forced. Returning current state.', { currentAuth: authState.isAuthenticated, context: 'verifyAuthState:inProgress' });
-      return authState.isAuthenticated;
+      const currentAuth = getAppState().isAuthenticated;
+      logger.debug('[AuthModule][verifyAuthState] Verification already in progress and not forced. Returning current state.', { currentAuth, context: 'verifyAuthState:inProgress' });
+      return currentAuth;
     }
     authCheckInProgress = true;
     logger.debug('[AuthModule][verifyAuthState] Starting verification.', { forceVerify, context: 'verifyAuthState:start' });
@@ -527,10 +540,11 @@ export function createAuthModule(deps) {
       // For network errors (status 0 or no status) or other non-401/500 errors
       const hasCookiesOnNetworkError = publicAuth.hasAuthCookies(); // Re-check, might have changed
       if (hasCookiesOnNetworkError && (error.status === 0 || !error.status)) {
-        logger.warn('[AuthModule][verifyAuthState] Network error occurred, but auth cookies are present. Maintaining current auth state.', { errorMessage: error.message, currentAuth: authState.isAuthenticated, context: 'verifyAuthState:networkErrorWithCookies' });
-        // Do not change authState.isAuthenticated here; return existing state.
+        const currentAuth = getAppState().isAuthenticated;
+        logger.warn('[AuthModule][verifyAuthState] Network error occurred, but auth cookies are present. Maintaining current auth state.', { errorMessage: error.message, currentAuth, context: 'verifyAuthState:networkErrorWithCookies' });
+        // Do not change authentication state here; return existing state.
         // The user might be temporarily offline but still "logged in".
-        return authState.isAuthenticated;
+        return currentAuth;
       }
 
       // For other errors where cookies might not be present or it's not a network error
@@ -580,7 +594,7 @@ export function createAuthModule(deps) {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string') {
           logger.debug('[AuthModule][loginUser] Cookies after login API call (contents masked for security).', { hasCookies: !!doc.cookie, context: 'loginUser:cookieCheck' });
-           if (!doc.cookie) {
+          if (!doc.cookie) {
             logger.warn('[AuthModule][loginUser] No cookies seem to be set after login API call. Backend might not be setting session/CSRF cookies correctly.', { context: 'loginUser:noCookiesWarning' });
           }
         }
@@ -592,11 +606,11 @@ export function createAuthModule(deps) {
       let userObject = null;
       if (response && typeof response === 'object') {
         if (response.user && typeof response.user === 'object' && response.user.id) {
-            userObject = response.user;
+          userObject = response.user;
         } else if (response.id && response.username) {
-            userObject = response;
+          userObject = response;
         } else if (response.username) { // If only username is directly in response
-            userObject = { username: response.username, id: `login-temp-${Date.now()}`};
+          userObject = { username: response.username, id: `login-temp-${Date.now()}` };
         }
       }
 
@@ -833,10 +847,14 @@ export function createAuthModule(deps) {
   async function init() {
     // Wait for DOM/app readiness strictly via domReadinessService—no ad-hoc or legacy logic
     // Prevent multiple initializations
-    if (authState.isReady) {
-      broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_already_ready');
-      return authState.isAuthenticated;
+    const currentState = getAppState();
+    if (currentState.isReady) {
+      broadcastAuth(currentState.isAuthenticated, currentState.currentUser, 'init_already_ready');
+      return currentState.isAuthenticated;
     }
+    // Wait for DOM readiness before setting up forms
+    await domReadinessService.documentReady();
+
     setupAuthForms();
     // modalsLoaded, DOM are both handled via the same readiness patterns
     const doc = domAPI.getDocument();
@@ -964,26 +982,32 @@ export function createAuthModule(deps) {
       }
       if (verifyInterval) browserService.clearInterval(verifyInterval); // Clear existing if any (e.g. re-init)
       verifyInterval = browserService.setInterval(() => {
-        if (!domAPI.isDocumentHidden?.() && authState.isAuthenticated) { // Check if document is visible
+        const periodicState = getAppState();
+        if (!domAPI.isDocumentHidden?.() && periodicState.isAuthenticated) { // Check if document is visible
           logger.debug('[AuthModule][init] Performing periodic auth verification.', { context: 'init:periodicVerify' });
           verifyAuthState(false).catch((err) => {
             // This catch is for the verifyAuthState call itself, not for errors during setInterval setup.
             logger.warn('[AuthModule][init] Periodic verifyAuthState encountered an error (logged by verifyAuthState).', { error: err.message, context: 'init:periodicVerify:error' });
           });
         } else {
-          logger.debug('[AuthModule][init] Skipping periodic auth verification.', { isHidden: domAPI.isDocumentHidden?.(), isAuthenticated: authState.isAuthenticated, context: 'init:periodicVerifySkipped' });
+          logger.debug('[AuthModule][init] Skipping periodic auth verification.', { isHidden: domAPI.isDocumentHidden?.(), isAuthenticated: periodicState.isAuthenticated, context: 'init:periodicVerifySkipped' });
         }
       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
       logger.info('[AuthModule][init] Periodic auth verification scheduled.', { interval: AUTH_CONFIG.VERIFICATION_INTERVAL, context: 'init' });
 
-      authState.isReady = true; // Mark auth module as ready
+      // Mark auth module as ready in the canonical state
+      const appModuleRef = DependencySystem?.modules?.get('appModule');
+      if (appModuleRef?.setLifecycleState) {
+        appModuleRef.setLifecycleState({ isReady: true });
+      }
       logger.info('[AuthModule][init] Auth module is now ready.', { context: 'init' });
 
       // Dispatch authReady event
+      const finalState = getAppState();
       const readyEventDetail = {
-        authenticated: authState.isAuthenticated,
-        user: authState.userObject,
-        username: authState.username,
+        authenticated: finalState.isAuthenticated,
+        user: finalState.currentUser,
+        username: finalState.currentUser?.username || null,
         error: null, // No error at this stage of emitting 'authReady'
         timestamp: Date.now(),
         source: 'init_auth_module_ready'
@@ -1006,14 +1030,20 @@ export function createAuthModule(deps) {
 
       // Final broadcast based on the state determined during init.
       // This ensures appModule is updated if it wasn't already through verifyAuthState's broadcasts.
-      logger.debug('[AuthModule][init] Performing final broadcastAuth after init completion.', { authenticated: authState.isAuthenticated, context: 'init' });
-      broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_final_broadcast');
+      const broadcastState = getAppState();
+      logger.debug('[AuthModule][init] Performing final broadcastAuth after init completion.', { authenticated: broadcastState.isAuthenticated, context: 'init' });
+      broadcastAuth(broadcastState.isAuthenticated, broadcastState.currentUser, 'init_final_broadcast');
 
       return verified; // Return the result of the initial verification attempt
     } catch (err) {
       logger.error('[AuthModule][init] Unhandled error during initialization process.', { error: err, stack: err.stack, context: 'init:unhandledError' });
       await clearTokenState({ source: 'init_unhandled_error' });
-      authState.isReady = true;
+
+      // Mark as ready even on error, but ensure auth state is cleared
+      const appModuleRef = DependencySystem?.modules?.get('appModule');
+      if (appModuleRef?.setLifecycleState) {
+        appModuleRef.setLifecycleState({ isReady: true });
+      }
       broadcastAuth(false, null, 'init_unhandled_error');
       throw err;
     }
@@ -1117,10 +1147,11 @@ export function createAuthModule(deps) {
 
   // === 14) PUBLIC API EXPORT (FACTORY PATTERN) ===
   const publicAuth = {
-    isAuthenticated: () => authState.isAuthenticated,
-    isReady: () => authState.isReady,
-    getCurrentUser: () => authState.username,
-    getCurrentUserObject: () => authState.userObject,
+    // CONSOLIDATED: All state reads from appModule.state (single source of truth)
+    isAuthenticated: () => getAppState().isAuthenticated,
+    isReady: () => getAppState().isReady,
+    getCurrentUser: () => getAppState().currentUser?.username || null,
+    getCurrentUserObject: () => getAppState().currentUser,
     init,
     login: loginUser,
     logout,

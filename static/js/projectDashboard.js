@@ -473,14 +473,13 @@ export function createProjectDashboard(deps) {
         return;
       }
 
-      const isAuthed =
-        this.app?.state?.isAuthenticated ||
-        (typeof this.auth?.isAuthenticated === 'function' && this.auth.isAuthenticated());
+      // CONSOLIDATED: Single source of truth - only check app.state
+      const isAuthed = this.app?.state?.isAuthenticated;
 
       if (!isAuthed) {
         // Wait a bit and retry if user logs in
         this.browserService.setTimeout(() => {
-          if (this.auth?.isAuthenticated?.()) {
+          if (this.app?.state?.isAuthenticated) {
             this._loadProjects();
           }
         }, 500);
@@ -521,18 +520,18 @@ export function createProjectDashboard(deps) {
           logger.error('[ProjectDashboard][_setupEventListeners]', 'Missing trackListener', { context: 'projectDashboard' });
           throw new Error('[ProjectDashboard] eventHandlers.trackListener is required');
         }
-      const safeHandler = this._wrapHandler(handler, `Evt_${event}`);
-      const optionsWithContext = { ...opts, context: 'projectDashboard' };
-      // trackListener _already_ stores its own removal; capture the returned unsub if provided.
-      const maybeUnsub = this.eventHandlers.trackListener(
-        target,
-        event,
-        safeHandler,
-        optionsWithContext
-      );
-      if (typeof maybeUnsub === 'function') {
-        this._unsubs.push(maybeUnsub);
-      }
+        const safeHandler = this._wrapHandler(handler, `Evt_${event}`);
+        const optionsWithContext = { ...opts, context: 'projectDashboard' };
+        // trackListener _already_ stores its own removal; capture the returned unsub if provided.
+        const maybeUnsub = this.eventHandlers.trackListener(
+          target,
+          event,
+          safeHandler,
+          optionsWithContext
+        );
+        if (typeof maybeUnsub === 'function') {
+          this._unsubs.push(maybeUnsub);
+        }
       };
 
       // Example events: define as needed
@@ -775,14 +774,14 @@ export function createProjectDashboard(deps) {
       if (this._viewsRegistered || !this.navigationService?.registerView) return;
       try {
         this.navigationService.registerView('projectList', {
-          show : async () => {                       // delegate to real logic
+          show: async () => {                       // delegate to real logic
             try { await this.showProjectList(); } catch {
               // Ignore navigation failures to keep dashboard robust (view not found, etc.)
               return false;
             }
             return true;
           },
-          hide : async () => {
+          hide: async () => {
             try { this.components.projectList?.hide?.(); } catch {
               // Ignore errors during hide - likely uninitialized, no critical error
             }
@@ -795,7 +794,7 @@ export function createProjectDashboard(deps) {
 
       try {
         this.navigationService.registerView('projectDetails', {
-          show : async (params = {}) => {
+          show: async (params = {}) => {
             const { projectId, activeTab, conversationId } = params;
             if (!projectId) return false;
             try {
@@ -810,7 +809,7 @@ export function createProjectDashboard(deps) {
             }
             return true;
           },
-          hide : async () => {
+          hide: async () => {
             try { this.components.projectDetails?.hide?.(); } catch (err) {
               // ignore errors during component hide
             }
@@ -867,13 +866,13 @@ export function createProjectDashboard(deps) {
             if (typeof this.projectManager?.loadProjectDetails === 'function') {
               try {
                 projectToRender = await this.projectManager.loadProjectDetails(projectId);
-} catch (error) {
-      logger.error('[ProjectDashboard][detailsViewShow:loadProjectDetails]', error, {
-        context: 'projectDashboard'
-      });
-      // If load fails, an event may be dispatched that triggers showProjectList
-      return false;
-    }
+              } catch (error) {
+                logger.error('[ProjectDashboard][detailsViewShow:loadProjectDetails]', error, {
+                  context: 'projectDashboard'
+                });
+                // If load fails, an event may be dispatched that triggers showProjectList
+                return false;
+              }
             }
             if (!projectToRender) {
               // Possibly a 404
@@ -1074,10 +1073,10 @@ export function createProjectDashboard(deps) {
           timeout: 8000,
           context: 'ProjectDashboard::detailsTplContainer'
         })
-        .then(loadDetailsTemplate)
-        .catch(loadDetailsTemplate);          // fallback – still attempt
+          .then(loadDetailsTemplate)
+          .catch(loadDetailsTemplate);          // fallback – still attempt
       } else {
-        loadDetailsTemplate().catch(() => {});
+        loadDetailsTemplate().catch(() => { });
       }
     }
   } catch (err) {
@@ -1105,10 +1104,10 @@ export function createProjectDashboard(deps) {
           timeout: 8000,
           context: 'ProjectDashboard::listTplContainer'
         })
-        .then(loadListTemplate)
-        .catch(loadListTemplate);      // fallback – still attempt
+          .then(loadListTemplate)
+          .catch(loadListTemplate);      // fallback – still attempt
       } else {
-        loadListTemplate().catch(() => {});
+        loadListTemplate().catch(() => { });
       }
     }
   } catch (err) {
@@ -1134,11 +1133,11 @@ export function createProjectDashboard(deps) {
     dashboardBus: dashboard.dashboardBus,
     setProjectListComponent: (component) => {
       if (dashboard.components) dashboard.components.projectList = component;
-      else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectList', { context: 'projectDashboard'});
+      else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectList', { context: 'projectDashboard' });
     },
     setProjectDetailsComponent: (component) => {
       if (dashboard.components) dashboard.components.projectDetails = component;
-      else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectDetails', { context: 'projectDashboard'});
+      else dashboard.logger.warn('[ProjectDashboard] Components object not ready for projectDetails', { context: 'projectDashboard' });
     }
   };
 }

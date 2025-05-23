@@ -266,37 +266,62 @@ Object.assign(app, {
     return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null; // always return copy
   },
   setCurrentProject: (project) => {
-    if (!project || !project.id) {
+    // Allow null to clear the current project
+    if (project !== null && (!project || !project.id)) {
       logger.warn('[app] setCurrentProject: Attempted to set invalid project.', { project, context: 'app:setCurrentProject' });
       return;
     }
+
     const previous = currentProject;
-    currentProject = project; // Update the central single source of truth
+    currentProject = project; // Update the central single source of truth (can be null)
+
+    // Update appModule state with current project ID
+    const appModule = DependencySystem.modules.get('appModule');
+    if (appModule?.setCurrentProject) {
+      appModule.setCurrentProject(project?.id || null);
+    }
 
     logger.info('[app] setCurrentProject: currentProject updated.', {
-      newProjectId: project.id,
-      previousProjectId: previous?.id,
-      projectName: project.name,
+      newProjectId: project?.id || null,
+      previousProjectId: previous?.id || null,
+      projectName: project?.name || null,
       context: 'app:setCurrentProject'
     });
 
     const appBus = DependencySystem.modules.get('AppBus');
     if (appBus && typeof appBus.dispatchEvent === 'function') {
-      logger.debug('[app] setCurrentProject: Dispatching "currentProjectChanged" event on AppBus.', { projectId: project.id, context: 'app:setCurrentProjectEvent' });
+      logger.debug('[app] setCurrentProject: Dispatching "currentProjectChanged" event on AppBus.', { projectId: project?.id || null, context: 'app:setCurrentProjectEvent' });
       appBus.dispatchEvent(
         eventHandlers.createCustomEvent('currentProjectChanged', {
           detail: {
-            project: { ...project }, // Send a copy
-            previousProject: previous ? { ...previous } : null // Send a copy
+            project: project ? { ...project } : null, // Send a copy or null
+            previousProject: previous ? { ...previous } : null // Send a copy or null
           }
         })
       );
     } else {
       logger.warn('[app] setCurrentProject: AppBus not available or dispatchEvent is not a function. Cannot dispatch "currentProjectChanged" event.', { context: 'app:setCurrentProjectEvent' });
     }
+
+    // Also dispatch projectSelected event for backward compatibility (only if project is not null)
+    if (project) {
+      const doc = domAPI.getDocument();
+      if (doc && eventHandlers?.createCustomEvent) {
+        logger.debug('[app] setCurrentProject: Dispatching "projectSelected" event on document.', { projectId: project.id, context: 'app:setCurrentProjectEvent' });
+        domAPI.dispatchEvent(
+          doc,
+          eventHandlers.createCustomEvent('projectSelected', {
+            detail: {
+              projectId: project.id,
+              project: { ...project }
+            }
+          })
+        );
+      }
+    }
     // Do not re-register 'currentProject' in DependencySystem.
     // It's managed locally within app.js, accessed via app.getCurrentProject().
-    return project; // Return the set project
+    return project; // Return the set project (can be null)
   },
   navigateToConversation: async (chatId) => {
     const chatMgr = DependencySystem.modules.get('chatManager');
@@ -526,29 +551,52 @@ function setupChatInitializationTrigger() {
     return;
   }
 
+  // Helper function to initialize chat for current project
+  async function initializeChatForCurrentProject() {
+    const appModule = DependencySystem.modules.get('appModule');
+    const currentProjectId = appModule?.state?.currentProjectId;
+
+    if (currentProjectId && auth.isAuthenticated() && chatManager?.initialize) {
+      try {
+        // Wait a bit longer for project details DOM to be ready
+        await domReadinessService.dependenciesAndElements({
+          domSelectors: ['#chatTab .chat-container', '#chatMessages', '#chatInput', '#chatSendBtn'],
+          context: 'app:chatInit:projectDetails',
+          timeout: 10000 // Increase timeout to 10 seconds
+        });
+
+        await chatManager.initialize({
+          projectId: currentProjectId,
+          containerSelector: "#chatTab .chat-container",
+          messageContainerSelector: "#chatMessages",
+          inputSelector: "#chatInput",
+          sendButtonSelector: "#chatSendBtn",
+          titleSelector: "#chatTitle",
+          minimizeButtonSelector: "#minimizeChatBtn"
+        });
+      } catch (err) {
+        logger.error('[setupChatInitializationTrigger] Chat initialization failed', err, { context: 'app:chatInit' });
+      }
+    }
+  }
+
+  // Note: Chat initialization is handled by projectDetailsComponent._restoreChatAndModelConfig()
+  // when the project details view is shown. No need to duplicate it here.
+
+  // Initialize chat when user logs in (if project is already selected)
   eventHandlers.trackListener(
     domAPI.getDocument(),
-    'projectSelected',
+    'authStateChanged',
     safeHandler(async (e) => {
-      const projectId = e?.detail?.projectId;
-      if (!projectId) return;
-
-      if (auth.isAuthenticated() && chatManager?.initialize) {
-        try {
-          await chatManager.initialize({
-            projectId,
-            containerSelector: "#projectChatContainer",
-            messageContainerSelector: "#projectChatMessages",
-            inputSelector: "#projectChatInput",
-            sendButtonSelector: "#projectChatSendBtn"
-          });
-        } catch (err) {
-          logger.error('[safeInit]', err, { context: 'app:safeInit:ChatExtensions' });
-          throw err;
-        }
+      const isAuthenticated = e?.detail?.authenticated;
+      if (isAuthenticated) {
+        // User just logged in, initialize chat if project is selected
+        // Note: This will only work if the project details view is already shown
+        // Otherwise, the projectDetailsComponent will handle initialization when shown
+        await initializeChatForCurrentProject();
       }
-    }, 'projectSelected/init chat'),
-    { description: 'Initialize ChatManager on projectSelected', context: 'app' }
+    }, 'authStateChanged/init chat'),
+    { description: 'Initialize ChatManager on login', context: 'app:authStateChanged' }
   );
 }
 
@@ -946,6 +994,38 @@ export async function init() {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
       fireAppReady(true);
     }
+
+    // Add debug functions to browserAPI window for troubleshooting
+    const window = browserAPI.getWindow();
+    if (window) {
+      window.debugSidebarAuth = () => {
+        const sidebar = DependencySystem.modules.get('sidebar');
+        if (sidebar?.debugAuthState) {
+          return sidebar.debugAuthState();
+        } else {
+          logger.warn('[App] Sidebar debug function not available', { context: 'app:debug' });
+          return null;
+        }
+      };
+
+      window.debugAppState = () => {
+        const appModule = DependencySystem.modules.get('appModule');
+        const authModule = DependencySystem.modules.get('auth');
+        const state = {
+          appState: appModule?.state,
+          // CONSOLIDATED: No separate authState - all auth info is in appState
+          authInfo: {
+            isAuthenticated: authModule?.isAuthenticated?.(),
+            currentUser: authModule?.getCurrentUserObject?.()
+          }
+        };
+        logger.info('[App] Debug app state requested', state, { context: 'app:debug' });
+        return state;
+      };
+
+      logger.info('[App] Debug functions available: window.debugSidebarAuth(), window.debugAppState()', { context: 'app:debug' });
+    }
+
     return true;
   } catch (err) {
     logger.error('[init]', err, { context: 'app:init', ts: Date.now() });
