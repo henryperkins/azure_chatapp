@@ -153,11 +153,35 @@ export function createDomAPI({
     },
 
     /**
-     * Return el.closest(selector) if available, else null
+     * DOM-safe .closest() wrapper.
+     * • Works for SVG / text-node targets that lack native .closest().
+     * • Includes very-old-browser fallback via matches() traversal.
      */
-    closest: (el, selector) => {
-      if (el && typeof el.closest === 'function') {
+    closest(el, selector) {
+      if (!el || !selector) return null;
+
+      /* Fast path – modern browsers / Elements */
+      if (typeof el.closest === 'function') {
         return el.closest(selector);
+      }
+
+      /* Fallback: climb the DOM manually */
+      let node =
+        el.nodeType === 1               // Element
+          ? el
+          : el.parentElement || el.parentNode;
+
+      const matches =
+        node?.matches ||
+        node?.webkitMatchesSelector ||
+        node?.msMatchesSelector ||
+        (() => false);
+
+      while (node && node.nodeType === 1) {
+        try {
+          if (matches.call(node, selector)) return node;
+        } catch { /* ignore selector errors */ }
+        node = node.parentElement || node.parentNode;
       }
       return null;
     },
