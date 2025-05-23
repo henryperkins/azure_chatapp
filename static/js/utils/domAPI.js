@@ -389,7 +389,6 @@ export function createDomAPI({
 
     /* attribute / dataset shorthands already exist for setDataAttribute
        – add the missing remove variant if not present */
-    removeDataAttribute    : (el, k) => { if (el?.dataset) delete el.dataset[k]; },
 
     /* selection helpers required by copy-to-clipboard code */
     selectElement  : (el)        => { try { el?.select?.(); } catch { } },
