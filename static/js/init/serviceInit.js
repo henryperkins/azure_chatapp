@@ -55,11 +55,11 @@ export function createServiceInitializer({
     try {
       // Register core browser and DOM services
       safeRegister('domAPI', domAPI);
-      safeRegister('browserAPI',         browserServiceInstance);
-      safeRegister('browserService',     browserServiceInstance);
-      safeRegister('storage',            browserServiceInstance);
-      safeRegister('eventHandlers',      eventHandlers);
-      safeRegister('domReadinessService',domReadinessService);
+      safeRegister('browserAPI', browserServiceInstance);
+      safeRegister('browserService', browserServiceInstance);
+      safeRegister('storage', browserServiceInstance);
+      safeRegister('eventHandlers', eventHandlers);
+      safeRegister('domReadinessService', domReadinessService);
 
       // Wire circular dependency with setter (post-construction)
       eventHandlers.setDomReadinessService(domReadinessService);
@@ -68,7 +68,7 @@ export function createServiceInitializer({
       safeRegister(
         'errorReporter',
         DependencySystem.modules.get('errorReporter') ||
-        createErrorReporterStub(logger,'serviceInit:ErrorReporterStub')
+        createErrorReporterStub(logger, 'serviceInit:ErrorReporterStub')
       );
 
       // Register utility services
@@ -153,18 +153,12 @@ export function createServiceInitializer({
         const htmlTemplateLoader = createHtmlTemplateLoader({
           DependencySystem,
           domAPI,
-          eventHandlers,
           sanitizer,
-          // Use raw window.fetch so static HTML paths are untouched
-          apiClient: {
-            fetch: (...args) =>
-              browserServiceInstance.getWindow().fetch(...args)
-          },
-          timerAPI: {
-            setTimeout: (...args) => browserServiceInstance.getWindow().setTimeout(...args),
-            clearTimeout: (...args) => browserServiceInstance.getWindow().clearTimeout(...args)
-          },
-          domReadinessService     // Pass replay-enabled event system
+          eventHandlers,
+          apiClient: apiRequest, // Pass the 'apiRequest' instance as the 'apiClient' property
+          timerAPI: browserServiceInstance,
+          domReadinessService,  // NEW: Pass domReadinessService for replay capability
+          logger
         });
         DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
       }

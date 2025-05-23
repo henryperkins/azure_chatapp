@@ -156,5 +156,6 @@ export function createApiClient({
   mainApiRequest.get = (url, params = {}, opts = {}, skip = false) =>
     mainApiRequest(url, { ...opts, method: 'GET',  params }, skip);
 
+  mainApiRequest.fetch = mainApiRequest; // Expose the main function as .fetch
   return mainApiRequest;
 }
