@@ -84,10 +84,16 @@ export function createFileUploadComponent({
     if (_handlersBound) return;
     try {
       if (domReadinessService) {
-        await domReadinessService.dependenciesAndElements({
-          domSelectors: Object.values(_elements.selectors),
-          context: MODULE_CONTEXT + '::init'
-        });
+        // Only pass string selectors, not DOM element objects
+        const stringSelectors = Object.values(_elements.selectors).filter(
+          selector => typeof selector === 'string'
+        );
+        if (stringSelectors.length > 0) {
+          await domReadinessService.dependenciesAndElements({
+            domSelectors: stringSelectors,
+            context: MODULE_CONTEXT + '::init'
+          });
+        }
       }
       if (!_findElements()) {
         logger.error('[FileUploadComponent] Required DOM elements not found', {
