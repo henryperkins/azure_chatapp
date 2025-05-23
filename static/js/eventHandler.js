@@ -309,7 +309,9 @@ export function createEventHandlers({
 
       try {
         // Use browserService.FormData if available (it's a required dep)
-        const formData = browserService.FormData ? new browserService.FormData(form) : new FormData(form);
+        if (!browserService?.FormData)
+          throw new Error('[EventHandler][setupForm] browserService.FormData unavailable (strict DI)');
+        const formData = new browserService.FormData(form);
         await submitHandler(formData, form);
         if (resetOnSuccess && typeof form.reset === 'function') { // form.reset is a direct DOM call
           domAPI.callMethod(form, 'reset'); // Assumed domAPI.callMethod or similar

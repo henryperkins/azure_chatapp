@@ -94,7 +94,14 @@ export function createElement(tag, opts = {}, trackListener, domAPI) {
   if (opts.className) el.className = opts.className;
   if (opts.id) el.id = opts.id;
   if ("textContent" in opts) el.textContent = opts.textContent;
-  if ("innerHTML" in opts) el.innerHTML = opts.innerHTML;
+  if ("innerHTML" in opts) {
+    if (domAPI?.setInnerHTML) {
+      domAPI.setInnerHTML(el, opts.innerHTML);   // sanitizer aware
+    } else {
+      // Fallback: escape tags to avoid XSS
+      el.textContent = String(opts.innerHTML).replace(/<[^>]*>?/gm, '');
+    }
+  }
 
   // Attach event listeners via DI tracker
   Object.entries(opts).forEach(([k, v]) => {
