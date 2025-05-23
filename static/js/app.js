@@ -244,10 +244,10 @@ const apiRequest = DependencySystem.modules.get('apiRequest');
 // ---------------------------------------------------------------------------
 // 12) app object & top-level state (enrich the early-defined app object)
 // ---------------------------------------------------------------------------
-let currentUser = null; // This local currentUser is used by renderAuthHeader and fetchCurrentUser.
-// It should be kept in sync with appModule.state.currentUser.
+// The local 'currentUser' variable has been removed.
+// appModule.state.currentUser is the single source of truth.
 
-// The local appState variable has been removed. Its properties are merged into appModule.state.
+// The local appState variable has also been removed. Its properties are merged into appModule.state.
 // appModule.state is now the single source of truth for these flags.
 
 let _globalInitCompleted = false;
@@ -267,20 +267,37 @@ Object.assign(app, {
     return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null; // always return copy
   },
   setCurrentProject: (project) => {
-    if (!project || !project.id) return;
+    if (!project || !project.id) {
+      logger.warn('[app] setCurrentProject: Attempted to set invalid project.', { project, context: 'app:setCurrentProject' });
+      return;
+    }
     const previous = currentProject;
-    currentProject = project;
-    // optional: emit an event for listeners who care about project changes
+    currentProject = project; // Update the central single source of truth
+
+    logger.info('[app] setCurrentProject: currentProject updated.', {
+      newProjectId: project.id,
+      previousProjectId: previous?.id,
+      projectName: project.name,
+      context: 'app:setCurrentProject'
+    });
+
     const appBus = DependencySystem.modules.get('AppBus');
     if (appBus && typeof appBus.dispatchEvent === 'function') {
+      logger.debug('[app] setCurrentProject: Dispatching "currentProjectChanged" event on AppBus.', { projectId: project.id, context: 'app:setCurrentProjectEvent' });
       appBus.dispatchEvent(
         eventHandlers.createCustomEvent('currentProjectChanged', {
-          detail: { project, previousProject: previous }
+          detail: {
+            project: { ...project }, // Send a copy
+            previousProject: previous ? { ...previous } : null // Send a copy
+          }
         })
       );
+    } else {
+      logger.warn('[app] setCurrentProject: AppBus not available or dispatchEvent is not a function. Cannot dispatch "currentProjectChanged" event.', { context: 'app:setCurrentProjectEvent' });
     }
-    // Do not re-register in DependencySystem. Only the initial registration (null) at startup is allowed.
-    return project;
+    // Do not re-register 'currentProject' in DependencySystem.
+    // It's managed locally within app.js, accessed via app.getCurrentProject().
+    return project; // Return the set project
   },
   navigateToConversation: async (chatId) => {
     const chatMgr = DependencySystem.modules.get('chatManager');
@@ -293,9 +310,15 @@ Object.assign(app, {
   // Instead of directly mutating app.state, call the "auth" setter in appModule
   setCurrentUser: (user) => {
     const appModuleRef = DependencySystem.modules.get('appModule');
-    appModuleRef?.setAuthState({
-      currentUser: user // do not mutate app.state directly
-    });
+    if (appModuleRef) {
+      logger.info('[app] setCurrentUser: Setting user in appModule.state', { userId: user?.id, username: user?.username });
+      appModuleRef.setAuthState({
+        currentUser: user, // This updates appModule's state
+        // isAuthenticated should be updated by authModule logic, not directly here unless intended
+      });
+    } else {
+      logger.warn('[app] setCurrentUser: appModule not found. Cannot set user.');
+    }
   }
 });
 
@@ -411,9 +434,18 @@ const uiInit = createUIInitializer({
   uiUtils
 });
 
-/* ---------------------------------------------------------------------------
-   Utility functions required by init and other top-level logic
---------------------------------------------------------------------------- */
+/**
+ * Safely invokes an asynchronous initialization method on a given instance, logging warnings or errors as needed.
+ *
+ * Attempts to call the specified method on the provided instance. Logs a warning if the instance or method is missing, and logs and rethrows any errors encountered during execution.
+ *
+ * @param {object} instance - The object containing the initialization method.
+ * @param {string} name - The name of the instance, used for logging context.
+ * @param {string} methodName - The name of the method to invoke.
+ * @returns {Promise<boolean>} Resolves to `true` if initialization succeeds or the method returns `undefined`; otherwise, resolves to the boolean value of the method's result. Returns `false` if the instance or method is missing.
+ *
+ * @throws {Error} If the initialization method throws an error during execution.
+ */
 async function safeInit(instance, name, methodName) {
   const logger = DependencySystem.modules.get('logger');
   if (!instance) {
@@ -433,38 +465,56 @@ async function safeInit(instance, name, methodName) {
   }
 }
 
-async function fetchCurrentUser() {
+/**
+ * Attempts to retrieve the current authenticated user from the auth module.
+ *
+ * Prefers the `fetchCurrentUser()` method if available, falling back to `getCurrentUserObject()` or `getCurrentUserAsync()` if necessary. Returns `null` if no user is authenticated, the auth module is unavailable, or an error occurs during retrieval.
+ *
+ * @returns {Promise<Object|null>} The current user object if authenticated, or `null` if not authenticated or unavailable.
+ */
+async function fetchCurrentUser() { // This is the local function in app.js, called during init step 4
+  logger.debug('[app] fetchCurrentUser (app.js local function) called.');
   try {
     const authModule = DependencySystem.modules.get('auth');
     if (!authModule) {
+      logger.warn('[app] fetchCurrentUser: authModule not found in DI.');
       return null;
     }
 
+    // Prefer using authModule.fetchCurrentUser() as it's the designated method for this.
     if (authModule.fetchCurrentUser) {
+      logger.debug('[app] fetchCurrentUser: Calling authModule.fetchCurrentUser().');
       const userObj = await authModule.fetchCurrentUser();
-      if (userObj?.id) {
+      if (userObj) { // userObj can be null if not authenticated or error
+        logger.info('[app] fetchCurrentUser: User object fetched via authModule.fetchCurrentUser()', { userId: userObj.id, username: userObj.username });
         return userObj;
+      } else {
+        logger.info('[app] fetchCurrentUser: authModule.fetchCurrentUser() returned null (likely not authenticated).');
+        return null;
+      }
+    } else {
+      // Fallback or alternative, though authModule.fetchCurrentUser should be the primary
+      logger.warn('[app] fetchCurrentUser: authModule.fetchCurrentUser method not available. Trying alternatives (getCurrentUserObject/getCurrentUserAsync).');
+      if (authModule.getCurrentUserObject) { // Typically returns cached user
+        const userObjFromGetter = authModule.getCurrentUserObject();
+        if (userObjFromGetter?.id) {
+          logger.info('[app] fetchCurrentUser: User object obtained via authModule.getCurrentUserObject()', { userObjFromGetter });
+          return userObjFromGetter;
+        }
+      }
+      if (authModule.getCurrentUserAsync) { // If there's an async getter
+        const userObjAsync = await authModule.getCurrentUserAsync();
+        if (userObjAsync?.id) {
+          logger.info('[app] fetchCurrentUser: User object obtained via authModule.getCurrentUserAsync()', { userObjAsync });
+          return userObjAsync;
+        }
       }
     }
-
-    if (authModule.getCurrentUserObject) {
-      const userObjFromGetter = authModule.getCurrentUserObject();
-      if (userObjFromGetter?.id) {
-        return userObjFromGetter;
-      }
-    }
-
-    if (authModule.getCurrentUserAsync) {
-      const userObjAsync = await authModule.getCurrentUserAsync();
-      if (userObjAsync?.id) {
-        return userObjAsync;
-      }
-    }
-
+    logger.info('[app] fetchCurrentUser: No user object could be fetched via authModule.');
     return null;
   } catch (error) {
-    logger.error('[fetchCurrentUser]', error, { context: 'app:fetchCurrentUser' });
-    return null;
+    logger.error('[app] fetchCurrentUser: Error during user fetching process', error, { context: 'app:fetchCurrentUser' });
+    return null; // Return null on error
   }
 }
 
@@ -550,7 +600,18 @@ function handleInitError(err) {
 
 // ---------------------------------------------------------------------------
 // 14) Main initialization function
-// ---------------------------------------------------------------------------
+/**
+ * Orchestrates the full asynchronous initialization sequence for the application.
+ *
+ * Waits for DOM readiness, loads required HTML templates, initializes core systems, waits for critical dependencies, sets up authentication, fetches the current user if authenticated, initializes UI components, registers navigation views, and sets up app-level listeners. Handles timing, error management, and global timeouts, and dispatches the final "app:ready" event upon completion or failure.
+ *
+ * @returns {Promise<boolean>} Resolves to `true` if initialization completes successfully.
+ *
+ * @throws {Error} If any critical initialization phase fails or required dependencies are missing.
+ *
+ * @remark
+ * If initialization exceeds the configured global timeout, an error is logged, error handling is triggered, and the "app:ready" event is dispatched with failure status.
+ */
 export async function init() {
   logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
 
@@ -619,27 +680,52 @@ export async function init() {
   try {
     // 0.5) Load modals.html synchronously before ANY initialization
     logStep('loadModalsHtml', 'pre');
-    await Promise.race([
-      domReadinessService.dependenciesAndElements({
-        domSelectors: ['#modalsContainer'],
-        timeout: APP_CONFIG.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
-        context: 'app:loadModalsHtml'
-      }).then(() => {
-        const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
-        return htmlTemplateLoader.loadTemplate({
-          url: '/static/html/modals.html',
-          containerSelector: '#modalsContainer',
-          eventName: 'modalsLoaded'
-        });
-      }),
-      new Promise((_, reject) =>
-        browserAPI.getWindow().setTimeout(
-          () => reject(new Error('Timeout in loadModalsHtml')),
-          PHASE_TIMEOUT
+    let modalsHtmlLoadedSuccessfully = false;
+    try {
+      logger.info('[App.init] Attempting to load modals.html');
+      await Promise.race([
+        domReadinessService.dependenciesAndElements({
+          domSelectors: ['#modalsContainer'], // Ensure container exists
+          timeout: APP_CONFIG.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
+          context: 'app:loadModalsHtml:waitForContainer'
+        }).then(async () => { // made async
+          const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
+          if (!htmlTemplateLoader) {
+            logger.error('[App.init] htmlTemplateLoader not found in DI for modals.html loading.');
+            throw new Error('htmlTemplateLoader not available');
+          }
+          // The loadTemplate itself will dispatch 'modalsLoaded'
+          // and htmlTemplateLoader.js now has detailed logging for this.
+          const result = await htmlTemplateLoader.loadTemplate({
+            url: '/static/html/modals.html',
+            containerSelector: '#modalsContainer',
+            eventName: 'modalsLoaded' // This event is critical for ModalManager
+          });
+          modalsHtmlLoadedSuccessfully = result; // result is true on success, false on failure
+          return result; // Propagate success/failure
+        }),
+        new Promise((_, reject) =>
+          browserAPI.getWindow().setTimeout(
+            () => reject(new Error(`Timeout in loadModalsHtml after ${PHASE_TIMEOUT}ms`)),
+            PHASE_TIMEOUT
+          )
         )
-      )
-    ]);
-    logStep('loadModalsHtml', 'post');
+      ]);
+      if (!modalsHtmlLoadedSuccessfully) {
+        // This case might be hit if loadTemplate itself returns false but doesn't throw (e.g. container not found)
+        logger.error('[App.init] modals.html loading reported failure (loadTemplate returned false). This will likely break ModalManager initialization.');
+        // Potentially throw here to halt initialization, as ModalManager depends on this.
+        // For now, allow ModalManager's init to fail and report, as it strictly awaits 'modalsLoaded' success.
+      } else {
+        logger.info('[App.init] modals.html loaded successfully.');
+      }
+    } catch (err) {
+      logger.error('[App.init] Error during modals.html loading phase (step 0.5).', err, { context: 'app:init:loadModalsHtml:catch' });
+      // We rethrow here because subsequent steps (like ModalManager init) are critical.
+      // ModalManager's own init will also try to wait for 'modalsLoaded' and timeout/error if it failed here.
+      throw err; 
+    }
+    logStep('loadModalsHtml', 'post', { success: modalsHtmlLoadedSuccessfully });
 
     // 1) Initialize core systems using factory
     logStep('initializeCoreSystems', 'pre');
@@ -653,6 +739,7 @@ export async function init() {
       )
     ]);
     logStep('initializeCoreSystems', 'post');
+    logger.info('[App.init] Core systems initialization phase completed.');
 
     /* ── Wait for critical DI modules via domReadinessService ─────────── */
     logStep('depsReady', 'pre');

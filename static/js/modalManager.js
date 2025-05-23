@@ -74,7 +74,7 @@ class ModalManager {
     this.activeModal = null;
     this._scrollLockY = undefined;
 
-    this.logger.debug?.('[ModalManager] constructed', { withApp: !!this.app });
+    this.logger.debug?.('[ModalManager] constructed', { withApp: !!this.app }); // Changed to debug
   }
 
   isReadyPromise() { return this._readyPromise; }
@@ -106,6 +106,8 @@ class ModalManager {
   }
 
   _showModalElement(modalEl) {
+    const modalId = modalEl.id || 'unknown_modal_id';
+    this.logger.debug?.(`[ModalManager] Showing modal element: #${modalId}`, { modalId });
     if (typeof modalEl.showModal === 'function') {
       modalEl.showModal();
       modalEl.style.zIndex = '9999';
@@ -120,6 +122,8 @@ class ModalManager {
   }
 
   _hideModalElement(modalEl) {
+    const modalId = modalEl.id || 'unknown_modal_id';
+    this.logger.debug?.(`[ModalManager] Hiding modal element: #${modalId}`, { modalId });
     if (typeof modalEl.close === 'function') {
       modalEl.close();
     } else {
@@ -150,14 +154,18 @@ class ModalManager {
 
   _registerAvailableModals() {
     if (!this.modalMappings || typeof this.modalMappings !== 'object') {
-      this.logger.warn?.('[ModalManager] No modalMappings available to register.');
+      this.logger.warn?.('[ModalManager] _registerAvailableModals: No modalMappings available to register.');
       return;
     }
+    let registeredCount = 0;
+    let notFoundCount = 0;
+    this.logger.debug?.(`[ModalManager] _registerAvailableModals: Starting registration for ${Object.keys(this.modalMappings).length} mapped modals.`);
 
     Object.entries(this.modalMappings).forEach(([modalName, modalId]) => {
       const modalEl = this.domAPI.getElementById(modalId);
       if (!modalEl) {
-        this.logger.warn?.(`[ModalManager] Modal element #${modalId} for "${modalName}" not found.`);
+        this.logger.warn?.(`[ModalManager] _registerAvailableModals: Modal element #${modalId} for "${modalName}" not found in DOM.`);
+        notFoundCount++;
         return;
       }
 
@@ -166,7 +174,7 @@ class ModalManager {
         this.eventHandlers.trackListener(
           modalEl,
           'close',
-          () => this._onDialogClose(modalId),
+          () => this._onDialogClose(modalId), // Pass modalId to handler
           {
             description: `Dialog close event for ${modalId}`,
             context: 'modalManager',
@@ -194,69 +202,78 @@ class ModalManager {
           );
         }
       });
-      this.logger.debug?.(`[ModalManager] Registered modal: ${modalName} (#${modalId})`);
+      this.logger.debug?.(`[ModalManager] _registerAvailableModals: Successfully registered modal: ${modalName} (#${modalId})`);
+      registeredCount++;
     });
+    this.logger.info?.(`[ModalManager] _registerAvailableModals: Finished. Registered ${registeredCount} modals. ${notFoundCount} modals not found in DOM.`);
   }
 
   async init() {
+    this.logger.info?.('[ModalManager] init() called.');
     try {
       const depSys = this.DependencySystem;
-      if (!depSys) throw new Error('[ModalManager] DependencySystem missing in init');
+      if (!depSys) {
+        this.logger.error?.('[ModalManager] init: DependencySystem missing.');
+        throw new Error('[ModalManager] DependencySystem missing in init');
+      }
 
-      // Attempt to get the domReadinessService from DI
       const domReadinessService = depSys.modules?.get('domReadinessService');
       if (!domReadinessService) {
+        this.logger.error?.('[ModalManager] init: domReadinessService missing from DI.');
         throw new Error('[ModalManager] Missing domReadinessService in DI. Make sure it is registered.');
       }
 
-      // NEW – wait for required dependencies via domReadinessService
+      this.logger.debug?.('[ModalManager] init: Awaiting core dependencies (eventHandlers, domAPI).');
       await domReadinessService.dependenciesAndElements({
         deps: ['eventHandlers', 'domAPI'],
-        timeout: 5000,
-        context: 'modalManager.init'
+        timeout: 5000, 
+        context: 'modalManager.init:coreDeps'
       });
+      this.logger.debug?.('[ModalManager] init: Core dependencies ready.');
 
-      // Wait for body readiness
+      this.logger.debug?.('[ModalManager] init: Awaiting body element readiness.');
       await domReadinessService.dependenciesAndElements({
         deps: [],
         domSelectors: ['body'],
         timeout: 5000,
-        context: 'modalManager.init'
+        context: 'modalManager.init:bodyReady'
+      });
+      this.logger.debug?.('[ModalManager] init: Body element ready.');
+
+      this.logger.info?.("[ModalManager] init: Waiting for 'modalsLoaded' event...");
+      // CRITICAL CHANGE: Strict wait for modalsLoaded.
+      // If modals.html fails to load or the event doesn't fire, ModalManager init will fail.
+      const modalsLoadedEventData = await domReadinessService.waitForEvent('modalsLoaded', {
+        timeout: 15000, // Increased timeout to 15s for modals.html loading
+        context: 'modalManager.init:waitForModalsLoaded'
       });
 
-      // Optionally, wait for 'modalsLoaded' event. If it times out, we proceed anyway
-      try {
-        await domReadinessService.waitForEvent('modalsLoaded', {
-          timeout: 8000,
-          context: 'modalManager.init'
-        });
-      } catch (_err) {
-        // We do not fail if modalsLoaded never fires
+      if (!modalsLoadedEventData?.detail?.success) {
+        const errorMsg = modalsLoadedEventData?.detail?.error || 'modalsLoaded event reported failure or missing success flag';
+        this.logger.error?.(`[ModalManager] init: 'modalsLoaded' event indicated failure. Error: ${errorMsg}`, { eventDetail: modalsLoadedEventData?.detail });
+        throw new Error(`[ModalManager] 'modalsLoaded' event reported failure: ${errorMsg}`);
       }
+      this.logger.info?.("[ModalManager] init: 'modalsLoaded' event received and indicates success.");
+      
+      // The one-time listener for 'modalsLoaded' to re-scan is removed as we now strictly await it.
+      // If it was necessary due to late injection by other means, that's a separate issue.
+      // For now, assume modals.html load is the sole trigger for 'modalsLoaded'.
 
-      // One-time listener to re-scan after templates are injected
-      this.eventHandlers.trackListener(
-        this.domAPI.getDocument(),
-        'modalsLoaded',
-        () => this._registerAvailableModals(),
-        { once: true, context: 'modalManager', description: 'late modal registration' }
-      );
-
-      // Register any currently available modals
+      this.logger.debug?.('[ModalManager] init: Registering available modals after modalsLoaded.');
       this._registerAvailableModals();
 
-      // Dispatch success event
       const doc = this.domAPI.getDocument();
       this.domAPI.dispatchEvent(
         doc,
         new CustomEvent('modalmanager:initialized', { detail: { success: true } })
       );
-
-      // Mark ready
+      this.logger.info?.('[ModalManager] init() completed successfully. ModalManager is ready.');
       this._readyResolve?.(true);
     } catch (err) {
-      this._readyReject?.(err);
-      throw err;
+      this.logger.error?.('[ModalManager] init() failed catastrophically.', err, { context: 'modalManager.init' });
+      this._readyReject?.(err); // Reject the promise
+      // No rethrow here, error is reported via promise.
+      // If rethrow is desired, ensure calling initializers (coreInit/uiInit) handle it.
     }
   }
 
@@ -280,53 +297,94 @@ class ModalManager {
     });
   }
 
-  show(modalName, options = {}) {
+  async show(modalName, options = {}) {
+    this.logger.debug?.(`[ModalManager] show() called for modal: ${modalName}`, { modalName, options });
+
+    // CRITICAL CHANGE: Await readiness before proceeding
+    try {
+      this.logger.debug?.(`[ModalManager] show(${modalName}): Awaiting manager readiness (isReadyPromise).`);
+      await this.isReadyPromise(); // Ensures init() completed successfully
+      this.logger.debug?.(`[ModalManager] show(${modalName}): Manager is ready.`);
+    } catch (err) {
+      this.logger.error?.(`[ModalManager] show(${modalName}): ModalManager not ready or its initialization failed. Cannot show modal.`, { error: err, modalName });
+      this.errorReporter.report?.(err, { module: 'ModalManager', fn: 'show', modalName, reason: 'ManagerNotReadyOrInitFailed' });
+      return false; // Cannot proceed if manager isn't ready
+    }
+
     // --- Ensure the injected modals container is visible -----------------
     const containerEl = this.domAPI.getElementById('modalsContainer');
     if (containerEl) {
-      // Remove utility `hidden` class (Tailwind/DaisyUI) or standard `hidden` attr
       this.domAPI.removeClass(containerEl, 'hidden');
       containerEl.removeAttribute?.('hidden');
       if (containerEl.style.display === 'none') containerEl.style.display = '';
+    } else {
+      // This might not be a critical error if modals are directly in body, but good to log.
+      this.logger.warn?.(`[ModalManager] show(${modalName}): #modalsContainer element not found. Modals might not display correctly if they rely on this container.`, { modalName });
     }
 
     if (this.app?.isInitializing && !options.showDuringInitialization) {
+      this.logger.warn?.(`[ModalManager] show(${modalName}): Attempt to show modal during app initialization (and !options.showDuringInitialization). Aborting.`, { modalName });
       return false;
     }
 
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
+      this.logger.warn?.(`[ModalManager] show(${modalName}): Modal name not found in mappings. Cannot show.`, { modalName });
       return false;
     }
+    this.logger.debug?.(`[ModalManager] show(${modalName}): Found modalId "${modalId}" in mappings.`);
 
     const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
-      return false;
+      this.logger.warn?.(`[ModalManager] show(${modalName}): Modal element with ID "${modalId}" NOT FOUND in DOM. Cannot show. This is unexpected if init was successful.`, { modalName, modalId });
+      return false; 
     }
+    this.logger.debug?.(`[ModalManager] show(${modalName}): Found modal element for ID "${modalId}". Proceeding to show.`);
 
-    // ── Contenido dinámico para modal de error ────────────────────────
+    // Dynamic content for error modal
     if (modalName === 'error') {
       const titleEl   = modalEl.querySelector('#errorModalTitle');
       const messageEl = modalEl.querySelector('#errorModalMessage');
       if (titleEl   && options.title)   titleEl.textContent   = options.title;
       if (messageEl && options.message) messageEl.textContent = options.message;
+      this.logger.debug?.(`[ModalManager] show(${modalName}): Populated error modal content.`, { title: options.title });
     }
 
     this._showModalElement(modalEl);
     this.activeModal = modalName;
+    this.logger.info?.(`[ModalManager] Successfully shown modal: ${modalName} (#${modalId})`);
     return true;
   }
 
-  confirmAction(options) {
+  async confirmAction(options) {
+    this.logger.debug?.('[ModalManager] confirmAction() called.', { options });
+
+    // CRITICAL CHANGE: Await readiness before proceeding (as it calls show())
+    try {
+      this.logger.debug?.('[ModalManager] confirmAction: Awaiting manager readiness (isReadyPromise).');
+      await this.isReadyPromise();
+      this.logger.debug?.('[ModalManager] confirmAction: Manager is ready.');
+    } catch (err) {
+      this.logger.error?.('[ModalManager] confirmAction: ModalManager not ready or its initialization failed. Cannot show confirmation.', { error: err });
+      this.errorReporter.report?.(err, { module: 'ModalManager', fn: 'confirmAction', reason: 'ManagerNotReadyOrInitFailed' });
+      // Optionally call options.onCancel() or throw, depending on desired behavior
+      if (typeof options.onCancel === 'function') {
+        options.onCancel(); // Simulate cancellation as modal cannot be shown
+      }
+      return; // Cannot proceed
+    }
+
     const modalName = 'confirm';
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
-      return;
+      this.logger.warn?.('[ModalManager] confirmAction: Confirm modal "confirm" not found in mappings.');
+      return; // Cannot proceed
     }
 
     const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
-      return;
+      this.logger.warn?.(`[ModalManager] confirmAction: Confirm modal element with ID "${modalId}" NOT FOUND in DOM.`);
+      return; // Cannot proceed
     }
 
     const titleEl = modalEl.querySelector('h3');
@@ -396,15 +454,20 @@ class ModalManager {
   hide(modalName) {
     const modalId = this.modalMappings[modalName];
     if (!modalId) {
+      this.logger.warn?.(`[ModalManager] hide(${modalName}): Modal name not found in mappings. Cannot hide.`, { modalName });
       return;
     }
     const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
+      this.logger.warn?.(`[ModalManager] hide(${modalName}): Modal element with ID "${modalId}" NOT FOUND in DOM. Cannot hide.`, { modalName, modalId });
       return;
     }
-    this._hideModalElement(modalEl);
+    this._hideModalElement(modalEl); // This logs internally
     if (this.activeModal === modalName) {
       this.activeModal = null;
+      this.logger.debug?.(`[ModalManager] hide(${modalName}): Modal hidden and activeModal cleared.`);
+    } else {
+      this.logger.debug?.(`[ModalManager] hide(${modalName}): Modal hidden. It was not the active modal (activeModal was ${this.activeModal}).`);
     }
   }
 }
@@ -470,7 +533,7 @@ class ProjectModal {
     this.isOpen = false;
     this.currentProjectId = null;
 
-    this.logger.debug?.('[ProjectModal] constructed');
+    this.logger.info?.('[ProjectModal] constructed'); // Changed to info for better visibility
   }
 
   _isDebug() {
@@ -523,27 +586,44 @@ class ProjectModal {
    * This method must be called and awaited before interacting with modal DOM.
    */
   async init() {
-    await this.domReadinessService.dependenciesAndElements({
-      domSelectors: ['#projectModal', '#projectModalForm'],
-      timeout: 5000,
-      context: 'projectModal.init'
-    });
-    this.modalElement = this.domAPI.getElementById('projectModal');
-    this.formElement = this.domAPI.getElementById('projectModalForm');
-    if (!this.modalElement || !this.formElement) {
-      throw new Error('[ProjectModal] Required DOM elements not found on init.');
-    }
-    this.setupEventListeners();
+    this.logger.info?.('[ProjectModal] init() called.');
+    try {
+      // This relies on modals.html (containing #projectModal) already being loaded.
+      // ModalManager's init should ensure this before ProjectModal.init is typically called.
+      this.logger.debug?.('[ProjectModal] init: Awaiting DOM elements #projectModal and #projectModalForm.');
+      await this.domReadinessService.dependenciesAndElements({
+        domSelectors: ['#projectModal', '#projectModalForm'],
+        timeout: 7000, // Increased timeout slightly, assuming modals.html is loaded
+        context: 'projectModal.init:awaitElements'
+      });
+      this.logger.debug?.('[ProjectModal] init: DOM elements wait completed.');
 
-    // Optionally emit readiness event if desired by code conventions
-    if (
-      typeof this.domAPI.dispatchEvent === 'function' &&
-      this.modalElement
-    ) {
-      this.domAPI.dispatchEvent(
-        this.modalElement,
-        new CustomEvent('projectModal:ready', { detail: { success: true } })
-      );
+      this.modalElement = this.domAPI.getElementById('projectModal');
+      this.formElement = this.domAPI.getElementById('projectModalForm');
+
+      if (!this.modalElement) {
+        this.logger.error?.('[ProjectModal] init: #projectModal element NOT FOUND in DOM after domReadinessService wait. This is critical.');
+        throw new Error('[ProjectModal] #projectModal element not found on init.');
+      }
+      if (!this.formElement) {
+        this.logger.error?.('[ProjectModal] init: #projectModalForm element NOT FOUND in DOM after domReadinessService wait. This is critical.');
+        throw new Error('[ProjectModal] #projectModalForm element not found on init.');
+      }
+      this.logger.debug?.('[ProjectModal] init: #projectModal and #projectModalForm elements successfully found.');
+
+      this.setupEventListeners(); // Internal logging within this method
+
+      if (typeof this.domAPI.dispatchEvent === 'function' && this.modalElement) {
+        this.domAPI.dispatchEvent(
+          this.modalElement,
+          new CustomEvent('projectModal:ready', { detail: { success: true } })
+        );
+      }
+      this.logger.info?.('[ProjectModal] init() completed successfully.');
+    } catch (err) {
+      this.logger.error?.('[ProjectModal] init() failed.', err, { context: 'projectModal.init' });
+      this.errorReporter.report?.(err, { module: 'ProjectModal', fn: 'init', reason: 'DomElementsOrListenersFailed' });
+      throw err; // Re-throw so callers (e.g., UI initializer) know init failed
     }
   }
 
@@ -556,129 +636,206 @@ class ProjectModal {
 
   openModal(project = null) {
     if (!this.modalElement) {
+      this.logger.warn?.('[ProjectModal] openModal: modalElement is null (likely init failed). Cannot open.');
       return;
     }
+    this.logger.debug?.(`[ProjectModal] openModal called. Project: ${project ? project.id : 'new'}`, { project });
 
     if (this.formElement) {
       this.formElement.reset();
+      this.logger.debug?.('[ProjectModal] openModal: Form reset.');
+    } else {
+      this.logger.warn?.('[ProjectModal] openModal: formElement is null. Cannot reset form.');
     }
 
     const titleEl = this.modalElement.querySelector('#projectModalTitle');
     if (titleEl) {
       titleEl.textContent = project ? 'Edit Project' : 'Create Project';
+    } else {
+      this.logger.warn?.('[ProjectModal] openModal: #projectModalTitle element not found.');
     }
 
     if (project) {
       this.currentProjectId = project.id;
+      this.logger.debug?.(`[ProjectModal] openModal: Populating form for editing project ID: ${this.currentProjectId}`);
       const idInput = this.modalElement.querySelector('#projectModalIdInput');
       const nameInput = this.modalElement.querySelector('#projectModalNameInput');
       const descInput = this.modalElement.querySelector('#projectModalDescInput');
       const goalsInput = this.modalElement.querySelector('#projectModalGoalsInput');
       const maxTokensInput = this.modalElement.querySelector('#projectModalMaxTokensInput');
 
-      if (idInput) idInput.value = project.id || '';
-      if (nameInput) nameInput.value = project.name || '';
-      if (descInput) descInput.value = project.description || '';
-      if (goalsInput) goalsInput.value = project.goals || '';
-      if (maxTokensInput) maxTokensInput.value = project.max_tokens || '';
+      if (idInput) idInput.value = project.id || ''; else this.logger.warn?.('[ProjectModal] openModal: #projectModalIdInput not found.');
+      if (nameInput) nameInput.value = project.name || ''; else this.logger.warn?.('[ProjectModal] openModal: #projectModalNameInput not found.');
+      if (descInput) descInput.value = project.description || ''; else this.logger.warn?.('[ProjectModal] openModal: #projectModalDescInput not found.');
+      if (goalsInput) goalsInput.value = project.goals || ''; else this.logger.warn?.('[ProjectModal] openModal: #projectModalGoalsInput not found.');
+      if (maxTokensInput) maxTokensInput.value = project.max_tokens || ''; else this.logger.warn?.('[ProjectModal] openModal: #projectModalMaxTokensInput not found.');
     } else {
       this.currentProjectId = null;
+      this.logger.debug?.('[ProjectModal] openModal: Clearing form for new project.');
       const idEl = this.modalElement.querySelector('#projectModalIdInput');
       if (idEl) {
-        idEl.value = '';
+        idEl.value = ''; // Ensure hidden ID field is cleared for new projects
+      } else {
+        this.logger.warn?.('[ProjectModal] openModal: #projectModalIdInput not found for clearing.');
       }
+      // Explicitly clear other fields for new project scenario
+      const nameInput = this.modalElement.querySelector('#projectModalNameInput');
+      if (nameInput) nameInput.value = '';
+      const descInput = this.modalElement.querySelector('#projectModalDescInput');
+      if (descInput) descInput.value = '';
+      const goalsInput = this.modalElement.querySelector('#projectModalGoalsInput');
+      if (goalsInput) goalsInput.value = '';
+      const maxTokensInput = this.modalElement.querySelector('#projectModalMaxTokensInput');
+      if (maxTokensInput) maxTokensInput.value = '';
+
     }
 
-    this._showModalElement();
+    this._showModalElement(); // Internal logging for show
     this.isOpen = true;
+    this.logger.info?.(`[ProjectModal] Modal opened. Mode: ${project ? 'edit' : 'create'}, Project ID: ${this.currentProjectId || 'N/A'}`);
   }
 
   setupEventListeners() {
-    if (!this.formElement) return;
+    if (!this.modalElement) {
+       this.logger.warn?.('[ProjectModal] setupEventListeners: modalElement is null. Cannot set up common listeners.');
+       // If modalElement is null, formElement is also likely null or irrelevant.
+       return;
+    }
+    if (!this.formElement) {
+      this.logger.warn?.('[ProjectModal] setupEventListeners: formElement is null. Cannot set up form submit listener.');
+      // Proceed to set up modal-specific listeners like ESC and backdrop if modalElement exists
+    }
+    
+    this.logger.debug?.('[ProjectModal] Setting up event listeners.');
 
-    const submitHandler = async (e) => {
-      await this.handleSubmit(e);
-    };
-    this._bindEvent(
-      this.formElement,
-      'submit',
-      submitHandler,
-      'ProjectModal submit',
-      { passive: false }
-    );
+    if (this.formElement) {
+      const submitHandler = async (e) => {
+        // e.preventDefault() is called in handleSubmit
+        await this.handleSubmit(e);
+      };
+      this._bindEvent(
+        this.formElement,
+        'submit',
+        submitHandler,
+        'ProjectModal form submit', // More specific description
+        { passive: false } 
+      );
+    }
 
     const cancelBtn = this.modalElement.querySelector('#projectCancelBtn');
     if (cancelBtn) {
       const cancelHandler = (e) => {
         e.preventDefault();
+        this.logger.debug?.('[ProjectModal] Cancel button clicked.');
         this.closeModal();
       };
-      this._bindEvent(cancelBtn, 'click', cancelHandler, 'ProjectModal Cancel');
+      this._bindEvent(cancelBtn, 'click', cancelHandler, 'ProjectModal Cancel button click');
+    } else {
+      this.logger.warn?.('[ProjectModal] setupEventListeners: Cancel button #projectCancelBtn not found in #projectModal.');
     }
 
+    // Listen on document for ESC key for wider capture, e.g., if focus is not directly in modal
     const escHandler = (e) => {
       if (e.key === 'Escape' && this.isOpen) {
+        this.logger.debug?.('[ProjectModal] ESC key pressed while modal is open, closing modal.');
         this.closeModal();
       }
     };
     this._bindEvent(
-      this.domAPI.ownerDocument,
+      this.domAPI.ownerDocument, // Changed from this.modalElement for broader scope if modal loses focus
       'keydown',
       escHandler,
-      'ProjectModal ESC handler'
+      'ProjectModal Document ESC key handler'
     );
 
+    // Click on backdrop (dialog element itself) to close, if it's a <dialog>
+    // For non-<dialog> fallbacks, this might need CSS to make the backdrop clickable.
     const backdropHandler = (e) => {
+      // Check if the click is directly on the dialog/modalElement itself
       if (e.target === this.modalElement && this.isOpen) {
+        this.logger.debug?.('[ProjectModal] Backdrop clicked (e.target is modalElement), closing modal.');
         this.closeModal();
       }
     };
     this._bindEvent(
-      this.modalElement,
+      this.modalElement, // Listener on the modal itself
       'click',
       backdropHandler,
-      'ProjectModal backdrop click'
+      'ProjectModal backdrop click handler'
     );
+    this.logger.debug?.('[ProjectModal] Event listeners setup completed.');
   }
 
   closeModal() {
-    if (!this.modalElement) return;
-    this._hideModalElement();
+    if (!this.modalElement) {
+      this.logger.warn?.('[ProjectModal] closeModal: modalElement is null. Cannot close.');
+      return;
+    }
+    if (!this.isOpen) {
+      this.logger.debug?.('[ProjectModal] closeModal: Modal is already closed or was never opened.');
+      return;
+    }
+    this._hideModalElement(); // Internal logging for hide
     this.isOpen = false;
+    const closedProjectId = this.currentProjectId; // Capture before resetting
     this.currentProjectId = null;
+    this.logger.info?.(`[ProjectModal] Modal closed. Was for Project ID: ${closedProjectId || 'N/A'}`);
   }
 
   async handleSubmit(e) {
-    e.preventDefault();
+    e.preventDefault(); // Always prevent default for form submission via JS
     if (!this.formElement) {
+      this.logger.warn?.('[ProjectModal] handleSubmit: formElement is null. Cannot process submission.');
       return;
+    }
+    this.logger.debug?.('[ProjectModal] handleSubmit: Form submission initiated.');
+
+    const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
+    if (!saveBtn) {
+        this.logger.warn?.('[ProjectModal] handleSubmit: Save button #projectSaveBtn not found. UI update for loading state will fail.');
     }
 
     try {
       const formData = new FormData(this.formElement);
       const projectData = {
-        name: formData.get('name') || '',
+        name: formData.get('name')?.trim() || '', // Ensure trimmed
         description: formData.get('description') || '',
         goals: formData.get('goals') || '',
         max_tokens: formData.get('maxTokens') || null
       };
-      const projectId = formData.get('projectId');
+      // projectId from hidden input for existing projects, or null/empty for new.
+      // this.currentProjectId is set when opening for an existing project.
+      const projectIdFromForm = formData.get('projectId'); 
+      const idToSave = projectIdFromForm || this.currentProjectId; // Prefer form ID if available, else currentProjectId
 
-      if (!projectData.name.trim()) {
+      this.logger.debug?.(`[ProjectModal] handleSubmit: Project data extracted. Name: "${projectData.name}", Form ID: "${projectIdFromForm}", Current Edit ID: "${this.currentProjectId}", Effective ID for save: "${idToSave}"`);
+
+      if (!projectData.name) { // Check after trim
+        this.logger.warn?.('[ProjectModal] handleSubmit: Project name is empty after trim. Aborting save.');
+        // TODO: Implement user-facing validation feedback (e.g., highlight field, show message)
+        this.errorReporter.report?.(new Error('Validation: Project name empty'), {
+            module: 'ProjectModal', fn: 'handleSubmit', validationError: true, field: 'name'
+        });
+        if (saveBtn) this._setButtonLoading(saveBtn, false); // Reset button if validation fails early
         return;
       }
 
-      const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
-      this._setButtonLoading(saveBtn, true);
+      if (saveBtn) this._setButtonLoading(saveBtn, true, 'Saving...');
+      this.logger.info?.(`[ProjectModal] handleSubmit: Attempting to save project. ID: ${idToSave || '(new project)'}, Name: "${projectData.name}"`);
 
-      await this.saveProject(projectId, projectData);
+      await this.saveProject(idToSave, projectData); // Use idToSave (could be null for new project)
+      
+      this.logger.info?.(`[ProjectModal] handleSubmit: Project save successful. ID: ${idToSave || '(new project after save)'}, Name: "${projectData.name}"`);
       this.closeModal();
+
     } catch (err) {
-      this.logger.error?.('[ProjectModal][handleSubmit] Error saving project:', err);
+      this.logger.error?.('[ProjectModal][handleSubmit] Error during project save operation:', err, { projectId: this.currentProjectId, formData: Object.fromEntries(new FormData(this.formElement)) });
       this.errorReporter.report?.(err, { module: 'ProjectModal', fn: 'handleSubmit', currentProjectId: this.currentProjectId });
+      // TODO: Show error to user within the modal (e.g., a toast or message area in the modal)
     } finally {
-      const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
-      this._setButtonLoading(saveBtn, false);
+      // Ensure button loading state is always reset, even if saveBtn was not found initially (though less likely)
+      if (saveBtn) this._setButtonLoading(saveBtn, false);
+      this.logger.debug?.('[ProjectModal] handleSubmit: Submission process finished.');
     }
   }
 

@@ -1,19 +1,13 @@
 /**
- * HtmlTemplateLoader
- * Factory that fetches & injects external HTML fragments, then emits a
- * custom event (<eventName>) on document so other modules can await it.
+ * Creates an HTML template loader with injected dependencies for DOM manipulation, HTTP requests, and event handling.
  *
- * @param {Object}   deps
- * @param {Object}   deps.DependencySystem  – Required (for consistency, though not used heavily here)
- * @param {Object}   deps.domAPI           – Required, for DOM queries and event dispatch
- * @param {Object}   deps.sanitizer        – Optional. If present, must have .sanitize(html)
- * @param {Object}   deps.eventHandlers    – Required, must provide createCustomEvent
+ * Returns an object with two methods:
+ * - `loadTemplate`: Loads an external HTML template into a specified DOM container, optionally sanitizes it, and emits a custom event upon completion. If the template URL contains `'modals.html'`, also emits a `'modalsLoaded'` event with the result.
+ * - `loadAppTemplates`: Sequentially loads multiple HTML templates based on an array of configuration objects, returning an array of results for each load attempt.
  *
- * // Additional guardrail-driven injections:
- * @param {Object}   deps.apiClient        – Required, for all HTTP requests
- * @param {Object}   deps.timerAPI         – Required, must provide { setTimeout, clearTimeout }
+ * @returns {{ loadTemplate: Function, loadAppTemplates: Function }} An object with methods to load single or multiple HTML templates.
  *
- * @returns {Object} { loadTemplate, loadAppTemplates }
+ * @throws {Error} If required dependencies are missing or invalid.
  */
 export function createHtmlTemplateLoader({
   DependencySystem,
@@ -37,8 +31,19 @@ export function createHtmlTemplateLoader({
   }
 
   /**
-   * Loads a single HTML template into a DOM container, sanitizes if available,
-   * and emits an eventName upon completion (success or failure).
+   * Loads an external HTML template into a specified DOM container and emits a custom event upon completion.
+   *
+   * Fetches the template from the given URL, injects its HTML into the target container, and optionally sanitizes the content if a sanitizer is available. Emits the specified event with success or failure details after the operation. If the URL contains "modals.html", also emits a "modalsLoaded" event with the same outcome.
+   *
+   * @param {Object} options - Template loading options.
+   * @param {string} options.url - The URL of the HTML template to load.
+   * @param {string} options.containerSelector - CSS selector for the DOM container to inject the template into.
+   * @param {string} [options.eventName='htmlTemplateLoaded'] - Name of the custom event to emit after loading.
+   * @param {number} [options.timeout=15000] - Timeout in milliseconds for the fetch request.
+   * @returns {Promise<boolean>} Resolves to true if the template was loaded and injected successfully; false otherwise.
+   *
+   * @remark
+   * If the container is not found or the fetch fails, the event is still dispatched with failure details. For templates with URLs containing "modals.html", a "modalsLoaded" event is always emitted in addition to the main event.
    */
   async function loadTemplate({
     url,
@@ -46,35 +51,55 @@ export function createHtmlTemplateLoader({
     eventName = 'htmlTemplateLoaded',
     timeout = 15_000 // default to 15s
   } = {}) {
+    const isModalsHtml = url && url.includes('modals.html');
+    logger.info?.(`[HtmlTemplateLoader] Attempting to load template: ${url} into ${containerSelector}`, { url, containerSelector, eventName, isModalsHtml });
+
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
-      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template will not be injected.`);
+      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template ${url} will not be injected.`);
+      // Dispatch event even if container is not found, so listeners are unblocked
+      const notFoundEvt = eventHandlers.createCustomEvent(eventName, { detail: { success: false, error: `Container ${containerSelector} not found` } });
+      domAPI.dispatchEvent(domAPI.getDocument(), notFoundEvt);
+      if (isModalsHtml) {
+        const modalsNotFoundEvt = eventHandlers.createCustomEvent('modalsLoaded', { detail: { success: false, error: `Container ${containerSelector} not found for modals.html` } });
+        domAPI.dispatchEvent(domAPI.getDocument(), modalsNotFoundEvt);
+      }
       return false;
     }
 
     // Create a manual AbortController for this request
     const controller = new AbortController();
     // Use injected timerAPI instead of window
-    const tm = timerAPI.setTimeout(() => controller.abort(), timeout);
+    const tm = timerAPI.setTimeout(() => {
+      logger.warn(`[HtmlTemplateLoader] Timeout loading template: ${url}`, { url, timeout });
+      controller.abort();
+    }, timeout);
 
     let success = false;
+    let errorInfo = null;
     try {
+      logger.info?.(`[HtmlTemplateLoader] Fetching template: ${url}`, { url });
       const resp = await apiClient.fetch(url, {
         method: 'GET',
         cache: 'no-store',
         signal: controller.signal
       });
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) {
+        errorInfo = `HTTP ${resp.status}`;
+        throw new Error(errorInfo);
+      }
 
       const html = await resp.text();
+      logger.info?.(`[HtmlTemplateLoader] Successfully fetched template: ${url}, preparing to inject. Length: ${html.length}`, { url });
 
       // Always inject via domAPI to respect DI & built-in sanitiser
       domAPI.setInnerHTML(container, html);
-
+      logger.info?.(`[HtmlTemplateLoader] Successfully injected template: ${url} into ${containerSelector}`, { url });
       success = true;
 
     } catch (err) {
+      errorInfo = errorInfo || err.message;
       // Log the actual error for debugging
       logger.error(`[HtmlTemplateLoader] Failed to load template from ${url}`, err, {
         context: 'HtmlTemplateLoader.loadTemplate',
@@ -86,15 +111,16 @@ export function createHtmlTemplateLoader({
     } finally {
       timerAPI.clearTimeout(tm);
 
-      // Always dispatch the specific event for this template
+      logger.info?.(`[HtmlTemplateLoader] Dispatching event: ${eventName} for ${url}`, { success, error: errorInfo, url });
       const evt = eventHandlers.createCustomEvent(eventName,
-        { detail: { success, error: success ? null : 'Fetch or injection failed' } });
+        { detail: { success, error: errorInfo } });
       domAPI.dispatchEvent(domAPI.getDocument(), evt);
 
       // Special handling for modals.html - always emit modalsLoaded event
-      if (url && url.includes('modals.html')) {
+      if (isModalsHtml) {
+        logger.info?.(`[HtmlTemplateLoader] Dispatching event: modalsLoaded for ${url}`, { success, error: errorInfo, url });
         const modalsLoadedEvent = eventHandlers.createCustomEvent('modalsLoaded',
-          { detail: { success, error: success ? null : 'Failed to load modals.html' } });
+          { detail: { success, error: errorInfo } });
         domAPI.dispatchEvent(domAPI.getDocument(), modalsLoadedEvent);
       }
     }
