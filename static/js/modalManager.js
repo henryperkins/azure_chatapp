@@ -74,7 +74,7 @@ class ModalManager {
     this.activeModal = null;
     this._scrollLockY = undefined;
 
-    this.logger.info?.('[ModalManager] constructed', { withApp: !!this.app }); // Changed to info
+    this.logger.debug?.('[ModalManager] constructed', { withApp: !!this.app }); // Changed to debug
   }
 
   isReadyPromise() { return this._readyPromise; }
