@@ -1,15 +1,11 @@
 /**
- * authInit.js
- * Factory for auth system initialization, auth state change handling, and auth header rendering.
+ * Creates an authentication initializer that manages authentication system setup, state change handling, and UI updates.
  *
- * Guardrails:
- * - Factory export (createAuthInitializer)
- * - Strict DI: Accept all dependencies as factory arguments
- * - No import-time side effects
- * - No global/window/document usage directly
- * - All event/listener registration via injected eventHandlers
- * - All logging via injected logger
- * - Use domReadinessService for DOM waits
+ * This factory enforces strict dependency injection and provides methods to initialize authentication, respond to authentication state changes, render authentication-related UI elements, and force the display of the login modal.
+ *
+ * @returns {object} An object with methods: {@link initializeAuthSystem}, {@link handleAuthStateChange}, {@link renderAuthHeader}, and {@link forceShowLoginModal}.
+ *
+ * @throws {Error} If any required dependency is missing.
  */
 
 export function createAuthInitializer({
@@ -82,7 +78,11 @@ export function createAuthInitializer({
   }
 
   /**
-   * Handle authentication state changes
+   * Responds to authentication state changes by updating UI and dependent modules.
+   *
+   * Reads the latest authentication state and user information from {@link appModule.state}, updates the authentication header, and notifies relevant modules of the new state. If the user is authenticated, attempts to navigate to the project list or load projects once the application is ready.
+   *
+   * @param {CustomEvent} event - The authentication state change event.
    */
   function handleAuthStateChange(event) {
     // auth.js's broadcastAuth (via app.setAuthState) has already updated appModule.state
@@ -143,7 +143,12 @@ export function createAuthInitializer({
   }
 
   /**
-   * Render authentication header elements
+   * Updates authentication-related UI elements in the header based on the current authentication state.
+   *
+   * Adjusts the visibility and content of login buttons, user menus, user initials, and status messages according to the user's authentication status and information from {@link appModule.state}. Attaches a logout handler to the logout button if present.
+   *
+   * @remark
+   * If {@link appModule} is not available in the dependency system, the function logs an error and exits without updating the UI.
    */
   function renderAuthHeader() {
     try {
