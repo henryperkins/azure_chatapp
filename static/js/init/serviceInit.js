@@ -1,3 +1,6 @@
+import { resolveApiEndpoints } from '../utils/apiEndpoints.js';
+import { createErrorReporterStub } from '../utils/errorReporterStub.js';
+
 /**
  * serviceInit.js
  * Factory for service registration logic extracted from app.js.
