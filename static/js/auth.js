@@ -1,14 +1,17 @@
 /**
- * auth.js
+ * Creates and returns a centralized authentication module with dependency injection.
  *
- * Centralized, DI-compliant authentication module for login/logout/register/session/CSRF.
- * All authentication state, CSRF handling, API request/wrapping, form/event logic
- * is implemented in this single module—no dependencies outside DI context.
+ * This factory function provides a complete authentication system, including login, logout, registration, session verification, CSRF token management, authenticated API requests, event broadcasting, and UI form integration. All external dependencies must be supplied via the `deps` object, ensuring strict modularity and testability.
  *
- * Removal Notice: All previous modular primitives (authRequester, authState, csrfManager, etc.) are removed.
- * This module is now the single source of truth for ALL auth logic and event wiring.
+ * The returned module exposes methods for authentication actions, state queries, event handling, and diagnostics, and manages all authentication state and event wiring internally.
  *
- * @module AuthModule
+ * @param {object} deps - Dependency injection object containing required services and configuration.
+ * @returns {object} Public API for authentication operations, including methods for login, logout, registration, state verification, CSRF handling, event bus, and diagnostics.
+ *
+ * @throws {Error} If required dependencies or endpoint configurations are missing or invalid.
+ *
+ * @remark
+ * All authentication logic, state, and event handling are encapsulated in this module. No authentication primitives exist outside this context. All previous modular primitives are removed.
  */
 
 export function createAuthModule(deps) {
@@ -274,7 +277,18 @@ export function createAuthModule(deps) {
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
   }
 
-  // === 8) BROADCASTING AUTH STATE ===
+  /**
+   * Broadcasts authentication state changes to the application and updates relevant UI elements.
+   *
+   * If the authentication state or user object has changed, updates the internal state, synchronizes with the central app module if available, updates the user menu in the UI, and dispatches an `authStateChanged` event on both the `AuthBus` and the document.
+   *
+   * @param {boolean} authenticated - Whether the user is authenticated.
+   * @param {object|null} [userObject=null] - The current user object, or `null` if not authenticated.
+   * @param {string} [source='unknown'] - The source of the state change for diagnostic purposes.
+   *
+   * @remark
+   * If no change in authentication state or user object is detected, no events are dispatched and the UI is not updated.
+   */
   function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
     logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] called.', {
       authenticated, userObject, source,
@@ -292,11 +306,20 @@ export function createAuthModule(deps) {
     if (changed) {
       const appModuleRef = DependencySystem?.modules?.get('appModule');
       if (appModuleRef && typeof appModuleRef.setAuthState === 'function') {
-        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Setting appModule state', { isAuthenticated: authenticated, currentUser: userObject }, { context: 'broadcastAuth' });
+          logger.info('[AuthModule][broadcastAuth] Updating appModule state.', {
+            authenticated,
+            userId: userObject?.id,
+            source,
+            context: 'broadcastAuth:appModuleUpdate'
+          });
         appModuleRef.setAuthState({ isAuthenticated: authenticated, currentUser: userObject });
       } else {
-        logger.warn('[DIAGNOSTIC][auth.js][broadcastAuth] No appModuleRef or no setAuthState function!', { context: 'broadcastAuth' });
+          logger.warn('[AuthModule][broadcastAuth] appModuleRef.setAuthState not available. Cannot update central app state.', { source, context: 'broadcastAuth' });
       }
+
+        // Event dispatching should happen AFTER appModule state is updated.
+        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Broadcasting authStateChanged event', { source, authenticated, userId: userObject?.id, context: 'broadcastAuth:dispatchEvents' });
+
       // Custom: Update username in header's userMenu for a single-line greeting. (No double "Hello,")
       try {
         const doc = domAPI.getDocument?.();
@@ -361,43 +384,62 @@ export function createAuthModule(deps) {
   let authCheckInProgress = false;
   const AUTH_CONFIG = { VERIFICATION_INTERVAL: 300000 };
   let verifyInterval = null;
+  /**
+   * Verifies the current authentication state by querying the backend and updates the application state accordingly.
+   *
+   * This function checks for authentication cookies and calls the backend verification endpoint to determine if the user is authenticated. It handles various response formats, including user objects and boolean flags, and updates the authentication state, user object, and broadcasts changes. On errors, it attempts token refresh for 401 responses, clears tokens for 500 or unhandled errors, and maintains state for network errors if cookies are present.
+   *
+   * @param {boolean} [forceVerify=false] - If true, forces verification even if a check is already in progress.
+   * @returns {Promise<boolean>} Resolves to true if the user is authenticated, false otherwise.
+   *
+   * @throws {Error} If the backend returns a non-JSON response when JSON is expected.
+   */
   async function verifyAuthState(forceVerify = false) {
     // Remove the early return that was causing issues with page refresh
     // Always check auth state on page load/refresh regardless of recent login timestamp
-    if (authCheckInProgress && !forceVerify) return authState.isAuthenticated;
+    if (authCheckInProgress && !forceVerify) {
+      logger.debug('[AuthModule][verifyAuthState] Verification already in progress and not forced. Returning current state.', { currentAuth: authState.isAuthenticated, context: 'verifyAuthState:inProgress' });
+      return authState.isAuthenticated;
+    }
     authCheckInProgress = true;
+    logger.debug('[AuthModule][verifyAuthState] Starting verification.', { forceVerify, context: 'verifyAuthState:start' });
+
     try {
-      // Check if we have auth cookies first - if not, no point in making the request
-      const hasCookies = publicAuth.hasAuthCookies();
-      if (!hasCookies && !forceVerify) {
-        logger.log('[verifyAuthState] No auth cookies found, skipping verification', { context: 'verifyAuthState' });
-        await clearTokenState({ source: 'no_auth_cookies' });
-        broadcastAuth(false, null, 'no_auth_cookies');
+      const hasExistingCookies = publicAuth.hasAuthCookies();
+      if (!hasExistingCookies && !forceVerify) {
+        logger.info('[AuthModule][verifyAuthState] No auth cookies found and not forceVerify. Clearing state and broadcasting false.', { context: 'verifyAuthState:noCookies' });
+        await clearTokenState({ source: 'verify_no_auth_cookies_not_forced' });
+        broadcastAuth(false, null, 'verify_no_auth_cookies_not_forced');
         return false;
       }
 
-      logger.log('[verifyAuthState] Verifying auth state with backend', {
-        forceVerify,
-        hasCookies,
-        context: 'verifyAuthState'
-      });
-
+      logger.debug('[AuthModule][verifyAuthState] Proceeding to call AUTH_VERIFY endpoint.', { hasExistingCookies, forceVerify, context: 'verifyAuthState:apiCall' });
       let response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
+
+      // Attempt to parse if response is a string (though apiClient should handle JSON)
       if (typeof response === 'string') {
         try {
           response = JSON.parse(response);
         } catch (parseErr) {
-          logger.error('[verifyAuthState][parseErr]', parseErr, { context: 'verifyAuthState' });
+          logger.warn('[AuthModule][verifyAuthState] API response was a string, failed to parse as JSON.', { responseString: response, error: parseErr.message, context: 'verifyAuthState:jsonParseError' });
+          // Depending on backend, an unparsable string might mean an error page or non-JSON success.
+          // For now, assume it's a failure if it's not parsable and was expected to be JSON.
+          // If backend sometimes sends non-JSON success, this needs adjustment.
+          throw new Error('Non-JSON response from AUTH_VERIFY'); 
         }
       }
+      logger.debug('[AuthModule][verifyAuthState] AUTH_VERIFY response received.', { response, context: 'verifyAuthState:apiResponse' });
 
-      // Enhanced response validation
+      // Enhanced response validation for user object
       let userObject = null;
       if (response && typeof response === 'object') {
+        // Common patterns for user object nesting or direct properties
         if (response.user && typeof response.user === 'object' && response.user.id) {
           userObject = response.user;
-        } else if (response.id && response.username) {
+          logger.debug('[AuthModule][verifyAuthState] User object found in response.user.', { userId: userObject.id, context: 'verifyAuthState:userObjSource' });
+        } else if (response.id && response.username) { // User object might be the response itself
           userObject = response;
+          logger.debug('[AuthModule][verifyAuthState] User object is the response itself.', { userId: userObject.id, context: 'verifyAuthState:userObjSource' });
         }
       }
 
@@ -405,106 +447,103 @@ export function createAuthModule(deps) {
       if (userObject) {
         const userIdFromObject = userObject.id || userObject.user_id || userObject.userId || userObject._id;
         if (userIdFromObject) {
-          finalUserObject = { ...userObject, id: userIdFromObject };
+          finalUserObject = { ...userObject, id: userIdFromObject }; // Ensure 'id' field is standardized
+          logger.debug('[AuthModule][verifyAuthState] Standardized user object.', { finalUserObject, context: 'verifyAuthState:userObjStandardized' });
+        } else {
+          logger.warn('[AuthModule][verifyAuthState] User object found but lacks a usable ID field.', { userObject, context: 'verifyAuthState:userObjNoId' });
         }
       }
 
-      const hasValidUserId = Boolean(finalUserObject && finalUserObject.id);
-      if (hasValidUserId) {
-        logger.log('[verifyAuthState] Successfully verified user', {
-          username: finalUserObject.username,
-          context: 'verifyAuthState'
-        });
+      // Primary condition: Valid user object with an ID means authenticated
+      if (finalUserObject?.id) {
+        logger.info('[AuthModule][verifyAuthState] Verification successful: Valid user object with ID found.', { username: finalUserObject.username, userId: finalUserObject.id, context: 'verifyAuthState:successWithUserObject' });
         broadcastAuth(true, finalUserObject, 'verify_success_with_user_id');
         return true;
       }
 
-      // Check for boolean authentication flags
+      // Secondary condition: Check for boolean authentication flags if no complete user object
       const truthy = (v) => v === true || v === 'true' || v === 1 || v === '1';
       const isAuthenticatedByFlags =
-        truthy(response?.authenticated) ||
-        truthy(response?.is_authenticated) ||
-        truthy(response?.auth) ||
-        truthy(response?.isAuth) ||
-        String(response?.authenticated).toLowerCase() === 'true' ||
-        String(response?.is_authenticated).toLowerCase() === 'true';
+        truthy(response?.authenticated) || truthy(response?.is_authenticated) ||
+        truthy(response?.auth) || truthy(response?.isAuth); // Common flag names
 
-      const hasUsername = Boolean(response?.username || (response?.user && response.user.username));
-
-      if (isAuthenticatedByFlags || hasUsername) {
-        const tempUserObj = hasUsername && !finalUserObject
-          ? {
-            username: response?.username || response?.user?.username || 'user',
-            id: response?.id || response?.user?.id || ('temp-id-' + Date.now())
-          }
-          : null;
-        logger.log('[verifyAuthState] Verified via flags/username', {
-          isAuthenticatedByFlags,
-          hasUsername,
-          context: 'verifyAuthState'
-        });
-        broadcastAuth(true, tempUserObj || null, 'verify_success_via_alternative_checks');
+      if (isAuthenticatedByFlags) {
+        // If authenticated by flag but no user object, create a minimal one if username is available
+        const usernameFromResponse = response?.username || response?.user?.username;
+        const tempUserObj = usernameFromResponse ? { username: usernameFromResponse, id: `flag-auth-${Date.now()}` } : null;
+        logger.info('[AuthModule][verifyAuthState] Verification successful: Authenticated by boolean flag.', { username: tempUserObj?.username, context: 'verifyAuthState:successWithFlag' });
+        broadcastAuth(true, tempUserObj, 'verify_success_via_flag');
         return true;
       }
-
-      // If we have cookies but backend says we're not authenticated, the cookies are stale
-      if (hasCookies) {
-        logger.warn(
-          '[AuthModule][verifyAuthState] Auth cookies found but backend verification failed – clearing stale cookies.',
-          { context: 'verifyAuthState' }
-        );
-        await clearTokenState({ source: 'stale_auth_cookies' });
+      
+      // If here, API response did not indicate authentication (no user object, no true flags)
+      logger.info('[AuthModule][verifyAuthState] Verification negative: API response does not indicate active authentication.', { response, context: 'verifyAuthState:negativeApiReponse' });
+      if (hasExistingCookies) {
+        logger.warn('[AuthModule][verifyAuthState] Stale Cookies: Auth cookies were present, but backend verification failed. Clearing token state.', { context: 'verifyAuthState:staleCookies' });
+        await clearTokenState({ source: 'verify_stale_cookies_after_api_check' });
+      } else {
+        await clearTokenState({ source: 'verify_negative_no_cookies_after_api_check' });
       }
-
-      logger.log('[verifyAuthState] No valid authentication found', { context: 'verifyAuthState' });
-      await clearTokenState({ source: 'verify_negative_after_all_checks' });
-      broadcastAuth(false, null, 'verify_negative_after_all_checks');
+      broadcastAuth(false, null, 'verify_negative_after_api_check');
       return false;
+
     } catch (error) {
-      logger.error('[verifyAuthState][catch]', error, { context: 'verifyAuthState' });
+      logger.error('[AuthModule][verifyAuthState] Error during verification API call or processing.', { status: error.status, message: error.message, data: error.data, stack: error.stack, context: 'verifyAuthState:catchAllError' });
 
       if (error.status === 500) {
+        logger.warn('[AuthModule][verifyAuthState] Server error (500). Clearing token state.', { context: 'verifyAuthState:error500' });
         await clearTokenState({ source: 'verify_500_error' });
         broadcastAuth(false, null, 'verify_500_error');
         return false;
       }
 
       if (error.status === 401) {
-        logger.log('[verifyAuthState] 401 error, attempting token refresh', { context: 'verifyAuthState' });
+        logger.info('[AuthModule][verifyAuthState] Unauthorized (401). Attempting token refresh.', { context: 'verifyAuthState:error401' });
         try {
           await refreshTokens();
-          return await verifyAuthState(true);
+          logger.info('[AuthModule][verifyAuthState] Token refresh successful after 401. Re-verifying.', { context: 'verifyAuthState:postRefreshAttempt' });
+          return await verifyAuthState(true); // Force re-verification after refresh
         } catch (refreshErr) {
-          logger.error('[verifyAuthState][refreshErr]', refreshErr, { context: 'verifyAuthState' });
-          await clearTokenState({ source: 'refresh_failed_after_401' });
-          broadcastAuth(false, null, 'refresh_failed_after_401');
+          logger.warn('[AuthModule][verifyAuthState] Token refresh failed after 401.', { error: refreshErr.message, context: 'verifyAuthState:refreshFailed' });
+          await clearTokenState({ source: 'refresh_failed_after_401_in_verify' });
+          broadcastAuth(false, null, 'refresh_failed_after_401_in_verify');
           return false;
         }
       }
 
-      // For network errors or other issues, don't immediately clear auth state
-      // if we have cookies - the user might just have a temporary connection issue
-      const hasCookies = publicAuth.hasAuthCookies();
+      // For network errors (status 0 or no status) or other non-401/500 errors
+      const hasCookiesOnNetworkError = publicAuth.hasAuthCookies(); // Re-check, might have changed
       if (hasCookies && (error.status === 0 || !error.status)) {
-        logger.warn('[verifyAuthState] Network error but auth cookies present, maintaining auth state', {
-          error: error.message,
-          context: 'verifyAuthState'
-        });
-        // Don't change auth state for network errors
+        logger.warn('[AuthModule][verifyAuthState] Network error occurred, but auth cookies are present. Maintaining current auth state.', { errorMessage: error.message, currentAuth: authState.isAuthenticated, context: 'verifyAuthState:networkErrorWithCookies' });
+        // Do not change authState.isAuthenticated here; return existing state.
+        // The user might be temporarily offline but still "logged in".
         return authState.isAuthenticated;
       }
 
-      await clearTokenState({ source: `verify_unhandled_error_${error.status || 'unknown'}` });
-      broadcastAuth(false, null, `verify_unhandled_error_${error.status || 'unknown'}`);
+      // For other errors where cookies might not be present or it's not a network error
+      logger.warn(`[AuthModule][verifyAuthState] Unhandled error (status: ${error.status || 'unknown'}). Clearing token state.`, { context: 'verifyAuthState:unhandledErrorClear' });
+      await clearTokenState({ source: `verify_unhandled_error_status_${error.status || 'unknown'}` });
+      broadcastAuth(false, null, `verify_unhandled_error_status_${error.status || 'unknown'}`);
       return false;
     } finally {
       authCheckInProgress = false;
     }
   }
 
-  // === 10) PUBLIC AUTH ACTIONS: login, logout, register ===
+  /**
+   * Attempts to log in a user with the provided credentials.
+   *
+   * Fetches a CSRF token, sends a login request to the backend, stores authentication tokens on success, and broadcasts the authenticated state. If the backend response does not include a user object, a provisional user is created for state broadcasting. Logs detailed diagnostics and clears token state on failure.
+   *
+   * @param {string} username - The username to authenticate.
+   * @param {string} password - The password for the user.
+   * @returns {Promise<Object>} The full API response from the login endpoint.
+   *
+   * @throws {Error} If the login attempt fails due to invalid credentials, network issues, or backend errors.
+   */
 
   async function loginUser(username, password) {
+    logger.info('[AuthModule][loginUser] Attempting login.', { username: username, context: 'loginUser:start' });
     try {
       logger.log('[DIAGNOSTIC][auth.js][loginUser] Attempting login', username, { context: 'loginUser' });
       await getCSRFTokenAsync();
@@ -512,94 +551,119 @@ export function createAuthModule(deps) {
         username: username.trim(),
         password
       });
-      logger.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response, { context: 'loginUser' });
-      // Store bearer tokens if present
+      logger.info('[AuthModule][loginUser] Login API response received.', { response, context: 'loginUser:apiResponse' });
+
       if (response && response.access_token) {
         accessToken = response.access_token;
         tokenType = response.token_type || 'Bearer';
         refreshToken = response.refresh_token || null;
+        logger.info('[AuthModule][loginUser] Access and refresh tokens stored from login response.', { context: 'loginUser:tokensStored' });
       }
+
+      // Log cookie state after login attempt for diagnostics
       try {
         const doc = domAPI.getDocument?.();
         if (doc && typeof doc.cookie === 'string') {
-          logger.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login: [masked]', { context: 'loginUser' });
-        } else {
-          logger.log('[DIAGNOSTIC][auth.js][loginUser] Unable to read document.cookie', { context: 'loginUser' });
+          logger.debug('[AuthModule][loginUser] Cookies after login API call (contents masked for security).', { hasCookies: !!doc.cookie, context: 'loginUser:cookieCheck' });
+           if (!doc.cookie) {
+            logger.warn('[AuthModule][loginUser] No cookies seem to be set after login API call. Backend might not be setting session/CSRF cookies correctly.', { context: 'loginUser:noCookiesWarning' });
+          }
         }
       } catch (cookieErr) {
-        logger.error('[DIAGNOSTIC][auth.js][loginUser] Exception reading cookies:', cookieErr, { context: 'loginUser' });
+        logger.warn('[AuthModule][loginUser] Error reading cookies after login.', { error: cookieErr.message, context: 'loginUser:cookieReadError' });
       }
-      if (response && response.username) {
-        const userObject = {
-          username: response.username,
-          id: response.id || response.user_id || response.userId || (`temp-id-${Date.now()}`)
-        };
-        broadcastAuth(true, userObject, 'login_success_immediate');
-        _lastLoginTimestamp = Date.now();
-        try {
-          const doc = domAPI.getDocument?.();
-          if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
-            logger.warn('[DIAGNOSTIC][auth.js][loginUser] WARNING: No cookies set after successful login! Backend may not be setting cookies.', { context: 'loginUser' });
-          }
-        } catch (cookieCheckErr) {
-          logger.error('[AuthModule] Cookie check after login failed (non-critical):', cookieCheckErr, { context: 'loginUser' });
+      
+      // Determine user object from response
+      let userObject = null;
+      if (response && typeof response === 'object') {
+        if (response.user && typeof response.user === 'object' && response.user.id) {
+            userObject = response.user;
+        } else if (response.id && response.username) {
+            userObject = response;
+        } else if (response.username) { // If only username is directly in response
+            userObject = { username: response.username, id: `login-temp-${Date.now()}`};
         }
-        return response;
       }
-      logger.warn('[DIAGNOSTIC][auth.js][loginUser] Login response lacked user data – broadcasting provisional auth state.', { context: 'loginUser' });
-      const provisionalUser = {
-        username: username.trim(),
-        id: `temp-${Date.now()}`
-      };
-      broadcastAuth(true, provisionalUser, 'login_success_provisional');
+      
+      if (userObject?.id && userObject?.username) {
+        logger.info('[AuthModule][loginUser] Login successful. User object identified from response.', { userId: userObject.id, username: userObject.username, context: 'loginUser:successWithUserObject' });
+        broadcastAuth(true, userObject, 'login_success_with_user_object');
+      } else {
+        // If API indicates success (e.g. 200 OK) but no clear user object, broadcast with provisional user.
+        // This might happen if backend sends just a success message or JWT without user details.
+        logger.warn('[AuthModule][loginUser] Login API success, but user object not clearly identified in response. Broadcasting provisional auth.', { response, context: 'loginUser:successProvisional' });
+        const provisionalUser = { username: username.trim(), id: `provisional-${Date.now()}` };
+        broadcastAuth(true, provisionalUser, 'login_success_provisional_user_data');
+      }
+      
       _lastLoginTimestamp = Date.now();
-      try {
-        const doc = domAPI.getDocument?.();
-        if (doc && typeof doc.cookie === 'string' && (!doc.cookie || doc.cookie === '')) {
-          logger.log('[DIAGNOSTIC][auth.js][loginUser] Cookies after login: [masked]', { context: 'loginUser' });
-        }
-      } catch (cookieCheckErr) {
-        logger.error('[AuthModule] Cookie check after provisional login failed (non-critical):', cookieCheckErr, { context: 'loginUser' });
-      }
-      return response;
+      return response; // Return full API response
     } catch (error) {
-      logger.error('[DIAGNOSTIC][auth.js][loginUser][ERROR]', error, { context: 'loginUser' });
-      await clearTokenState({ source: 'login_error' });
-      throw error;
+      logger.error('[AuthModule][loginUser] Login attempt failed.', { username: username, error: error.message, status: error.status, data: error.data, context: 'loginUser:error' });
+      await clearTokenState({ source: 'login_api_error' }); // Clear any partial token state on login failure
+      throw error; // Re-throw for form handler
     }
   }
 
+  /**
+   * Logs out the current user by clearing authentication tokens and broadcasting a logged-out state.
+   *
+   * Attempts to call the backend logout API endpoint, but ensures the user is logged out locally regardless of API errors.
+   */
   async function logout() {
-    logger.log('[DIAGNOSTIC][auth.js][logout] Logging out', { context: 'logout' });
+    logger.info('[AuthModule][logout] Initiating logout process.', { context: 'logout:start' });
     accessToken = null;
     refreshToken = null;
-    await clearTokenState({ source: 'logout_manual' });
+    // Broadcast logged-out state immediately
+    await clearTokenState({ source: 'logout_manual_clear' }); 
+    // clearTokenState calls broadcastAuth(false, null, ...)
+
     try {
-      await getCSRFTokenAsync();
+      await getCSRFTokenAsync(); // Ensure CSRF is available if needed by logout endpoint
+      logger.debug('[AuthModule][logout] Attempting to call logout API endpoint.', { context: 'logout:apiCall' });
       await authRequest(apiEndpoints.AUTH_LOGOUT, 'POST');
-      logger.log('[DIAGNOSTIC][auth.js][logout] Logout POST done', { context: 'logout' });
+      logger.info('[AuthModule][logout] Logout API call successful.', { context: 'logout:apiSuccess' });
     } catch (err) {
-      logger.error('[DIAGNOSTIC][auth.js][logout][ERROR]', err, { context: 'logout' });
+      // Log error but don't re-throw; user is already logged out on client-side.
+      logger.warn('[AuthModule][logout] Error calling logout API endpoint. User is already logged out locally.', { error: err.message, status: err.status, context: 'logout:apiError' });
     }
+    logger.info('[AuthModule][logout] Logout process completed on client-side.', { context: 'logout:end' });
   }
 
+  /**
+   * Registers a new user with the provided credentials.
+   *
+   * Validates that both username and password are present, then submits a registration request to the backend. After successful registration, forces authentication state verification to synchronize the client with the backend. Clears any partial authentication state and rethrows the error if registration fails.
+   *
+   * @param {Object} userData - The registration data containing at least a username and password.
+   * @returns {Object} The full API response from the registration endpoint.
+   *
+   * @throws {Error} If username or password is missing, or if the registration request fails.
+   */
   async function registerUser(userData) {
     if (!userData?.username || !userData?.password) {
+      logger.error('[AuthModule][registerUser] Username and password are required for registration.', { context: 'registerUser:validationError' });
       throw new Error('Username and password required.');
     }
+    const trimmedUsername = userData.username.trim();
+    logger.info('[AuthModule][registerUser] Attempting user registration.', { username: trimmedUsername, context: 'registerUser:start' });
+
     try {
-      logger.log('[DIAGNOSTIC][auth.js][registerUser] Registering', userData.username, { context: 'registerUser' });
-      await getCSRFTokenAsync();
+      await getCSRFTokenAsync(); // Ensure CSRF token is fetched before POST request
       const response = await authRequest(apiEndpoints.AUTH_REGISTER, 'POST', {
-        username: userData.username.trim(),
-        password: userData.password
+        username: trimmedUsername,
+        password: userData.password // Assuming password validation happened in form
       });
-      logger.log('[DIAGNOSTIC][auth.js][registerUser][API RESPONSE]', response, { context: 'registerUser' });
-      await verifyAuthState(true);
-      return response;
+      logger.info('[AuthModule][registerUser] Registration API call successful.', { response, context: 'registerUser:apiResponse' });
+      
+      // After successful registration, typically backend auto-logins or requires login.
+      // Forcing verifyAuthState helps sync client with backend's post-registration state.
+      logger.debug('[AuthModule][registerUser] Triggering auth state verification after registration.', { context: 'registerUser:postVerify' });
+      await verifyAuthState(true); 
+      return response; // Return full API response
     } catch (error) {
-      logger.error('[DIAGNOSTIC][auth.js][registerUser][ERROR]', error, { context: 'registerUser' });
-      await clearTokenState({ source: 'register_error' });
+      logger.error('[AuthModule][registerUser] Registration failed.', { username: trimmedUsername, error: error.message, status: error.status, data: error.data, context: 'registerUser:error' });
+      await clearTokenState({ source: 'register_api_error' }); // Clear any partial state
       throw error;
     }
   }
@@ -741,7 +805,15 @@ export function createAuthModule(deps) {
     }
   }
 
-  // === 12) MODULE INIT & CLEANUP ===
+  /**
+   * Initializes the authentication module, setting up event listeners, CSRF protection, and initial authentication state.
+   *
+   * Waits for DOM readiness, attaches form handlers, ensures CSRF token availability with retries, verifies authentication state, and schedules periodic re-verification. Dispatches an `authReady` event upon completion and updates application state. Handles initialization errors by clearing tokens, broadcasting a logged-out state, and raising a fatal modal if CSRF setup fails.
+   *
+   * @returns {Promise<boolean>} Resolves to the result of the initial authentication verification.
+   *
+   * @throws {Error} If required dependencies for periodic verification are missing or if an unhandled error occurs during initialization.
+   */
 
   async function init() {
     // Wait for DOM/app readiness strictly via domReadinessService—no ad-hoc or legacy logic
@@ -867,29 +939,45 @@ export function createAuthModule(deps) {
         await clearTokenState({ source: 'init_verify_error' });
         verified = false;
       }
+
+      // Setup periodic verification
       const browserService = DependencySystem.modules.get('browserService');
       if (!browserService || typeof browserService.setInterval !== 'function') {
-        throw new Error('[AuthModule] browserService.setInterval is required for guardrail compliance. No global setInterval fallback allowed.');
+        // This is a critical failure for long-term auth stability if not caught.
+        logger.error('[AuthModule][init] browserService.setInterval is NOT available. Periodic auth verification will NOT run.', { context: 'init:setIntervalMissing' });
+        throw new Error('[AuthModule] browserService.setInterval is required for periodic auth verification.');
       }
+      if (verifyInterval) browserService.clearInterval(verifyInterval); // Clear existing if any (e.g. re-init)
       verifyInterval = browserService.setInterval(() => {
-        if (!domAPI.isDocumentHidden && authState.isAuthenticated) {
+        if (!domAPI.isDocumentHidden?.() && authState.isAuthenticated) { // Check if document is visible
+          logger.debug('[AuthModule][init] Performing periodic auth verification.', { context: 'init:periodicVerify' });
           verifyAuthState(false).catch((err) => {
-            logger.debug('[AuthModule] Periodic verifyAuthState failed (silent):', err, { context: 'init' });
+            // This catch is for the verifyAuthState call itself, not for errors during setInterval setup.
+            logger.warn('[AuthModule][init] Periodic verifyAuthState encountered an error (logged by verifyAuthState).', { error: err.message, context: 'init:periodicVerify:error' });
           });
+        } else {
+          logger.debug('[AuthModule][init] Skipping periodic auth verification.', { isHidden: domAPI.isDocumentHidden?.(), isAuthenticated: authState.isAuthenticated, context: 'init:periodicVerifySkipped' });
         }
       }, AUTH_CONFIG.VERIFICATION_INTERVAL);
-      authState.isReady = true;
+      logger.info('[AuthModule][init] Periodic auth verification scheduled.', { interval: AUTH_CONFIG.VERIFICATION_INTERVAL, context: 'init' });
+      
+      authState.isReady = true; // Mark auth module as ready
+      logger.info('[AuthModule][init] Auth module is now ready.', { context: 'init' });
+
+      // Dispatch authReady event
       const readyEventDetail = {
         authenticated: authState.isAuthenticated,
         user: authState.userObject,
         username: authState.username,
-        error: null,
+        error: null, // No error at this stage of emitting 'authReady'
         timestamp: Date.now(),
-        source: 'init_complete'
+        source: 'init_auth_module_ready'
       };
+
       if (!eventHandlers.createCustomEvent) {
-        logger.error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create authReady event.', { context: 'init' });
+        logger.error('[AuthModule][init] eventHandlers.createCustomEvent is NOT available. Cannot dispatch authReady event.', { context: 'init:dispatchAuthReady' });
       } else {
+        logger.debug('[AuthModule][init] Dispatching authReady event.', { detail: readyEventDetail, context: 'init:dispatchAuthReady' });
         AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
         try {
           const doc = domAPI.getDocument();
@@ -897,13 +985,18 @@ export function createAuthModule(deps) {
             domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
           }
         } catch (docErr) {
-          logger.error('[AuthModule] Failed to dispatch authReady on document', docErr, { context: 'init' });
+          logger.error('[AuthModule][init] Failed to dispatch authReady on document.', { error: docErr, context: 'init:dispatchAuthReady' });
         }
       }
-      broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_complete');
-      return verified;
+      
+      // Final broadcast based on the state determined during init.
+      // This ensures appModule is updated if it wasn't already through verifyAuthState's broadcasts.
+      logger.debug('[AuthModule][init] Performing final broadcastAuth after init completion.', { authenticated: authState.isAuthenticated, context: 'init' });
+      broadcastAuth(authState.isAuthenticated, authState.userObject, 'init_final_broadcast');
+      
+      return verified; // Return the result of the initial verification attempt
     } catch (err) {
-      logger.error('[AuthModule][init][unhandled]', err, { context: 'init' });
+      logger.error('[AuthModule][init] Unhandled error during initialization process.', { error: err, stack: err.stack, context: 'init:unhandledError' });
       await clearTokenState({ source: 'init_unhandled_error' });
       authState.isReady = true;
       broadcastAuth(false, null, 'init_unhandled_error');
