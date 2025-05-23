@@ -16,6 +16,7 @@ export function createHtmlTemplateLoader({
   eventHandlers,
   apiClient,
   timerAPI,
+  domReadinessService = null,  // NEW: For replay-able events
   logger = DependencySystem?.modules?.get?.('logger') || { warn: () => { } }
 } = {}) {
   // Guardrail checks:
@@ -37,6 +38,20 @@ export function createHtmlTemplateLoader({
   // ──────────────────────────────────────────────────────────────
   const _nativeFetch =
     domAPI?.getWindow?.()?.fetch?.bind?.(domAPI.getWindow()) || null;
+
+  /**
+   * Helper function to emit events using replay capability if available
+   */
+  function emitEvent(eventName, detail) {
+    if (domReadinessService?.emitReplayable) {
+      logger.info?.(`[HtmlTemplateLoader] Emitting replayable event: ${eventName}`, { eventName, detail });
+      domReadinessService.emitReplayable(eventName, detail);
+    } else {
+      logger.info?.(`[HtmlTemplateLoader] Emitting standard event: ${eventName}`, { eventName, detail });
+      const evt = eventHandlers.createCustomEvent(eventName, { detail });
+      domAPI.dispatchEvent(domAPI.getDocument(), evt);
+    }
+  }
 
   /**
    * Loads an external HTML template into a specified DOM container and emits a custom event upon completion.
@@ -66,11 +81,10 @@ export function createHtmlTemplateLoader({
     if (!container) {
       logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template ${url} will not be injected.`);
       // Dispatch event even if container is not found, so listeners are unblocked
-      const notFoundEvt = eventHandlers.createCustomEvent(eventName, { detail: { success: false, error: `Container ${containerSelector} not found` } });
-      domAPI.dispatchEvent(domAPI.getDocument(), notFoundEvt);
+      emitEvent(eventName, { success: false, error: `Container ${containerSelector} not found` });
+
       if (isModalsHtml) {
-        const modalsNotFoundEvt = eventHandlers.createCustomEvent('modalsLoaded', { detail: { success: false, error: `Container ${containerSelector} not found for modals.html` } });
-        domAPI.dispatchEvent(domAPI.getDocument(), modalsNotFoundEvt);
+        emitEvent('modalsLoaded', { success: false, error: `Container ${containerSelector} not found for modals.html` });
       }
       return false;
     }
@@ -141,17 +155,12 @@ export function createHtmlTemplateLoader({
     } finally {
       timerAPI.clearTimeout(tm);
 
-      logger.info?.(`[HtmlTemplateLoader] Dispatching event: ${eventName} for ${url}`, { success, error: errorInfo, url });
-      const evt = eventHandlers.createCustomEvent(eventName,
-        { detail: { success, error: errorInfo } });
-      domAPI.dispatchEvent(domAPI.getDocument(), evt);
+      // Emit main event using replay capability
+      emitEvent(eventName, { success, error: errorInfo, url });
 
       // Special handling for modals.html - always emit modalsLoaded event
       if (isModalsHtml) {
-        logger.info?.(`[HtmlTemplateLoader] Dispatching event: modalsLoaded for ${url}`, { success, error: errorInfo, url });
-        const modalsLoadedEvent = eventHandlers.createCustomEvent('modalsLoaded',
-          { detail: { success, error: errorInfo } });
-        domAPI.dispatchEvent(domAPI.getDocument(), modalsLoadedEvent);
+        emitEvent('modalsLoaded', { success, error: errorInfo, url });
       }
     }
 

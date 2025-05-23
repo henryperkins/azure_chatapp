@@ -163,7 +163,8 @@ export function createServiceInitializer({
           timerAPI: {
             setTimeout: (...args) => browserServiceInstance.getWindow().setTimeout(...args),
             clearTimeout: (...args) => browserServiceInstance.getWindow().clearTimeout(...args)
-          }
+          },
+          domReadinessService     // Pass replay-enabled event system
         });
         DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
       }
