@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en" class="mobile-safe">
+
 <head>
   <!-- ============================================= -->
   <!-- Merge of Original CSP and Mobile-First Meta   -->
@@ -19,7 +20,7 @@
   ">
 
   <!-- Mobile-Optimized Viewport & PWA Hints -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -48,10 +49,10 @@
         window.initSentry();
       } else {
         (window.DependencySystem?.modules?.get?.('logger')
-            || window.logger
-            || { warn:()=>{} }
+          || window.logger
+          || { warn: () => { } }
         ).warn('[base.html] Sentry or initSentry function not available',
-               { context: 'base:sentry' });
+          { context: 'base:sentry' });
       }
     };
   </script>
@@ -177,10 +178,8 @@
   <!-- ========================================================= -->
   <!-- Potential top-level error display from original base.html -->
   <!-- ========================================================= -->
-  <div id="appInitError"
-       class="bg-error text-error-content text-sm p-2 hidden"
-       aria-live="assertive"
-       style="z-index: 9999;">
+  <div id="appInitError" class="bg-error text-error-content text-sm p-2 hidden" aria-live="assertive"
+    style="z-index: 9999;">
     <strong>Initialization Error:</strong>
     <span id="appInitErrorText"></span>
   </div>
@@ -201,10 +200,9 @@
     <div class="max-w-7xl mx-auto px-3 py-2 md:py-3 flex items-center justify-between gap-2">
       <!-- Mobile Menu Button (toggles #mainSidebar) -->
       <button id="navToggleBtn" class="btn btn-ghost btn-square lg:hidden min-w-[44px] min-h-[44px]"
-              aria-label="Toggle sidebar" aria-expanded="false" aria-controls="mainSidebar">
+        aria-label="Toggle sidebar" aria-expanded="false" aria-controls="mainSidebar">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 6h16M4 12h16M4 18h16"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
 
@@ -212,10 +210,9 @@
       <div class="flex items-center gap-2 min-w-0">
         <svg class="w-7 h-7 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"
           aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M8 9l3 3-3 3m5 0h3M5 20h14a2
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2
                2 0 002-2V6a2 2 0 00-2-2H5a2
-               2 0 00-2 2v12a2 2 0 002 2z"/>
+               2 0 00-2 2v12a2 2 0 002 2z" />
         </svg>
         <!-- Show short name on mobile, longer name on bigger screens -->
         <h1 class="text-lg font-bold text-base-content sm:hidden truncate">Azure Chat</h1>
@@ -229,10 +226,9 @@
         <!-- Original help button from old code, optional -->
         <button id="keyboardHelpBtn" type="button" class="btn btn-ghost btn-sm btn-square hidden sm:inline-flex"
           aria-label="Show keyboard shortcuts">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-               stroke="currentColor" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M8.228 9c.549-1.165
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165
                      2.03-2 3.772-2 2.21 0
                      4 1.343 4
                      3 0 1.4-1.278
@@ -247,30 +243,61 @@
         </button>
 
         <!-- Dark Mode Toggle (like new + old) -->
-        <button id="darkModeToggle" type="button"
-          class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]"
+        <button id="darkModeToggle" type="button" class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]"
           aria-label="Toggle dark mode">
-          <svg id="darkModeIcon" class="h-5 w-5"
-               fill="none" viewBox="0 0 24 24" stroke="currentColor"
-               aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 3v1m0 16v1m9-9h-1M4
+          <svg id="darkModeIcon" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+            aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4
                  12H3m15.364 6.364l-.707-.707M6.343
                  6.343l-.707-.707m12.728
                  0l-.707.707M6.343 17.657l-.707.707M16
                  12a4 4 0 11-8
-                 0 4 4 0 018 0z"/>
+                 0 4 4 0 018 0z" />
           </svg>
         </button>
 
-        <!-- Auth container (restored at top-level).
-             For advanced logic, keep or integrate with the old userMenu. -->
+        <!-- Auth Section: Login button when not authenticated, User menu when authenticated -->
         <div id="authSection" class="flex items-center gap-2">
-          <!-- Example single login button if user not logged in.
-               Or you can hide this if using the sidebar form only. -->
+          <!-- Login button (shown when not authenticated) -->
           <button id="authButton" class="btn btn-primary btn-sm min-w-[44px] min-h-[44px]">
             Login
           </button>
+
+          <!-- User menu (shown when authenticated) -->
+          <div id="userMenu" class="dropdown dropdown-end hidden">
+            <div tabindex="0" role="button" class="btn btn-ghost btn-sm btn-circle avatar">
+              <div
+                class="w-8 h-8 rounded-full bg-primary text-primary-content flex items-center justify-center text-sm font-medium">
+                <span id="userInitials">?</span>
+              </div>
+            </div>
+            <ul tabindex="0"
+              class="dropdown-content menu bg-base-100 rounded-box z-[1] w-52 p-2 shadow-lg border border-base-300">
+              <li class="menu-title px-4 py-2">
+                <span id="authStatus">Not Authenticated</span>
+              </li>
+              <li>
+                <div class="px-4 py-2 text-sm">
+                  Hello, <span id="usernameDisplay">User</span>
+                </div>
+              </li>
+              <li>
+                <hr class="my-1">
+              </li>
+              <li>
+                <button id="logoutBtn" class="text-error hover:bg-error hover:text-error-content">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Logout
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <!-- User status indicator (hidden, for backwards compatibility) -->
+          <div id="userStatus" class="hidden"></div>
         </div>
       </div>
     </div>
@@ -282,8 +309,7 @@
   <!-- ========================================================= -->
   <div class="flex flex-1 overflow-hidden">
     <!-- SIDEBAR (using original #mainSidebar markup, but updated classes) -->
-    <nav id="mainSidebar"
-         class="fixed md:relative inset-0 md:inset-y-0 md:left-0 z-50 w-4/5 max-w-xs md:w-72 bg-base-100
+    <nav id="mainSidebar" class="fixed md:relative inset-0 md:inset-y-0 md:left-0 z-50 w-4/5 max-w-xs md:w-72 bg-base-100
                 shadow-xl md:shadow-none border-r border-base-300 transform transition-transform duration-300
                 ease-in-out -translate-x-full md:translate-x-0 overflow-y-auto h-[100dvh] md:h-full flex flex-col
                 sidebar focus-within:ring-2 focus-within:ring-primary focus-within:outline-none
@@ -293,23 +319,20 @@
 
       <!-- Close button (mobile only) -->
       <button id="closeSidebarBtn" type="button"
-        class="md:hidden absolute top-3 right-3 btn btn-ghost btn-sm btn-circle"
-        aria-label="Close sidebar" tabindex="0">
-        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-             viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M6 18L18 6M6
-                   6l12 12"/>
+        class="md:hidden absolute top-3 right-3 btn btn-ghost btn-sm btn-circle" aria-label="Close sidebar"
+        tabindex="0">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6
+                   6l12 12" />
         </svg>
       </button>
 
       <div class="p-4 pb-6 flex flex-col h-full min-h-0">
         <!-- Back to Chat or New Chat link -->
         <a href="/" class="w-full btn btn-primary mb-4 flex items-center justify-center gap-2" role="button">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-               aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M8 12h.01M12
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12
                      12h.01M16
                      12h.01M21
                      12c0 4.418-4.03
@@ -323,28 +346,35 @@
                      12c0-4.418
                      4.03-8 9-8s9
                      3.582 9
-                     8z"/>
+                     8z" />
           </svg>
           Back to Chat
         </a>
 
-        <!-- Example tabs or nav items -->
-        <div class="enhanced-tabs mb-4 overflow-x-auto no-scrollbar" role="tablist">
-          <button class="enhanced-tab tab-active" data-tab="projects" role="tab" aria-selected="true">
-            Projects
-          </button>
-          <button class="enhanced-tab" data-tab="recent" role="tab" aria-selected="false">
-            Recent
-          </button>
-          <button class="enhanced-tab" data-tab="settings" role="tab" aria-selected="false">
-            Settings
-          </button>
+        <!-- Sidebar Tabs -->
+        <div class="tabs tabs-boxed mb-4" role="tablist">
+          <button id="recentChatsTab" class="tab tab-active" role="tab" aria-selected="true">Recent</button>
+          <button id="starredChatsTab" class="tab" role="tab" aria-selected="false">Starred</button>
+          <button id="projectsTab" class="tab" role="tab" aria-selected="false">Projects</button>
         </div>
 
-        <!-- Example "Projects" section -->
-        <div class="flex-1 flex flex-col min-h-0 bg-base-200 rounded-box shadow-xs p-3 overflow-y-auto">
-          <h3 class="text-sm font-semibold mb-2">Project List</h3>
-          <!-- Insert your real project list or search -->
+        <!-- Recent Chats Section -->
+        <div id="recentChatsSection" class="flex-1 flex flex-col min-h-0">
+          <div class="mb-3">
+            <input id="chatSearchInput" type="text" placeholder="Search conversations..."
+              class="input input-sm input-bordered w-full">
+          </div>
+          <div class="flex-1 overflow-y-auto">
+            <div class="text-base-content/60 text-center py-4">No recent conversations</div>
+          </div>
+        </div>
+
+        <!-- Starred Chats Section -->
+        <div id="starredChatsSection" class="flex-1 flex-col min-h-0 hidden">
+          <div class="mb-3">
+            <input type="text" placeholder="Search starred..." class="input input-sm input-bordered w-full">
+          </div>
+          <!-- Project list will be populated here -->
           <div class="text-base-content/60 text-center py-4">No projects yet.</div>
         </div>
 
@@ -357,50 +387,39 @@
             <!-- Username (shown only on registration) -->
             <div id="sidebarUsernameContainer" class="mb-2 hidden">
               <label for="sidebarUsername" class="sr-only">Username</label>
-              <input type="text" id="sidebarUsername" name="username"
-                     placeholder="Username"
-                     autocomplete="username"
-                     class="input input-sm input-bordered w-full" />
+              <input type="text" id="sidebarUsername" name="username" placeholder="Username" autocomplete="username"
+                class="input input-sm input-bordered w-full" />
             </div>
 
             <!-- Email -->
             <div class="mb-2">
               <label for="sidebarEmail" class="sr-only">Email</label>
-              <input type="email" id="sidebarEmail" name="email"
-                     placeholder="Email"
-                     autocomplete="email"
-                     required
-                     class="input input-sm input-bordered w-full" />
+              <input type="email" id="sidebarEmail" name="email" placeholder="Email" autocomplete="email" required
+                class="input input-sm input-bordered w-full" />
             </div>
 
             <!-- Password -->
             <div class="mb-2">
               <label for="sidebarPassword" class="sr-only">Password</label>
-              <input type="password" id="sidebarPassword" name="password"
-                     placeholder="Password"
-                     autocomplete="current-password"
-                     required
-                     class="input input-sm input-bordered w-full" />
+              <input type="password" id="sidebarPassword" name="password" placeholder="Password"
+                autocomplete="current-password" required class="input input-sm input-bordered w-full" />
             </div>
 
             <!-- Confirm Password (shown only on registration) -->
             <div id="sidebarConfirmPasswordContainer" class="mb-3 hidden">
               <label for="sidebarConfirmPassword" class="sr-only">Confirm Password</label>
-              <input type="password" id="sidebarConfirmPassword" name="confirmPassword"
-                     placeholder="Confirm Password"
-                     autocomplete="new-password"
-                     class="input input-sm input-bordered w-full" />
+              <input type="password" id="sidebarConfirmPassword" name="confirmPassword" placeholder="Confirm Password"
+                autocomplete="new-password" class="input input-sm input-bordered w-full" />
             </div>
 
-            <button type="submit" id="sidebarAuthBtn"
-                    class="btn btn-primary btn-sm w-full">
+            <button type="submit" id="sidebarAuthBtn" class="btn btn-primary btn-sm w-full">
               Login
             </button>
             <div id="sidebarAuthError" class="text-error text-xs mt-2 min-h-[1em]"></div>
           </form>
           <div class="text-center mt-3">
             <a href="#" id="sidebarAuthToggle"
-               class="link link-hover text-sm min-w-[44px] min-h-[44px] inline-flex items-center">
+              class="link link-hover text-sm min-w-[44px] min-h-[44px] inline-flex items-center">
               Need an account? Register
             </a>
           </div>
@@ -436,8 +455,7 @@
   <nav class="mobile-nav lg:hidden">
     <button class="mobile-nav-item active" data-tab="chat">
       <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M8 12h.01M12
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12
                  12h.01M16
                  12h.01M21
                  12c0 4.418-4.03
@@ -451,27 +469,25 @@
                  12c0-4.418
                  4.03-8 9-8s9
                  3.582 9
-                 8z"/>
+                 8z" />
       </svg>
       <span>Chat</span>
     </button>
     <button class="mobile-nav-item" data-tab="projects">
       <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M3 7v10a2
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2
                  2 0 002
                  2h14a2 2
                  0 002-2V9a2 2 0
                  00-2-2h-6l-2-2H5a2
                  2 0 00-2
-                 2z"/>
+                 2z" />
       </svg>
       <span>Projects</span>
     </button>
     <button class="mobile-nav-item" data-tab="settings">
       <svg class="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M10.325
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325
                  4.317c.426-1.756
                  2.924-1.756
                  3.35 0a1.724
@@ -506,13 +522,12 @@
                  001.066-2.573c-.94-1.543.826-3.31
                  2.37-2.37.996.608
                  2.296.07
-                 2.572-1.065z"/>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M15
+                 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15
                  12a3 3 0
                  11-6 0
                  3 3 0
-                 016 0z"/>
+                 016 0z" />
       </svg>
       <span>Settings</span>
     </button>
@@ -521,14 +536,12 @@
   <!-- ============================================= -->
   <!-- Loading Spinners, same as original           -->
   <!-- ============================================= -->
-  <div id="loadingSpinner"
-       class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center hidden">
+  <div id="loadingSpinner" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center hidden">
     <div class="loading-spinner w-8 h-8 text-primary"></div>
     <span class="ml-3 text-lg">Loading...</span>
   </div>
-  <div id="appLoadingSpinner"
-       class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center hidden"
-       role="status">
+  <div id="appLoadingSpinner" class="fixed inset-0 bg-base-100 z-50 flex items-center justify-center hidden"
+    role="status">
     <div class="text-center">
       <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
       <p class="text-lg">Loading application...</p>
@@ -538,8 +551,7 @@
   <!-- ============================================= -->
   <!-- Modals Container (same as original)          -->
   <!-- ============================================= -->
-  <div id="modalsContainer" aria-live="polite" role="complementary"
-       class="hidden">
+  <div id="modalsContainer" aria-live="polite" role="complementary" class="hidden">
     <!-- modals.html will be dynamically loaded here -->
   </div>
 
@@ -571,4 +583,5 @@
   <button id="newConversationBtn" class="hidden" data-requires-chat="true">New Conversation</button>
   <div id="knowledgeBaseContainer" class="hidden" data-requires-kb="true"></div>
 </body>
+
 </html>
