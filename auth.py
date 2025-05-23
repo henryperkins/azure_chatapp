@@ -642,12 +642,14 @@ async def get_server_time() -> dict[str, float]:
 
 
 @router.get("/csrf", response_model=dict[str, str])
-async def get_csrf_token(request: Request, response: Response):
+async def get_csrf_token(request: Request):
     # Generate CSRF token, store in session, set cookie, and return in JSON
     import secrets
+    from fastapi.responses import JSONResponse
     token = secrets.token_urlsafe()
     request.session["csrf_token"] = token
-    response.set_cookie(
+    resp = JSONResponse(content={"token": token})
+    resp.set_cookie(
         "csrf_token",
         token,
         httponly=False,
@@ -655,7 +657,7 @@ async def get_csrf_token(request: Request, response: Response):
         samesite="lax",
         path="/",
     )
-    return {"token": token}
+    return resp
 
 
 @router.get("/apple-touch-icon.png", include_in_schema=False)
