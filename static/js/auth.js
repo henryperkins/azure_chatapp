@@ -23,6 +23,14 @@ export function createAuthModule(deps) {
   if (!deps.domAPI) throw new Error("[AuthModule] DI param 'domAPI' is required.");
   if (!deps.sanitizer) throw new Error("[AuthModule] DI param 'sanitizer' is required.");
   if (!deps.apiEndpoints) throw new Error("[AuthModule] DI param 'apiEndpoints' is required.");
+
+  // Validate that apiEndpoints contains all required auth endpoint keys
+  const requiredEndpoints = ['AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'];
+  const missingEndpoints = requiredEndpoints.filter(key => !deps.apiEndpoints[key]);
+  if (missingEndpoints.length > 0) {
+    throw new Error(`[AuthModule] Missing required auth endpoints in apiEndpoints: ${missingEndpoints.join(', ')}. Available endpoints: ${Object.keys(deps.apiEndpoints).join(', ')}`);
+  }
+
   // DependencySystem and modalManager may be undefined
 
   const {
@@ -50,8 +58,8 @@ export function createAuthModule(deps) {
   }
 
   // --- bearer token storage ---------------------------------
-  let accessToken  = null;           // stores latest JWT / bearer
-  let tokenType    = 'Bearer';       // e.g. "Bearer"
+  let accessToken = null;           // stores latest JWT / bearer
+  let tokenType = 'Bearer';       // e.g. "Bearer"
   let refreshToken = null;           // optional refresh token
 
   // === 2) INTERNAL UTILITIES & HELPERS ===
@@ -96,9 +104,9 @@ export function createAuthModule(deps) {
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /\d/.test(password);
     const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
-    if (!hasUpper)   return { valid: false, message: 'Password must contain an uppercase letter' };
-    if (!hasLower)   return { valid: false, message: 'Password must contain a lowercase letter' };
-    if (!hasNumber)  return { valid: false, message: 'Password must contain a number' };
+    if (!hasUpper) return { valid: false, message: 'Password must contain an uppercase letter' };
+    if (!hasLower) return { valid: false, message: 'Password must contain a lowercase letter' };
+    if (!hasNumber) return { valid: false, message: 'Password must contain a number' };
     if (!hasSpecial) return { valid: false, message: 'Password must contain a special character' };
     return { valid: true };
   }
@@ -242,8 +250,8 @@ export function createAuthModule(deps) {
         const response = await authRequest(apiEndpoints.AUTH_REFRESH, 'POST');
         // Store bearer tokens if present
         if (response && response.access_token) {
-          accessToken  = response.access_token;
-          tokenType    = response.token_type || 'Bearer';
+          accessToken = response.access_token;
+          tokenType = response.token_type || 'Bearer';
           refreshToken = response.refresh_token || refreshToken;
         }
         return { success: true, response };
@@ -261,7 +269,7 @@ export function createAuthModule(deps) {
     return tokenRefreshPromise;
   }
   async function clearTokenState(options = { source: 'unknown' }) {
-    accessToken  = null;
+    accessToken = null;
     refreshToken = null;
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
   }
@@ -302,7 +310,7 @@ export function createAuthModule(deps) {
           }
           if (initialsSpan && userObject?.username) {
             // Set user initials (e.g., "AB" for Alice Bob)
-            const initials = userObject.username.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+            const initials = userObject.username.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
             initialsSpan.textContent = initials;
           }
         }
@@ -426,9 +434,9 @@ export function createAuthModule(deps) {
       if (isAuthenticatedByFlags || hasUsername) {
         const tempUserObj = hasUsername && !finalUserObject
           ? {
-              username: response?.username || response?.user?.username || 'user',
-              id: response?.id || response?.user?.id || ('temp-id-' + Date.now())
-            }
+            username: response?.username || response?.user?.username || 'user',
+            id: response?.id || response?.user?.id || ('temp-id-' + Date.now())
+          }
           : null;
         logger.log('[verifyAuthState] Verified via flags/username', {
           isAuthenticatedByFlags,
@@ -507,8 +515,8 @@ export function createAuthModule(deps) {
       logger.log('[DIAGNOSTIC][auth.js][loginUser][API RESPONSE]', response, { context: 'loginUser' });
       // Store bearer tokens if present
       if (response && response.access_token) {
-        accessToken  = response.access_token;
-        tokenType    = response.token_type || 'Bearer';
+        accessToken = response.access_token;
+        tokenType = response.token_type || 'Bearer';
         refreshToken = response.refresh_token || null;
       }
       try {
@@ -524,7 +532,7 @@ export function createAuthModule(deps) {
       if (response && response.username) {
         const userObject = {
           username: response.username,
-          id:      response.id || response.user_id || response.userId || (`temp-id-${Date.now()}`)
+          id: response.id || response.user_id || response.userId || (`temp-id-${Date.now()}`)
         };
         broadcastAuth(true, userObject, 'login_success_immediate');
         _lastLoginTimestamp = Date.now();
@@ -563,7 +571,7 @@ export function createAuthModule(deps) {
 
   async function logout() {
     logger.log('[DIAGNOSTIC][auth.js][logout] Logging out', { context: 'logout' });
-    accessToken  = null;
+    accessToken = null;
     refreshToken = null;
     await clearTokenState({ source: 'logout_manual' });
     try {

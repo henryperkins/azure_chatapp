@@ -4,7 +4,7 @@ import { createErrorReporterStub } from '../utils/errorReporterStub.js';
 /**
  * serviceInit.js
  * Factory for service registration logic extracted from app.js.
- * 
+ *
  * Handles the complex service registration and wiring that was scattered
  * throughout app.js initialization.
  *
@@ -83,9 +83,19 @@ export function createServiceInitializer({
       }
 
       // Register API endpoints (only if not already provided)
-      safeRegister('apiEndpoints',
-        DependencySystem.modules.get('apiEndpoints') ||
-        resolveApiEndpoints(APP_CONFIG));
+      const resolvedEndpoints = DependencySystem.modules.get('apiEndpoints') || resolveApiEndpoints(APP_CONFIG);
+      safeRegister('apiEndpoints', resolvedEndpoints);
+
+      // Log the full apiEndpoints map for rapid detection of bad overrides
+      logger.log('[serviceInit] API endpoints registered successfully:', {
+        endpointKeys: Object.keys(resolvedEndpoints),
+        endpointCount: Object.keys(resolvedEndpoints).length,
+        hasRequiredAuth: ['AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'].every(key => resolvedEndpoints[key]),
+        context: 'serviceInit:registerBasicServices'
+      });
+
+      // Log individual endpoint mappings for debugging
+      logger.log('[serviceInit] Detailed endpoint mappings:', resolvedEndpoints, { context: 'serviceInit:registerBasicServices' });
 
       logger.log('[serviceInit] Basic services registered', { context: 'serviceInit:registerBasicServices' });
     } catch (err) {
@@ -99,9 +109,10 @@ export function createServiceInitializer({
    */
   function registerAdvancedServices() {
     try {
-      // Create API client
+      // Create API client - declare at function scope for reuse
+      let apiRequest = null;
       if (createApiClient && globalUtils) {
-        const apiRequest = createApiClient({
+        apiRequest = createApiClient({
           APP_CONFIG,
           globalUtils: {
             shouldSkipDedup: globalUtils.shouldSkipDedup,
@@ -145,7 +156,7 @@ export function createServiceInitializer({
           eventHandlers,
           sanitizer,
           apiClient: {
-            fetch: (...args) => apiRequest(...args),
+            fetch: (...args) => apiRequest ? apiRequest(...args) : Promise.reject(new Error('API client not available')),
           },
           timerAPI: {
             setTimeout: (...args) => browserServiceInstance.getWindow().setTimeout(...args),
