@@ -87,8 +87,10 @@ export function safeParseJSON(str, fallback) {
 }
 
 // DOM helpers (only single definition, prefer domAPI for new code)
-export function createElement(tag, opts = {}, trackListener) {
-  const el = document.createElement(tag);
+export function createElement(tag, opts = {}, trackListener, domAPI) {
+  const doc = domAPI?.getDocument?.();
+  if (!doc) throw new Error('[globalUtils.createElement] domAPI with getDocument() is required');
+  const el = doc.createElement(tag);
   if (opts.className) el.className = opts.className;
   if (opts.id) el.id = opts.id;
   if ("textContent" in opts) el.textContent = opts.textContent;
@@ -124,11 +126,11 @@ export function createElement(tag, opts = {}, trackListener) {
   return el;
 }
 
-export function toggleElement(selOrEl, show) {
+export function toggleElement(selOrEl, show, domAPI) {
   try {
     if (typeof selOrEl === "string") {
-      document.querySelectorAll(selOrEl).forEach((el) => el.classList.toggle("hidden", !show));
-    } else if (selOrEl instanceof HTMLElement) {
+      domAPI.querySelectorAll(selOrEl).forEach((el) => el.classList.toggle("hidden", !show));
+    } else if (selOrEl && selOrEl.classList) {
       selOrEl.classList.toggle("hidden", !show);
     }
   } catch (e) {
