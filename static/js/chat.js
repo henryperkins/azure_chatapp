@@ -24,10 +24,17 @@ import { createChatUIUtils } from "./chat-ui-utils.js";
  */
 
 /**
- * @typedef {Object} EventHandlers
- * @property {function(HTMLElement|EventTarget, string, Function, Object=): any} trackListener
- * @property {function(HTMLElement|EventTarget, string, any): void} untrackListener
- * @property {function(Object=): void} cleanupListeners
+ * Creates and returns a chat manager for handling chat UI, conversation lifecycle, message sending, authentication, and project context changes.
+ *
+ * The returned chat manager provides methods to initialize the chat UI, manage conversations (create, load, delete), send messages with queueing and abort handling, update model configuration, set images for vision models, and clean up resources. It integrates with injected dependencies for API requests, DOM manipulation, navigation, event handling, logging, and configuration, and uses an event bus for chat-related events.
+ *
+ * @param {Object} deps - Dependency injection object containing required APIs, services, and configuration.
+ * @returns {Object} Chat manager instance with methods: initialize, sendMessage, createNewConversation, loadConversation, deleteConversation, setImage, updateModelConfig, cleanup, and chatBus.
+ *
+ * @throws {Error} If required dependencies are missing from {@link deps}.
+ *
+ * @remark
+ * The chat manager automatically responds to global authentication and project context changes, disabling or re-initializing the chat UI as needed. It requires valid authentication and project selection to function.
  */
 
 export function createChatManager(deps = {}) {

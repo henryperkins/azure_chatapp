@@ -14,7 +14,23 @@ export function isValidProjectId(id) {
 
 // ----------------------------------------------------------------------------
 // 2) Primary factory export: createProjectManager
-// ----------------------------------------------------------------------------
+/**
+ * Factory function that creates and configures a ProjectManager instance for managing projects and related resources.
+ *
+ * The returned object includes the ProjectManager instance, a cleanup method, and utility functions for normalizing project responses, extracting resource lists, and retrying asynchronous operations with backoff.
+ *
+ * @returns {Object} An object containing:
+ *   - `instance`: The ProjectManager instance.
+ *   - `cleanup`: Function to destroy the instance and clean up listeners.
+ *   - `normalizeProjectResponse`: Utility to normalize project server responses.
+ *   - `extractResourceList`: Utility to extract resource arrays from API responses.
+ *   - `retryWithBackoff`: Utility to retry async functions with exponential backoff.
+ *
+ * @throws {Error} If required dependencies (`DependencySystem`, `domReadinessService`, or `logger`) are missing.
+ *
+ * @remark
+ * The ProjectManager instance is registered with the DependencySystem under the name `'projectManager'`.
+ */
 export function createProjectManager({
   DependencySystem,
   domReadinessService,
