@@ -1084,6 +1084,41 @@ export function createProjectDashboard(deps) {
     logger.warn('[ProjectDashboard] Unable to fire-and-forget details template load', err, { context: 'projectDashboard' });
   }
 
+  // ==== Speculative/Eager Project List Template Loading (wait for container) ====
+  try {
+    const htmlTemplateLoader =
+      dependencySystem?.modules?.get?.('htmlTemplateLoader');
+
+    if (htmlTemplateLoader?.loadTemplate) {
+      const drs = dependencySystem?.modules?.get?.('domReadinessService');
+
+      const loadListTemplate = () =>
+        htmlTemplateLoader.loadTemplate({
+          url: '/static/html/project_list.html',
+          containerSelector: '#projectListView',
+          eventName: 'projectListHtmlLoaded'
+        });
+
+      /* Ensure #projectListView exists before loading template */
+      if (drs?.elementsReady) {
+        drs.elementsReady('#projectListView', {
+          timeout: 8000,
+          context: 'ProjectDashboard::listTplContainer'
+        })
+        .then(loadListTemplate)
+        .catch(loadListTemplate);      // fallback – still attempt
+      } else {
+        loadListTemplate().catch(() => {});
+      }
+    }
+  } catch (err) {
+    logger.warn(
+      '[ProjectDashboard] Unable to fire-and-forget list template load',
+      err,
+      { context: 'projectDashboard' }
+    );
+  }
+
   function cleanup() {
     dashboard.cleanup();
   }
