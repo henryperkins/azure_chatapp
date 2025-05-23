@@ -117,21 +117,9 @@ const domAPI = createDomAPI({
 });
 
 // ---------------------------------------------------------------------------
-// 3) Create domReadinessService (CRITICAL FIX)
+// 3)  ERROR-REPORTER  ➜  EVENT-HANDLERS  ➜  DOM-READINESS-SERVICE (new order)
 // ---------------------------------------------------------------------------
-const domReadinessService = createDomReadinessService({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  logger,
-  timeoutMs: APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? 5000
-});
-DependencySystem.register('domReadinessService', domReadinessService);
-
-// ---------------------------------------------------------------------------
-// 4) Create eventHandlers (CRITICAL FIX)
-// ---------------------------------------------------------------------------
-const errorReporter = createErrorReporterStub(logger,'app:ErrorReporterStub');
+const errorReporter = createErrorReporterStub(logger, 'app:ErrorReporterStub');
 DependencySystem.register('errorReporter', errorReporter);
 
 const eventHandlers = createEventHandlers({
@@ -144,7 +132,17 @@ const eventHandlers = createEventHandlers({
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
-// Wire circular dependency with setter (post-construction)
+const domReadinessService = createDomReadinessService({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  eventHandlers,                          // ← inject so .trackListener exists
+  logger,
+  timeoutMs: APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? 5000
+});
+DependencySystem.register('domReadinessService', domReadinessService);
+
+// circular-dependency link (opposite direction)
 eventHandlers.setDomReadinessService(domReadinessService);
 
 
