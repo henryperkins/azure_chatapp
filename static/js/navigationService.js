@@ -88,7 +88,9 @@ export function createNavigationService({
    * @returns {Object} Parameter object
    */
   function getUrlParams() {
-    const searchParams = new URLSearchParams(browserService.getLocation().search);
+    const searchParams = new browserService.URLSearchParams(
+      browserService.getLocation().search
+    );
     const params = {};
 
     // Convert searchParams to plain object

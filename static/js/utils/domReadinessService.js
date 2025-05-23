@@ -64,9 +64,10 @@ export function createDomReadinessService({
 
   // ───── instrumentation – selector wait times ─────
   const _SEL_STATS = new Map();                // sel ➜ { total, waits:[{start,end,duration}] }
-  const _nowPerf   = () =>
-    (typeof performance !== 'undefined' && performance.now)
-      ? performance.now() : Date.now();
+  function _nowPerf() {
+    const win = browserService.getWindow?.();
+    return (win?.performance?.now?.()) ?? Date.now();
+  }
 
   function _markStart(selectors) {
     const t = _nowPerf();
@@ -250,9 +251,11 @@ export function createDomReadinessService({
 
     // Create a MutationObserver to watch the entire body subtree
     const MutationObserverImpl =
-      browserService?.getWindow?.()?.MutationObserver ||
-      (typeof MutationObserver !== 'undefined' ? MutationObserver : null);
-    if (!MutationObserverImpl) return;                 // env without MO
+      browserService.getWindow?.()?.MutationObserver;
+    if (!MutationObserverImpl) {
+      _logger.error('[domReadinessService] MutationObserver unavailable via DI',{context:'domReadinessService'});
+      return;
+    }
 
     const observer = new MutationObserverImpl((mutations) => {
       if (appearanceListeners.size === 0) return;

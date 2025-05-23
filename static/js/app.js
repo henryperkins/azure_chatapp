@@ -145,7 +145,6 @@ DependencySystem.register('eventHandlers', eventHandlers);
 // Wire circular dependency with setter (post-construction)
 eventHandlers.setDomReadinessService(domReadinessService);
 
-const globalConsole = (typeof console !== 'undefined') ? console : {};
 
 // ---------------------------------------------------------------------------
 // 6) Early app module (using factory)
