@@ -33,7 +33,7 @@ export function createHtmlTemplateLoader({
 
   // ──────────────────────────────────────────────────────────────
   // Native fetch shortcut (bypasses apiClient pre-processing).
-  // Will be used for “pure” static assets such as *.html, *.css, …
+  // Will be used for "pure" static assets such as *.html, *.css, …
   // It is derived from domAPI DI to remain test/environment safe.
   // ──────────────────────────────────────────────────────────────
   const _nativeFetch =
@@ -214,9 +214,7 @@ export function createHtmlTemplateLoader({
           eventNameEmitted: eventName
         });
         // Dispatch event in case something is awaiting
-        const evt = eventHandlers.createCustomEvent(eventName,
-          { detail: { success: false, error: err.message } });
-        domAPI.dispatchEvent(domAPI.getDocument(), evt);
+        emitEvent(eventName, { success: false, error: err.message });
       }
     }
 

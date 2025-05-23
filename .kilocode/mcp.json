@@ -1,0 +1,21 @@
+{
+  "mcp": {
+    "inputs": [
+      {
+        "type": "promptString",
+        "id": "sentry_auth_token",
+        "description": "Sentry Auth Token",
+        "password": true
+      }
+    ],
+    "servers": {
+      "github.com/modelcontextprotocol/servers/tree/main/src/sentry": {
+        "command": "uvx",
+        "args": ["mcp-server-sentry"],
+        "env": {
+          "SENTRY_AUTH_TOKEN": "${input:sentry_auth_token}"
+        }
+      }
+    }
+  }
+}

@@ -52,12 +52,21 @@ class CookieSettings:
     def get_attributes(self, request: Request) -> dict[str, Any]:
         env = self.env.lower()
         hostname = request.url.hostname
-        scheme = request.url.scheme
+
+        # Honor X-Forwarded-Proto so that deployments behind an SSL-terminating
+        # reverse-proxy (e.g. Nginx, Cloudflare) are treated as HTTPS even though
+        # `request.url.scheme` is "http".
+        forwarded_proto_raw = request.headers.get("x-forwarded-proto", "")
+        forwarded_proto = (
+            forwarded_proto_raw.split(",")[0].strip().lower() if forwarded_proto_raw else ""
+        )
+        scheme = forwarded_proto or request.url.scheme
+
         is_localhost = hostname in ["localhost", "127.0.0.1"]
         is_production = env == "production"
 
-        # Production must have strict security
-        if is_production and not scheme == "https":
+        # Production must have strict security; only warn when *effective* scheme is not https
+        if is_production and scheme != "https":
             logger.warning(
                 f"Production environment detected but not using HTTPS: {hostname}"
             )
@@ -734,37 +743,37 @@ async def logout_user(
                 pass
 
         if current_user:
-            async with session.begin():
-                locked = await session.get(User, current_user.id, with_for_update=True)
-                if locked:
-                    locked.token_version = (locked.token_version or 0) + 1
-                    logger.info(
-                        "[TOKEN_VERSION_INCREMENT] user=%s new_ver=%s reason=logout",
-                        locked.username,
-                        locked.token_version,
-                    )
-                    if refresh_cookie:
-                        try:
-                            dec = await verify_token(
-                                refresh_cookie, "refresh", db_session=session
+            locked = await session.get(User, current_user.id, with_for_update=True)
+            if locked:
+                locked.token_version = (locked.token_version or 0) + 1
+                logger.info(
+                    "[TOKEN_VERSION_INCREMENT] user=%s new_ver=%s reason=logout",
+                    locked.username,
+                    locked.token_version,
+                )
+                if refresh_cookie:
+                    try:
+                        dec = await verify_token(
+                            refresh_cookie, "refresh", db_session=session
+                        )
+                        tid = dec.get("jti")
+                        exp_val = dec.get("exp")
+                        if tid and exp_val:
+                            dt_expirada = datetime.fromtimestamp(
+                                float(exp_val), tz=timezone.utc
                             )
-                            tid = dec.get("jti")
-                            exp_val = dec.get("exp")
-                            if tid and exp_val:
-                                dt_expirada = datetime.fromtimestamp(
-                                    float(exp_val), tz=timezone.utc
-                                )
-                                blackl = TokenBlacklist(
-                                    jti=tid,
-                                    expires=dt_expirada.replace(tzinfo=None),
-                                    user_id=locked.id,
-                                    token_type="refresh",
-                                    creation_reason="logout",
-                                )
-                                session.add(blackl)
-                                logger.info("Blacklisted refresh => jti=%s", tid)
-                        except Exception as e:
-                            logger.error("Failed to blacklist => %s", e)
+                            blackl = TokenBlacklist(
+                                jti=tid,
+                                expires=dt_expirada.replace(tzinfo=None),
+                                user_id=locked.id,
+                                token_type="refresh",
+                                creation_reason="logout",
+                            )
+                            session.add(blackl)
+                            logger.info("Blacklisted refresh => jti=%s", tid)
+                    except Exception as e:
+                        logger.error("Failed to blacklist => %s", e)
+            await session.commit()
     except Exception as e:
         logger.error("Logout error => %s", e)
 
