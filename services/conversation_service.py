@@ -471,10 +471,10 @@ class ConversationService:
 
                 # Attach stats and structured truncation details to API response and assistant_message
                 response["token_stats"] = stats
-                response["truncation_details"] = stats.get("truncation_details")
+                response["truncation_details"] = stats.get("truncation_details", {})
                 if "assistant_message" in response and response["assistant_message"]:
                     response["assistant_message"]["token_stats"] = stats
-                    response["assistant_message"]["truncation_details"] = stats.get("truncation_details")
+                    response["assistant_message"]["truncation_details"] = stats.get("truncation_details", {})
             except HTTPException as http_exc:
                 logger.error(
                     f"HTTP error during AI generation for conv {conversation_id}: "
