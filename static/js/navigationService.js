@@ -160,8 +160,8 @@ export function createNavigationService({
         const loginMessage = domAPI.getElementById('loginRequiredMessage');
         const mainContent = domAPI.getElementById('mainContent');
 
-        if (loginMessage) loginMessage.classList.add('hidden');
-        if (mainContent) mainContent.classList.remove('hidden');
+        if (loginMessage) domAPI.addClass(loginMessage, 'hidden');
+        if (mainContent) domAPI.removeClass(mainContent, 'hidden');
       }
 
       // Hide previous view if different
