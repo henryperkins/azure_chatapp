@@ -329,8 +329,8 @@ export function createChatManager(deps = {}) {
         }
         
         // Clear the temporary auth change listener if auth is now okay and it was previously set
-        if (this._authChangeListener && auth?.AuthBus?.removeEventListener) {
-            auth.AuthBus.removeEventListener('authStateChanged', this._authChangeListener);
+        if (this._authChangeListener && auth?.AuthBus) {
+            eventHandlers.untrackListener(auth.AuthBus, 'authStateChanged', this._authChangeListener);
             logger.debug(`[ChatManager][initialize] Auth successful, removed temporary _authChangeListener.`, { context: "chatManager.initialize" });
             this._authChangeListener = null;
         }
