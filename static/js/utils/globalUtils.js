@@ -30,7 +30,6 @@ export { createStorageService } from './storageService.js';
  */
 export { createBrowserService } from './browserService.js';
 
-import { createDomReadinessService } from "./domReadinessService.js";
 
 // General-purpose helper functions
 import { isValidProjectId as rawIsValidProjectId } from "../projectManager.js";
@@ -176,26 +175,6 @@ export const fileIcon = (t = "") =>
     }[t.toLowerCase()] || "📄"
   );
 
-/**
- * @deprecated  Replaced by domReadinessService.dependenciesAndElements.
- *              Please migrate.  This shim will be removed soon.
- */
-export async function waitForDepsAndDom(cfg = {}) {
-  const { DependencySystem, domAPI, browserService, eventHandlers, APP_CONFIG } = cfg;
-  const drs = createDomReadinessService({
-    DependencySystem,
-    domAPI,
-    browserService,
-    eventHandlers,
-    APP_CONFIG,
-  });
-  await drs.dependenciesAndElements({
-    deps        : cfg.deps,
-    domSelectors: cfg.domSelectors,
-    timeout     : cfg.timeout ?? 10_000,
-    context     : cfg.source ?? 'waitForDepsAndDom(shim)',
-  });
-}
 
 /**
  * @deprecated Use apiClient + proper .get/.post signature for this
