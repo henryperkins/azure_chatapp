@@ -56,14 +56,33 @@ export function shouldSkipDedup(url = '') {
   return DEDUP_EXCLUSION_RE.test(url);
 }
 
-// Debounce
-export function debounce(fn, wait = 250) {
-  let t = null;
-  return function (...a) {
-    clearTimeout(t);
-    t = setTimeout(() => {
-      t = null;
-      fn.apply(this, a);
+/**
+ * debounce – DI-safe version.
+ * Requires a timer API that exposes { setTimeout, clearTimeout }.
+ * If no timerAPI is supplied, it attempts to obtain the injected
+ * browserService from the global DependencySystem.
+ */
+export function debounce(fn, wait = 250, timerAPI = null) {
+  let timerId = null;
+
+  /* Resolve timer helpers strictly via DI (never from window/global). */
+  const getTimerAPI = () => {
+    if (timerAPI?.setTimeout && timerAPI?.clearTimeout) return timerAPI;
+
+    // Fallback: look-up browserService already registered in DI
+    const ds = globalThis?.DependencySystem;
+    const bs = ds?.modules?.get?.('browserService');
+    if (bs?.setTimeout && bs?.clearTimeout) return bs;
+
+    throw new Error('[globalUtils.debounce] timerAPI with setTimeout/clearTimeout is required (strict DI)');
+  };
+
+  return function debounced(...args) {
+    const api = getTimerAPI();
+    api.clearTimeout(timerId);
+    timerId = api.setTimeout(() => {
+      timerId = null;
+      fn.apply(this, args);
     }, wait);
   };
 }
