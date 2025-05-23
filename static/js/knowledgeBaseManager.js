@@ -5,26 +5,14 @@
 const MODULE = "KnowledgeBaseManager";
 
 /**
- * Factory function to create a manager for KnowledgeBaseComponent.
- * @param {Object} ctx - The KnowledgeBaseComponent instance (context).
- * @param {Object} ctx.elements - DOM element references.
- * @param {Object} ctx.state - Component's internal state.
- * @param {Function} ctx.apiRequest - API request function.
- * @param {Object} ctx.modalManager - Modal management utility.
- * @param {Object} ctx.projectManager - Project management utility.
- * @param {Function} ctx.validateUUID - UUID validation function.
- * @param {Function} ctx._getCurrentProjectId - Function to get current project ID.
- * @param {Function} ctx._showInactiveState - Callback to show inactive UI state.
- * @param {Function} ctx._updateStatusIndicator - Callback to update status badge.
- * @param {Function} ctx._updateStatusAlerts - Callback to update status alerts.
- * @param {Function} ctx._updateUploadButtonsState - Callback to update button states.
- * @param {Function} ctx._setButtonLoading - Utility to set button loading state.
- * @param {Function} ctx._safeSetInnerHTML - Utility to safely set innerHTML.
- * @param {Function} ctx.renderKnowledgeBaseInfo - Callback to re-render main KB info.
- * @param {Object} ctx.uiUtils - UI utility functions (formatBytes, formatDate, fileIcon).
- * @param {Object} ctx.eventHandlers - Event handling utility.
- * @param {Function} ctx.getDep - Dependency getter.
- * @returns {Object} Manager instance with public methods.
+ * Creates a manager for handling Knowledge Base (KB) lifecycle, settings, files, and GitHub integration within a project context.
+ *
+ * The returned manager provides methods for toggling KB activation, reprocessing files, handling KB settings forms, deleting KBs, managing KB modals, loading KB health and files, attaching/detaching GitHub repositories, validating model compatibility, updating model selection, and cleaning up event listeners.
+ *
+ * @param {Object} ctx - Context object containing dependencies, state, DOM elements, utilities, and callbacks required for KB management.
+ * @returns {Object} An object exposing public methods for managing the Knowledge Base feature within a project.
+ *
+ * @throws {Error} If required dependencies (`apiRequest`, `eventHandlers`, `domAPI`, or logger) are missing from the context.
  */
 export function createKnowledgeBaseManager(ctx) {
   /* ------------------------------------------------------------------
@@ -52,9 +40,14 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Toggle knowledge base activation
-   * @param {boolean} enabled
+   * Enables or disables the knowledge base for the current project.
+   *
+   * Updates the activation state both on the server and in the UI, synchronizes local storage, and refreshes project details or knowledge base info as needed.
+   *
+   * @param {boolean} enabled - Whether to activate (`true`) or deactivate (`false`) the knowledge base.
    * @returns {Promise<void>}
+   *
+   * @throws {Error} If the API request to toggle the knowledge base fails.
    */
   async function toggleKnowledgeBase(enabled) {
     logger.info(`[${MODULE}][toggleKnowledgeBase] Called with enabled: ${enabled}`, { context: MODULE });
@@ -107,9 +100,14 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Reprocess all files in the knowledge base
-   * @param {string} projectId
+   * Initiates reprocessing of all knowledge base files for the specified project.
+   *
+   * Triggers a server-side reindexing of all files in the project's knowledge base. Updates UI state and reloads project or knowledge base details upon completion.
+   *
+   * @param {string} projectId - The unique identifier of the project whose knowledge base files will be reprocessed.
    * @returns {Promise<void>}
+   *
+   * @throws {Error} If the API request to reprocess files fails.
    */
   async function reprocessFiles(projectId) {
     logger.info(`[${MODULE}][reprocessFiles] Called for project ID: ${projectId}`, { context: MODULE });
@@ -159,8 +157,11 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Handle settings form submission
-   * @param {Event} e - Form submit event
+   * Handles submission of the Knowledge Base settings form, validating input and initiating creation or update of the Knowledge Base.
+   *
+   * Prevents default form submission, validates required fields, constructs the payload, and triggers the submission process. If creating a new Knowledge Base, includes the option to process existing files.
+   *
+   * @param {Event} e - The form submit event.
    */
   function handleKnowledgeBaseFormSubmit(e) {
     e.preventDefault();
@@ -209,10 +210,16 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Submit settings to the server
-   * @param {string} projectId
-   * @param {Object} payload
+   * Submits knowledge base settings to the server for creation or update.
+   *
+   * Determines whether to create a new knowledge base or update an existing one based on the current state, sends the appropriate API request, and updates the UI accordingly. Handles conflict errors by attempting to refresh project details and update the UI.
+   *
+   * @param {string} projectId - The ID of the project to which the knowledge base belongs.
+   * @param {Object} payload - The settings data to submit for the knowledge base.
+   *
    * @returns {Promise<void>}
+   *
+   * @throws {Error} If the server response indicates failure or returns invalid data.
    */
   async function _submitKnowledgeBaseForm(projectId, payload) {
     logger.info(`[${MODULE}][_submitKnowledgeBaseForm] Submitting for project ID: ${projectId}`, { payload, context: MODULE });
@@ -275,7 +282,11 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Handle deleting the knowledge base
+   * Deletes the current knowledge base after user confirmation.
+   *
+   * Prompts the user to confirm deletion, then sends a request to remove the knowledge base for the current project. On success, closes the modal, updates the UI to reflect the inactive state, and reloads project details. If deletion fails, displays an error alert.
+   *
+   * @remark If the project ID or knowledge base ID is missing, the function aborts without performing any action.
    */
   async function handleDeleteKnowledgeBase() {
     logger.info(`[${MODULE}][handleDeleteKnowledgeBase] Initiating delete.`, { context: MODULE });
@@ -337,7 +348,9 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Show the settings modal
+   * Displays the Knowledge Base settings modal dialog, populating the form with current or default KB data and updating related UI elements.
+   *
+   * If a Knowledge Base exists for the current project, its details are loaded and shown in the form; otherwise, the form is prepared for creating a new KB. The modal also manages the visibility and content of GitHub repository attachment fields based on KB state, and validates model selection compatibility.
    */
   async function showKnowledgeBaseModal() {
     logger.info(`[${MODULE}][showKnowledgeBaseModal] Showing KB settings modal.`, { context: MODULE });
@@ -442,7 +455,7 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Hide the settings modal
+   * Closes the Knowledge Base settings modal dialog if it is present and supports closing.
    */
   function hideKnowledgeBaseModal() {
     logger.info(`[${MODULE}][hideKnowledgeBaseModal] Hiding KB settings modal.`, { context: MODULE });
@@ -455,9 +468,12 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Load health metrics for the KB
-   * @param {string} kbId
-   * @returns {Promise<Object|null>}
+   * Loads and updates health metrics for a specific Knowledge Base by ID.
+   *
+   * Retrieves detailed health information for the given Knowledge Base, updates relevant UI elements and internal state, and returns the health data object if found.
+   *
+   * @param {string} kbId - The Knowledge Base ID to load health metrics for.
+   * @returns {Promise<Object|null>} The health data object for the Knowledge Base, or null if not found or on error.
    */
   async function loadKnowledgeBaseHealth(kbId) {
     logger.info(`[${MODULE}][loadKnowledgeBaseHealth] Called for KB ID: ${kbId}`, { context: MODULE });
@@ -547,9 +563,12 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Load and render files for the current project's knowledge base.
-   * @param {string} projectId - The ID of the current project.
-   * @param {string} kbId - The ID of the knowledge base.
+   * Loads and displays the list of files for a project's knowledge base.
+   *
+   * Retrieves the files associated with the specified project and knowledge base, updating the UI to show the files or a placeholder if none are found. If the project or KB ID is missing, or if an error occurs, the files list is cleared and the files section is hidden.
+   *
+   * @param {string} projectId - The project identifier.
+   * @param {string} kbId - The knowledge base identifier.
    */
   async function loadKnowledgeBaseFiles(projectId, kbId) {
     logger.info(`[${MODULE}][loadKnowledgeBaseFiles] Called for project: ${projectId}, KB ID: ${kbId}`, { context: MODULE });
@@ -648,10 +667,15 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Handle deletion of a single file from the knowledge base.
-   * @param {string} projectId
-   * @param {string} fileId
-   * @param {string} filename
+   * Deletes a file from the knowledge base after user confirmation.
+   *
+   * Prompts the user to confirm deletion of the specified file from the knowledge base. If confirmed, sends a request to remove the file and updates the file list, knowledge base health, and project statistics upon success. Displays an error alert if the deletion fails.
+   *
+   * @param {string} projectId - The ID of the project containing the knowledge base.
+   * @param {string} fileId - The ID of the file to delete.
+   * @param {string} filename - The name of the file to display in confirmation dialogs and alerts.
+   *
+   * @throws {Error} If the API request to delete the file fails.
    */
   async function _handleDeleteKnowledgeBaseFile(projectId, fileId, filename) {
     logger.info(`[${MODULE}][_handleDeleteKnowledgeBaseFile] Initiating delete for file: ${filename} (ID: ${fileId}) in project ${projectId}.`, { context: MODULE });
@@ -701,7 +725,11 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Handle attaching a GitHub repository to the knowledge base.
+   * Attaches a GitHub repository to the current knowledge base using form input values.
+   *
+   * Validates the repository URL and gathers branch and file path information from the UI. On success, updates the knowledge base state with the attached repository details and refreshes the modal, files list, and health metrics.
+   *
+   * @remark If the repository URL is invalid or missing, the operation is aborted without user feedback. Errors during the API request are shown as status alerts.
    */
   async function handleAttachGitHubRepo() {
     logger.info(`[${MODULE}][handleAttachGitHubRepo] Attempting to attach GitHub repo.`, { context: MODULE });
@@ -777,7 +805,9 @@ export function createKnowledgeBaseManager(ctx) {
   }
 
   /**
-   * Handle detaching a GitHub repository from the knowledge base.
+   * Detaches a GitHub repository from the current knowledge base after user confirmation.
+   *
+   * Prompts the user to confirm detachment, then sends a request to remove the repository and its files from the knowledge base. Updates the UI and internal state on success, or displays an error alert on failure.
    */
   async function handleDetachGitHubRepo() {
     logger.info(`[${MODULE}][handleDetachGitHubRepo] Attempting to detach GitHub repo.`, { context: MODULE });
