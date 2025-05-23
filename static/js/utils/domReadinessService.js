@@ -52,6 +52,8 @@ export function createDomReadinessService({
   const observers = [];
   // Track listeners waiting for element appearance
   const appearanceListeners = new Map();
+  // Cache fired events for replay capability
+  const firedEvents = new Map(); // eventName -> { detail, timestamp }
 
   // Default timeout from APP_CONFIG or fallback
   const DEFAULT_TIMEOUT = APP_CONFIG?.TIMEOUTS?.DOM_READY ?? 10000;
@@ -309,7 +311,27 @@ export function createDomReadinessService({
   }
 
   /**
+   * Emits a replay-able custom event that can be received by late listeners.
+   * @param {string} eventName - The name of the event
+   * @param {object} detail - Event detail data
+   */
+  function emitReplayable(eventName, detail = {}) {
+    _logger.info?.(`[domReadinessService] Emitting replayable event: ${eventName}`, { eventName, detail });
+
+    // Cache the event for late listeners
+    firedEvents.set(eventName, {
+      detail,
+      timestamp: _nowPerf()
+    });
+
+    // Dispatch the event normally
+    const event = eventHandlers.createCustomEvent(eventName, { detail });
+    domAPI.dispatchEvent(domAPI.getDocument(), event);
+  }
+
+  /**
    * Wait for a specified custom event (e.g. "modalsLoaded"), with a time limit.
+   * If the event was already fired, returns immediately with cached data.
    * @param {string} eventName - The name of the event (e.g., 'modalsLoaded')
    * @param {object} options
    * @param {number} [options.timeout=DEFAULT_TIMEOUT] - Time in ms before rejecting
@@ -320,6 +342,25 @@ export function createDomReadinessService({
     timeout = DEFAULT_TIMEOUT,
     context = 'unknown'
   } = {}) {
+    // Check if event was already fired (replay capability)
+    if (firedEvents.has(eventName)) {
+      const cachedEvent = firedEvents.get(eventName);
+      _logger.info?.(`[domReadinessService] Event "${eventName}" replayed from cache`, {
+        eventName,
+        context,
+        cachedDetail: cachedEvent.detail,
+        cachedTimestamp: cachedEvent.timestamp
+      });
+
+      // Create a synthetic event with the cached detail
+      const syntheticEvent = eventHandlers.createCustomEvent(eventName, {
+        detail: cachedEvent.detail
+      });
+      return Promise.resolve(syntheticEvent);
+    }
+
+    _logger.info?.(`[domReadinessService] Waiting for event "${eventName}" (context: ${context})`);
+
     return new Promise((resolve, reject) => {
       // Start a timeout
       const timeoutId = browserService.setTimeout(() => {
@@ -336,6 +377,7 @@ export function createDomReadinessService({
         eventName,
         (evt) => {
           browserService.clearTimeout(timeoutId);
+          _logger.info?.(`[domReadinessService] Event "${eventName}" received by listener`, { eventName, context });
           resolve(evt);
         },
         { once: true, context: 'domReadinessService' }
@@ -370,13 +412,19 @@ export function createDomReadinessService({
     return Array.from(_missingSelectors);
   }
 
+  function getFiredEvents() {
+    return Array.from(firedEvents.keys());
+  }
+
   return {
     documentReady,
     elementsReady,
     dependenciesAndElements,
     waitForEvent,
+    emitReplayable,  // NEW: For replay-able events
     destroy,
-    getSelectorTimings,            // ← new
-    getMissingSelectors      // NEW
+    getSelectorTimings,
+    getMissingSelectors,
+    getFiredEvents   // NEW: For diagnostics
   };
 }
