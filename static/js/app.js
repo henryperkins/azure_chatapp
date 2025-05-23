@@ -29,7 +29,10 @@ import {
   shouldSkipDedup,
   stableStringify,
   isAbsoluteUrl,
-  isValidProjectId
+  isValidProjectId,
+  formatBytes  as globalFormatBytes,
+  formatDate   as globalFormatDate,
+  fileIcon     as globalFileIcon
 } from './utils/globalUtils.js';
 
 import { createEventHandlers } from './eventHandler.js';
@@ -54,30 +57,9 @@ import { createFileUploadComponent } from './FileUploadComponent.js';
 // UI helpers for KnowledgeBaseComponent
 // ---------------------------------------------------------------------------
 const uiUtils = {
-  formatBytes: (b = 0, dp = 1) => {
-    if (b === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(b) / Math.log(k));
-    return parseFloat((b / Math.pow(k, i)).toFixed(dp)) + ' ' + sizes[i];
-  },
-  formatDate: (d) => {
-    const date = d instanceof Date ? d : new Date(d);
-    return isNaN(date) ? '' : date.toLocaleString();
-  },
-  fileIcon: (type = '') => {
-    const map = {
-      pdf: '📄',
-      doc: '📄',
-      docx: '📄',
-      csv: '🗒️',
-      json: '🗒️',
-      png: '🖼️',
-      jpg: '🖼️',
-      jpeg: '🖼️'
-    };
-    return map[(type || '').toLowerCase()] ?? '📄';
-  }
+  formatBytes: globalFormatBytes,
+  formatDate : globalFormatDate,
+  fileIcon   : globalFileIcon
 };
 
 // ---------------------------------------------------------------------------

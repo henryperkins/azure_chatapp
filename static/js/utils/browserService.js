@@ -139,18 +139,9 @@ export function createBrowserService({ windowObject, logger } = {}) {
     windowObject.DependencySystem = createFallbackDependencySystem();
   }
 
+  // reuse shared helper – avoids keeping two divergent copies
   function _buildUrl(params = {}) {
-    const url = new URL(windowObject.location.href);
-    Object.entries(params).forEach(([k, v]) => {
-      if (v === undefined || v === null || v === '') url.searchParams.delete(k);
-      else url.searchParams.set(k, v);
-    });
-    // Normalise: keep pathname, sorted params
-    const sorted = Array.from(url.searchParams.entries()).sort(([a], [b]) => a.localeCompare(b));
-    url.search = new URLSearchParams(sorted).toString();
-    const raw  = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
-    const path = raw || '/';
-    return path + (url.search ? `?${url.search}` : '');
+    return buildUrl(params, windowObject.location.href);
   }
 
   // --------- DI wrappers for browser APIs ---------
