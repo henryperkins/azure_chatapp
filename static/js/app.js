@@ -17,6 +17,7 @@ import { createDomAPI } from './utils/domAPI.js';
 import { resolveApiEndpoints } from './utils/apiEndpoints.js';
 import { createErrorReporterStub } from './utils/errorReporterStub.js';
 import { createBrowserService, normaliseUrl } from './utils/browserService.js';
+import { setBrowserService as registerSessionBrowserService } from './utils/session.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
@@ -70,6 +71,7 @@ const uiUtils = {
 const browserServiceInstance = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
+registerSessionBrowserService(browserServiceInstance);
 const browserAPI = browserServiceInstance;
 
 // ---------------------------------------------------------------------------
