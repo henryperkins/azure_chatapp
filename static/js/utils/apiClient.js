@@ -38,7 +38,8 @@ export function createApiClient({
 
     // Handle restOpts.params for GET requests
     if (method === "GET" && restOpts.params && typeof restOpts.params === 'object') {
-      const queryParams = new URLSearchParams(restOpts.params).toString();
+      const queryParams = new browserService.URLSearchParams(restOpts.params)
+        .toString();
       if (queryParams) {
         fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryParams;
       }

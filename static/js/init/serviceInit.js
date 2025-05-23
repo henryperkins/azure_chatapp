@@ -145,13 +145,7 @@ export function createServiceInitializer({
           eventHandlers,
           sanitizer,
           apiClient: {
-            fetch: (...args) => {
-              const win = browserServiceInstance.getWindow();
-              if (!win?.fetch) {
-                throw new Error('[serviceInit] browserService.getWindow().fetch is not available');
-              }
-              return win.fetch(...args);
-            }
+            fetch: (...args) => apiRequest(...args),
           },
           timerAPI: {
             setTimeout: (...args) => browserServiceInstance.getWindow().setTimeout(...args),
