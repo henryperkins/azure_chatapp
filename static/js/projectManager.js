@@ -133,7 +133,7 @@ export function createProjectManager({
       modelConfig = null,
       listenerTracker = null,
       timer: timerFunc = typeof setTimeout === 'function' ? setTimeout : (cb) => cb(),
-      storage = { setItem: () => {}, getItem: () => null },
+      storage = { setItem: () => { }, getItem: () => null },
       apiEndpoints,
       apiRequest = null,
       browserService = null,
@@ -251,15 +251,10 @@ export function createProjectManager({
     }
 
     _authOk(failEvent, extraDetail = {}) {
+      // CONSOLIDATED: Single source of truth - only check appModule.state
       const appModule = this.DependencySystem?.modules?.get('appModule');
       if (appModule?.state?.isAuthenticated) {
         logger.debug(`[${MODULE}][_authOk] Auth check passed via appModule.state.`, { context: MODULE });
-        return true;
-      }
-      // Fallback to direct auth module check if appModule isn't definitive yet or for robustness
-      const auth = this.DependencySystem?.modules?.get?.('auth');
-      if (auth?.isAuthenticated?.()) {
-        logger.debug(`[${MODULE}][_authOk] Auth check passed via auth.isAuthenticated().`, { context: MODULE });
         return true;
       }
       logger.warn(`[${MODULE}][_authOk] Auth check failed. Emitting ${failEvent}.`, { failEvent, extraDetail, context: MODULE });
@@ -375,7 +370,7 @@ export function createProjectManager({
           this._emit('projectDetailsLoadedForStaleId', { loadedProject: currentProjectObj, currentGlobalProjectId: globalCurrentProjectId, context: MODULE });
           return currentProjectObj; // Return the loaded data, but don't make it the global current
         }
-        
+
         this._emit('projectLoaded', currentProjectObj); // Emit on local bus
 
         if (currentProjectObj.archived) {
@@ -801,9 +796,8 @@ export function createProjectManager({
         this._emit('projectKnowledgeBaseError', {
           projectId,
           error: createError,
-          message: `Failed to create knowledge base for project ${projectId}: ${
-            createError?.message || 'Unknown error'
-          }`
+          message: `Failed to create knowledge base for project ${projectId}: ${createError?.message || 'Unknown error'
+            }`
         });
         throw createError;
       }
@@ -891,14 +885,14 @@ export function createProjectManager({
       if (auth && !auth.isReady()) {
         this.logger.info(`[${MODULE}] Auth module not ready yet, waiting for authReady event.`, { context: MODULE });
         await new Promise(resolve => {
-            this.listenerTracker.add(auth.AuthBus, 'authReady', () => {
-                this.logger.info(`[${MODULE}] Received authReady event.`, { context: MODULE });
-                resolve();
-            }, 'ProjectManager_AuthReadyListener', { once: true });
+          this.listenerTracker.add(auth.AuthBus, 'authReady', () => {
+            this.logger.info(`[${MODULE}] Received authReady event.`, { context: MODULE });
+            resolve();
+          }, 'ProjectManager_AuthReadyListener', { once: true });
         });
       }
       this.logger.info(`[${MODULE}] Auth module is ready. Current appModule auth state: ${appModule?.state?.isAuthenticated}`, { context: MODULE });
-      
+
       this._setupEventListeners();
 
       // Initialize with current project if already set in app state
@@ -909,9 +903,9 @@ export function createProjectManager({
         // Optionally, load project details or list if required on init and project exists
         // For now, deferring to explicit calls or UI-triggered loads.
       } else {
-         this.logger.info(`[${MODULE}] No initial project found from app state.`, { context: MODULE });
+        this.logger.info(`[${MODULE}] No initial project found from app state.`, { context: MODULE });
       }
-      
+
       this.logger.info(`[${MODULE}] Initialization complete.`, { context: MODULE });
       return true;
     }

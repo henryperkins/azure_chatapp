@@ -20,6 +20,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
     state: {
       isAuthenticated: false,
       currentUser: null,
+      currentProjectId: null, // Track currently selected project
       isReady: false, // True when app is fully initialized and safe for interaction
       disableErrorTracking: false,
       initialized: false, // True when the main init() sequence has completed (success or fail)
@@ -81,6 +82,21 @@ export function createAppStateManager({ DependencySystem, logger }) {
     // Helper method to get current user
     getCurrentUser() {
       return this.state.currentUser;
+    },
+
+    // Method to update current project
+    setCurrentProject(projectId) {
+      logger.info('[appState][setCurrentProject] Updating current project.', {
+        oldProjectId: this.state.currentProjectId,
+        newProjectId: projectId,
+        context: 'appState:setCurrentProject'
+      });
+      this.state.currentProjectId = projectId;
+    },
+
+    // Helper method to get current project ID
+    getCurrentProjectId() {
+      return this.state.currentProjectId;
     },
 
     // Helper method to check if app is ready
