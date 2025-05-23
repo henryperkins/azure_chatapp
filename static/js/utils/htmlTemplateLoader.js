@@ -22,11 +22,11 @@ export function createHtmlTemplateLoader({
   eventHandlers,
   apiClient,
   timerAPI,
-  logger = DependencySystem?.modules?.get?.('logger') || { warn: ()=>{} }
+  logger = DependencySystem?.modules?.get?.('logger') || { warn: () => { } }
 } = {}) {
   // Guardrail checks:
   if (!DependencySystem) throw new Error('DependencySystem required by HtmlTemplateLoader');
-  if (!domAPI)           throw new Error('domAPI required by HtmlTemplateLoader');
+  if (!domAPI) throw new Error('domAPI required by HtmlTemplateLoader');
   if (!eventHandlers || typeof eventHandlers.createCustomEvent !== 'function')
     throw new Error('[HtmlTemplateLoader] eventHandlers.createCustomEvent required');
   if (!apiClient || typeof apiClient.fetch !== 'function') {
@@ -75,12 +75,28 @@ export function createHtmlTemplateLoader({
       success = true;
 
     } catch (err) {
-      // Error handling intentionally left blank (no notification/capture)
+      // Log the actual error for debugging
+      logger.error(`[HtmlTemplateLoader] Failed to load template from ${url}`, err, {
+        context: 'HtmlTemplateLoader.loadTemplate',
+        url,
+        containerSelector,
+        eventName
+      });
+      success = false;
     } finally {
       timerAPI.clearTimeout(tm);
+
+      // Always dispatch the specific event for this template
       const evt = eventHandlers.createCustomEvent(eventName,
         { detail: { success, error: success ? null : 'Fetch or injection failed' } });
       domAPI.dispatchEvent(domAPI.getDocument(), evt);
+
+      // Special handling for modals.html - always emit modalsLoaded event
+      if (url && url.includes('modals.html')) {
+        const modalsLoadedEvent = eventHandlers.createCustomEvent('modalsLoaded',
+          { detail: { success, error: success ? null : 'Failed to load modals.html' } });
+        domAPI.dispatchEvent(domAPI.getDocument(), modalsLoadedEvent);
+      }
     }
 
     return success;
@@ -100,23 +116,23 @@ export function createHtmlTemplateLoader({
     for (const config of templateConfigs) {
       if (!config.url || !config.containerSelector) {
         results.push({
-          url    : config.url,
+          url: config.url,
           success: false,
-          error  : 'Invalid configuration'
+          error: 'Invalid configuration'
         });
         continue;
       }
 
       const eventName = config.eventName ||
         `templateLoaded:${config.url.split('/').pop()}`;
-      const tmo       = config.timeout || 15000;
+      const tmo = config.timeout || 15000;
 
       try {
         const success = await loadTemplate({
-          url             : config.url,
+          url: config.url,
           containerSelector: config.containerSelector,
           eventName,
-          timeout         : tmo
+          timeout: tmo
         });
 
         results.push({
@@ -127,9 +143,9 @@ export function createHtmlTemplateLoader({
 
       } catch (err) {
         results.push({
-          url    : config.url,
+          url: config.url,
           success: false,
-          error  : err.message,
+          error: err.message,
           eventNameEmitted: eventName
         });
         // Dispatch event in case something is awaiting

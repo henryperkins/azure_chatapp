@@ -396,7 +396,50 @@ export function createEventHandlers({
 
     runDomDependentSetup();
 
-    // -- Project modal form (wait for element to exist)
+    // -- Ensure modal HTML is loaded before waiting for #projectModalForm --
+    // Check multiple indicators: specific form, modals container, or wait for event
+    async function waitForModalsLoadedIfNeeded() {
+      // Fast path 1: if the specific form is already present
+      if (domAPI.getElementById('projectModalForm')) {
+        return;
+      }
+
+      // Fast path 2: if modals container has content (modals already loaded)
+      const modalsContainer = domAPI.getElementById('modalsContainer');
+      if (modalsContainer && domAPI.getProperty(modalsContainer, 'children').length > 0) {
+        // Modals are loaded, but maybe the specific form hasn't rendered yet
+        // Wait a short time for DOM to settle
+        await new Promise(resolve => browserService.setTimeout(resolve, 100));
+        return;
+      }
+
+      // Slow path: wait for 'modalsLoaded' event (only if modals aren't already loaded)
+      await new Promise((resolve, reject) => {
+        let resolved = false;
+        const timeout = browserService.setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            reject(new Error("'modalsLoaded' event timeout waiting for modal HTML"));
+          }
+        }, dependencyWaitTimeout);
+        trackListener(
+          domAPI.getDocument(),
+          'modalsLoaded',
+          () => {
+            if (!resolved) {
+              resolved = true;
+              browserService.clearTimeout(timeout);
+              resolve();
+            }
+          },
+          { once: true, description: "Wait for modalsLoaded before #projectModalForm", context: MODULE }
+        );
+      });
+    }
+
+    await waitForModalsLoadedIfNeeded();
+
+    // Now wait for the project modal form to appear
     await _domReadinessService.elementsReady('#projectModalForm', {
       timeout: dependencyWaitTimeout,
       context: 'eventHandler.init:modalForm'
