@@ -103,14 +103,8 @@ export function createAuthInitializer({
 
     renderAuthHeader(); // Renders based on appModule.state
 
-    const chatManager = DependencySystem.modules.get('chatManager');
-    if (chatManager?.setAuthState) {
-      chatManager.setAuthState(isAuthenticated);
-    }
-    const projectManager = DependencySystem.modules.get('projectManager');
-    if (projectManager?.setAuthState) {
-      projectManager.setAuthState(isAuthenticated);
-    }
+    // CONSOLIDATED: No need to call individual setAuthState methods
+    // All modules should listen to authStateChanged events and read from appModule.state
 
     if (isAuthenticated) {
       const navService = DependencySystem.modules.get('navigationService');
@@ -172,19 +166,19 @@ export function createAuthInitializer({
       /* ── login-button / user-menu visibility ─────────────────── */
       if (authBtn) {
         if (isAuth) {
-          domAPI.addClass   (authBtn, 'hidden');
-          domAPI.setStyle   (authBtn, 'display', 'none');
+          domAPI.addClass(authBtn, 'hidden');
+          domAPI.setStyle(authBtn, 'display', 'none');
           domAPI.setAttribute(authBtn, 'hidden', 'hidden');
         } else {
           domAPI.removeClass(authBtn, 'hidden');
-          domAPI.setStyle   (authBtn, 'display', '');
+          domAPI.setStyle(authBtn, 'display', '');
           domAPI.removeAttribute(authBtn, 'hidden');
         }
       }
 
       if (userMenu) {
         domAPI.toggleClass(userMenu, 'hidden', !isAuth);
-        domAPI.setStyle   (userMenu, 'display', isAuth ? '' : 'none');
+        domAPI.setStyle(userMenu, 'display', isAuth ? '' : 'none');
         isAuth
           ? userMenu.removeAttribute?.('hidden')
           : userMenu.setAttribute?.('hidden', 'hidden');
@@ -247,9 +241,9 @@ export function createAuthInitializer({
    * Utility function to force show login modal
    */
   function forceShowLoginModal() {
-    // Only show login modal if not authenticated
-    const authMod = DependencySystem.modules.get?.('auth');
-    if (authMod && !authMod.isAuthenticated?.()) {
+    // CONSOLIDATED: Only show login modal if not authenticated (check appModule.state)
+    const appModule = DependencySystem.modules.get?.('appModule');
+    if (appModule && !appModule.state?.isAuthenticated) {
       // Open the modal using modalManager if available
       const modalManager = DependencySystem.modules.get?.('modalManager');
       if (modalManager && typeof modalManager.show === 'function') {
