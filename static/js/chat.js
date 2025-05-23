@@ -209,6 +209,7 @@ export function createChatManager(deps = {}) {
       this.domReadinessService = domReadinessService;
       this._uiAttached = false;
       this.APP_CONFIG = APP_CONFIG;
+      this._appEventListenersAttached = false; // Flag to ensure app/auth listeners are attached once
     }
 
     /**
@@ -218,63 +219,93 @@ export function createChatManager(deps = {}) {
     _ensureUIAttached() {
       if (!this._uiAttached) {
         logger.info("[ChatManager][_ensureUIAttached] Attaching UI utilities", { context: "chatManager" });
-        chatUIUtils.attachChatUI(this);
+        chatUIUtils.attachChatUI(this); // This injects UI methods onto `this`
         this._uiAttached = true;
       }
     }
+    
+    _setupAppEventListeners() {
+      if (this._appEventListenersAttached) return;
+
+      logger.debug(`[ChatManager] Setting up AppBus/AuthBus event listeners.`, { context: "chatManager" });
+      const appBus = this.DependencySystem?.modules?.get('AppBus');
+      const auth = this.DependencySystem?.modules?.get('auth');
+
+      if (appBus) {
+        this.eventHandlers.trackListener(appBus, 'currentProjectChanged', 
+          safeHandler(this._handleAppCurrentProjectChanged.bind(this), "_handleAppCurrentProjectChanged"), 
+          { context: 'chatManagerAppEvents', description: 'ChatManager_AppBus_CurrentProjectChanged' });
+        logger.info(`[ChatManager] Subscribed to AppBus "currentProjectChanged".`, { context: "chatManager" });
+      } else {
+        logger.warn(`[ChatManager] AppBus not available. Cannot subscribe to "currentProjectChanged".`, { context: "chatManager" });
+      }
+
+      if (auth?.AuthBus) {
+         this.eventHandlers.trackListener(auth.AuthBus, "authStateChanged", 
+          safeHandler(this._handleGlobalAuthStateChanged.bind(this), "_handleGlobalAuthStateChanged"),
+          { context: 'chatManagerAppEvents', description: "ChatManager_AuthBus_AuthStateChanged" });
+        logger.info(`[ChatManager] Subscribed to AuthBus "authStateChanged".`, { context: "chatManager" });
+      } else {
+        logger.warn(`[ChatManager] AuthBus not available. Cannot subscribe to "authStateChanged".`, { context: "chatManager" });
+      }
+      this._appEventListenersAttached = true;
+    }
+
 
     /**
      * Initialize the chat manager with optional UI selectors or overrides.
      */
     async initialize(options = {}) {
       const _initStart = clock.now();
-      logger.info("[ChatManager][initialize] Starting initialization", { context: "chatManager.initialize", options });
+      logger.info(`[ChatManager][initialize] Starting initialization. Project ID: ${options.projectId}`, { options, currentInternalPid: this.projectId, context: "chatManager.initialize" });
 
       await this.domReadinessService.documentReady();
 
       await domReadinessService.dependenciesAndElements({
-        deps: ['app', 'domAPI', 'eventHandlers'],
+        deps: ['app', 'domAPI', 'eventHandlers', 'AppBus'], // Added AppBus
         context: 'ChatManager.init:core'
       });
 
       await domReadinessService.dependenciesAndElements({
-        deps: ['auth'],
+        deps: ['auth'], // Auth is needed for AuthBus listener
         context: 'ChatManager.init:auth'
       });
       const auth = app?.DependencySystem?.modules?.get('auth') || null;
+      
+      this._ensureUIAttached(); // Ensure UI methods are available early
+      this._setupAppEventListeners(); // Setup global event listeners if not already
 
-      this.containerSelector = options.containerSelector;
-      this.messageContainerSelector = options.messageContainerSelector;
-      this.inputSelector = options.inputSelector;
-      this.sendButtonSelector = options.sendButtonSelector;
-      this.titleSelector = options.titleSelector;
-      this.minimizeButtonSelector = options.minimizeButtonSelector;
+      this.containerSelector = options.containerSelector || this.containerSelector;
+      this.messageContainerSelector = options.messageContainerSelector || this.messageContainerSelector;
+      this.inputSelector = options.inputSelector || this.inputSelector;
+      this.sendButtonSelector = options.sendButtonSelector || this.sendButtonSelector;
+      this.titleSelector = options.titleSelector || this.titleSelector;
+      this.minimizeButtonSelector = options.minimizeButtonSelector || this.minimizeButtonSelector;
 
       try {
-        if (!auth || !auth.isAuthenticated()) {
+        if (!auth || !this.app.state.isAuthenticated) { // Check appModule state directly
           const msg = "User not authenticated. Cannot initialize ChatManager.";
-          logger.error("[ChatManager][initialize] Auth failure", new Error(msg), { context: "chatManager.initialize" });
+          logger.warn(`[ChatManager][initialize] Auth check failed: ${msg}`, { context: "chatManager.initialize" });
           this.projectDetails?.disableChatUI?.("Not authenticated");
-
+          
+          // The global authStateChanged listener (_handleGlobalAuthStateChanged) should handle re-enabling if user logs in.
+          // The specific _authChangeListener for retrying init might be redundant if global listener is effective.
+          // For now, keeping it to see if it's needed for an initial load race condition.
           if (!this._authChangeListener && auth?.AuthBus) {
             this._authChangeListener = safeHandler(async (e) => {
-              if (e.detail?.authenticated && this.projectId) {
-                this.eventHandlers.cleanupListeners?.({ context: 'chatManagerAuthRetryListener' });
-                if (this._authChangeListener && auth?.AuthBus?.removeEventListener) {
-                  auth.AuthBus.removeEventListener('authStateChanged', this._authChangeListener);
+              logger.info(`[ChatManager][initialize] _authChangeListener triggered by authStateChanged. Authenticated: ${e.detail?.authenticated}`, { context: "chatManager.initialize" });
+              if (e.detail?.authenticated && (this.projectId || options.projectId) ) { // Ensure projectId is available
+                if (this._authChangeListener && auth?.AuthBus?.removeEventListener) { // Use optional chaining
+                    auth.AuthBus.removeEventListener('authStateChanged', this._authChangeListener);
+                    logger.debug(`[ChatManager][initialize] Removed temporary _authChangeListener.`, { context: "chatManager.initialize" });
                 }
-                this._authChangeListener = null;
-                await this.initialize({
-                  projectId: this.projectId,
-                  containerSelector: this.containerSelector,
-                  messageContainerSelector: this.messageContainerSelector,
-                  inputSelector: this.inputSelector,
-                  sendButtonSelector: this.sendButtonSelector,
-                  titleSelector: this.titleSelector,
-                  minimizeButtonSelector: this.minimizeButtonSelector
-                });
+                this._authChangeListener = null; // Clear the listener
+                // Re-attempt initialization with the project ID that was intended.
+                const projectIdForRetry = options.projectId || this.projectId;
+                logger.info(`[ChatManager][initialize] Re-attempting initialization after auth. Project ID: ${projectIdForRetry}`, { context: "chatManager.initialize" });
+                await this.initialize({ ...options, projectId: projectIdForRetry });
               }
-            }, "authChangeListener");
+            }, "authChangeListenerForRetry");
 
             this.eventHandlers.trackListener(
               auth.AuthBus,
@@ -282,130 +313,210 @@ export function createChatManager(deps = {}) {
               this._authChangeListener,
               {
                 context: 'chatManagerAuthRetryListener',
-                description: 'Auth state change listener for chat initialization retry'
+                description: 'Auth state change listener for chat initialization retry (specific to init failure)'
               }
             );
+            logger.debug(`[ChatManager][initialize] Temporary _authChangeListener attached for re-init on auth.`, { context: "chatManager.initialize" });
           }
           throw new Error(msg);
         }
-
-        const requestedProjectId = options.projectId && this.isValidProjectId(options.projectId)
-          ? options.projectId
-          : this.projectId;
-
-        if (options.projectId && this.isValidProjectId(options.projectId)) {
-          this.projectId = options.projectId;
-        } else if (!this.projectId && requestedProjectId) {
-          this.projectId = requestedProjectId;
+        
+        // Clear the temporary auth change listener if auth is now okay and it was previously set
+        if (this._authChangeListener && auth?.AuthBus?.removeEventListener) {
+            auth.AuthBus.removeEventListener('authStateChanged', this._authChangeListener);
+            logger.debug(`[ChatManager][initialize] Auth successful, removed temporary _authChangeListener.`, { context: "chatManager.initialize" });
+            this._authChangeListener = null;
         }
 
-        if (!this.projectId) {
-          const noProjectMsg = "No valid project ID provided for ChatManager initialization.";
-          logger.error("[ChatManager][initialize] No valid project ID", new Error(noProjectMsg), { context: "chatManager.initialize" });
+        const newProjectId = options.projectId;
+        logger.debug(`[ChatManager][initialize] Requested Project ID: ${newProjectId}, Current internal Project ID: ${this.projectId}`, { context: "chatManager.initialize" });
+
+        // If no new projectId is provided, and internal one exists, use that.
+        // This can happen if initialize is called to just refresh UI for current project.
+        const targetProjectId = this.isValidProjectId(newProjectId) ? newProjectId : this.projectId;
+
+        if (!this.isValidProjectId(targetProjectId)) {
+          const noProjectMsg = `No valid project ID for ChatManager. Provided: ${newProjectId}, Internal: ${this.projectId}`;
+          logger.error(`[ChatManager][initialize] ${noProjectMsg}`, { context: "chatManager.initialize" });
+          this.projectDetails?.disableChatUI?.("No project selected");
           throw new Error(noProjectMsg);
         }
+        
+        // Project Switch Logic
+        if (this.isInitialized && this.projectId && this.projectId !== targetProjectId) {
+          logger.info(`[ChatManager][initialize] Project changed from ${this.projectId} to ${targetProjectId}. Clearing old project data.`, { context: "chatManager.initialize" });
+          this._clearProjectSpecificData(); // Clear conversation list, current conversation, messages
+        }
+        this.projectId = targetProjectId; // Set the new project ID
 
-        // Re-initialization for same project
-        if (this.isInitialized && this.projectId === requestedProjectId) {
-          logger.info("[ChatManager][initialize] Already initialized for project, re-binding UI", {
-            context: "chatManager.initialize",
-            projectId: this.projectId
-          });
+        // UI Setup (ensure elements are present and events are bound)
+        await this._setupUIElements(); // Resolves DOM elements based on selectors
+        this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' }); // Clear old UI listeners
+        this._setupEventListeners(); // Attach new listeners to potentially new elements
 
-          // Ensure helpers are attached (idempotent)
-          this._ensureUIAttached();
-
-          // ⬇️ Re-evaluate DOM selectors in case we just switched between the
-          //    global chat panel and the per-project chat panel.  Without this,
-          //    messageContainer / input / buttons may still point to the old
-          //    elements, causing broken listeners and race conditions.
-          await this._setupUIElements();
-
-          // Re-register listeners on the freshly resolved elements
-          this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
-          this._setupEventListeners();
-
-          logger.info("[ChatManager][initialize] Re-initialization complete", { context: "chatManager.initialize" });
+        // If already initialized for this same project, could be a UI refresh or re-bind.
+        if (this.isInitialized && this.projectId === targetProjectId) {
+          logger.info(`[ChatManager][initialize] Already initialized for project ${this.projectId}. Re-checking conversation history / UI state.`, { context: "chatManager.initialize" });
+          // Potentially reload current conversation if needed, or ensure UI is consistent.
+          // _loadConversationHistory will handle loading last/URL-specified convo or creating new one.
+          if (this.currentConversationId) {
+            await this.loadConversation(this.currentConversationId); // Refresh current conversation view
+          } else {
+            await this._loadConversationHistory(); // Load history or new convo for current project
+          }
+          logger.info(`[ChatManager][initialize] Re-initialization for same project ${this.projectId} complete.`, { context: "chatManager.initialize" });
           return true;
         }
+        
+        // First time initialization for this project context (or after project switch)
+        logger.info(`[ChatManager][initialize] Initializing for project ${this.projectId}. Loading history.`, { context: "chatManager.initialize" });
+        await this._loadConversationHistory(); 
 
-        // Switching projects
-        if (this.isInitialized && this.projectId !== requestedProjectId) {
-          this.currentConversationId = null;
-          this.loadPromise = null;
-          this.isLoading = false;
-          if (this.messageContainer) this._clearMessages();
-        }
+        this.isInitialized = true; // Mark as initialized AFTER history/convo load attempt
 
-        this.projectId = requestedProjectId;
-
-        this._ensureUIAttached();
-
-        // Setup "New Conversation" button if it exists
-        const newConversationBtn = this.domAPI.getElementById("newConversationBtn");
-        if (newConversationBtn) {
+        // Setup "New Conversation" button
+        const newConversationBtn = this.domAPI.getElementById("newConversationBtn"); // Assuming global button for now
+        if (newConversationBtn) { // This button might be project-specific or global
           newConversationBtn.classList.remove("hidden");
-          this.eventHandlers.cleanupListeners?.({ context: 'chatManager:newConvoBtn' });
+          // Ensure listener is only added once or managed correctly if this init is called multiple times
+          this.eventHandlers.cleanupListeners?.({ context: 'chatManagerNewConvoBtn' }); 
           this.eventHandlers.trackListener(
             newConversationBtn,
             "click",
             safeHandler(async () => {
+              logger.debug(`[ChatManager] "New Conversation" button clicked. Current project: ${this.projectId}`, { context: "chatManager" });
               try {
-                await this.createNewConversation();
+                await this.createNewConversation(); // Uses this.projectId
               } catch (err) {
-                logger.error("[ChatManager][New Conversation Button]", err, { context: "chatManager.initialize" });
-                this._showErrorMessage("Failed to start new chat: " + (err?.message || err));
+                logger.error("[ChatManager][New Conversation Button Click]", { error: err, context: "chatManager" });
+                this._showErrorMessage("Failed to start new chat: " + (err?.message || "Unknown error"));
               }
-            }, "New Conversation Button"),
-            { description: "New Conversation Button", context: "chatManager:newConvoBtn", source: "ChatManager.initialize" }
+            }, "NewConversationButtonClick"),
+            { description: "New Conversation Button", context: "chatManagerNewConvoBtn" }
           );
+        } else {
+            logger.debug("[ChatManager][initialize] New Conversation button not found.", { context: "chatManager.initialize" });
         }
-
-        // Ensure UI elements are present before history/render
-        await this._setupUIElements();
-        await this._loadConversationHistory();
-        this.isInitialized = true;
-        this.eventHandlers.cleanupListeners?.({ context: 'chatManager' });
-        this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' });
-        this._setupEventListeners();
-
-        this.chatBus?.dispatchEvent(
-          new CustomEvent('chatManagerReady', { detail: { projectId: this.projectId } })
-        );
-
-        logger.info("[ChatManager][initialize] Successfully initialized", {
-          context: "chatManager.initialize",
-          projectId: this.projectId,
-          duration: clock.now() - _initStart
-        });
-
+        
+        this.chatBus?.dispatchEvent(new CustomEvent('chatManagerReady', { detail: { projectId: this.projectId } }));
+        logger.info(`[ChatManager][initialize] Initialization successful for project ${this.projectId}. Duration: ${clock.now() - _initStart}ms`, { context: "chatManager.initialize" });
         return true;
 
       } catch (error) {
-        logger.error("[ChatManager][initialize] Initialization failed", error, { context: "chatManager.initialize" });
-        this.isInitialized = false;
+        logger.error(`[ChatManager][initialize] Initialization failed for project ${options.projectId || this.projectId}.`, { error: error, context: "chatManager.initialize" });
+        this.isInitialized = false; // Ensure it's marked as not initialized on failure
         const originalErrorMessage = this._extractErrorMessage(error);
-        if (originalErrorMessage.includes("Project has no knowledge base")) {
+        // Specific error handling for KB missing
+        if (originalErrorMessage.toLowerCase().includes("project has no knowledge base")) {
           const specificMessage = "Chat initialization failed: Project has no knowledge base. Please add one to enable chat.";
           this._showErrorMessage(specificMessage);
           this.projectDetails?.disableChatUI?.(specificMessage);
+        } else if (!originalErrorMessage.includes("User not authenticated")) { // Don't show generic if auth was the issue
+            this._showErrorMessage(`Chat error: ${originalErrorMessage}`);
         }
         return false;
       }
     }
+    
+    _clearProjectSpecificData() {
+        logger.info(`[ChatManager][_clearProjectSpecificData] Clearing data for project ${this.projectId}.`, { context: "chatManager" });
+        this.currentConversationId = null;
+        this.loadPromise = null; // Cancel any ongoing load for the old project
+        this.isLoading = false;
+        this._clearMessages();
+        this._clearConversationList(); // Assumes this method exists or is added via UI utils
+        if (this.titleElement) this.titleElement.textContent = "Chat"; // Reset title
+        // this.projectId itself will be updated by the calling context (e.g., _handleAppCurrentProjectChanged or initialize)
+    }
 
+    _handleAppCurrentProjectChanged(event) {
+      const newProject = event?.detail?.project;
+      const oldProjectId = this.projectId;
+      logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Received. New: ${newProject?.id}, Old: ${oldProjectId}`, { detail: event.detail, context: "chatManager" });
+
+      if (newProject?.id && newProject.id !== oldProjectId) {
+        logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Project changed to ${newProject.id}. Re-initializing chat.`, { context: "chatManager" });
+        // Cleanup old project listeners and state before re-initializing
+        this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' }); // Clean UI specific listeners for the old project
+        this._clearProjectSpecificData(); // Clear data related to oldProjectId
+        this.isInitialized = false; // Mark as not initialized for the new project yet
+        
+        // Re-initialize for the new project. Pass along current UI selectors.
+        this.initialize({ 
+            projectId: newProject.id,
+            containerSelector: this.containerSelector,
+            messageContainerSelector: this.messageContainerSelector,
+            inputSelector: this.inputSelector,
+            sendButtonSelector: this.sendButtonSelector,
+            titleSelector: this.titleSelector,
+            minimizeButtonSelector: this.minimizeButtonSelector
+        }).catch(err => logger.error(`[ChatManager][_handleAppCurrentProjectChanged] Error during re-initialization for new project ${newProject.id}`, { error: err, context: "chatManager" }));
+      } else if (!newProject && oldProjectId) {
+        logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Project context cleared. Cleaning up chat for project ${oldProjectId}.`, { context: "chatManager" });
+        this._clearProjectSpecificData();
+        this.projectId = null;
+        this.isInitialized = false;
+        this.projectDetails?.disableChatUI?.("No project selected");
+        if (this.inputField) this.inputField.disabled = true;
+        if (this.sendButton) this.sendButton.disabled = true;
+      }
+    }
+
+    _handleGlobalAuthStateChanged(event) {
+        const isAuthenticated = event?.detail?.authenticated;
+        logger.info(`[ChatManager][_handleGlobalAuthStateChanged] Received. Authenticated: ${isAuthenticated}`, { detail: event.detail, context: "chatManager" });
+
+        if (!isAuthenticated) {
+            logger.info(`[ChatManager][_handleGlobalAuthStateChanged] User logged out. Cleaning up chat.`, { context: "chatManager" });
+            this.cleanup(); // Full cleanup on logout
+            this.projectDetails?.disableChatUI?.("Logged out");
+            if (this.inputField) this.inputField.disabled = true;
+            if (this.sendButton) this.sendButton.disabled = true;
+        } else {
+            // User logged in. If a projectId is already set (e.g. from URL or previous state),
+            // try to re-initialize. This might also be handled by a subsequent currentProjectChanged event.
+            logger.info(`[ChatManager][_handleGlobalAuthStateChanged] User authenticated.`, { currentProjectId: this.projectId, context: "chatManager" });
+            if (this.projectId && !this.isInitialized) { // If a project context exists but chat not initialized
+                logger.info(`[ChatManager][_handleGlobalAuthStateChanged] Attempting to re-initialize chat for project ${this.projectId} after auth.`, { context: "chatManager" });
+                this.initialize({ projectId: this.projectId }).catch(err => logger.error(`[ChatManager][_handleGlobalAuthStateChanged] Error re-initializing post-auth`, {error: err, context: "chatManager"}));
+            } else if (this.projectId && this.isInitialized) {
+                 if (this.inputField) this.inputField.disabled = false;
+                 if (this.sendButton) this.sendButton.disabled = false;
+            }
+        }
+    }
+    
     cleanup() {
+      logger.info(`[ChatManager][cleanup] Cleaning up ChatManager for project ${this.projectId}.`, { context: "chatManager" });
       this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
-      this.eventHandlers.cleanupListeners?.({ context: "chatManager" });
-      // Also clear any listeners injected by chatUIEnhancements
+      this.eventHandlers.cleanupListeners?.({ context: "chatManager" }); // General listeners for this manager instance
+      this.eventHandlers.cleanupListeners?.({ context: "chatManagerNewConvoBtn" });
+      this.eventHandlers.cleanupListeners?.({ context: 'chatManagerAuthRetryListener' });
+
+
+      // DO NOT clean up 'chatManagerAppEvents' here as they are global app/auth listeners
+      // and should persist for the lifetime of the chatManager instance,
+      // unless chatManager itself is being completely destroyed and removed from DI.
+      // If this cleanup is for project change, these global listeners should remain.
+      // If it's for full app shutdown, then they can be removed by a higher-level orchestrator.
+
       const chatUIEnh = this.DependencySystem?.modules?.get?.('chatUIEnhancements');
-      chatUIEnh?.cleanup?.();
-      this.isInitialized = false;
-      this.currentConversationId = null;
+      chatUIEnh?.cleanup?.(); // Assuming this cleans up its own tracked listeners
+
+      this._clearProjectSpecificData();
       this.projectId = null;
-      this.isGlobalMode = false;
-      this._clearMessages();
-      this._uiAttached = false;
+      this.isInitialized = false;
+      // this.isGlobalMode = false; // If isGlobalMode is a relevant state
+      this._uiAttached = false; // Allow UI to re-attach on next init
+      
+      // Clear the specific auth listener if it's still active
+      const auth = this.DependencySystem?.modules?.get('auth');
+      if (this._authChangeListener && auth?.AuthBus?.removeEventListener) {
+        auth.AuthBus.removeEventListener('authStateChanged', this._authChangeListener);
+        logger.debug(`[ChatManager][cleanup] Removed temporary _authChangeListener.`, { context: "chatManager" });
+        this._authChangeListener = null;
+      }
+      logger.info(`[ChatManager][cleanup] Cleanup finished.`, { context: "chatManager" });
     }
 
     async loadConversation(conversationId) {

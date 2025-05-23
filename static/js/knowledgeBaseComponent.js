@@ -21,13 +21,17 @@ export function createKnowledgeBaseComponent(options = {}) {
   const modalManager = getDep("modalManager");
   const domAPI = getDep("domAPI");
   const domReadinessService = getDep("domReadinessService");
+  const logger = getDep("logger"); // Ensure logger is fetched for constructor scope if needed early
+
   if (!domReadinessService)
-    throw new Error(`${MODULE} requires 'domReadinessService' DI`);
+    throw new Error(`[${MODULE}] requires 'domReadinessService' DI`);
+  if (!logger)
+    throw new Error(`[${MODULE}] requires 'logger' DI`);
   if (!sanitizer || typeof sanitizer.sanitize !== 'function')
-    throw new Error("KnowledgeBaseComponent requires 'sanitizer' (object with .sanitize).");
+    throw new Error(`[${MODULE}] requires 'sanitizer' (object with .sanitize).`);
   if (!app || !projectManager || !eventHandlers || !uiUtils || !modalManager) {
     throw new Error(
-      "KnowledgeBaseComponent requires 'app', 'projectManager', 'eventHandlers', 'uiUtils', and 'modalManager' dependencies."
+      `[${MODULE}] requires 'app', 'projectManager', 'eventHandlers', 'uiUtils', and 'modalManager' dependencies.`
     );
   }
   if (!domAPI) throw new Error(`${MODULE} requires 'domAPI' abstraction for DOM access.`);
@@ -107,11 +111,12 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.modalManager = modalManager;
       this.domAPI = domAPI;
       this.getDep = getDep;
-      this.DependencySystem = DS; // Assign DependencySystem to the instance
+      this.DependencySystem = DS;
       this.domReadinessService = domReadinessService;
+      this.logger = logger; // Store logger instance
 
-      this.elementSelectors = elementSelectors; // Store selectors from factory
-      this.elements = {}; // Will be populated by _initElements
+      this.elementSelectors = elementSelectors;
+      this.elements = {};
       this.elRefs = elRefs; // Store elRefs passed in options for _initElements
       this.state = {
         knowledgeBase: null,
@@ -159,7 +164,7 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.searchHandler = createKnowledgeBaseSearchHandler(this);
       this.manager = createKnowledgeBaseManager(this);
 
-      this._bindEventHandlers();
+      // this._bindEventHandlers(); // Call this after _initElements in initialize
     }
 
     _initElements() {
@@ -213,102 +218,196 @@ export function createKnowledgeBaseComponent(options = {}) {
       if (this.domAPI.querySelector('#knowledgeTab') && !presentSelectors.includes('#knowledgeTab')) {
         presentSelectors.push('#knowledgeTab');
       }
+      
+      this.logger.info(`[${MODULE}] Initializing. Received isVisible: ${isVisible}, kbData ID: ${kbData?.id}, projectId: ${projectId}`, { context: MODULE });
 
       await this.domReadinessService.dependenciesAndElements({
-        domSelectors: presentSelectors,   // ← filtered list
-        context    : MODULE + '::initialize',
-        timeout    : this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000
+        domSelectors: presentSelectors,
+        deps: ['auth', 'AppBus'], // Ensure auth and AppBus are ready for listeners
+        context: MODULE + '::initializeDOM',
+        timeout: this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000
       });
+      this.logger.debug(`[${MODULE}] DOM elements and core deps (auth, AppBus) ready.`, { context: MODULE });
+      
       try {
-        this._initElements(); // Resolve DOM elements now
+        this._initElements();
+        this._bindEventHandlers(); // Bind handlers after elements are initialized
       } catch (error) {
-        const logger = this.getDep('logger');
-        logger?.error(`[${MODULE}] Failed to initialize elements: ${error.message}`, error);
+        this.logger.error(`[${MODULE}] Failed to initialize elements or bind handlers: ${error.message}`, { error, context: MODULE });
         this.domAPI.dispatchEvent(
           this.domAPI.getDocument(),
           new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: false, error } })
         );
-        // Optionally, display an error in the UI or throw to prevent further execution
-        // For now, let's make the component non-functional but not break the app
-        this.elements.container?.classList.add("hidden"); // Hide if container was found
-        return; // Stop initialization
-      }
-
-      if (this.state.isInitialized && !isVisible) {
-        this.elements.activeSection?.classList.add("hidden");
-        this.elements.inactiveSection?.classList?.add("hidden");
-        this.elements.knowledgeBaseFilesSection?.classList?.add("hidden");
+        this.elements.container?.classList.add("hidden");
         return;
       }
 
-      this.state.isInitialized = true;
+      const auth = this.DependencySystem.modules.get('auth');
+      if (auth && !auth.isReady()) {
+          this.logger.info(`[${MODULE}] Auth module not ready yet, waiting for authReady event.`, { context: MODULE });
+          await new Promise(resolve => {
+              this.eventHandlers.trackListener(auth.AuthBus, 'authReady', () => {
+                  this.logger.info(`[${MODULE}] Received authReady event during init.`, { context: MODULE });
+                  resolve();
+              }, { once: true, context: MODULE, description: 'KB_Init_AuthReady' });
+          });
+      }
+      this.logger.info(`[${MODULE}] Auth module is now ready. App authenticated: ${this.app.state.isAuthenticated}`, { context: MODULE });
 
-      if (kbData) {
-        await this.renderKnowledgeBaseInfo(kbData, projectId);
-      } else {
-        this.elements.activeSection?.classList.add("hidden");
-        this.elements.inactiveSection?.classList.add("hidden");
-        this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
-        if (projectId) {
+      if (!this.app.state.isAuthenticated) {
+          this.logger.warn(`[${MODULE}] User not authenticated. Showing inactive state and hiding component.`, { context: MODULE });
+          this._showInactiveState();
+          this.elements.container?.classList.add("hidden");
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
-            new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId } })
+            new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: true, message: 'Initialized but hidden due to auth state.' } })
           );
-        }
+          return;
+      }
+      
+      // If already initialized and just a visibility change, handle and return.
+      if (this.state.isInitialized && this.elements.container) {
+          this.logger.debug(`[${MODULE}] Already initialized. Setting visibility: ${isVisible}`, { context: MODULE });
+          this.elements.container.classList.toggle("hidden", !isVisible);
+          this.elements.container.classList.toggle("pointer-events-none", !isVisible);
+          // If becoming visible and kbData or projectId provided, refresh.
+          if (isVisible && (kbData || projectId)) {
+             await this.renderOrClear(kbData, projectId);
+          }
+          return;
       }
 
-      this.elements.container.classList.toggle("hidden", !isVisible);
-      this.elements.container.classList.toggle("pointer-events-none", !isVisible);
+      this.state.isInitialized = true;
+      this.logger.info(`[${MODULE}] First-time initialization logic running.`, { context: MODULE });
+
+      await this.renderOrClear(kbData, projectId);
+
+      if (this.elements.container) {
+        this.elements.container.classList.toggle("hidden", !isVisible);
+        this.elements.container.classList.toggle("pointer-events-none", !isVisible);
+      }
 
       this.domAPI.dispatchEvent(
         this.domAPI.getDocument(),
         new CustomEvent('knowledgebasecomponent:initialized', { detail: { success: true } })
       );
+      this.logger.info(`[${MODULE}] Initialization complete. Final visibility: ${isVisible}`, { context: MODULE });
+    }
+
+    async renderOrClear(kbData, projectId) {
+      if (kbData) {
+        this.logger.debug(`[${MODULE}] Rendering with provided kbData.`, { kbId: kbData.id, projectId, context: MODULE });
+        await this.renderKnowledgeBaseInfo(kbData, projectId);
+      } else if (projectId) {
+        this.logger.debug(`[${MODULE}] No kbData, but projectId ${projectId} provided. Attempting to load KB via manager.`, { context: MODULE });
+        // This implies manager should fetch if only projectId is given.
+        // For now, KBM's loadKnowledgeBase is called by projectManager, not directly by component on project change without kbData.
+        // So, if kbData is null here, it means no KB exists or it shouldn't be shown.
+        this._showInactiveState(); // Show inactive if no explicit kbData
+         this.domAPI.dispatchEvent(
+            this.domAPI.getDocument(),
+            new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId } })
+          );
+      } else {
+        this.logger.debug(`[${MODULE}] No kbData or projectId. Showing inactive state.`, { context: MODULE });
+        this._showInactiveState();
+      }
     }
 
     _bindEventHandlers() {
+      this.logger.debug(`[${MODULE}] Binding event handlers.`, { context: MODULE });
       const EH = this.eventHandlers;
       const DA = this.domAPI;
-      const MODULE_CONTEXT = MODULE;
+      const MODULE_CONTEXT = MODULE; // Defined at the top of the factory
 
-      const addListener = (el, type, fn, opts = {}) => {
-        if (el) {
-          EH.trackListener(el, type, fn, { ...opts, context: MODULE_CONTEXT });
+      const addListener = (elRef, type, fn, opts = {}) => {
+        const element = typeof elRef === 'string' ? this.elements[elRef] : elRef;
+        if (element) {
+          EH.trackListener(element, type, fn, { ...opts, context: MODULE_CONTEXT, description: opts.description || `${elRef}_${type}` });
+        } else {
+          this.logger.warn(`[${MODULE}] Element ref "${elRef}" not found for listener type "${type}".`, { context: MODULE_CONTEXT });
         }
       };
-
+      
       // Search UI
-      addListener(this.elements.searchButton, "click", () => this.searchHandler.triggerSearch(), { description: "KB Search Button" });
-      addListener(this.elements.searchInput, "input", (e) => this.searchHandler.debouncedSearch(e.target.value), { description: "KB Search Input" });
-      addListener(this.elements.searchInput, "keyup", (e) => { if (e.key === "Enter") this.searchHandler.triggerSearch(); }, { description: "KB Search Enter" });
-      addListener(this.elements.resultModal, "keydown", (e) => this.searchHandler.handleResultModalKeydown(e), { description: "KB Result Modal Keydown" });
+      addListener("searchButton", "click", () => this.searchHandler.triggerSearch());
+      addListener("searchInput", "input", (e) => this.searchHandler.debouncedSearch(e.target.value));
+      addListener("searchInput", "keyup", (e) => { if (e.key === "Enter") this.searchHandler.triggerSearch(); });
+      addListener("resultModal", "keydown", (e) => this.searchHandler.handleResultModalKeydown(e));
 
       // Management UI
-      addListener(this.elements.kbToggle, "change", (e) => this.manager.toggleKnowledgeBase(e.target.checked), { description: "KB Toggle Active" });
-      addListener(this.elements.reprocessButton, "click", () => {
+      addListener("kbToggle", "change", (e) => this.manager.toggleKnowledgeBase(e.target.checked));
+      addListener("reprocessButton", "click", () => {
         const pid = this._getCurrentProjectId();
-        if (pid) this.manager.reprocessFiles(pid);
-      }, { description: "KB Reprocess Files" });
+        if (pid) this.manager.reprocessFiles(pid); else this.logger.warn(`[${MODULE}] Reprocess clicked but no current project ID found.`, { context: MODULE_CONTEXT });
+      });
 
-      const showModalHandler = () => {
-        // notification/logging removed
-        this.manager.showKnowledgeBaseModal();
-      };
-      addListener(this.elements.setupButton, "click", showModalHandler, { description: "KB Setup Button" });
-      addListener(this.elements.settingsButton, "click", showModalHandler, { description: "KB Settings Button" });
-      addListener(this.elements.settingsForm, "submit", (e) => this.manager.handleKnowledgeBaseFormSubmit(e), { description: "KB Settings Form Submit" });
-      addListener(this.elements.cancelSettingsBtn, "click", () => this.manager.hideKnowledgeBaseModal(), { description: "KB Cancel Settings" });
-      addListener(this.elements.deleteKnowledgeBaseBtn, "click", () => this.manager.handleDeleteKnowledgeBase(), { description: "KB Delete Button" });
-      addListener(this.elements.modelSelect, "change", () => this.manager.validateSelectedModelDimensions(), { description: "KB Model Select Change" });
-
+      const showModalHandler = () => this.manager.showKnowledgeBaseModal();
+      addListener("setupButton", "click", showModalHandler);
+      addListener("settingsButton", "click", showModalHandler);
+      addListener("settingsForm", "submit", (e) => this.manager.handleKnowledgeBaseFormSubmit(e));
+      addListener("cancelSettingsBtn", "click", () => this.manager.hideKnowledgeBaseModal());
+      addListener("deleteKnowledgeBaseBtn", "click", () => this.manager.handleDeleteKnowledgeBase());
+      addListener("modelSelect", "change", () => this.manager.validateSelectedModelDimensions());
+      
       // GitHub integration
-      addListener(this.elements.kbAttachRepoBtn, "click", () => this.manager.handleAttachGitHubRepo(), { description: "KB Attach GitHub Repo" });
-      addListener(this.elements.kbDetachRepoBtn, "click", () => this.manager.handleDetachGitHubRepo(), { description: "KB Detach GitHub Repo" });
+      addListener("kbAttachRepoBtn", "click", () => this.manager.handleAttachGitHubRepo());
+      addListener("kbDetachRepoBtn", "click", () => this.manager.handleDetachGitHubRepo());
 
-      // Auth state change—NO GLOBAL document usage; use injected bus/doc only
-      addListener(this.domAPI.getDocument(), "authStateChanged", (e) => {
-        this._handleAuthStateChange(e.detail?.authenticated);
-      }, { description: "KB Auth State Change Listener" });
+      // Listen to AppBus for currentProjectChanged
+      const appBus = this.DependencySystem.modules.get('AppBus');
+      if (appBus) {
+        EH.trackListener(appBus, 'currentProjectChanged', this._handleAppCurrentProjectChanged.bind(this), 
+          { context: MODULE, description: 'KBComponent_AppBus_CurrentProjectChanged' });
+        this.logger.debug(`[${MODULE}] Subscribed to AppBus "currentProjectChanged".`, { context: MODULE });
+      } else {
+        this.logger.error(`[${MODULE}] AppBus not available. Cannot subscribe to "currentProjectChanged". Critical for functionality.`, { context: MODULE });
+      }
+
+      // Listen to AuthBus for authStateChanged (more direct than document)
+      const auth = this.DependencySystem.modules.get('auth');
+      if (auth?.AuthBus) {
+         EH.trackListener(auth.AuthBus, "authStateChanged", (e) => {
+            this.logger.debug(`[${MODULE}] AuthBus authStateChanged event received.`, { detail: e.detail, context: MODULE_CONTEXT });
+            this._handleAuthStateChange(e.detail?.authenticated);
+        }, { description: "KB AuthBus authStateChanged Listener", context: MODULE_CONTEXT });
+        this.logger.debug(`[${MODULE}] Subscribed to AuthBus "authStateChanged".`, { context: MODULE });
+      } else {
+        // Fallback to document listener if AuthBus isn't available (though it should be via DI)
+        this.logger.warn(`[${MODULE}] AuthBus not available. Falling back to document listener for "authStateChanged".`, { context: MODULE });
+        addListener(this.domAPI.getDocument(), "authStateChanged", (e) => {
+            this._handleAuthStateChange(e.detail?.authenticated);
+        }, { description: "KB Document authStateChanged Listener (Fallback)", context: MODULE_CONTEXT });
+      }
+    }
+    
+    _handleAppCurrentProjectChanged(event) {
+      const newProject = event?.detail?.project;
+      const oldProject = event?.detail?.previousProject; // May be useful for cleanup
+      this.logger.info(`[${MODULE}] Event "currentProjectChanged" received via AppBus.`, {
+        newProjectId: newProject?.id,
+        oldProjectId: oldProject?.id,
+        currentInternalKBProjectId: this.state.knowledgeBase?.project_id,
+        context: MODULE
+      });
+
+      if (newProject?.id && newProject.id !== this.state.knowledgeBase?.project_id) {
+        this.logger.info(`[${MODULE}] New project selected (${newProject.id}). Resetting KB view. Manager will load new KB.`, { context: MODULE });
+        // Reset UI to prepare for new project's KB.
+        // The actual fetching of KB data is expected to be triggered by an orchestrator (e.g. projectDetailsComponent)
+        // which would call this.initialize() or this.manager.loadKnowledgeBase()
+        // For now, simply clear and show inactive.
+        this._showInactiveState(); 
+        this.state.knowledgeBase = null; // Clear internal KB state
+        // It is assumed another component (like projectDetailsComponent) will call this.initialize()
+        // with the new project's KB data or trigger manager.loadKnowledgeBase().
+        // If this component should be fully autonomous, it would call:
+        // this.manager.loadKnowledgeBase(newProject.id);
+      } else if (!newProject && this.state.knowledgeBase) {
+        this.logger.info(`[${MODULE}] Project context cleared. Resetting KB view.`, { context: MODULE });
+        this._showInactiveState();
+        this.state.knowledgeBase = null;
+      }
     }
 
     _getCurrentProjectId() {
@@ -338,13 +437,14 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
 
       this.state.knowledgeBase = kbData;
+      const currentProjectId = projectId || kbData.project_id || this._getCurrentProjectId();
+      this.logger.info(`[${MODULE}] Rendering KB Info for KB ID: ${kbData.id}, Project ID: ${currentProjectId}`, { kbData, context: MODULE });
 
-      const pid = projectId || kbData.project_id || this._getCurrentProjectId();
       if (this.elements.activeSection?.dataset) {
-        this.elements.activeSection.dataset.projectId = pid || "";
+        this.elements.activeSection.dataset.projectId = currentProjectId || "";
       }
       this._updateBasicInfo(kbData);
-      this.manager._updateModelSelection(kbData.embedding_model);
+      this.manager._updateModelSelection(kbData.embedding_model); // Manager might need this method if it manipulates the select
       this._updateStatusIndicator(kbData.is_active !== false);
 
       this.elements.activeSection?.classList.remove("hidden");
@@ -354,33 +454,36 @@ export function createKnowledgeBaseComponent(options = {}) {
       }
 
       try {
-        if (kbData.is_active !== false && kbData.id) {
-          this.manager.loadKnowledgeBaseHealth(kbData.id)
-            .catch(() => {});
-          this.manager.loadKnowledgeBaseFiles(pid, kbData.id);
+        if (kbData.is_active !== false && kbData.id && currentProjectId) {
+          this.logger.debug(`[${MODULE}] KB is active. Loading health and files.`, { kbId: kbData.id, projectId: currentProjectId, context: MODULE });
+          this.manager.loadKnowledgeBaseHealth(kbData.id).catch(err => this.logger.warn(`[${MODULE}] Error loading KB health (non-critical).`, { err, context: MODULE }));
+          this.manager.loadKnowledgeBaseFiles(currentProjectId, kbData.id); // This should handle its own errors and UI updates
         } else {
+          this.logger.debug(`[${MODULE}] KB is inactive or no ID. Hiding files section and clearing list.`, { kbIsActive: kbData.is_active, kbId: kbData.id, context: MODULE });
           this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
-          if (this.manager._renderKnowledgeBaseFiles) {
+          if (this.manager._renderKnowledgeBaseFiles) { // Assuming manager has this method for direct rendering
             this.manager._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
           } else {
             const container = this.elements.knowledgeBaseFilesListContainer;
-            if (container) _safeSetInnerHTML(container, '<p class="text-base-content/60 text-center py-4">No files currently in the Knowledge Base.</p>');
+            if (container) _safeSetInnerHTML(container, '<p class="text-base-content/60 text-center py-4">Knowledge Base is inactive or has no files.</p>');
           }
         }
-        this._updateStatusAlerts(kbData);
-        this._updateUploadButtonsState();
+        this._updateStatusAlerts(kbData); // This seems to be for additional alerts, not main status
+        this._updateUploadButtonsState(); // Update based on new KB state
 
-        if (pid) {
+        if (currentProjectId) {
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
-            new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId: pid } })
+            new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId: currentProjectId, knowledgeBaseId: kbData.id } })
           );
         }
       } catch (err) {
-        if (pid) {
+        this.logger.error(`[${MODULE}] Error during post-render KB info processing (health/files load).`, { error: err, context: MODULE });
+        // Ensure event is still dispatched if there was a project ID
+        if (currentProjectId) {
           this.domAPI.dispatchEvent(
             this.domAPI.getDocument(),
-            new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId: pid } })
+            new CustomEvent('projectKnowledgeBaseRendered', { detail: { projectId: currentProjectId, error: err.message } })
           );
         }
       }
@@ -402,25 +505,33 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     _showInactiveState() {
-      this.state.knowledgeBase = null;
-      if (this.elements.activeSection && this.elements.activeSection.classList) {
-        this.elements.activeSection.classList.add("hidden");
-      }
-      if (this.elements.inactiveSection && this.elements.inactiveSection.classList) {
-        this.elements.inactiveSection.classList.remove("hidden");
-        // If there was an old reference to this.elements.knowledgeNoResults, update to .noResultsSection
-      }
-      if (this.elements.knowledgeBaseFilesSection && this.elements.knowledgeBaseFilesSection.classList) {
-        this.elements.knowledgeBaseFilesSection.classList.add("hidden");
-      }
-      if (this.manager?._renderKnowledgeBaseFiles) {
+      this.logger.info(`[${MODULE}] Showing inactive state.`, { context: MODULE });
+      this.state.knowledgeBase = null; // Clear internal state
+      
+      this.elements.activeSection?.classList.add("hidden");
+      this.elements.inactiveSection?.classList.remove("hidden");
+      this.elements.knowledgeBaseFilesSection?.classList.add("hidden");
+      
+      // Clear displayed KB info
+      if (this.elements.kbNameDisplay) this.elements.kbNameDisplay.textContent = "N/A";
+      if (this.elements.kbModelDisplay) this.elements.kbModelDisplay.textContent = "N/A";
+      if (this.elements.kbVersionDisplay) this.elements.kbVersionDisplay.textContent = "N/A";
+      if (this.elements.kbLastUsedDisplay) this.elements.kbLastUsedDisplay.textContent = "N/A";
+      if (this.elements.knowledgeFileCount) this.elements.knowledgeFileCount.textContent = "0";
+      if (this.elements.knowledgeChunkCount) this.elements.knowledgeChunkCount.textContent = "0";
+      if (this.elements.knowledgeFileSize) this.elements.knowledgeFileSize.textContent = this.formatBytes(0);
+
+
+      if (this.manager?._renderKnowledgeBaseFiles) { // Ask manager to clear its file list UI
         this.manager._renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } });
-      } else if (this.elements.knowledgeBaseFilesListContainer) {
-        _safeSetInnerHTML(this.elements.knowledgeBaseFilesListContainer, '<p class="text-base-content/60 text-center py-4">No files currently in the Knowledge Base.</p>');
+      } else if (this.elements.knowledgeBaseFilesListContainer) { // Fallback if manager method not available
+        _safeSetInnerHTML(this.elements.knowledgeBaseFilesListContainer, '<p class="text-base-content/60 text-center py-4">No Knowledge Base active or selected.</p>');
       }
-      this._updateStatusIndicator(false);
-      this._showStatusAlert("Knowledge Base needed. Click 'Setup'.", "info");
-      this._updateUploadButtonsState();
+      
+      this._updateStatusIndicator(false); // Set status badge to "Inactive"
+      // Consider if an alert is always needed or if the UI state is clear enough
+      // this._showStatusAlert("Knowledge Base is not active or configured for this project.", "info");
+      this._updateUploadButtonsState(); // Disable KB-dependent buttons
     }
 
     _updateUploadButtonsState() {
@@ -487,20 +598,43 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
 
     _handleAuthStateChange(authenticated) {
-      this.state.authState = authenticated;
-      const items = [
+      this.logger.debug(`[${MODULE}] Auth state changed. Authenticated: ${authenticated}`, { context: MODULE });
+      this.state.authState = authenticated; // Store current auth state
+
+      // List of elements that depend on authentication for enabling/disabling
+      const authDependentElements = [
         this.elements.searchButton, this.elements.reprocessButton, this.elements.setupButton,
         this.elements.kbToggle, this.elements.settingsButton, this.elements.deleteKnowledgeBaseBtn,
         this.elements.kbAttachRepoBtn, this.elements.kbDetachRepoBtn,
+        // Add other elements like file input / upload button if they are directly part of this component's elements
       ];
-      items.forEach((el) => {
-        if (!el) return;
+
+      authDependentElements.forEach((el) => {
+        if (!el) return; // Skip if an optional element isn't found
         el.disabled = !authenticated;
         el.classList.toggle("opacity-50", !authenticated);
         el.classList.toggle("cursor-not-allowed", !authenticated);
+        if (!authenticated) {
+          el.title = "Authentication required.";
+        } else {
+          el.removeAttribute("title"); // Or set to its functional title
+        }
       });
+
       if (!authenticated) {
-        this._showStatusAlert("Authentication required", "warning");
+        this.logger.info(`[${MODULE}] User unauthenticated. Clearing KB data and showing inactive state.`, { context: MODULE });
+        this._showStatusAlert("Authentication required to use Knowledge Base features.", "warning");
+        // Clear KB data and UI to prevent interaction with stale data
+        this.state.knowledgeBase = null;
+        this._showInactiveState(); 
+      } else {
+        // User is authenticated. If there's a current project, KB data might need to be (re)loaded
+        // This is often handled by currentProjectChanged or initial load sequence.
+        // For now, just ensure UI elements are enabled.
+        this.logger.debug(`[${MODULE}] User authenticated. KB UI elements enabled. KB data will load if project context is active.`, { context: MODULE });
+        // Potentially re-check/re-load KB if a project is active:
+        // const currentProjectId = this._getCurrentProjectId();
+        // if (currentProjectId) { this.manager.loadKnowledgeBase(currentProjectId); }
       }
     }
   }
