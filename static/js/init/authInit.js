@@ -88,7 +88,8 @@ export function createAuthInitializer({
     // auth.js's broadcastAuth (via app.setAuthState) has already updated appModule.state
     // before this event listener is triggered.
     // This function now primarily reacts to that pre-established state.
-    const appModule = DependencySystem.modules.get('appModule');
+    const appModule      = DependencySystem.modules.get('appModule');
+    const projectManager = DependencySystem.modules.get('projectManager');   // ← referenced later
 
     logger.log('[authInit][handleAuthStateChange]', {
       eventDetail: event?.detail,
