@@ -61,11 +61,12 @@ export function createServiceInitializer({
       // Wire circular dependency with setter (post-construction)
       eventHandlers.setDomReadinessService(domReadinessService);
 
-      // Register error reporter
-      const errorReporter = {
-        report: (...args) => logger.error('[ErrorReporterStub]', ...args, { context: 'serviceInit:ErrorReporterStub' })
-      };
-      safeRegister('errorReporter', errorReporter);
+      // Register / reuse shared errorReporter
+      safeRegister(
+        'errorReporter',
+        DependencySystem.modules.get('errorReporter') ||
+        createErrorReporterStub(logger,'serviceInit:ErrorReporterStub')
+      );
 
       // Register utility services
       if (uiUtils) safeRegister('uiUtils', uiUtils);
@@ -78,22 +79,10 @@ export function createServiceInitializer({
         safeRegister('FileUploadComponent', createFileUploadComponent);
       }
 
-      // Register API endpoints configuration
-      const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
-        PROJECTS: '/api/projects/',
-        AUTH_CSRF: '/api/auth/csrf',
-        AUTH_LOGIN: '/api/auth/login',
-        AUTH_LOGOUT: '/api/auth/logout',
-        AUTH_REGISTER: '/api/auth/register',
-        AUTH_VERIFY: '/api/auth/verify',
-        AUTH_REFRESH: '/api/auth/refresh',
-        CONVOS: '/api/projects/{id}/conversations',
-        PROJECT_CONVERSATIONS_URL_TEMPLATE: '/api/projects/{id}/conversations',
-        CONVERSATIONS: (projectId) => `/api/projects/${projectId}/conversations`,
-        CONVERSATION: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}`,
-        MESSAGES: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/messages`
-      };
-      safeRegister('apiEndpoints', apiEndpoints);
+      // Register API endpoints (only if not already provided)
+      safeRegister('apiEndpoints',
+        DependencySystem.modules.get('apiEndpoints') ||
+        resolveApiEndpoints(APP_CONFIG));
 
       logger.log('[serviceInit] Basic services registered', { context: 'serviceInit:registerBasicServices' });
     } catch (err) {

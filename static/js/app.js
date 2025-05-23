@@ -14,6 +14,8 @@
 
 import { APP_CONFIG } from './appConfig.js';
 import { createDomAPI } from './utils/domAPI.js';
+import { resolveApiEndpoints } from './utils/apiEndpoints.js';
+import { createErrorReporterStub } from './utils/errorReporterStub.js';
 import { createBrowserService, normaliseUrl } from './utils/browserService.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
@@ -127,24 +129,21 @@ DependencySystem.register('domReadinessService', domReadinessService);
 // ---------------------------------------------------------------------------
 // 4) Create eventHandlers (CRITICAL FIX)
 // ---------------------------------------------------------------------------
+const errorReporter = createErrorReporterStub(logger,'app:ErrorReporterStub');
+DependencySystem.register('errorReporter', errorReporter);
+
 const eventHandlers = createEventHandlers({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
   logger,
-  errorReporter: { report: (...args) => logger.error('[ErrorReporterStub]', ...args, { context: 'app:ErrorReporterStub' }) },
+  errorReporter,
   APP_CONFIG
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 
 // Wire circular dependency with setter (post-construction)
 eventHandlers.setDomReadinessService(domReadinessService);
-
-// ---------------------------------------------------------------------------
-// 5) Register base services
-// ---------------------------------------------------------------------------
-const errorReporter =
-  { report: (...args) => logger.error('[ErrorReporterStub]', ...args, { context: 'app:ErrorReporterStub' }) };
 
 const globalConsole = (typeof console !== 'undefined') ? console : {};
 
@@ -205,22 +204,7 @@ DependencySystem.register('MODAL_MAPPINGS', MODAL_MAPPINGS);
 DependencySystem.register('globalUtils', { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl, isValidProjectId });
 
 // ---------------------------------------------------------------------------
-// 9) Define API endpoints (CRITICAL FIX)
-// ---------------------------------------------------------------------------
-const apiEndpoints = APP_CONFIG?.API_ENDPOINTS || {
-  PROJECTS: '/api/projects/',
-  AUTH_CSRF: '/api/auth/csrf',
-  AUTH_LOGIN: '/api/auth/login',
-  AUTH_LOGOUT: '/api/auth/logout',
-  AUTH_REGISTER: '/api/auth/register',
-  AUTH_VERIFY: '/api/auth/verify',
-  AUTH_REFRESH: '/api/auth/refresh',
-  CONVOS: '/api/projects/{id}/conversations',
-  PROJECT_CONVERSATIONS_URL_TEMPLATE: '/api/projects/{id}/conversations',
-  CONVERSATIONS: (projectId) => `/api/projects/${projectId}/conversations`,
-  CONVERSATION: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}`,
-  MESSAGES: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}/messages`
-};
+const apiEndpoints = resolveApiEndpoints(APP_CONFIG);
 DependencySystem.register('apiEndpoints', apiEndpoints);
 
 // ---------------------------------------------------------------------------
