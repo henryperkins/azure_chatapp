@@ -95,8 +95,8 @@ let logger = createLogger({
 });
 DependencySystem.register('logger', logger);
 
-// Dedicated App Event Bus
-const AppBus = new EventTarget();
+ // Dedicated App Event Bus
+const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
 DependencySystem.register('AppBus', AppBus);
 
 // ──  initialise sanitizer FIRST ──────────────────────────────────
@@ -184,8 +184,9 @@ function fireAppReady(success = true, error = null) {
     DependencySystem.register('app', app);
   }
   const detail = success ? { success } : { success, error };
-  AppBus.dispatchEvent(new CustomEvent('app:ready', { detail }));
-  domAPI.getDocument()?.dispatchEvent(new CustomEvent('app:ready', { detail }));
+  const evt = eventHandlers.createCustomEvent('app:ready', { detail });
+  AppBus.dispatchEvent(evt);
+  domAPI.dispatchEvent(domAPI.getDocument(), evt);
   DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', { success, error, context: 'app' });
 }
 
@@ -260,7 +261,7 @@ let currentProject = null; // NEW: THE single source of truth
 Object.assign(app, {
   getProjectId: () => {
     const { search } = browserAPI.getLocation();
-    return new URLSearchParams(search).get('project');
+    return new browserAPI.URLSearchParams(search).get('project');
   },
   getCurrentProject: () => {
     return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null; // always return copy
@@ -272,9 +273,11 @@ Object.assign(app, {
     // optional: emit an event for listeners who care about project changes
     const appBus = DependencySystem.modules.get('AppBus');
     if (appBus && typeof appBus.dispatchEvent === 'function') {
-      appBus.dispatchEvent(new CustomEvent('currentProjectChanged', {
-        detail: { project, previousProject: previous }
-      }));
+      appBus.dispatchEvent(
+        eventHandlers.createCustomEvent('currentProjectChanged', {
+          detail: { project, previousProject: previous }
+        })
+      );
     }
     // Do not re-register in DependencySystem. Only the initial registration (null) at startup is allowed.
     return project;
@@ -524,7 +527,7 @@ function handleInitError(err) {
   // Emitir evento centralizado para otros módulos
   domAPI.dispatchEvent(
     domAPI.getDocument(),
-    new CustomEvent('app:initError', { detail: { error: err } })
+    eventHandlers.createCustomEvent('app:initError', { detail: { error: err } })
   );
 
   // Fallback visible sólo si no existe el modal
@@ -848,8 +851,9 @@ export async function init() {
       .sort(([, a], [, b]) => b - a)
       .forEach(([sel, ms]) =>
         logger.info(`[Perf] DOM selector "${sel}" waited ${ms} ms total`));
-    domAPI.getDocument()?.dispatchEvent(
-      new CustomEvent('app:domSelectorTimings', { detail: selStats })
+    domAPI.dispatchEvent(
+      domAPI.getDocument(),
+      eventHandlers.createCustomEvent('app:domSelectorTimings', { detail: selStats })
     );
 
     if (!globalInitTimeoutFired) {
