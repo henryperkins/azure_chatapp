@@ -354,10 +354,26 @@ export function createAuthModule(deps) {
   const AUTH_CONFIG = { VERIFICATION_INTERVAL: 300000 };
   let verifyInterval = null;
   async function verifyAuthState(forceVerify = false) {
-    if (!forceVerify && Date.now() - _lastLoginTimestamp < 4000) return authState.isAuthenticated;
+    // Remove the early return that was causing issues with page refresh
+    // Always check auth state on page load/refresh regardless of recent login timestamp
     if (authCheckInProgress && !forceVerify) return authState.isAuthenticated;
     authCheckInProgress = true;
     try {
+      // Check if we have auth cookies first - if not, no point in making the request
+      const hasCookies = publicAuth.hasAuthCookies();
+      if (!hasCookies && !forceVerify) {
+        logger.log('[verifyAuthState] No auth cookies found, skipping verification', { context: 'verifyAuthState' });
+        await clearTokenState({ source: 'no_auth_cookies' });
+        broadcastAuth(false, null, 'no_auth_cookies');
+        return false;
+      }
+
+      logger.log('[verifyAuthState] Verifying auth state with backend', {
+        forceVerify,
+        hasCookies,
+        context: 'verifyAuthState'
+      });
+
       let response = await authRequest(apiEndpoints.AUTH_VERIFY, 'GET');
       if (typeof response === 'string') {
         try {
@@ -366,21 +382,36 @@ export function createAuthModule(deps) {
           logger.error('[verifyAuthState][parseErr]', parseErr, { context: 'verifyAuthState' });
         }
       }
+
+      // Enhanced response validation
       let userObject = null;
       if (response && typeof response === 'object') {
-        if (response.user && typeof response.user === 'object' && response.user.id) userObject = response.user;
-        else if (response.id && response.username) userObject = response;
+        if (response.user && typeof response.user === 'object' && response.user.id) {
+          userObject = response.user;
+        } else if (response.id && response.username) {
+          userObject = response;
+        }
       }
+
       let finalUserObject = null;
       if (userObject) {
         const userIdFromObject = userObject.id || userObject.user_id || userObject.userId || userObject._id;
-        if (userIdFromObject) finalUserObject = { ...userObject, id: userIdFromObject };
+        if (userIdFromObject) {
+          finalUserObject = { ...userObject, id: userIdFromObject };
+        }
       }
+
       const hasValidUserId = Boolean(finalUserObject && finalUserObject.id);
       if (hasValidUserId) {
+        logger.log('[verifyAuthState] Successfully verified user', {
+          username: finalUserObject.username,
+          context: 'verifyAuthState'
+        });
         broadcastAuth(true, finalUserObject, 'verify_success_with_user_id');
         return true;
       }
+
+      // Check for boolean authentication flags
       const truthy = (v) => v === true || v === 'true' || v === 1 || v === '1';
       const isAuthenticatedByFlags =
         truthy(response?.authenticated) ||
@@ -389,53 +420,49 @@ export function createAuthModule(deps) {
         truthy(response?.isAuth) ||
         String(response?.authenticated).toLowerCase() === 'true' ||
         String(response?.is_authenticated).toLowerCase() === 'true';
+
       const hasUsername = Boolean(response?.username || (response?.user && response.user.username));
-      const location = domAPI.getWindow()?.location;
-      const browserService = DependencySystem?.modules?.get('browserService');
-      const windowObj = browserService?.getWindow?.();
-      if (!windowObj || typeof windowObj.URLSearchParams !== 'function') {
-        logger.error('[AuthModule] window.URLSearchParams (via browserService.getWindow()) is required for guardrail compliance.', { context: 'verifyAuthState' });
-      }
-      const urlParams = location && windowObj?.URLSearchParams ? new windowObj.URLSearchParams(location.search) : null;
-      const hasLoginParams = urlParams && urlParams.has('username') && urlParams.has('password');
-      if (isAuthenticatedByFlags || hasUsername || hasLoginParams) {
+
+      if (isAuthenticatedByFlags || hasUsername) {
         const tempUserObj = hasUsername && !finalUserObject
           ? {
-              username: response?.username ||
-                response?.user?.username ||
-                (hasLoginParams ? urlParams.get('username') : 'user'),
+              username: response?.username || response?.user?.username || 'user',
               id: response?.id || response?.user?.id || ('temp-id-' + Date.now())
             }
           : null;
+        logger.log('[verifyAuthState] Verified via flags/username', {
+          isAuthenticatedByFlags,
+          hasUsername,
+          context: 'verifyAuthState'
+        });
         broadcastAuth(true, tempUserObj || null, 'verify_success_via_alternative_checks');
         return true;
       }
-      const hasCookies = publicAuth.hasAuthCookies();
+
+      // If we have cookies but backend says we're not authenticated, the cookies are stale
       if (hasCookies) {
-        // We still have auth cookies, but the backend did **not** confirm the
-        // session.  Treat them as stale rather than assuming the user is
-        // logged-in; clear the tokens and continue down the unauthenticated
-        // path so the login UI becomes visible.
         logger.warn(
-          '[AuthModule][verifyAuthState] Auth cookies found but backend ' +
-          'verification failed – clearing stale cookies.',
+          '[AuthModule][verifyAuthState] Auth cookies found but backend verification failed – clearing stale cookies.',
           { context: 'verifyAuthState' }
         );
         await clearTokenState({ source: 'stale_auth_cookies' });
-        // Do NOT `return true` here – allow the function to fall through so
-        // it eventually broadcasts `authenticated:false`.
       }
+
+      logger.log('[verifyAuthState] No valid authentication found', { context: 'verifyAuthState' });
       await clearTokenState({ source: 'verify_negative_after_all_checks' });
       broadcastAuth(false, null, 'verify_negative_after_all_checks');
       return false;
     } catch (error) {
       logger.error('[verifyAuthState][catch]', error, { context: 'verifyAuthState' });
+
       if (error.status === 500) {
         await clearTokenState({ source: 'verify_500_error' });
         broadcastAuth(false, null, 'verify_500_error');
         return false;
       }
+
       if (error.status === 401) {
+        logger.log('[verifyAuthState] 401 error, attempting token refresh', { context: 'verifyAuthState' });
         try {
           await refreshTokens();
           return await verifyAuthState(true);
@@ -446,8 +473,21 @@ export function createAuthModule(deps) {
           return false;
         }
       }
-      await clearTokenState({ source: `verify_unhandled_error_${error.status}` });
-      broadcastAuth(false, null, `verify_unhandled_error_${error.status}`);
+
+      // For network errors or other issues, don't immediately clear auth state
+      // if we have cookies - the user might just have a temporary connection issue
+      const hasCookies = publicAuth.hasAuthCookies();
+      if (hasCookies && (error.status === 0 || !error.status)) {
+        logger.warn('[verifyAuthState] Network error but auth cookies present, maintaining auth state', {
+          error: error.message,
+          context: 'verifyAuthState'
+        });
+        // Don't change auth state for network errors
+        return authState.isAuthenticated;
+      }
+
+      await clearTokenState({ source: `verify_unhandled_error_${error.status || 'unknown'}` });
+      broadcastAuth(false, null, `verify_unhandled_error_${error.status || 'unknown'}`);
       return false;
     } finally {
       authCheckInProgress = false;

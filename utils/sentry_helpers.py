@@ -104,7 +104,7 @@ def create_background_task(
     coro_func: Callable[..., Awaitable[Any]],
     *args: Any,
     **kwargs: Any,
-) -> asyncio.Task[caAny]:
+) -> asyncio.Task[Any]:
     loop = asyncio.get_running_loop()
 
     async def runner() -> Any:

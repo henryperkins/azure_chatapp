@@ -142,16 +142,23 @@ def set_secure_cookie(
                 response.delete_cookie(key=key, path=path)
             return
 
+        # Ensure max_age is properly set for persistence
+        effective_max_age = max_age if max_age and max_age > 0 else None
+
         response.set_cookie(
             key=key,
             value=value,
             httponly=httponly,
             secure=secure,
             path=path,
-            max_age=max_age or 0,
-            domain=domain,  # Use the determined domain
+            max_age=effective_max_age,
+            domain=domain,
             samesite=samesite,
+            # Add expires as backup for browsers that don't support max_age properly
+            expires=None if not effective_max_age else int(datetime.utcnow().timestamp()) + effective_max_age
         )
+
+        logger.info(f"[AUTH_COOKIE_SET] Successfully set cookie '{key}' with max_age={effective_max_age}")
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
         raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}") from e
@@ -258,7 +265,7 @@ def validate_password(password: str) -> None:
 async def get_user_and_claims_from_refresh_token(
     token: str, session: AsyncSession, request: Request
 ) -> Tuple[User, dict[str, Any]]:
-    decoded = await verify_token(token, "refresh", request, db_session=session)
+    decoded = await verify_token(token, "refresh", db_session=session)
     sub = decoded.get("sub")
     if not sub:
         raise HTTPException(status_code=401, detail="Missing 'sub' in refresh token.")
@@ -739,7 +746,7 @@ async def logout_user(
                     if refresh_cookie:
                         try:
                             dec = await verify_token(
-                                refresh_cookie, "refresh", request, db_session=session
+                                refresh_cookie, "refresh", db_session=session
                             )
                             tid = dec.get("jti")
                             exp_val = dec.get("exp")
