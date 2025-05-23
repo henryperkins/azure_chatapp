@@ -47,6 +47,25 @@ export function isAbsoluteUrl(url = '') {
 }
 
 /**
+ * normaliseUrl  – canonical path+query normaliser used by apiClient.
+ * Mirrors implementation inside browserService so callers can depend on
+ * `globalUtils.normaliseUrl` (serviceInit already does).
+ */
+export function normaliseUrl(u = '') {
+  try {
+    const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
+    const raw = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
+    const path = raw || '/';
+    return path + url.search + url.hash;
+  } catch {
+    return u;
+  }
+}
+
+/* U.S.-spelling alias kept for backward compatibility */
+export const normalizeUrl = normaliseUrl;
+
+/**
  * Returns true when a GET request to `url` should NOT be deduplicated
  * (each call is unique even if the URL string repeats).  Extend the
  * regex list as new endpoints are discovered.
