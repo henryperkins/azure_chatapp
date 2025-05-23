@@ -36,15 +36,27 @@ export function createErrorInitializer({
         return;
       }
 
-      // Add global error handler to catch and log any errors
-      window.onerror = function (message, source, lineno, colno, error) {
-        const log = DependencySystem?.modules?.get?.('logger');
-        log?.error?.('[window.onerror]',
-          { message, source, lineno, colno, err: error?.stack || error },
-          { context: 'global.onerror' }
-        );
-        return false; // keep default browser behaviour
-      };
+      // Centralised global-error listener via DI event system
+      eventHandlers.trackListener(
+        window,
+        'error',
+        (evt) => {
+          const {
+            message,
+            filename: source,
+            lineno,
+            colno,
+            error
+          } = evt;
+          const log = DependencySystem?.modules?.get?.('logger');
+          log?.error?.(
+            '[window.error]',
+            { message, source, lineno, colno, err: error?.stack || error },
+            { context: 'global.error' }
+          );
+        },
+        { context: 'errorInit', description: 'window error handler', passive: true }
+      );
 
       // Track unhandled promise rejections
       eventHandlers.trackListener(
