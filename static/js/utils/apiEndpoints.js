@@ -6,8 +6,7 @@ export const DEFAULT_API_ENDPOINTS = {
   AUTH_REGISTER : '/api/auth/register',
   AUTH_VERIFY   : '/api/auth/verify',
   AUTH_REFRESH  : '/api/auth/refresh',
-  CONVOS        : '/api/projects/{id}/conversations',
-  PROJECT_CONVERSATIONS_URL_TEMPLATE: '/api/projects/{id}/conversations',
+  CONVOS        : '/api/projects/{id}/conversations',   // ← keep ONE
   CONVERSATIONS : (pid)                => `/api/projects/${pid}/conversations`,
   CONVERSATION  : (pid, cid)           => `/api/projects/${pid}/conversations/${cid}`,
   MESSAGES      : (pid, cid)           => `/api/projects/${pid}/conversations/${cid}/messages`
