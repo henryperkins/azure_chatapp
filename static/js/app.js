@@ -33,9 +33,9 @@ import {
   stableStringify,
   isAbsoluteUrl,
   isValidProjectId,
-  formatBytes  as globalFormatBytes,
-  formatDate   as globalFormatDate,
-  fileIcon     as globalFileIcon
+  formatBytes as globalFormatBytes,
+  formatDate as globalFormatDate,
+  fileIcon as globalFileIcon
 } from './utils/globalUtils.js';
 
 import { createEventHandlers } from './eventHandler.js';
@@ -61,8 +61,8 @@ import { createFileUploadComponent } from './FileUploadComponent.js';
 // ---------------------------------------------------------------------------
 const uiUtils = {
   formatBytes: globalFormatBytes,
-  formatDate : globalFormatDate,
-  fileIcon   : globalFileIcon
+  formatDate: globalFormatDate,
+  fileIcon: globalFileIcon
 };
 
 // ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ let logger = createLogger({
 });
 DependencySystem.register('logger', logger);
 
- // Dedicated App Event Bus
+// Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
 DependencySystem.register('AppBus', AppBus);
 
@@ -216,7 +216,7 @@ const serviceInit = createServiceInitializer({
   domAPI,
   browserServiceInstance,
   eventHandlers,
-  domReadinessService,
+  domReadinessService,  // Make sure this is passed
   logger,
   sanitizer,
   APP_CONFIG,

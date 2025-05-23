@@ -52,8 +52,16 @@ export function createDomReadinessService({
   const observers = [];
   // Track listeners waiting for element appearance
   const appearanceListeners = new Map();
-  // Cache fired events for replay capability
-  const firedEvents = new Map(); // eventName -> { detail, timestamp }
+  // Cache fired events for replay capability with TTL support
+  const firedEvents = new Map(); // eventName -> { detail, timestamp, ttl }
+
+  // Enhanced replay event config
+  const REPLAY_CONFIG = {
+    enabled: APP_CONFIG?.EVENT_REPLAY_ENABLED ?? true,
+    maxEvents: APP_CONFIG?.MAX_CACHED_EVENTS ?? 50,
+    ttlMs: APP_CONFIG?.EVENT_REPLAY_TTL ?? 300000, // 5 mins default
+    cleanupIntervalMs: APP_CONFIG?.EVENT_CLEANUP_INTERVAL ?? 60000 // 1 min
+  };
 
   // Default timeout from APP_CONFIG or fallback
   const DEFAULT_TIMEOUT = APP_CONFIG?.TIMEOUTS?.DOM_READY ?? 10000;
@@ -63,6 +71,9 @@ export function createDomReadinessService({
     injectedLogger ||
     DependencySystem?.modules?.get?.('logger') ||
     { info: ()=>{}, warn: ()=>{}, error: ()=>{} };
+
+  // ───── periodic cleanup for expired events ─────
+  let cleanupTimer = null;
 
   // ───── instrumentation – selector wait times ─────
   const _SEL_STATS = new Map();                // sel ➜ { total, waits:[{start,end,duration}] }
@@ -311,27 +322,104 @@ export function createDomReadinessService({
   }
 
   /**
+   * Cleanup expired events from cache
+   */
+  function cleanupExpiredEvents() {
+    if (!REPLAY_CONFIG.enabled) return;
+
+    const now = _nowPerf();
+    const initialSize = firedEvents.size;
+
+    for (const [eventName, eventData] of firedEvents.entries()) {
+      if (eventData.ttl && eventData.ttl < now) {
+        firedEvents.delete(eventName);
+        _logger.info?.(`[domReadinessService] Cleaned up expired event: ${eventName}`, {
+          eventName,
+          age: now - eventData.timestamp
+        });
+      }
+    }
+
+    if (firedEvents.size !== initialSize) {
+      _logger.info?.(`[domReadinessService] Cleanup removed ${initialSize - firedEvents.size} expired events`);
+    }
+  }
+
+  /**
+   * Start periodic cleanup if enabled
+   */
+  function startCleanupTimer() {
+    if (!REPLAY_CONFIG.enabled || cleanupTimer) return;
+
+    cleanupTimer = browserService.setInterval(() => {
+      cleanupExpiredEvents();
+    }, REPLAY_CONFIG.cleanupIntervalMs);
+  }
+
+  /**
    * Emits a replay-able custom event that can be received by late listeners.
-   * @param {string} eventName - The name of the event
-   * @param {object} detail - Event detail data
+   * Enhanced: TTL, maxEvents, fallback to standard, logs, eviction.
    */
   function emitReplayable(eventName, detail = {}) {
-    _logger.info?.(`[domReadinessService] Emitting replayable event: ${eventName}`, { eventName, detail });
+    // Validate eventName
+    if (!eventName || typeof eventName !== 'string') {
+      _logger.error?.(`[domReadinessService] Invalid event name for emitReplayable`, { eventName, detail });
+      return;
+    }
 
-    // Cache the event for late listeners
-    firedEvents.set(eventName, {
+    if (!REPLAY_CONFIG.enabled) {
+      _logger.info?.(`[domReadinessService] Event replay disabled, emitting standard event: ${eventName}`);
+      const event = eventHandlers.createCustomEvent(eventName, { detail });
+      domAPI.dispatchEvent(domAPI.getDocument(), event);
+      return;
+    }
+
+    _logger.info?.(`[domReadinessService] Emitting replayable event: ${eventName}`, {
+      eventName,
       detail,
-      timestamp: _nowPerf()
+      currentCacheSize: firedEvents.size
     });
 
-    // Dispatch the event normally
-    const event = eventHandlers.createCustomEvent(eventName, { detail });
-    domAPI.dispatchEvent(domAPI.getDocument(), event);
+    // Enforce cache limit
+    if (firedEvents.size >= REPLAY_CONFIG.maxEvents) {
+      const oldestEvent = Array.from(firedEvents.entries())
+        .sort(([,a], [,b]) => a.timestamp - b.timestamp)[0];
+      if (oldestEvent) {
+        firedEvents.delete(oldestEvent[0]);
+        _logger.warn?.(`[domReadinessService] Evicted oldest cached event: ${oldestEvent[0]}`, {
+          evictedEvent: oldestEvent[0],
+          age: _nowPerf() - oldestEvent[1].timestamp
+        });
+      }
+    }
+
+    const now = _nowPerf();
+
+    firedEvents.set(eventName, {
+      detail,
+      timestamp: now,
+      ttl: now + REPLAY_CONFIG.ttlMs
+    });
+
+    // Start cleanup interval timer if not started
+    startCleanupTimer();
+
+    // Dispatch the event normally, with error catch
+    try {
+      const event = eventHandlers.createCustomEvent(eventName, { detail });
+      domAPI.dispatchEvent(domAPI.getDocument(), event);
+    } catch (err) {
+      _logger.error?.(`[domReadinessService] Failed to dispatch event: ${eventName}`, err, {
+        eventName,
+        detail
+      });
+    }
   }
 
   /**
    * Wait for a specified custom event (e.g. "modalsLoaded"), with a time limit.
-   * If the event was already fired, returns immediately with cached data.
+   * If the event was already fired, returns immediately with cached data,
+   * handling TTL expiry. Synthetic event is created via eventHandlers.
    * @param {string} eventName - The name of the event (e.g., 'modalsLoaded')
    * @param {object} options
    * @param {number} [options.timeout=DEFAULT_TIMEOUT] - Time in ms before rejecting
@@ -342,21 +430,49 @@ export function createDomReadinessService({
     timeout = DEFAULT_TIMEOUT,
     context = 'unknown'
   } = {}) {
+    // Validate event name
+    if (!eventName || typeof eventName !== 'string') {
+      return Promise.reject(
+        new Error(`[domReadinessService] Invalid event name: ${eventName}`)
+      );
+    }
+
     // Check if event was already fired (replay capability)
     if (firedEvents.has(eventName)) {
       const cachedEvent = firedEvents.get(eventName);
-      _logger.info?.(`[domReadinessService] Event "${eventName}" replayed from cache`, {
-        eventName,
-        context,
-        cachedDetail: cachedEvent.detail,
-        cachedTimestamp: cachedEvent.timestamp
-      });
 
-      // Create a synthetic event with the cached detail
-      const syntheticEvent = eventHandlers.createCustomEvent(eventName, {
-        detail: cachedEvent.detail
-      });
-      return Promise.resolve(syntheticEvent);
+      // Check if cached event has expired via TTL
+      if (cachedEvent.ttl && cachedEvent.ttl < _nowPerf()) {
+        firedEvents.delete(eventName);
+        _logger.warn?.(`[domReadinessService] Cached event "${eventName}" expired, waiting for new event`, {
+          eventName,
+          context,
+          expiredTimestamp: cachedEvent.timestamp
+        });
+      } else {
+        const age = _nowPerf() - cachedEvent.timestamp;
+        _logger.info?.(`[domReadinessService] Event "${eventName}" replayed from cache`, {
+          eventName,
+          context,
+          cachedDetail: cachedEvent.detail,
+          cachedTimestamp: cachedEvent.timestamp,
+          age
+        });
+
+        // Create a synthetic event with the cached detail, best-effort try/catch
+        try {
+          const syntheticEvent = eventHandlers.createCustomEvent(eventName, {
+            detail: cachedEvent.detail
+          });
+          return Promise.resolve(syntheticEvent);
+        } catch (err) {
+          _logger.error?.(`[domReadinessService] Failed to create synthetic event for "${eventName}"`, err, {
+            eventName,
+            context
+          });
+          // Fall through to normal event listening
+        }
+      }
     }
 
     _logger.info?.(`[domReadinessService] Waiting for event "${eventName}" (context: ${context})`);
@@ -377,7 +493,11 @@ export function createDomReadinessService({
         eventName,
         (evt) => {
           browserService.clearTimeout(timeoutId);
-          _logger.info?.(`[domReadinessService] Event "${eventName}" received by listener`, { eventName, context });
+          _logger.info?.(`[domReadinessService] Event "${eventName}" received by listener`, {
+            eventName,
+            context,
+            detail: evt.detail
+          });
           resolve(evt);
         },
         { once: true, context: 'domReadinessService' }
@@ -386,10 +506,64 @@ export function createDomReadinessService({
   }
 
   /**
-   * Cleanup function to stop all observers and clear stored promises.
-   * Call this if you need to completely remove references (e.g., if reloading).
+   * Get comprehensive event replay statistics
+   */
+  function getEventReplayStats() {
+    const stats = {
+      enabled: REPLAY_CONFIG.enabled,
+      totalCachedEvents: firedEvents.size,
+      maxEvents: REPLAY_CONFIG.maxEvents,
+      ttlMs: REPLAY_CONFIG.ttlMs,
+      events: {},
+      oldestEvent: null,
+      newestEvent: null,
+      expiredCount: 0
+    };
+
+    if (firedEvents.size === 0) return stats;
+
+    let oldest = Infinity;
+    let newest = 0;
+    const now = _nowPerf();
+
+    for (const [eventName, eventData] of firedEvents.entries()) {
+      const age = now - eventData.timestamp;
+      const isExpired = eventData.ttl && eventData.ttl < now;
+
+      if (isExpired) stats.expiredCount++;
+
+      stats.events[eventName] = {
+        timestamp: eventData.timestamp,
+        age,
+        expired: isExpired,
+        ttl: eventData.ttl,
+        hasDetail: !!eventData.detail,
+        detailKeys: eventData.detail ? Object.keys(eventData.detail) : []
+      };
+
+      if (eventData.timestamp < oldest) {
+        oldest = eventData.timestamp;
+        stats.oldestEvent = eventName;
+      }
+      if (eventData.timestamp > newest) {
+        newest = eventData.timestamp;
+        stats.newestEvent = eventName;
+      }
+    }
+
+    return stats;
+  }
+
+  /**
+   * Enhanced cleanup function
    */
   function destroy() {
+    // Stop cleanup timer
+    if (cleanupTimer) {
+      browserService.clearInterval(cleanupTimer);
+      cleanupTimer = null;
+    }
+
     // Stop all mutation observers
     observers.forEach((obs) => obs.disconnect());
     observers.length = 0;
@@ -397,9 +571,12 @@ export function createDomReadinessService({
     // Clear pending states
     pendingPromises.clear();
     appearanceListeners.clear();
+    firedEvents.clear();
 
     // Remove any event listeners with the matching context
     eventHandlers.cleanupListeners({ context: 'domReadinessService' });
+
+    _logger.info?.('[domReadinessService] Destroyed and cleaned up all resources');
   }
 
   function getSelectorTimings() {
@@ -416,15 +593,23 @@ export function createDomReadinessService({
     return Array.from(firedEvents.keys());
   }
 
+  // Additional helpers for replay/diagnostics/feature flagging
+  function isReplayEnabled() {
+    return REPLAY_CONFIG.enabled;
+  }
+
   return {
     documentReady,
     elementsReady,
     dependenciesAndElements,
     waitForEvent,
-    emitReplayable,  // NEW: For replay-able events
+    emitReplayable,
     destroy,
     getSelectorTimings,
     getMissingSelectors,
-    getFiredEvents   // NEW: For diagnostics
+    getFiredEvents,
+    getEventReplayStats,    // NEW: diagnostics
+    cleanupExpiredEvents,   // NEW: manual trigger
+    isReplayEnabled         // NEW: config check
   };
 }

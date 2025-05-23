@@ -220,12 +220,26 @@ export function createUIInitializer({
       }
     } else {
       logger.warn('[UIInit] projectDashboardInstance not found. Cannot set sub-components.', { context: 'uiInit:createAndRegisterUIComponents' });
-    }
+   }
 
-    logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });
-  }
+   // Initialize ProjectModal
+   const projectModalInstance = DependencySystem.modules.get('projectModal');
+   if (projectModalInstance && typeof projectModalInstance.init === 'function') {
+     try {
+       logger.log('[UIInit] Initializing ProjectModal instance.', { context: 'uiInit:createAndRegisterUIComponents' });
+       await projectModalInstance.init();
+     } catch (err) {
+       logger.error('[UIInit] ProjectModal initialization failed', err, { context: 'uiInit:projectModalInit' });
+       // Depending on severity, might want to throw or handle gracefully
+     }
+   } else {
+     logger.warn('[UIInit] ProjectModal instance or its init method not found in DI.', { context: 'uiInit:createAndRegisterUIComponents' });
+   }
 
-  async function registerNavigationViews() {
+   logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });
+ }
+
+ async function registerNavigationViews() {
     const navigationService = DependencySystem.modules.get('navigationService');
     if (!navigationService || typeof navigationService.registerView !== 'function') {
       logger.warn('[UIInit] NavigationService not available or missing registerView method', { context: 'uiInit:registerNavigationViews' });

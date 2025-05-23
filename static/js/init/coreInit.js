@@ -144,14 +144,7 @@ export function createCoreInitializer({
     DependencySystem.register('auth', authModule);
 
     logger.log('[coreInit] auth module registered', { context: 'coreInit' });
-    // Initialize auth module to set up event listeners
-    if (authModule.init) {
-      try {
-        await authModule.init();
-      } catch (err) {
-        logger.error('[coreInit] Auth module initialization error', err, { context: 'coreInit' });
-      }
-    }
+    // authModule.init() will be called by authInit.initializeAuthSystem() later in app.js
 
     // 3. Model config
     const modelConfigInstance = createModelConfig({

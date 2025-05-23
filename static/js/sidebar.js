@@ -74,9 +74,9 @@ export function createSidebar({
   if (!DependencySystem) throw new Error('[Sidebar] DependencySystem is required.');
   if (!domAPI) throw new Error('[Sidebar] domAPI is required.');
   if (!uiRenderer ||
-      typeof uiRenderer.renderConversations !== 'function' ||
-      typeof uiRenderer.renderStarredConversations !== 'function' ||
-      typeof uiRenderer.renderProjects !== 'function') {
+    typeof uiRenderer.renderConversations !== 'function' ||
+    typeof uiRenderer.renderStarredConversations !== 'function' ||
+    typeof uiRenderer.renderProjects !== 'function') {
     throw new Error('[Sidebar] uiRenderer with the necessary render methods is required.');
   }
   if (!storageAPI) throw new Error('[Sidebar] storageAPI is required.');
@@ -132,7 +132,7 @@ export function createSidebar({
 
   function toggleSettingsPanel(force) {
     const panel = _ensureSettingsPanel();
-    const show  = force !== undefined ? !!force : panel.classList.contains('hidden');
+    const show = force !== undefined ? !!force : panel.classList.contains('hidden');
     domAPI.toggleClass(panel, 'hidden', !show);
     if (show) maybeRenderModelConfig();
   }
@@ -145,8 +145,8 @@ export function createSidebar({
 
     mobileDockEl = domAPI.getElementById('sidebarDock');
     if (!mobileDockEl) {
-      mobileDockEl           = domAPI.createElement('div');
-      mobileDockEl.id        = 'sidebarDock';
+      mobileDockEl = domAPI.createElement('div');
+      mobileDockEl.id = 'sidebarDock';
       mobileDockEl.className = 'sidebar-dock hidden';
       domAPI.appendChild(el, mobileDockEl);
     }
@@ -155,8 +155,8 @@ export function createSidebar({
     const mkBtn = (id, label, icon, onClick) => {
       let b = domAPI.getElementById(id);
       if (!b) {
-        b           = domAPI.createElement('button');
-        b.id        = id;
+        b = domAPI.createElement('button');
+        b.id = id;
         b.className = 'btn btn-ghost btn-square flex-1';
         domAPI.setInnerHTML(b, `${icon}<span class="sr-only">${label}</span>`);
         eventHandlers.trackListener(
@@ -168,8 +168,8 @@ export function createSidebar({
       }
     };
 
-    mkBtn('dockRecentBtn',   'Recent',   '🕑', () => activateTab('recent'));
-    mkBtn('dockStarredBtn',  'Starred',  '⭐', () => activateTab('starred'));
+    mkBtn('dockRecentBtn', 'Recent', '🕑', () => activateTab('recent'));
+    mkBtn('dockStarredBtn', 'Starred', '⭐', () => activateTab('starred'));
     mkBtn('dockProjectsBtn', 'Projects', '📁', () => activateTab('projects'));
     mkBtn('dockSettingsBtn', 'Settings', '⚙️', () => toggleSettingsPanel());
 
@@ -180,11 +180,11 @@ export function createSidebar({
   /* 3) Internal State                                                  */
   /* ------------------------------------------------------------------ */
   let el = null;
-  let btnToggle     = null;
-  let btnClose      = null;
-  let btnPin        = null;
-  let btnSettings   = null;      // NEW
-  let mobileDockEl  = null;      // NEW bottom dock on mobile
+  let btnToggle = null;
+  let btnClose = null;
+  let btnPin = null;
+  let btnSettings = null;      // NEW
+  let mobileDockEl = null;      // NEW bottom dock on mobile
   let chatSearchInputEl = null;
   let sidebarProjectSearchInputEl = null;
   let backdrop = null;
@@ -213,34 +213,34 @@ export function createSidebar({
   // Inline auth fields
   let isRegisterMode = false;
   let sidebarAuthFormContainerEl,
-      sidebarAuthFormTitleEl,
-      sidebarAuthFormEl,
-      sidebarUsernameContainerEl,
-      sidebarUsernameInputEl,
-      sidebarEmailInputEl,
-      sidebarPasswordInputEl,
-      sidebarConfirmPasswordContainerEl,
-      sidebarConfirmPasswordInputEl,
-      sidebarAuthBtnEl,
-      sidebarAuthErrorEl,
-      sidebarAuthToggleEl;
+    sidebarAuthFormTitleEl,
+    sidebarAuthFormEl,
+    sidebarUsernameContainerEl,
+    sidebarUsernameInputEl,
+    sidebarEmailInputEl,
+    sidebarPasswordInputEl,
+    sidebarConfirmPasswordContainerEl,
+    sidebarConfirmPasswordInputEl,
+    sidebarAuthBtnEl,
+    sidebarAuthErrorEl,
+    sidebarAuthToggleEl;
 
   /* ------------------------------------------------------------------ */
   /* 4) Inline Auth Logic (merged from sidebar-auth)                    */
   /* ------------------------------------------------------------------ */
   function initAuthDom() {
-    sidebarAuthFormContainerEl       = domAPI.getElementById('sidebarAuthFormContainer');
-    sidebarAuthFormTitleEl           = domAPI.getElementById('sidebarAuthFormTitle');
-    sidebarAuthFormEl                = domAPI.getElementById('sidebarAuthForm');
-    sidebarUsernameContainerEl       = domAPI.getElementById('sidebarUsernameContainer');
-    sidebarUsernameInputEl           = domAPI.getElementById('sidebarUsername');
-    sidebarEmailInputEl              = domAPI.getElementById('sidebarEmail');
-    sidebarPasswordInputEl           = domAPI.getElementById('sidebarPassword');
-    sidebarConfirmPasswordContainerEl= domAPI.getElementById('sidebarConfirmPasswordContainer');
-    sidebarConfirmPasswordInputEl    = domAPI.getElementById('sidebarConfirmPassword');
-    sidebarAuthBtnEl                 = domAPI.getElementById('sidebarAuthBtn');
-    sidebarAuthErrorEl               = domAPI.getElementById('sidebarAuthError');
-    sidebarAuthToggleEl              = domAPI.getElementById('sidebarAuthToggle');
+    sidebarAuthFormContainerEl = domAPI.getElementById('sidebarAuthFormContainer');
+    sidebarAuthFormTitleEl = domAPI.getElementById('sidebarAuthFormTitle');
+    sidebarAuthFormEl = domAPI.getElementById('sidebarAuthForm');
+    sidebarUsernameContainerEl = domAPI.getElementById('sidebarUsernameContainer');
+    sidebarUsernameInputEl = domAPI.getElementById('sidebarUsername');
+    sidebarEmailInputEl = domAPI.getElementById('sidebarEmail');
+    sidebarPasswordInputEl = domAPI.getElementById('sidebarPassword');
+    sidebarConfirmPasswordContainerEl = domAPI.getElementById('sidebarConfirmPasswordContainer');
+    sidebarConfirmPasswordInputEl = domAPI.getElementById('sidebarConfirmPassword');
+    sidebarAuthBtnEl = domAPI.getElementById('sidebarAuthBtn');
+    sidebarAuthErrorEl = domAPI.getElementById('sidebarAuthError');
+    sidebarAuthToggleEl = domAPI.getElementById('sidebarAuthToggle');
   }
 
   function clearAuthForm() {
@@ -265,7 +265,7 @@ export function createSidebar({
 
   async function _handleAuthSubmit(authModule) {
     const username = sidebarUsernameInputEl.value.trim();
-    const email    = sidebarEmailInputEl.value.trim();
+    const email = sidebarEmailInputEl.value.trim();
     const password = sidebarPasswordInputEl.value;
 
     // Optionally sanitize if desired
@@ -328,38 +328,59 @@ export function createSidebar({
   }
 
   async function handleGlobalAuthStateChange(event) {
-    const authModule = DependencySystem.modules?.get('auth') || DependencySystem.get?.('auth');
-    const authenticated = event?.detail?.authenticated ?? authModule?.isAuthenticated?.();
-
-    domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', !!authenticated);
-    // Ensure DaisyUI/Dual-class elements really hide
-    if (sidebarAuthFormContainerEl) {
-      domAPI.setStyle(sidebarAuthFormContainerEl, 'display', authenticated ? 'none' : '');
-      authenticated
-        ? sidebarAuthFormContainerEl.setAttribute?.('hidden', 'hidden')
-        : sidebarAuthFormContainerEl.removeAttribute?.('hidden');
+    // Ensure DOM elements are fresh, in case this is called before initAuthDom fully completes
+    // or if elements are dynamically added/removed.
+    if (!sidebarAuthFormContainerEl) {
+      initAuthDom(); // Re-attempt to find DOM elements
     }
-    // Ensure the sidebar itself is always visible, independent of auth state
-    domAPI.toggleClass(el, 'hidden', false);
+
+    const appModule = DependencySystem.modules?.get('appModule');
+    const authenticated = appModule?.state?.isAuthenticated ?? false;
+    const currentUser = appModule?.state?.currentUser ?? null;
+
+    logger.debug('[Sidebar][handleGlobalAuthStateChange] Auth state update:', {
+      isAuthenticated: authenticated,
+      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null,
+      eventDetail: event?.detail,
+      sidebarAuthFormContainerEl_exists: !!sidebarAuthFormContainerEl
+    });
+
+    if (sidebarAuthFormContainerEl) {
+      domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', authenticated);
+      domAPI.setStyle(sidebarAuthFormContainerEl, 'display', authenticated ? 'none' : '');
+      if (authenticated) {
+        sidebarAuthFormContainerEl.setAttribute?.('hidden', 'hidden');
+      } else {
+        sidebarAuthFormContainerEl.removeAttribute?.('hidden');
+      }
+    } else {
+      logger.warn('[Sidebar][handleGlobalAuthStateChange] sidebarAuthFormContainerEl not found. UI may not update correctly.');
+    }
+
+    // Ensure the main sidebar element 'el' is always visible, independent of auth state
+    if (el) { // el is the main sidebar container
+      domAPI.toggleClass(el, 'hidden', false);
+      domAPI.setStyle(el, 'display', ''); // Ensure it's not display:none
+      el.removeAttribute?.('hidden');
+    }
+
 
     if (authenticated) {
-      // On login: ensure projects are loaded and UI is updated
       try {
-        if (logger && logger.info) logger.info(`[Sidebar][auth:stateChanged] Logged in, loading projects and refreshing Projects tab`, { context: 'Sidebar' });
+        logger.info(`[Sidebar][auth:stateChanged] User authenticated. Loading projects and refreshing Projects tab.`, { context: 'Sidebar' });
         if (projectManager?.loadProjects) {
           await projectManager.loadProjects('all');
         }
-        // Switch to projects tab or re-render it
         await activateTab('projects');
       } catch (err) {
-        if (logger && logger.error) logger.error(`[Sidebar][auth:stateChanged] Failed to load projects`, err && err.stack ? err.stack : err, { context: 'Sidebar' });
+        logger.error(`[Sidebar][auth:stateChanged] Failed to load projects or activate tab after authentication.`, err, { context: 'Sidebar' });
       }
     } else {
-      // If logged out, revert to login mode
+      logger.info(`[Sidebar][auth:stateChanged] User not authenticated. Resetting auth form.`, { context: 'Sidebar' });
       if (isRegisterMode) {
-        updateAuthFormUI(false);
+        updateAuthFormUI(false); // Revert to login mode if currently in register mode
       }
-      clearAuthForm();
+      clearAuthForm(); // Clear username/password fields
     }
   }
 
@@ -368,12 +389,12 @@ export function createSidebar({
   /* ------------------------------------------------------------------ */
 
   function findDom() {
-    el                       = domAPI.getElementById('mainSidebar');
-    btnToggle               = domAPI.getElementById('navToggleBtn');
-    btnClose                = domAPI.getElementById('closeSidebarBtn');
-    btnPin                  = domAPI.getElementById('pinSidebarBtn');
-    btnSettings             = domAPI.getElementById('sidebarSettingsBtn'); // NEW (gear-icon)
-    chatSearchInputEl       = domAPI.getElementById('chatSearchInput');
+    el = domAPI.getElementById('mainSidebar');
+    btnToggle = domAPI.getElementById('navToggleBtn');
+    btnClose = domAPI.getElementById('closeSidebarBtn');
+    btnPin = domAPI.getElementById('pinSidebarBtn');
+    btnSettings = domAPI.getElementById('sidebarSettingsBtn'); // NEW (gear-icon)
+    chatSearchInputEl = domAPI.getElementById('chatSearchInput');
     sidebarProjectSearchInputEl = domAPI.getElementById('sidebarProjectSearch');
 
     if (!el) {
@@ -500,16 +521,16 @@ export function createSidebar({
   async function activateTab(name = 'recent') {
     try {
       const map = {
-        recent:   { btn: 'recentChatsTab',  panel: 'recentChatsSection'   },
-        starred:  { btn: 'starredChatsTab', panel: 'starredChatsSection' },
-        projects: { btn: 'projectsTab',     panel: 'projectsSection'      }
+        recent: { btn: 'recentChatsTab', panel: 'recentChatsSection' },
+        starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
+        projects: { btn: 'projectsTab', panel: 'projectsSection' }
       };
       if (!map[name]) {
         name = 'recent';
       }
       // Toggle all tabs
       Object.entries(map).forEach(([key, ids]) => {
-        const btn   = domAPI.getElementById(ids.btn);
+        const btn = domAPI.getElementById(ids.btn);
         const panel = domAPI.getElementById(ids.panel);
         if (btn && panel) {
           const isActive = key === name;
@@ -518,7 +539,7 @@ export function createSidebar({
           btn.tabIndex = isActive ? 0 : -1;
           panel.classList.toggle('hidden', !isActive);
           if (isActive) panel.classList.add('flex');
-          else          panel.classList.remove('flex');
+          else panel.classList.remove('flex');
         }
       });
       storageAPI.setItem('sidebarActiveTab', name);
@@ -686,7 +707,7 @@ export function createSidebar({
   /* 6) Debounced Search Wrappers                                       */
   /* ------------------------------------------------------------------ */
   // We replace direct calls with wrapped versions in bindDomEvents
-  const _debouncedChatSearch    = globalDebounce(_handleChatSearch, 200);
+  const _debouncedChatSearch = globalDebounce(_handleChatSearch, 200);
   const _debouncedProjectSearch = globalDebounce(_handleProjectSearch, 200);
 
   /* ------------------------------------------------------------------ */
@@ -748,9 +769,9 @@ export function createSidebar({
 
     // Tab menu handlers: Register click handlers for tab buttons (Recent, Starred, Projects)
     const tabs = [
-      { id: 'recentChatsTab',   tab: 'recent',   desc: 'Tab: Recent Chats' },
-      { id: 'starredChatsTab',  tab: 'starred',  desc: 'Tab: Starred Chats' },
-      { id: 'projectsTab',      tab: 'projects', desc: 'Tab: Projects' },
+      { id: 'recentChatsTab', tab: 'recent', desc: 'Tab: Recent Chats' },
+      { id: 'starredChatsTab', tab: 'starred', desc: 'Tab: Starred Chats' },
+      { id: 'projectsTab', tab: 'projects', desc: 'Tab: Projects' },
     ];
     tabs.forEach(({ id, tab, desc }) => {
       const element = domAPI.getElementById(id);
@@ -898,8 +919,14 @@ export function createSidebar({
          listener. */
       try {
         const authMod = DependencySystem.modules?.get?.('auth');
+        const currentAuthStatusFromModule = authMod?.isAuthenticated?.();
+        // KILOCODE: Added detailed logging for initial sync call
+        logger.debug('[Sidebar][init] Syncing auth state on init. Auth module status:', {
+          isAuthenticated: currentAuthStatusFromModule,
+          user: authMod?.getCurrentUserObject?.()
+        });
         handleGlobalAuthStateChange({
-          detail: { authenticated: authMod?.isAuthenticated?.() }
+          detail: { authenticated: currentAuthStatusFromModule, user: authMod?.getCurrentUserObject?.() }
         });
       } catch (syncErr) {
         logger.error('[Sidebar] Auth state sync failed during init', syncErr && syncErr.stack ? syncErr.stack : syncErr, { context: 'Sidebar' });
