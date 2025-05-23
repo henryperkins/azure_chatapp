@@ -116,34 +116,7 @@ const domAPI = createDomAPI({
   sanitizer                      // ← now defined
 });
 
-// ---------------------------------------------------------------------------
-// 3)  ERROR-REPORTER  ➜  EVENT-HANDLERS  ➜  DOM-READINESS-SERVICE (new order)
-// ---------------------------------------------------------------------------
-const errorReporter = createErrorReporterStub(logger, 'app:ErrorReporterStub');
-DependencySystem.register('errorReporter', errorReporter);
-
-const eventHandlers = createEventHandlers({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  logger,
-  errorReporter,
-  APP_CONFIG
-});
-DependencySystem.register('eventHandlers', eventHandlers);
-
-const domReadinessService = createDomReadinessService({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  eventHandlers,                          // ← inject so .trackListener exists
-  logger,
-  timeoutMs: APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? 5000
-});
-DependencySystem.register('domReadinessService', domReadinessService);
-
-// circular-dependency link (opposite direction)
-eventHandlers.setDomReadinessService(domReadinessService);
+// (intentionally left blank -- this block is deleted as it is now above)
 
 
 // ---------------------------------------------------------------------------
