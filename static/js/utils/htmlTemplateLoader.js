@@ -46,35 +46,55 @@ export function createHtmlTemplateLoader({
     eventName = 'htmlTemplateLoaded',
     timeout = 15_000 // default to 15s
   } = {}) {
+    const isModalsHtml = url && url.includes('modals.html');
+    logger.info?.(`[HtmlTemplateLoader] Attempting to load template: ${url} into ${containerSelector}`, { url, containerSelector, eventName, isModalsHtml });
+
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
-      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template will not be injected.`);
+      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template ${url} will not be injected.`);
+      // Dispatch event even if container is not found, so listeners are unblocked
+      const notFoundEvt = eventHandlers.createCustomEvent(eventName, { detail: { success: false, error: `Container ${containerSelector} not found` } });
+      domAPI.dispatchEvent(domAPI.getDocument(), notFoundEvt);
+      if (isModalsHtml) {
+        const modalsNotFoundEvt = eventHandlers.createCustomEvent('modalsLoaded', { detail: { success: false, error: `Container ${containerSelector} not found for modals.html` } });
+        domAPI.dispatchEvent(domAPI.getDocument(), modalsNotFoundEvt);
+      }
       return false;
     }
 
     // Create a manual AbortController for this request
     const controller = new AbortController();
     // Use injected timerAPI instead of window
-    const tm = timerAPI.setTimeout(() => controller.abort(), timeout);
+    const tm = timerAPI.setTimeout(() => {
+      logger.warn(`[HtmlTemplateLoader] Timeout loading template: ${url}`, { url, timeout });
+      controller.abort();
+    }, timeout);
 
     let success = false;
+    let errorInfo = null;
     try {
+      logger.info?.(`[HtmlTemplateLoader] Fetching template: ${url}`, { url });
       const resp = await apiClient.fetch(url, {
         method: 'GET',
         cache: 'no-store',
         signal: controller.signal
       });
 
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) {
+        errorInfo = `HTTP ${resp.status}`;
+        throw new Error(errorInfo);
+      }
 
       const html = await resp.text();
+      logger.info?.(`[HtmlTemplateLoader] Successfully fetched template: ${url}, preparing to inject. Length: ${html.length}`, { url });
 
       // Always inject via domAPI to respect DI & built-in sanitiser
       domAPI.setInnerHTML(container, html);
-
+      logger.info?.(`[HtmlTemplateLoader] Successfully injected template: ${url} into ${containerSelector}`, { url });
       success = true;
 
     } catch (err) {
+      errorInfo = errorInfo || err.message;
       // Log the actual error for debugging
       logger.error(`[HtmlTemplateLoader] Failed to load template from ${url}`, err, {
         context: 'HtmlTemplateLoader.loadTemplate',
@@ -86,15 +106,16 @@ export function createHtmlTemplateLoader({
     } finally {
       timerAPI.clearTimeout(tm);
 
-      // Always dispatch the specific event for this template
+      logger.info?.(`[HtmlTemplateLoader] Dispatching event: ${eventName} for ${url}`, { success, error: errorInfo, url });
       const evt = eventHandlers.createCustomEvent(eventName,
-        { detail: { success, error: success ? null : 'Fetch or injection failed' } });
+        { detail: { success, error: errorInfo } });
       domAPI.dispatchEvent(domAPI.getDocument(), evt);
 
       // Special handling for modals.html - always emit modalsLoaded event
-      if (url && url.includes('modals.html')) {
+      if (isModalsHtml) {
+        logger.info?.(`[HtmlTemplateLoader] Dispatching event: modalsLoaded for ${url}`, { success, error: errorInfo, url });
         const modalsLoadedEvent = eventHandlers.createCustomEvent('modalsLoaded',
-          { detail: { success, error: success ? null : 'Failed to load modals.html' } });
+          { detail: { success, error: errorInfo } });
         domAPI.dispatchEvent(domAPI.getDocument(), modalsLoadedEvent);
       }
     }

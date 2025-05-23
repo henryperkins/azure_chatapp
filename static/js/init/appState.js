@@ -30,13 +30,35 @@ export function createAppStateManager({ DependencySystem, logger }) {
 
     // Method to update authentication-related state
     setAuthState(newAuthState) {
-      logger.log('[appState][setAuthState]', JSON.stringify(newAuthState), { context: 'appState:setAuthState' });
+      const oldAuthState = {
+        isAuthenticated: this.state.isAuthenticated,
+        currentUser: this.state.currentUser ? { id: this.state.currentUser.id, username: this.state.currentUser.username } : null
+      };
+      const newAuthStateForLog = {
+        isAuthenticated: newAuthState.isAuthenticated,
+        currentUser: newAuthState.currentUser ? { id: newAuthState.currentUser.id, username: newAuthState.currentUser.username } : null
+      };
+      logger.info('[appState][setAuthState] Updating auth state.', {
+        oldAuthState,
+        newAuthState: newAuthStateForLog,
+        context: 'appState:setAuthState'
+      });
       Object.assign(this.state, newAuthState);
     },
 
     // Method to update general app lifecycle state
     setAppLifecycleState(newLifecycleState) {
-      logger.log('[appState][setAppLifecycleState]', JSON.stringify(newLifecycleState), { context: 'appState:setAppLifecycleState' });
+      const oldLifecycleStateForLog = {
+        isReady: this.state.isReady,
+        initialized: this.state.initialized,
+        initializing: this.state.initializing,
+        currentPhase: this.state.currentPhase
+      };
+      logger.info('[appState][setAppLifecycleState] Updating app lifecycle state.', {
+        oldLifecycleState: oldLifecycleStateForLog,
+        newLifecycleState,
+        context: 'appState:setAppLifecycleState'
+      });
       Object.assign(this.state, newLifecycleState);
 
       // If 'initialized' becomes true, set 'isReady' based on success/failure

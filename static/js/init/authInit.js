@@ -29,8 +29,8 @@ export function createAuthInitializer({
     throw new Error('[authInit] Missing required dependencies for auth initialization.');
   }
 
-  // Local state for currentUser (synced with appModule.state.currentUser)
-  let currentUser = null;
+  // Note: Local state for 'currentUser' has been removed.
+  // All currentUser information should be sourced from appModule.state.currentUser.
 
   /**
    * Initialize the authentication system
@@ -98,10 +98,10 @@ export function createAuthInitializer({
     const isAuthenticated = appModule.state.isAuthenticated; // Read from canonical source
     const user = appModule.state.currentUser; // Read from canonical source
 
-    // Update the local `currentUser` variable which might be used by renderAuthHeader or other legacy parts.
-    currentUser = user;
+    // Local 'currentUser' variable removed.
+    // renderAuthHeader will now directly use appModule.state.
 
-    renderAuthHeader(); // Renders based on the local `currentUser`
+    renderAuthHeader(); // Renders based on appModule.state
 
     const chatManager = DependencySystem.modules.get('chatManager');
     if (chatManager?.setAuthState) {
@@ -147,9 +147,15 @@ export function createAuthInitializer({
    */
   function renderAuthHeader() {
     try {
-      const authMod = DependencySystem.modules.get('auth');
-      const isAuth = authMod?.isAuthenticated?.();
-      const user = currentUser || { username: authMod?.getCurrentUser?.() };
+      const appModule = DependencySystem.modules.get('appModule');
+      if (!appModule) {
+        logger.error('[authInit][renderAuthHeader] appModule not found in DI. Cannot render header accurately.');
+        return;
+      }
+      const isAuth = appModule.state.isAuthenticated;
+      const user = appModule.state.currentUser; // Use canonical source
+
+      logger.debug('[authInit][renderAuthHeader] Rendering auth header', { isAuth, user });
 
       const authBtn = domAPI.getElementById('authButton');
       const userMenu = domAPI.getElementById('userMenu');
@@ -186,13 +192,16 @@ export function createAuthInitializer({
 
       if (isAuth && userMenu && userInitialsEl) {
         let initials = '?';
-        if (user?.name) {
+        if (user?.name) { // Prefer user.name if available
           initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
-        } else if (user?.username) {
+        } else if (user?.username) { // Fallback to username
           initials = user.username.trim().slice(0, 2).toUpperCase();
         }
         domAPI.setTextContent(userInitialsEl, initials);
+      } else if (userMenu && userInitialsEl) {
+        domAPI.setTextContent(userInitialsEl, ''); // Clear if not authenticated
       }
+
 
       if (authStatus) {
         domAPI.setTextContent(authStatus, isAuth
@@ -203,24 +212,28 @@ export function createAuthInitializer({
 
       if (userStatus) {
         domAPI.setTextContent(userStatus, isAuth && user?.username
-          ? `Hello, ${user.name ?? user.username}`
+          ? `Hello, ${user.name ?? user.username}` // Prefer user.name for greeting
           : 'Offline'
         );
       }
 
       if (logoutBtn) {
+        // Ensure listener is only attached once, or managed by eventHandlers.trackListener's internal tracking
+        // Assuming trackListener handles duplicates or provides a way to clear old ones if this is called multiple times.
+        const authMod = DependencySystem.modules.get('auth'); // Get authMod for logout
         eventHandlers.trackListener(
           logoutBtn,
           'click',
           safeHandler((e) => {
             domAPI.preventDefault(e);
-            authMod?.logout?.();
-          }, 'Auth logout button'),
-          { description: 'Auth logout button', context: 'authInit' }
+            logger.debug('[authInit][renderAuthHeader] Logout button clicked.');
+            authMod?.logout?.().catch(err => logger.error('[authInit] Error during logout action from button:', err));
+          }, 'Auth logout button click'),
+          { description: 'Auth logout button click', context: 'authInit', once: false } // Ensure it can be clicked multiple times if needed
         );
       }
     } catch (err) {
-      logger.error('[authInit][renderAuthHeader]', err, { context: 'authInit:renderAuthHeader' });
+      logger.error('[authInit][renderAuthHeader] Error during rendering', err, { context: 'authInit:renderAuthHeader' });
       // Error handled silently
     }
   }

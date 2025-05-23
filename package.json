@@ -11,6 +11,7 @@
     "lint": "eslint \"static/js/**/*.js\"",
     "audit": "node scripts/audit.js",
     "codemod": "jscodeshift -t scripts/remove-window-export.js static/js/**/*.js",
+    "test:e2e": "playwright test tests/e2e",
     "prebuild": "npm run build:css",
     "start": "uvicorn main:app --host=0.0.0.0 --port=8000"
   },
