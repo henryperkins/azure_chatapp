@@ -7,12 +7,13 @@
  *   const storage = createStorageService({ browserService, APP_CONFIG });
  */
 
-export function createStorageService({ browserService, APP_CONFIG }) {
+export function createStorageService({ browserService, APP_CONFIG, logger, DependencySystem }) {
   function safe(fn, fallback, ctx) {
     try {
       return fn();
     } catch (err) {
-      if (APP_CONFIG?.DEBUG) console.warn(`[storageService] ${ctx} failed`, err);
+      const log = logger || DependencySystem?.modules?.get?.('logger');
+      log?.warn?.(`[storageService] ${ctx} failed`, err);
       return fallback;
     }
   }
