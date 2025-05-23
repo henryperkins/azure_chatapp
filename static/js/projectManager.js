@@ -14,7 +14,23 @@ export function isValidProjectId(id) {
 
 // ----------------------------------------------------------------------------
 // 2) Primary factory export: createProjectManager
-// ----------------------------------------------------------------------------
+/**
+ * Factory function that creates and configures a ProjectManager instance for managing projects and related resources.
+ *
+ * The returned object includes the ProjectManager instance, a cleanup method, and utility functions for normalizing project responses, extracting resource lists, and retrying asynchronous operations with backoff.
+ *
+ * @returns {Object} An object containing:
+ *   - `instance`: The ProjectManager instance.
+ *   - `cleanup`: Function to destroy the instance and clean up listeners.
+ *   - `normalizeProjectResponse`: Utility to normalize project server responses.
+ *   - `extractResourceList`: Utility to extract resource arrays from API responses.
+ *   - `retryWithBackoff`: Utility to retry async functions with exponential backoff.
+ *
+ * @throws {Error} If required dependencies (`DependencySystem`, `domReadinessService`, or `logger`) are missing.
+ *
+ * @remark
+ * The ProjectManager instance is registered with the DependencySystem under the name `'projectManager'`.
+ */
 export function createProjectManager({
   DependencySystem,
   domReadinessService,
@@ -168,6 +184,7 @@ export function createProjectManager({
       this._loadingProjects = false;
       this._loadProjectsDebounceTimer = null;
       this._DEBOUNCE_DELAY = 300;
+      this._activeProjectId = null; // Internal tracking of the current project ID
 
       this.apiEndpoints = apiEndpoints;
       this._CONFIG = {
@@ -234,9 +251,18 @@ export function createProjectManager({
     }
 
     _authOk(failEvent, extraDetail = {}) {
-      if (this.app?.state?.isAuthenticated) return true;
+      const appModule = this.DependencySystem?.modules?.get('appModule');
+      if (appModule?.state?.isAuthenticated) {
+        logger.debug(`[${MODULE}][_authOk] Auth check passed via appModule.state.`, { context: MODULE });
+        return true;
+      }
+      // Fallback to direct auth module check if appModule isn't definitive yet or for robustness
       const auth = this.DependencySystem?.modules?.get?.('auth');
-      if (auth?.isAuthenticated?.()) return true;
+      if (auth?.isAuthenticated?.()) {
+        logger.debug(`[${MODULE}][_authOk] Auth check passed via auth.isAuthenticated().`, { context: MODULE });
+        return true;
+      }
+      logger.warn(`[${MODULE}][_authOk] Auth check failed. Emitting ${failEvent}.`, { failEvent, extraDetail, context: MODULE });
       this._emit(failEvent, { error: 'auth_required', ...extraDetail });
       return false;
     }
@@ -335,8 +361,22 @@ export function createProjectManager({
       try {
         const detailRes = await this._req(detailUrl, undefined, 'loadProjectDetails');
         const currentProjectObj = normalizeProjectResponse(detailRes);
-        this.app.setCurrentProject(currentProjectObj);
-        this._emit('projectLoaded', currentProjectObj);
+
+        // Race condition check: Only update global state if the loaded project is still the active one.
+        const globalCurrentProjectId = this.app?.getCurrentProject?.()?.id;
+        if (globalCurrentProjectId === id) {
+          this.logger.info(`[${MODULE}][loadProjectDetails] Setting current project in app state.`, { projectId: id, context: MODULE });
+          this.app.setCurrentProject(currentProjectObj); // This will trigger AppBus 'currentProjectChanged'
+        } else {
+          this.logger.warn(`[${MODULE}][loadProjectDetails] Global current project changed (${globalCurrentProjectId}) while loading details for ${id}. Not updating global state.`, { context: MODULE });
+          // Decide if we should still emit 'projectLoaded' on local bus or a different event.
+          // For now, let's assume other components will react to AppBus 'currentProjectChanged'.
+          // If this component specifically needs to signal it loaded 'an old project', add custom event.
+          this._emit('projectDetailsLoadedForStaleId', { loadedProject: currentProjectObj, currentGlobalProjectId: globalCurrentProjectId, context: MODULE });
+          return currentProjectObj; // Return the loaded data, but don't make it the global current
+        }
+        
+        this._emit('projectLoaded', currentProjectObj); // Emit on local bus
 
         if (currentProjectObj.archived) {
           this._emit('projectArchivedNotice', { id: currentProjectObj.id });
@@ -652,25 +692,35 @@ export function createProjectManager({
     // getCurrentProject is now synchronous and does not block on app:ready.
     getCurrentProject() {
       if (this.app && typeof this.app.getCurrentProject === 'function') {
-        return this.app.getCurrentProject();
+        const proj = this.app.getCurrentProject();
+        // this.logger.debug(`[${MODULE}][getCurrentProject] Fetched from app.getCurrentProject()`, { projectId: proj?.id, context: MODULE });
+        return proj;
       }
-      // Log a warning if app or method is not available.
-      this.logger?.warn?.('[ProjectManager][getCurrentProject] app or app.getCurrentProject is not available.', { context: MODULE });
+      this.logger.warn(`[${MODULE}][getCurrentProject] app.getCurrentProject is not available.`, { context: MODULE });
       return null;
     }
 
-    // setCurrentProject is now synchronous and does not block on app:ready.
+    // This method is for when ProjectManager ITSELF decides to change the project.
+    // It updates the global state via app.setCurrentProject.
+    // For reacting to external changes, it should listen to AppBus.
     setCurrentProject(project) {
       if (!project || !project.id) {
-        return;
+        this.logger.warn(`[${MODULE}][setCurrentProject] Invalid project object provided.`, { project, context: MODULE });
+        return null;
       }
+      this.logger.info(`[${MODULE}][setCurrentProject] Called to set project globally.`, { projectId: project.id, context: MODULE });
+      this._activeProjectId = project.id; // Update internal tracker
       this.storage?.setItem?.('selectedProjectId', project.id);
+
       if (this.app && typeof this.app.setCurrentProject === 'function') {
-        this.app.setCurrentProject(project);
+        this.logger.debug(`[${MODULE}][setCurrentProject] Calling app.setCurrentProject().`, { projectId: project.id, context: MODULE });
+        this.app.setCurrentProject(project); // This will trigger AppBus event
       } else {
-        this.logger?.warn?.('[ProjectManager][setCurrentProject] app or app.setCurrentProject is not available.', { context: MODULE });
+        this.logger.warn(`[${MODULE}][setCurrentProject] app.setCurrentProject is not available. Cannot set project globally.`, { context: MODULE });
+        // If app.setCurrentProject is not available, we might need to manually emit on local bus
+        // but the design implies app.setCurrentProject is the primary way.
+        this._emit('currentProjectChanged', { project }); // Local emit if global fails
       }
-      this._emit('currentProjectChanged', { project });
       return project;
     }
 
@@ -827,16 +877,119 @@ export function createProjectManager({
     }
 
     async initialize() {
+      this.logger.info(`[${MODULE}] Initializing...`, { context: MODULE });
       await this.domReadinessService.dependenciesAndElements({
-        deps: ['app'],
+        deps: ['app', 'auth', 'AppBus', 'eventHandlers'], // Ensure AppBus and eventHandlers are available for listeners
         timeout: 30000,
-        context: `${MODULE}_dependenciesAndElements`
+        context: `${MODULE}_dependenciesAndElements_wait1`
       });
+      this.logger.debug(`[${MODULE}] Core dependencies (app, auth, AppBus, eventHandlers) ready.`, { context: MODULE });
+
+      const auth = this.DependencySystem.modules.get('auth');
+      const appModule = this.DependencySystem.modules.get('appModule');
+
+      if (auth && !auth.isReady()) {
+        this.logger.info(`[${MODULE}] Auth module not ready yet, waiting for authReady event.`, { context: MODULE });
+        await new Promise(resolve => {
+            this.listenerTracker.add(auth.AuthBus, 'authReady', () => {
+                this.logger.info(`[${MODULE}] Received authReady event.`, { context: MODULE });
+                resolve();
+            }, 'ProjectManager_AuthReadyListener', { once: true });
+        });
+      }
+      this.logger.info(`[${MODULE}] Auth module is ready. Current appModule auth state: ${appModule?.state?.isAuthenticated}`, { context: MODULE });
+      
+      this._setupEventListeners();
+
+      // Initialize with current project if already set in app state
+      const initialProject = this.app?.getCurrentProject?.();
+      if (initialProject?.id) {
+        this.logger.info(`[${MODULE}] Initial project found from app state. Setting active project ID.`, { projectId: initialProject.id, context: MODULE });
+        this._activeProjectId = initialProject.id;
+        // Optionally, load project details or list if required on init and project exists
+        // For now, deferring to explicit calls or UI-triggered loads.
+      } else {
+         this.logger.info(`[${MODULE}] No initial project found from app state.`, { context: MODULE });
+      }
+      
+      this.logger.info(`[${MODULE}] Initialization complete.`, { context: MODULE });
       return true;
     }
 
+    _setupEventListeners() {
+      this.logger.debug(`[${MODULE}] Setting up event listeners.`, { context: MODULE });
+      const appBus = this.DependencySystem.modules.get('AppBus');
+      const authBus = this.DependencySystem.modules.get('auth')?.AuthBus;
+
+      if (appBus) {
+        this.listenerTracker.add(appBus, 'currentProjectChanged', this._handleCurrentProjectChanged.bind(this), 'ProjectManager_AppBus_CurrentProjectChanged');
+        this.logger.debug(`[${MODULE}] Subscribed to AppBus "currentProjectChanged".`, { context: MODULE });
+      } else {
+        this.logger.warn(`[${MODULE}] AppBus not available. Cannot subscribe to "currentProjectChanged".`, { context: MODULE });
+      }
+
+      if (authBus) {
+        this.listenerTracker.add(authBus, 'authStateChanged', this._handleAuthStateChanged.bind(this), 'ProjectManager_AuthBus_AuthStateChanged');
+        this.logger.debug(`[${MODULE}] Subscribed to AuthBus "authStateChanged".`, { context: MODULE });
+      } else {
+        this.logger.warn(`[${MODULE}] AuthBus not available. Cannot subscribe to "authStateChanged".`, { context: MODULE });
+      }
+    }
+
+    _handleCurrentProjectChanged(event) {
+      const newProject = event?.detail?.project;
+      const oldProject = event?.detail?.previousProject;
+      this.logger.info(`[${MODULE}] Received "currentProjectChanged" event via AppBus.`, {
+        newProjectId: newProject?.id,
+        oldProjectId: oldProject?.id,
+        context: MODULE
+      });
+      if (newProject?.id && newProject.id !== this._activeProjectId) {
+        this.logger.debug(`[${MODULE}] Updating internal active project ID to ${newProject.id}.`, { context: MODULE });
+        this._activeProjectId = newProject.id;
+        // Clear any data specific to the old project, IF projectManager caches such details.
+        // For example, if this.projects was a list of files for ONLY the _activeProjectId, clear it.
+        // Currently, loadProjects fetches all projects, so it's less of an issue for the main list.
+        // However, if specific details like current project's files, stats etc., were cached directly
+        // on `this`, they would need clearing here.
+        // Example: if (this.detailedFilesCache?.projectId !== newProject.id) this.detailedFilesCache = null;
+
+        // Optionally, trigger a reload of project-specific data if this component is responsible
+        // for displaying details of the active project.
+        // e.g., if it maintained a this.detailedProjectObject, it might call this.loadProjectDetails(newProject.id);
+        // For now, this manager primarily provides methods; UI components would drive reloads.
+
+      } else if (!newProject?.id) {
+        this.logger.info(`[${MODULE}] Current project cleared (null). Updating internal active ID.`, { context: MODULE });
+        this._activeProjectId = null;
+        // Clear project-specific cached data
+      }
+    }
+
+    _handleAuthStateChanged(event) {
+      const isAuthenticated = event?.detail?.authenticated;
+      this.logger.info(`[${MODULE}] Received "authStateChanged" event. Authenticated: ${isAuthenticated}`, { detail: event?.detail, context: MODULE });
+      if (!isAuthenticated) {
+        this.logger.info(`[${MODULE}] User is now unauthenticated. Clearing cached projects list and active project ID.`, { context: MODULE });
+        this.projects = []; // Clear cached list of all projects
+        this._activeProjectId = null;
+        // Emit an event that project data has been cleared due to auth change, if other parts rely on this.
+        this._emit('projectDataClearedDueToAuth', { reason: 'User unauthenticated' });
+      } else {
+        // User is now authenticated. We might want to trigger a reload of projects.
+        // However, UI components or app.js init flow typically handle initial loads post-auth.
+        // Only trigger if projectManager is expected to proactively refresh its list on login.
+        this.logger.debug(`[${MODULE}] User is now authenticated. Project list can be reloaded if necessary.`, { context: MODULE });
+        // Example: this.loadProjects(); // If proactive reload is desired.
+      }
+    }
+
     destroy() {
-      this.listenerTracker?.remove?.();
+      this.logger.info(`[${MODULE}] Destroying and cleaning up listeners.`, { context: MODULE });
+      this.listenerTracker?.remove?.(); // Cleans up listeners tracked via eventHandlers
+      if (this._loadProjectsDebounceTimer) {
+        clearTimeout(this._loadProjectsDebounceTimer);
+      }
     }
   }
 
