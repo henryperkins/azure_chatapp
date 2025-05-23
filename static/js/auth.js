@@ -410,10 +410,10 @@ export function createAuthModule(deps) {
     try {
       const hasExistingCookies = publicAuth.hasAuthCookies();
       if (!hasExistingCookies && !forceVerify) {
-        logger.info('[AuthModule][verifyAuthState] No auth cookies found and not forceVerify. Clearing state and broadcasting false.', { context: 'verifyAuthState:noCookies' });
-        await clearTokenState({ source: 'verify_no_auth_cookies_not_forced' });
-        broadcastAuth(false, null, 'verify_no_auth_cookies_not_forced');
-        return false;
+        // HttpOnly cookies are not visible to JavaScript; absence of
+        // readable cookies does NOT necessarily indicate the user is logged
+        // out. Continue with backend verification instead of clearing state.
+        logger.debug('[AuthModule][verifyAuthState] No readable auth cookies (likely HttpOnly). Proceeding with backend verification.', { context: 'verifyAuthState:noReadableCookies' });
       }
 
       logger.debug('[AuthModule][verifyAuthState] Proceeding to call AUTH_VERIFY endpoint.', { hasExistingCookies, forceVerify, context: 'verifyAuthState:apiCall' });

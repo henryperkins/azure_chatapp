@@ -334,9 +334,14 @@ export function createSidebar({
       initAuthDom(); // Re-attempt to find DOM elements
     }
 
-    const appModule = DependencySystem.modules?.get('appModule');
-    const authenticated = appModule?.state?.isAuthenticated ?? false;
-    const currentUser = appModule?.state?.currentUser ?? null;
+    // Prefer event detail (directly from AuthModule). Fallback to appModule if detail is missing.
+    let authenticated = event?.detail?.authenticated;
+    let currentUser = event?.detail?.user;
+    if (authenticated === undefined) {
+      const appModule = DependencySystem.modules?.get('appModule');
+      authenticated = appModule?.state?.isAuthenticated ?? false;
+      currentUser = appModule?.state?.currentUser ?? null;
+    }
 
     logger.debug('[Sidebar][handleGlobalAuthStateChange] Auth state update:', {
       isAuthenticated: authenticated,
