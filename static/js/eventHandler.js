@@ -153,7 +153,7 @@ export function createEventHandlers({
       typeof elementSelectorOrElement === 'string'
         ? domAPI.querySelector(elementSelectorOrElement)
         : elementSelectorOrElement;
-    return globalToggleElement(element, show); // This utility can remain as is
+    return globalToggleElement(element, show, domAPI);
   }
 
   function setupCollapsible(toggleId, panelId, chevronId, onExpand) {

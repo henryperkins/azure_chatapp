@@ -89,19 +89,20 @@ export function createApiClient({
 
     // Timeout via AbortController (browserService/DI if available)
     const AbortControllerImpl =
-      (browserService?.getWindow?.() || browserService?.windowObject)?.AbortController
-      || AbortController;
+      browserService.getWindow()?.AbortController
+      ?? (()=>{ throw new Error('[apiClient] AbortController unavailable via DI'); })();
     const abortCtl = new AbortControllerImpl();
     restOpts.signal = abortCtl.signal;
     const apiTimeout = APP_CONFIG?.TIMEOUTS?.API_REQUEST || 15000;
-    const timer = setTimeout(
+    const timer = browserService.setTimeout(
       () => abortCtl.abort(new Error(`API Timeout (${apiTimeout}ms)`)),
       apiTimeout,
     );
 
     const p = (async () => {
       try {
-        const resp = await (browserService?.fetch || fetch)(normUrl, restOpts);
+        if (!browserService?.fetch) throw new Error('[apiClient] browserService.fetch unavailable');
+        const resp = await browserService.fetch(normUrl, restOpts);
 
         // ---------- NEW unified response handling ----------
         const contentType = resp.headers.get('content-type') || '';
@@ -139,7 +140,7 @@ export function createApiClient({
         err.data   = payload;          // keep full payload for callers
         throw err;
       } finally {
-        clearTimeout(timer);
+        browserService.clearTimeout(timer);
         if (method === "GET") pending.delete(key);
       }
     })();

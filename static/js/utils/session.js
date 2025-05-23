@@ -5,7 +5,7 @@
 let sessionId = null;
 function generateSessionId() {
   // Generate RFC4122v4 string with fallback if crypto not present
-  if (window.crypto && window.crypto.randomUUID) return window.crypto.randomUUID();
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return 'ssn-xxxxxxxxyxxxxxxxyxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
   });
