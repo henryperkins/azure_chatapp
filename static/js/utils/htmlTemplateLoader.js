@@ -30,6 +30,14 @@ export function createHtmlTemplateLoader({
     throw new Error('[HtmlTemplateLoader] timerAPI with setTimeout/clearTimeout is required');
   }
 
+  // ──────────────────────────────────────────────────────────────
+  // Native fetch shortcut (bypasses apiClient pre-processing).
+  // Will be used for “pure” static assets such as *.html, *.css, …
+  // It is derived from domAPI DI to remain test/environment safe.
+  // ──────────────────────────────────────────────────────────────
+  const _nativeFetch =
+    domAPI?.getWindow?.()?.fetch?.bind?.(domAPI.getWindow()) || null;
+
   /**
    * Loads an external HTML template into a specified DOM container and emits a custom event upon completion.
    *
@@ -79,11 +87,33 @@ export function createHtmlTemplateLoader({
     let errorInfo = null;
     try {
       logger.info?.(`[HtmlTemplateLoader] Fetching template: ${url}`, { url });
-      const resp = await apiClient.fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        signal: controller.signal
-      });
+
+      // Decide which fetch to use:
+      // • /static/… or any *.html → use browser/native fetch directly
+      // • otherwise → try apiClient.fetch first, then fallback
+      const looksStatic = url.startsWith('/static/') || url.endsWith('.html');
+      const primaryFetch = looksStatic && _nativeFetch ? _nativeFetch : apiClient.fetch;
+
+      let resp;
+      try {
+        resp = await primaryFetch(url, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal
+        });
+      } catch (primaryErr) {
+        // Fallback: if the first try used apiClient and we have native fetch
+        if (primaryFetch !== _nativeFetch && _nativeFetch) {
+          logger.warn('[HtmlTemplateLoader] Primary fetch failed, retrying with native fetch', { url });
+          resp = await _nativeFetch(url, {
+            method: 'GET',
+            cache: 'no-store',
+            signal: controller.signal
+          });
+        } else {
+          throw primaryErr;
+        }
+      }
 
       if (!resp.ok) {
         errorInfo = `HTTP ${resp.status}`;
