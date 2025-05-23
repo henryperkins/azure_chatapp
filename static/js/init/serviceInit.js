@@ -155,8 +155,10 @@ export function createServiceInitializer({
           domAPI,
           eventHandlers,
           sanitizer,
+          // Use raw window.fetch so static HTML paths are untouched
           apiClient: {
-            fetch: (...args) => apiRequest ? apiRequest(...args) : Promise.reject(new Error('API client not available')),
+            fetch: (...args) =>
+              browserServiceInstance.getWindow().fetch(...args)
           },
           timerAPI: {
             setTimeout: (...args) => browserServiceInstance.getWindow().setTimeout(...args),
