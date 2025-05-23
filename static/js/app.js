@@ -116,8 +116,7 @@ const domAPI = createDomAPI({
   sanitizer                      // ← now defined
 });
 
-// (intentionally left blank -- this block is deleted as it is now above)
-
+/* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
 
 // ---------------------------------------------------------------------------
 // 6) Early app module (using factory)
@@ -130,6 +129,35 @@ DependencySystem.register('appModule', appModule);
 // ---------------------------------------------------------------------------
 const app = {}; // This will be enriched later
 DependencySystem.register('app', app);
+
+/* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
+const eventHandlers = createEventHandlers({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  APP_CONFIG,
+  logger,
+  errorReporter: createErrorReporterStub({ logger }),
+  sanitizer,
+  app,
+  projectManager: null,
+  modalManager: null
+  // domReadinessService to be injected after instantiation
+});
+DependencySystem.register('eventHandlers', eventHandlers);
+
+/* Correct domReadinessService creation — after eventHandlers are available. */
+const domReadinessService = createDomReadinessService({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  eventHandlers,
+  logger
+});
+DependencySystem.register('domReadinessService', domReadinessService);
+
+/* Wire the circular dependency */
+eventHandlers.setDomReadinessService(domReadinessService);
 
 // ---------------------------------------------------------------------------
 // Early 'app:ready' dispatch helper
@@ -694,7 +722,7 @@ export async function init() {
       logger.error('[App.init] Error during modals.html loading phase (step 0.5).', err, { context: 'app:init:loadModalsHtml:catch' });
       // We rethrow here because subsequent steps (like ModalManager init) are critical.
       // ModalManager's own init will also try to wait for 'modalsLoaded' and timeout/error if it failed here.
-      throw err; 
+      throw err;
     }
     logStep('loadModalsHtml', 'post', { success: modalsHtmlLoadedSuccessfully });
 
