@@ -434,9 +434,18 @@ const uiInit = createUIInitializer({
   uiUtils
 });
 
-/* ---------------------------------------------------------------------------
-   Utility functions required by init and other top-level logic
---------------------------------------------------------------------------- */
+/**
+ * Safely invokes an asynchronous initialization method on a given instance, logging warnings or errors as needed.
+ *
+ * Attempts to call the specified method on the provided instance. Logs a warning if the instance or method is missing, and logs and rethrows any errors encountered during execution.
+ *
+ * @param {object} instance - The object containing the initialization method.
+ * @param {string} name - The name of the instance, used for logging context.
+ * @param {string} methodName - The name of the method to invoke.
+ * @returns {Promise<boolean>} Resolves to `true` if initialization succeeds or the method returns `undefined`; otherwise, resolves to the boolean value of the method's result. Returns `false` if the instance or method is missing.
+ *
+ * @throws {Error} If the initialization method throws an error during execution.
+ */
 async function safeInit(instance, name, methodName) {
   const logger = DependencySystem.modules.get('logger');
   if (!instance) {
@@ -456,6 +465,13 @@ async function safeInit(instance, name, methodName) {
   }
 }
 
+/**
+ * Attempts to retrieve the current authenticated user from the auth module.
+ *
+ * Prefers the `fetchCurrentUser()` method if available, falling back to `getCurrentUserObject()` or `getCurrentUserAsync()` if necessary. Returns `null` if no user is authenticated, the auth module is unavailable, or an error occurs during retrieval.
+ *
+ * @returns {Promise<Object|null>} The current user object if authenticated, or `null` if not authenticated or unavailable.
+ */
 async function fetchCurrentUser() { // This is the local function in app.js, called during init step 4
   logger.debug('[app] fetchCurrentUser (app.js local function) called.');
   try {
@@ -584,7 +600,18 @@ function handleInitError(err) {
 
 // ---------------------------------------------------------------------------
 // 14) Main initialization function
-// ---------------------------------------------------------------------------
+/**
+ * Orchestrates the full asynchronous initialization sequence for the application.
+ *
+ * Waits for DOM readiness, loads required HTML templates, initializes core systems, waits for critical dependencies, sets up authentication, fetches the current user if authenticated, initializes UI components, registers navigation views, and sets up app-level listeners. Handles timing, error management, and global timeouts, and dispatches the final "app:ready" event upon completion or failure.
+ *
+ * @returns {Promise<boolean>} Resolves to `true` if initialization completes successfully.
+ *
+ * @throws {Error} If any critical initialization phase fails or required dependencies are missing.
+ *
+ * @remark
+ * If initialization exceeds the configured global timeout, an error is logged, error handling is triggered, and the "app:ready" event is dispatched with failure status.
+ */
 export async function init() {
   logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
 

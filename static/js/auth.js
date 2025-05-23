@@ -1,14 +1,17 @@
 /**
- * auth.js
+ * Creates and returns a centralized authentication module with dependency injection.
  *
- * Centralized, DI-compliant authentication module for login/logout/register/session/CSRF.
- * All authentication state, CSRF handling, API request/wrapping, form/event logic
- * is implemented in this single module—no dependencies outside DI context.
+ * This factory function provides a complete authentication system, including login, logout, registration, session verification, CSRF token management, authenticated API requests, event broadcasting, and UI form integration. All external dependencies must be supplied via the `deps` object, ensuring strict modularity and testability.
  *
- * Removal Notice: All previous modular primitives (authRequester, authState, csrfManager, etc.) are removed.
- * This module is now the single source of truth for ALL auth logic and event wiring.
+ * The returned module exposes methods for authentication actions, state queries, event handling, and diagnostics, and manages all authentication state and event wiring internally.
  *
- * @module AuthModule
+ * @param {object} deps - Dependency injection object containing required services and configuration.
+ * @returns {object} Public API for authentication operations, including methods for login, logout, registration, state verification, CSRF handling, event bus, and diagnostics.
+ *
+ * @throws {Error} If required dependencies or endpoint configurations are missing or invalid.
+ *
+ * @remark
+ * All authentication logic, state, and event handling are encapsulated in this module. No authentication primitives exist outside this context. All previous modular primitives are removed.
  */
 
 export function createAuthModule(deps) {
@@ -274,7 +277,18 @@ export function createAuthModule(deps) {
     broadcastAuth(false, null, `clearTokenState:${options.source}`);
   }
 
-  // === 8) BROADCASTING AUTH STATE ===
+  /**
+   * Broadcasts authentication state changes to the application and updates relevant UI elements.
+   *
+   * If the authentication state or user object has changed, updates the internal state, synchronizes with the central app module if available, updates the user menu in the UI, and dispatches an `authStateChanged` event on both the `AuthBus` and the document.
+   *
+   * @param {boolean} authenticated - Whether the user is authenticated.
+   * @param {object|null} [userObject=null] - The current user object, or `null` if not authenticated.
+   * @param {string} [source='unknown'] - The source of the state change for diagnostic purposes.
+   *
+   * @remark
+   * If no change in authentication state or user object is detected, no events are dispatched and the UI is not updated.
+   */
   function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
     logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] called.', {
       authenticated, userObject, source,
@@ -370,6 +384,16 @@ export function createAuthModule(deps) {
   let authCheckInProgress = false;
   const AUTH_CONFIG = { VERIFICATION_INTERVAL: 300000 };
   let verifyInterval = null;
+  /**
+   * Verifies the current authentication state by querying the backend and updates the application state accordingly.
+   *
+   * This function checks for authentication cookies and calls the backend verification endpoint to determine if the user is authenticated. It handles various response formats, including user objects and boolean flags, and updates the authentication state, user object, and broadcasts changes. On errors, it attempts token refresh for 401 responses, clears tokens for 500 or unhandled errors, and maintains state for network errors if cookies are present.
+   *
+   * @param {boolean} [forceVerify=false] - If true, forces verification even if a check is already in progress.
+   * @returns {Promise<boolean>} Resolves to true if the user is authenticated, false otherwise.
+   *
+   * @throws {Error} If the backend returns a non-JSON response when JSON is expected.
+   */
   async function verifyAuthState(forceVerify = false) {
     // Remove the early return that was causing issues with page refresh
     // Always check auth state on page load/refresh regardless of recent login timestamp
@@ -506,7 +530,17 @@ export function createAuthModule(deps) {
     }
   }
 
-  // === 10) PUBLIC AUTH ACTIONS: login, logout, register ===
+  /**
+   * Attempts to log in a user with the provided credentials.
+   *
+   * Fetches a CSRF token, sends a login request to the backend, stores authentication tokens on success, and broadcasts the authenticated state. If the backend response does not include a user object, a provisional user is created for state broadcasting. Logs detailed diagnostics and clears token state on failure.
+   *
+   * @param {string} username - The username to authenticate.
+   * @param {string} password - The password for the user.
+   * @returns {Promise<Object>} The full API response from the login endpoint.
+   *
+   * @throws {Error} If the login attempt fails due to invalid credentials, network issues, or backend errors.
+   */
 
   async function loginUser(username, password) {
     logger.info('[AuthModule][loginUser] Attempting login.', { username: username, context: 'loginUser:start' });
@@ -571,6 +605,11 @@ export function createAuthModule(deps) {
     }
   }
 
+  /**
+   * Logs out the current user by clearing authentication tokens and broadcasting a logged-out state.
+   *
+   * Attempts to call the backend logout API endpoint, but ensures the user is logged out locally regardless of API errors.
+   */
   async function logout() {
     logger.info('[AuthModule][logout] Initiating logout process.', { context: 'logout:start' });
     accessToken = null;
@@ -591,6 +630,16 @@ export function createAuthModule(deps) {
     logger.info('[AuthModule][logout] Logout process completed on client-side.', { context: 'logout:end' });
   }
 
+  /**
+   * Registers a new user with the provided credentials.
+   *
+   * Validates that both username and password are present, then submits a registration request to the backend. After successful registration, forces authentication state verification to synchronize the client with the backend. Clears any partial authentication state and rethrows the error if registration fails.
+   *
+   * @param {Object} userData - The registration data containing at least a username and password.
+   * @returns {Object} The full API response from the registration endpoint.
+   *
+   * @throws {Error} If username or password is missing, or if the registration request fails.
+   */
   async function registerUser(userData) {
     if (!userData?.username || !userData?.password) {
       logger.error('[AuthModule][registerUser] Username and password are required for registration.', { context: 'registerUser:validationError' });
@@ -756,7 +805,15 @@ export function createAuthModule(deps) {
     }
   }
 
-  // === 12) MODULE INIT & CLEANUP ===
+  /**
+   * Initializes the authentication module, setting up event listeners, CSRF protection, and initial authentication state.
+   *
+   * Waits for DOM readiness, attaches form handlers, ensures CSRF token availability with retries, verifies authentication state, and schedules periodic re-verification. Dispatches an `authReady` event upon completion and updates application state. Handles initialization errors by clearing tokens, broadcasting a logged-out state, and raising a fatal modal if CSRF setup fails.
+   *
+   * @returns {Promise<boolean>} Resolves to the result of the initial authentication verification.
+   *
+   * @throws {Error} If required dependencies for periodic verification are missing or if an unhandled error occurs during initialization.
+   */
 
   async function init() {
     // Wait for DOM/app readiness strictly via domReadinessService—no ad-hoc or legacy logic

@@ -7,6 +7,16 @@ import { createKnowledgeBaseSearchHandler } from './knowledgeBaseSearchHandler.j
 import { createKnowledgeBaseManager } from './knowledgeBaseManager.js';
 
 const MODULE = "KnowledgeBaseComponent";
+/**
+ * Creates and returns a knowledge base UI component instance with full lifecycle management.
+ *
+ * This factory function resolves all required dependencies via the provided options or dependency injection system, validates their presence, and constructs a knowledge base component that manages UI rendering, event handling, authentication state, and project context changes. The returned component exposes methods for initialization, rendering, and cleanup, and integrates with injected services for DOM manipulation, event tracking, and logging.
+ *
+ * @param {Object} [options={}] - Configuration and dependency injection options.
+ * @returns {KnowledgeBaseComponentWithDestroy} An instance of the knowledge base component with destroy capability.
+ *
+ * @throws {Error} If required dependencies such as `DependencySystem`, `logger`, `sanitizer`, `app`, `projectManager`, `eventHandlers`, `uiUtils`, `modalManager`, or `domAPI` are missing or invalid.
+ */
 export function createKnowledgeBaseComponent(options = {}) {
   // --- Dependency Resolution ---
   if (!options.DependencySystem) throw new Error("DependencySystem is required for KnowledgeBaseComponent");
