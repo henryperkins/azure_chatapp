@@ -73,23 +73,25 @@ class CookieSettings:
 
         # Force production settings for safety
         if is_production:
+            # Use SameSite=None for sub-domain XHR (refresh endpoint needs cookie)
             return {
-                "secure": (True if self.env.lower() == "production" else False),
+                "secure": True,  # Always secure in production
                 "domain": (
                     self.cookie_domain
                     if self.env.lower() == "production" and self.cookie_domain
                     else None
                 ),
-                "samesite": "lax",
+                "samesite": "none",
                 "httponly": True,
                 "path": "/",
             }
 
         # Default for local development
         return {
-            "secure": not is_localhost,  # False for localhost HTTP, True for e.g. LAN IP dev over HTTPS
+            # Dev / non-prod: allow SameSite=None to test refresh flow across sub-domains
+            "secure": False if is_localhost else True,
             "domain": None,
-            "samesite": "lax",
+            "samesite": "none",
             "httponly": True,
             "path": "/",
         }
