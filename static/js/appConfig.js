@@ -28,25 +28,11 @@ export const APP_CONFIG = {
     INIT_WARN: 3000
   },
   API_ENDPOINTS: {
-  AUTH_CSRF: '/api/auth/csrf',
-  AUTH_LOGIN: '/api/auth/login',
-  AUTH_LOGOUT: '/api/auth/logout',
-  AUTH_REGISTER: '/api/auth/register',
-  AUTH_VERIFY: '/api/auth/verify',
-  AUTH_REFRESH: '/api/auth/refresh',
-  AUTH_SETTINGS: '/api/auth/settings',
+    AUTH_SETTINGS: '/api/auth/settings',
     USER_PROFILE: '/api/user/me',
     USER_PROJECTS: '/api/user/projects',
     USER_STARRED_CONVERSATIONS: '/api/preferences/starred',
-    USER_UPDATE_PREFERENCES: '/api/user/preferences',
-
-    // --- ADDED CHAT/CONVERSATION ENDPOINTS ---
-    // List/create conversations for a project
-    CONVERSATIONS: (projectId) => `/api/projects/${encodeURIComponent(projectId)}/conversations`,
-    // Get/update/delete a specific conversation
-    CONVERSATION: (projectId, conversationId) => `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}`,
-    // List/post messages for a conversation
-    MESSAGES: (projectId, conversationId) => `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`
+    USER_UPDATE_PREFERENCES: '/api/user/preferences'
   },
   LOGGING: {
     BACKEND_ENABLED: true,

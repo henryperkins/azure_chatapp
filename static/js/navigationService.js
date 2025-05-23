@@ -105,27 +105,11 @@ export function createNavigationService({
    * @param {boolean} replace - Whether to replace current history entry
    */
   function updateUrlParams(params = {}, replace = false) {
-    const currentUrl = new URL(browserService.getLocation().href);
-    const searchParams = currentUrl.searchParams;
-
-    // Remove params with null/undefined values
-    Object.entries(params).forEach(([key, value]) => {
-      if (value === null || value === undefined) {
-        searchParams.delete(key);
-      } else {
-        searchParams.set(key, value);
-      }
-    });
-
-    const newUrl = currentUrl.toString();
-
-    if (replace) {
-      browserService.replaceState({}, '', newUrl);
-    } else {
-      browserService.pushState({}, '', newUrl);
-    }
-
-    // Notification removed (URL params update)
+    // delegate to the central implementation to keep behaviour consistent
+    const newUrl = browserService.buildUrl(params);
+    replace
+      ? browserService.replaceState({}, '', newUrl)
+      : browserService.pushState   ({}, '', newUrl);
   }
 
   // === View Management ===
