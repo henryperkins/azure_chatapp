@@ -240,6 +240,49 @@ class ModalManager {
       });
       this.logger.debug?.('[ModalManager] init: Body element ready.');
 
+      /* ----------------------------------------------------------
+         Eager-load modals template if it is not yet in the DOM.
+         This guarantees that the required 'modalsLoaded' event
+         will fire, allowing init() to proceed without timing out.
+      ---------------------------------------------------------- */
+      try {
+        const container = this.domAPI.getElementById('modalsContainer');
+        const modalsAlreadyInjected =
+          !!(container && container.children && container.children.length > 0);
+
+        const htmlTemplateLoader =
+          this.DependencySystem?.modules?.get?.('htmlTemplateLoader');
+
+        if (!modalsAlreadyInjected && htmlTemplateLoader?.loadTemplate) {
+          this.logger.info?.(
+            '[ModalManager] init: Loading /static/html/modals.html template eagerly.'
+          );
+
+          // Fire-and-forget; `loadTemplate` will dispatch the
+          //   `modalsLoaded` event on success (or even on error),
+          //   which is what this.init() waits for next.
+          htmlTemplateLoader
+            .loadTemplate({
+              url: '/static/html/modals.html',
+              containerSelector: '#modalsContainer',
+              eventName: 'modalsLoaded'
+            })
+            .catch((err) =>
+              this.logger.warn?.(
+                '[ModalManager] init: Failed to load modals.html',
+                err,
+                { context: 'modalManager' }
+              )
+            );
+        }
+      } catch (err) {
+        this.logger.warn?.(
+          '[ModalManager] init: Unexpected error during eager modals load',
+          err,
+          { context: 'modalManager' }
+        );
+      }
+
       this.logger.info?.("[ModalManager] init: Waiting for 'modalsLoaded' event...");
       // CRITICAL CHANGE: Strict wait for modalsLoaded.
       // If modals.html fails to load or the event doesn't fire, ModalManager init will fail.
