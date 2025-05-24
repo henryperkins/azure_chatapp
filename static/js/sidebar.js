@@ -605,8 +605,8 @@ export function createSidebar({
     if (btnToggle) {
       eventHandlers.trackListener(
         btnToggle, 'click',
-        safeHandler(showSidebar, 'Sidebar:navToggleBtn click'),
-        { context: 'Sidebar', description: 'Sidebar open' }
+        safeHandler(() => toggleSidebar(), 'Sidebar:navToggleBtn click'),   // ← use toggle, not always-open
+        { context: 'Sidebar', description: 'Sidebar toggle' }
       );
     }
     if (btnClose) {
