@@ -364,26 +364,6 @@ export function createAuthModule(deps) {
       } catch (busErr) {
         logger.error('[DIAGNOSTIC][auth.js][broadcastAuth] AuthBus dispatch failed', busErr, { context: 'broadcastAuth' });
       }
-      try {
-        const doc = domAPI.getDocument();
-        if (doc) {
-          logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on doc', { context: 'broadcastAuth' });
-          if (!eventHandlers.createCustomEvent) {
-            throw new Error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create events for guardrail compliance.');
-          }
-          domAPI.dispatchEvent(
-            doc,
-            eventHandlers.createCustomEvent('authStateChanged', {
-              detail: {
-                ...eventDetail,
-                source: source + '_via_auth_module'
-              }
-            })
-          );
-        }
-      } catch (err) {
-        logger.error('[DIAGNOSTIC][auth.js][broadcastAuth] doc dispatch failed', err, { context: 'broadcastAuth' });
-      }
     } else {
       logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] No auth/user change; not broadcasting', { context: 'broadcastAuth' });
     }
