@@ -371,6 +371,27 @@ function vFactory(err, file, config) {
                 hasProp(returnPath.node.argument, "destroy")
               ) {
                 hasCleanup = true;
+
+                /* Deep-traverse the inline cleanup fn for cleanupListeners() */
+                returnPath.get("argument").get("properties").forEach(propPath => {
+                  const key = propPath.node.key;
+                  if (
+                    (key.type === "Identifier" && key.name === "cleanup") ||
+                    (key.type === "StringLiteral" && key.value === "cleanup")
+                  ) {
+                    propPath.get("value").traverse({
+                      CallExpression(callPath) {
+                        const cal = callPath.node.callee;
+                        if (
+                          cal.type === "MemberExpression" &&
+                          cal.property.name === "cleanupListeners"
+                        ) {
+                          cleanupInvokesEH = true;
+                        }
+                      }
+                    });
+                  }
+                });
               }
             }
           },
