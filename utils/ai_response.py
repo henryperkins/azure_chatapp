@@ -44,6 +44,9 @@ class AIResponseOptions:
             "temperature"              : self.temperature,
             **self.extra_params,
         }
+        # Drop reasoning_summary – we never want to request a summary
+        # unless explicitly whitelisted.
+        self.extra_params.pop("reasoning_summary", None)
         # Inject reasoning param for o-series models if requested
         if force_reasoning_for_model and force_reasoning_for_model.startswith("o"):
             # request extra reasoning detail **without** triggering summary generation
@@ -51,6 +54,7 @@ class AIResponseOptions:
                 "effort": self.reasoning_effort or "medium"
             }
         # strip Nones
+        d.pop("reasoning_summary", None)
         return {k: v for k, v in d.items() if v is not None}
 
 
