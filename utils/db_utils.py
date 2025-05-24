@@ -1,3 +1,5 @@
+# SINGLE source of truth for shared DB helpers.
+# All service wrappers must delegate here.
 """
 db_utils.py
 ----------
