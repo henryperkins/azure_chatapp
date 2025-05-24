@@ -21,6 +21,20 @@ export function createLogger({
   authModule = null               // ← NEW optional DI: AuthModule for auth check
 } = {}) {
   const THRESHOLD = LVL[minLevel] ?? LVL.info;
+
+  // Generate a unique request ID for correlation tracking
+  function generateRequestId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    // Fallback for older browsers
+    return 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+
   async function send(level, args) {
     if (!enableServer) return;
     if (LVL[level] < THRESHOLD) return;          // NEW
@@ -39,11 +53,24 @@ export function createLogger({
         (typeof fetch === 'function' ? fetch : null);
       if (!_fetch) return;                   // no fetch available
 
+      // Generate request ID for correlation tracking
+      const reqId = generateRequestId();
+
       const response = await _fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Request-ID': reqId,           // NEW - correlation header
+          'X-Correlation-ID': reqId        // NEW - backup header
+        },
         credentials: 'include',                   // NEW – carry cookies / CSRF exempt
-        body: JSON.stringify({ level, context, args, ts: Date.now() })
+        body: JSON.stringify({
+          level,
+          context,
+          args,
+          ts: Date.now(),
+          request_id: reqId                     // NEW - also in body
+        })
       });
       if (!response.ok) {
         // Surface server-side log ingestion failures - use fallback logging
