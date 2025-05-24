@@ -382,6 +382,7 @@ export function createSidebar({
 
     el.classList.remove('-translate-x-full');
     el.classList.add('translate-x-0');
+    el.classList.add('open');               // ← ensures CSS .sidebar.open {...} overrides mobile transform
 
     if (sidebarMobileDock && typeof sidebarMobileDock.updateDockVisibility === 'function') {
       sidebarMobileDock.updateDockVisibility(true);
@@ -432,6 +433,7 @@ export function createSidebar({
     }
 
     visible = false;
+    el.classList.remove('open');            // ← reset the open flag
     el.classList.add('-translate-x-full');
 
     el.inert = true;
@@ -702,6 +704,7 @@ export function createSidebar({
       el.classList.add('sidebar-pinned');
       el.classList.remove('-translate-x-full');
       el.classList.add('translate-x-0');
+      el.classList.add('open');             // keep open state on reload / desktop
       visible = true;
       el.inert = false;
       el.setAttribute('aria-hidden', 'false');
