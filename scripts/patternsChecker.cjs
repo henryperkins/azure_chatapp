@@ -1764,14 +1764,14 @@ function analyze(file, code, configToUse) {
       ]
     });
   } catch (e) {
-    return [
-      E(
-        file,
-        e.loc ? e.loc.line : 1,
-        0,
-        `Parse error: ${e.message}`
-      )
-    ];
+    const pe = E(
+      file,
+      e.loc ? e.loc.line : 1,
+      0,
+      `Parse error: ${e.message}`
+    );
+    pe.actualLine = getLine(code, pe.line);
+    return [pe];
   }
 
   const visitors = [
