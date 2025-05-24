@@ -1027,16 +1027,21 @@ function vReadiness(err, file, isAppJs, config) {
 
   return {
     CallExpression(p) {
-      // e.g. window.addEventListener("DOMContentLoaded", ...)
       const callee = p.node.callee;
+
+      /* ------------------------------------------------------------------
+       * A. window/document.addEventListener("DOMContentLoaded" | "load")
+       * ------------------------------------------------------------------ */
       if (
         callee.type === "MemberExpression" &&
         callee.property.name === "addEventListener"
       ) {
-        const evNameNode = p.node.arguments[0];
+        const evArg = p.node.arguments[0];
+
+        // DOMContentLoaded / load listeners attached to window or document
         if (
-          evNameNode?.type === "StringLiteral" &&
-          (evNameNode.value === "DOMContentLoaded" || evNameNode.value === "load")
+          evArg?.type === "StringLiteral" &&
+          ["DOMContentLoaded", "load"].includes(evArg.value)
         ) {
           const objSource = getExpressionSourceNode(p.get("callee.object"));
           if (objSource?.name === "window" || objSource?.name === "document") {
@@ -1045,12 +1050,66 @@ function vReadiness(err, file, isAppJs, config) {
                 file,
                 p.node.loc.start.line,
                 7,
-                `Ad-hoc DOM readiness check ('${evNameNode.value}') found.`,
+                `Ad-hoc DOM readiness check ('${evArg.value}') found.`,
                 `Use DI-injected '${config.serviceNames.domReadinessService}'.`
               )
             );
           }
         }
+        /* --------------------------------------------------------------
+         * B. Manual application-level readiness events
+         * -------------------------------------------------------------- */
+        else if (
+          evArg?.type === "StringLiteral" &&
+          ["app:ready", "AppReady"].includes(evArg.value)
+        ) {
+          err.push(
+            E(
+              file,
+              p.node.loc.start.line,
+              7,
+              `Manual addEventListener('${evArg.value}', ...) detected.`,
+              "Use domReadinessService for all app/module readiness coordination."
+            )
+          );
+        }
+      }
+
+      /* ------------------------------------------------------------------
+       * C. Direct DependencySystem.waitFor(...)
+       * ------------------------------------------------------------------ */
+      if (
+        callee.type === "MemberExpression" &&
+        callee.object.name === "DependencySystem" &&
+        callee.property.name === "waitFor"
+      ) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            7,
+            "Manual DependencySystem.waitFor() call is forbidden for module/app readiness.",
+            "Use only domReadinessService.{waitForEvent(),dependenciesAndElements()} via DI."
+          )
+        );
+      }
+
+      /* ------------------------------------------------------------------
+       * D. setTimeout / setInterval – often used as ad-hoc readiness hacks
+       * ------------------------------------------------------------------ */
+      if (
+        callee.type === "Identifier" &&
+        /^(setTimeout|setInterval)$/.test(callee.name)
+      ) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            7,
+            "setTimeout/setInterval detected; manual async awaits discouraged.",
+            "If this implements readiness orchestration, replace with domReadinessService-based APIs."
+          )
+        );
       }
     }
   };
