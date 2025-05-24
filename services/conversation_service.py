@@ -355,15 +355,32 @@ class ConversationService:
                     conv.extra_data.get("ai_settings", {}) if conv.extra_data else {}
                 )
 
+                # Check if the model supports extended thinking before applying settings
+                from utils.model_registry import get_model_config
+
+                model_cfg = get_model_config(conv.model_id)
+                model_supports_thinking = (
+                    model_cfg
+                    and "extended_thinking" in model_cfg.get("capabilities", [])
+                )
+
                 final_enable_thinking = (
                     enable_thinking
                     if enable_thinking is not None
-                    else ai_settings.get("enable_thinking")
+                    else (
+                        ai_settings.get("enable_thinking")
+                        if model_supports_thinking
+                        else False
+                    )
                 )
                 final_thinking_budget = (
                     thinking_budget
                     if thinking_budget is not None
-                    else ai_settings.get("thinking_budget")
+                    else (
+                        ai_settings.get("thinking_budget")
+                        if model_supports_thinking
+                        else None
+                    )
                 )
                 final_reasoning_effort = (
                     reasoning_effort
@@ -414,11 +431,17 @@ class ConversationService:
                         final_enable_thinking = False
                         final_thinking_budget = None
                         final_reasoning_effort = None
-                        params_for_validation.update(
-                            enable_thinking=False,
-                            thinking_budget=None,
-                            reasoning_effort=None,
-                        )
+                        # Remove thinking-related parameters completely from validation
+                        params_for_validation = {
+                            k: v
+                            for k, v in params_for_validation.items()
+                            if k
+                            not in [
+                                "enable_thinking",
+                                "thinking_budget",
+                                "reasoning_effort",
+                            ]
+                        }
                         validate_model_and_params(conv.model_id, params_for_validation)
                     else:
                         # Propagate unrelated validation errors
@@ -474,7 +497,9 @@ class ConversationService:
                 response["truncation_details"] = stats.get("truncation_details", {})
                 if "assistant_message" in response and response["assistant_message"]:
                     response["assistant_message"]["token_stats"] = stats
-                    response["assistant_message"]["truncation_details"] = stats.get("truncation_details", {})
+                    response["assistant_message"]["truncation_details"] = stats.get(
+                        "truncation_details", {}
+                    )
             except HTTPException as http_exc:
                 logger.error(
                     f"HTTP error during AI generation for conv {conversation_id}: "
