@@ -11,9 +11,10 @@ from typing import Dict, Any, List, Optional
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, select
 from models.artifact import Artifact
 from fastapi import HTTPException
+from models.user import User
 
 from services.project_service import validate_project_access, validate_resource_access
 
