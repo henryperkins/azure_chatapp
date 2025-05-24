@@ -46,7 +46,7 @@ from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
 from services.file_service import FileService
-from utils.sentry_utils import sentry_span
+from utils.sentry_utils import sentry_span_context
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -113,7 +113,6 @@ async def create_project(
     )
     transaction = start_transaction(
         op="project",
-        name="Create Project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
     try:
@@ -257,9 +256,8 @@ async def list_projects(
     logger.info(
         f"[PROJECT_LIST_START] User ID {current_user.id} ({current_user.username}) listing projects with filter: {filter_type.value}"
     )
-    with sentry_span(
+    with sentry_span_context(
         op="project",
-        name="List Projects",
         description=f"List projects with filter: {filter_type.value}",
     ) as span:
         try:
@@ -346,8 +344,8 @@ async def get_project(
                 detail=f"Invalid project ID: {project_id}",
             ) from coercion_err
 
-        with sentry_span(
-            op="project", name="Get Project", description=f"Get project {proj_id}"
+        with sentry_span_context(
+            op="project", description=f"Get project {proj_id}"
         ) as span:
             try:
                 span.set_tag("project.id", str(proj_id))
@@ -425,7 +423,6 @@ async def update_project(
     proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
-        name="Update Project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
     try:
@@ -450,7 +447,9 @@ async def update_project(
                     detail="Token limit below current usage",
                 )
 
-            with sentry_span(op="db.update", description="Update project record"):
+            with sentry_span_context(
+                op="db.update", description="Update project record"
+            ) as span:
                 for key, value in updates.items():
                     if getattr(project, key) != value:
                         old_val = getattr(project, key)
@@ -508,7 +507,6 @@ async def delete_project(
     proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
     transaction = start_transaction(
         op="project",
-        name="Delete Project",
         sampled=random.random() < PROJECT_SAMPLE_RATE,
     )
     try:
@@ -524,20 +522,23 @@ async def delete_project(
                 raise HTTPException(status_code=404, detail="Project not found")
 
             files_deleted = 0
-            files_failed  = 0
-            total_size    = 0
+            files_failed = 0
+            total_size = 0
 
             fs = FileService(db)
+            project_uuid = coerce_project_id(project_id)
 
-            with sentry_span(op="storage", description="Delete project files"):
+            with sentry_span_context(
+                op="storage", description="Delete project files"
+            ) as span:
                 files = await get_all_by_condition(
                     db, ProjectFile, ProjectFile.project_id == project_id
                 )
                 for f in files:
                     try:
-                        await fs.delete_file(project_id, f.id)
+                        await fs.delete_file(project_uuid, f.id)
                         files_deleted += 1
-                        total_size   += f.file_size
+                        total_size += f.file_size
                     except Exception as file_err:
                         files_failed += 1
                         capture_exception(file_err)
@@ -585,7 +586,9 @@ async def delete_project(
                 f"Deleted {file_del.rowcount if hasattr(file_del, 'rowcount') else '?'} file records for project {project_id}"
             )
 
-            with sentry_span(op="db.delete", description="Delete project record"):
+            with sentry_span_context(
+                op="db.delete", description="Delete project record"
+            ) as span:
                 await db.delete(project)
                 await db.commit()
 
@@ -644,9 +647,8 @@ async def toggle_archive_project(
     """Toggle archive status with state tracking"""
     current_user, _token = current_user_tuple
     proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
-    with sentry_span(
+    with sentry_span_context(
         op="project",
-        name="Toggle Archive",
         description=f"Toggle archive for project {proj_id}",
     ) as span:
         try:
@@ -703,9 +705,8 @@ async def toggle_pin_project(
     """Toggle pin status of a project with validation"""
     current_user, _token = current_user_tuple
     proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
-    with sentry_span(
+    with sentry_span_context(
         op="project",
-        name="Toggle Pin",
         description=f"Toggle pin for project {proj_id}",
     ) as span:
         try:
@@ -764,11 +765,9 @@ async def get_project_stats(
     """Get project statistics with performance tracing."""
     current_user, _token = current_user_tuple
     proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
-    with sentry_span(
+    with sentry_span_context(
         op="project",
-        name="Get Stats",
         description=f"Get stats for project {proj_id}",
-        sampled=random.random() < METRICS_SAMPLE_RATE,
     ) as span:
         try:
             span.set_tag("project.id", str(proj_id))

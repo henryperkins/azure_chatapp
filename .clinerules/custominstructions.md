@@ -69,6 +69,7 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 | Feature | Location | Access |
 |---------|----------|---------|
 | SafeHandler | `app.js` | `DependencySystem.modules.get('safeHandler')` |
+| Logger Factory | `logger.js` | `createLogger({ context, debug, minLevel, sessionIdProvider, traceIdProvider })` |
 | Project State | `appModule.state` | `.currentProjectId`, `.currentProject` |
 | Form Handlers | `auth.js` | `createAuthFormHandler()` |
 | URL Parsing | `navigationService` | `.navigateTo()`, `.parseURL()` |
@@ -102,6 +103,48 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 - Mutable module-level state
 - Generic response types
 - Synchronous operations in async code
+
+## Logging Patterns (MANDATORY)
+
+### ✅ Logger Factory Creation (app.js only)
+```javascript
+// Correct logger factory creation - no authModule parameter
+import { createLogger } from './logger.js';
+const logger = createLogger({
+  context: 'App',
+  debug: APP_CONFIG.DEBUG,
+  minLevel: 'info',
+  enableServer: false, // Disabled until auth completes
+  sessionIdProvider: () => getSessionId(),
+  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId')
+});
+
+// After auth initialization - enable remote logging
+logger.setServerLoggingEnabled(true);
+```
+
+### ✅ Logger Usage in Modules
+```javascript
+// Logger is DI-injected, never access directly
+export function createMyModule({ logger, apiClient, domAPI }) {
+  const context = 'MyModule';
+
+  // Always use context parameter for module identification
+  logger.info(context, 'Module initialized', { timestamp: Date.now() });
+  logger.error(context, 'Operation failed', error, { userId: user.id });
+
+  // Runtime controls (app.js only)
+  logger.setServerLoggingEnabled(true);  // Enable remote logging after auth
+  logger.setMinLevel('warn');            // Set minimum log level
+}
+```
+
+### ❌ Logger Anti-Patterns
+- Direct console.* calls (use injected logger)
+- Accessing logger via DependencySystem.modules.get() in modules
+- Missing context parameter in log calls
+- Calling setAuthModule() (method removed - uses appModule.state automatically)
+- Including authModule parameter in createLogger() factory
 
 ## Quick Reference
 ```javascript

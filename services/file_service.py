@@ -21,10 +21,12 @@ from services.knowledgebase_helpers import (
     StorageManager,
     TokenManager,
 )
-from services.knowledgebase_service import (
-    ensure_project_has_knowledge_base,
-    process_single_file_for_search,
-)
+
+# Delayed imports to avoid circular dependency
+# from services.knowledgebase_service import (
+#     ensure_project_has_knowledge_base,
+#     process_single_file_for_search,
+# )
 from utils.db_utils import get_by_id, save_model
 from utils.file_validation import FileValidator, sanitize_filename
 from utils.tokens import count_tokens_text
@@ -78,6 +80,9 @@ class FileService:
 
         kb = None
         if index_kb:
+            # Delayed import to avoid circular dependency
+            from services.knowledgebase_service import ensure_project_has_knowledge_base
+
             kb = project.knowledge_base or await ensure_project_has_knowledge_base(
                 project_id, self.db, user_id
             )
@@ -128,6 +133,9 @@ class FileService:
 
         # Queue background processing if KB indexing requested
         if index_kb and background_tasks and kb:
+            # Delayed import to avoid circular dependency
+            from services.knowledgebase_service import process_single_file_for_search
+
             background_tasks.add_task(
                 process_single_file_for_search,
                 file_id=UUID(str(project_file.id)),
