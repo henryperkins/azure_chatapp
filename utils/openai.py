@@ -365,17 +365,13 @@ async def _send_azure_responses_request(
     if "reasoning" in payload and payload["reasoning"]:
         responses_payload["reasoning"] = payload["reasoning"]
 
-    # Max output tokens mapping for o3 (and future models)
-    # If present, remap max_completion_tokens to max_output_tokens for model 'o3'
-    if model_name.startswith("o3"):
-        mct = payload.get("max_completion_tokens")
-        if mct is not None:
-            responses_payload["max_output_tokens"] = mct
-    else:
-        # For other models, still allow max_completion_tokens
-        mct = payload.get("max_completion_tokens")
-        if mct is not None:
-            responses_payload["max_completion_tokens"] = mct
+    # ---- Map token limits to the field expected by the Responses API ----
+    mct = payload.get("max_completion_tokens") or payload.get("max_tokens")
+    if mct is not None:
+        responses_payload["max_output_tokens"] = mct
+    # Ensure we don’t forward unsupported names
+    responses_payload.pop("max_completion_tokens", None)
+    responses_payload.pop("max_tokens", None)
 
     # Always pass stream if present
     if "stream" in payload and payload["stream"] is not None:
@@ -567,11 +563,14 @@ def build_azure_payload(
         if is_reasoning_model(model_name):
             # For Chat Completions API, use reasoning_effort parameter
             if model_name in RESPONSES_API_MODELS:
-                # only ask Azure for a summary when the caller explicitly supplied one
                 reasoning_obj = {"effort": kwargs.get("reasoning_effort", "medium")}
+                # Only add summary if caller explicitly supplied one
                 if kwargs.get("reasoning_summary") is not None:
                     reasoning_obj["summary"] = kwargs["reasoning_summary"]
-                payload["reasoning"] = reasoning_obj
+
+                payload["reasoning"] = reasoning_obj          # ← keep effort only
+                payload.pop("reasoning_effort", None)         # remove duplicate
+                payload.pop("reasoning_summary", None)        # never send as separate field
             else:
                 # For Chat Completions API, use reasoning_effort parameter
                 if kwargs.get("reasoning_effort"):
