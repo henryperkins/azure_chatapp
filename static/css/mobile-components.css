@@ -178,3 +178,14 @@ input, select, textarea {
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
 }
+
+/* ─── Conversation list items ─────────────────────────────── */
+.conversation-item {
+  @apply flex items-center justify-between gap-3 p-3
+         bg-base-100 border border-base-200 rounded-xl shadow-sm
+         transition-colors duration-200;
+  min-height: var(--mobile-touch-target);
+}
+.conversation-item:hover   { @apply bg-base-200; }
+.conversation-item.active  { @apply bg-primary/10 border-primary; }
+.conversation-item .badge  { @apply bg-base-200 border-none text-xs; }
