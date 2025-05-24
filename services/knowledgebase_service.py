@@ -32,7 +32,9 @@ from services.project_service import (
     check_knowledge_base_status as get_project_files_stats,
     validate_project_access,
 )  # Unified export for all code that expects file & chunk stats APIs
-from services.file_service import FileService
+
+# Delayed import to avoid circular dependency
+# from services.file_service import FileService
 
 from fastapi import (
     HTTPException,
@@ -214,12 +216,15 @@ async def upload_file_to_project(
     await _validate_user_and_project(project_id, user_id, db)
 
     # ── Single-source-of-truth upload via FileService ──────────────────
+    # Delayed import to avoid circular dependency
+    from services.file_service import FileService
+
     fs = FileService(db)
     return await fs.upload(
         project_id=project_id,
         file=file,
-        user_id=user_id,            # FileService already validates this
-        index_kb=True,              # KB uploads must always be indexed
+        user_id=user_id,  # FileService already validates this
+        index_kb=True,  # KB uploads must always be indexed
         background_tasks=background_tasks,
     )
 
@@ -286,6 +291,7 @@ async def delete_project_file(
     token_count = file_record.config.get("token_count", 0) if file_record.config else 0
 
     from services.file_service import FileService
+
     fs = FileService(db, StorageManager.get())
     await fs.delete_file(project_id, file_id)
 
@@ -465,6 +471,7 @@ async def _validate_file_access(
         raise HTTPException(status_code=404, detail="File not found")
     return project, file_record
 
+
 async def _delete_file_vectors(
     project_id: UUID, file_id: UUID, db: AsyncSession
 ) -> None:
@@ -611,6 +618,9 @@ async def get_project_file_list(
 ) -> dict[str, Any]:
     # Single-source permission check
     await _validate_user_and_project(project_id, user_id, db)
+
+    # Delayed import to avoid circular dependency
+    from services.file_service import FileService
 
     fs = FileService(db)
     result = await fs.list_files(

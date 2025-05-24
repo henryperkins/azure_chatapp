@@ -8,7 +8,7 @@
  *   DependencySystem.register('logger', logger);
  */
 
-const LEVELS = { debug:10, info:20, log:20, warn:30, error:40, critical:50, fatal:60 };
+const LEVELS = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
@@ -17,14 +17,12 @@ export function createLogger({
   minLevel = 'debug',
   fetcher = null,
   browserService = null,
-  authModule = null,
   sessionIdProvider = null,
-  traceIdProvider   = null,
-  safeHandler       = null
+  traceIdProvider = null,
+  safeHandler = null
 } = {}) {
-  let _minLvlNum  = LEVELS[minLevel] ?? 10;
+  let _minLvlNum = LEVELS[minLevel] ?? 10;
   let _enableServer = enableServer;
-  let _authModule   = authModule;
 
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
@@ -41,7 +39,11 @@ export function createLogger({
 
   async function send(level, args) {
     if (!_enableServer) return;
-    if (_authModule?.isAuthenticated?.() === false) return;
+
+    // ✅ CORRECT - Use canonical appModule.state (follows Dec 2024 auth guardrails)
+    const appModule = (typeof DependencySystem !== 'undefined') ? DependencySystem?.modules?.get?.('appModule') : null;
+    if (appModule?.state?.isAuthenticated === false) return;
+
     if (LEVELS[level] < _minLvlNum) return;
 
     try {
@@ -56,16 +58,16 @@ export function createLogger({
       const reqId = generateRequestId();
 
       const sessionId = sessionIdProvider?.() ||
-                        browserService?.getSessionId?.() ||
-                        (typeof window!=='undefined' && window.__APP_SESSION_ID) ||
-                        'unknown-session';
-      const traceId   = traceIdProvider?.();
+        browserService?.getSessionId?.() ||
+        (typeof window !== 'undefined' && window.__APP_SESSION_ID) ||
+        'unknown-session';
+      const traceId = traceIdProvider?.();
 
       const response = await _fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Content-Type'   :'application/json',
-          'X-Request-ID'   : reqId,
+          'Content-Type': 'application/json',
+          'X-Request-ID': reqId,
           'X-Correlation-ID': reqId,
           ...(traceId ? { 'X-Trace-ID': traceId } : {})
         },
@@ -77,43 +79,41 @@ export function createLogger({
           ts: Date.now(),
           request_id: reqId,
           session_id: sessionId,
-          trace_id  : traceId
+          trace_id: traceId
         })
       });
       if (!response.ok) {
         // Surface server-side log ingestion failures - use fallback logging
-        const _c = (typeof window!=='undefined' && window.console) || {warn:()=>{}};
+        const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
         _c.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
       }
     } catch (err) {
       // Surface client-side failures (e.g., network down, CORS, 0 response) - use fallback logging
-      const _c = (typeof window!=='undefined' && window.console) || {warn:()=>{}};
+      const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
       _c.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
     }
   }
-  const _c = (typeof window!=='undefined' && window.console) || {log:()=>{},info:()=>{},warn:()=>{},error:()=>{},debug:()=>{}};
-  function wrap(level, fn=_c.log) {
+  const _c = (typeof window !== 'undefined' && window.console) || { log: () => { }, info: () => { }, warn: () => { }, error: () => { }, debug: () => { } };
+  function wrap(level, fn = _c.log) {
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
-    return (...args)=>{ safe(`[${context}]`, ...args); void send(level,args); };
+    return (...args) => { safe(`[${context}]`, ...args); void send(level, args); };
   }
 
   // Mutators for runtime control
   function setServerLoggingEnabled(flag = true) { _enableServer = !!flag; }
-  function setAuthModule(module)                { _authModule   = module; }
   function setMinLevel(lvl = 'info') {   // accepts 'debug' … 'fatal'
     if (LEVELS[lvl]) _minLvlNum = LEVELS[lvl];
   }
 
   return {
-    log : wrap('log', _c.log),
+    log: wrap('log', _c.log),
     info: wrap('info', _c.info),
     warn: wrap('warn', _c.warn),
     error: wrap('error', _c.error),
     debug: debug ? wrap('debug', _c.debug) : () => { },
-    critical : wrap('critical', _c.error),
-    fatal    : wrap('fatal',    _c.error),
+    critical: wrap('critical', _c.error),
+    fatal: wrap('fatal', _c.error),
     setServerLoggingEnabled,
-    setAuthModule,
     setMinLevel
   };
 }

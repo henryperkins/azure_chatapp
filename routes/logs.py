@@ -178,6 +178,8 @@ async def receive_logs(
         # Integration: Forward client log to Sentry as a message (retaining details)
         try:
             msg = f"[{ctx}] {level.upper()}: {summary}"
+            if level == "warn":
+                level = "warning"
             if level in ("warning", "warn", "error", "critical", "fatal"):
                 # Set Sentry tags for correlation
                 import sentry_sdk

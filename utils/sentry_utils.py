@@ -374,7 +374,13 @@ def sentry_span_context(
         raise
 
 
-def sentry_span(op: str | None = None, desc: str | None = None, alert_ms: int = 500):
+def sentry_span(
+    op: str | None = None,
+    description: str | None = None,
+    *,
+    desc: str | None = None,
+    alert_ms: int = 500,
+):
     """
     One-line span decorator that times any function and auto-sends slow calls as WARNING logs.
 
@@ -388,10 +394,11 @@ def sentry_span(op: str | None = None, desc: str | None = None, alert_ms: int = 
 
     def decorator(fn):
         is_coro = asyncio.iscoroutinefunction(fn)
+        _desc = description if description is not None else desc
 
         @functools.wraps(fn)
         async def async_wrapper(*args, **kwargs):
-            with sentry_span_context(op=op or fn.__name__, description=desc):
+            with sentry_span_context(op=op or fn.__name__, description=_desc):
                 start = time.perf_counter()
                 try:
                     return await fn(*args, **kwargs)
@@ -407,7 +414,7 @@ def sentry_span(op: str | None = None, desc: str | None = None, alert_ms: int = 
 
         @functools.wraps(fn)
         def sync_wrapper(*args, **kwargs):
-            with sentry_span_context(op=op or fn.__name__, description=desc):
+            with sentry_span_context(op=op or fn.__name__, description=_desc):
                 start = time.perf_counter()
                 try:
                     return fn(*args, **kwargs)

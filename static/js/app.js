@@ -90,13 +90,13 @@ import { createLogger } from './logger.js';
 
 // PHASE 1: Create a basic logger for early DI (no authModule yet)
 let logger = createLogger({
-  context   : 'App',
-  debug     : APP_CONFIG && APP_CONFIG.DEBUG === true,
-  minLevel  : APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-  fetcher   : browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
-  enableServer : false, // Prevent backend POSTs before authModule is available
-  sessionIdProvider : () => getSessionId(),
-  traceIdProvider   : () => DependencySystem?.modules?.get?.('traceId') ?? null
+  context: 'App',
+  debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
+  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
+  fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
+  enableServer: false, // Prevent backend POSTs before authModule is available
+  sessionIdProvider: () => getSessionId(),
+  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId') ?? null
 });
 DependencySystem.register('logger', logger);
 
@@ -598,9 +598,7 @@ export async function init() {
 
     // ─── elevate logger to full remote mode once auth is wired ───
     {
-      const logger      = DependencySystem.modules.get('logger');
-      const authModule  = DependencySystem.modules.get('auth');
-      logger?.setAuthModule?.(authModule);
+      const logger = DependencySystem.modules.get('logger');
       logger?.setServerLoggingEnabled?.(true);
     }
 

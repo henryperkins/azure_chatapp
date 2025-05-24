@@ -180,9 +180,8 @@ export function createSidebar({
   }
 
   function dispatch(name, detail) {
-    const doc = domAPI.getDocument();
-    if (doc && typeof doc.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') {
-      doc.dispatchEvent(new CustomEvent(name, { detail }));
+    if (typeof CustomEvent !== 'undefined' && SidebarBus && typeof SidebarBus.dispatchEvent === 'function') {
+      SidebarBus.dispatchEvent(new CustomEvent(name, { detail }));
     }
   }
 
@@ -228,7 +227,7 @@ export function createSidebar({
         `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
       );
     } catch (error) {
-      logger.error('[Sidebar][_handleProjectSearch] Failed to handle project search', error && error.stack ? error.stack : error, { context: 'Sidebar' });
+      logger.error('[Sidebar][_handleProjectSearch] Failed to handle project search', error && error.stack ? error.stack : error, { context: 'Sidebar:_handleProjectSearch' });
     }
   }
 
@@ -242,7 +241,7 @@ export function createSidebar({
       // Clear the list and show a message instead of trying to load without project ID
       const listElement = domAPI.getElementById('recentChatsSection')?.querySelector('ul');
       if (listElement) {
-        listElement.innerHTML = '';
+        listElement.innerHTML = sanitizer.sanitize('');
         const li = domAPI.createElement('li');
         li.className = 'p-4 text-center text-gray-500';
         domAPI.setTextContent(li, 'Select a project to view conversations');
@@ -268,7 +267,7 @@ export function createSidebar({
       // Clear the list and show a message instead of trying to load without project ID
       const listElement = domAPI.getElementById('starredChatsSection')?.querySelector('ul');
       if (listElement) {
-        listElement.innerHTML = '';
+        listElement.innerHTML = sanitizer.sanitize('');
         const li = domAPI.createElement('li');
         li.className = 'p-4 text-center text-gray-500';
         domAPI.setTextContent(li, 'Select a project to view starred conversations');
@@ -363,7 +362,7 @@ export function createSidebar({
 
         // ── ensure conversation lists show once a project exists ──
         const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-        if (activeTab === 'recent')  maybeRenderRecentConversations();
+        if (activeTab === 'recent') maybeRenderRecentConversations();
         if (activeTab === 'starred') maybeRenderStarredConversations();
       }
     } catch (err) {
@@ -549,7 +548,7 @@ export function createSidebar({
       safeHandler(() => {
         const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
         logger.debug('[Sidebar] currentProjectChanged → refresh', { activeTab, context: 'Sidebar' });
-        if (activeTab === 'recent')  maybeRenderRecentConversations();
+        if (activeTab === 'recent') maybeRenderRecentConversations();
         if (activeTab === 'starred') maybeRenderStarredConversations();
       }, 'Sidebar:currentProjectChanged'),
       { context: 'Sidebar', description: 'Refresh conversations on project switch' }
@@ -790,7 +789,8 @@ export function createSidebar({
           isAuthenticated: currentAuthStatus,
           user: currentUser,
           appModuleExists: !!appModule,
-          appStateExists: !!appModule?.state
+          appStateExists: !!appModule?.state,
+          context: 'Sidebar:init:authStateSync'
         });
 
         // ENHANCED: Force immediate auth state sync
@@ -811,7 +811,8 @@ export function createSidebar({
           logger.debug('[Sidebar][init] Delayed auth state re-sync:', {
             isAuthenticated: latestAuthStatus,
             user: latestUser,
-            changed: latestAuthStatus !== currentAuthStatus
+            changed: latestAuthStatus !== currentAuthStatus,
+            context: 'Sidebar:init:delayedAuthStateResync'
           });
 
           if (latestAuthStatus !== currentAuthStatus) {
@@ -826,14 +827,14 @@ export function createSidebar({
         }, 100); // Small delay to allow for any pending auth state updates
 
       } catch (syncErr) {
-        logger.error('[Sidebar] Auth state sync failed during init', syncErr && syncErr.stack ? syncErr.stack : syncErr, { context: 'Sidebar' });
+        logger.error('[Sidebar] Auth state sync failed during init', syncErr && syncErr.stack ? syncErr.stack : syncErr, { context: 'Sidebar:init:authSyncFailure' });
       }
 
       eventHandlers.trackListener(
         domAPI.getDocument(),
         'app:ready',
         safeHandler(() => {
-          logger.debug('[Sidebar] App ready event received, re-syncing auth state', { context: 'Sidebar:appReady' });
+          logger.debug('[Sidebar] App ready event received, re-syncing auth state', { context: 'Sidebar:appReadyListener' });
           const appModule = DependencySystem.modules?.get?.('appModule');
           const currentAuthStatus = appModule?.state?.isAuthenticated ?? false;
           const currentUser = appModule?.state?.currentUser ?? null;
@@ -872,9 +873,9 @@ export function createSidebar({
     if (domReadinessService && domReadinessService.destroy) {
       try {
         domReadinessService.destroy();
-      } catch (err) {
-        logger.error('[Sidebar] domReadinessService.destroy failed', err && err.stack ? err.stack : err, { context: 'Sidebar' });
-      }
+    } catch (err) {
+      logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar:ensureProjectDashboard' });
+    }
     }
 
     pinned = false;
