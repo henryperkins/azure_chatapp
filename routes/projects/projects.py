@@ -42,11 +42,10 @@ from utils.auth_utils import get_current_user_and_token
 from services.project_service import check_project_permission, ProjectAccessLevel
 from services.project_service import coerce_project_id
 from services.project_service import _lookup_project
-import config
 from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
-from services.file_storage import get_file_storage
+from services.file_service import FileService
 from utils.sentry_utils import sentry_span
 
 logger = logging.getLogger(__name__)
