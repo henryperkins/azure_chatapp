@@ -96,7 +96,15 @@ class FileService:
         token_data = await self._estimate_file_tokens(
             contents, file_info["sanitized_filename"]
         )
-        await self._validate_token_capacity(project, token_data["token_estimate"])
+        has_capacity = await TokenManager.validate_usage(project, token_data["token_estimate"])
+        if not has_capacity:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Operation requires {token_data['token_estimate']} tokens, "
+                    f"but only {project.max_tokens - project.token_usage} available"
+                ),
+            )
 
         # Store file
         stored_path = await self._store_file(
@@ -309,16 +317,6 @@ class FileService:
             "file_size": len(contents),
         }
 
-    async def _validate_token_capacity(
-        self, project: Project, additional_tokens: int
-    ) -> None:
-        """Validate project has sufficient token capacity."""
-        if project.token_usage + additional_tokens > project.max_tokens:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Operation requires {additional_tokens} tokens, "
-                f"but only {project.max_tokens - project.token_usage} available",
-            )
 
     async def _store_file(
         self, contents: bytes, project_id: UUID, filename: str
