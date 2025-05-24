@@ -89,7 +89,7 @@ const DEFAULT_CONFIG = {
     stateProperty: "state", // For app.state -> 'state'
   },
   knownBusNames: ["eventBus", "moduleBus", "appBus"],
-  factoryValidationRegex: "Missing\\b", // For "throw new Error('Missing dep')"
+  factoryValidationRegex: "Missing\\b|\\brequired\\b", // accept “…is required” wording too
 };
 
 let currentConfig = DEFAULT_CONFIG;
@@ -386,8 +386,9 @@ function vFactory(err, file, config) {
           ReturnStatement(returnPath) {
             if (returnPath.node.argument?.type === "ObjectExpression") {
               if (
-                hasProp(returnPath.node.argument, "cleanup") ||
-                hasProp(returnPath.node.argument, "teardown")
+                hasProp(returnPath.node.argument, "cleanup")   ||
+                hasProp(returnPath.node.argument, "teardown")  ||
+                hasProp(returnPath.node.argument, "destroy")   /* allow destroy() */
               ) {
                 hasCleanup = true;
               }
@@ -395,8 +396,8 @@ function vFactory(err, file, config) {
           },
           FunctionDeclaration(funcDeclPath) {
             // Potentially a named function inside factory
-            if (["cleanup", "teardown"].includes(funcDeclPath.node.id?.name)) {
-              // Could treat that as hasCleanup = true, though typically you'd expect it returned
+            if (["cleanup", "teardown", "destroy"].includes(funcDeclPath.node.id?.name)) {
+              hasCleanup = true;
             }
           }
         });
