@@ -169,19 +169,24 @@ export function createProjectDashboard(deps) {
     }
 
     /**
-     * Utility: wrap any event handler so that errors get logged properly.
+     * Utility: wrap any event handler using canonical safeHandler from DI
      */
     _wrapHandler(handlerFn, description) {
-      return (...args) => {
-        try {
-          return handlerFn(...args);
-        } catch (err) {
-          logger.error(`[ProjectDashboard][${description}]`, err, {
-            context: 'projectDashboard'
-          });
-          throw err;
-        }
-      };
+      const safeHandler = this.dependencySystem.modules.get('safeHandler');
+      if (!safeHandler) {
+        logger.warn('[ProjectDashboard] safeHandler not available in DI, using fallback', { context: 'projectDashboard' });
+        return (...args) => {
+          try {
+            return handlerFn(...args);
+          } catch (err) {
+            logger.error(`[ProjectDashboard][${description}]`, err, {
+              context: 'projectDashboard'
+            });
+            throw err;
+          }
+        };
+      }
+      return safeHandler(handlerFn, `ProjectDashboard:${description}`);
     }
 
     /**
@@ -630,7 +635,8 @@ export function createProjectDashboard(deps) {
 
     _handleProjectNotFound(e) {
       const { projectId } = e.detail || {};
-      this.state.currentProject = null;
+      // CONSOLIDATED: Use canonical appModule state instead of local state
+      this.app.setCurrentProject?.(null);
       const detailsView = this.domAPI.getElementById('projectDetailsView');
       if (detailsView) {
         detailsView.classList.add('hidden');
@@ -683,7 +689,8 @@ export function createProjectDashboard(deps) {
           if (loginRequiredMessage) loginRequiredMessage.classList.add('hidden');
           if (mainContent) mainContent.classList.remove('hidden');
           this.state.currentView = 'list';
-          this.state.currentProject = null;
+          // CONSOLIDATED: Use canonical appModule state instead of local state
+          this.app.setCurrentProject?.(null);
           this.browserService.removeSearchParam?.('project');
 
           if (projectListView) {

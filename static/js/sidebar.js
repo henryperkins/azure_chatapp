@@ -472,6 +472,26 @@ export function createSidebar({
       { context: 'Sidebar', description: 'Sidebar reacts to auth state changes' }
     );
 
+    // ENHANCED: Also listen to AuthBus directly for more reliable auth state updates
+    const auth = DependencySystem.modules?.get('auth');
+    if (auth?.AuthBus) {
+      eventHandlers.trackListener(
+        auth.AuthBus,
+        'authStateChanged',
+        safeHandler(sidebarAuth.handleGlobalAuthStateChange, 'Sidebar:AuthBus:authStateChanged'),
+        { context: 'Sidebar', description: 'Sidebar reacts to AuthBus auth state changes' }
+      );
+      eventHandlers.trackListener(
+        auth.AuthBus,
+        'authReady',
+        safeHandler(sidebarAuth.handleGlobalAuthStateChange, 'Sidebar:AuthBus:authReady'),
+        { context: 'Sidebar', description: 'Sidebar reacts to AuthBus auth ready events' }
+      );
+      logger.debug('[Sidebar] Subscribed to AuthBus events for auth state changes', { context: 'Sidebar' });
+    } else {
+      logger.warn('[Sidebar] AuthBus not available, relying only on document events', { context: 'Sidebar' });
+    }
+
     if (btnPin) {
       eventHandlers.trackListener(
         btnPin, 'click',
@@ -627,11 +647,43 @@ export function createSidebar({
 
         logger.debug('[Sidebar][init] Syncing auth state on init from appModule.state:', {
           isAuthenticated: currentAuthStatus,
-          user: currentUser
+          user: currentUser,
+          appModuleExists: !!appModule,
+          appStateExists: !!appModule?.state
         });
-        sidebarAuth.handleGlobalAuthStateChange({
-          detail: { authenticated: currentAuthStatus, user: currentUser }
+
+        // ENHANCED: Force immediate auth state sync
+        await sidebarAuth.handleGlobalAuthStateChange({
+          detail: {
+            authenticated: currentAuthStatus,
+            user: currentUser,
+            source: 'sidebar_init_sync'
+          }
         });
+
+        // ENHANCED: Also trigger a manual auth state check to ensure we have the latest state
+        setTimeout(() => {
+          const latestAppModule = DependencySystem.modules?.get?.('appModule');
+          const latestAuthStatus = latestAppModule?.state?.isAuthenticated ?? false;
+          const latestUser = latestAppModule?.state?.currentUser ?? null;
+
+          logger.debug('[Sidebar][init] Delayed auth state re-sync:', {
+            isAuthenticated: latestAuthStatus,
+            user: latestUser,
+            changed: latestAuthStatus !== currentAuthStatus
+          });
+
+          if (latestAuthStatus !== currentAuthStatus) {
+            sidebarAuth.handleGlobalAuthStateChange({
+              detail: {
+                authenticated: latestAuthStatus,
+                user: latestUser,
+                source: 'sidebar_init_delayed_sync'
+              }
+            });
+          }
+        }, 100); // Small delay to allow for any pending auth state updates
+
       } catch (syncErr) {
         logger.error('[Sidebar] Auth state sync failed during init', syncErr && syncErr.stack ? syncErr.stack : syncErr, { context: 'Sidebar' });
       }
@@ -700,17 +752,40 @@ export function createSidebar({
     const appModule = DependencySystem.modules?.get?.('appModule');
     const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
     const currentUser = appModule?.state?.currentUser ?? null;
+
+    // ENHANCED: Also check auth module state for comparison
+    const auth = DependencySystem.modules?.get?.('auth');
+    const authModuleState = auth ? {
+      isAuthenticated: auth.isAuthenticated?.(),
+      currentUser: auth.getCurrentUserObject?.()
+    } : null;
+
     const debugInfo = {
       appModuleAuth: isAuthenticated,
+      authModuleAuth: authModuleState?.isAuthenticated,
       finalAuth: isAuthenticated,
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null,
+      authModuleUser: authModuleState?.currentUser ? { id: authModuleState.currentUser.id, username: authModuleState.currentUser.username } : null,
+      formContainerExists: !!domAPI.getElementById('sidebarAuthFormContainer'),
+      formContainerHidden: domAPI.hasClass(domAPI.getElementById('sidebarAuthFormContainer'), 'hidden'),
       context: 'Sidebar:debug'
     };
     logger.info('[Sidebar] Current auth state debug info', debugInfo);
+
+    // Force auth state sync
     sidebarAuth.handleGlobalAuthStateChange({
-      detail: { authenticated: isAuthenticated, user: currentUser }
+      detail: {
+        authenticated: isAuthenticated,
+        user: currentUser,
+        source: 'manual_debug_refresh'
+      }
     });
     return { isAuthenticated, currentUser, debugInfo };
+  }
+
+  function forceAuthStateRefresh() {
+    logger.info('[Sidebar] Force auth state refresh triggered', { context: 'Sidebar:forceRefresh' });
+    return debugAuthState();
   }
 
   return {
@@ -725,6 +800,7 @@ export function createSidebar({
     activateTab,
     isConversationStarred,
     toggleStarConversation,
-    debugAuthState
+    debugAuthState,
+    forceAuthStateRefresh
   };
 }

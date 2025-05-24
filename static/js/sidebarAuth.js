@@ -151,20 +151,40 @@ export function createSidebarAuth({
       initAuthDom();
     }
 
-    // Use event detail from AuthModule
-    const authenticated = event?.detail?.authenticated ?? false;
-    const currentUser = event?.detail?.user ?? null;
+    // Use event detail from AuthModule, but also fallback to appModule.state for robustness
+    let authenticated = event?.detail?.authenticated ?? false;
+    let currentUser = event?.detail?.user ?? null;
+
+    // ENHANCED: If event doesn't have auth data, read from canonical source
+    if (event?.detail?.authenticated === undefined) {
+      const appModule = DependencySystem?.modules?.get('appModule');
+      if (appModule?.state) {
+        authenticated = appModule.state.isAuthenticated;
+        currentUser = appModule.state.currentUser;
+        logger.debug('[SidebarAuth][handleGlobalAuthStateChange] Event missing auth data, reading from appModule.state:', {
+          authenticated,
+          currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null
+        });
+      }
+    }
 
     logger.debug('[SidebarAuth][handleGlobalAuthStateChange] Auth state update:', {
       isAuthenticated: authenticated,
       currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null,
       eventDetail: event?.detail,
       sidebarAuthFormContainerEl_exists: !!sidebarAuthFormContainerEl,
-      sidebarAuthFormContainerEl_id: sidebarAuthFormContainerEl?.id
+      sidebarAuthFormContainerEl_id: sidebarAuthFormContainerEl?.id,
+      eventSource: event?.detail?.source || 'unknown'
     });
 
     if (sidebarAuthFormContainerEl) {
       const shouldHideForm = authenticated;
+
+      logger.debug('[SidebarAuth][handleGlobalAuthStateChange] Updating form visibility:', {
+        shouldHideForm,
+        authenticated,
+        formCurrentlyHidden: domAPI.hasClass(sidebarAuthFormContainerEl, 'hidden')
+      });
 
       domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', shouldHideForm);
       domAPI.setStyle(sidebarAuthFormContainerEl, 'display', shouldHideForm ? 'none' : '');
@@ -174,6 +194,8 @@ export function createSidebarAuth({
       } else {
         sidebarAuthFormContainerEl.removeAttribute?.('hidden');
       }
+    } else {
+      logger.warn('[SidebarAuth][handleGlobalAuthStateChange] sidebarAuthFormContainerEl not found, cannot update form visibility');
     }
 
     // Always ensure the sidebar is visible independent of auth state
@@ -186,7 +208,11 @@ export function createSidebarAuth({
 
     if (authenticated) {
       try {
-        logger.info(`[SidebarAuth][auth:stateChanged] User authenticated.`, { context: MODULE });
+        logger.info(`[SidebarAuth][auth:stateChanged] User authenticated.`, {
+          context: MODULE,
+          userId: currentUser?.id,
+          username: currentUser?.username
+        });
         // Consumer should reload projects and activate tab if needed
       } catch (err) {
         logger.error(`[SidebarAuth][auth:stateChanged] Failed during post-auth actions.`, err, { context: MODULE });
@@ -197,6 +223,33 @@ export function createSidebarAuth({
         updateAuthFormUI(false);
       }
       clearAuthForm();
+    }
+  }
+
+  function forceAuthStateSync() {
+    logger.debug('[SidebarAuth][forceAuthStateSync] Forcing auth state sync from appModule.state');
+    const appModule = DependencySystem?.modules?.get('appModule');
+    if (appModule?.state) {
+      const authenticated = appModule.state.isAuthenticated;
+      const currentUser = appModule.state.currentUser;
+
+      logger.debug('[SidebarAuth][forceAuthStateSync] Current appModule state:', {
+        authenticated,
+        currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null
+      });
+
+      handleGlobalAuthStateChange({
+        detail: {
+          authenticated,
+          user: currentUser,
+          source: 'force_auth_state_sync'
+        }
+      });
+
+      return { authenticated, currentUser };
+    } else {
+      logger.warn('[SidebarAuth][forceAuthStateSync] appModule.state not available');
+      return null;
     }
   }
 
@@ -221,6 +274,7 @@ export function createSidebarAuth({
     init: initAuthDom,
     setupInlineAuthForm,
     handleGlobalAuthStateChange,
+    forceAuthStateSync,
     cleanup,
     updateAuthFormUI,
     clearAuthForm

@@ -175,15 +175,7 @@ let _appReadyDispatched = false;
 function fireAppReady(success = true, error = null) {
   if (_appReadyDispatched) return;
   _appReadyDispatched = true;
-  // Register 'app' in DI once (skip if already present)
-  if (
-    success &&
-    DependencySystem &&
-    typeof DependencySystem.register === "function" &&
-    !(DependencySystem.modules?.has?.('app'))
-  ) {
-    DependencySystem.register('app', app);
-  }
+  // app object is already registered at line 133, no need to register again
   const detail = success ? { success } : { success, error };
   const evt = eventHandlers.createCustomEvent('app:ready', { detail });
   AppBus.dispatchEvent(evt);
@@ -258,74 +250,34 @@ let _globalInitInProgress = false;
 
 /* Enrich the stub "app" (registered earlier) with its real API */
 
-// Centralized current project state and API
-let currentProject = null; // NEW: THE single source of truth
-
+// CONSOLIDATED: All project state management moved to appState.js
 Object.assign(app, {
+  // CONSOLIDATED: Fully delegate URL parsing to navigationService
   getProjectId: () => {
-    const { search } = browserAPI.getLocation();
-    return new browserAPI.URLSearchParams(search).get('project');
-  },
-  getCurrentProject: () => {
-    return currentProject ? JSON.parse(JSON.stringify(currentProject)) : null; // always return copy
-  },
-  setCurrentProject: (project) => {
-    // Allow null to clear the current project
-    if (project !== null && (!project || !project.id)) {
-      logger.warn('[app] setCurrentProject: Attempted to set invalid project.', { project, context: 'app:setCurrentProject' });
-      return;
+    const navigationService = DependencySystem.modules.get('navigationService');
+    if (navigationService?.getUrlParams) {
+      return navigationService.getUrlParams().project || null;
     }
-
-    const previous = currentProject;
-    currentProject = project; // Update the central single source of truth (can be null)
-
-    // Update appModule state with current project ID
+    // No fallback - navigationService should handle all URL parsing
+    logger.warn('[app] getProjectId: navigationService not available', { context: 'app:getProjectId' });
+    return null;
+  },
+  // CONSOLIDATED: Delegate to canonical appModule state
+  getCurrentProject: () => {
+    const appModule = DependencySystem.modules.get('appModule');
+    return appModule?.getCurrentProject?.() || null;
+  },
+  // CONSOLIDATED: Delegate to canonical appModule state
+  setCurrentProject: (project) => {
     const appModule = DependencySystem.modules.get('appModule');
     if (appModule?.setCurrentProject) {
-      appModule.setCurrentProject(project?.id || null);
-    }
-
-    logger.info('[app] setCurrentProject: currentProject updated.', {
-      newProjectId: project?.id || null,
-      previousProjectId: previous?.id || null,
-      projectName: project?.name || null,
-      context: 'app:setCurrentProject'
-    });
-
-    const appBus = DependencySystem.modules.get('AppBus');
-    if (appBus && typeof appBus.dispatchEvent === 'function') {
-      logger.debug('[app] setCurrentProject: Dispatching "currentProjectChanged" event on AppBus.', { projectId: project?.id || null, context: 'app:setCurrentProjectEvent' });
-      appBus.dispatchEvent(
-        eventHandlers.createCustomEvent('currentProjectChanged', {
-          detail: {
-            project: project ? { ...project } : null, // Send a copy or null
-            previousProject: previous ? { ...previous } : null // Send a copy or null
-          }
-        })
-      );
+      // CONSOLIDATED: appState.js handles ALL validation, logging, and event dispatching (including legacy events)
+      appModule.setCurrentProject(project);
+      return project;
     } else {
-      logger.warn('[app] setCurrentProject: AppBus not available or dispatchEvent is not a function. Cannot dispatch "currentProjectChanged" event.', { context: 'app:setCurrentProjectEvent' });
+      logger.warn('[app] setCurrentProject: appModule not available', { context: 'app:setCurrentProject' });
+      return null;
     }
-
-    // Also dispatch projectSelected event for backward compatibility (only if project is not null)
-    if (project) {
-      const doc = domAPI.getDocument();
-      if (doc && eventHandlers?.createCustomEvent) {
-        logger.debug('[app] setCurrentProject: Dispatching "projectSelected" event on document.', { projectId: project.id, context: 'app:setCurrentProjectEvent' });
-        domAPI.dispatchEvent(
-          doc,
-          eventHandlers.createCustomEvent('projectSelected', {
-            detail: {
-              projectId: project.id,
-              project: { ...project }
-            }
-          })
-        );
-      }
-    }
-    // Do not re-register 'currentProject' in DependencySystem.
-    // It's managed locally within app.js, accessed via app.getCurrentProject().
-    return project; // Return the set project (can be null)
   },
   navigateToConversation: async (chatId) => {
     const chatMgr = DependencySystem.modules.get('chatManager');
@@ -401,7 +353,8 @@ function safeHandler(handler, description) {
     }
   };
 }
-// Early DI registration for safeHandler so factories like createSidebar can resolve it
+
+// Register safeHandler in DI system for use by all modules (single registration)
 if (DependencySystem && typeof DependencySystem.register === 'function' && !DependencySystem.modules?.has?.('safeHandler')) {
   DependencySystem.register('safeHandler', safeHandler);
 }
@@ -473,75 +426,20 @@ const uiInit = createUIInitializer({
 // fetchCurrentUser logic is now delegated to auth module
 // This eliminates duplication and ensures single source of truth for user fetching
 
-function setupChatInitializationTrigger() {
-  const projectManager = DependencySystem.modules.get('projectManager');
-  const chatManager = DependencySystem.modules.get('chatManager');
-  const auth = DependencySystem.modules.get('auth');
-
-  if (!projectManager || !chatManager || !auth) {
-    return;
-  }
-
-  // Helper function to initialize chat for current project
-  async function initializeChatForCurrentProject() {
-    const appModule = DependencySystem.modules.get('appModule');
-    const currentProjectId = appModule?.state?.currentProjectId;
-
-    if (currentProjectId && auth.isAuthenticated() && chatManager?.initialize) {
-      try {
-        // Wait a bit longer for project details DOM to be ready
-        await domReadinessService.dependenciesAndElements({
-          domSelectors: ['#chatTab .chat-container', '#chatMessages', '#chatInput', '#chatSendBtn'],
-          context: 'app:chatInit:projectDetails',
-          timeout: 10000 // Increase timeout to 10 seconds
-        });
-
-        await chatManager.initialize({
-          projectId: currentProjectId,
-          containerSelector: "#chatTab .chat-container",
-          messageContainerSelector: "#chatMessages",
-          inputSelector: "#chatInput",
-          sendButtonSelector: "#chatSendBtn",
-          titleSelector: "#chatTitle",
-          minimizeButtonSelector: "#minimizeChatBtn"
-        });
-      } catch (err) {
-        logger.error('[setupChatInitializationTrigger] Chat initialization failed', err, { context: 'app:chatInit' });
-      }
-    }
-  }
-
-  // Note: Chat initialization is handled by projectDetailsComponent._restoreChatAndModelConfig()
-  // when the project details view is shown. No need to duplicate it here.
-
-  // Initialize chat when user logs in (if project is already selected)
-  eventHandlers.trackListener(
-    domAPI.getDocument(),
-    'authStateChanged',
-    safeHandler(async (e) => {
-      const isAuthenticated = e?.detail?.authenticated;
-      if (isAuthenticated) {
-        // User just logged in, initialize chat if project is selected
-        // Note: This will only work if the project details view is already shown
-        // Otherwise, the projectDetailsComponent will handle initialization when shown
-        await initializeChatForCurrentProject();
-      }
-    }, 'authStateChanged/init chat'),
-    { description: 'Initialize ChatManager on login', context: 'app:authStateChanged' }
-  );
-}
+// CONSOLIDATED: Chat initialization logic moved to chatManager.js
+// ChatManager already handles:
+// 1. Project changes via AppBus 'currentProjectChanged' events
+// 2. Authentication changes via AuthBus 'authStateChanged' events
+// 3. Initialization via projectDetailsComponent._restoreChatAndModelConfig()
+// No duplicate logic needed here.
 
 function registerAppListeners() {
-  domReadinessService.dependenciesAndElements({
-    deps: ['auth', 'chatManager', 'projectManager', 'eventHandlers'],
-    context: 'app.js:registerAppListeners'
-  })
-    .then(() => {
-      setupChatInitializationTrigger();
-    })
-    .catch(() => {
-      // Error handled silently
-    });
+  // CONSOLIDATED: No app-level listeners needed
+  // All event handling is now managed by individual modules:
+  // - ChatManager handles project/auth changes
+  // - ProjectManager handles project events
+  // - AuthModule handles authentication events
+  logger.info('[app] registerAppListeners: All event handling delegated to individual modules', { context: 'app:registerAppListeners' });
 }
 
 function handleInitError(err) {

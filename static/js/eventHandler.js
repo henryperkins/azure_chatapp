@@ -396,58 +396,25 @@ export function createEventHandlers({
 
     runDomDependentSetup();
 
-    // -- Ensure modal HTML is loaded before waiting for #projectModalForm --
-    // Check multiple indicators: specific form, modals container, or wait for event
-    async function waitForModalsLoadedIfNeeded() {
-      // Fast path 1: if the specific form is already present
-      if (domAPI.getElementById('projectModalForm')) {
-        return;
-      }
-
-      // Fast path 2: if modals container has content (modals already loaded)
-      const modalsContainer = domAPI.getElementById('modalsContainer');
-      if (modalsContainer && domAPI.getProperty(modalsContainer, 'children').length > 0) {
-        // Modals are loaded, but maybe the specific form hasn't rendered yet
-        // Wait a short time for DOM to settle
-        await new Promise(resolve => browserService.setTimeout(resolve, 100));
-        return;
-      }
-
-      // Slow path: wait for 'modalsLoaded' event (only if modals aren't already loaded)
-      await new Promise((resolve, reject) => {
-        let resolved = false;
-        const timeout = browserService.setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            reject(new Error("'modalsLoaded' event timeout waiting for modal HTML"));
-          }
-        }, dependencyWaitTimeout);
-        trackListener(
-          domAPI.getDocument(),
-          'modalsLoaded',
-          () => {
-            if (!resolved) {
-              resolved = true;
-              browserService.clearTimeout(timeout);
-              resolve();
-            }
-          },
-          { once: true, description: "Wait for modalsLoaded before #projectModalForm", context: MODULE }
-        );
+    // Modal loading is now handled by modalManager.init() in coreInit
+    // modalManager.init() is called BEFORE eventHandlers.init(), so modals should be ready
+    try {
+      // Wait for the project modal form to appear
+      // modalManager.init() has already completed, so this should be quick
+      await _domReadinessService.elementsReady('#projectModalForm', {
+        timeout: 3000, // Short timeout since modalManager has already initialized
+        context: 'eventHandler.init:modalForm'
+      }).then(() => {
+        setupProjectModalForm();
+        logger.info(`[${MODULE}][init] Project modal form setup completed`);
+      }).catch((error) => {
+        logger.warn(`[${MODULE}][init] elementsReady('#projectModalForm') failed - modal form may not be available`, error, { context: 'eventHandler.init:modalForm' });
+        // Don't throw - this is not critical for app initialization
       });
+    } catch (error) {
+      logger.error(`[${MODULE}][init] Error during modal form setup`, error, { context: 'eventHandler.init:modalForm' });
+      // Don't throw - this is not critical for app initialization
     }
-
-    await waitForModalsLoadedIfNeeded();
-
-    // Now wait for the project modal form to appear
-    await _domReadinessService.elementsReady('#projectModalForm', {
-      timeout: dependencyWaitTimeout,
-      context: 'eventHandler.init:modalForm'
-    }).then(() => {
-      setupProjectModalForm();
-    }).catch((error) => {
-      logger.error(`[${MODULE}][init] elementsReady('#projectModalForm') failed`, error, { context: 'eventHandler.init:modalForm' });
-    });
 
     // LOGIN BUTTON / MODAL HANDLING
     function bindAuthButtonDelegate() {

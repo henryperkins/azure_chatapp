@@ -89,6 +89,16 @@ export function createHtmlTemplateLoader({
       return false;
     }
 
+    // Early exit: template already injected – we mark this via a data attribute
+    if (container.dataset?.htmlLoaded === 'true') {
+      logger.info?.(`[HtmlTemplateLoader] Template already present in ${containerSelector}, skipping fetch for ${url}`, { url, containerSelector });
+      emitEvent(eventName, { success: true, skipped: true, reason: 'Template already present', url });
+      if (isModalsHtml) {
+        emitEvent('modalsLoaded', { success: true, skipped: true, reason: 'Template already present', url });
+      }
+      return true;
+    }
+
     // Create a manual AbortController for this request
     const controller = new AbortController();
     // Use injected timerAPI instead of window
@@ -139,6 +149,8 @@ export function createHtmlTemplateLoader({
 
       // Always inject via domAPI to respect DI & built-in sanitiser
       domAPI.setInnerHTML(container, html);
+      // Mark as loaded so subsequent loadTemplate calls can short-circuit safely
+      container.setAttribute('data-html-loaded', 'true');
       logger.info?.(`[HtmlTemplateLoader] Successfully injected template: ${url} into ${containerSelector}`, { url });
       success = true;
 

@@ -197,11 +197,14 @@ export function createAuthModule(deps) {
   }
 
   // === 6) AUTH REQUEST WRAPPER ===
+  // CONSOLIDATED: Standardized error object creation to match apiClient.js pattern
   function extendErrorWithStatus(error, message) {
     if (!error.status) {
+      // Use same structure as apiClient.js: status, data (full payload), message
       extendProps(error, {
         status: 0,
-        data: { detail: message || 'Network/CORS issue' }
+        data: { detail: message || 'Network/CORS issue' },
+        // message is already set on the Error object
       });
     }
   }
@@ -690,6 +693,96 @@ export function createAuthModule(deps) {
 
   // === 11) FORM EVENT HANDLER SETUP ===
   const registeredListeners = [];
+
+  // CONSOLIDATED: Generic form handler for both login and register
+  function createAuthFormHandler(formType, formElement, errorElementId, submitButtonSelector, loadingText, successText) {
+    return async (e) => {
+      logger.log(`[AuthModule] ${formType} form submit handler invoked.`, { context: `${formType}Form` });
+      domAPI.preventDefault(e);
+      const errorEl = domAPI.getElementById(errorElementId);
+      hideError(errorEl);
+      const submitBtn = domAPI.querySelector(submitButtonSelector, formElement);
+      setButtonLoading(submitBtn, true, loadingText);
+
+      const browserService = DependencySystem.modules.get('browserService');
+      if (!browserService || !browserService.FormData) {
+        throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
+      }
+
+      const formData = new browserService.FormData(formElement);
+      const username = formData.get('username')?.trim();
+      const password = formData.get('password');
+
+      // Common validation
+      if (!username || !password) {
+        showError(errorEl, 'Username and password are required.');
+        setButtonLoading(submitBtn, false, successText);
+        return;
+      }
+      if (!validateUsername(username)) {
+        showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
+        setButtonLoading(submitBtn, false, successText);
+        return;
+      }
+      const pwCheck = validatePassword(password);
+      if (!pwCheck.valid) {
+        showError(errorEl, pwCheck.message);
+        setButtonLoading(submitBtn, false, successText);
+        return;
+      }
+
+      // Register-specific validation
+      if (formType === 'register') {
+        const passwordConfirm = formData.get('passwordConfirm');
+        if (!passwordConfirm) {
+          showError(errorEl, 'All fields are required.');
+          setButtonLoading(submitBtn, false, successText);
+          return;
+        }
+        if (password !== passwordConfirm) {
+          showError(errorEl, 'Passwords do not match.');
+          setButtonLoading(submitBtn, false, successText);
+          return;
+        }
+      }
+
+      try {
+        if (formType === 'login') {
+          await publicAuth.login(username, password);
+        } else {
+          await publicAuth.register({ username, password });
+        }
+        if (modalManager?.hide) modalManager.hide('login');
+      } catch (error) {
+        logger.error(`[${formType}Form][catch]`, error, { context: `${formType}Form` });
+        let msg = `${formType === 'login' ? 'Login' : 'Registration'} failed due to server error.`;
+
+        if (formType === 'login') {
+          if (error.status === 401) {
+            msg = 'Incorrect username or password.';
+          } else if (error.status === 400) {
+            msg = error.data?.detail || 'Invalid login request.';
+          }
+        } else {
+          if (error.status === 409) {
+            msg = 'A user with that username already exists.';
+          } else if (error.status === 400) {
+            msg = error.data?.detail || 'Invalid registration data.';
+          }
+        }
+
+        if (!msg.includes('server error')) {
+          // Use specific error message
+        } else {
+          msg = error.data?.detail || error.message || msg;
+        }
+        showError(errorEl, msg);
+      } finally {
+        setButtonLoading(submitBtn, false, successText);
+      }
+    };
+  }
+
   function setupAuthForms() {
     // #loginModalForm
     const loginForm = domAPI.getElementById('loginModalForm');
@@ -698,54 +791,16 @@ export function createAuthModule(deps) {
       domAPI.setAttribute(loginForm, 'novalidate', 'novalidate');
       domAPI.removeAttribute(loginForm, 'action');
       domAPI.removeAttribute(loginForm, 'method');
-      const handler = async (e) => {
-        logger.log('[AuthModule] loginModalForm submit handler invoked. Event:', e, { context: 'loginModalForm' });
-        domAPI.preventDefault(e);
-        const errorEl = domAPI.getElementById('loginModalError');
-        hideError(errorEl);
-        const submitBtn = domAPI.querySelector('button[type="submit"]', loginForm);
-        setButtonLoading(submitBtn, true, 'Logging in...');
-        const browserService = DependencySystem.modules.get('browserService');
-        if (!browserService || !browserService.FormData) {
-          throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
-        }
-        const formData = new browserService.FormData(loginForm);
-        const username = formData.get('username')?.trim();
-        const password = formData.get('password');
-        if (!username || !password) {
-          showError(errorEl, 'Username and password are required.');
-          setButtonLoading(submitBtn, false);
-          return;
-        }
-        if (!validateUsername(username)) {
-          showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
-          setButtonLoading(submitBtn, false);
-          return;
-        }
-        const pwCheck = validatePassword(password);
-        if (!pwCheck.valid) {
-          showError(errorEl, pwCheck.message);
-          setButtonLoading(submitBtn, false);
-          return;
-        }
-        try {
-          await publicAuth.login(username, password);
-          if (modalManager?.hide) modalManager.hide('login');
-        } catch (error) {
-          logger.error('[loginModalForm][catch]', error, { context: 'loginModalForm' });
-          let msg = 'Login failed due to server error.';
-          if (error.status === 401) {
-            msg = 'Incorrect username or password.';
-          } else if (error.status === 400) {
-            msg = error.data?.detail || 'Invalid login request.';
-          } else {
-            msg = error.data?.detail || error.message || msg;
-          }
-          showError(errorEl, msg);
-        } finally {
-          setButtonLoading(submitBtn, false, 'Login');
-        }
-      };
+
+      const handler = createAuthFormHandler(
+        'login',
+        loginForm,
+        'loginModalError',
+        'button[type="submit"]',
+        'Logging in...',
+        'Login'
+      );
+
       registeredListeners.push(
         eventHandlers.trackListener(loginForm, 'submit', safeHandler(handler, 'AuthModule:loginFormSubmit', logger), {
           passive: false,
@@ -755,66 +810,23 @@ export function createAuthModule(deps) {
       );
     }
 
-    // #registerModalForm
+    // #registerModalForm - CONSOLIDATED: Use generic form handler
     const registerForm = domAPI.getElementById('registerModalForm');
     if (registerForm && !registerForm._listenerAttached) {
       registerForm._listenerAttached = true;
       domAPI.setAttribute(registerForm, 'novalidate', 'novalidate');
       domAPI.removeAttribute(registerForm, 'action');
       domAPI.removeAttribute(registerForm, 'method');
-      const handler = async (e) => {
-        domAPI.preventDefault(e);
-        const errorEl = domAPI.getElementById('registerModalError');
-        const submitBtn = domAPI.getElementById('registerModalSubmitBtn');
-        hideError(errorEl);
-        setButtonLoading(submitBtn, true, 'Registering...');
-        const browserService = DependencySystem.modules.get('browserService');
-        if (!browserService || !browserService.FormData) {
-          throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
-        }
-        const formData = new browserService.FormData(registerForm);
-        const username = formData.get('username')?.trim();
-        const password = formData.get('password');
-        const passwordConfirm = formData.get('passwordConfirm');
-        if (!username || !password || !passwordConfirm) {
-          showError(errorEl, 'All fields are required.');
-          setButtonLoading(submitBtn, false, 'Register');
-          return;
-        }
-        if (!validateUsername(username)) {
-          showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
-          setButtonLoading(submitBtn, false, 'Register');
-          return;
-        }
-        const pwCheck = validatePassword(password);
-        if (!pwCheck.valid) {
-          showError(errorEl, pwCheck.message);
-          setButtonLoading(submitBtn, false, 'Register');
-          return;
-        }
-        if (password !== passwordConfirm) {
-          showError(errorEl, 'Passwords do not match.');
-          setButtonLoading(submitBtn, false, 'Register');
-          return;
-        }
-        try {
-          await publicAuth.register({ username, password });
-          if (modalManager?.hide) modalManager.hide('login');
-        } catch (error) {
-          logger.error('[registerModalForm][catch]', error, { context: 'registerModalForm' });
-          let msg = 'Registration failed due to server error.';
-          if (error.status === 409) {
-            msg = 'A user with that username already exists.';
-          } else if (error.status === 400) {
-            msg = error.data?.detail || 'Invalid registration data.';
-          } else {
-            msg = error.data?.detail || error.message || msg;
-          }
-          showError(errorEl, msg);
-        } finally {
-          setButtonLoading(submitBtn, false, 'Register');
-        }
-      };
+
+      const handler = createAuthFormHandler(
+        'register',
+        registerForm,
+        'registerModalError',
+        '#registerModalSubmitBtn',
+        'Registering...',
+        'Register'
+      );
+
       registeredListeners.push(
         eventHandlers.trackListener(registerForm, 'submit', safeHandler(handler, 'AuthModule:registerFormSubmit', logger), {
           passive: false,
