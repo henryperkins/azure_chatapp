@@ -18,6 +18,7 @@ import { resolveApiEndpoints } from './utils/apiEndpoints.js';
 import { createErrorReporterStub } from './utils/errorReporterStub.js';
 import { createBrowserService, normaliseUrl } from './utils/browserService.js';
 import { setBrowserService as registerSessionBrowserService } from './utils/session.js';
+import { getSessionId } from './utils/session.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
@@ -89,11 +90,13 @@ import { createLogger } from './logger.js';
 
 // PHASE 1: Create a basic logger for early DI (no authModule yet)
 let logger = createLogger({
-  context: 'App',
-  debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
-  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-  fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
-  enableServer: false // Prevent backend POSTs before authModule is available
+  context   : 'App',
+  debug     : APP_CONFIG && APP_CONFIG.DEBUG === true,
+  minLevel  : APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
+  fetcher   : browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
+  enableServer : false, // Prevent backend POSTs before authModule is available
+  sessionIdProvider : () => getSessionId(),
+  traceIdProvider   : () => DependencySystem?.modules?.get?.('traceId') ?? null
 });
 DependencySystem.register('logger', logger);
 
