@@ -613,15 +613,10 @@ export function createModelConfig({
     container.textContent = "";
 
     api.delayed(() => {
-      try {
-        buildModelSelectUI(api, state, container);
-        buildMaxTokensUI(api, state, container);
-        buildVisionToggleIfNeeded(api, state, container);
-        dispatchEventToBus(api, "modelConfigRendered", { containerId: container.id });
-      } catch (error) {
-        // LOGGING SUPPRESSED: error message during quick config UI
-        throw error;
-      }
+      buildModelSelectUI(api, state, container);
+      buildMaxTokensUI(api, state, container);
+      buildVisionToggleIfNeeded(api, state, container);
+      dispatchEventToBus(api, "modelConfigRendered", { containerId: container.id });
     }, 0);
   }
 

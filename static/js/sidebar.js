@@ -27,7 +27,7 @@ export function createSidebar({
   logger,
   safeHandler,
   APP_CONFIG,
-  ...rest
+  ..._rest
 } = {}) {
   if (!eventHandlers) throw new Error('[Sidebar] eventHandlers is required.');
   if (!DependencySystem) throw new Error('[Sidebar] DependencySystem is required.');
@@ -50,7 +50,6 @@ export function createSidebar({
   if (!APP_CONFIG) throw new Error('[Sidebar] APP_CONFIG is required.');
 
   const MODULE = 'Sidebar';
-  const CONTEXT = 'Sidebar';
 
   app = app || tryResolve('app');
   projectDashboard = projectDashboard || tryResolve('projectDashboard');
@@ -105,7 +104,6 @@ export function createSidebar({
   let backdrop = null;
 
   let sidebarMobileDock = null;
-  let sidebarVisible = false;
   let visible = false;
   let pinned = false;
 
@@ -190,39 +188,47 @@ export function createSidebar({
 
   function _handleChatSearch() {
     if (!chatSearchInputEl || !uiRenderer) return;
-    let searchTerm = chatSearchInputEl.value.trim().toLowerCase();
-    searchTerm = sanitizer?.sanitize(searchTerm) || searchTerm;
 
-    const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-    const currentProject = projectManager.getCurrentProject?.();
-    const projectId = currentProject?.id;
+    try {
+      let searchTerm = chatSearchInputEl.value.trim().toLowerCase();
+      // Sanitize user input to prevent XSS
+      searchTerm = sanitizer?.sanitize(searchTerm) || searchTerm;
 
-    if (activeTab === 'recent') {
-      uiRenderer.renderConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
-      accessibilityUtils.announce?.(`Recent conversations filtered: "${searchTerm || 'all'}"`);
-    } else if (activeTab === 'starred') {
-      uiRenderer.renderStarredConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
-      accessibilityUtils.announce?.(`Starred conversations filtered: "${searchTerm || 'all'}"`);
+      const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+      const currentProject = projectManager.getCurrentProject?.();
+      const projectId = currentProject?.id;
+
+      if (activeTab === 'recent') {
+        uiRenderer.renderConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
+        accessibilityUtils.announce?.(`Recent conversations filtered: "${searchTerm || 'all'}"`);
+      } else if (activeTab === 'starred') {
+        uiRenderer.renderStarredConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
+        accessibilityUtils.announce?.(`Starred conversations filtered: "${searchTerm || 'all'}"`);
+      }
+    } catch (err) {
+      logger.error('[Sidebar][_handleChatSearch] Failed to handle chat search', err, { context: 'Sidebar' });
     }
   }
 
   function _handleProjectSearch() {
     if (!sidebarProjectSearchInputEl || !projectManager || !uiRenderer) return;
-    let searchTerm = sidebarProjectSearchInputEl.value.trim().toLowerCase();
-    searchTerm = sanitizer?.sanitize(searchTerm) || searchTerm;
-
-    const allProjects = projectManager.projects || [];
-    const filteredProjects = searchTerm
-      ? allProjects.filter((p) => p.name?.toLowerCase().includes(searchTerm))
-      : allProjects;
 
     try {
+      let searchTerm = sidebarProjectSearchInputEl.value.trim().toLowerCase();
+      // Sanitize user input to prevent XSS
+      searchTerm = sanitizer?.sanitize(searchTerm) || searchTerm;
+
+      const allProjects = projectManager.projects || [];
+      const filteredProjects = searchTerm
+        ? allProjects.filter((p) => p.name?.toLowerCase().includes(searchTerm))
+        : allProjects;
+
       uiRenderer.renderProjects(filteredProjects);
       accessibilityUtils.announce?.(
         `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
       );
     } catch (error) {
-      logger.error('[Sidebar][_handleProjectSearch]', error && error.stack ? error.stack : error, { context: 'Sidebar' });
+      logger.error('[Sidebar][_handleProjectSearch] Failed to handle project search', error && error.stack ? error.stack : error, { context: 'Sidebar' });
     }
   }
 
@@ -274,9 +280,6 @@ export function createSidebar({
       storageAPI.setItem('sidebarActiveTab', name);
       dispatch('sidebarTabChanged', { tab: name });
 
-      const currentProject = projectManager.getCurrentProject?.();
-      const projectId = currentProject?.id;
-
       if (name === 'recent') {
         maybeRenderRecentConversations();
       } else if (name === 'starred') {
@@ -285,7 +288,9 @@ export function createSidebar({
         await ensureProjectDashboard();
         _handleProjectSearch();
       }
-    } catch (error) {}
+    } catch (error) {
+      logger.error('[Sidebar][activateTab] Failed to activate tab', error, { context: 'Sidebar', tab: name });
+    }
   }
 
   async function ensureProjectDashboard() {

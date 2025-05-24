@@ -78,12 +78,13 @@ export function createSidebarAuth({
   }
 
   async function handleAuthSubmit(authModule) {
-    const username = sidebarUsernameInputEl.value.trim();
-    const email = sidebarEmailInputEl.value.trim();
+    let username = sidebarUsernameInputEl.value.trim();
+    let email = sidebarEmailInputEl.value.trim();
     const password = sidebarPasswordInputEl.value;
 
-    // Optionally sanitize if desired
-    // e.g. const cleanEmail = sanitizer?.sanitize(email) || email;
+    // Sanitize user inputs to prevent XSS
+    username = sanitizer?.sanitize(username) || username;
+    email = sanitizer?.sanitize(email) || email;
 
     if (sidebarAuthBtnEl) {
       domAPI.setProperty(sidebarAuthBtnEl, 'disabled', true);
@@ -103,10 +104,8 @@ export function createSidebarAuth({
       }
     } catch (err) {
       logger.error('[SidebarAuth][authSubmit]', err && err.stack ? err.stack : err, { context: MODULE });
-      domAPI.setTextContent(
-        sidebarAuthErrorEl,
-        err?.message || (isRegisterMode ? 'Registration failed.' : 'Login failed.')
-      );
+      const errorMessage = sanitizer?.sanitize(err?.message) || (isRegisterMode ? 'Registration failed.' : 'Login failed.');
+      domAPI.setTextContent(sidebarAuthErrorEl, errorMessage);
     } finally {
       if (sidebarAuthBtnEl) {
         domAPI.setProperty(sidebarAuthBtnEl, 'disabled', false);

@@ -52,6 +52,8 @@ import { createAccessibilityEnhancements } from './accessibility-utils.js';
 import { createNavigationService } from './navigationService.js';
 import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
 import { createTokenStatsManager } from './tokenStatsManager.js';
+import { createSidebar } from './sidebar.js';
+import { createUiRenderer } from './uiRenderer.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { createFileUploadComponent } from './FileUploadComponent.js';
@@ -201,6 +203,7 @@ DependencySystem.register('createProjectDashboard', createProjectDashboard);
 DependencySystem.register('createProjectDetailsComponent', createProjectDetailsComponent);
 DependencySystem.register('createProjectListComponent', createProjectListComponent);
 DependencySystem.register('createProjectModal', createProjectModal);
+DependencySystem.register('createSidebar', createSidebar);
 DependencySystem.register('MODAL_MAPPINGS', MODAL_MAPPINGS);
 DependencySystem.register('globalUtils', { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl, isValidProjectId });
 
@@ -226,7 +229,8 @@ const serviceInit = createServiceInitializer({
   createApiClient,
   createAccessibilityEnhancements,
   createNavigationService,
-  createHtmlTemplateLoader
+  createHtmlTemplateLoader,
+  createUiRenderer
 });
 
 // Register basic services
@@ -395,6 +399,10 @@ function safeHandler(handler, description) {
       throw err;
     }
   };
+}
+// Early DI registration for safeHandler so factories like createSidebar can resolve it
+if (DependencySystem && typeof DependencySystem.register === 'function' && !DependencySystem.modules?.has?.('safeHandler')) {
+  DependencySystem.register('safeHandler', safeHandler);
 }
 
 // ---------------------------------------------------------------------------

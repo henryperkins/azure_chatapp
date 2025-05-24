@@ -30,7 +30,8 @@ export function createServiceInitializer({
   createApiClient,
   createAccessibilityEnhancements,
   createNavigationService,
-  createHtmlTemplateLoader
+  createHtmlTemplateLoader,
+  createUiRenderer
 }) {
   if (
     !DependencySystem || !domAPI || !browserServiceInstance || !eventHandlers ||
@@ -161,6 +162,54 @@ export function createServiceInitializer({
           logger
         });
         DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
+      }
+
+      // Create UI Renderer
+      if (createUiRenderer && apiRequest) {
+        const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
+        if (!apiEndpoints) {
+          logger.error('[serviceInit] apiEndpoints not available for uiRenderer creation', { context: 'serviceInit:registerAdvancedServices' });
+          return;
+        }
+
+        const uiRenderer = createUiRenderer({
+          domAPI,
+          eventHandlers,
+          apiRequest,
+          apiEndpoints,
+          onConversationSelect: (conversationId) => {
+            // Simple callback - just log for now, actual implementation will be handled by sidebar
+            logger.info('[serviceInit] onConversationSelect called', { conversationId, context: 'serviceInit:uiRenderer' });
+            // Dispatch event for other modules to handle
+            const doc = domAPI.getDocument();
+            if (doc && eventHandlers?.createCustomEvent) {
+              domAPI.dispatchEvent(
+                doc,
+                eventHandlers.createCustomEvent('conversationSelected', {
+                  detail: { conversationId }
+                })
+              );
+            }
+          },
+          onProjectSelect: (projectId) => {
+            // Simple callback - just log for now, actual implementation will be handled by sidebar
+            logger.info('[serviceInit] onProjectSelect called', { projectId, context: 'serviceInit:uiRenderer' });
+            // Dispatch event for other modules to handle
+            const doc = domAPI.getDocument();
+            if (doc && eventHandlers?.createCustomEvent) {
+              domAPI.dispatchEvent(
+                doc,
+                eventHandlers.createCustomEvent('projectSelected', {
+                  detail: { projectId }
+                })
+              );
+            }
+          },
+          domReadinessService,
+          logger
+        });
+        DependencySystem.register('uiRenderer', uiRenderer);
+        logger.log('[serviceInit] uiRenderer created and registered successfully', { context: 'serviceInit:registerAdvancedServices' });
       }
 
       logger.log('[serviceInit] Advanced services registered', { context: 'serviceInit:registerAdvancedServices' });
