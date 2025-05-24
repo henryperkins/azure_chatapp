@@ -592,6 +592,15 @@ export async function init() {
       )
     ]);
     logStep('initializeAuthSystem', 'post');
+
+    // ─── elevate logger to full remote mode once auth is wired ───
+    {
+      const logger      = DependencySystem.modules.get('logger');
+      const authModule  = DependencySystem.modules.get('auth');
+      logger?.setAuthModule?.(authModule);
+      logger?.setServerLoggingEnabled?.(true);
+    }
+
     // Early app:ready dispatch: emits right after auth is ready (guaranteed single-fire)
     if (!_appReadyDispatched) fireAppReady(true);
 

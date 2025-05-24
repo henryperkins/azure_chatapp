@@ -23,6 +23,10 @@ export function createLogger({
   safeHandler       = null
 } = {}) {
   const minLvlNum = LEVELS[minLevel] ?? 10;
+  // Replace const with let for mutability
+  let _enableServer = enableServer;
+  let _authModule   = authModule;
+
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -37,14 +41,9 @@ export function createLogger({
   }
 
   async function send(level, args) {
-    if (!enableServer) return;
+    if (!_enableServer) return;
+    if (_authModule?.isAuthenticated?.() === false) return;
     if (LEVELS[level] < minLvlNum) return;
-
-    // Only send logs to backend if authenticated (if authModule is provided)
-    if (authModule && typeof authModule.isAuthenticated === 'function' && !authModule.isAuthenticated()) {
-      // Optionally, could log to browser only
-      return;
-    }
 
     try {
       const _fetch =
@@ -98,11 +97,20 @@ export function createLogger({
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
     return (...args)=>{ safe(`[${context}]`, ...args); void send(level,args); };
   }
+
+  // Mutators for runtime control
+  function setServerLoggingEnabled(flag = true) { _enableServer = !!flag; }
+  function setAuthModule(module)                { _authModule   = module; }
+
   return {
-    log: wrap('log', _c.log),
+    log : wrap('log', _c.log),
     info: wrap('info', _c.info),
     warn: wrap('warn', _c.warn),
     error: wrap('error', _c.error),
-    debug: debug ? wrap('debug', _c.debug) : () => { }
+    debug: debug ? wrap('debug', _c.debug) : () => { },
+    critical : wrap('critical', _c.error),
+    fatal    : wrap('fatal',    _c.error),
+    setServerLoggingEnabled,
+    setAuthModule
   };
 }
