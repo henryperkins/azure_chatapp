@@ -596,15 +596,21 @@ export function createSidebar({
   async function init() {
     if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: Starting...", { context: 'Sidebar' });
 
-    await domReadinessService.dependenciesAndElements({
-      deps: ['eventHandlers', 'auth', 'appModule'],
-      domSelectors: ['#mainSidebar'],
-      context: 'Sidebar'
-    });
-
     try {
+      await domReadinessService.dependenciesAndElements({
+        deps: ['eventHandlers', 'auth', 'appModule'],
+        domSelectors: ['#mainSidebar'],
+        timeout: 15000, // Increased timeout for critical dependencies
+        context: 'Sidebar'
+      });
+
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom", { context: 'Sidebar' });
       findDom();
+
+      // Verify critical elements exist
+      if (!el) {
+        throw new Error('[Sidebar] Critical element #mainSidebar not found after DOM readiness');
+      }
 
       sidebarMobileDock = createSidebarMobileDock({
         domAPI,
@@ -626,6 +632,19 @@ export function createSidebar({
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState", { context: 'Sidebar' });
       restorePersistentState();
+
+      // Force initial auth state sync to ensure sidebar shows correct state
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: forcing initial auth state sync", { context: 'Sidebar' });
+      const appModule = DependencySystem.modules.get('appModule');
+      if (appModule && appModule.state) {
+        sidebarAuth.handleGlobalAuthStateChange({
+          detail: {
+            authenticated: appModule.state.isAuthenticated,
+            user: appModule.state.currentUser,
+            source: 'sidebar_init_sync'
+          }
+        });
+      }
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: bindDomEvents", { context: 'Sidebar' });
       bindDomEvents();

@@ -308,6 +308,22 @@ export function createCoreInitializer({
     });
     DependencySystem.register('sidebar', sidebar);
 
+    // --- NEW: Ensure the sidebar is fully initialised so that it can
+    // wire DOM listeners, react to auth state, and expose its public API.
+    // Without this call the sidebar remains dormant, causing the observed
+    // “sidebar not working / ignoring authentication” issue.
+    if (sidebar?.init) {
+      try {
+        await sidebar.init();
+        logger.log('[coreInit] sidebar initialization complete', { context: 'coreInit:sidebar' });
+      } catch (err) {
+        logger.error('[coreInit] Error in sidebar.init', err, { context: 'coreInit:sidebar:init' });
+        throw err;
+      }
+    } else {
+      logger.warn('[coreInit] Sidebar module missing init() method', { context: 'coreInit:sidebar' });
+    }
+
     logger.log('[coreInit][initializeCoreSystems] Complete', { context: 'coreInit' });
     return true;
   }

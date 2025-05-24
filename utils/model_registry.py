@@ -99,7 +99,7 @@ def validate_model_and_params(
 
     # Extended thinking / Reasoning ------------------------------------------------------
     if params.get("enable_thinking") is not None:
-        # Check if model supports either extended_thinking (Claude) or reasoning_effort (Azure)
+        # Check if model supports either extended_thinking (Claude) or reasoning_effort (Azure / Responses API) or reasoning (Azure)
         supports_extended_thinking = "extended_thinking" in capabilities
         supports_reasoning_effort = "reasoning_effort" in capabilities
         supports_reasoning = "reasoning" in capabilities
