@@ -8,21 +8,21 @@
  *   DependencySystem.register('logger', logger);
  */
 
-const _LVL = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
-
+const LEVELS = { debug:10, info:20, log:20, warn:30, error:40, critical:50, fatal:60 };
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
   debug = false,
   context = 'App',
-  minLevel = 'debug',             // ← rename
+  minLevel = 'debug',
   fetcher = null,
   browserService = null,
   authModule = null,
-  sessionIdProvider = null,       // ← NEW
-  traceIdProvider   = null,       // ← NEW
-  safeHandler       = null        // ← optional DI wrapper
+  sessionIdProvider = null,
+  traceIdProvider   = null,
+  safeHandler       = null
 } = {}) {
+  const minLvlNum = LEVELS[minLevel] ?? 10;
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -38,7 +38,7 @@ export function createLogger({
 
   async function send(level, args) {
     if (!enableServer) return;
-    // Always forward; THRESHOLD now == DEBUG so nothing is skipped
+    if (LEVELS[level] < minLvlNum) return;
 
     // Only send logs to backend if authenticated (if authModule is provided)
     if (authModule && typeof authModule.isAuthenticated === 'function' && !authModule.isAuthenticated()) {
@@ -57,50 +57,52 @@ export function createLogger({
       // Generate request ID for correlation tracking
       const reqId = generateRequestId();
 
+      const sessionId = sessionIdProvider?.() ||
+                        browserService?.getSessionId?.() ||
+                        (typeof window!=='undefined' && window.__APP_SESSION_ID) ||
+                        'unknown-session';
+      const traceId   = traceIdProvider?.();
+
       const response = await _fetch(endpoint, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': reqId,           // NEW - correlation header
-          'X-Correlation-ID': reqId        // NEW - backup header
+          'Content-Type'   :'application/json',
+          'X-Request-ID'   : reqId,
+          'X-Correlation-ID': reqId,
+          ...(traceId ? { 'X-Trace-ID': traceId } : {})
         },
-        credentials: 'include',                   // NEW – carry cookies / CSRF exempt
+        credentials: 'include',
         body: JSON.stringify({
           level,
           context,
           args,
           ts: Date.now(),
-          request_id: reqId,                    // NEW - also in body
-          session_id: (typeof window !== 'undefined' && window.__APP_SESSION_ID) ||
-            (browserService?.getSessionId?.()) ||
-            'unknown-session'
+          request_id: reqId,
+          session_id: sessionId,
+          trace_id  : traceId
         })
       });
       if (!response.ok) {
         // Surface server-side log ingestion failures - use fallback logging
-        if (typeof window !== 'undefined' && window.console && window.console.warn) {
-          window.console.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
-        }
+        const _c = (typeof window!=='undefined' && window.console) || {warn:()=>{}};
+        _c.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
       }
     } catch (err) {
       // Surface client-side failures (e.g., network down, CORS, 0 response) - use fallback logging
-      if (typeof window !== 'undefined' && window.console && window.console.warn) {
-        window.console.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
-      }
+      const _c = (typeof window!=='undefined' && window.console) || {warn:()=>{}};
+      _c.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
     }
   }
-  function wrap(level, fn) {
-    return (...args) => {
-      fn(`[${context}]`, ...args);
-      // fire-and-forget, do not await to avoid blocking UI
-      send(level, args);
-    };
+  const _c = (typeof window!=='undefined' && window.console) || {log:()=>{},info:()=>{},warn:()=>{},error:()=>{},debug:()=>{}};
+  function wrap(level, fn=_c.log) {
+    const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
+    return (...args)=>{ safe(`[${context}]`, ...args); void send(level,args); };
   }
   return {
-    log: wrap('log', console.log),
-    info: wrap('info', console.info),
-    warn: wrap('warn', console.warn),
-    error: wrap('error', console.error),
-    debug: debug ? wrap('debug', console.debug) : () => { }
+    log: wrap('log', _c.log),
+    info: wrap('info', _c.info),
+    warn: wrap('warn', _c.warn),
+    error: wrap('error', _c.error),
+    debug: debug ? wrap('debug', _c.debug) : () => { }
   };
 }
