@@ -17,7 +17,8 @@ export function createTokenStatsManager({
   projectManager,
   app,
   chatManager,
-  domReadinessService
+  domReadinessService,
+  DependencySystem
 } = {}) {
   const MODULE_CONTEXT = 'tokenStatsManager';
 
@@ -30,6 +31,7 @@ export function createTokenStatsManager({
   if (!modalManager) throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: modalManager`);
   if (!domReadinessService)
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: domReadinessService`);
+  if (!DependencySystem) throw new Error('Missing DependencySystem');
 
   // Module state
   const state = {
