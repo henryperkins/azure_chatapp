@@ -245,6 +245,15 @@ def init_structured_logging():
     # Add the handler to the root logger
     root_logger.addHandler(stream_handler)
 
+    # Optional rotating file sink
+    log_file = os.getenv("LOG_FILE")
+    if log_file:
+        from logging.handlers import RotatingFileHandler
+        fh = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)
+        fh.setFormatter(formatter)
+        fh.addFilter(context_filter); fh.addFilter(rate_limiting_filter); fh.addFilter(sensitive_data_filter)
+        root_logger.addHandler(fh)
+
     # Set up signal handler for runtime log level cycling (SIGUSR2)
     try:
         signal.signal(signal.SIGUSR2, lambda *_: _cycle_level(root_logger))

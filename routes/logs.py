@@ -4,6 +4,8 @@ import json
 import os
 import re
 import time
+import logging
+from pydantic import BaseModel, ValidationError
 from utils.sentry_utils import capture_custom_message
 from utils.auth_utils import get_current_user
 from models.user import User
@@ -34,6 +36,20 @@ except ImportError:
     Fore = ForeDummy()
     Style = StyleDummy()
 
+logger = logging.getLogger("api.logs")
+level_map = {
+    "debug": logging.DEBUG, "info": logging.INFO, "log": logging.INFO,
+    "warn": logging.WARNING, "warning": logging.WARNING,
+    "error": logging.ERROR, "critical": logging.CRITICAL, "fatal": logging.CRITICAL,
+}
+class ClientLog(BaseModel):
+    level: str = "info"
+    context: str = "client"
+    args: list = []
+    ts: int | None = None
+    request_id: str | None = None
+    session_id: str | None = None
+
 router = APIRouter()
 
 
@@ -56,7 +72,12 @@ async def receive_logs(
     request: Request, current_user: User = Depends(get_current_user)
 ):
     try:
-        log_entry = await request.json()
+        try:
+            log_entry = ClientLog(**(await request.json())).dict()
+        except ValidationError as ve:
+            logger.warning("Bad client-log payload", extra={"errors": ve.errors()})
+            return Response(status_code=400)
+
         level = str(log_entry.get("level", "info")).lower()
         ctx = log_entry.get("context", "client")
         args = log_entry.get("args", [])
@@ -122,21 +143,16 @@ async def receive_logs(
         sanitized_entry["session_id"] = log_entry.get("session_id")
 
         # --- Log rotation: if file >10MB, rotate ---
-        log_path = "client_logs.jsonl"
+        log_path = os.getenv("CLIENT_LOG_FILE", "client_logs.jsonl")
         max_bytes = 10 * 1024 * 1024
         if os.path.exists(log_path) and os.path.getsize(log_path) > max_bytes:
             ts = time.strftime("%Y%m%d-%H%M%S")
             rotated = f"client_logs_{ts}.jsonl"
-            os.rename(log_path, rotated)
+            import aiofiles.os; await aiofiles.os.rename(log_path, rotated)
 
         # Terminal echo **only** for WARN/ERROR+
         if level in ("warn", "warning", "error", "critical", "fatal"):
-            main_args = " ".join(str(a) for a in args)
-            print(
-                f"{color}[CLIENT LOG] [{ctx}] [{level.upper()}] {main_args}{reset}",
-                file=sys.stdout,
-                flush=True,
-            )
+            logger.log(level_map[level], summary, extra=sanitized_entry)
 
         # --- Async write to log file ---
         try:
@@ -144,11 +160,7 @@ async def receive_logs(
                 await logfile.write(json.dumps(sanitized_entry, ensure_ascii=False))
                 await logfile.write("\n")
         except Exception as log_exc:
-            print(
-                f"{Fore.YELLOW}[CLIENT LOG WARNING] Failed to write log file: {str(log_exc)}{reset}",
-                file=sys.stderr,
-                flush=True,
-            )
+            logger.warning("Failed to write log file", extra={"error": str(log_exc)})
 
         # Skip Sentry for noise-level logs
         if level in ("debug", "info"):
@@ -176,17 +188,9 @@ async def receive_logs(
                     },
                 )
         except Exception as sentry_exc:
-            print(
-                f"{Fore.MAGENTA}[CLIENT LOG - SENTRY] Failed to forward log: {str(sentry_exc)}{reset}",
-                file=sys.stderr,
-                flush=True,
-            )
+            logger.error("Failed to forward log to Sentry", extra={"error": str(sentry_exc)})
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as e:
-        print(
-            f"{Fore.RED}[CLIENT LOG ERROR] Could not process incoming client log: {str(e)}{Style.RESET_ALL}",
-            file=sys.stderr,
-            flush=True,
-        )
+        logger.error("Could not process incoming client log", extra={"error": str(e)})
         return Response(status_code=400)

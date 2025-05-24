@@ -15,10 +15,13 @@ export function createLogger({
   enableServer = true,
   debug = false,
   context = 'App',
-  _minLevel = 'debug',         // post everything that hits the console
-  fetcher = null,             // ← NEW injectable fetch
-  browserService = null,          // ← NEW optional DI
-  authModule = null               // ← NEW optional DI: AuthModule for auth check
+  minLevel = 'debug',             // ← rename
+  fetcher = null,
+  browserService = null,
+  authModule = null,
+  sessionIdProvider = null,       // ← NEW
+  traceIdProvider   = null,       // ← NEW
+  safeHandler       = null        // ← optional DI wrapper
 } = {}) {
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
