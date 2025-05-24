@@ -1014,7 +1014,11 @@ export function createAuthModule(deps) {
           logger.debug('[AuthModule][init] Performing periodic auth verification.', { context: 'init:periodicVerify' });
           verifyAuthState(false).catch((err) => {
             // This catch is for the verifyAuthState call itself, not for errors during setInterval setup.
-            logger.warn('[AuthModule][init] Periodic verifyAuthState encountered an error (logged by verifyAuthState).', { error: err.message, context: 'init:periodicVerify:error' });
+            logger.warn(
+              '[AuthModule][init] Periodic verifyAuthState encountered an error (logged by verifyAuthState).',
+              err,
+              { context: 'init:periodicVerify:error' }
+            );
           });
         } else {
           logger.debug('[AuthModule][init] Skipping periodic auth verification.', { isHidden: domAPI.isDocumentHidden?.(), isAuthenticated: periodicState.isAuthenticated, context: 'init:periodicVerifySkipped' });
