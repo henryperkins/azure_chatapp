@@ -4,7 +4,7 @@ import json
 import os
 import re
 import time
-from utils.sentry_helpers import capture_custom_message
+from utils.sentry_utils import capture_custom_message
 from utils.auth_utils import get_current_user
 from models.user import User
 
@@ -18,6 +18,7 @@ limiter = Limiter(key_func=get_remote_address)
 # Add colorama and initialize (safe even if multiple imports)
 try:
     from colorama import init as colorama_init, Fore, Style
+
     colorama_init()
 except ImportError:
     # fallback stubs if colorama is not installed
@@ -29,10 +30,12 @@ except ImportError:
 
     class StyleDummy(Dummy):
         BRIGHT = NORMAL = DIM = ""
+
     Fore = ForeDummy()
     Style = StyleDummy()
 
 router = APIRouter()
+
 
 def get_color_for_level(level: str):
     level = level.lower()
@@ -46,9 +49,12 @@ def get_color_for_level(level: str):
         return Fore.GREEN
     return Style.NORMAL
 
-@router.post('/api/logs', status_code=status.HTTP_204_NO_CONTENT)
+
+@router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
 @limiter.limit("100/minute")
-async def receive_logs(request: Request, current_user: User = Depends(get_current_user)):
+async def receive_logs(
+    request: Request, current_user: User = Depends(get_current_user)
+):
     try:
         log_entry = await request.json()
         level = str(log_entry.get("level", "info")).lower()
@@ -64,14 +70,22 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
                 r"password.*",
                 r".*token.*",
                 r".*key.*",
-                r".*secret.*"
+                r".*secret.*",
             ]
+
             def is_sensitive(key):
-                return any(re.match(pattern, key, re.IGNORECASE) for pattern in sensitive_patterns)
+                return any(
+                    re.match(pattern, key, re.IGNORECASE)
+                    for pattern in sensitive_patterns
+                )
+
             result = []
             for arg in args:
                 if isinstance(arg, dict):
-                    sanitized = {k: "[REDACTED]" if is_sensitive(k) else v for k, v in arg.items()}
+                    sanitized = {
+                        k: "[REDACTED]" if is_sensitive(k) else v
+                        for k, v in arg.items()
+                    }
                     result.append(sanitized)
                 else:
                     result.append(arg)
@@ -82,10 +96,15 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
                 r"password.*",
                 r".*token.*",
                 r".*key.*",
-                r".*secret.*"
+                r".*secret.*",
             ]
+
             def is_sensitive(key):
-                return any(re.match(pattern, key, re.IGNORECASE) for pattern in sensitive_patterns)
+                return any(
+                    re.match(pattern, key, re.IGNORECASE)
+                    for pattern in sensitive_patterns
+                )
+
             sanitized = dict(entry)
             for key in list(sanitized.keys()):
                 if is_sensitive(key):
@@ -106,10 +125,11 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
             os.rename(log_path, rotated)
 
         # Output: colored header, Route-style log (single line, all context and summary)
-        main_args = ' '.join(str(a) for a in args)
+        main_args = " ".join(str(a) for a in args)
         print(
             f"{color}[CLIENT LOG] [{ctx}] [{level.upper()}] {main_args}{reset}",
-            file=sys.stdout, flush=True
+            file=sys.stdout,
+            flush=True,
         )
 
         # --- Async write to log file ---
@@ -118,7 +138,11 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
                 await logfile.write(json.dumps(sanitized_entry, ensure_ascii=False))
                 await logfile.write("\n")
         except Exception as log_exc:
-            print(f"{Fore.YELLOW}[CLIENT LOG WARNING] Failed to write log file: {str(log_exc)}{reset}", file=sys.stderr, flush=True)
+            print(
+                f"{Fore.YELLOW}[CLIENT LOG WARNING] Failed to write log file: {str(log_exc)}{reset}",
+                file=sys.stderr,
+                flush=True,
+            )
 
         # Skip Sentry for noise-level logs
         if level in ("debug", "info"):
@@ -135,13 +159,21 @@ async def receive_logs(request: Request, current_user: User = Depends(get_curren
                         "browser": True,
                         "source": ctx,
                         "args": args,
-                        "raw": sanitized_entry
-                    }
+                        "raw": sanitized_entry,
+                    },
                 )
         except Exception as sentry_exc:
-            print(f"{Fore.MAGENTA}[CLIENT LOG - SENTRY] Failed to forward log: {str(sentry_exc)}{reset}", file=sys.stderr, flush=True)
+            print(
+                f"{Fore.MAGENTA}[CLIENT LOG - SENTRY] Failed to forward log: {str(sentry_exc)}{reset}",
+                file=sys.stderr,
+                flush=True,
+            )
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as e:
-        print(f"{Fore.RED}[CLIENT LOG ERROR] Could not process incoming client log: {str(e)}{Style.RESET_ALL}", file=sys.stderr, flush=True)
+        print(
+            f"{Fore.RED}[CLIENT LOG ERROR] Could not process incoming client log: {str(e)}{Style.RESET_ALL}",
+            file=sys.stderr,
+            flush=True,
+        )
         return Response(status_code=400)

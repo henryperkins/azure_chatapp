@@ -134,7 +134,21 @@ export function createProjectListComponent(deps) {
             logger.error('[ProjectListComponent] Failed to dispatch initialized event', err, { context: MODULE_CONTEXT });
         }
 
-        _loadProjects();
+        // CONSOLIDATED: Check initial authentication state from appModule.state
+        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
+        const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+
+        logger.debug('[ProjectListComponent][initialize] Checking initial auth state', {
+            isAuthenticated,
+            appModuleExists: !!appModule,
+            context: MODULE_CONTEXT
+        });
+
+        if (isAuthenticated) {
+            _loadProjects();
+        } else {
+            _showLoginRequired();
+        }
     }
 
     function _safeSetInnerHTML(el, rawHtml) {
@@ -413,6 +427,22 @@ export function createProjectListComponent(deps) {
         } catch (err) {
             logger.error('[ProjectListComponent][show] elementsReady failed', err, { context: MODULE_CONTEXT });
         }
+
+        // CONSOLIDATED: Check authentication state before showing content
+        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
+        const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+
+        logger.debug('[ProjectListComponent][show] Checking auth state before showing content', {
+            isAuthenticated,
+            hasProjects: !!(state.projects && state.projects.length > 0),
+            context: MODULE_CONTEXT
+        });
+
+        if (!isAuthenticated) {
+            _showLoginRequired();
+            return;
+        }
+
         _makeVisible();
         if (state.projects && state.projects.length > 0 && !isRendering) {
             try {
@@ -430,6 +460,17 @@ export function createProjectListComponent(deps) {
                 deps: ['auth'],
                 context: MODULE_CONTEXT + '_loadProjects'
             });
+
+            // CONSOLIDATED: Check authentication state before loading projects
+            const appModule = app?.DependencySystem?.modules?.get?.('appModule');
+            const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+
+            if (!isAuthenticated) {
+                logger.debug('[ProjectListComponent][_loadProjects] User not authenticated, showing login required', { context: MODULE_CONTEXT });
+                _showLoginRequired();
+                return;
+            }
+
             if (state.loading) return;
             if (!projectManager?.loadProjects) return;
             _setState({ loading: true });

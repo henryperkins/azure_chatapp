@@ -68,7 +68,7 @@ export function createKnowledgeBaseManager(ctx) {
       );
       logger.debug(`[${MODULE}][toggleKnowledgeBase] API response:`, { response: resp, context: MODULE });
 
-      if (resp.success) {
+      if (resp.status === "success") {
         logger.info(`[${MODULE}][toggleKnowledgeBase] Successfully toggled KB to ${enabled} for project ${pid}.`, { context: MODULE });
         if (ctx.state.knowledgeBase) {
           ctx.state.knowledgeBase.is_active = enabled;
@@ -91,7 +91,7 @@ export function createKnowledgeBaseManager(ctx) {
         logger.error(`[${MODULE}][toggleKnowledgeBase] API reported failure.`, { responseMessage: resp.message, context: MODULE });
         throw new Error(resp.message || "Failed to toggle knowledge base status.");
       }
-    } catch(err) {
+    } catch (err) {
       logger.error(`[${MODULE}][toggleKnowledgeBase] Error toggling knowledge base for project ${pid}. Reverting UI.`, { error: err, context: MODULE });
       if (ctx.elements.kbToggle) ctx.elements.kbToggle.checked = !enabled; // Revert UI
       ctx._updateStatusIndicator(!enabled); // Revert UI
@@ -129,7 +129,7 @@ export function createKnowledgeBaseManager(ctx) {
       );
       logger.debug(`[${MODULE}][reprocessFiles] API response:`, { response: resp, context: MODULE });
 
-      if (resp.success) {
+      if (resp.status === "success") {
         logger.info(`[${MODULE}][reprocessFiles] Successfully initiated reprocessing for project ${projectId}.`, { context: MODULE });
         if (ctx.projectManager.loadProjectDetails) {
           logger.debug(`[${MODULE}][reprocessFiles] Reloading project details and stats for ${projectId}.`, { context: MODULE });
@@ -145,9 +145,9 @@ export function createKnowledgeBaseManager(ctx) {
         }
       } else {
         logger.error(`[${MODULE}][reprocessFiles] API reported failure.`, { responseMessage: resp.message, context: MODULE });
-         throw new Error(resp.message || "Reprocessing request failed.");
+        throw new Error(resp.message || "Reprocessing request failed.");
       }
-    } catch(err) {
+    } catch (err) {
       logger.error(`[${MODULE}][reprocessFiles] Error during reprocessing for project ${projectId}.`, { error: err, context: MODULE });
       // Optionally, show an error to the user
     } finally {
@@ -242,7 +242,7 @@ export function createKnowledgeBaseManager(ctx) {
 
       const responseData = isUpdating ? resp.data : (resp.data?.knowledge_base || resp.data);
 
-      if (responseData?.id || resp.success) {
+      if (responseData?.id || resp.status === "success") {
         logger.info(`[${MODULE}][_submitKnowledgeBaseForm] Form submission successful for project ${projectId}. KB ID: ${responseData?.id}`, { context: MODULE });
         hideKnowledgeBaseModal();
 
@@ -253,8 +253,8 @@ export function createKnowledgeBaseManager(ctx) {
         } else {
           logger.debug(`[${MODULE}][_submitKnowledgeBaseForm] projectManager.loadProjectDetails not available. Rendering with combined KB state.`, { context: MODULE });
           ctx.renderKnowledgeBaseInfo({
-            ...ctx.state.knowledgeBase, 
-            ...responseData,          
+            ...ctx.state.knowledgeBase,
+            ...responseData,
           }, projectId); // UI update
         }
       } else {
@@ -263,13 +263,13 @@ export function createKnowledgeBaseManager(ctx) {
       }
     } catch (err) {
       logger.error(`[${MODULE}][_submitKnowledgeBaseForm] Error submitting form for project ${projectId}.`, { error: err, status: err?.status, context: MODULE });
-      if (err.status === 409) { 
+      if (err.status === 409) {
         logger.warn(`[${MODULE}][_submitKnowledgeBaseForm] Conflict (409) detected. Attempting to refresh project details.`, { context: MODULE });
         if (ctx.projectManager.loadProjectDetails) {
           try {
             const project = await ctx.projectManager.loadProjectDetails(projectId);
             ctx.renderKnowledgeBaseInfo(project?.knowledge_base, projectId); // Refresh UI
-            hideKnowledgeBaseModal(); 
+            hideKnowledgeBaseModal();
           } catch (refreshError) {
             logger.error(`[${MODULE}][_submitKnowledgeBaseForm] Error refreshing project details after 409.`, { error: refreshError, context: MODULE });
           }
@@ -326,10 +326,10 @@ export function createKnowledgeBaseManager(ctx) {
       );
       logger.debug(`[${MODULE}][handleDeleteKnowledgeBase] API response:`, { response: resp, context: MODULE });
 
-      if (resp.success || resp.data?.deleted_id) {
+      if (resp.status === "success" || resp.data?.deleted_id) {
         logger.info(`[${MODULE}][handleDeleteKnowledgeBase] Successfully deleted KB ${kbId} for project ${projectId}.`, { context: MODULE });
         hideKnowledgeBaseModal();
-        ctx._showInactiveState(); 
+        ctx._showInactiveState();
         if (ctx.projectManager.loadProjectDetails) {
           logger.debug(`[${MODULE}][handleDeleteKnowledgeBase] Reloading project details for ${projectId}.`, { context: MODULE });
           await ctx.projectManager.loadProjectDetails(projectId);
@@ -376,12 +376,12 @@ export function createKnowledgeBaseManager(ctx) {
         logger.debug(`[${MODULE}][showKnowledgeBaseModal] Refreshing project details for ${projectId} to get latest KB state.`, { context: MODULE });
         const projectDetails = await ctx.projectManager.loadProjectDetails(projectId);
         if (projectDetails && typeof projectDetails.knowledge_base !== 'undefined') {
-          ctx.state.knowledgeBase = projectDetails.knowledge_base; 
+          ctx.state.knowledgeBase = projectDetails.knowledge_base;
           logger.debug(`[${MODULE}][showKnowledgeBaseModal] KB state updated from project details. KB ID: ${ctx.state.knowledgeBase?.id}`, { context: MODULE });
         } else if (projectDetails === null) {
           logger.warn(`[${MODULE}][showKnowledgeBaseModal] Project details load failed for ${projectId}. Modal might show stale KB data.`, { context: MODULE });
         } else {
-           logger.debug(`[${MODULE}][showKnowledgeBaseModal] Project details loaded but no 'knowledge_base' field found.`, { projectDetails , context: MODULE });
+          logger.debug(`[${MODULE}][showKnowledgeBaseModal] Project details loaded but no 'knowledge_base' field found.`, { projectDetails, context: MODULE });
         }
       }
     } catch (err) {
@@ -404,16 +404,16 @@ export function createKnowledgeBaseManager(ctx) {
     const deleteBtn = ctx.elements.deleteKnowledgeBaseBtn;
     const { kbGitHubAttachedRepoInfo, kbAttachedRepoUrlDisplay, kbAttachedRepoBranchDisplay, kbGitHubAttachForm, kbGitHubRepoUrlInput, kbGitHubBranchInput, kbGitHubFilePathsTextarea } = ctx.elements;
 
-    if (ctx.state.knowledgeBase && ctx.state.knowledgeBase.id) { 
+    if (ctx.state.knowledgeBase && ctx.state.knowledgeBase.id) {
       logger.debug(`[${MODULE}][showKnowledgeBaseModal] Populating form for existing KB. ID: ${ctx.state.knowledgeBase.id}`, { context: MODULE });
       const kb = ctx.state.knowledgeBase;
       if (form) {
         form.elements["name"].value = kb.name || "";
         form.elements["description"].value = kb.description || "";
         const processAllFilesCheckbox = form.elements["process_all_files"];
-        if (processAllFilesCheckbox) processAllFilesCheckbox.checked = false; 
+        if (processAllFilesCheckbox) processAllFilesCheckbox.checked = false;
 
-        const autoEnableCheckbox = form.elements["auto_enable"]; 
+        const autoEnableCheckbox = form.elements["auto_enable"];
         if (autoEnableCheckbox) autoEnableCheckbox.checked = kb.is_active !== false;
       }
       deleteBtn?.classList.remove("hidden");
@@ -430,7 +430,7 @@ export function createKnowledgeBaseManager(ctx) {
         if (kbGitHubBranchInput) kbGitHubBranchInput.value = "main";
         if (kbGitHubFilePathsTextarea) kbGitHubFilePathsTextarea.value = "";
       }
-    } else { 
+    } else {
       logger.debug(`[${MODULE}][showKnowledgeBaseModal] Populating form for new KB.`, { context: MODULE });
       if (form) {
         const processAllFilesCheckbox = form.elements["process_all_files"];
@@ -497,16 +497,16 @@ export function createKnowledgeBaseManager(ctx) {
         { method: "GET" }
       );
       logger.debug(`[${MODULE}][loadKnowledgeBaseHealth] API response for KB ${kbId}:`, { response: healthResp, context: MODULE });
-      
+
       // Assuming healthResp.data contains an array of KBs or a single KB object for the project
       // And we need to find the specific KB by kbId if multiple are returned, or it's the main object.
       let kbHealthData = null;
       if (Array.isArray(healthResp?.data)) {
-          kbHealthData = healthResp.data.find(kb => kb.id === kbId);
+        kbHealthData = healthResp.data.find(kb => kb.id === kbId);
       } else if (healthResp?.data?.id === kbId || (healthResp?.data && !Array.isArray(healthResp?.data) && Object.keys(healthResp.data).length > 0 && !kbId)) {
-          // If kbId was not initially passed, but we got a single KB object, assume it's the one.
-          // Or if a single object is returned and its ID matches.
-          kbHealthData = healthResp.data;
+        // If kbId was not initially passed, but we got a single KB object, assume it's the one.
+        // Or if a single object is returned and its ID matches.
+        kbHealthData = healthResp.data;
       }
 
 
@@ -523,7 +523,7 @@ export function createKnowledgeBaseManager(ctx) {
         if (knowledgeChunkCount && kbHealthData.vector_stats?.total_vectors !== undefined) {
           knowledgeChunkCount.textContent = kbHealthData.vector_stats.total_vectors;
         }
-        
+
         let totalSize = 0;
         if (kbHealthData.files?.files_details) {
           kbHealthData.files.files_details.forEach(file => totalSize += (file.file_size || 0));
@@ -549,13 +549,13 @@ export function createKnowledgeBaseManager(ctx) {
           if (kbHealthData.vector_stats) {
             ctx.state.knowledgeBase.stats.chunk_count = kbHealthData.vector_stats.total_vectors || 0;
           }
-          ctx._updateStatusAlerts(ctx.state.knowledgeBase); 
+          ctx._updateStatusAlerts(ctx.state.knowledgeBase);
         }
       } else {
         logger.warn(`[${MODULE}][loadKnowledgeBaseHealth] No specific health data found for KB ${kbId} in response.`, { response: healthResp, context: MODULE });
       }
-      return kbHealthData; 
-    } catch(err) {
+      return kbHealthData;
+    } catch (err) {
       logger.error(`[${MODULE}][loadKnowledgeBaseHealth] Error loading health for KB ${kbId}.`, { error: err, context: MODULE });
       ctx._showStatusAlert(`Could not load Knowledge Base status: ${err.message}`, "error");
       return null;
@@ -589,7 +589,7 @@ export function createKnowledgeBaseManager(ctx) {
       );
       logger.debug(`[${MODULE}][loadKnowledgeBaseFiles] API response for files list:`, { response: response, context: MODULE });
 
-      if (response.success && response.data) {
+      if (response.status === "success" && response.data) {
         logger.info(`[${MODULE}][loadKnowledgeBaseFiles] Successfully loaded ${response.data.files?.length || 0} files for KB ${kbId}.`, { context: MODULE });
         _renderKnowledgeBaseFiles(response.data); // UI update
         ctx.elements.knowledgeBaseFilesSection?.classList.toggle("hidden", response.data.files.length === 0);
@@ -702,15 +702,15 @@ export function createKnowledgeBaseManager(ctx) {
       );
       logger.debug(`[${MODULE}][_handleDeleteKnowledgeBaseFile] API response for delete file ${fileId}:`, { response, context: MODULE });
 
-      if (response.success) {
+      if (response.status === "success") {
         logger.info(`[${MODULE}][_handleDeleteKnowledgeBaseFile] Successfully deleted file ${fileId} from KB for project ${projectId}.`, { context: MODULE });
         const kbId = ctx.state.knowledgeBase?.id;
         if (kbId) {
           logger.debug(`[${MODULE}][_handleDeleteKnowledgeBaseFile] Refreshing file list and health for KB ${kbId}.`, { context: MODULE });
-          loadKnowledgeBaseFiles(projectId, kbId); 
-          loadKnowledgeBaseHealth(kbId); 
+          loadKnowledgeBaseFiles(projectId, kbId);
+          loadKnowledgeBaseHealth(kbId);
         }
-        if (ctx.projectManager.loadProjectStats) { 
+        if (ctx.projectManager.loadProjectStats) {
           logger.debug(`[${MODULE}][_handleDeleteKnowledgeBaseFile] Refreshing project stats for ${projectId}.`, { context: MODULE });
           ctx.projectManager.loadProjectStats(projectId);
         }
@@ -757,7 +757,7 @@ export function createKnowledgeBaseManager(ctx) {
       return;
     }
     try {
-      new URL(repoUrl); 
+      new URL(repoUrl);
     } catch (_) {
       logger.warn(`[${MODULE}][handleAttachGitHubRepo] Invalid repository URL: ${repoUrl}. Aborting.`, { context: MODULE });
       // TODO: Show user validation error
@@ -788,9 +788,9 @@ export function createKnowledgeBaseManager(ctx) {
           ctx.state.knowledgeBase.branch = response.data.branch || branch; // Assuming API returns branch
           ctx.state.knowledgeBase.file_paths = response.data.file_paths || filePaths; // Assuming API returns paths
         }
-        showKnowledgeBaseModal(); 
-        loadKnowledgeBaseFiles(projectId, kbId); 
-        loadKnowledgeBaseHealth(kbId); 
+        showKnowledgeBaseModal();
+        loadKnowledgeBaseFiles(projectId, kbId);
+        loadKnowledgeBaseHealth(kbId);
       } else {
         logger.error(`[${MODULE}][handleAttachGitHubRepo] API reported failure.`, { responseMessage: response.message, context: MODULE });
         throw new Error(response.message || "Failed to attach GitHub repository.");
@@ -844,20 +844,20 @@ export function createKnowledgeBaseManager(ctx) {
     try {
       const response = await ctx.apiRequest(
         `/api/projects/${projectId}/knowledge-bases/github/detach`,
-        { method: "POST", body: { repo_url: repoUrl } } 
+        { method: "POST", body: { repo_url: repoUrl } }
       );
       logger.debug(`[${MODULE}][handleDetachGitHubRepo] API response:`, { response, context: MODULE });
 
-      if (response.success && response.data) { // Assuming response.data might contain status or confirmation
+      if (response.status === "success" && response.data) { // Assuming response.data might contain status or confirmation
         logger.info(`[${MODULE}][handleDetachGitHubRepo] Successfully detached GitHub repo ${repoUrl} from KB ${kbId}.`, { context: MODULE });
         if (ctx.state.knowledgeBase) {
           delete ctx.state.knowledgeBase.repo_url;
           delete ctx.state.knowledgeBase.branch;
           delete ctx.state.knowledgeBase.file_paths;
         }
-        showKnowledgeBaseModal(); 
-        loadKnowledgeBaseFiles(projectId, kbId); 
-        loadKnowledgeBaseHealth(kbId); 
+        showKnowledgeBaseModal();
+        loadKnowledgeBaseFiles(projectId, kbId);
+        loadKnowledgeBaseHealth(kbId);
       } else {
         logger.error(`[${MODULE}][handleDetachGitHubRepo] API reported failure.`, { responseMessage: response.message, context: MODULE });
         throw new Error(response.message || "Failed to detach GitHub repository.");

@@ -14,7 +14,6 @@ import hashlib
 import logging
 import tempfile
 from pathlib import Path
-from io import IOBase
 from typing import Any, Optional, Union, cast, BinaryIO
 from uuid import UUID
 

@@ -90,7 +90,8 @@ export function createChatManager(deps = {}) {
     domAPI,
     DOMPurify,
     eventHandlers: _EH,
-    domReadinessService
+    domReadinessService,
+    DependencySystem
   });
 
   // Use canonical safeHandler from DI
