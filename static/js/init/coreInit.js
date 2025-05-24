@@ -111,6 +111,8 @@ export function createCoreInitializer({
     if (!createProjectListComponent) throw new Error('[coreInit] createProjectListComponent factory not available in DI.');
     const createProjectModal = DependencySystem.modules.get('createProjectModal');
     if (!createProjectModal) throw new Error('[coreInit] createProjectModal factory not available in DI.');
+    const createSidebar = DependencySystem.modules.get('createSidebar');
+    if (!createSidebar) throw new Error('[coreInit] createSidebar factory not available in DI.');
 
     const MODAL_MAPPINGS = DependencySystem.modules.get('MODAL_MAPPINGS');
     const apiRequest = DependencySystem.modules.get('apiRequest');
@@ -271,6 +273,27 @@ export function createCoreInitializer({
       domPurify: sanitizer
     });
     DependencySystem.register('projectModal', projectModal);
+
+    // 9.5. Sidebar
+    const sidebar = createSidebar({
+      eventHandlers,
+      DependencySystem,
+      domAPI,
+      uiRenderer: DependencySystem.modules.get('uiRenderer'),
+      storageAPI: DependencySystem.modules.get('storage'),
+      projectManager: DependencySystem.modules.get('projectManager'),
+      modelConfig: modelConfigInstance,
+      app: DependencySystem.modules.get('app'),
+      projectDashboard: DependencySystem.modules.get('projectDashboard'),
+      viewportAPI: browserService,
+      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
+      sanitizer,
+      domReadinessService,
+      logger,
+      safeHandler: DependencySystem.modules.get('safeHandler'),
+      APP_CONFIG
+    });
+    DependencySystem.register('sidebar', sidebar);
 
     // 10. Wait for modals to load (event-based or fallback)
     let modalsLoadedSuccess = false;
