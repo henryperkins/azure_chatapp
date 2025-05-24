@@ -22,8 +22,7 @@ export function createLogger({
   traceIdProvider   = null,
   safeHandler       = null
 } = {}) {
-  const minLvlNum = LEVELS[minLevel] ?? 10;
-  // Replace const with let for mutability
+  let _minLvlNum  = LEVELS[minLevel] ?? 10;
   let _enableServer = enableServer;
   let _authModule   = authModule;
 
@@ -43,7 +42,7 @@ export function createLogger({
   async function send(level, args) {
     if (!_enableServer) return;
     if (_authModule?.isAuthenticated?.() === false) return;
-    if (LEVELS[level] < minLvlNum) return;
+    if (LEVELS[level] < _minLvlNum) return;
 
     try {
       const _fetch =
@@ -101,6 +100,9 @@ export function createLogger({
   // Mutators for runtime control
   function setServerLoggingEnabled(flag = true) { _enableServer = !!flag; }
   function setAuthModule(module)                { _authModule   = module; }
+  function setMinLevel(lvl = 'info') {   // accepts 'debug' … 'fatal'
+    if (LEVELS[lvl]) _minLvlNum = LEVELS[lvl];
+  }
 
   return {
     log : wrap('log', _c.log),
@@ -111,6 +113,7 @@ export function createLogger({
     critical : wrap('critical', _c.error),
     fatal    : wrap('fatal',    _c.error),
     setServerLoggingEnabled,
-    setAuthModule
+    setAuthModule,
+    setMinLevel
   };
 }

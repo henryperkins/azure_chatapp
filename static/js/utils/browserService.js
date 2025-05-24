@@ -11,6 +11,7 @@
  * The standalone helpers below now require explicit baseHref/location.
  */
 
+import { getSessionId } from './session.js';
 // --- shared URL helpers -------------------------------------------------
 export function buildUrl(params = {}, baseHref) {
   if (!baseHref) {
@@ -280,5 +281,8 @@ export function createBrowserService({ windowObject, logger } = {}) {
     // session-scoped user helpers (used by app.handleAuthStateChange)
     setCurrentUser,
     getCurrentUser,
+
+    /* correlation helpers */
+    getSessionId : () => getSessionId(),
   };
 }
