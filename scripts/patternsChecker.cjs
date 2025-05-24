@@ -74,7 +74,7 @@ const RULE_DESC = {
   11: "All network calls via DI-injected `apiClient`.",
   12: "No `console.*`; all logs via DI logger with context. Use canonical safeHandler.",
   13: "Single source of truth: `appModule.state` only; no local `authState` or dual checks.",
-  14: "Modules must not exceed 1000 lines.",
+  14: "Modules must not exceed 600 lines.",
   15: "Use canonical implementations only (safeHandler, form handlers, URL parsing, etc.)",
   16: "Error objects must use standard { status, data, message } structure.",
 };
@@ -95,7 +95,7 @@ const DEFAULT_CONFIG = {
   },
   knownBusNames: ["eventBus", "moduleBus", "appBus", "AuthBus"],
   factoryValidationRegex: "Missing\\b|\\brequired\\b",
-  maxModuleLines: 1000,
+  maxModuleLines: 600,
 };
 
 //   Certain low-level infra modules (they *implement* the wrappers the other
