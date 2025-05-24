@@ -20,7 +20,9 @@ from config import settings, Settings
 logger = logging.getLogger(__name__)
 
 
-def get_model_config(model_name: str, config: Settings = settings) -> Optional[Dict[str, Any]]:
+def get_model_config(
+    model_name: str, config: Settings = settings
+) -> Optional[Dict[str, Any]]:
     """Return the configuration dict for *model_name* or *None* if not found.*"""
 
     # Trim whitespace, normalise simple alias mapping (hyphens vs dots, etc.)
@@ -55,7 +57,9 @@ def get_model_config(model_name: str, config: Settings = settings) -> Optional[D
     return None
 
 
-def validate_model_and_params(model_id: str, params: Dict[str, Any] | None = None) -> None:
+def validate_model_and_params(
+    model_id: str, params: Dict[str, Any] | None = None
+) -> None:
     """Raise *ValueError* if *params* contains options unsupported by the model.*"""
 
     params = params or {}
@@ -93,19 +97,32 @@ def validate_model_and_params(model_id: str, params: Dict[str, Any] | None = Non
                 f"Valid values: {valid_efforts}"
             )
 
-    # Extended thinking ------------------------------------------------------
+    # Extended thinking / Reasoning ------------------------------------------------------
     if params.get("enable_thinking") is not None:
-        if "extended_thinking" not in capabilities:
-            raise ValueError(f"Model '{model_id}' does not support extended thinking.")
+        # Check if model supports either extended_thinking (Claude) or reasoning_effort (Azure)
+        supports_extended_thinking = "extended_thinking" in capabilities
+        supports_reasoning_effort = "reasoning_effort" in capabilities
+        supports_reasoning = "reasoning" in capabilities
 
-        thinking_budget = params.get("thinking_budget")
-        ext_cfg = model_cfg.get("extended_thinking_config", {})
-        if thinking_budget is not None and ext_cfg:
-            min_budget = ext_cfg.get("min_budget", 0)
-            if thinking_budget < min_budget:
-                raise ValueError(
-                    f"thinking_budget {thinking_budget} is below minimum {min_budget} for {model_id}."
-                )
+        if (
+            not supports_extended_thinking
+            and not supports_reasoning_effort
+            and not supports_reasoning
+        ):
+            raise ValueError(
+                f"Model '{model_id}' does not support extended thinking or reasoning."
+            )
+
+        # Only validate thinking_budget for models that support extended_thinking (Claude)
+        if supports_extended_thinking:
+            thinking_budget = params.get("thinking_budget")
+            ext_cfg = model_cfg.get("extended_thinking_config", {})
+            if thinking_budget is not None and ext_cfg:
+                min_budget = ext_cfg.get("min_budget", 0)
+                if thinking_budget < min_budget:
+                    raise ValueError(
+                        f"thinking_budget {thinking_budget} is below minimum {min_budget} for {model_id}."
+                    )
 
     # TODO: temperature / top_p / max_tokens range checks can be added here
 

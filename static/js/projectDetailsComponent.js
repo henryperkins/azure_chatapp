@@ -224,13 +224,16 @@ class ProjectDetailsComponent {
       this.elements.tabs = {
         chat: $("#chatTab"),
         files: $("#filesTab"),
+        details: $("#detailsTab"),
         knowledge: $("#knowledgeTab"),
         settings: $("#settingsTab")
       };
-      // FIXED: Removed references to non-existent elements
-      // this.elements.description = $("#projectDescription"); // Doesn't exist in current template
-      // this.elements.goals = $("#projectGoals"); // Doesn't exist in current template
-      // this.elements.instructions = $("#projectInstructions"); // Doesn't exist in current template
+      // Details tab elements
+      this.elements.projectNameDisplay = $("#projectNameDisplay");
+      this.elements.projectDescriptionDisplay = $("#projectDescriptionDisplay");
+      this.elements.projectGoalsDisplay = $("#projectGoalsDisplay");
+      this.elements.projectInstructionsDisplay = $("#projectInstructionsDisplay");
+      this.elements.projectCreatedDate = $("#projectCreatedDate");
       // Optional: lists/containers for subcomponents
       this.elements.filesList = $("#filesList");
       this.elements.conversationsList = $("#conversationsList");
@@ -423,16 +426,39 @@ class ProjectDetailsComponent {
   // --- Main render (title/details/etc.) + per-tab specialized rendering
   _renderProjectData() {
     if (!this.elements.container || !this.projectData) return;
-    const { name, description, goals, customInstructions } = this.projectData;
+    const { name, description, goals, customInstructions, created_at } = this.projectData;
     if (this.elements.title) this.elements.title.textContent = name || "Untitled Project";
 
-    // FIXED: These elements don't exist in the current template, so we don't try to render to them
-    // The project description, goals, and instructions are now handled in the settings tab
-    // if (this.elements.description) this.domAPI.setInnerHTML(this.elements.description, this.sanitizer.sanitize(description || "No description."));
-    // if (this.elements.goals) this.domAPI.setInnerHTML(this.elements.goals, this.sanitizer.sanitize(goals || "No goals specified."));
-    // if (this.elements.instructions) this.domAPI.setInnerHTML(this.elements.instructions, this.sanitizer.sanitize(customInstructions || "No custom instructions."));
+    // Render project details in the details tab
+    if (this.elements.projectNameDisplay) {
+      this.elements.projectNameDisplay.textContent = name || "Untitled Project";
+    }
+    if (this.elements.projectDescriptionDisplay) {
+      this.domAPI.setInnerHTML(this.elements.projectDescriptionDisplay,
+        this.sanitizer.sanitize(description || "No description provided."));
+    }
+    if (this.elements.projectGoalsDisplay) {
+      this.domAPI.setInnerHTML(this.elements.projectGoalsDisplay,
+        this.sanitizer.sanitize(goals || "No goals specified."));
+    }
+    if (this.elements.projectInstructionsDisplay) {
+      this.domAPI.setInnerHTML(this.elements.projectInstructionsDisplay,
+        this.sanitizer.sanitize(customInstructions || "No custom instructions."));
+    }
+    if (this.elements.projectCreatedDate && created_at) {
+      this.elements.projectCreatedDate.textContent = this._formatDate(created_at);
+    }
 
     // MAY trigger tab data reloads/rendering here for first view
+  }
+
+  _formatDate(dateString) {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString();
+    } catch (error) {
+      return 'Unknown';
+    }
   }
 
   // --- Renderers for lists/files/artifacts/convos/stats, always sanitized, all events tracked
@@ -904,8 +930,8 @@ class ProjectDetailsComponent {
     const tab = this.state.activeTab;
     if ((tab === "conversations" || tab === "chat") &&
       this.chatManager?.initialize) {
-      const conversationsTabContent = this.elements.tabs.conversations;
-      if (conversationsTabContent) {
+      const chatTabContent = this.elements.tabs.chat;
+      if (chatTabContent) {
         this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
         this.chatManager.initialize({
           projectId: this.projectId,

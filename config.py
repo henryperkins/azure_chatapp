@@ -113,7 +113,9 @@ class Settings:
     )  # 30 days
 
     # Cookie domain for the application
-    COOKIE_DOMAIN: str = os.getenv("COOKIE_DOMAIN", "")  # Empty by default to use current host
+    COOKIE_DOMAIN: str = os.getenv(
+        "COOKIE_DOMAIN", ""
+    )  # Empty by default to use current host
 
     # Allowed hosts for development
     ALLOWED_HOSTS: list[str] = [
@@ -148,7 +150,7 @@ class Settings:
                 "developer_messages",
                 "image_analysis",
                 "reasoning_effort",
-                "streaming"
+                "streaming",
             ],
             "parameters": {
                 "vision_detail": ["low", "high"],
@@ -175,12 +177,17 @@ class Settings:
             "description": "Advanced o3 reasoning model with long context",
             "capabilities": [
                 "reasoning_effort",
+                "reasoning",
                 "developer_messages",
                 "structured_output",
-                "streaming"
+                "streaming",
             ],
             "parameters": {
                 "reasoning_effort": ["low", "medium", "high"],
+                "reasoning": {
+                    "effort": ["low", "medium", "high"],
+                    "summary": ["auto", "concise", "detailed"],
+                },
             },
             "max_context_tokens": 200000,
             "max_completion_tokens": 100000,
@@ -204,7 +211,7 @@ class Settings:
                 "reasoning_effort",
                 "developer_messages",
                 "code_generation",
-                "streaming"
+                "streaming",
             ],
             "parameters": {
                 "reasoning_effort": ["low", "medium", "high"],
@@ -227,21 +234,110 @@ class Settings:
             "provider": "azure",
             "type": "text",
             "description": "GPT-4.1 large context and streaming support",
-            "capabilities": ["streaming"],
-            "parameters": {},
+            "capabilities": ["reasoning_effort", "reasoning", "streaming"],
+            "parameters": {
+                "reasoning_effort": ["low", "medium", "high"],
+                "reasoning": {
+                    "effort": ["low", "medium", "high"],
+                    "summary": ["auto", "concise", "detailed"],
+                },
+            },
             "max_context_tokens": 128000,
-            "max_tokens": 4096,
-            "api_version": AZURE_DEFAULT_API_VERSION,
+            "max_completion_tokens": 4096,
+            "api_version": AZURE_REASONING_API_VERSION,
+            "unsupported_params": [
+                "temperature",
+                "top_p",
+                "presence_penalty",
+                "frequency_penalty",
+                "logprobs",
+                "top_logprobs",
+                "logit_bias",
+                "max_tokens",
+            ],
         },
         "gpt-4.1-mini": {
             "provider": "azure",
             "type": "text",
             "description": "GPT-4.1 mini model, fast and cost-effective",
-            "capabilities": ["streaming"],
-            "parameters": {},
+            "capabilities": ["reasoning_effort", "reasoning", "streaming"],
+            "parameters": {
+                "reasoning_effort": ["low", "medium", "high"],
+                "reasoning": {
+                    "effort": ["low", "medium", "high"],
+                    "summary": ["auto", "concise", "detailed"],
+                },
+            },
             "max_context_tokens": 128000,
-            "max_tokens": 4096,
-            "api_version": AZURE_DEFAULT_API_VERSION,
+            "max_completion_tokens": 4096,
+            "api_version": AZURE_REASONING_API_VERSION,
+            "unsupported_params": [
+                "temperature",
+                "top_p",
+                "presence_penalty",
+                "frequency_penalty",
+                "logprobs",
+                "top_logprobs",
+                "logit_bias",
+                "max_tokens",
+            ],
+        },
+        "gpt-4.1-nano": {
+            "provider": "azure",
+            "type": "text",
+            "description": "GPT-4.1 nano model, ultra-fast and efficient",
+            "capabilities": ["reasoning_effort", "reasoning", "streaming"],
+            "parameters": {
+                "reasoning_effort": ["low", "medium", "high"],
+                "reasoning": {
+                    "effort": ["low", "medium", "high"],
+                    "summary": ["auto", "concise", "detailed"],
+                },
+            },
+            "max_context_tokens": 128000,
+            "max_completion_tokens": 4096,
+            "api_version": AZURE_REASONING_API_VERSION,
+            "unsupported_params": [
+                "temperature",
+                "top_p",
+                "presence_penalty",
+                "frequency_penalty",
+                "logprobs",
+                "top_logprobs",
+                "logit_bias",
+                "max_tokens",
+            ],
+        },
+        "o4-mini": {
+            "provider": "azure",
+            "type": "text",
+            "description": "O4 mini reasoning model, efficient and fast",
+            "capabilities": [
+                "reasoning_effort",
+                "reasoning",
+                "developer_messages",
+                "streaming",
+            ],
+            "parameters": {
+                "reasoning_effort": ["low", "medium", "high"],
+                "reasoning": {
+                    "effort": ["low", "medium", "high"],
+                    "summary": ["auto", "concise", "detailed"],
+                },
+            },
+            "max_context_tokens": 200000,
+            "max_completion_tokens": 100000,
+            "api_version": AZURE_REASONING_API_VERSION,
+            "unsupported_params": [
+                "temperature",
+                "top_p",
+                "presence_penalty",
+                "frequency_penalty",
+                "logprobs",
+                "top_logprobs",
+                "logit_bias",
+                "max_tokens",
+            ],
         },
         "gpt-4o": {
             "provider": "azure",
