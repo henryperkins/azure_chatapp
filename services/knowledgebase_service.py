@@ -32,6 +32,7 @@ from services.project_service import (
     check_knowledge_base_status as get_project_files_stats,
     validate_project_access,
 )  # Unified export for all code that expects file & chunk stats APIs
+from services.file_service import FileService
 
 from fastapi import (
     HTTPException,
@@ -206,90 +207,21 @@ async def upload_file_to_project(
     file: UploadFile,
     db: AsyncSession,
     user_id: Optional[int] = None,
+    *,
     background_tasks: Optional[BackgroundTasks] = None,
 ) -> dict[str, Any]:
-    """Upload and process a file for a project"""
-    # Validate project access
-    project = await _validate_user_and_project(project_id, user_id, db)
+    # ── Unified validation (still enforces permission rules) ───────────
+    await _validate_user_and_project(project_id, user_id, db)
 
-    # Ensure (or create) the project's knowledge base
-    kb = project.knowledge_base or await ensure_project_has_knowledge_base(
-        project_id, db, user_id
+    # ── Single-source-of-truth upload via FileService ──────────────────
+    fs = FileService(db)
+    return await fs.upload(
+        project_id=project_id,
+        file=file,
+        user_id=user_id,            # FileService already validates this
+        index_kb=True,              # KB uploads must always be indexed
+        background_tasks=background_tasks,
     )
-
-    # Process file info
-    file_info = await _process_upload_file_info(file)
-
-    # Read file in chunks to avoid massive in-memory reads
-    chunk_size = 65536  # 64 KB
-    file_chunks = []
-    total_bytes = 0
-
-    chunk = await file.read(chunk_size)
-    while chunk:
-        file_chunks.append(chunk)
-        total_bytes += len(chunk)
-        # Log progress for large files
-        if total_bytes % (1024 * 1024) < chunk_size:
-            logger.info(f"Reading file... total so far: {total_bytes} bytes")
-        chunk = await file.read(chunk_size)
-
-    contents = b"".join(file_chunks)
-    logger.info(f"Finished reading file: total {total_bytes} bytes")
-
-    # Validate size
-    config = KBConfig.get()
-    if len(contents) > config["max_file_bytes"]:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File exceeds maximum size of {config['max_file_bytes'] / 1024 / 1024:.1f} MB",
-        )
-
-    # Estimate tokens
-    token_data = await _estimate_file_tokens(contents, file_info["sanitized_filename"])
-
-    # Check if token estimation itself returned an error in its metadata
-    if "error" in token_data.get("metadata", {}):
-        error_detail = token_data["metadata"]["error"]
-        logger.error(
-            f"Token estimation failed for {file_info['sanitized_filename']}: {error_detail}"
-        )
-        # Use 422 if the file content caused a processing error during token estimation
-        raise HTTPException(
-            status_code=422,
-            detail=f"Failed to process file for token estimation: {error_detail}",
-        )
-
-    if not await TokenManager.validate_usage(project, token_data["token_estimate"]):
-        raise ValueError(
-            f"Adding this file would exceed the project's token limit "
-            f"({project.max_tokens} tokens)"
-        )
-
-    # Store file
-    storage = StorageManager.get()
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    rel_path = f"{project_id}/{timestamp}_{file_info['sanitized_filename']}"
-    stored_path = await storage.save_file(contents, rel_path, project_id=project_id)
-
-    # Create file record
-    project_file = await _create_file_record(
-        project_id, file_info, stored_path, len(contents), token_data
-    )
-    await save_model(db, project_file)
-    await TokenManager.update_usage(project, token_data["token_estimate"], db)
-
-    # Queue background processing
-    if background_tasks:
-        background_tasks.add_task(
-            process_single_file_for_search,
-            file_id=UUID(str(project_file.id)),
-            project_id=UUID(str(project_id)),
-            knowledge_base_id=UUID(str(kb.id)),
-            db=db,
-        )
-
-    return MetadataHelper.extract_file_metadata(project_file)
 
 
 async def process_single_file_for_search(
@@ -534,76 +466,6 @@ async def _validate_file_access(
     return project, file_record
 
 
-async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
-    file_info = await FileValidator.validate_upload_file(file)
-    filename, ext = os.path.splitext(file.filename or "untitled")
-    return {
-        "sanitized_filename": f"{sanitize_filename(filename)}{ext}",
-        "file_ext": ext[1:].lower() if ext else "",
-        "file_type": file_info.get("category", "unknown"),
-    }
-
-
-async def _estimate_file_tokens(contents: bytes, filename: str) -> dict[str, Any]:
-    """
-    Estimate the number of tokens in the file contents.
-
-    Args:
-        contents: File contents as bytes
-        filename: Name of the file
-
-    Returns:
-        Dictionary with token estimate and metadata
-    """
-    from services.text_extraction import get_text_extractor
-
-    text_extractor = get_text_extractor()
-    tok_count = 0
-    tok_metadata = {}
-
-    try:
-        _chunks, metadata_dict = await text_extractor.extract_text(
-            file_content=contents, filename=filename
-        )
-        tok_count = metadata_dict.get("token_count", 0)
-        tok_metadata = metadata_dict
-    except Exception as e:
-        logger.error(
-            f"Error estimating tokens via extract_text: {str(e)}", exc_info=True
-        )
-        tok_count = 0
-        tok_metadata = {
-            "error": f"Token estimation failed during text extraction: {str(e)}",
-            "extraction_status": "failed",
-        }
-
-    return {"token_estimate": tok_count, "metadata": tok_metadata}
-
-
-async def _create_file_record(
-    project_id: UUID,
-    file_info: dict[str, Any],
-    stored_path: str,
-    file_size: int,
-    token_data: dict[str, Any],
-) -> ProjectFile:
-    return ProjectFile(
-        project_id=project_id,
-        filename=file_info["sanitized_filename"],
-        file_path=stored_path,
-        file_type=file_info["file_type"],
-        file_size=file_size,
-        config={
-            "token_count": token_data["token_estimate"],
-            "file_extension": file_info["file_ext"],
-            "upload_time": datetime.now().isoformat(),
-            "search_processing": {
-                "status": "pending",
-                "queued_at": datetime.now().isoformat(),
-            },
-            **token_data["metadata"],
-        },
-    )
 
 
 async def _delete_file_from_storage(storage: Any, file_path: str) -> str:
