@@ -70,7 +70,7 @@ export function createDomReadinessService({
   const _logger =
     injectedLogger ||
     DependencySystem?.modules?.get?.('logger') ||
-    { info: ()=>{}, warn: ()=>{}, error: ()=>{} };
+    { info: () => { }, warn: () => { }, error: () => { } };
 
   // ───── periodic cleanup for expired events ─────
   let cleanupTimer = null;
@@ -96,9 +96,9 @@ export function createDomReadinessService({
       if (!rec || !rec.waits.length) return;
       const last = rec.waits.at(-1);
       if (last.end) return;                   // already closed
-      last.end      = t;
+      last.end = t;
       last.duration = t - last.start;
-      rec.total    += last.duration;
+      rec.total += last.duration;
     });
   }
 
@@ -188,8 +188,7 @@ export function createDomReadinessService({
           );
           reject(
             new Error(
-              `[domReadinessService] Timed out after ${timeout}ms for selectors: ${
-                missing.join(', ')
+              `[domReadinessService] Timed out after ${timeout}ms for selectors: ${missing.join(', ')
               } (context: ${context}). Elements missing: [${missing.join(', ')}]`
             )
           );
@@ -266,7 +265,7 @@ export function createDomReadinessService({
     const MutationObserverImpl =
       browserService.getWindow?.()?.MutationObserver;
     if (!MutationObserverImpl) {
-      _logger.error('[domReadinessService] MutationObserver unavailable via DI',{context:'domReadinessService'});
+      _logger.error('[domReadinessService] MutationObserver unavailable via DI', { context: 'domReadinessService' });
       return;
     }
 
@@ -383,7 +382,7 @@ export function createDomReadinessService({
     // Enforce cache limit
     if (firedEvents.size >= REPLAY_CONFIG.maxEvents) {
       const oldestEvent = Array.from(firedEvents.entries())
-        .sort(([,a], [,b]) => a.timestamp - b.timestamp)[0];
+        .sort(([, a], [, b]) => a.timestamp - b.timestamp)[0];
       if (oldestEvent) {
         firedEvents.delete(oldestEvent[0]);
         _logger.warn?.(`[domReadinessService] Evicted oldest cached event: ${oldestEvent[0]}`, {
@@ -478,8 +477,31 @@ export function createDomReadinessService({
     _logger.info?.(`[domReadinessService] Waiting for event "${eventName}" (context: ${context})`);
 
     return new Promise((resolve, reject) => {
+      let timeoutId = null;
+      let listenerRemover = null;
+
+      // Cleanup function to prevent memory leaks
+      const cleanup = () => {
+        if (timeoutId) {
+          browserService.clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (listenerRemover && typeof listenerRemover === 'function') {
+          try {
+            listenerRemover();
+          } catch (err) {
+            _logger.warn?.(`[domReadinessService] Error removing event listener during cleanup`, err, {
+              eventName,
+              context
+            });
+          }
+          listenerRemover = null;
+        }
+      };
+
       // Start a timeout
-      const timeoutId = browserService.setTimeout(() => {
+      timeoutId = browserService.setTimeout(() => {
+        cleanup();
         reject(
           new Error(
             `[domReadinessService] Timeout after ${timeout}ms waiting for event "${eventName}" (context: ${context})`
@@ -488,20 +510,29 @@ export function createDomReadinessService({
       }, timeout);
 
       // Listen for the event once
-      eventHandlers.trackListener(
-        domAPI.getDocument(),
-        eventName,
-        (evt) => {
-          browserService.clearTimeout(timeoutId);
-          _logger.info?.(`[domReadinessService] Event "${eventName}" received by listener`, {
-            eventName,
-            context,
-            detail: evt.detail
-          });
-          resolve(evt);
-        },
-        { once: true, context: 'domReadinessService' }
-      );
+      try {
+        listenerRemover = eventHandlers.trackListener(
+          domAPI.getDocument(),
+          eventName,
+          (evt) => {
+            cleanup();
+            _logger.info?.(`[domReadinessService] Event "${eventName}" received by listener`, {
+              eventName,
+              context,
+              detail: evt.detail
+            });
+            resolve(evt);
+          },
+          { once: true, context: 'domReadinessService' }
+        );
+      } catch (err) {
+        cleanup();
+        _logger.error?.(`[domReadinessService] Error setting up event listener`, err, {
+          eventName,
+          context
+        });
+        reject(new Error(`[domReadinessService] Failed to set up event listener for "${eventName}": ${err.message}`));
+      }
     });
   }
 

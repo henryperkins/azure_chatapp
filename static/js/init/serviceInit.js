@@ -58,6 +58,7 @@ export function createServiceInitializer({
       safeRegister('domAPI', domAPI);
       safeRegister('browserAPI', browserServiceInstance);
       safeRegister('browserService', browserServiceInstance);
+      safeRegister('viewportAPI', browserServiceInstance); // Register as viewportAPI for components that need viewport functionality
       safeRegister('storage', browserServiceInstance);
       safeRegister('eventHandlers', eventHandlers);
       safeRegister('domReadinessService', domReadinessService);
