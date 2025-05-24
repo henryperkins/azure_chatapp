@@ -567,11 +567,11 @@ def build_azure_payload(
         if is_reasoning_model(model_name):
             # For Chat Completions API, use reasoning_effort parameter
             if model_name in RESPONSES_API_MODELS:
-                # For Responses API, use reasoning object
-                payload["reasoning"] = {
-                    "effort": kwargs.get("reasoning_effort", "medium"),
-                    "summary": kwargs.get("reasoning_summary", "detailed"),
-                }
+                # only ask Azure for a summary when the caller explicitly supplied one
+                reasoning_obj = {"effort": kwargs.get("reasoning_effort", "medium")}
+                if kwargs.get("reasoning_summary") is not None:
+                    reasoning_obj["summary"] = kwargs["reasoning_summary"]
+                payload["reasoning"] = reasoning_obj
             else:
                 # For Chat Completions API, use reasoning_effort parameter
                 if kwargs.get("reasoning_effort"):
