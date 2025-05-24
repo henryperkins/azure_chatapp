@@ -120,7 +120,7 @@ class CustomJsonFormatter(logging.Formatter):
         if request_id:
             log_record["request_id"] = request_id
 
-        trace_id = getattr(record, "trace_id", None)
+        trace_id = getattr(record, "trace_id", None) or record.__dict__.get("trace_id")
         if trace_id:
             log_record["trace_id"] = trace_id
 
