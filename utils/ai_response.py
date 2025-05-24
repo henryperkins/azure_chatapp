@@ -45,10 +45,10 @@ class AIResponseOptions:
             **self.extra_params,
         }
         # Inject reasoning param for o-series models if requested
-        if force_reasoning_for_model and (force_reasoning_for_model.startswith("o") or "o" in force_reasoning_for_model):
+        if force_reasoning_for_model and force_reasoning_for_model.startswith("o"):
+            # request extra reasoning detail **without** triggering summary generation
             d["reasoning"] = {
-                "effort": self.reasoning_effort or "medium",
-                "summary": "detailed"
+                "effort": self.reasoning_effort or "medium"
             }
         # strip Nones
         return {k: v for k, v in d.items() if v is not None}
