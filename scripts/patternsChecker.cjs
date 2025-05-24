@@ -98,6 +98,10 @@ const DEFAULT_CONFIG = {
   maxModuleLines: 600,
 };
 
+//   Certain low-level infra modules (they *implement* the wrappers the other
+//   rules depend on) must be exempt from some checks to avoid false positives.
+const WRAPPER_FILE_REGEX = /(?:^|[\\/])(domAPI|eventHandler|eventHandlers|domReadinessService|browserService)\.(js|ts)$/i;
+
 let currentConfig = DEFAULT_CONFIG;
 
 /* ───────────────────────── Load Config ─────────────────────────── */
@@ -836,14 +840,32 @@ function vSanitize(err, file, config) {
 
   function isSanitized(valuePath) {
     if (!valuePath) return false;
-    const valueNode = getExpressionSourceNode(valuePath);
-    return (
-      valueNode &&
-      valueNode.type === "CallExpression" &&
-      valueNode.callee.type === "MemberExpression" &&
+
+    const node = getExpressionSourceNode(valuePath);
+    if (!node) return false;
+
+    /* Direct or optional call:  sanitizer.sanitize(html)  /  sanitizer?.sanitize(html) */
+    const directCall =
+      (node.type === "CallExpression" || node.type === "OptionalCallExpression") &&
+      node.callee.type === "MemberExpression" &&
       getExpressionSourceNode(valuePath.get("callee.object"))?.name === sanitizerName &&
-      valueNode.callee.property.name === "sanitize"
-    );
+      node.callee.property.name === "sanitize";
+    if (directCall) return true;
+
+    /* Recurse into conditional / logical wrappers */
+    if (node.type === "ConditionalExpression") {
+      return (
+        isSanitized(valuePath.get("consequent")) ||
+        isSanitized(valuePath.get("alternate"))
+      );
+    }
+    if (node.type === "LogicalExpression") {
+      return (
+        isSanitized(valuePath.get("left")) ||
+        isSanitized(valuePath.get("right"))
+      );
+    }
+    return false;
   }
 
   return {
@@ -1762,6 +1784,9 @@ function analyze(file, code, configToUse) {
     /\/(app|main)\.(js|ts|jsx|tsx)$/i.test(file) ||
     code.includes("WARNING: BOOTSTRAP EXCEPTION");
 
+  const isWrapperFile = WRAPPER_FILE_REGEX.test(file);
+  const isDomAPIFile  = /(?:^|[\\/])domAPI\.(js|ts)$/i.test(file);
+
   // Add module size check first (no AST needed)
   if (!isAppJs) {
     const sizeErrors = [];
@@ -1801,8 +1826,8 @@ function analyze(file, code, configToUse) {
     isAppJs ? null : vPure(errors, file),
     isAppJs ? null : vState(errors, file, isAppJs, configToUse),
 
-    vEvent(errors, file, isAppJs, moduleCtx, configToUse),
-    vSanitize(errors, file, configToUse),
+    isWrapperFile ? null : vEvent(errors, file, isAppJs, moduleCtx, configToUse),
+    isDomAPIFile  ? null : vSanitize(errors, file, configToUse),
     vReadiness(errors, file, isAppJs, configToUse),
     vBus(errors, file, configToUse),
     vNav(errors, file, configToUse),
