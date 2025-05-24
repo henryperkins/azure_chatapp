@@ -94,8 +94,22 @@ export function createTokenStatsManager({
     }
   }
 
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
+  // Use canonical safeHandler from DI (following custom instructions pattern)
+  function _safeHandler(handler, description) {
+    const safeHandler = DependencySystem?.modules?.get?.('safeHandler');
+    if (!safeHandler) {
+      logger.warn(`[${MODULE_CONTEXT}] safeHandler not available in DI, using fallback`, { context: MODULE_CONTEXT });
+      return (...args) => {
+        try {
+          return handler(...args);
+        } catch (err) {
+          logger.error(`[${MODULE_CONTEXT}][${description}]`, err, { context: MODULE_CONTEXT });
+          throw err;
+        }
+      };
+    }
+    return safeHandler(handler, description);
+  }
 
   /**
    * Initialize the token stats manager
@@ -161,7 +175,7 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         tokenUsageStat,
         'click',
-        safeHandler(() => {
+        _safeHandler(() => {
           _showTokenStatsModal();
         }, 'tokenUsageStatClick'),
         { context: MODULE_CONTEXT }
@@ -174,9 +188,22 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         tokenStatsBtn,
         'click',
-        safeHandler(() => {
+        _safeHandler(() => {
           _showTokenStatsModal();
         }, 'tokenStatsBtnClick'),
+        { context: MODULE_CONTEXT }
+      );
+    }
+
+    // Refresh button in token stats modal
+    const refreshTokenStatsBtn = domAPI.getElementById('refreshTokenStatsBtn');
+    if (refreshTokenStatsBtn) {
+      eventHandlers.trackListener(
+        refreshTokenStatsBtn,
+        'click',
+        _safeHandler(() => {
+          _refreshTokenStats();
+        }, 'refreshTokenStatsBtnClick'),
         { context: MODULE_CONTEXT }
       );
     }
@@ -185,7 +212,7 @@ export function createTokenStatsManager({
     eventHandlers.trackListener(
       doc,
       'chat:conversationChanged',
-      safeHandler((e) => {
+      _safeHandler((e) => {
         if (e.detail && e.detail.conversationId) {
           state.currentConversation = e.detail.conversationId;
           fetchConversationTokenStats(e.detail.conversationId);
@@ -198,7 +225,7 @@ export function createTokenStatsManager({
     eventHandlers.trackListener(
       doc,
       'chat:messageSent',
-      safeHandler((e) => {
+      _safeHandler((e) => {
         if (state.currentConversation) {
           fetchConversationTokenStats(state.currentConversation);
         }
@@ -210,14 +237,34 @@ export function createTokenStatsManager({
     eventHandlers.trackListener(
       doc,
       'projectLoaded',
-      safeHandler((e) => {
-        if (e.detail && e.detail.project && e.detail.project.id) {
-          state.currentProject = e.detail.project;
-          _updateProjectTokenStats(e.detail.project);
+      _safeHandler((e) => {
+        // Handle both formats: e.detail.project and e.detail (project object directly)
+        const project = e.detail?.project || e.detail;
+        if (project && project.id) {
+          state.currentProject = project;
+          _updateProjectTokenStats(project);
+          _logInfo('Project loaded, updating token stats', { projectId: project.id, tokenUsage: project.token_usage });
         }
       }, 'projectLoadedEvent'),
       { context: MODULE_CONTEXT }
     );
+
+    // Listen for AppBus current project changes
+    if (app && app.AppBus) {
+      eventHandlers.trackListener(
+        app.AppBus,
+        'currentProjectChanged',
+        _safeHandler((e) => {
+          const project = e.detail?.project;
+          if (project && project.id) {
+            state.currentProject = project;
+            _updateProjectTokenStats(project);
+            _logInfo('Current project changed, updating token stats', { projectId: project.id, tokenUsage: project.token_usage });
+          }
+        }, 'currentProjectChangedEvent'),
+        { context: MODULE_CONTEXT }
+      );
+    }
   }
 
   /**
@@ -232,8 +279,8 @@ export function createTokenStatsManager({
         eventHandlers.trackListener(
           closeBtn,
           'click',
-          safeHandler(() => {
-            modalManager.hideModal('tokenStats');
+          _safeHandler(() => {
+            modalManager.hide('tokenStats');
           }, 'closeTokenStatsModal'),
           { context: MODULE_CONTEXT }
         );
@@ -256,7 +303,7 @@ export function createTokenStatsManager({
         eventHandlers.trackListener(
           exportBtn,
           'click',
-          safeHandler(() => {
+          _safeHandler(() => {
             _exportTokenStats();
           }, 'exportTokenStats'),
           { context: MODULE_CONTEXT }
@@ -285,7 +332,7 @@ export function createTokenStatsManager({
       _updateTokenStatsModal();
 
       // Show the modal
-      modalManager.showModal('tokenStats');
+      modalManager.show('tokenStats');
 
       // If we have a current conversation, refresh the data
       if (state.currentConversation) {
@@ -298,6 +345,41 @@ export function createTokenStatsManager({
       } catch (logErr) {
         try {
           logger.error(`[${MODULE_CONTEXT}] Failed to log error in _showTokenStatsModal`, logErr, { context: MODULE_CONTEXT });
+        } catch (finalErr) {
+          // If logging fails, do nothing further to avoid infinite loop
+        }
+      }
+    }
+  }
+
+  /**
+   * Refresh token stats data
+   */
+  function _refreshTokenStats() {
+    try {
+      _logInfo('Refreshing token stats data');
+
+      // Refresh project stats if we have a current project
+      if (state.currentProject) {
+        _updateProjectTokenStats(state.currentProject);
+      }
+
+      // Refresh conversation stats if we have a current conversation
+      if (state.currentConversation) {
+        fetchConversationTokenStats(state.currentConversation);
+      }
+
+      // Update the modal display
+      _updateTokenStatsModal();
+
+      _logInfo('Token stats refreshed successfully');
+    } catch (err) {
+      _logError('Failed to refresh token stats', err);
+      try {
+        logger.error(`[${MODULE_CONTEXT}] Exception in _refreshTokenStats`, err, { context: MODULE_CONTEXT });
+      } catch (logErr) {
+        try {
+          logger.error(`[${MODULE_CONTEXT}] Failed to log error in _refreshTokenStats`, logErr, { context: MODULE_CONTEXT });
         } catch (finalErr) {
           // If logging fails, do nothing further to avoid infinite loop
         }
