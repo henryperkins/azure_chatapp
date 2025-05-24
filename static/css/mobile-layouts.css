@@ -15,6 +15,7 @@
 .chat-container {
   @apply flex flex-col h-full;
   max-height: calc(100vh - 120px);
+  @apply bg-base-100 border border-base-200 rounded-2xl shadow-sm;
 }
 
 .chat-messages {
@@ -22,6 +23,9 @@
   @apply space-y-3;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  border: 1px solid theme('colors.base.200');
+  border-radius: 1rem;
+  background-color: theme('colors.base.100');
 }
 
 .chat-input-container {
@@ -70,6 +74,8 @@
   @apply bg-base-100 rounded-xl p-4;
   @apply border border-base-200;
   @apply text-center;
+  @apply flex flex-col items-center justify-center gap-1;
+  min-height: 100px;          /* uniform card height */
 }
 
 .project-tabs {
