@@ -11,12 +11,11 @@ from typing import Dict, Any, List, Optional
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select
 from sqlalchemy import and_, or_, func
 from models.artifact import Artifact
-from models.project import Project
-from models.conversation import Conversation
 from fastapi import HTTPException
+
+from services.project_service import validate_project_access, validate_resource_access
 
 logger = logging.getLogger(__name__)
 
@@ -87,33 +86,14 @@ async def create_artifact(
     Returns:
         Created Artifact object
     """
-    # Validate project exists and user has access
-    project_result = await db.execute(select(Project).where(Project.id == project_id))
-    project = project_result.scalars().first()
-
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Check user permission if user_id provided
-    if user_id is not None and project.user_id != user_id:
-        raise HTTPException(
-            status_code=403,
-            detail="You don't have permission to add artifacts to this project",
-        )
-
-    # Validate conversation if provided
-    if conversation_id:
-        conversation_result = await db.execute(
-            select(Conversation).where(
-                Conversation.id == conversation_id,
-                Conversation.project_id == project_id,
-            )
-        )
-        conversation = conversation_result.scalars().first()
-        if not conversation:
-            raise HTTPException(
-                status_code=404, detail="Conversation not found in this project"
-            )
+    # ----- canonical access check -------------------------------------
+    user  = await db.get(User, user_id) if user_id is not None else None
+    project = await validate_project_access(
+        project_id=project_id,
+        user=user,
+        db=db,
+        skip_ownership_check=user is None,
+    )
 
     # Standardize content type
     standardized_type = validate_artifact_type(content_type)
@@ -154,42 +134,16 @@ async def create_artifact(
 async def get_artifact(
     db: AsyncSession, artifact_id: UUID, project_id: UUID, user_id: Optional[int] = None
 ) -> Artifact:
-    """
-    Retrieve an artifact by ID.
-
-    Args:
-        artifact_id: UUID of the artifact
-        project_id: UUID of the project
-        user_id: Optional user ID for permission checks
-        db: SQLAlchemy async session
-
-    Returns:
-        Artifact object
-    """
-    from services.project_service import validate_resource_access
-    from models.user import User
-
-    if user_id is not None:
-        user = await db.get(User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        # Use shared validation function
-        return await validate_resource_access(
-            artifact_id, project_id, user, db, "Artifact", Artifact
-        )
-
-    # If no user_id provided, just check if artifact exists in project
-    result = await db.execute(
-        select(Artifact).where(
-            Artifact.id == artifact_id, Artifact.project_id == project_id
-        )
+    user = await db.get(User, user_id) if user_id is not None else None
+    artifact = await validate_resource_access(
+        resource_id=artifact_id,
+        model_class=Artifact,
+        user=user,
+        db=db,
+        resource_name="Artifact",
+        additional_filters=[Artifact.project_id == project_id],
+        require_ownership=user is not None,
     )
-    artifact = result.scalars().first()
-
-    if not artifact:
-        raise HTTPException(status_code=404, detail="Artifact not found")
-
     return artifact
 
 
@@ -225,24 +179,13 @@ async def list_artifacts(
     """
     from services.project_service import get_paginated_resources
 
-    # If user_id is provided, validate user's access
-    if user_id is not None:
-        user_project = await db.execute(
-            select(Project).where(Project.id == project_id, Project.user_id == user_id)
-        )
-        project = user_project.scalars().first()
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
-        if project.user_id != user_id:
-            raise HTTPException(
-                status_code=403,
-                detail="You don't have permission to access this project's artifacts",
-            )
-    else:
-        # Just ensure project exists
-        project = await db.get(Project, project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    user = await db.get(User, user_id) if user_id is not None else None
+    await validate_project_access(
+        project_id=project_id,
+        user=user,
+        db=db,
+        skip_ownership_check=user is None,
+    )
 
     # Build additional filters
     filters = []
@@ -512,29 +455,13 @@ async def export_artifact(
 async def get_artifact_stats(
     project_id: UUID, db: AsyncSession, user_id: Optional[int] = None
 ) -> dict[str, Any]:
-    """
-    Get statistics about artifacts in a project.
-
-    Args:
-        project_id: UUID of the project
-        db: SQLAlchemy async session
-        user_id: Optional user ID for permission checks
-
-    Returns:
-        Dictionary with artifact statistics
-    """
-    # Check user permission if user_id provided
-    if user_id is not None:
-        project_result = await db.execute(
-            select(Project).where(Project.id == project_id, Project.user_id == user_id)
-        )
-        project = project_result.scalars().first()
-
-        if not project:
-            raise HTTPException(
-                status_code=403,
-                detail="You don't have permission to access this project",
-            )
+    user = await db.get(User, user_id) if user_id is not None else None
+    await validate_project_access(
+        project_id=project_id,
+        user=user,
+        db=db,
+        skip_ownership_check=user is None,
+    )
 
     # Total artifact count
     count_query = (
