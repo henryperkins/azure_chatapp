@@ -80,6 +80,8 @@ async def receive_logs(
             return Response(status_code=400)
 
         level = str(log_entry.get("level", "info")).lower()
+        if level not in level_map:
+            level = "info"
         ctx = log_entry.get("context", "client")
         args = log_entry.get("args", [])
         summary = args[0] if args else ""
@@ -157,7 +159,9 @@ async def receive_logs(
 
         # Terminal echo **only** for WARN/ERROR+
         if level in ("warn", "warning", "error", "critical", "fatal"):
-            logger.log(level_map[level], summary, extra=sanitized_entry)
+            lvl_num   = level_map.get(level, logging.INFO)
+            summary_c = f"{color}{summary}{reset}"
+            logger.log(lvl_num, summary_c, extra=sanitized_entry)
 
         # --- Async write to log file ---
         try:
