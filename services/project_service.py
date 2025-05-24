@@ -471,15 +471,14 @@ async def create_project(
 # =======================================================
 
 
+from services.knowledgebase_helpers import TokenManager
+
 async def validate_project_token_usage(
     project: Project, additional_tokens: int
 ) -> None:
-    """
-    Raises ValueError if the project doesn't have enough capacity
-    for additional_tokens. Return 400 or 422 in routes if desired.
-    """
-    if project.token_usage + additional_tokens > project.max_tokens:
-        # We typically consider this a 400 "Bad Request"
+    """Raise ValueError when the extra tokens would exceed project limits."""
+    is_ok = await TokenManager.validate_usage(project, additional_tokens)
+    if not is_ok:
         raise ValueError(
             f"Operation requires {additional_tokens} tokens, "
             f"but only {project.max_tokens - project.token_usage} available"
