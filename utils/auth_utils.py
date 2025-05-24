@@ -218,6 +218,17 @@ async def verify_token(
             },
         )
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}") from e
+    except HTTPException as http_exc:
+        # Preserve original status code / detail – just re-raise.
+        logger.debug(
+            "verify_token propagated HTTPException",
+            extra={
+                "event_type": "token_verification_http_exception",
+                "status_code": http_exc.status_code,
+                "detail": http_exc.detail,
+            },
+        )
+        raise  # <-- propagate unchanged
     except Exception as e:
         logger.error(
             "Unexpected error during token verification",
