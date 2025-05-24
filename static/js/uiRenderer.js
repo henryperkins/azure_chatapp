@@ -116,12 +116,9 @@ export function createUiRenderer(deps = {}) {
     isConversationStarredFn,
     toggleStarConversationCb
   ) {
-    if (typeof isConversationStarredFn !== 'function') {
-      isConversationStarredFn = () => false;
-    }
-    if (typeof toggleStarConversationCb !== 'function') {
-      toggleStarConversationCb = () => {};
-    }
+    // Robust: allow sidebar to be undefined/null and fallback safely
+    const isStarredFn = typeof isConversationStarredFn === 'function' ? isConversationStarredFn : () => false;
+    const toggleStarCb = typeof toggleStarConversationCb === 'function' ? toggleStarConversationCb : () => {};
 
     const li = domAPI.createElement('li');
     li.className = 'py-1';
@@ -146,7 +143,7 @@ export function createUiRenderer(deps = {}) {
 
     const starButton = domAPI.createElement('button');
     starButton.className = 'btn btn-ghost btn-sm btn-square text-accent';
-    const isStarred = isConversationStarredFn(conversation.id);
+    const isStarred = isStarredFn(conversation.id);
 
     domAPI.setInnerHTML(
       starButton,
@@ -163,7 +160,7 @@ export function createUiRenderer(deps = {}) {
       'click',
       safeHandler(
         () => {
-          toggleStarConversationCb(conversation.id);
+          toggleStarCb(conversation.id);
         },
         `Toggle star (${conversation.id})`
       ),
@@ -183,8 +180,10 @@ export function createUiRenderer(deps = {}) {
    * Fetches and renders conversations in the "recent" list.
    * @param {string} projectId - The current project ID.
    * @param {string} [searchTerm=''] - Optional search term.
-   * @param {Function} isConversationStarredFn - Checks if a conversation is starred.
-   * @param {Function} toggleStarConversationCb - Toggles star/unstar for a conversation.
+   * @param {Function} [isConversationStarredFn] - Checks if a conversation is starred; if not provided, behaves as "never starred".
+   * @param {Function} [toggleStarConversationCb] - Toggles star/unstar; if not provided, does nothing (no-op).
+   *
+   * Star/Unstar functionality will gracefully degrade if callbacks are omitted.
    */
   async function renderConversations(
     projectId,
@@ -302,8 +301,10 @@ export function createUiRenderer(deps = {}) {
    * Fetches and renders "starred" conversations.
    * @param {string} projectId - The current project ID.
    * @param {string} [searchTerm=''] - Optional search term.
-   * @param {Function} isConversationStarredFn - Checks if a conversation is starred.
-   * @param {Function} toggleStarConversationCb - Toggles star/unstar for a conversation.
+   * @param {Function} [isConversationStarredFn] - Checks if a conversation is starred; if not provided, behaves as "never starred".
+   * @param {Function} [toggleStarConversationCb] - Toggles star/unstar; if not provided, does nothing (no-op).
+   *
+   * Will gracefully degrade if callbacks are not supplied.
    */
   async function renderStarredConversations(
     projectId,
@@ -349,6 +350,9 @@ export function createUiRenderer(deps = {}) {
 
       _setLoadingState(listElement, false);
 
+      // Provide safe fallback for isConversationStarredFn here too
+      const isStarredFn = typeof isConversationStarredFn === 'function' ? isConversationStarredFn : () => false;
+
       if (conversations.length === 0) {
         _displayMessageInList(
           listElement,
@@ -357,7 +361,7 @@ export function createUiRenderer(deps = {}) {
         );
       } else {
         conversations.forEach((convo) => {
-          if (isConversationStarredFn(convo.id)) {
+          if (isStarredFn(convo.id)) {
             const listItem = _createConversationListItem(
               convo,
               true,
