@@ -17,3 +17,4 @@ export function getSessionId() {
   if (!sessionId) sessionId = generateSessionId();
   return sessionId;
 }
+export function resetSessionId(){ sessionId=null; }
