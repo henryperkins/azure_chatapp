@@ -181,7 +181,7 @@ export function createDomAPI({
         try {
           if (matches.call(node, selector)) return node;
         } catch {
-          /* noop – intentional */
+          /* intentionally ignored */ void 0;
         }
         node = node.parentElement || node.parentNode;
       }
@@ -282,7 +282,7 @@ export function createDomAPI({
         if (prop in el)           el[prop] = value;         // preferencia a propiedad DOM
         else                      el.setAttribute(prop, value); // fallback atributo
       } catch {
-        /* noop – intentional */
+        /* intentionally ignored */ void 0;
       }
     },
 
