@@ -1361,19 +1361,31 @@ function vErrorLog(err, file, moduleCtx, config) {
         const handlerArgPath = p.get("arguments")[2];
         if (handlerArgPath) {
           const handlerSourceNode = getExpressionSourceNode(handlerArgPath);
-          const notSafeWrapped =
-            !(
-              handlerSourceNode &&
-              handlerSourceNode.type === "CallExpression" &&
-              handlerSourceNode.callee.name === "safeHandler"
-            );
-          if (notSafeWrapped) {
+
+          /* ---------------------------------------------
+           * Allow two valid patterns:
+           *  1.  safeHandler(myHandler, …)   ← canonical
+           *  2.  handler  (where “handler” is one of the
+           *      current function’s PARAMETERS – wrapper
+           *      helpers forward already-wrapped handlers)
+           * --------------------------------------------*/
+
+          const isSafeHandlerCall =
+            handlerSourceNode &&
+            handlerSourceNode.type === "CallExpression" &&
+            handlerSourceNode.callee.name === "safeHandler";
+
+          const isForwardedParam =
+            handlerArgPath.isIdentifier() &&
+            (handlerArgPath.scope.getBinding(handlerArgPath.node.name)?.kind === "param");
+
+          if (!isSafeHandlerCall && !isForwardedParam) {
             err.push(
               E(
                 file,
                 handlerArgPath.node.loc.start.line,
                 12,
-                `Event handler for '${ehName}.trackListener' must be wrapped by 'safeHandler'.`,
+                `Event handler for '${ehName}.trackListener' must be wrapped by 'safeHandler' (or forwarded parameter already wrapped upstream).`,
                 `Example: ${ehName}.trackListener(el, 'click', safeHandler(myHandler, '${moduleCtx}:desc'), ...);`
               )
             );
