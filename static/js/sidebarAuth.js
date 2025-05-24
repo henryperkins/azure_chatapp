@@ -100,7 +100,13 @@ export function createSidebarAuth({
         updateAuthFormUI(false);
         domAPI.setTextContent(sidebarAuthErrorEl, 'Registration successful. Please sign in.');
       } else {
-        await authModule.login(username, password);
+        // In login mode, the username field is hidden, so use email as username
+        // The backend expects a username field, but users enter their email in login mode
+        const loginUsername = username || email;
+        if (!loginUsername || !password) {
+          throw new Error('Email and password are required.');
+        }
+        await authModule.login(loginUsername, password);
       }
     } catch (err) {
       logger.error('[SidebarAuth][authSubmit]', err && err.stack ? err.stack : err, { context: MODULE });
