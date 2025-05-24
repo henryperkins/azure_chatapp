@@ -102,7 +102,9 @@ class FileService:
         token_data = await self._estimate_file_tokens(
             contents, file_info["sanitized_filename"]
         )
-        has_capacity = await TokenManager.validate_usage(project, token_data["token_estimate"])
+        has_capacity = await TokenManager.validate_usage(
+            project, token_data["token_estimate"]
+        )
         if not has_capacity:
             raise HTTPException(
                 status_code=400,
@@ -253,7 +255,7 @@ class FileService:
         try:
             storage_deleted = await self.storage.delete_file(file_record.file_path)
         except Exception as e:
-            logger.warning(f"Failed to delete file from storage: {e}")
+            logger.warning(f"Failed to delete file from storage: {e}", exc_info=True)
 
         # Delete file record
         await self.db.delete(file_record)
@@ -297,7 +299,6 @@ class FileService:
         logger.info(f"Finished reading file: total {total_bytes} bytes")
         return b"".join(file_chunks)
 
-
     async def _estimate_file_tokens(
         self, contents: bytes, filename: str
     ) -> Dict[str, Any]:
@@ -306,7 +307,9 @@ class FileService:
             text_content = contents.decode("utf-8", errors="ignore")
             token_estimate = count_tokens_text(text_content)
         except Exception as e:
-            logger.warning(f"Failed to estimate tokens for {filename}: {e}")
+            logger.warning(
+                f"Failed to estimate tokens for {filename}: {e}", exc_info=True
+            )
             # Fallback estimation: roughly 4 characters per token
             token_estimate = len(contents) // 4
 
@@ -314,7 +317,6 @@ class FileService:
             "token_estimate": token_estimate,
             "file_size": len(contents),
         }
-
 
     async def _store_file(
         self, contents: bytes, project_id: UUID, filename: str
