@@ -91,27 +91,35 @@ function createProjectDetailsEnhancements(deps) {
    */
   function addFloatingActionButton() {
     try {
-      // Create FAB element
-      const fabElement = domAPI.createElement('button');
-      fabElement.id = 'projectFab';
-      fabElement.className = 'project-fab';
-      fabElement.title = 'Quick Actions';
-      fabElement.setAttribute('aria-label', 'Quick Actions');
+      // --- Use existing FAB if present, else create it ---
+      const FAB_ID = 'projectFab';
+      let fabElement = domAPI.getElementById(FAB_ID);          // ← reuse if already in HTML
+      if (!fabElement) {                                       // fallback: create only if missing
+        fabElement = domAPI.createElement('button');
+        fabElement.id = FAB_ID;
+        fabElement.className = 'project-fab';
+        fabElement.title = 'Quick Actions';
+        fabElement.setAttribute('aria-label', 'Quick Actions');
+        domAPI.setInnerHTML(
+          fabElement,
+          sanitizer.sanitize(`<svg xmlns="http://www.w3.org/2000/svg"
+                                    class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                      stroke-width="2"
+                                      d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>`)
+        );
 
-      // Create FAB icon
-      domAPI.setInnerHTML(fabElement, sanitizer.sanitize(`
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-        </svg>
-      `));
-
-      // Append to project-details-root
-      const projectRoot = domAPI.querySelector('.project-details-root');
-      if (projectRoot) {
-        domAPI.appendChild(projectRoot, fabElement);
+        // append to main details container (always present in template)
+        const root =
+          domAPI.getElementById('projectDetailsContainer') ||
+          domAPI.getElementById('projectDetailsView') ||
+          domAPI.getBody();
+        domAPI.appendChild(root, fabElement);
       }
 
-      // Add click handler
+      // Add click handler only once
       const handleFabClick = (e) => {
         e.preventDefault();
 
@@ -151,12 +159,16 @@ function createProjectDetailsEnhancements(deps) {
         }
       };
 
-      const fabClickUnsub = eventHandlers.trackListener(
-        fabElement,
-        'click',
-        handleFabClick,
-        { context: CONTEXT }
-      );
+      // Guard against duplicate wiring
+      if (fabElement.dataset.bound !== '1') {
+        eventHandlers.trackListener(
+          fabElement,
+          'click',
+          safeHandler(handleFabClick, 'projectFabClick'),
+          { context: CONTEXT, description: 'FAB main click' }
+        );
+        fabElement.dataset.bound = '1';
+      }
 
       // For mobile: Add reminder pulse after 5 seconds of inactivity
       // to subtly draw attention to the FAB
