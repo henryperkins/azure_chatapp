@@ -818,7 +818,6 @@ class ProjectDetailsComponent {
   _safeAttr(str) { return String(str || "").replace(/[<>"']/g, "_"); }
   _safeTxt(str) { return this.sanitizer.sanitize(String(str ?? "")); }
   _formatBytes(b) { if (!b) return "0 B"; const n = parseInt(b, 10); return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : n > 1e3 ? (n / 1e3).toFixed(1) + " kB" : n + " B"; }
-  _formatDate(d) { return d ? (new Date(d)).toLocaleDateString() : ""; }
   _setHTML(el, raw) { this.domAPI.setInnerHTML(el, raw); }
 
   // --- LIFECYCLE ---
