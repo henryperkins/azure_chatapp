@@ -224,8 +224,10 @@ class MetadataHelper:
             ),
         }
 
-        if include_token_count and file_record.config:
-            metadata["token_count"] = file_record.config.get("token_count", 0)
+        if include_token_count:
+            metadata["token_count"] = (
+                file_record.config.get("token_count", 0) if file_record.config else 0
+            )
 
         if file_record.config and "search_processing" in file_record.config:
             metadata["processing"] = file_record.config["search_processing"]
