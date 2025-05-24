@@ -507,6 +507,16 @@ function vDI(err, file, isAppJs, config) {
     },
 
     Identifier(p) {
+      /* Ignore identifiers that are only the .property part of
+         a MemberExpression  (e.g.  deps.apiClient  ⇒  “apiClient”). */
+      if (
+        p.parent?.type === "MemberExpression" &&
+        p.parent.property === p.node &&
+        !p.parent.computed
+      ) {
+        return;
+      }
+
       if (bannedGlobals.includes(p.node.name) && !p.scope.hasBinding(p.node.name)) {
         err.push(
           E(
@@ -526,7 +536,9 @@ function vDI(err, file, isAppJs, config) {
         !isAppJs
       ) {
         // Check if this service is directly in the factory parameters (object destructuring)
-        const isDirectlyInjected = diParamsInFactory.has(serviceName);
+        const isDirectlyInjected =
+          diParamsInFactory.has(serviceName) ||
+          destructuredServices.has(serviceName);
 
         // Check if this service is destructured from a DI object
         let isFromDIObject = false;
