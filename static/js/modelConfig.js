@@ -25,7 +25,6 @@ export function createModelConfig({
 
   // Provide a local logger using fallback no-ops.
   const localLogger = logger || {
-    info: () => { },
     error: () => { },
     warn: () => { },
   };
@@ -215,8 +214,7 @@ export function createModelConfig({
   }
 
   function getConfig(state) {
-    // Diagnostic logging: log every time getConfig is called and what config it returns
-    localLogger.info(`[${MODULE_CONTEXT}][getConfig] Returning config:`, { ...state }, { context: MODULE_CONTEXT });
+    // Logging suppressed (was: localLogger.info(`[${MODULE_CONTEXT}][getConfig] Returning config:` ...))
     return { ...state };
   }
 
@@ -233,8 +231,6 @@ export function createModelConfig({
   }
 
   function setStateFromConfig(state, config) {
-    // Diagnostic logging: state and config before mutation
-    localLogger.info(`[${MODULE_CONTEXT}][setStateFromConfig] Updating state. Current:`, { ...state }, "New:", { ...config }, { context: MODULE_CONTEXT });
     Object.assign(state, {
       modelName: config.modelName || state.modelName,
       provider: config.provider || state.provider,
@@ -305,30 +301,12 @@ export function createModelConfig({
         : null;
     if (loadingEl) loadingEl.classList.remove("hidden");
 
-    // Diagnostic logging: log received config and old state
-    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Attempting to update. Received config:`, { ...config }, { context: MODULE_CONTEXT });
-    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Current state BEFORE update:`, { ...state }, { context: MODULE_CONTEXT });
-
     setStateFromConfig(state, config);
     persistConfig(api, state);
 
-    // Diagnostic logging: log state AFTER update
-    api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Persisted config. Current state AFTER update:`, { ...state }, {
-      context: MODULE_CONTEXT,
-      updatedState: { ...state }
-    });
-
     if (!opts.skipNotify) {
-      api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] Notifying chat manager`, null, {
-        context: MODULE_CONTEXT,
-      });
       notifyChatManager(api, state);
-      // Fire the bus event only if notification is allowed (no recursion)
       dispatchEventToBus(api, "modelConfigChanged", { ...state });
-      api.log.info(`[${MODULE_CONTEXT}][updateModelConfig] modelConfigChanged event dispatched`, null, {
-        context: MODULE_CONTEXT,
-        updatedState: state,
-      });
     }
 
     updateModelDisplay(api, state);
@@ -641,11 +619,7 @@ export function createModelConfig({
         buildVisionToggleIfNeeded(api, state, container);
         dispatchEventToBus(api, "modelConfigRendered", { containerId: container.id });
       } catch (error) {
-        api.log.error(`[${MODULE_CONTEXT}][renderQuickConfig] Error building config UI`, error, {
-          context: MODULE_CONTEXT,
-        });
-        // Re-throw to ensure we follow the "any exception thrown or caught must be re-logged"
-        // (then re-thrown)
+        // LOGGING SUPPRESSED: error message during quick config UI
         throw error;
       }
     }, 0);

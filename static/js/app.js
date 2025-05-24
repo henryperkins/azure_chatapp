@@ -1003,6 +1003,11 @@ export async function init() {
         if (sidebar?.debugAuthState) {
           return sidebar.debugAuthState();
         } else {
+          // Announce using accessibilityUtils if present, else warn
+          const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
+          if (accessibilityUtils?.announce) {
+            accessibilityUtils.announce('Sidebar module unavailable. Debug action skipped.', 'assertive');
+          }
           logger.warn('[App] Sidebar debug function not available', { context: 'app:debug' });
           return null;
         }
