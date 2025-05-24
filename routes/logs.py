@@ -11,6 +11,7 @@ from utils.auth_utils import get_current_user
 from models.user import User
 
 import aiofiles
+from aiofiles import os as aioos     # ← ADD
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -155,7 +156,7 @@ async def receive_logs(
         if os.path.exists(log_path) and os.path.getsize(log_path) > max_bytes:
             ts = time.strftime("%Y%m%d-%H%M%S")
             rotated = f"client_logs_{ts}.jsonl"
-            import aiofiles.os; await aiofiles.os.rename(log_path, rotated)
+            await aioos.rename(log_path, rotated)     # ← REPLACE
 
         # Terminal echo **only** for WARN/ERROR+
         if level in ("warn", "warning", "error", "critical", "fatal"):
