@@ -386,8 +386,8 @@ function vFactory(err, file, config) {
           ReturnStatement(returnPath) {
             if (returnPath.node.argument?.type === "ObjectExpression") {
               if (
-                hasProp(returnPath.node.argument, "cleanup")   ||
-                hasProp(returnPath.node.argument, "teardown")  ||
+                hasProp(returnPath.node.argument, "cleanup") ||
+                hasProp(returnPath.node.argument, "teardown") ||
                 hasProp(returnPath.node.argument, "destroy")   /* allow destroy() */
               ) {
                 hasCleanup = true;
@@ -1376,8 +1376,8 @@ function vLog(err, file, isAppJs, moduleCtx, config) {
         if (lastArgNode?.type === "ObjectExpression" && hasProp(lastArgNode, "context")) {
           const contextProp = lastArgNode.properties.find(
             prop =>
-              prop.key.name === "context" ||
-              prop.key.value === "context"
+              (prop.key && prop.key.name === "context") ||
+              (prop.key && prop.key.value === "context")
           );
           if (contextProp && contextProp.value) {
             const contextValueNode = contextProp.value;
@@ -1421,7 +1421,48 @@ function vErrorLog(err, file, moduleCtx, config) {
   const loggerName = config.serviceNames.logger;
   const ehName = config.serviceNames.eventHandlers;
 
+  // Skip safeHandler duplication checks for app.js (canonical source)
+  const isAppJs = /\/(app|main)\.(js|ts|jsx|tsx)$/i.test(file) ||
+    file.includes("WARNING: BOOTSTRAP EXCEPTION");
+
+  // Skip catch clause validation for logger.js (can't use itself for error logging)
+  const isLoggerJs = /\/logger\.(js|ts)$/i.test(file);
+
   return {
+    // Check for duplicate safeHandler function declarations (skip for app.js)
+    FunctionDeclaration(p) {
+      if (!isAppJs && p.node.id && p.node.id.name === "safeHandler") {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            12,
+            "Duplicate 'safeHandler' function declaration is forbidden.",
+            "Use the canonical safeHandler from DI: const safeHandler = DependencySystem.modules.get('safeHandler');"
+          )
+        );
+      }
+    },
+    // Check for safeHandler variable declarations (skip for app.js)
+    VariableDeclarator(p) {
+      if (
+        !isAppJs &&
+        p.node.id.type === "Identifier" &&
+        p.node.id.name === "safeHandler" &&
+        p.node.init &&
+        p.node.init.type === "FunctionExpression"
+      ) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            12,
+            "Local 'safeHandler' function definition is forbidden.",
+            "Use the canonical safeHandler from DI: const safeHandler = DependencySystem.modules.get('safeHandler');"
+          )
+        );
+      }
+    },
     CallExpression(p) {
       // If trackListener is used, ensure callback is wrapped with safeHandler
       const callee = p.node.callee;
@@ -1490,7 +1531,7 @@ function vErrorLog(err, file, moduleCtx, config) {
       // Handle small edge cases, e.g. catch (finalErr) {}
       const isSwallow =
         /^(finalErr|logErr)$/i.test(errId || "") && p.node.body.body.length === 0;
-      if (!loggedCorrectly && !hasNestedTry && !isSwallow) {
+      if (!loggedCorrectly && !hasNestedTry && !isSwallow && !isLoggerJs) {
         err.push(
           E(
             file,

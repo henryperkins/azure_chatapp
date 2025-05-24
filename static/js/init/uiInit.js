@@ -37,49 +37,10 @@ export function createUIInitializer({
   let _uiInitialized = false;
 
   async function setupSidebarControls() {
-    const navToggleBtn = domAPI.getElementById('navToggleBtn');
-    const closeSidebarBtn = domAPI.getElementById('closeSidebarBtn');
-    const doc = domAPI.getDocument();
-
-    function setSidebarOpen(open) {
-      const sidebar = domAPI.getElementById('mainSidebar');
-      // freeze / release background scroll
-      domAPI[open ? 'addClass' : 'removeClass'](doc.body, 'sidebar-open');
-      domAPI[open ? 'addClass' : 'removeClass'](doc.documentElement, 'sidebar-open');
-
-      // slide sidebar in/out
-      if (sidebar) {
-        domAPI[open ? 'addClass' : 'removeClass'](sidebar, 'translate-x-0');
-        domAPI[open ? 'removeClass' : 'addClass'](sidebar, '-translate-x-full');
-        domAPI.setAttribute(sidebar, 'aria-hidden', String(!open));
-      }
-      // update toggle button ARIA
-      if (navToggleBtn) domAPI.setAttribute(navToggleBtn, 'aria-expanded', String(open));
-    }
-
-    if (navToggleBtn) {
-      eventHandlers.trackListener(
-        navToggleBtn,
-        'click',
-        safeHandler(() => setSidebarOpen(domAPI.getAttribute(navToggleBtn, 'aria-expanded') !== 'true'), 'navToggleBtn:toggleSidebar'),
-        { context: 'uiInit:sidebar', description: 'toggleSidebar' }
-      );
-    }
-    if (closeSidebarBtn) {
-      eventHandlers.trackListener(
-        closeSidebarBtn, 'click',
-        () => setSidebarOpen(false),
-        { context: 'uiInit:sidebar', description: 'closeSidebar' }
-      );
-    }
-
-    // Global escape key listener
-    eventHandlers.trackListener(
-      doc,
-      'keydown',
-      (e) => { if (e.key === 'Escape') setSidebarOpen(false); },
-      { context: 'uiInit:sidebar', description: 'escCloseSidebar' }
-    );
+    // Sidebar controls are now handled by the sidebar module itself
+    // This eliminates duplication and ensures consistent sidebar behavior
+    // The sidebar module registers its own event listeners during initialization
+    logger.log('[UIInit] Sidebar controls delegated to sidebar module', { context: 'uiInit:setupSidebarControls' });
   }
 
   async function loadProjectTemplates() {
@@ -122,6 +83,37 @@ export function createUIInitializer({
       ]).catch(() => {
         logger.warn('[UIInit] ModalManager not ready after 8s – continuing', { context: 'uiInit' });
       });
+    }
+  }
+
+  /**
+   * Enhanced modal readiness helper that can be used by other modules.
+   * Waits for modal manager to be ready with configurable timeout.
+   * @param {number} timeout - Timeout in milliseconds (default: 8000)
+   * @param {string} context - Context for logging (default: 'waitForModalReadiness')
+   * @returns {Promise<boolean>} - True if ready, false if timeout
+   */
+  async function waitForModalReadinessWithTimeout(timeout = 8000, context = 'waitForModalReadiness') {
+    const modalMgr = DependencySystem.modules.get('modalManager');
+    if (!modalMgr?.isReadyPromise) {
+      logger.warn(`[${context}] ModalManager or isReadyPromise not available`, { context });
+      return false;
+    }
+
+    try {
+      await Promise.race([
+        modalMgr.isReadyPromise(),
+        new Promise((_, reject) =>
+          browserService.getWindow().setTimeout(
+            () => reject(new Error(`Modal readiness timeout after ${timeout}ms`)),
+            timeout
+          )
+        )
+      ]);
+      return true;
+    } catch (err) {
+      logger.warn(`[${context}] ModalManager not ready after ${timeout}ms – continuing`, { context, error: err.message });
+      return false;
     }
   }
 
@@ -220,26 +212,26 @@ export function createUIInitializer({
       }
     } else {
       logger.warn('[UIInit] projectDashboardInstance not found. Cannot set sub-components.', { context: 'uiInit:createAndRegisterUIComponents' });
-   }
+    }
 
-   // Initialize ProjectModal
-   const projectModalInstance = DependencySystem.modules.get('projectModal');
-   if (projectModalInstance && typeof projectModalInstance.init === 'function') {
-     try {
-       logger.log('[UIInit] Initializing ProjectModal instance.', { context: 'uiInit:createAndRegisterUIComponents' });
-       await projectModalInstance.init();
-     } catch (err) {
-       logger.error('[UIInit] ProjectModal initialization failed', err, { context: 'uiInit:projectModalInit' });
-       // Depending on severity, might want to throw or handle gracefully
-     }
-   } else {
-     logger.warn('[UIInit] ProjectModal instance or its init method not found in DI.', { context: 'uiInit:createAndRegisterUIComponents' });
-   }
+    // Initialize ProjectModal
+    const projectModalInstance = DependencySystem.modules.get('projectModal');
+    if (projectModalInstance && typeof projectModalInstance.init === 'function') {
+      try {
+        logger.log('[UIInit] Initializing ProjectModal instance.', { context: 'uiInit:createAndRegisterUIComponents' });
+        await projectModalInstance.init();
+      } catch (err) {
+        logger.error('[UIInit] ProjectModal initialization failed', err, { context: 'uiInit:projectModalInit' });
+        // Depending on severity, might want to throw or handle gracefully
+      }
+    } else {
+      logger.warn('[UIInit] ProjectModal instance or its init method not found in DI.', { context: 'uiInit:createAndRegisterUIComponents' });
+    }
 
-   logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });
- }
+    logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });
+  }
 
- async function registerNavigationViews() {
+  async function registerNavigationViews() {
     const navigationService = DependencySystem.modules.get('navigationService');
     if (!navigationService || typeof navigationService.registerView !== 'function') {
       logger.warn('[UIInit] NavigationService not available or missing registerView method', { context: 'uiInit:registerNavigationViews' });
@@ -247,35 +239,95 @@ export function createUIInitializer({
     }
 
     try {
-      // Wait for project list elements to be ready
-      await domReadinessService.dependenciesAndElements({
-        domSelectors: ['#projectListContainer'],
-        timeout: APP_CONFIG.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 5000,
-        context: 'uiInit:registerNavigationViews:projectListElements'
-      });
+      // Register projectList view with enhanced functionality
+      if (!navigationService.hasView('projectList')) {
+        navigationService.registerView('projectList', {
+          show: async () => {
+            try {
+              const dashboard = DependencySystem.modules.get('projectDashboard');
+              if (dashboard?.components?.projectList?.show) {
+                await dashboard.components.projectList.show();
+                return true;
+              }
+              const plc = DependencySystem.modules.get('projectListComponent');
+              if (plc?.show) {
+                await plc.show();
+                return true;
+              }
+              return false;
+            } catch (err) {
+              logger.error('[UIInit] Error in projectList show', err, { context: 'uiInit:navigation:projectList:show' });
+              throw err;
+            }
+          },
+          hide: async () => {
+            try {
+              const dashboard = DependencySystem.modules.get('projectDashboard');
+              if (dashboard?.components?.projectList?.hide) {
+                await dashboard.components.projectList.hide();
+                return true;
+              }
+              const plc = DependencySystem.modules.get('projectListComponent');
+              if (plc?.hide) {
+                await plc.hide();
+                return true;
+              }
+              return false;
+            } catch (err) {
+              logger.error('[UIInit] Error in projectList hide', err, { context: 'uiInit:navigation:projectList:hide' });
+              throw err;
+            }
+          }
+        });
+      }
 
-      navigationService.registerView('projectList', {
-        selector: '#projectListView',
-        onActivate: async () => {
-          logger.log('[UIInit] Activating project list view', { context: 'uiInit:navigation:projectList' });
-          // Additional activation logic can go here
-        }
-      });
+      // Register projectDetails view with enhanced functionality and dependency waiting
+      if (!navigationService.hasView('projectDetails')) {
+        navigationService.registerView('projectDetails', {
+          show: async (params) => {
+            try {
+              await domReadinessService.dependenciesAndElements({
+                deps: ['projectDashboard', 'projectDetailsComponent'],
+                timeout: 10000,
+                context: 'uiInit:nav:projectDetails'
+              });
 
-      // Wait for project details elements to be ready
-      await domReadinessService.dependenciesAndElements({
-        domSelectors: ['#projectDetailsContainer'],
-        timeout: APP_CONFIG.TIMEOUTS?.PROJECT_DETAILS_ELEMENTS ?? 5000,
-        context: 'uiInit:registerNavigationViews:projectDetailsElements'
-      });
-
-      navigationService.registerView('projectDetails', {
-        selector: '#projectDetailsView',
-        onActivate: async () => {
-          logger.log('[UIInit] Activating project details view', { context: 'uiInit:navigation:projectDetails' });
-          // Additional activation logic can go here
-        }
-      });
+              const dashboard = DependencySystem.modules.get('projectDashboard');
+              if (dashboard?.showProjectDetails) {
+                await dashboard.showProjectDetails(params.projectId);
+                return true;
+              }
+              const pdc = DependencySystem.modules.get('projectDetailsComponent');
+              if (pdc?.showProjectDetails) {
+                await pdc.showProjectDetails(params.projectId);
+                return true;
+              }
+              return false;
+            } catch (err) {
+              logger.error('[UIInit] Error in projectDetails show', err, { context: 'uiInit:navigation:projectDetails:show' });
+              throw err;
+            }
+          },
+          hide: async () => {
+            try {
+              const dashboard = DependencySystem.modules.get('projectDashboard');
+              if (dashboard?.components?.projectDetails?.hideProjectDetails) {
+                await dashboard.components.projectDetails.hideProjectDetails();
+                return true;
+              }
+              const pdc = DependencySystem.modules.get('projectDetailsComponent');
+              if (pdc?.hideProjectDetails) {
+                await pdc.hideProjectDetails();
+                return true;
+              }
+              return false;
+            } catch (err) {
+              logger.error('[UIInit] Error in projectDetails hide', err, { context: 'uiInit:navigation:projectDetails:hide' });
+              throw err;
+            }
+          }
+        });
+      }
 
       logger.log('[UIInit] Navigation views registered', { context: 'uiInit:navigation' });
     } catch (err) {
@@ -325,5 +377,9 @@ export function createUIInitializer({
     }
   }
 
-  return { initializeUIComponents };
+  return {
+    initializeUIComponents,
+    waitForModalReadinessWithTimeout,
+    registerNavigationViews
+  };
 }

@@ -47,18 +47,24 @@ export const resolveApiEndpoints = (cfg) => {
       errors.push(`Empty required endpoint keys: ${emptyKeys.join(', ')}`);
     }
 
-    console.error('[apiEndpoints] Configuration validation failed:', errors.join('; '));
-    console.error('[apiEndpoints] Provided config:', cfg.API_ENDPOINTS);
-    console.error('[apiEndpoints] Merged result:', merged);
+    // Use fallback logging for critical configuration errors
+    if (typeof window !== 'undefined' && window.console && window.console.error) {
+      window.console.error('[apiEndpoints] Configuration validation failed:', errors.join('; '));
+      window.console.error('[apiEndpoints] Provided config:', cfg.API_ENDPOINTS);
+      window.console.error('[apiEndpoints] Merged result:', merged);
+    }
 
     throw new Error(`API endpoint configuration invalid: ${errors.join('; ')}`);
   }
 
-  console.log('[apiEndpoints] Successfully resolved and validated endpoints:', {
-    overrides: Object.keys(cfg.API_ENDPOINTS),
-    total: Object.keys(merged).length,
-    required: REQUIRED_ENDPOINT_KEYS.length
-  });
+  // Use fallback logging for successful endpoint validation
+  if (typeof window !== 'undefined' && window.console && window.console.log) {
+    window.console.log('[apiEndpoints] Successfully resolved and validated endpoints:', {
+      overrides: Object.keys(cfg.API_ENDPOINTS),
+      total: Object.keys(merged).length,
+      required: REQUIRED_ENDPOINT_KEYS.length
+    });
+  }
 
   return merged;
 };

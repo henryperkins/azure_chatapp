@@ -77,13 +77,19 @@
       async register(name, instance, dependencies = []) {
         if (this.modules.has(name)) {
           const msg = `[DependencySystem] Duplicate module: '${name}'`;
-          console.error(msg);
+          // Use fallback logging for critical DependencySystem errors
+          if (typeof window !== 'undefined' && window.console && window.console.error) {
+            window.console.error(msg);
+          }
           throw new Error(msg);
         }
         if (dependencies.length > 0) {
           await this.waitFor(dependencies);
         }
-        console.log(`[DependencySystem] Registering module: ${name}`);
+        // Use fallback logging for DependencySystem registration
+        if (typeof window !== 'undefined' && window.console && window.console.log) {
+          window.console.log(`[DependencySystem] Registering module: ${name}`);
+        }
         this.modules.set(name, instance);
         if (name === 'eventHandlers' && this._pendingCleanups.length && instance?.cleanupListeners) {
           this._pendingCleanups.forEach(ctx => instance.cleanupListeners({ context: ctx }));
@@ -99,7 +105,10 @@
           try {
             callback(this.modules.get(name));
           } catch (error) {
-            console.error(`[DependencySystem] Error in waiter callback for ${name}:`, error);
+            // Use fallback logging for DependencySystem callback errors
+            if (typeof window !== 'undefined' && window.console && window.console.error) {
+              window.console.error(`[DependencySystem] Error in waiter callback for ${name}:`, error);
+            }
           }
         });
         this.waiters.delete(name);
@@ -117,7 +126,10 @@
           const timeoutId = setTimeout(() => {
             if (!resolved) {
               const msg = `[DependencySystem] Timeout – missing: ${missing.join(', ')}`;
-              console.error(msg);
+              // Use fallback logging for DependencySystem timeout errors
+              if (typeof window !== 'undefined' && window.console && window.console.error) {
+                window.console.error(msg);
+              }
               resolved = true;
               reject(new Error(msg));
             }
@@ -383,7 +395,7 @@
         <div id="projectsSection" class="flex-1 flex flex-col min-h-0 hidden">
           <div class="mb-3">
             <input id="sidebarProjectSearch" type="text" placeholder="Search projects..."
-                   class="input input-sm input-bordered w-full">
+              class="input input-sm input-bordered w-full">
           </div>
           <div class="flex-1 overflow-y-auto">
             <div class="text-base-content/60 text-center py-4">No projects yet.</div>

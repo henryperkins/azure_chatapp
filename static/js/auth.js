@@ -48,17 +48,8 @@ export function createAuthModule(deps) {
     domReadinessService
   } = deps;
 
-  // === safeHandler: For all event handlers (logging errors) ===
-  function safeHandler(handler, description) {
-    return (...args) => {
-      try {
-        return handler(...args);
-      } catch (err) {
-        logger.error(`[AuthModule][${description}] Handler exception`, err, { context: description });
-        throw err;
-      }
-    };
-  }
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   // --- bearer token storage ---------------------------------
   let accessToken = null;           // stores latest JWT / bearer
