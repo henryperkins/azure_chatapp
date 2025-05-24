@@ -360,6 +360,11 @@ export function createSidebar({
 
       if (projectManager?.projects?.length && uiRenderer.renderProjects) {
         uiRenderer.renderProjects(projectManager.projects);
+
+        // ── ensure conversation lists show once a project exists ──
+        const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+        if (activeTab === 'recent')  maybeRenderRecentConversations();
+        if (activeTab === 'starred') maybeRenderStarredConversations();
       }
     } catch (err) {
       logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar' });
@@ -534,6 +539,18 @@ export function createSidebar({
         }
       }, 'Sidebar:projectChanged'),
       { context: 'Sidebar', description: 'Sidebar project changed => refresh conversations' }
+    );
+
+    // also react to the canonical “currentProjectChanged” event (AppBus)
+    eventHandlers.trackListener(
+      domAPI.getDocument(), 'currentProjectChanged',
+      safeHandler(() => {
+        const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+        logger.debug('[Sidebar] currentProjectChanged → refresh', { activeTab, context: 'Sidebar' });
+        if (activeTab === 'recent')  maybeRenderRecentConversations();
+        if (activeTab === 'starred') maybeRenderStarredConversations();
+      }, 'Sidebar:currentProjectChanged'),
+      { context: 'Sidebar', description: 'Refresh conversations on project switch' }
     );
 
     // Rewired: Use sidebarAuth for all auth state logic
