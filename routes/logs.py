@@ -49,6 +49,7 @@ class ClientLog(BaseModel):
     ts: int | None = None
     request_id: str | None = None
     session_id: str | None = None
+    trace_id: str | None = None  # ← NEW
 
 router = APIRouter()
 
@@ -141,6 +142,10 @@ async def receive_logs(
             "X-Request-ID"
         ) or log_entry.get("request_id")
         sanitized_entry["session_id"] = log_entry.get("session_id")
+        sanitized_entry["trace_id"] = (
+            request.headers.get("X-Trace-ID")
+            or log_entry.get("trace_id")
+        )
 
         # --- Log rotation: if file >10MB, rotate ---
         log_path = os.getenv("CLIENT_LOG_FILE", "client_logs.jsonl")
@@ -176,6 +181,7 @@ async def receive_logs(
                 with sentry_sdk.configure_scope() as scope:
                     scope.set_tag("session_id", sanitized_entry.get("session_id"))
                     scope.set_tag("request_id", sanitized_entry.get("request_id"))
+                    scope.set_tag("trace_id"  , sanitized_entry.get("trace_id"))  # NEW
 
                 capture_custom_message(
                     message=msg,
