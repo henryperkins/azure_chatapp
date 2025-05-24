@@ -10,7 +10,6 @@ uploads/*
 codex/
 tests/
 docs/
-scripts/
 storage/
 alembic/
 # Playwright
