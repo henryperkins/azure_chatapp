@@ -31,17 +31,29 @@ CLAUDE_SAMPLE_RATE = 1.0  # Always sample Claude calls
 # Model Config Helpers
 # -----------------------------
 
+# Define which models must use the responses API.
+RESPONSES_API_MODELS = {
+    "o3",
+    "o3-mini",
+    "o4-mini",
+    "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4.1-nano",
+}
+
+
 def is_reasoning_model(model_name: str) -> bool:
-    # Recognize o-series and gpt-4.x, o3, o4-mini, gpt-4.1, etc.
-    name = model_name.lower()
-    return (
-        name.startswith("o")
-        or name.startswith("gpt-4.1")
-        or "o3" in name
-        or "o4" in name
-        or "o4-mini" in name
-        or "reasoning" in name
-    )
+    """Check if a model uses the Responses API and supports reasoning."""
+    return model_name in {
+        "o1",
+        "o3",
+        "o3-mini",
+        "o4-mini",
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-nano",
+    }
+
 
 def get_azure_api_version(model_config: dict[str, Any]) -> str:
     """Get the Azure API version from model config or fallback to default."""
@@ -155,9 +167,6 @@ async def azure_chat(
         sampled=random.random() < AZURE_SAMPLE_RATE,
     )
 
-    # Define which models must use the responses API.
-    RESPONSES_API_MODELS = {"o3", "gpt-4.1"}
-
     try:
         with transaction:
             transaction.set_tag("model.id", model_name)
@@ -220,6 +229,115 @@ async def azure_chat(
 # --- RESPONSES API SUPPORT ---
 
 
+def _convert_messages_to_responses_format(
+    messages: List[dict[str, Any]],
+) -> List[dict[str, Any]]:
+    """
+    Convert Chat Completions API messages to Responses API input format.
+
+    The Responses API expects messages with 'type': 'message' and content arrays.
+    """
+    converted_messages = []
+
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+
+        if isinstance(content, str):
+            # Simple text content
+            converted_msg = {
+                "type": "message",
+                "role": role,
+                "content": [{"type": "input_text", "text": content}],
+            }
+        elif isinstance(content, list):
+            # Multi-part content (text + images)
+            converted_content = []
+            for part in content:
+                if isinstance(part, dict):
+                    part_type = part.get("type", "text")
+                    if part_type == "text":
+                        converted_content.append(
+                            {"type": "input_text", "text": part.get("text", "")}
+                        )
+                    elif part_type == "image_url":
+                        converted_content.append(
+                            {
+                                "type": "input_image",
+                                "image_url": part.get("image_url", {}).get("url", ""),
+                            }
+                        )
+                    else:
+                        # Pass through other types as-is
+                        converted_content.append(part)
+                else:
+                    # Handle string parts in list
+                    converted_content.append({"type": "input_text", "text": str(part)})
+
+            converted_msg = {
+                "type": "message",
+                "role": role,
+                "content": converted_content,
+            }
+        else:
+            # Fallback for unexpected content types
+            converted_msg = {
+                "type": "message",
+                "role": role,
+                "content": [{"type": "input_text", "text": str(content)}],
+            }
+
+        converted_messages.append(converted_msg)
+
+    return converted_messages
+
+
+def _convert_responses_to_chat_format(
+    data: dict[str, Any],
+    message_text: Optional[str],
+    reasoning_summary: Optional[str],
+    usage: dict[str, Any],
+    reasoning_tokens: Optional[int],
+) -> dict[str, Any]:
+    """
+    Convert Responses API response to Chat Completions API format for compatibility.
+
+    This ensures that the rest of the application can work with both APIs seamlessly.
+    """
+    # Create a Chat Completions-style response
+    chat_response = {
+        "id": data.get("id", ""),
+        "object": "chat.completion",
+        "created": int(data.get("created_at", 0)),
+        "model": data.get("model", ""),
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": message_text or ""},
+                "finish_reason": data.get("status", "completed"),
+            }
+        ],
+        "usage": {
+            "prompt_tokens": usage.get("input_tokens", 0),
+            "completion_tokens": usage.get("output_tokens", 0),
+            "total_tokens": usage.get("total_tokens", 0),
+        },
+    }
+
+    # Add reasoning-specific fields for downstream processing
+    if reasoning_summary:
+        chat_response["reasoning_summary"] = reasoning_summary
+    if reasoning_tokens:
+        chat_response["reasoning_tokens"] = reasoning_tokens
+        # Also add to usage for compatibility
+        chat_response["usage"]["reasoning_tokens"] = reasoning_tokens
+
+    # Preserve raw response for debugging
+    chat_response["raw_response"] = data
+
+    return chat_response
+
+
 async def _send_azure_responses_request(
     payload: dict[str, Any],
     model_name: str,
@@ -237,9 +355,11 @@ async def _send_azure_responses_request(
     }
 
     # Required fields for responses API
+    # Convert messages to Responses API input format
+    input_messages = _convert_messages_to_responses_format(payload.get("messages", []))
     responses_payload = {
         "model": model_name,
-        "input": payload.get("messages", []),
+        "input": input_messages,
     }
     # Add nested reasoning object if present
     if "reasoning" in payload and payload["reasoning"]:
@@ -279,32 +399,47 @@ async def _send_azure_responses_request(
             if data.get("object") == "response" and "output" in data:
                 output_items = data["output"]
                 # Extract assistant message
-                message_item = next((item for item in output_items if item.get("type") == "message"), None)
+                message_item = next(
+                    (item for item in output_items if item.get("type") == "message"),
+                    None,
+                )
                 message_text = None
                 if message_item and "content" in message_item:
-                    output_text_block = next((block for block in message_item.get("content", []) if block.get("type") == "output_text"), None)
+                    output_text_block = next(
+                        (
+                            block
+                            for block in message_item.get("content", [])
+                            if block.get("type") == "output_text"
+                        ),
+                        None,
+                    )
                     if output_text_block:
                         message_text = output_text_block.get("text", "")
                 # Extract summary/reasoning chain
-                reasoning_item = next((item for item in output_items if item.get("type") == "reasoning"), None)
+                reasoning_item = next(
+                    (item for item in output_items if item.get("type") == "reasoning"),
+                    None,
+                )
                 reasoning_summary = None
                 if reasoning_item and "summary" in reasoning_item:
-                    summary_texts = [s.get("text") for s in reasoning_item.get("summary", []) if s.get("text")]
+                    summary_texts = [
+                        s.get("text")
+                        for s in reasoning_item.get("summary", [])
+                        if s.get("text")
+                    ]
                     if summary_texts:
                         reasoning_summary = "\n".join(summary_texts)
                 # Usage
                 usage = data.get("usage", {})
                 reasoning_tokens = None
                 if usage.get("output_tokens_details"):
-                    reasoning_tokens = usage.get("output_tokens_details", {}).get("reasoning_tokens")
-                # Expose these as additional structured fields
-                return {
-                    "assistant_content": message_text,
-                    "reasoning_summary": reasoning_summary,
-                    "usage": usage,
-                    "reasoning_tokens": reasoning_tokens,
-                    "raw_response": data,  # preserve original for downstream
-                }
+                    reasoning_tokens = usage.get("output_tokens_details", {}).get(
+                        "reasoning_tokens"
+                    )
+                # Convert to standard Chat Completions format for compatibility
+                return _convert_responses_to_chat_format(
+                    data, message_text, reasoning_summary, usage, reasoning_tokens
+                )
             return data
     except httpx.RequestError as e:
         logger.error(f"Azure Responses API request error: {str(e)}")
@@ -340,7 +475,7 @@ async def validate_azure_params(
         # ---------------- Generic validation ----------------
         try:
             _validate_model_params(model_name, kwargs)
-        except ValueError as exc:
+        except ValueError:
             raise
 
         # ---------------- Azure-only checks ----------------
@@ -428,12 +563,21 @@ def build_azure_payload(
         ) and "markdown_formatting" in model_config.get("capabilities", []):
             payload["enable_markdown_formatting"] = True
 
-        # Reasoning: always inject for reasoning models (o-series, gpt-4.1, etc)
+        # Reasoning: handle both Chat Completions API and Responses API
         if is_reasoning_model(model_name):
-            payload["reasoning"] = {
-                "effort": kwargs.get("reasoning_effort", "medium"),
-                "summary": kwargs.get("reasoning_summary") or kwargs.get("summary") or "detailed"
-            }
+            # For Chat Completions API, use reasoning_effort parameter
+            if model_name in RESPONSES_API_MODELS:
+                # For Responses API, use reasoning object
+                payload["reasoning"] = {
+                    "effort": kwargs.get("reasoning_effort", "medium"),
+                    "summary": kwargs.get("reasoning_summary", "detailed"),
+                }
+            else:
+                # For Chat Completions API, use reasoning_effort parameter
+                if kwargs.get("reasoning_effort"):
+                    payload["reasoning_effort"] = kwargs.get(
+                        "reasoning_effort", "medium"
+                    )
 
         # Vision
         if kwargs.get("image_data") and "vision" in model_config.get(
