@@ -429,21 +429,23 @@ async def _validate_project_and_kb(
 
 
 async def _validate_user_and_project(
-    project_id: UUID, user_id: Optional[int], db: AsyncSession
+    project_id: UUID,
+    user_id: Optional[int],
+    db: AsyncSession,
 ) -> Project:
     """
-    Wrapper – forwards to project_service.validate_project_access to avoid code duplication.
+    Wrapper kept for legacy callers – now delegates to the single-source-of-truth
+    `validate_project_access` in services.project_service.
     """
-    from services.project_service import validate_project_access
-
     user = None
     if user_id is not None:
         user = await get_by_id(db, User, user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+
     return await validate_project_access(
         project_id=project_id,
-        user=user,  # None ⇒ skip ownership check
+        user=user,
         db=db,
         skip_ownership_check=user is None,
     )
