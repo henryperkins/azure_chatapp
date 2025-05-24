@@ -33,6 +33,17 @@ export function createTokenStatsManager({
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: domReadinessService`);
   if (!DependencySystem) throw new Error('Missing DependencySystem');
 
+  // Canonical safeHandler
+  const safeHandler =
+    DependencySystem?.modules?.get?.('safeHandler') ||
+    ((handler, description) => (...args) => {
+      try { return handler(...args); }
+      catch (err) {
+        logger.error(`[${MODULE_CONTEXT}][${description}]`, err, { context: MODULE_CONTEXT });
+        throw err;
+      }
+    });
+
   // Module state
   const state = {
     initialized: false,
@@ -96,22 +107,6 @@ export function createTokenStatsManager({
     }
   }
 
-  // Use canonical safeHandler from DI (following custom instructions pattern)
-  function _safeHandler(handler, description) {
-    const safeHandler = DependencySystem?.modules?.get?.('safeHandler');
-    if (!safeHandler) {
-      logger.warn(`[${MODULE_CONTEXT}] safeHandler not available in DI, using fallback`, { context: MODULE_CONTEXT });
-      return (...args) => {
-        try {
-          return handler(...args);
-        } catch (err) {
-          logger.error(`[${MODULE_CONTEXT}][${description}]`, err, { context: MODULE_CONTEXT });
-          throw err;
-        }
-      };
-    }
-    return safeHandler(handler, description);
-  }
 
   /**
    * Initialize the token stats manager
@@ -140,6 +135,8 @@ export function createTokenStatsManager({
           _logInfo('Token-stats UI not yet present – deferring initialization', {
             missing: requiredSel
           });
+          logger.error(`[${MODULE_CONTEXT}] elementsReady failed`, err,
+                       { context: MODULE_CONTEXT, phase: 'init', missing: requiredSel });
           state.initializing = null;   // allow future retries
           return false;                // non-fatal
         }
@@ -154,6 +151,8 @@ export function createTokenStatsManager({
         _logInfo('Token stats manager initialized');
       } catch (err) {
         _logError('Failed to initialize token stats manager', err);
+        logger.error(`[${MODULE_CONTEXT}] Failed to initialize token stats manager`, err,
+                     { context: MODULE_CONTEXT });
       } finally {
         state.initializing = null;
       }
@@ -177,7 +176,7 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         tokenUsageStat,
         'click',
-        _safeHandler(() => {
+        safeHandler(() => {
           _showTokenStatsModal();
         }, 'tokenUsageStatClick'),
         { context: MODULE_CONTEXT }
@@ -190,7 +189,7 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         tokenStatsBtn,
         'click',
-        _safeHandler(() => {
+        safeHandler(() => {
           _showTokenStatsModal();
         }, 'tokenStatsBtnClick'),
         { context: MODULE_CONTEXT }
@@ -203,7 +202,7 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         refreshTokenStatsBtn,
         'click',
-        _safeHandler(() => {
+        safeHandler(() => {
           _refreshTokenStats();
         }, 'refreshTokenStatsBtnClick'),
         { context: MODULE_CONTEXT }
@@ -214,7 +213,7 @@ export function createTokenStatsManager({
     eventHandlers.trackListener(
       doc,
       'chat:conversationChanged',
-      _safeHandler((e) => {
+      safeHandler((e) => {
         if (e.detail && e.detail.conversationId) {
           state.currentConversation = e.detail.conversationId;
           fetchConversationTokenStats(e.detail.conversationId);
@@ -227,7 +226,7 @@ export function createTokenStatsManager({
     eventHandlers.trackListener(
       doc,
       'chat:messageSent',
-      _safeHandler((e) => {
+      safeHandler((e) => {
         if (state.currentConversation) {
           fetchConversationTokenStats(state.currentConversation);
         }
@@ -239,7 +238,7 @@ export function createTokenStatsManager({
     eventHandlers.trackListener(
       doc,
       'projectLoaded',
-      _safeHandler((e) => {
+      safeHandler((e) => {
         // Handle both formats: e.detail.project and e.detail (project object directly)
         const project = e.detail?.project || e.detail;
         if (project && project.id) {
@@ -256,7 +255,7 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         app.AppBus,
         'currentProjectChanged',
-        _safeHandler((e) => {
+        safeHandler((e) => {
           const project = e.detail?.project;
           if (project && project.id) {
             state.currentProject = project;
@@ -281,7 +280,7 @@ export function createTokenStatsManager({
         eventHandlers.trackListener(
           closeBtn,
           'click',
-          _safeHandler(() => {
+          safeHandler(() => {
             modalManager.hide('tokenStats');
           }, 'closeTokenStatsModal'),
           { context: MODULE_CONTEXT }
@@ -305,7 +304,7 @@ export function createTokenStatsManager({
         eventHandlers.trackListener(
           exportBtn,
           'click',
-          _safeHandler(() => {
+          safeHandler(() => {
             _exportTokenStats();
           }, 'exportTokenStats'),
           { context: MODULE_CONTEXT }
