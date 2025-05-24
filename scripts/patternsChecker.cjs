@@ -1121,6 +1121,12 @@ function vState(err, file, isAppJs, config) {
   if (isAppJs) return {};
   const globalAppName = config.objectNames.globalApp;
   const statePropName = config.objectNames.stateProperty;
+  // Allow both “app.state” and “appModule.state” to be treated as the canonical
+  // global state object.  Support array override via config, but always include
+  // the built-in “appModule” alias.
+  const globalAppNames = Array.isArray(globalAppName)
+    ? [...new Set([...globalAppName, "appModule"])]
+    : [globalAppName, "appModule"];
 
   return {
     AssignmentExpression(p) {
@@ -1129,7 +1135,7 @@ function vState(err, file, isAppJs, config) {
       if (
         left.type === "MemberExpression" &&
         left.object.type === "MemberExpression" &&
-        left.object.object.name === globalAppName &&
+        globalAppNames.includes(left.object.object.name) &&
         left.object.property.name === statePropName
       ) {
         err.push(
@@ -1145,7 +1151,7 @@ function vState(err, file, isAppJs, config) {
       // e.g. app.state = newState
       else if (
         left.type === "MemberExpression" &&
-        left.object.name === globalAppName &&
+        globalAppNames.includes(left.object.name) &&
         left.property.name === statePropName
       ) {
         err.push(
@@ -1173,7 +1179,7 @@ function vState(err, file, isAppJs, config) {
         if (
           firstArgSource &&
           firstArgSource.type === "MemberExpression" &&
-          firstArgSource.object.name === globalAppName &&
+          globalAppNames.includes(firstArgSource.object.name) &&
           firstArgSource.property.name === statePropName
         ) {
           err.push(
