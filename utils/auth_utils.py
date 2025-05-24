@@ -94,10 +94,17 @@ async def verify_token(
     token: str,
     expected_type: Optional[str] = None,
     db_session: Optional[AsyncSession] = None,
+    allow_version_mismatch: bool = False,
 ) -> dict[str, Any]:
     """
-    Enhanced token verification with strict error handling and logging.
+    Enhanced token verification with strict error handling and structured logging.
     Raises HTTPException(401) on any validation or blacklist failure.
+
+    Args:
+        token: JWT token to verify
+        expected_type: Expected token type (access, refresh, ws)
+        db_session: Database session for blacklist checking
+        allow_version_mismatch: If True, allows tokens with version mismatch (for logout)
     """
     if db_session is None:
         raise RuntimeError("Database session required for verify_token")
@@ -112,7 +119,7 @@ async def verify_token(
         if not token_id:
             raise HTTPException(status_code=401, detail="Invalid token: missing jti")
 
-        # Check token version
+        # Check token version with structured logging
         sub = decoded.get("sub")
         if sub:
             # Check user
@@ -125,17 +132,40 @@ async def verify_token(
                 and user.token_version is not None
                 and decoded.get("version") != user.token_version
             ):
+                # Structured logging for token version mismatch
                 logger.warning(
-                    "[TOKEN_VERSION_MISMATCH] user=%s tok_ver=%s db_ver=%s jti=%s exp=%s iat=%s",
-                    sub,
-                    decoded.get("version"),
-                    user.token_version,
-                    decoded.get("jti"),
-                    decoded.get("exp"),
-                    decoded.get("iat"),
+                    "Token version mismatch detected",
+                    extra={
+                        "event_type": "token_version_mismatch",
+                        "user": sub,
+                        "token_version": decoded.get("version"),
+                        "db_version": user.token_version,
+                        "jti": decoded.get("jti"),
+                        "exp": decoded.get("exp"),
+                        "iat": decoded.get("iat"),
+                        "allow_version_mismatch": allow_version_mismatch,
+                        "token_type": token_type,
+                    },
                 )
 
+                # Reject token if version mismatch is not allowed
+                if not allow_version_mismatch:
+                    raise HTTPException(
+                        status_code=401,
+                        detail="Token version mismatch. Please re-authenticate.",
+                    )
+
         if expected_type and token_type != expected_type:
+            logger.warning(
+                "Token type mismatch",
+                extra={
+                    "event_type": "token_type_mismatch",
+                    "expected_type": expected_type,
+                    "actual_type": token_type,
+                    "jti": token_id,
+                    "user": sub,
+                },
+            )
             raise HTTPException(
                 status_code=401, detail=f"Invalid token type: expected {expected_type}"
             )
@@ -145,16 +175,61 @@ async def verify_token(
             select(TokenBlacklist).where(TokenBlacklist.jti == token_id)
         )
         if blacklisted.scalar_one_or_none():
+            logger.warning(
+                "Blacklisted token access attempt",
+                extra={
+                    "event_type": "blacklisted_token_access",
+                    "jti": token_id,
+                    "user": sub,
+                    "token_type": token_type,
+                },
+            )
             raise HTTPException(status_code=401, detail="Token has been revoked")
+
+        # Log successful verification
+        logger.debug(
+            "Token verification successful",
+            extra={
+                "event_type": "token_verification_success",
+                "user": sub,
+                "token_type": token_type,
+                "jti": token_id,
+            },
+        )
 
         return decoded
 
     except ExpiredSignatureError as exc:
+        logger.warning(
+            "Expired token access attempt",
+            extra={
+                "event_type": "expired_token_access",
+                "token_preview": token[:10] if token else "None",
+            },
+        )
         raise HTTPException(status_code=401, detail="Token has expired") from exc
     except InvalidTokenError as e:
+        logger.warning(
+            "Invalid token format",
+            extra={
+                "event_type": "invalid_token_format",
+                "error": str(e),
+                "token_preview": token[:10] if token else "None",
+            },
+        )
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}") from e
     except Exception as e:
-        logger.error(f"Unexpected error during token verification: {str(e)}")
+        logger.error(
+            "Unexpected error during token verification",
+            extra={
+                "event_type": "token_verification_error",
+                "error": str(e),
+                "token_preview": token[:10] if token else "None",
+                "expected_type": expected_type,
+                "allow_version_mismatch": allow_version_mismatch,
+            },
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail="Token verification failed") from e
 
 
@@ -177,7 +252,7 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
     # Log active token counts by type
     token_count_query = (
-        select(TokenBlacklist.token_type, func.count('*'))
+        select(TokenBlacklist.token_type, func.count("*"))
         .where(TokenBlacklist.expires >= now)
         .group_by(TokenBlacklist.token_type)
     )
@@ -391,7 +466,8 @@ async def get_user_from_token(
 
     if not user.is_active:
         logger.warning(
-            "[GET_USER_FROM_TOKEN] Attempt to use token for disabled account: %s", username
+            "[GET_USER_FROM_TOKEN] Attempt to use token for disabled account: %s",
+            username,
         )
         raise HTTPException(
             status_code=403,
@@ -461,6 +537,7 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
         user.id,
     )
     return user, token
+
 
 # -----------------------------------------------------------------------------
 # FastAPI Dependency: Current User Only

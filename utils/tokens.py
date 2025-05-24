@@ -30,16 +30,16 @@ if _tiktoken_spec is not None:  # pragma: no cover – environment-dependent
     import tiktoken  # type: ignore
 
     # Cache the encoder so we don’t re-initialise it on every call
-    _ENCODER = tiktoken.get_encoding("cl100k_base")      # NEW
+    _ENCODER = tiktoken.get_encoding("cl100k_base")  # NEW
 
-    def _encode(text: str) -> int:                       # UPDATED
+    def _encode(text: str) -> int:  # UPDATED
         """
         Return the token count for *text* using tiktoken.
         A cached encoder is reused for performance.
         """
         try:
             return len(_ENCODER.encode(text))
-        except Exception as exc:        # pragma: no cover – unlikely branch
+        except Exception as exc:  # pragma: no cover – unlikely branch
             logger.debug("tiktoken failure: %s", exc)
             return -1
 
@@ -65,10 +65,29 @@ def count_tokens_text(text: str, model_id: Optional[str] = None) -> int:
     # Use tiktoken path if available (works well for Azure/OpenAI family)
     tok_count = _encode(text)
     if tok_count != -1:
+        logger.debug(
+            "Token count calculated using tiktoken",
+            extra={
+                "event_type": "token_count_tiktoken",
+                "text_length": len(text),
+                "token_count": tok_count,
+                "model_id": model_id,
+            },
+        )
         return tok_count
 
     # Fallback – simple heuristic (4 chars ≈ 1 token)
-    return (len(text) + 3) // 4
+    fallback_count = (len(text) + 3) // 4
+    logger.debug(
+        "Token count calculated using fallback heuristic",
+        extra={
+            "event_type": "token_count_fallback",
+            "text_length": len(text),
+            "token_count": fallback_count,
+            "model_id": model_id,
+        },
+    )
+    return fallback_count
 
 
 def count_tokens_messages(
