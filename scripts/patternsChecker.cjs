@@ -1015,6 +1015,15 @@ function vReadiness(err, file, isAppJs, config) {
         callee.type === "Identifier" &&
         /^(setTimeout|setInterval)$/.test(callee.name)
       ) {
+        // Ignore utility wrappers (e.g.,  fn => setTimeout(fn,ms)  inside
+        // a factory) – only flag top-level readiness hacks.
+        const insideFn = p.findParent(q =>
+          q.isFunction() ||
+          q.isArrowFunctionExpression() ||
+          q.isFunctionExpression()
+        );
+        if (insideFn) return;
+
         err.push(
           E(
             file,
