@@ -4,16 +4,7 @@
  */
 
 export function createUiRenderer(deps = {}) {
-  const {
-    domAPI,
-    eventHandlers,
-    apiRequest,
-    apiEndpoints,
-    onConversationSelect,
-    onProjectSelect,
-    domReadinessService,
-    logger
-  } = deps;
+  const { domAPI, eventHandlers, apiRequest, apiEndpoints, onConversationSelect, onProjectSelect, domReadinessService, logger, DependencySystem } = deps;
 
   // ==== Pattern 1: Factory & DI checks ====
   if (!domAPI) throw new Error('Missing domAPI');
@@ -24,6 +15,7 @@ export function createUiRenderer(deps = {}) {
   if (typeof onProjectSelect !== 'function') throw new Error('Missing onProjectSelect');
   if (!domReadinessService) throw new Error('Missing domReadinessService');
   if (!logger) throw new Error('Missing logger');
+  if (!DependencySystem) throw new Error('Missing DependencySystem');
 
   const MODULE = "UiRenderer";
   const CONTEXT = "uiRenderer";

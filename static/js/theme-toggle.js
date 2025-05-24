@@ -205,8 +205,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') {
       createSVGElement     : (tag)     => document.createElementNS('http://www.w3.org/2000/svg', tag),
 
       /* Storage helpers (env-safe) */
-      localStorageGet : (k) => { try { return window.localStorage.getItem(k); } catch { return null; } },
-      localStorageSet : (k,v)=> { try { window.localStorage.setItem(k,v);   } catch {} },
+      localStorageGet : (k) => { try { return window.localStorage.getItem(k); } catch {
+        /* noop – intentional swallow (localStorage may be unavailable) */
+        return null; } },
+      localStorageSet : (k,v)=> { try { window.localStorage.setItem(k,v);   } catch {
+        /* noop – intentional swallow (localStorage may be unavailable) */
+      } },
 
       /* Media-query helpers */
       matchMedia       : (q) => window.matchMedia?.(q),

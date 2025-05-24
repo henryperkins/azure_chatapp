@@ -180,7 +180,9 @@ export function createDomAPI({
       while (node && node.nodeType === 1) {
         try {
           if (matches.call(node, selector)) return node;
-        } catch { /* ignore selector errors */ }
+        } catch {
+          /* noop – intentional */
+        }
         node = node.parentElement || node.parentNode;
       }
       return null;
@@ -279,7 +281,9 @@ export function createDomAPI({
       try {
         if (prop in el)           el[prop] = value;         // preferencia a propiedad DOM
         else                      el.setAttribute(prop, value); // fallback atributo
-      } catch {}
+      } catch {
+        /* noop – intentional */
+      }
     },
 
     /**

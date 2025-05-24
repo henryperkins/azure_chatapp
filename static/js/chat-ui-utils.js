@@ -12,14 +12,9 @@ export function createChatUIUtils(deps) {
   if (!deps.DOMPurify) throw new Error('Missing DOMPurify');
   if (!deps.eventHandlers) throw new Error('Missing eventHandlers');
   if (!deps.domReadinessService) throw new Error('Missing domReadinessService');
+  if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
 
-  const {
-    logger,
-    domAPI,
-    DOMPurify,
-    eventHandlers,
-    domReadinessService
-  } = deps;
+  const { logger, domAPI, DOMPurify, eventHandlers, domReadinessService, DependencySystem } = deps;
 
   // Use canonical safeHandler from DI
   const safeHandler = DependencySystem.modules.get('safeHandler');

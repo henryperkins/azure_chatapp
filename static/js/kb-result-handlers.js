@@ -21,12 +21,13 @@
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logger } = {}) {
+export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logger, DependencySystem } = {}) {
   // === Dependency validation block ===
   if (!eventHandlers) throw new Error('[kb-result-handlers] eventHandlers dependency required');
   if (!DOMPurify) throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
   if (!domAPI) throw new Error('[kb-result-handlers] domAPI dependency required');
   if (!logger) throw new Error('[kb-result-handlers] logger dependency required');
+  if (!DependencySystem) throw new Error('Missing DependencySystem');
 
   const MODULE_CONTEXT = 'KbResultHandlers';
   const wnd = domAPI.window || (typeof window !== 'undefined' ? window : null);
