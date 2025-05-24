@@ -31,12 +31,6 @@ import os
 import logging
 from typing import Dict, Any
 
-import sentry_sdk
-from sentry_sdk.integrations.logging import LoggingIntegration
-from sentry_sdk.integrations.fastapi import FastApiIntegration
-
-# from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration # Unused
-from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -44,9 +38,50 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.routing import APIRoute
 
+# Initialize telemetry (logging + Sentry) FIRST - must be at module level before any other logging
+from utils.bootstrap import init_telemetry
+
+APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
+APP_VERSION = os.getenv("APP_VERSION", "unknown")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Default to dev
+
+# Initialize all telemetry systems
+init_telemetry(
+    app_name=APP_NAME,
+    app_version=APP_VERSION,
+    environment=ENVIRONMENT
+)
+
+# Import config after telemetry setup
+from config import settings  # noqa: E402
+from db import init_db, get_async_session_context  # noqa: E402
+from utils.auth_utils import clean_expired_tokens  # noqa: E402
+from utils.db_utils import schedule_token_cleanup  # noqa: E402
+
+# Import Sentry SDK for exception handlers
+import sentry_sdk  # noqa: E402
+
+# ----- Ensure ALL models are registered for migrations/table creation -----
+import models  # noqa: E402, F401 # F401: imported but unused - common for model registration
+
+# Import your routers
+from auth import router as auth_router, create_default_user  # noqa: E402
+from routes.knowledge_base_routes import router as knowledge_base_router  # noqa: E402
+from routes.projects.projects import router as projects_router  # noqa: E402
+from routes.projects.files import router as project_files_router  # noqa: E402
+from routes.projects.artifacts import router as project_artifacts_router  # noqa: E402
+from routes.user_preferences import router as user_preferences_router  # noqa: E402
+from routes.unified_conversations import router as conversations_router  # noqa: E402
+from routes.sentry_test import router as sentry_test_router  # noqa: E402
+from routes.admin import router as admin_router  # noqa: E402
+from routes.logs import router as logs_router  # noqa: E402
+
+# Get logger for this module (after telemetry init)
+logging.getLogger("urllib3").setLevel(logging.INFO)  # Suppress spam DEBUG from urllib3
+logger = logging.getLogger(__name__)
+
+
 # Dev helper: always deliver fresh JS/CSS/HTML – disables browser cache
-
-
 class NoCacheStatic(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
@@ -151,81 +186,6 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
         )
         return response
 
-    # If you still want to test or see behavior, you could add HTTPSRedirectMiddleware,
-    # but here we skip it to remain on plain HTTP (insecure).
-
-
-# -----------------------------------------------------------------------------
-# Optional: Sentry Setup for Insecure/Debug
-# -----------------------------------------------------------------------------
-def configure_sentry_insecure(app_name: str, app_version: str, env: str) -> None:
-    """Configure Sentry in debug mode if needed. Otherwise, skip."""
-    SENTRY_ENABLED = os.getenv("SENTRY_ENABLED", "false").lower() == "true"
-    SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-    if not SENTRY_ENABLED or not SENTRY_DSN:
-        logging.info("Sentry is disabled or DSN not provided (debug mode).")
-        return
-
-    sentry_logging = LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)
-    integrations = [
-        sentry_logging,
-        FastApiIntegration(transaction_style="endpoint"),
-        # SqlalchemyIntegration(), # Temporarily commented out to diagnose greenlet_spawn issue
-        AsyncioIntegration(),
-    ]
-
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        environment=env,
-        release=f"{app_name}@{app_version}",
-        traces_sample_rate=1.0,  # High sample rate for debugging
-        profiles_sample_rate=1.0,
-        send_default_pii=False,
-        attach_stacktrace=True,
-        integrations=integrations,
-        before_send=filter_sensitive_event,
-        debug=False,  # Debug mode
-    )
-    sentry_sdk.set_tag("app", app_name)
-    sentry_sdk.set_tag("environment", env)
-    logging.info("Sentry initialized in debug mode")
-
-
-# -----------------------------------------------------------------------------
-# FastAPI & Application Setup
-# -----------------------------------------------------------------------------
-# Initialize structured logging FIRST, before other imports that might configure logging.
-
-from config import settings  # noqa: E402
-from db import init_db, get_async_session_context  # noqa: E402
-from utils.auth_utils import clean_expired_tokens  # noqa: E402
-from utils.db_utils import schedule_token_cleanup  # noqa: E402
-from utils.sentry_utils import filter_sensitive_event  # Canonical Sentry filter
-
-# ----- Ensure ALL models are registered for migrations/table creation -----
-import models  # noqa: E402, F401 # F401: imported but unused - common for model registration
-
-# Import your routers
-from auth import router as auth_router, create_default_user  # noqa: E402
-from routes.knowledge_base_routes import router as knowledge_base_router  # noqa: E402
-from routes.projects.projects import router as projects_router  # noqa: E402
-from routes.projects.files import router as project_files_router  # noqa: E402
-from routes.projects.artifacts import router as project_artifacts_router  # noqa: E402
-from routes.user_preferences import router as user_preferences_router  # noqa: E402
-from routes.unified_conversations import router as conversations_router  # noqa: E402
-from routes.sentry_test import router as sentry_test_router  # noqa: E402
-from routes.admin import router as admin_router  # noqa: E402
-from routes.logs import router as logs_router  # noqa: E402
-
-APP_NAME = os.getenv("APP_NAME", "Insecure Debug App")
-APP_VERSION = os.getenv("APP_VERSION", settings.APP_VERSION)
-ENVIRONMENT = os.getenv("ENVIRONMENT", "development")  # Default to dev
-
-# logging.basicConfig is no longer needed as init_structured_logging() handles setup.
-# The root logger is configured there. We can still get specific loggers.
-logging.getLogger("urllib3").setLevel(logging.INFO)  # Suppress spam DEBUG from urllib3
-logger = logging.getLogger(__name__)  # Get a logger for this module
-
 
 # -----------------------------------------------------------------------------
 # Suppress /api/log_notification and common vulnerability scan paths in access logs
@@ -271,9 +231,6 @@ DB_AVAILABLE = True
 
 # Apply insecure middlewares
 setup_middlewares_insecure(app)
-
-# Optionally configure Sentry in debug mode
-configure_sentry_insecure(APP_NAME, APP_VERSION, ENVIRONMENT)
 
 
 @app.on_event("startup")
@@ -419,11 +376,6 @@ async def debug_routes() -> list[Dict[str, Any]]:
         for route in app.routes
         if isinstance(route, APIRoute)
     ]
-
-
-# -----------------------------------------------------------------------------
-# Request ID Logging Middleware
-# -----------------------------------------------------------------------------
 
 
 # -----------------------------------------------------------------------------
