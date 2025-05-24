@@ -318,6 +318,8 @@ async def search_project_knowledge(
 # ----------------------------------------------------------------------
 
 
+# NOTE: This endpoint is a deliberate permanent redirect to the canonical file upload endpoint.
+# It must not contain any business logic—only the redirect.
 @router.post(
     "/{project_id}/knowledge-bases/files",
     response_model=dict,
@@ -346,6 +348,8 @@ async def upload_knowledge_base_file_redirect(
     )
 
 
+# NOTE: This endpoint is a deliberate permanent redirect to the canonical file listing endpoint.
+# It must not contain any business logic—only the redirect.
 @router.get(
     "/{project_id}/knowledge-bases/files-list",
     response_model=dict,
@@ -421,6 +425,8 @@ async def reindex_knowledge_base(
         ) from e
 
 
+# NOTE: This endpoint is a deliberate permanent redirect to the canonical file deletion endpoint.
+# It must not contain any business logic—only the redirect.
 @router.delete(
     "/{project_id}/knowledge-bases/files/{file_id}",
     response_model=dict,
