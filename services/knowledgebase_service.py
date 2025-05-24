@@ -283,25 +283,20 @@ async def delete_project_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Delete from storage
-    storage = StorageManager.get()
-    file_deletion_status = await _delete_file_from_storage(
-        storage, file_record.file_path
-    )
+    token_count = file_record.config.get("token_count", 0) if file_record.config else 0
 
-    # Delete vectors
+    from services.file_service import FileService
+    fs = FileService(db, StorageManager.get())
+    await fs.delete_file(project_id, file_id)
+
     if project.knowledge_base:
         await _delete_file_vectors(project_id, file_id, db)
 
-    # Delete record and update tokens
-    token_count = file_record.config.get("token_count", 0) if file_record.config else 0
-    await db.delete(file_record)
     await TokenManager.update_usage(project, -token_count, db)
 
     return {
-        "success": file_deletion_status == "success",
-        "status": file_deletion_status,
         "file_id": str(file_id),
+        "deleted": True,
         "tokens_removed": token_count,
     }
 
@@ -468,13 +463,6 @@ async def _validate_file_access(
 
 
 
-async def _delete_file_from_storage(storage: Any, file_path: str) -> str:
-    try:
-        deleted = await storage.delete_file(file_path)
-        return "success" if deleted else "not_found_in_storage"
-    except Exception as e:
-        logger.error(f"Error deleting file from storage: {e}")
-        return "storage_deletion_failed"
 
 
 async def _delete_file_vectors(

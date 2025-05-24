@@ -524,30 +524,25 @@ async def delete_project(
             if not project:
                 raise HTTPException(status_code=404, detail="Project not found")
 
-            storage = get_file_storage(
-                {
-                    "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-                    "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-                }
-            )
-
             files_deleted = 0
-            files_failed = 0
-            total_size = 0
+            files_failed  = 0
+            total_size    = 0
+
+            fs = FileService(db)
 
             with sentry_span(op="storage", description="Delete project files"):
                 files = await get_all_by_condition(
                     db, ProjectFile, ProjectFile.project_id == project_id
                 )
-                for file in files:
+                for f in files:
                     try:
-                        await storage.delete_file(file.file_path)
+                        await fs.delete_file(project_id, f.id)
                         files_deleted += 1
-                        total_size += file.file_size
+                        total_size   += f.file_size
                     except Exception as file_err:
                         files_failed += 1
                         capture_exception(file_err)
-                        logger.warning(f"Failed to delete file {file.id}: {file_err}")
+                        logger.warning(f"Failed to delete file {f.id}: {file_err}")
 
             transaction.set_data(
                 "files",
