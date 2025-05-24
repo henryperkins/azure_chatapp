@@ -8,27 +8,25 @@
  *   DependencySystem.register('logger', logger);
  */
 
-const LVL = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
+const _LVL = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
 
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
   debug = false,
   context = 'App',
-  minLevel = 'info',           // default threshold
+  _minLevel = 'debug',         // post everything that hits the console
   fetcher = null,             // ← NEW injectable fetch
   browserService = null,          // ← NEW optional DI
   authModule = null               // ← NEW optional DI: AuthModule for auth check
 } = {}) {
-  const THRESHOLD = LVL[minLevel] ?? LVL.info;
-
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
       return crypto.randomUUID();
     }
     // Fallback for older browsers
-    return 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g, function(c) {
+    return 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g, function (c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
@@ -37,7 +35,7 @@ export function createLogger({
 
   async function send(level, args) {
     if (!enableServer) return;
-    if (LVL[level] < THRESHOLD) return;          // NEW
+    // Always forward; THRESHOLD now == DEBUG so nothing is skipped
 
     // Only send logs to backend if authenticated (if authModule is provided)
     if (authModule && typeof authModule.isAuthenticated === 'function' && !authModule.isAuthenticated()) {
@@ -69,7 +67,10 @@ export function createLogger({
           context,
           args,
           ts: Date.now(),
-          request_id: reqId                     // NEW - also in body
+          request_id: reqId,                    // NEW - also in body
+          session_id: (typeof window !== 'undefined' && window.__APP_SESSION_ID) ||
+            (browserService?.getSessionId?.()) ||
+            'unknown-session'
         })
       });
       if (!response.ok) {

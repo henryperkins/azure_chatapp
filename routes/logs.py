@@ -114,7 +114,12 @@ async def receive_logs(
                 sanitized["args"] = sanitize_args(sanitized["args"])
             return sanitized
 
+        # Add correlation/meta if present
         sanitized_entry = sanitize(log_entry)
+        sanitized_entry["request_id"] = request.headers.get(
+            "X-Request-ID"
+        ) or log_entry.get("request_id")
+        sanitized_entry["session_id"] = log_entry.get("session_id")
 
         # --- Log rotation: if file >10MB, rotate ---
         log_path = "client_logs.jsonl"
@@ -124,13 +129,14 @@ async def receive_logs(
             rotated = f"client_logs_{ts}.jsonl"
             os.rename(log_path, rotated)
 
-        # Output: colored header, Route-style log (single line, all context and summary)
-        main_args = " ".join(str(a) for a in args)
-        print(
-            f"{color}[CLIENT LOG] [{ctx}] [{level.upper()}] {main_args}{reset}",
-            file=sys.stdout,
-            flush=True,
-        )
+        # Terminal echo **only** for WARN/ERROR+
+        if level in ("warn", "warning", "error", "critical", "fatal"):
+            main_args = " ".join(str(a) for a in args)
+            print(
+                f"{color}[CLIENT LOG] [{ctx}] [{level.upper()}] {main_args}{reset}",
+                file=sys.stdout,
+                flush=True,
+            )
 
         # --- Async write to log file ---
         try:
@@ -152,6 +158,13 @@ async def receive_logs(
         try:
             msg = f"[{ctx}] {level.upper()}: {summary}"
             if level in ("warning", "warn", "error", "critical", "fatal"):
+                # Set Sentry tags for correlation
+                import sentry_sdk
+
+                with sentry_sdk.configure_scope() as scope:
+                    scope.set_tag("session_id", sanitized_entry.get("session_id"))
+                    scope.set_tag("request_id", sanitized_entry.get("request_id"))
+
                 capture_custom_message(
                     message=msg,
                     level=level,

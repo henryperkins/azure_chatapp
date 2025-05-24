@@ -2,6 +2,9 @@ import logging
 import sys
 import os
 import json
+import signal
+import time
+import re
 from contextvars import ContextVar
 from typing import Optional, Any, Dict
 
@@ -19,6 +22,75 @@ class ContextFilter(logging.Filter):
         # Add attributes dynamically to the LogRecord object
         setattr(record, "request_id", request_id_var.get())
         setattr(record, "trace_id", trace_id_var.get())
+        return True
+
+
+class RateLimitingFilter(logging.Filter):
+    """
+    Rate limiting filter to prevent log storms by limiting identical messages.
+    Allows up to LOG_DUP_MAX identical messages per minute (default: 50).
+    """
+
+    _cache: Dict[tuple[str, str], tuple[int, float]] = (
+        {}
+    )  # (name,msg) ➜ (count, first_ts)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        key = (record.name, record.getMessage())
+        cnt, first_ts = self._cache.get(key, (0, record.created))
+        if record.created - first_ts > 60:  # new window
+            cnt, first_ts = 0, record.created
+        cnt += 1
+        self._cache[key] = (cnt, first_ts)
+        return cnt <= int(os.getenv("LOG_DUP_MAX", "50"))
+
+
+class SensitiveDataFilter(logging.Filter):
+    """
+    Enhanced PII protection filter that redacts sensitive information from log messages.
+    """
+
+    # Patterns for sensitive data detection
+    SENSITIVE_PATTERNS = [
+        (
+            re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+            "[EMAIL_REDACTED]",
+        ),  # Email
+        (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "[SSN_REDACTED]"),  # SSN
+        (
+            re.compile(r"\bBearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE),
+            "Bearer [TOKEN_REDACTED]",
+        ),  # Bearer tokens
+        (
+            re.compile(r"\b[A-Za-z0-9]{32,}\b"),
+            "[TOKEN_REDACTED]",
+        ),  # Generic long tokens
+        (
+            re.compile(r'password["\s]*[:=]["\s]*[^"\s,}]+', re.IGNORECASE),
+            'password="[REDACTED]"',
+        ),  # Passwords
+        (
+            re.compile(r'api[_-]?key["\s]*[:=]["\s]*[^"\s,}]+', re.IGNORECASE),
+            'api_key="[REDACTED]"',
+        ),  # API keys
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Redact sensitive data from the message
+        if hasattr(record, "msg") and isinstance(record.msg, str):
+            for pattern, replacement in self.SENSITIVE_PATTERNS:
+                record.msg = pattern.sub(replacement, record.msg)
+
+        # Also check args if they exist
+        if hasattr(record, "args") and record.args:
+            cleaned_args = []
+            for arg in record.args:
+                if isinstance(arg, str):
+                    for pattern, replacement in self.SENSITIVE_PATTERNS:
+                        arg = pattern.sub(replacement, arg)
+                cleaned_args.append(arg)
+            record.args = tuple(cleaned_args)
+
         return True
 
 
@@ -90,13 +162,57 @@ class CustomJsonFormatter(logging.Formatter):
         return json.dumps(log_record)
 
 
+def _cycle_level(root: logging.Logger) -> None:
+    """
+    Cycle through log levels: INFO → DEBUG → WARNING → INFO
+    Triggered by SIGUSR2 signal for runtime log level adjustment.
+    """
+    seq = [logging.INFO, logging.DEBUG, logging.WARNING]
+    current_idx = seq.index(root.level) if root.level in seq else 0
+    next_level = seq[(current_idx + 1) % len(seq)]
+    root.setLevel(next_level)
+    logging.getLogger(__name__).warning(
+        "🔄 log level changed → %s", logging.getLevelName(next_level)
+    )
+
+
+def setup_audit_logger() -> logging.Logger:
+    """
+    Set up a dedicated audit logger that always writes to disk AND Sentry,
+    independent of root logger level.
+    """
+    audit_logger = logging.getLogger("audit")
+    audit_logger.setLevel(logging.INFO)
+
+    # Prevent propagation to root logger to avoid duplicates
+    audit_logger.propagate = False
+
+    # File handler for audit logs
+    audit_file = os.getenv("AUDIT_LOG_FILE", "audit.log")
+    try:
+        file_handler = logging.FileHandler(audit_file)
+        file_handler.setLevel(logging.INFO)
+        file_handler.setFormatter(CustomJsonFormatter())
+        audit_logger.addHandler(file_handler)
+    except (OSError, PermissionError) as e:
+        # Fallback to stdout if file creation fails
+        logging.warning(f"Could not create audit log file {audit_file}: {e}")
+        stdout_handler = logging.StreamHandler(sys.stdout)
+        stdout_handler.setLevel(logging.INFO)
+        stdout_handler.setFormatter(CustomJsonFormatter())
+        audit_logger.addHandler(stdout_handler)
+
+    return audit_logger
+
+
 def init_structured_logging():
     """
     Initializes structured JSON logging for the application.
     - Sets the root logger's level (default: INFO, configurable via LOG_LEVEL env var).
     - Clears existing handlers to avoid duplicate logs.
     - Adds a StreamHandler to output logs to sys.stdout.
-    - Attaches ContextFilter and CustomJsonFormatter to the handler.
+    - Attaches ContextFilter, RateLimitingFilter, SensitiveDataFilter and CustomJsonFormatter.
+    - Sets up SIGUSR2 signal handler for runtime log level cycling.
     """
     log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     log_level = getattr(logging, log_level_name, logging.INFO)
@@ -111,9 +227,14 @@ def init_structured_logging():
     # Create a stream handler for stdout
     stream_handler = logging.StreamHandler(sys.stdout)
 
-    # Add the context filter
+    # Add all filters in order
     context_filter = ContextFilter()
+    rate_limiting_filter = RateLimitingFilter()
+    sensitive_data_filter = SensitiveDataFilter()
+
     stream_handler.addFilter(context_filter)
+    stream_handler.addFilter(rate_limiting_filter)
+    stream_handler.addFilter(sensitive_data_filter)
 
     # Create and set the custom JSON formatter
     formatter = CustomJsonFormatter(
@@ -124,7 +245,20 @@ def init_structured_logging():
     # Add the handler to the root logger
     root_logger.addHandler(stream_handler)
 
-    logging.info("Structured JSON logging initialized.")
+    # Set up signal handler for runtime log level cycling (SIGUSR2)
+    try:
+        signal.signal(signal.SIGUSR2, lambda *_: _cycle_level(root_logger))
+        logging.info("SIGUSR2 signal handler registered for log level cycling")
+    except (AttributeError, OSError):
+        # SIGUSR2 might not be available on all platforms (e.g., Windows)
+        logging.info("SIGUSR2 signal not available, log level cycling disabled")
+
+    # Set up audit logger
+    setup_audit_logger()
+
+    logging.info(
+        "Structured JSON logging initialized with enhanced filters and signal handling."
+    )
 
 
 if __name__ == "__main__":

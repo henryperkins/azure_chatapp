@@ -28,8 +28,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 import logging
 import os
+import time
 from contextvars import copy_context
 from typing import (
     Any,
@@ -51,6 +53,7 @@ from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.integrations import Integration
 from sentry_sdk.tracing import Span, Transaction
 from sentry_sdk.types import Event, Hint
 
@@ -64,10 +67,12 @@ __all__ = [
     "filter_sensitive_event",
     # Span and tracing helpers
     "sentry_span",
+    "sentry_span_context",
     "traced",
     "set_sentry_tag",
     "set_sentry_user",
     "set_sentry_context",
+    "set_sentry_measurements",
     "get_current_trace_id",
     "extract_sentry_trace",
     "tag_transaction",
@@ -120,7 +125,7 @@ IGNORED_TRANSACTIONS: Set[str] = {
     "/static/",
     "/api/auth/csrf",
     "/api/auth/verify",
-    "/api/logs",           # High-volume client log ingestion
+    "/api/logs",  # High-volume client log ingestion
     "/api/log_notification",  # Alternative log endpoint
 }
 
@@ -174,28 +179,59 @@ def _filter_event(event: Event) -> Event:
 # ------------------------------------------------------------------------- #
 # Sentry before_send hooks                                                  #
 # ------------------------------------------------------------------------- #
+def _attach_log_tail(event: Event, hint: Optional[Hint] = None) -> Event:
+    """
+    Attach the last 5 MiB of app.log as an event attachment.
+    Eliminates "works on my machine" reproductions.
+    """
+    path = os.getenv("APP_LOG_FILE", "app.log")
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)  # Go to end
+            file_size = f.tell()
+            # Read last 5MB or entire file if smaller
+            start_pos = max(file_size - 5_000_000, 0)
+            f.seek(start_pos, os.SEEK_SET)
+            log_data = f.read()
+
+            event.setdefault("attachments", []).append(
+                {"filename": "tail.log", "data": log_data, "content_type": "text/plain"}
+            )
+    except (FileNotFoundError, OSError, PermissionError):
+        # Don't fail the event if log file is unavailable
+        pass
+    return event
+
+
 def filter_sensitive_event(
-    event: Event, hint: Optional[Hint] = None
+    event: Event, _hint: Optional[Hint] = None
 ) -> Optional[Event]:
     """
     Main `before_send` hook.
     • Scrubs sensitive fields.
     • Enriches with lightweight system metrics.
     • Rejects noisy transactions.
+    • Attaches log tail for debugging.
     """
     # Drop high-volume, low-value transactions early
     if event.get("type") == "transaction":
         url = str(event.get("request", {}).get("url", ""))
         if any(p in url for p in IGNORED_TRANSACTIONS):
             return None
+
     try:
         # System memory metric (cheap)
+        # pylint: disable=import-outside-toplevel
         import psutil  # optional dependency
 
         mem_mb = psutil.Process().memory_info().rss / 1024 / 1024  # type: ignore[attr-defined]
         event.setdefault("extra", {}).update({"memory_usage_mb": round(mem_mb, 1)})
     except Exception:  # pragma: no cover
         pass  # never fail the event
+
+    # Attach log tail for error events
+    if event.get("level") in ("error", "fatal"):
+        event = _attach_log_tail(event, _hint)
 
     return _filter_event(event)
 
@@ -221,19 +257,18 @@ def configure_sentry(
     • SENTRY_DEBUG   (default: False)
     """
     # 1️⃣  Structured JSON logging – idempotent.
-    from utils.logging_config import init_structured_logging
-    init_structured_logging()  # Safe no-op if already initialized
+    # Already handled by init_telemetry
 
     if str(os.getenv("SENTRY_ENABLED", "")).lower() not in {"1", "true", "yes"}:
         logging.info("Sentry disabled via env flag; skipping initialisation.")
         return
 
     sentry_logging = LoggingIntegration(
-        level=logging.WARNING,  # breadcrumb level
-        event_level=logging.ERROR,
+        level=logging.INFO,  # Breadcrumbs ≥ INFO
+        event_level=logging.ERROR,  # Errors ≥ ERROR become events
     )
 
-    integrations: list[Any] = [
+    integrations: list[Integration] = [
         sentry_logging,
         FastApiIntegration(transaction_style="endpoint"),
         AsyncioIntegration(),
@@ -247,7 +282,7 @@ def configure_sentry(
         in {"1", "true"}
     )
     if sql_flag:
-        integrations.append(SqlalchemyIntegration())
+        integrations.append(SqlalchemyIntegration())  # type: ignore
         logging.info("Sentry SqlAlchemy integration enabled.")
     else:
         logging.info("Sentry SqlAlchemy integration disabled.")
@@ -279,6 +314,7 @@ def _ignore_noisy_loggers() -> None:
 # ------------------------------------------------------------------------- #
 def set_sentry_user(user: dict[str, Any]) -> None:
     """Shortcut with redaction."""
+    # pylint: disable=import-outside-toplevel
     from sentry_sdk import set_user
 
     set_user(_filter_user_data(user))
@@ -313,7 +349,7 @@ def get_current_trace_id() -> str | None:
 # Span helpers (sync + async)                                               #
 # ------------------------------------------------------------------------- #
 @contextlib.contextmanager
-def sentry_span(
+def sentry_span_context(
     op: str,
     description: str | None = None,
     **data: Any,
@@ -336,6 +372,58 @@ def sentry_span(
     except Exception:  # pragma: no cover
         logging.exception("Failed to create Sentry span")
         raise
+
+
+def sentry_span(op: str | None = None, desc: str | None = None, alert_ms: int = 500):
+    """
+    One-line span decorator that times any function and auto-sends slow calls as WARNING logs.
+
+    Usage:
+        @sentry_span(op="db", desc="fetch_conversation")
+        async def get_conv(session, conv_id): ...
+
+        @sentry_span()  # Uses function name as op
+        def slow_function(): ...
+    """
+
+    def decorator(fn):
+        is_coro = asyncio.iscoroutinefunction(fn)
+
+        @functools.wraps(fn)
+        async def async_wrapper(*args, **kwargs):
+            with sentry_span_context(op=op or fn.__name__, description=desc):
+                start = time.perf_counter()
+                try:
+                    return await fn(*args, **kwargs)
+                finally:
+                    dur = (time.perf_counter() - start) * 1000
+                    if dur > alert_ms:
+                        logging.warning(
+                            "⏱️  slow-call %s %.0f ms",
+                            fn.__qualname__,
+                            dur,
+                            extra={"duration_ms": int(dur)},
+                        )
+
+        @functools.wraps(fn)
+        def sync_wrapper(*args, **kwargs):
+            with sentry_span_context(op=op or fn.__name__, description=desc):
+                start = time.perf_counter()
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    dur = (time.perf_counter() - start) * 1000
+                    if dur > alert_ms:
+                        logging.warning(
+                            "⏱️  slow-call %s %.0f ms",
+                            fn.__qualname__,
+                            dur,
+                            extra={"duration_ms": int(dur)},
+                        )
+
+        return async_wrapper if is_coro else sync_wrapper
+
+    return decorator
 
 
 def _set_span_data(span: Span | Transaction, data: dict[str, Any]) -> None:
@@ -370,8 +458,8 @@ def make_sentry_trace_response(
         resp.headers["sentry-trace"] = transaction.to_traceparent()
         if hasattr(transaction, "containing_transaction"):
             # py-right: ignore[reportAttributeAccessIssue]
-            parent = transaction.containing_transaction()
-            if getattr(parent, "_baggage", None):
+            parent = transaction.containing_transaction  # type: ignore
+            if parent and getattr(parent, "_baggage", None):
                 resp.headers["baggage"] = parent._baggage.serialize()
     except Exception:  # pragma: no cover
         pass
@@ -393,6 +481,9 @@ def create_background_task(
     Example
     -------
     task = create_background_task(my_async_worker, user_id=123)
+
+    Note: This is a legacy wrapper. For new code, prefer using
+    utils.async_context.create_context_safe_task which has better error handling.
     """
     ctx = copy_context()
     loop = asyncio.get_running_loop()
@@ -400,7 +491,7 @@ def create_background_task(
     async def _wrapped_coro():
         return await ctx.run(coro_func, *args, **kwargs)
 
-    return loop.create_task(_wrapped_coro())
+    return loop.create_task(_wrapped_coro())  # type: ignore
 
 
 # ------------------------------------------------------------------------- #
@@ -487,6 +578,39 @@ def capture_critical_issue_with_logs(log_text: str) -> str | None:
     )
 
 
+def set_sentry_measurements(**measurements: Union[int, float]) -> None:
+    """
+    Set custom measurements for the current Sentry scope.
+    Surface key product KPIs in Performance tab.
+
+    Example:
+        set_sentry_measurements(
+            tokens_used=total_tokens,
+            latency_ms=round(latency*1000),
+            db_queries=query_count
+        )
+    """
+    try:
+        with sentry_sdk.configure_scope() as scope:
+            for name, value in measurements.items():
+                # Determine unit based on common naming patterns
+                if name.endswith("_ms") or name.endswith("_milliseconds"):
+                    unit = "millisecond"
+                elif name.endswith("_tokens") or "token" in name.lower():
+                    unit = "token"
+                elif name.endswith("_bytes") or "byte" in name.lower():
+                    unit = "byte"
+                elif name.endswith("_count") or "count" in name.lower():
+                    unit = "count"
+                else:
+                    unit = "none"
+
+                scope.set_measurement(name, value, unit=unit)
+    except Exception:
+        # Never fail the operation due to measurement issues
+        pass
+
+
 # ------------------------------------------------------------------------- #
 # Tracing Helper for Route Consolidation                                   #
 # ------------------------------------------------------------------------- #
@@ -496,7 +620,7 @@ def traced(op: str, description: str, *, tags=None):
     Lightweight tracing context manager for route operations.
     Creates a span with optional tags for consistent tracing across routes.
     """
-    with sentry_span(op=op, description=description) as span:
+    with sentry_span_context(op=op, description=description) as span:
         if tags:
             for k, v in tags.items():
                 span.set_tag(k, v)
