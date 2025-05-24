@@ -235,22 +235,52 @@ export function createSidebar({
   function maybeRenderRecentConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || '') {
     const projectId = projectManager.getCurrentProject?.()?.id;
     if (!projectId) {
-      if (searchTerm) {
-        uiRenderer.renderConversations(null, searchTerm, isConversationStarred, toggleStarConversation);
+      logger.debug('[Sidebar][maybeRenderRecentConversations] No current project selected', {
+        searchTerm,
+        context: 'Sidebar'
+      });
+      // Clear the list and show a message instead of trying to load without project ID
+      const listElement = domAPI.getElementById('recentChatsSection')?.querySelector('ul');
+      if (listElement) {
+        listElement.innerHTML = '';
+        const li = domAPI.createElement('li');
+        li.className = 'p-4 text-center text-gray-500';
+        domAPI.setTextContent(li, 'Select a project to view conversations');
+        listElement.appendChild(li);
       }
       return;
     }
+    logger.debug('[Sidebar][maybeRenderRecentConversations] Rendering conversations for project', {
+      projectId,
+      searchTerm,
+      context: 'Sidebar'
+    });
     uiRenderer.renderConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
   function maybeRenderStarredConversations(searchTerm = chatSearchInputEl?.value?.trim().toLowerCase() || '') {
     const projectId = projectManager.getCurrentProject?.()?.id;
     if (!projectId) {
-      if (searchTerm) {
-        uiRenderer.renderStarredConversations(null, searchTerm, isConversationStarred, toggleStarConversation);
+      logger.debug('[Sidebar][maybeRenderStarredConversations] No current project selected', {
+        searchTerm,
+        context: 'Sidebar'
+      });
+      // Clear the list and show a message instead of trying to load without project ID
+      const listElement = domAPI.getElementById('starredChatsSection')?.querySelector('ul');
+      if (listElement) {
+        listElement.innerHTML = '';
+        const li = domAPI.createElement('li');
+        li.className = 'p-4 text-center text-gray-500';
+        domAPI.setTextContent(li, 'Select a project to view starred conversations');
+        listElement.appendChild(li);
       }
       return;
     }
+    logger.debug('[Sidebar][maybeRenderStarredConversations] Rendering starred conversations for project', {
+      projectId,
+      searchTerm,
+      context: 'Sidebar'
+    });
     uiRenderer.renderStarredConversations(projectId, searchTerm, isConversationStarred, toggleStarConversation);
   }
 
@@ -301,6 +331,33 @@ export function createSidebar({
       if (section && !section.dataset.initialised) {
         section.dataset.initialised = 'true';
       }
+
+      // CRITICAL FIX: Load projects if not already loaded
+      if (projectManager?.loadProjects && (!projectManager.projects || projectManager.projects.length === 0)) {
+        logger.debug('[Sidebar][ensureProjectDashboard] Loading projects...', { context: 'Sidebar' });
+        try {
+          await projectManager.loadProjects();
+          logger.debug('[Sidebar][ensureProjectDashboard] Projects loaded successfully', {
+            count: projectManager.projects?.length || 0,
+            context: 'Sidebar'
+          });
+
+          // ENHANCED: Auto-select first project if no current project is set
+          const currentProject = projectManager.getCurrentProject?.();
+          if (!currentProject && projectManager.projects?.length > 0 && app?.setCurrentProject) {
+            const firstProject = projectManager.projects[0];
+            logger.debug('[Sidebar][ensureProjectDashboard] Auto-selecting first project', {
+              projectId: firstProject.id,
+              projectName: firstProject.name,
+              context: 'Sidebar'
+            });
+            app.setCurrentProject(firstProject);
+          }
+        } catch (loadErr) {
+          logger.error('[Sidebar][ensureProjectDashboard] Failed to load projects', loadErr, { context: 'Sidebar' });
+        }
+      }
+
       if (projectManager?.projects?.length && uiRenderer.renderProjects) {
         uiRenderer.renderProjects(projectManager.projects);
       }
@@ -462,6 +519,21 @@ export function createSidebar({
         if (activeTab === 'recent') _handleChatSearch();
       }, 'Sidebar:chat:conversationCreated'),
       { context: 'Sidebar', description: 'Sidebar conversation created => refresh if on "recent" tab' }
+    );
+
+    // ENHANCED: Listen for project changes to refresh conversations
+    eventHandlers.trackListener(
+      domAPI.getDocument(), 'projectChanged',
+      safeHandler(() => {
+        const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+        logger.debug('[Sidebar] Project changed, refreshing conversations', { activeTab, context: 'Sidebar' });
+        if (activeTab === 'recent') {
+          maybeRenderRecentConversations();
+        } else if (activeTab === 'starred') {
+          maybeRenderStarredConversations();
+        }
+      }, 'Sidebar:projectChanged'),
+      { context: 'Sidebar', description: 'Sidebar project changed => refresh conversations' }
     );
 
     // Rewired: Use sidebarAuth for all auth state logic
