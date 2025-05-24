@@ -18,7 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.project import Project
 from models.project_file import ProjectFile
 from services.knowledgebase_helpers import (
-    KBConfig,
     StorageManager,
     TokenManager,
 )
@@ -89,8 +88,15 @@ class FileService:
         # Read file contents in chunks
         contents = await self._read_file_contents(file)
 
-        # Validate file size
-        await self._validate_file_size(contents)
+        # Validate file size (single canonical implementation)
+        if not FileValidator.validate_size(len(contents)):
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"File exceeds maximum size of "
+                    f"{FileValidator.get_max_file_size_mb():.1f} MB"
+                ),
+            )
 
         # Estimate tokens and validate project capacity
         token_data = await self._estimate_file_tokens(
@@ -242,11 +248,10 @@ class FileService:
         if not file_record or file_record.project_id != project_id:
             raise HTTPException(status_code=404, detail="File not found")
 
-        # Delete from storage
+        # Delete from storage (canonical path)
+        storage_deleted = False
         try:
-            # Note: Storage deletion is handled by the storage backend
-            # Some backends may not support deletion or may handle it differently
-            pass
+            storage_deleted = await self.storage.delete_file(file_record.file_path)
         except Exception as e:
             logger.warning(f"Failed to delete file from storage: {e}")
 
@@ -260,6 +265,7 @@ class FileService:
             "id": str(file_id),
             "filename": file_record.filename,
             "deleted": True,
+            "storage_deleted": storage_deleted,
         }
 
     # Private helper methods
@@ -291,14 +297,6 @@ class FileService:
         logger.info(f"Finished reading file: total {total_bytes} bytes")
         return b"".join(file_chunks)
 
-    async def _validate_file_size(self, contents: bytes) -> None:
-        """Validate file size against configured limits."""
-        config = KBConfig.get()
-        if len(contents) > config["max_file_bytes"]:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File exceeds maximum size of {config['max_file_bytes'] / 1024 / 1024:.1f} MB",
-            )
 
     async def _estimate_file_tokens(
         self, contents: bytes, filename: str

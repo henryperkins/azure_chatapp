@@ -609,19 +609,20 @@ async def get_project_file_list(
     limit: int = 100,
     file_type: Optional[str] = None,
 ) -> dict[str, Any]:
+    # Single-source permission check
     await _validate_user_and_project(project_id, user_id, db)
-    stmt = select(ProjectFile).where(ProjectFile.project_id == project_id)
-    if file_type:
-        stmt = stmt.where(ProjectFile.file_type == file_type)
-    stmt = stmt.order_by(ProjectFile.created_at.desc()).offset(skip).limit(limit)
-    rows = (await db.execute(stmt)).scalars().all()
-    total = await db.scalar(
-        select(func.count(ProjectFile.id)).where(ProjectFile.project_id == project_id)
+
+    fs = FileService(db)
+    result = await fs.list_files(
+        project_id=project_id,
+        skip=skip,
+        limit=limit,
+        file_type=file_type,
     )
     return {
-        "files": [serialize_project_file(f, include_content=False) for f in rows],
-        "count": len(rows),
-        "total": total or 0,
+        "files": result["files"],
+        "count": len(result["files"]),
+        "total": result["total"],
     }
 
 
