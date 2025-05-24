@@ -4,6 +4,9 @@ import { defineConfig } from "eslint/config";
 
 
 export default defineConfig([
+  {                        // ignore bundled third-party code
+    ignores: ['static/js/vendor/**']
+  },
   {
     files: ["**/*.{js,mjs,cjs}"],
     plugins: { js },
