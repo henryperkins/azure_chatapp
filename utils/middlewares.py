@@ -162,8 +162,14 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         transaction: Any,
         start_time: float,
     ) -> Response:
-        # Generate context IDs for structured logging
-        request_id = str(uuid.uuid4())
+        # Extract or generate request ID for correlation tracking
+        request_id = (
+            request.headers.get("X-Request-ID") or
+            request.headers.get("X-Correlation-ID") or
+            str(uuid.uuid4())
+        )[:128]  # Cap to prevent malicious headers
+
+        # Get trace ID from Sentry transaction
         trace_id = transaction.trace_id if hasattr(transaction, "trace_id") else ""
 
         tag_transaction("request.id", request_id)

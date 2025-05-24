@@ -33,7 +33,6 @@ import os
 from contextvars import copy_context
 from typing import (
     Any,
-    AsyncGenerator,
     Callable,
     Generator,
     Literal,
@@ -121,6 +120,8 @@ IGNORED_TRANSACTIONS: Set[str] = {
     "/static/",
     "/api/auth/csrf",
     "/api/auth/verify",
+    "/api/logs",           # High-volume client log ingestion
+    "/api/log_notification",  # Alternative log endpoint
 }
 
 # ------------------------------------------------------------------------- #
@@ -220,7 +221,8 @@ def configure_sentry(
     • SENTRY_DEBUG   (default: False)
     """
     # 1️⃣  Structured JSON logging – idempotent.
-    pass  # Removed init_structured_logging() call; logging config not needed here
+    from utils.logging_config import init_structured_logging
+    init_structured_logging()  # Safe no-op if already initialized
 
     if str(os.getenv("SENTRY_ENABLED", "")).lower() not in {"1", "true", "yes"}:
         logging.info("Sentry disabled via env flag; skipping initialisation.")
@@ -231,7 +233,7 @@ def configure_sentry(
         event_level=logging.ERROR,
     )
 
-    integrations = [
+    integrations: list[Any] = [
         sentry_logging,
         FastApiIntegration(transaction_style="endpoint"),
         AsyncioIntegration(),
@@ -380,10 +382,7 @@ def make_sentry_trace_response(
 # Context-aware background tasks helper                                     #
 # ------------------------------------------------------------------------- #
 def create_background_task(
-    coro_func: (
-        Callable[..., "asyncio.Future[Any]"]
-        | Callable[..., "AsyncGenerator[Any, None]"]
-    ),
+    coro_func: Callable[..., Any],
     *args: Any,
     **kwargs: Any,
 ) -> asyncio.Task[Any]:
@@ -397,7 +396,11 @@ def create_background_task(
     """
     ctx = copy_context()
     loop = asyncio.get_running_loop()
-    return loop.create_task(ctx.run(coro_func, *args, **kwargs))
+
+    async def _wrapped_coro():
+        return await ctx.run(coro_func, *args, **kwargs)
+
+    return loop.create_task(_wrapped_coro())
 
 
 # ------------------------------------------------------------------------- #
