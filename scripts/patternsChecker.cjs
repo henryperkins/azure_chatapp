@@ -104,6 +104,8 @@ const WRAPPER_FILE_REGEX = /(?:^|[\\/])(domAPI|eventHandler|eventHandlers|domRea
 
 //  Node / tooling files (CLI, tests, repo scripts) – console* is allowed
 const NODE_SCRIPT_REGEX = /(?:^|[\\/])(scripts|tests)[\\/].+\.(?:c?js|mjs|ts)$/i;
+// Forbidden browser-storage APIs
+const STORAGE_IDENTIFIERS = ["localStorage", "sessionStorage"];
 
 let currentConfig = DEFAULT_CONFIG;
 
@@ -283,6 +285,7 @@ function vFactory(err, file, config) {
   let factoryInfo = { found: false, line: 1, name: "", paramsNode: null };
   let hasCleanup = false;
   let hasDepCheck = false;
+  let cleanupInvokesEH = false;     // new
 
   return {
     ExportNamedDeclaration(p) {
@@ -374,6 +377,19 @@ function vFactory(err, file, config) {
           FunctionDeclaration(funcDeclPath) {
             if (["cleanup", "teardown", "destroy"].includes(funcDeclPath.node.id?.name)) {
               hasCleanup = true;
+
+              /* Check body for eventHandlers.cleanupListeners(...) call */
+              funcDeclPath.traverse({
+                CallExpression(callPath) {
+                  const cal = callPath.node.callee;
+                  if (
+                    cal.type === "MemberExpression" &&
+                    cal.property.name === "cleanupListeners"
+                  ) {
+                    cleanupInvokesEH = true;
+                  }
+                }
+              });
             }
           }
         });
@@ -412,6 +428,16 @@ function vFactory(err, file, config) {
                 1,
                 `Factory '${factoryInfo.name}' must expose a cleanup or teardown API.`,
                 `Example: return { ..., cleanup: () => { /* detach listeners, etc. */ } };`
+              )
+            );
+          } else if (!cleanupInvokesEH) {
+            err.push(
+              E(
+                file,
+                factoryInfo.line,
+                4,
+                `Factory '${factoryInfo.name}' provides cleanup() but never calls eventHandlers.cleanupListeners().`,
+                "Invoke eventHandlers.cleanupListeners({ context: … }) inside cleanup()."
               )
             );
           }
@@ -529,6 +555,19 @@ function vDI(err, file, isAppJs, config) {
         );
       }
 
+      /* ── Storage APIs are never allowed ───────────────────── */
+      if (STORAGE_IDENTIFIERS.includes(p.node.name) && !p.scope.hasBinding(p.node.name)) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            2,
+            `Direct use of '${p.node.name}' is forbidden.`,
+            "Use server-side sessions or appModule.state – never browser storage."
+          )
+        );
+      }
+
       const serviceName = p.node.name;
       if (
         Object.values(serviceNamesConfig).includes(serviceName) &&
@@ -596,6 +635,26 @@ function vDI(err, file, isAppJs, config) {
             2,
             `Direct use of global '${p.node.property.name}' via 'globalThis' is forbidden. Use DI.`,
             `Example: inject a service that provides 'window.document' etc.`
+          )
+        );
+      }
+
+      /* window.localStorage / globalThis.sessionStorage, etc. */
+      const baseId   = p.node.object;
+      const propName = p.node.property?.name;
+      if (
+        propName &&
+        STORAGE_IDENTIFIERS.includes(propName) &&
+        baseId?.type === "Identifier" &&
+        ["window", "globalThis"].includes(baseId.name)
+      ) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            2,
+            `Access to '${baseId.name}.${propName}' is forbidden.`,
+            "Browser storage APIs violate guard-rails."
           )
         );
       }
@@ -1272,6 +1331,56 @@ function vAPI(err, file, config) {
   const apiClientName = config.serviceNames.apiClient;
   return {
     CallExpression(p) {
+      /* ── Ensure mutating apiClient() calls include CSRF header ── */
+      if (
+        p.node.callee.type === "Identifier" &&
+        p.node.callee.name === apiClientName
+      ) {
+        const optsArgPath = p.get("arguments")[1];          // url, options
+        if (optsArgPath && optsArgPath.isObjectExpression()) {
+          const optsNode = optsArgPath.node;
+
+          // default GET unless options.method provided
+          let method = "GET";
+          optsNode.properties.forEach(pr => {
+            if (
+              pr.type === "Property" &&
+              ["method"].includes(pr.key.name ?? pr.key.value) &&
+              pr.value.type === "StringLiteral"
+            ) {
+              method = pr.value.value.toUpperCase();
+            }
+          });
+
+          const mutating = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+          if (mutating) {
+            const hdrProp = optsNode.properties.find(
+              pr =>
+                pr.type === "Property" &&
+                ["headers"].includes(pr.key.name ?? pr.key.value) &&
+                pr.value.type === "ObjectExpression"
+            );
+            let hasCsrf = false;
+            if (hdrProp) {
+              hasCsrf = hdrProp.value.properties.some(hp => {
+                const k = hp.key.name ?? hp.key.value;
+                return /^x[-_]csrf[-_]token$/i.test(k);
+              });
+            }
+            if (!hasCsrf) {
+              err.push(
+                E(
+                  file,
+                  p.node.loc.start.line,
+                  11,
+                  "State-changing apiClient() call missing 'X-CSRF-Token' header.",
+                  "Add the CSRF token to options.headers."
+                )
+              );
+            }
+          }
+        }
+      }
       if (p.node.callee.name === "fetch" && !p.scope.hasBinding("fetch")) {
         err.push(
           E(
@@ -1333,6 +1442,31 @@ function vLog(err, file, isAppJs, moduleCtx, config) {
   return {
     CallExpression(p) {
       const c = p.node.callee;
+      /* logger.withContext('X').info(...)  → still needs meta object */
+      const isBound =
+        c.type === "MemberExpression" &&
+        c.object.type === "CallExpression" &&
+        c.object.callee?.type === "MemberExpression" &&
+        c.object.callee.object.type === "Identifier" &&
+        c.object.callee.object.name === loggerName &&
+        c.object.callee.property.name === "withContext";
+
+      if (isBound) {
+        const args = p.get("arguments");
+        const lastNode = getExpressionSourceNode(args[args.length - 1]);
+        if (!(lastNode && lastNode.type === "ObjectExpression")) {
+          err.push(
+            E(
+              file,
+              p.node.loc.start.line,
+              12,
+              "Logger call via withContext() missing metadata object.",
+              `Example: logger.withContext('X').info('msg', { context: "${moduleCtx}:info" })`
+            )
+          );
+        }
+        return; // avoid double-processing
+      }
       if (c.type === "MemberExpression" && c.object.name === loggerName && c.property.name !== "withContext") {
         const argsPaths = p.get("arguments") || [];
         const hasContextMeta = argsPaths.some(argPath => {
