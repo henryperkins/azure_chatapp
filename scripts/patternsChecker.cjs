@@ -1112,13 +1112,21 @@ function vBus(err, file, config) {
       if (callee.type === "MemberExpression" && callee.property.name === "dispatchEvent") {
         const busObjectPath = p.get("callee.object");
         const busSourceNode = getExpressionSourceNode(busObjectPath);
-        if (
-          !(
-            busSourceNode &&
-            knownBusNames.includes(busSourceNode.name)
-          ) &&
-          busSourceNode?.type !== "ThisExpression"
-        ) {
+        const isKnownBus =
+          // explicit well-known names from config
+          (busSourceNode?.type === "Identifier" &&
+           knownBusNames.includes(busSourceNode.name)) ||
+          // inside a class using this.dispatchEvent(...)
+          busSourceNode?.type === "ThisExpression" ||
+          // variable that was initialised with `new EventTarget()`
+          (busSourceNode?.type === "NewExpression" &&
+           busSourceNode.callee?.type === "Identifier" &&
+           busSourceNode.callee.name === "EventTarget") ||
+          // something like DependencySystem.modules.get('…').getEventBus()
+          (busSourceNode?.type === "CallExpression" &&
+           busSourceNode.callee?.property?.name === "getEventBus");
+
+        if (!isKnownBus) {
           err.push(
             E(
               file,
@@ -1269,32 +1277,24 @@ function vLog(err, file, isAppJs, moduleCtx, config) {
     CallExpression(p) {
       const c = p.node.callee;
       if (c.type === "MemberExpression" && c.object.name === loggerName && c.property.name !== "withContext") {
-       const lastArgIndex = p.node.arguments.length - 1;
-       const lastArgPath = p.get(`arguments.${lastArgIndex}`);
-       const lastArgNode = getExpressionSourceNode(lastArgPath);
-       if (lastArgNode?.type === "ObjectExpression" && hasProp(lastArgNode, "context")) {
-         const contextProp = lastArgNode.properties.find(
-           prop =>
-             (prop.key && prop.key.name === "context") ||
-             (prop.key && prop.key.value === "context")
-         );
-         if (contextProp && contextProp.value) {
-           const contextValueNode = contextProp.value;
-           if (contextValueNode.type === "StringLiteral" && contextValueNode.value.trim() === "") {
-             err.push(
-               E(
-                 file,
-                 contextValueNode.loc.start.line,
-                 5,
-                 `'${loggerName}' call has an empty { context } string.`,
-                 `Provide a meaningful context, e.g., { context: "${moduleCtx}:operation" }.`
-               )
-             );
-           }
-           // Remove the false positive check - StringLiteral is perfectly valid for context
-         }
-       }
-     }
+        const argsPaths = p.get("arguments") || [];
+        const hasContextMeta = argsPaths.some(argPath => {
+          const n = getExpressionSourceNode(argPath);
+          return n && n.type === "ObjectExpression" && hasProp(n, "context");
+        });
+
+        if (!hasContextMeta) {
+          err.push(
+            E(
+              file,
+              p.node.loc.start.line,
+              12,
+              `'${loggerName}.${c.property.name}' call missing { context } metadata.`,
+              `Ensure logger calls include, e.g., { context: "${moduleCtx}:operation" }.`
+            )
+          );
+        }
+      }
     }
   };
 }
