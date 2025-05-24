@@ -65,6 +65,7 @@ __all__ = [
     "filter_sensitive_event",
     # Span and tracing helpers
     "sentry_span",
+    "traced",
     "set_sentry_tag",
     "set_sentry_user",
     "set_sentry_context",
@@ -481,3 +482,19 @@ def capture_critical_issue_with_logs(log_text: str) -> str | None:
     return capture_custom_message(
         "Critical server issue with logs attached", level="error"
     )
+
+
+# ------------------------------------------------------------------------- #
+# Tracing Helper for Route Consolidation                                   #
+# ------------------------------------------------------------------------- #
+@contextlib.contextmanager
+def traced(op: str, description: str, *, tags=None):
+    """
+    Lightweight tracing context manager for route operations.
+    Creates a span with optional tags for consistent tracing across routes.
+    """
+    with sentry_span(op=op, description=description) as span:
+        if tags:
+            for k, v in tags.items():
+                span.set_tag(k, v)
+        yield span

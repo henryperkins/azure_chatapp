@@ -1,37 +1,40 @@
 """
 routes/projects/files.py
 -----------------------
-File management routes - focuses only on basic file operations within projects,
-with knowledge base integration handled separately in KB routes.
+Consolidated file management routes for projects with optional knowledge base integration.
+Serves as the single source of truth for all file operations.
 """
 
 import logging
 from uuid import UUID
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, BackgroundTasks
+from typing import Optional, Tuple
+
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    UploadFile,
+    File,
+    BackgroundTasks,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
 from db import get_async_session
 from models.user import User
-from models.project_file import ProjectFile
+from services.file_service import FileService
+from services.project_service import validate_project_access
 from utils.auth_utils import get_current_user_and_token
 from utils.response_utils import create_standard_response
-from utils.db_utils import get_all_by_condition
-from services.file_storage import get_file_storage
-from services.project_service import validate_project_access
-from services.knowledgebase_service import upload_file_to_project
-import config
+from utils.sentry_utils import traced
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Initialize file storage
-storage_config = {
-    "storage_type": getattr(config, "FILE_STORAGE_TYPE", "local"),
-    "local_path": getattr(config, "LOCAL_UPLOADS_DIR", "./uploads"),
-}
-storage = get_file_storage(storage_config)
+
+# =======================================================
+#  Consolidated File Operations with Tracing
+# =======================================================
 
 
 @router.post("", response_model=dict)
@@ -39,43 +42,79 @@ async def handle_upload_project_file(
     project_id: UUID,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    current_user_and_token: tuple = Depends(get_current_user_and_token),
+    index_kb: bool = Query(
+        False, description="Whether to index file in knowledge base"
+    ),
+    current_user_and_token: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Handle file uploads for a project.
+    Upload a file to a project with optional knowledge base indexing.
+
+    This is the canonical endpoint for all file uploads. Use index_kb=true
+    to automatically index the file in the project's knowledge base.
     """
     user, _token = current_user_and_token
-    try:
-        # Validate project access
-        await validate_project_access(project_id, user, db)
 
-        # Call the service function from knowledgebase_service.py
-        file_metadata = await upload_file_to_project(
-            project_id=project_id,
-            file=file,
-            db=db,
-            user_id=user.id,
-            background_tasks=background_tasks
-        )
-        return await create_standard_response(file_metadata, "File uploaded successfully")
-    except HTTPException as he:
-        # Re-raise HTTPExceptions from service or validation
-        logger.error(f"HTTPException during file upload for project {project_id} by user {user.id}: {he.detail}")
-        raise he
-    except ValueError as ve:
-        # Catch specific ValueErrors, e.g., token limit exceeded
-        logger.error(f"ValueError during file upload for project {project_id} by user {user.id}: {str(ve)}")
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
-        logger.error(f"Unhandled error uploading file for project {project_id} by user {user.id}: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to upload file due to an unexpected server error.")
+    with traced(op="file", description="Upload Project File") as span:
+        try:
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(user.id))
+            span.set_tag("index_kb", index_kb)
+            span.set_tag("filename", file.filename or "unknown")
+
+            # Validate project access
+            await validate_project_access(project_id, user, db)
+
+            # Use unified FileService for upload
+            file_service = FileService(db)
+            file_metadata = await file_service.upload(
+                project_id=project_id,
+                file=file,
+                user_id=user.id,
+                index_kb=index_kb,
+                background_tasks=background_tasks,
+            )
+
+            span.set_tag("file.id", file_metadata["id"])
+            span.set_tag("file.size", file_metadata["file_size"])
+
+            return await create_standard_response(
+                file_metadata,
+                f"File uploaded successfully{' and queued for KB indexing' if index_kb else ''}",
+            )
+
+        except HTTPException as he:
+            span.set_tag("error", True)
+            span.set_tag("error_status", he.status_code)
+            logger.error(
+                f"HTTPException during file upload for project {project_id} by user {user.id}: {he.detail}"
+            )
+            raise he
+        except ValueError as ve:
+            span.set_tag("error", True)
+            span.set_tag("error_type", "ValueError")
+            logger.error(
+                f"ValueError during file upload for project {project_id} by user {user.id}: {str(ve)}"
+            )
+            raise HTTPException(status_code=400, detail=str(ve))
+        except Exception as e:
+            span.set_tag("error", True)
+            span.set_tag("error_type", type(e).__name__)
+            logger.error(
+                f"Unhandled error uploading file for project {project_id} by user {user.id}: {str(e)}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to upload file due to an unexpected server error.",
+            )
 
 
 @router.get("", response_model=dict)
 async def list_project_files(
     project_id: UUID,
-    current_user_and_token: tuple = Depends(get_current_user_and_token),
+    current_user_and_token: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -84,137 +123,138 @@ async def list_project_files(
     ),
 ):
     """
-    List files in a project with metadata only.
-    Does not include knowledge base processing details.
+    List files in a project with pagination and filtering.
+
+    This is the canonical endpoint for listing project files.
     """
     user, _token = current_user_and_token
-    try:
-        # Validate project access
-        await validate_project_access(project_id, user, db)
 
-        conditions = [ProjectFile.project_id == project_id]
-        if file_type:
-            conditions.append(ProjectFile.file_type == file_type)
+    with traced(op="file", description="List Project Files") as span:
+        try:
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(user.id))
+            span.set_tag("skip", skip)
+            span.set_tag("limit", limit)
+            if file_type:
+                span.set_tag("file_type", file_type)
 
-        files = await get_all_by_condition(
-            db,
-            ProjectFile,
-            *conditions,
-            limit=limit,
-            offset=skip,
-            order_by=ProjectFile.created_at.desc(),
-        )
+            # Validate project access
+            await validate_project_access(project_id, user, db)
 
-        return await create_standard_response(
-            {
-                "files": [
-                    {
-                        "id": str(f.id),
-                        "filename": f.filename,
-                        "file_type": f.file_type,
-                        "file_size": f.file_size,
-                        "created_at": f.created_at.isoformat(),
-                        "metadata": f.config or {},
-                    }
-                    for f in files
-                ],
-                "count": len(files),
-                "total_size": await db.scalar(
-                    select(func.sum(ProjectFile.file_size)).where(
-                        ProjectFile.project_id == project_id
-                    )
-                )
-                or 0,
-            }
-        )
+            # Use unified FileService for listing
+            file_service = FileService(db)
+            result = await file_service.list_files(
+                project_id=project_id,
+                skip=skip,
+                limit=limit,
+                file_type=file_type,
+            )
 
-    except Exception as e:
-        logger.error(f"Error listing files: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to list project files"
-        ) from e
+            span.set_tag("files_count", len(result["files"]))
+            span.set_tag("total_files", result["total"])
+
+            return await create_standard_response(
+                result, "Files retrieved successfully"
+            )
+
+        except HTTPException:
+            span.set_tag("error", True)
+            raise
+        except Exception as e:
+            span.set_tag("error", True)
+            span.set_tag("error_type", type(e).__name__)
+            logger.error(f"Error listing files: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail="Failed to list project files"
+            ) from e
 
 
 @router.get("/{file_id}", response_model=dict)
 async def get_project_file_metadata(
     project_id: UUID,
     file_id: UUID,
-    current_user_and_token: tuple = Depends(get_current_user_and_token),
+    current_user_and_token: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
     Get metadata for a specific file.
-    NOTE: Actual file content retrieval will be handled separately.
+
+    This is the canonical endpoint for retrieving file metadata.
     """
     user, _token = current_user_and_token
-    try:
-        # Validate project access
-        await validate_project_access(project_id, user, db)
 
-        file = await db.get(ProjectFile, file_id)
-        if not file or file.project_id != project_id:
-            raise HTTPException(status_code=404, detail="File not found")
+    with traced(op="file", description="Get File Metadata") as span:
+        try:
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(user.id))
+            span.set_tag("file.id", str(file_id))
 
-        return await create_standard_response(
-            {
-                "id": str(file.id),
-                "filename": file.filename,
-                "file_type": file.file_type,
-                "file_size": file.file_size,
-                "created_at": file.created_at.isoformat(),
-                "metadata": file.config or {},
-                "storage_path": file.file_path,
-            }
-        )
+            # Validate project access
+            await validate_project_access(project_id, user, db)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error retrieving file metadata: {str(e)}")
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve file metadata"
-        ) from e
+            # Use unified FileService for metadata retrieval
+            file_service = FileService(db)
+            file_metadata = await file_service.get_file_metadata(project_id, file_id)
+
+            span.set_tag("filename", file_metadata["filename"])
+            span.set_tag("file_size", file_metadata["file_size"])
+
+            return await create_standard_response(
+                file_metadata, "File metadata retrieved successfully"
+            )
+
+        except HTTPException:
+            span.set_tag("error", True)
+            raise
+        except Exception as e:
+            span.set_tag("error", True)
+            span.set_tag("error_type", type(e).__name__)
+            logger.error(f"Error retrieving file metadata: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail="Failed to retrieve file metadata"
+            ) from e
 
 
 @router.delete("/{file_id}", response_model=dict)
 async def delete_project_file(
     project_id: UUID,
     file_id: UUID,
-    current_user_and_token: tuple = Depends(get_current_user_and_token),
+    current_user_and_token: Tuple[User, str] = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
     Delete a file from project storage.
-    NOTE: KB cleanup is handled by the KB service via database triggers/signals.
+
+    This is the canonical endpoint for file deletion. KB cleanup is handled
+    automatically by the service layer via database triggers/signals.
     """
     user, _token = current_user_and_token
-    try:
-        # Validate project access
-        await validate_project_access(project_id, user, db)
 
-        file = await db.get(ProjectFile, file_id)
-        if not file or file.project_id != project_id:
-            raise HTTPException(status_code=404, detail="File not found")
-
-        # Delete from storage
+    with traced(op="file", description="Delete Project File") as span:
         try:
-            await storage.delete_file(file.file_path)
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("user.id", str(user.id))
+            span.set_tag("file.id", str(file_id))
+
+            # Validate project access
+            await validate_project_access(project_id, user, db)
+
+            # Use unified FileService for deletion
+            file_service = FileService(db)
+            result = await file_service.delete_file(project_id, file_id)
+
+            span.set_tag("filename", result["filename"])
+
+            return await create_standard_response(result, "File deleted successfully")
+
+        except HTTPException:
+            span.set_tag("error", True)
+            raise
         except Exception as e:
-            logger.warning(f"Storage deletion failed: {str(e)}")
-
-        # Delete database record
-        await db.delete(file)
-        await db.commit()
-
-        return await create_standard_response(
-            {"id": str(file_id)}, "File deleted successfully"
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"File deletion failed: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete file") from e
+            span.set_tag("error", True)
+            span.set_tag("error_type", type(e).__name__)
+            logger.error(f"File deletion failed: {str(e)}")
+            raise HTTPException(status_code=500, detail="Failed to delete file") from e
 
 
 @router.get("/{file_id}/download", include_in_schema=False)

@@ -47,8 +47,6 @@ from services.knowledgebase_service import (
     delete_knowledge_base as kb_service_delete_kb,
     toggle_project_kb,
     upload_file_to_project,
-    delete_project_file,
-    get_project_file_list,
 )
 from services.github_service import GitHubService
 
@@ -207,7 +205,11 @@ async def get_project_knowledge_bases(
         # Validate project access
         project: Project = await validate_project_access(project_id, current_user, db)
 
-        kb = project.knowledge_base if project and project.knowledge_base and project.knowledge_base.is_active else None
+        kb = (
+            project.knowledge_base
+            if project and project.knowledge_base and project.knowledge_base.is_active
+            else None
+        )
         kbs = [serialize_knowledge_base(kb)] if kb else []
 
         return await create_standard_response(
@@ -319,9 +321,9 @@ async def search_project_knowledge(
 @router.post(
     "/{project_id}/knowledge-bases/files",
     response_model=dict,
-    status_code=status.HTTP_201_CREATED,
+    status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
-async def upload_knowledge_base_file(
+async def upload_knowledge_base_file_redirect(
     project_id: UUID,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
@@ -329,36 +331,27 @@ async def upload_knowledge_base_file(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Upload and process a file for the project's knowledge base.
+    DEPRECATED: Use POST /projects/{project_id}/files?index_kb=true instead.
+
+    This endpoint returns a permanent redirect to the canonical file upload endpoint.
     """
-    try:
-        current_user = current_user_tuple[0]
+    from fastapi.responses import RedirectResponse
 
-        # Validate project access
-        project: Project = await validate_project_access(project_id, current_user, db)
-
-        if not project.knowledge_base:
-            raise HTTPException(status_code=400, detail="Project has no knowledge base")
-
-        result = await upload_file_to_project(
-            project_id=project_id,
-            file=file,
-            db=db,
-            user_id=current_user.id,
-            background_tasks=background_tasks,
-        )
-
-        return await create_standard_response(result, "File uploaded successfully")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"File upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to upload file") from e
+    # Return permanent redirect to canonical endpoint with KB indexing enabled
+    redirect_url = f"/projects/{project_id}/files?index_kb=true"
+    return RedirectResponse(
+        url=redirect_url,
+        status_code=status.HTTP_308_PERMANENT_REDIRECT,
+        headers={"Location": redirect_url},
+    )
 
 
-@router.get("/{project_id}/knowledge-bases/files-list", response_model=dict)
-async def list_knowledge_base_files(
+@router.get(
+    "/{project_id}/knowledge-bases/files-list",
+    response_model=dict,
+    status_code=status.HTTP_308_PERMANENT_REDIRECT,
+)
+async def list_knowledge_base_files_redirect(
     project_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
@@ -367,38 +360,22 @@ async def list_knowledge_base_files(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    List files associated with a project's knowledge base.
-    Only files that are part of the active knowledge base are listed.
+    DEPRECATED: Use GET /projects/{project_id}/files instead.
+
+    This endpoint returns a permanent redirect to the canonical file listing endpoint.
     """
-    try:
-        current_user = current_user_tuple[0]
+    from fastapi.responses import RedirectResponse
 
-        # Validate project access
-        project: Project = await validate_project_access(project_id, current_user, db)
+    # Build redirect URL with query parameters
+    redirect_url = f"/projects/{project_id}/files?skip={skip}&limit={limit}"
+    if file_type:
+        redirect_url += f"&file_type={file_type}"
 
-        if not project.knowledge_base or not project.knowledge_base.is_active:
-            raise HTTPException(
-                status_code=400, detail="Project does not have an active knowledge base"
-            )
-
-        file_list_data = await get_project_file_list(
-            project_id=project_id,
-            user_id=current_user.id,
-            db=db,
-            skip=skip,
-            limit=limit,
-            file_type=file_type,
-        )
-
-        return await create_standard_response(file_list_data)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to list knowledge base files: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500, detail="Failed to retrieve knowledge base files"
-        ) from e
+    return RedirectResponse(
+        url=redirect_url,
+        status_code=status.HTTP_308_PERMANENT_REDIRECT,
+        headers={"Location": redirect_url},
+    )
 
 
 @router.post("/{project_id}/knowledge-bases/reindex", response_model=dict)
@@ -444,31 +421,31 @@ async def reindex_knowledge_base(
         ) from e
 
 
-@router.delete("/{project_id}/knowledge-bases/files/{file_id}", response_model=dict)
-async def delete_knowledge_base_file(
+@router.delete(
+    "/{project_id}/knowledge-bases/files/{file_id}",
+    response_model=dict,
+    status_code=status.HTTP_308_PERMANENT_REDIRECT,
+)
+async def delete_knowledge_base_file_redirect(
     project_id: UUID,
     file_id: UUID,
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Delete a file from the project's knowledge base.
+    DEPRECATED: Use DELETE /projects/{project_id}/files/{file_id} instead.
+
+    This endpoint returns a permanent redirect to the canonical file deletion endpoint.
     """
-    try:
-        current_user = current_user_tuple[0]
-        await validate_project_access(project_id, current_user, db)
+    from fastapi.responses import RedirectResponse
 
-        result = await delete_project_file(
-            project_id=project_id, file_id=file_id, db=db, user_id=current_user.id
-        )
-
-        return await create_standard_response(result, "File deleted successfully")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"File deletion failed: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to delete file") from e
+    # Return permanent redirect to canonical endpoint
+    redirect_url = f"/projects/{project_id}/files/{file_id}"
+    return RedirectResponse(
+        url=redirect_url,
+        status_code=status.HTTP_308_PERMANENT_REDIRECT,
+        headers={"Location": redirect_url},
+    )
 
 
 # ----------------------------------------------------------------------
