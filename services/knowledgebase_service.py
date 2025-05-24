@@ -419,7 +419,15 @@ async def detach_github_repository(
 async def _validate_project_and_kb(
     project_id: UUID, user_id: Optional[int], db: AsyncSession
 ) -> Tuple[Project, KnowledgeBase]:
-    project = await _validate_user_and_project(project_id, user_id, db)
+    """
+    Thin wrapper: delegates to services.project_service.validate_project_access and checks for KB.
+    """
+    project = await validate_project_access(
+        project_id=project_id,
+        user=await get_by_id(db, User, user_id) if user_id is not None else None,
+        db=db,
+        skip_ownership_check=user_id is None,
+    )
     if not project.knowledge_base:
         raise HTTPException(
             status_code=400, detail="Project does not have an associated knowledge base"
@@ -434,15 +442,9 @@ async def _validate_user_and_project(
     db: AsyncSession,
 ) -> Project:
     """
-    Wrapper kept for legacy callers – now delegates to the single-source-of-truth
-    `validate_project_access` in services.project_service.
+    Thin wrapper: delegates to services.project_service.validate_project_access.
     """
-    user = None
-    if user_id is not None:
-        user = await get_by_id(db, User, user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
+    user = await get_by_id(db, User, user_id) if user_id is not None else None
     return await validate_project_access(
         project_id=project_id,
         user=user,
@@ -454,18 +456,14 @@ async def _validate_user_and_project(
 async def _validate_file_access(
     project_id: UUID, file_id: Optional[UUID], user_id: Optional[int], db: AsyncSession
 ) -> Tuple[Project, Optional[ProjectFile]]:
+    """
+    Thin wrapper: delegates to services.project_service.validate_project_access and fetches file.
+    """
     project = await _validate_user_and_project(project_id, user_id, db)
-    file_record = None
-    if file_id:
-        file_record = await get_by_id(db, ProjectFile, file_id)
-        if not file_record or str(file_record.project_id) != str(project_id):
-            raise HTTPException(status_code=404, detail="File not found")
+    file_record = await get_by_id(db, ProjectFile, file_id) if file_id else None
+    if file_id and (not file_record or str(file_record.project_id) != str(project_id)):
+        raise HTTPException(status_code=404, detail="File not found")
     return project, file_record
-
-
-
-
-
 
 async def _delete_file_vectors(
     project_id: UUID, file_id: UUID, db: AsyncSession
