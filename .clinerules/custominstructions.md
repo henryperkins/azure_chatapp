@@ -66,6 +66,54 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 
 **Any code using the old dual authentication pattern will be flagged as a violation and must be refactored immediately.**
 
+## 🔧 **Code Standardization (CONSOLIDATED)**
+
+**ALL hostile duplications have been eliminated. The following patterns are now MANDATORY:**
+
+### **✅ CONSOLIDATED PATTERNS (ENFORCED):**
+
+1. **SafeHandler Pattern**:
+   - **Canonical Implementation**: `app.js` registered in DI system
+   - **Usage**: All modules MUST use `DependencySystem.modules.get('safeHandler')`
+   - **FORBIDDEN**: Custom safeHandler implementations, duplicate error handling wrappers
+
+2. **Project State Management**:
+   - **Single Source of Truth**: `appModule.state.currentProjectId` and `appModule.state.currentProject`
+   - **Access**: Use `appModule.getCurrentProject()` and `appModule.setCurrentProject()`
+   - **FORBIDDEN**: Local project state variables, competing project trackers
+
+3. **Form Handlers**:
+   - **Canonical Implementation**: `createAuthFormHandler()` in `auth.js`
+   - **Pattern**: Generic factory with parameterized differences (login vs register)
+   - **FORBIDDEN**: Duplicate form validation, separate login/register handlers
+
+4. **URL Parsing**:
+   - **Canonical Implementation**: `navigationService.js`
+   - **Delegation**: `app.js` and other modules MUST delegate to navigationService
+   - **FORBIDDEN**: Fallback URL parsing, duplicate URLSearchParams usage
+
+5. **Error Objects**:
+   - **Standard Structure**: `{ status, data, message }` (matches apiClient.js)
+   - **Consistency**: Same error format across auth.js and apiClient.js
+   - **FORBIDDEN**: Custom error object structures, inconsistent error properties
+
+6. **Chat Initialization**:
+   - **Canonical Handler**: `chatManager.js` via AppBus/AuthBus events
+   - **Integration**: `projectDetailsComponent._restoreChatAndModelConfig()`
+   - **FORBIDDEN**: Duplicate chat initialization logic in app.js or other modules
+
+### **❌ ELIMINATED ANTI-PATTERNS:**
+- Multiple `currentProjectId` trackers (was in 3 places)
+- Competing authentication state managers (was in 3 places)
+- Duplicate form handlers (70+ lines eliminated)
+- Scattered URL parsing logic (3+ implementations)
+- Inconsistent error object creation
+- Redundant chat initialization triggers
+- Multiple safeHandler implementations
+
+### **🚨 ENFORCEMENT:**
+Any code that reintroduces these eliminated patterns will be flagged as a **CRITICAL VIOLATION** and must be immediately refactored to use the canonical implementations.
+
 ---
 
 ## 📌 Table of Contents
@@ -208,26 +256,31 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 * **Logger Implementation** – Structured logs sent to server endpoint (`/api/logs`); include rich metadata.
 * **Fallback Logging** – When DI logger is unavailable, use standardized fallback pattern for critical system errors.
 
-**Error Handling Pattern:**
+**Canonical SafeHandler Pattern (CONSOLIDATED):**
 
 ```javascript
-function safeHandler(handler, description) {
-  // logger is guaranteed in DI for all app modules
-  const logger = DependencySystem.modules.get && DependencySystem.modules.get('logger');
-  return (...args) => {
-    try {
-      return handler(...args);
-    } catch (err) {
-      if (logger && typeof logger.error === "function") {
-        logger.error(
-          `[safeHandler][${description}]`,
-          err && err.stack ? err.stack : err,
-          { context: description || "safeHandler" }
-        );
+// ✅ CORRECT: Use canonical safeHandler from DI (registered in app.js)
+const safeHandler = DependencySystem.modules.get('safeHandler');
+const wrappedHandler = safeHandler(myHandler, 'MyModule:handlerDescription');
+
+// ❌ FORBIDDEN: Custom safeHandler implementations
+// function myCustomSafeHandler(handler, description) { ... } // DON'T DO THIS
+
+// ✅ FALLBACK: Only if DI safeHandler is unavailable (rare edge cases)
+function _safeHandler(handler, description) {
+  const safeHandler = DependencySystem.modules.get('safeHandler');
+  if (!safeHandler) {
+    logger.warn('[MyModule] safeHandler not available in DI, using fallback', { context: 'MyModule' });
+    return (...args) => {
+      try {
+        return handler(...args);
+      } catch (err) {
+        logger.error(`[MyModule][${description}]`, err, { context: 'MyModule' });
+        throw err;
       }
-      throw err;
-    }
-  };
+    };
+  }
+  return safeHandler(handler, description);
 }
 ```
 
@@ -273,7 +326,16 @@ Actively detect and eliminate these anti-patterns:
 * DOM readiness checks performed outside `domReadinessService`.
 * Direct DOM manipulation without sanitization.
 * Missing context tags for event listeners.
-* Duplicate safeHandler implementations (use canonical DI version).
+
+**Code Duplication anti-patterns (CRITICAL - ALL ELIMINATED):**
+
+* Duplicate safeHandler implementations (use canonical DI version from app.js).
+* Local project state tracking (use canonical appModule.state).
+* Custom form handlers (use createAuthFormHandler() in auth.js).
+* Fallback URL parsing (delegate to navigationService.js).
+* Custom error object structures (use standard status/data/message format).
+* Duplicate chat initialization (chatManager.js handles all cases).
+* Competing event dispatchers (single source in appState.js).
 
 **Authentication anti-patterns (CRITICAL):**
 

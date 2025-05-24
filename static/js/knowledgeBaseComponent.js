@@ -54,25 +54,25 @@ export function createKnowledgeBaseComponent(options = {}) {
     activeSection: "knowledgeStatus",
     inactiveSection: "knowledgeBaseInactive",
     statusBadge: "kbStatusBadge",
-    searchInput: "knowledgeSearchInput",
-    searchButton: "searchKnowledgeBtn",
+    searchInput: "knowledgeSearchInput", // Optional - will be added to HTML
+    searchButton: "searchKnowledgeBtn", // Optional - will be added to HTML
     resultsContainer: "knowledgeResults",
     resultsSection: "knowledgeResults",
     noResultsSection: "noResults",
     topKSelect: "knowledgeTopK",
-    kbToggle: "knowledgeBaseEnabled",
-    reprocessButton: "reprocessFilesBtn",
-    setupButton: "setupKnowledgeBaseBtn",
-    settingsButton: "knowledgeBaseSettingsBtn",
+    kbToggle: "kbToggle", // Fixed: matches HTML id="kbToggle"
+    reprocessButton: "reprocessButton", // Fixed: matches HTML id="reprocessButton"
+    setupButton: "setupButton", // Fixed: matches HTML id="setupButton"
+    settingsButton: "settingsButton", // Fixed: matches HTML id="settingsButton"
     kbNameDisplay: "knowledgeBaseName",
-    kbModelDisplay: "knowledgeBaseModelDisplay",
-    kbVersionDisplay: "knowledgeBaseVersionDisplay",
-    kbLastUsedDisplay: "knowledgeBaseLastUsedDisplay",
+    kbModelDisplay: "kbModelDisplay", // Fixed: matches HTML id="kbModelDisplay"
+    kbVersionDisplay: "kbVersionDisplay", // Fixed: matches HTML id="kbVersionDisplay"
+    kbLastUsedDisplay: "kbLastUsedDisplay", // Fixed: matches HTML id="kbLastUsedDisplay"
     settingsModal: "knowledgeBaseSettingsModal",
     settingsForm: "knowledgeBaseForm",
     cancelSettingsBtn: "cancelKnowledgeBaseFormBtn",
     deleteKnowledgeBaseBtn: "deleteKnowledgeBaseBtn",
-    modelSelect: "knowledgeBaseModelSelect",
+    modelSelect: "modelSelect", // Fixed: matches HTML id="modelSelect"
     resultModal: "knowledgeResultModal",
     resultTitle: "knowledgeResultTitle",
     resultSource: "knowledgeResultSource",
@@ -90,8 +90,8 @@ export function createKnowledgeBaseComponent(options = {}) {
     kbGitHubBranchInput: "kbGitHubBranchInput",
     kbGitHubFilePathsTextarea: "kbGitHubFilePathsTextarea",
     kbAttachRepoBtn: "kbAttachRepoBtn",
-    knowledgeFileCount: "knowledgeFileCount",
-    knowledgeChunkCount: "knowledgeChunkCount",
+    knowledgeFileCount: "kbDocCount", // Fixed: matches HTML id="kbDocCount"
+    knowledgeChunkCount: "kbChunkCount", // Fixed: matches HTML id="kbChunkCount"
     knowledgeFileSize: "knowledgeFileSize",
   };
 
@@ -180,6 +180,7 @@ export function createKnowledgeBaseComponent(options = {}) {
     _initElements() {
       const OPTIONAL_KEYS = new Set([
         'activeSection', 'inactiveSection', 'statusBadge',
+        'searchInput', 'searchButton', // Search elements are optional (not in current HTML)
         'kbToggle', 'reprocessButton', 'setupButton', 'settingsButton',
         'kbNameDisplay', 'kbModelDisplay', 'kbVersionDisplay', 'kbLastUsedDisplay',
         'knowledgeBaseFilesSection', 'knowledgeBaseFilesListContainer',
@@ -187,12 +188,10 @@ export function createKnowledgeBaseComponent(options = {}) {
         'kbAttachedRepoBranchDisplay', 'kbDetachRepoBtn',
         'kbGitHubAttachForm', 'kbGitHubRepoUrlInput',
         'kbGitHubBranchInput', 'kbGitHubFilePathsTextarea', 'kbAttachRepoBtn',
-        'kbModelDisplay', 'kbVersionDisplay', 'kbLastUsedDisplay',
-        'kbGitHubAttachedRepoInfo', 'kbAttachedRepoUrlDisplay',
-        'kbAttachedRepoBranchDisplay', 'kbDetachRepoBtn',
-        'kbNameDisplay', // extend later if needed
         'knowledgeFileCount', 'knowledgeChunkCount', 'knowledgeFileSize',
-        'noResultsSection'      // ← add this line
+        'noResultsSection', 'topKSelect', 'resultsContainer', 'resultsSection',
+        'settingsModal', 'settingsForm', 'cancelSettingsBtn', 'deleteKnowledgeBaseBtn',
+        'resultModal', 'resultTitle', 'resultSource', 'resultScore', 'resultContent', 'useInChatBtn'
       ]);
       const reqEl = (key, selector) => {
         // Prioritize elRefs if provided for a key

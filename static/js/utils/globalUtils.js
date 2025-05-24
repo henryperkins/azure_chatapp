@@ -47,11 +47,18 @@ export function isAbsoluteUrl(url = '') {
 }
 
 /**
- * normaliseUrl  – canonical path+query normaliser used by apiClient.
- * Mirrors implementation inside browserService so callers can depend on
- * `globalUtils.normaliseUrl` (serviceInit already does).
+ * CONSOLIDATED: normaliseUrl moved to browserService.js to eliminate duplication.
+ * This is a re-export for backward compatibility.
  */
 export function normaliseUrl(u = '') {
+  // Delegate to browserService implementation to avoid duplication
+  if (typeof window !== 'undefined' && window.DependencySystem) {
+    const browserService = window.DependencySystem.modules?.get?.('browserService');
+    if (browserService?.normaliseUrl) {
+      return browserService.normaliseUrl(u);
+    }
+  }
+  // Fallback implementation if DI not available
   try {
     const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
     const raw = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
@@ -201,26 +208,26 @@ export function formatBytes(num) {
   return `${(num / 1024 ** i).toFixed(2)} ${sizes[i]}`;
 }
 export const fileIcon = (t = "") =>
-  (
-    {
-      pdf: "📄",
-      doc: "📝",
-      docx: "📝",
-      txt: "📄",
-      csv: "📊",
-      json: "📋",
-      md: "📄",
-      py: "🐍",
-      js: "📜",
-      html: "🌐",
-      css: "🎨",
-      jpg: "🖼️",
-      jpeg: "🖼️",
-      png: "🖼️",
-      gif: "🖼️",
-      zip: "📦",
-    }[t.toLowerCase()] || "📄"
-  );
+(
+  {
+    pdf: "📄",
+    doc: "📝",
+    docx: "📝",
+    txt: "📄",
+    csv: "📊",
+    json: "📋",
+    md: "📄",
+    py: "🐍",
+    js: "📜",
+    html: "🌐",
+    css: "🎨",
+    jpg: "🖼️",
+    jpeg: "🖼️",
+    png: "🖼️",
+    gif: "🖼️",
+    zip: "📦",
+  }[t.toLowerCase()] || "📄"
+);
 
 
 /**

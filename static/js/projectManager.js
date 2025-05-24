@@ -184,7 +184,7 @@ export function createProjectManager({
       this._loadingProjects = false;
       this._loadProjectsDebounceTimer = null;
       this._DEBOUNCE_DELAY = 300;
-      this._activeProjectId = null; // Internal tracking of the current project ID
+      // CONSOLIDATED: Removed _activeProjectId - use canonical appModule.state.currentProjectId instead
 
       this.apiEndpoints = apiEndpoints;
       this._CONFIG = {
@@ -613,12 +613,11 @@ export function createProjectManager({
       }
     }
 
-    // Get projectId from several possible sources for conversation/context flow robustness
+    // CONSOLIDATED: Get projectId from canonical sources only
     _getEffectiveProjectId() {
-      // Priority order: this.currentProjectId, this.currentProject?.id, app.getCurrentProject().id, app.getProjectId(), browserService location param
+      // Priority order: canonical appModule state, app.getProjectId(), browserService location param
       const candidates = [
-        this.currentProjectId,
-        this.currentProject?.id,
+        // CONSOLIDATED: Use canonical appModule state first
         (this.app?.getCurrentProject && this.app.getCurrentProject()?.id),
         (this.app?.getProjectId && this.app.getProjectId())
       ];
@@ -695,26 +694,26 @@ export function createProjectManager({
       return null;
     }
 
+    // CONSOLIDATED: ProjectManager should delegate to canonical appModule state
     // This method is for when ProjectManager ITSELF decides to change the project.
-    // It updates the global state via app.setCurrentProject.
-    // For reacting to external changes, it should listen to AppBus.
     setCurrentProject(project) {
       if (!project || !project.id) {
         this.logger.warn(`[${MODULE}][setCurrentProject] Invalid project object provided.`, { project, context: MODULE });
         return null;
       }
-      this.logger.info(`[${MODULE}][setCurrentProject] Called to set project globally.`, { projectId: project.id, context: MODULE });
-      this._activeProjectId = project.id; // Update internal tracker
+      this.logger.info(`[${MODULE}][setCurrentProject] Delegating to canonical appModule state.`, { projectId: project.id, context: MODULE });
+
+      // Store in localStorage for persistence
       this.storage?.setItem?.('selectedProjectId', project.id);
 
+      // CONSOLIDATED: Delegate to canonical appModule state instead of maintaining local state
       if (this.app && typeof this.app.setCurrentProject === 'function') {
         this.logger.debug(`[${MODULE}][setCurrentProject] Calling app.setCurrentProject().`, { projectId: project.id, context: MODULE });
-        this.app.setCurrentProject(project); // This will trigger AppBus event
+        this.app.setCurrentProject(project); // This will trigger AppBus event and update appModule.state
       } else {
         this.logger.warn(`[${MODULE}][setCurrentProject] app.setCurrentProject is not available. Cannot set project globally.`, { context: MODULE });
-        // If app.setCurrentProject is not available, we might need to manually emit on local bus
-        // but the design implies app.setCurrentProject is the primary way.
-        this._emit('currentProjectChanged', { project }); // Local emit if global fails
+        // Fallback: emit local event if global state update fails
+        this._emit('currentProjectChanged', { project });
       }
       return project;
     }
@@ -895,15 +894,14 @@ export function createProjectManager({
 
       this._setupEventListeners();
 
-      // Initialize with current project if already set in app state
+      // CONSOLIDATED: No need to track local _activeProjectId - canonical state is in appModule
       const initialProject = this.app?.getCurrentProject?.();
       if (initialProject?.id) {
-        this.logger.info(`[${MODULE}] Initial project found from app state. Setting active project ID.`, { projectId: initialProject.id, context: MODULE });
-        this._activeProjectId = initialProject.id;
+        this.logger.info(`[${MODULE}] Initial project found from canonical app state.`, { projectId: initialProject.id, context: MODULE });
         // Optionally, load project details or list if required on init and project exists
         // For now, deferring to explicit calls or UI-triggered loads.
       } else {
-        this.logger.info(`[${MODULE}] No initial project found from app state.`, { context: MODULE });
+        this.logger.info(`[${MODULE}] No initial project found from canonical app state.`, { context: MODULE });
       }
 
       this.logger.info(`[${MODULE}] Initialization complete.`, { context: MODULE });
@@ -938,11 +936,11 @@ export function createProjectManager({
         oldProjectId: oldProject?.id,
         context: MODULE
       });
-      if (newProject?.id && newProject.id !== this._activeProjectId) {
-        this.logger.debug(`[${MODULE}] Updating internal active project ID to ${newProject.id}.`, { context: MODULE });
-        this._activeProjectId = newProject.id;
+      // CONSOLIDATED: No need to track local _activeProjectId - canonical state is in appModule
+      if (newProject?.id) {
+        this.logger.debug(`[${MODULE}] Project changed to ${newProject.id} via canonical state.`, { context: MODULE });
         // Clear any data specific to the old project, IF projectManager caches such details.
-        // For example, if this.projects was a list of files for ONLY the _activeProjectId, clear it.
+        // For example, if this.projects was a list of files for ONLY the current project, clear it.
         // Currently, loadProjects fetches all projects, so it's less of an issue for the main list.
         // However, if specific details like current project's files, stats etc., were cached directly
         // on `this`, they would need clearing here.
@@ -953,9 +951,8 @@ export function createProjectManager({
         // e.g., if it maintained a this.detailedProjectObject, it might call this.loadProjectDetails(newProject.id);
         // For now, this manager primarily provides methods; UI components would drive reloads.
 
-      } else if (!newProject?.id) {
-        this.logger.info(`[${MODULE}] Current project cleared (null). Updating internal active ID.`, { context: MODULE });
-        this._activeProjectId = null;
+      } else {
+        this.logger.info(`[${MODULE}] Current project cleared (null) via canonical state.`, { context: MODULE });
         // Clear project-specific cached data
       }
     }
@@ -964,9 +961,9 @@ export function createProjectManager({
       const isAuthenticated = event?.detail?.authenticated;
       this.logger.info(`[${MODULE}] Received "authStateChanged" event. Authenticated: ${isAuthenticated}`, { detail: event?.detail, context: MODULE });
       if (!isAuthenticated) {
-        this.logger.info(`[${MODULE}] User is now unauthenticated. Clearing cached projects list and active project ID.`, { context: MODULE });
+        this.logger.info(`[${MODULE}] User is now unauthenticated. Clearing cached projects list.`, { context: MODULE });
         this.projects = []; // Clear cached list of all projects
-        this._activeProjectId = null;
+        // CONSOLIDATED: No need to clear local _activeProjectId - canonical state is in appModule
         // Emit an event that project data has been cleared due to auth change, if other parts rely on this.
         this._emit('projectDataClearedDueToAuth', { reason: 'User unauthenticated' });
       } else {
