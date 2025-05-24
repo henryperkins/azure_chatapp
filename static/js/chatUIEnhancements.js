@@ -16,18 +16,10 @@ export function createChatUIEnhancements(deps = {}) {
   if (!deps.domReadinessService) throw new Error('Missing domReadinessService');
   if (!deps.logger) throw new Error('Missing logger');
   if (!deps.sanitizer) throw new Error('Missing sanitizer');
+  if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
   // chatManager and modalManager are optional
 
-  const {
-    domAPI,
-    eventHandlers,
-    browserService,
-    domReadinessService,
-    logger,
-    sanitizer,
-    chatManager,
-    modalManager
-  } = deps;
+  const { domAPI, eventHandlers, browserService, domReadinessService, logger, sanitizer, chatManager, modalManager, DependencySystem } = deps;
 
   const MODULE_CONTEXT = 'chatUIEnhancements';
 

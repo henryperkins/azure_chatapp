@@ -9,15 +9,10 @@ function createProjectDetailsEnhancements(deps) {
   if (!deps || typeof deps !== 'object') {
     throw new Error('[createProjectDetailsEnhancements] Dependencies object is required');
   }
+  if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
 
-  const {
-    domAPI,
-    browserService,
-    eventHandlers,
-    domReadinessService,
-    logger,
-    sanitizer
-  } = deps;
+  const { domAPI, browserService, eventHandlers, domReadinessService, logger, sanitizer, DependencySystem } = deps;
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   // Validate required dependencies
   if (!domAPI) throw new Error('[createProjectDetailsEnhancements] Missing dependency: domAPI');
