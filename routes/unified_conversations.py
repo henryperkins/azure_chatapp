@@ -382,7 +382,8 @@ async def update_project_conversation(
             transaction.set_tag("user.id", str(current_user.id))
 
             # Validate access
-            await validate_project_access(project_id, current_user, db)
+            with sentry_span_context(op="access.check", description="Validate project access"):
+                await validate_project_access(project_id, current_user, db)
 
             # Track changes
             changes = {}
