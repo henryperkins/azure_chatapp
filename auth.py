@@ -58,7 +58,9 @@ class CookieSettings:
         # `request.url.scheme` is "http".
         forwarded_proto_raw = request.headers.get("x-forwarded-proto", "")
         forwarded_proto = (
-            forwarded_proto_raw.split(",")[0].strip().lower() if forwarded_proto_raw else ""
+            forwarded_proto_raw.split(",")[0].strip().lower()
+            if forwarded_proto_raw
+            else ""
         )
         scheme = forwarded_proto or request.url.scheme
 
@@ -166,10 +168,16 @@ def set_secure_cookie(
             domain=domain,
             samesite=samesite,
             # Add expires as backup for browsers that don't support max_age properly
-            expires=None if not effective_max_age else int(datetime.utcnow().timestamp()) + effective_max_age
+            expires=(
+                None
+                if not effective_max_age
+                else int(datetime.utcnow().timestamp()) + effective_max_age
+            ),
         )
 
-        logger.info(f"[AUTH_COOKIE_SET] Successfully set cookie '{key}' with max_age={effective_max_age}")
+        logger.info(
+            f"[AUTH_COOKIE_SET] Successfully set cookie '{key}' with max_age={effective_max_age}"
+        )
     except Exception as e:
         logger.error("Failed to set cookie %s: %s", key, str(e))
         raise HTTPException(status_code=500, detail=f"Cookie error: {str(e)}") from e
@@ -590,6 +598,7 @@ async def get_token_expiry_settings() -> TokenExpirySettings:
         refresh_token_expire_days=REFRESH_TOKEN_EXPIRE_DAYS,
     )
 
+
 @router.get("/settings/auth", response_model=dict)
 async def get_auth_settings(request: Request):
     """Expose effective cookie/CORS/auth config for this request."""
@@ -646,6 +655,7 @@ async def get_csrf_token(request: Request):
     # Generate CSRF token, store in session, set cookie, and return in JSON
     import secrets
     from fastapi.responses import JSONResponse
+
     token = secrets.token_urlsafe()
     request.session["csrf_token"] = token
     resp = JSONResponse(content={"token": token})
@@ -706,8 +716,20 @@ async def set_cookies_endpoint(
                 int(refresh_expires.total_seconds()),
                 request,
             )
+
+        logger.info(
+            "Tokens set via insecure endpoint",
+            extra={
+                "event_type": "insecure_token_set",
+                "has_access_token": bool(token_req.access_token),
+                "has_refresh_token": bool(token_req.refresh_token),
+            },
+        )
     except Exception as e:
-        logger.error("Insecure set-cookie error => %s", e)
+        logger.error(
+            "Insecure set-cookie error",
+            extra={"event_type": "insecure_token_set_error", "error": str(e)},
+        )
         return {"status": "error", "message": str(e)}
     return {"status": "cookies set"}
 
@@ -757,8 +779,12 @@ async def logout_user(
                 )
                 if refresh_cookie:
                     try:
+                        # Allow version mismatch during logout to handle graceful token cleanup
                         dec = await verify_token(
-                            refresh_cookie, "refresh", db_session=session
+                            refresh_cookie,
+                            "refresh",
+                            db_session=session,
+                            allow_version_mismatch=True,
                         )
                         tid = dec.get("jti")
                         exp_val = dec.get("exp")
@@ -774,9 +800,26 @@ async def logout_user(
                                 creation_reason="logout",
                             )
                             session.add(blackl)
-                            logger.info("Blacklisted refresh => jti=%s", tid)
+                            logger.info(
+                                "Blacklisted refresh token during logout",
+                                extra={
+                                    "event_type": "token_blacklisted",
+                                    "jti": tid,
+                                    "user_id": locked.id,
+                                    "token_type": "refresh",
+                                    "reason": "logout",
+                                },
+                            )
                     except Exception as e:
-                        logger.error("Failed to blacklist => %s", e)
+                        logger.error(
+                            "Failed to blacklist refresh token during logout",
+                            extra={
+                                "event_type": "token_blacklist_error",
+                                "error": str(e),
+                                "user_id": locked.id if locked else None,
+                                "token_type": "refresh",
+                            },
+                        )
             await session.commit()
     except Exception as e:
         logger.error("Logout error => %s", e)
