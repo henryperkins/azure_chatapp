@@ -186,13 +186,17 @@ class ProjectDetailsComponent {
       '.project-tab', '#chatTab', '#filesTab', '#knowledgeTab', '#settingsTab'
     ];
     const optionalSelectors = [
-      "#projectDescription", "#projectGoals", "#projectInstructions",
-      "#knowledgeSearchInput", "#searchKnowledgeBtn", // Search elements (now added to HTML)
+      // FIXED: Removed non-existent elements that were causing timeout warnings
+      // "#projectDescription", "#projectGoals", "#projectInstructions", // These don't exist in current template
+      "#knowledgeSearchInput", "#searchKnowledgeBtn", // Search elements (exist in HTML)
       "#knowledgeResults", // Results container (exists in HTML)
       "#kbToggle", "#reprocessButton", "#setupButton", "#settingsButton", // Action buttons (exist in HTML)
       "#modelSelect", // Model selection (exists in HTML)
-      "#knowledgeBaseName", "#kbModelDisplay", "#kbVersionDisplay", "#kbLastUsedDisplay", // Display elements (now added to HTML)
-      "#kbDocCount", "#kbChunkCount" // Stats elements (exist in HTML)
+      "#knowledgeBaseName", "#kbModelDisplay", "#kbVersionDisplay", "#kbLastUsedDisplay", // Display elements (exist in HTML)
+      "#kbDocCount", "#kbChunkCount", // Stats elements (exist in HTML)
+      "#projectNameInput", "#projectDescriptionInput", // Settings tab elements (exist in HTML)
+      "#archiveProjectBtn", "#deleteProjectBtn", // Danger zone buttons (exist in HTML)
+      "#editProjectBtn", "#projectMenuBtn", "#projectFab" // Action buttons (exist in HTML)
     ];
     try {
       await this.domReadinessService.elementsReady(coreSelectors, {
@@ -200,11 +204,18 @@ class ProjectDetailsComponent {
         context: `${MODULE_CONTEXT}::_ensureElementsReady`
       });
       // fire-and-forget for optional elements – do NOT block init
+      // ENHANCED: Reduced timeout and improved error handling for optional elements
       this.domReadinessService.elementsReady(optionalSelectors, {
         observeMutations: true,
-        timeout: this.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 5000,
+        timeout: 2000, // Reduced timeout for optional elements
         context: `${MODULE_CONTEXT}::optionalElements`
-      }).catch(() => { });
+      }).catch((err) => {
+        // Log as info instead of warning since these are truly optional
+        this._logInfo(`Some optional elements not found within timeout, continuing anyway`, {
+          missingElements: err?.message || 'unknown',
+          context: `${MODULE_CONTEXT}::optionalElements`
+        });
+      });
       // Map elements cache
       const $ = (sel) => this.elements.container.querySelector(sel);
       this.elements.title = $("#projectTitle");
@@ -216,9 +227,10 @@ class ProjectDetailsComponent {
         knowledge: $("#knowledgeTab"),
         settings: $("#settingsTab")
       };
-      this.elements.description = $("#projectDescription");
-      this.elements.goals = $("#projectGoals");
-      this.elements.instructions = $("#projectInstructions");
+      // FIXED: Removed references to non-existent elements
+      // this.elements.description = $("#projectDescription"); // Doesn't exist in current template
+      // this.elements.goals = $("#projectGoals"); // Doesn't exist in current template
+      // this.elements.instructions = $("#projectInstructions"); // Doesn't exist in current template
       // Optional: lists/containers for subcomponents
       this.elements.filesList = $("#filesList");
       this.elements.conversationsList = $("#conversationsList");
@@ -413,9 +425,13 @@ class ProjectDetailsComponent {
     if (!this.elements.container || !this.projectData) return;
     const { name, description, goals, customInstructions } = this.projectData;
     if (this.elements.title) this.elements.title.textContent = name || "Untitled Project";
-    if (this.elements.description) this.domAPI.setInnerHTML(this.elements.description, this.sanitizer.sanitize(description || "No description."));
-    if (this.elements.goals) this.domAPI.setInnerHTML(this.elements.goals, this.sanitizer.sanitize(goals || "No goals specified."));
-    if (this.elements.instructions) this.domAPI.setInnerHTML(this.elements.instructions, this.sanitizer.sanitize(customInstructions || "No custom instructions."));
+
+    // FIXED: These elements don't exist in the current template, so we don't try to render to them
+    // The project description, goals, and instructions are now handled in the settings tab
+    // if (this.elements.description) this.domAPI.setInnerHTML(this.elements.description, this.sanitizer.sanitize(description || "No description."));
+    // if (this.elements.goals) this.domAPI.setInnerHTML(this.elements.goals, this.sanitizer.sanitize(goals || "No goals specified."));
+    // if (this.elements.instructions) this.domAPI.setInnerHTML(this.elements.instructions, this.sanitizer.sanitize(customInstructions || "No custom instructions."));
+
     // MAY trigger tab data reloads/rendering here for first view
   }
 
@@ -673,9 +689,39 @@ class ProjectDetailsComponent {
         if (this.navigationService) {
           this.navigationService.navigateToConversation(this.projectId, cv.id);
         }
-        // ENSURE the per-project chatManager loads the selected conversation
+        // ENSURE the per-project chatManager is initialized and loads the selected conversation
         if (this.chatManager && typeof this.chatManager.loadConversation === "function") {
-          this.chatManager.loadConversation(cv.id);
+          // CRITICAL FIX: Ensure ChatManager is initialized with project ID before loading conversation
+          if (!this.chatManager.projectId || this.chatManager.projectId !== this.projectId) {
+            this._logInfo("ChatManager not initialized for current project, initializing first", {
+              currentProjectId: this.projectId,
+              chatManagerProjectId: this.chatManager.projectId
+            });
+
+            // Try to sync project ID from canonical source first
+            if (this.chatManager.forceProjectIdSync) {
+              const syncedProjectId = this.chatManager.forceProjectIdSync();
+              this._logInfo("Attempted ChatManager project ID sync", {
+                syncedProjectId,
+                expectedProjectId: this.projectId
+              });
+            }
+
+            // Initialize ChatManager with current project ID
+            await this.chatManager.initialize({
+              projectId: this.projectId,
+              containerSelector: "#chatTab .chat-container",
+              messageContainerSelector: "#chatMessages",
+              inputSelector: "#chatInput",
+              sendButtonSelector: "#chatSendBtn",
+              titleSelector: "#chatTitle",
+              minimizeButtonSelector: "#minimizeChatBtn"
+            });
+          }
+
+          // Now load the conversation with proper project context
+          this._logInfo("Loading conversation in ChatManager", { conversationId: cv.id, projectId: this.projectId });
+          await this.chatManager.loadConversation(cv.id);
         }
         this._highlightActiveConversation(cv.id);
       } catch (_e) {
