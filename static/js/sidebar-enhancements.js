@@ -18,11 +18,47 @@
  * No globals are attached by this module.
  */
 
-export function createSidebarEnhancements({ eventHandlers, DependencySystem, domAPI }) {
+export function createSidebarEnhancements({
+  eventHandlers,
+  DependencySystem,
+  domAPI,
+  modelConfig, // for injecting model config UI if needed
+  logger,
+  safeHandler
+}) {
   if (!eventHandlers) throw new Error('eventHandlers required for sidebar-enhancements');
   if (!domAPI) throw new Error('domAPI required for sidebar-enhancements');
   const EH = eventHandlers;
   const MODULE_NAME = 'sidebar-enhancements'; // For consistent logging
+
+  // --- Settings Panel DOM and logic ---
+  let settingsPanelEl = null;
+  function attachSettingsPanel(sidebarEl) {
+    if (!sidebarEl) throw new Error('Sidebar element required to attach settings panel');
+    if (!settingsPanelEl) {
+      settingsPanelEl = domAPI.getElementById('sidebarSettingsPanel');
+      if (!settingsPanelEl) {
+        settingsPanelEl = domAPI.createElement('div');
+        settingsPanelEl.id = 'sidebarSettingsPanel';
+        settingsPanelEl.className =
+          'hidden flex flex-col gap-2 p-3 overflow-y-auto border-t border-base-300';
+        // Insert at end of sidebar
+        domAPI.appendChild(sidebarEl, settingsPanelEl);
+      }
+    }
+    return settingsPanelEl;
+  }
+
+  function toggleSettingsPanel(force, modelConfigCb) {
+    if (!settingsPanelEl) return;
+    const show = force !== undefined ? !!force : settingsPanelEl.classList.contains('hidden');
+    domAPI.toggleClass(settingsPanelEl, 'hidden', !show);
+    if (show && modelConfigCb && typeof modelConfigCb === "function") {
+      modelConfigCb(settingsPanelEl);
+    }
+  }
+
+  // --- Legacy features ---
 
   function migrateLegacyToggle({ oldToggleId, newCheckboxId, chevronId }) {
     try {
@@ -30,24 +66,31 @@ export function createSidebarEnhancements({ eventHandlers, DependencySystem, dom
       const newCheckbox = domAPI.getElementById(newCheckboxId);
       const chevron = domAPI.getElementById(chevronId);
       if (oldToggle && newCheckbox) {
-        EH.trackListener(oldToggle, 'click', () => {
-          newCheckbox.checked = !newCheckbox.checked;
-          updateChevronRotation(chevron, newCheckbox.checked);
-        }, `sidebar-enhancements: migrate legacy toggle ${oldToggleId}`);
+        EH.trackListener(
+          oldToggle,
+          'click',
+          () => {
+            newCheckbox.checked = !newCheckbox.checked;
+            updateChevronRotation(chevron, newCheckbox.checked);
+          },
+          `sidebar-enhancements: migrate legacy toggle ${oldToggleId}`
+        );
       }
       if (newCheckbox) {
-        EH.trackListener(newCheckbox, 'change', () => {
-          updateChevronRotation(chevron, newCheckbox.checked);
-        }, `sidebar-enhancements: checkbox change ${newCheckboxId}`);
+        EH.trackListener(
+          newCheckbox,
+          'change',
+          () => {
+            updateChevronRotation(chevron, newCheckbox.checked);
+          },
+          `sidebar-enhancements: checkbox change ${newCheckboxId}`
+        );
       }
     } catch (err) {
       // Notification removed per checklist; fail silently or log as needed.
     }
   }
 
-  /**
-   * Migrate all collapse controls from legacy toggles to checkbox+chevron.
-   */
   function initCollapseControls() {
     migrateLegacyToggle({
       oldToggleId: 'toggleModelConfig',
@@ -61,19 +104,11 @@ export function createSidebarEnhancements({ eventHandlers, DependencySystem, dom
     });
   }
 
-  /**
-   * Rotate a chevron element to indicate expanded/collapsed state.
-   * @param {HTMLElement} el – the chevron SVG/icon
-   * @param {boolean} expanded – true = rotated 180°, false = 0°
-   */
   function updateChevronRotation(el, expanded) {
     if (!el) return;
     el.style.transform = expanded ? 'rotate(180deg)' : 'rotate(0)';
   }
 
-  /**
-   * Wire the “Manage Projects” link to the sidebar controller’s tab logic.
-   */
   function initManageProjectsLink() {
     try {
       const btn = domAPI.getElementById('manageProjectsLink');
@@ -93,8 +128,10 @@ export function createSidebarEnhancements({ eventHandlers, DependencySystem, dom
     initManageProjectsLink();
   }
 
-  // API exposed for composition/testing; never attached to global scope.
+  // Public API
   return {
-    initSidebarEnhancements
+    initSidebarEnhancements,
+    attachSettingsPanel,
+    toggleSettingsPanel,
   };
 }
