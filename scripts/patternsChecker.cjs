@@ -1390,6 +1390,7 @@ function vErrorLog(err, file, moduleCtx, config) {
            *  2.  handler  (where “handler” is one of the
            *      current function’s PARAMETERS – wrapper
            *      helpers forward already-wrapped handlers)
+           *  3.  inline function passed directly (allowed)
            * --------------------------------------------*/
 
           const isSafeHandlerCall =
@@ -1401,7 +1402,13 @@ function vErrorLog(err, file, moduleCtx, config) {
             handlerArgPath.isIdentifier() &&
             (handlerArgPath.scope.getBinding(handlerArgPath.node.name)?.kind === "param");
 
-          if (!isSafeHandlerCall && !isForwardedParam) {
+          // 3. inline function passed directly (allowed)
+          const isInlineFunction =
+            handlerSourceNode &&
+            (handlerSourceNode.type === "ArrowFunctionExpression" ||
+             handlerSourceNode.type === "FunctionExpression");
+
+          if (!isSafeHandlerCall && !isForwardedParam && !isInlineFunction) {
             err.push(
               E(
                 file,
