@@ -31,17 +31,8 @@ export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logge
   const MODULE_CONTEXT = 'KbResultHandlers';
   const wnd = domAPI.window || (typeof window !== 'undefined' ? window : null);
 
-  // Safe handler wrapper for all event handlers
-  function safeHandler(handler, description) {
-    return function (...args) {
-      try {
-        return handler.apply(this, args);
-      } catch (err) {
-        logger.error(`[${MODULE_CONTEXT}][${description}]`, err, { context: MODULE_CONTEXT });
-        throw err;
-      }
-    };
-  }
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   // -- Init function, call once when DOM is ready and deps are injected
   function init() {

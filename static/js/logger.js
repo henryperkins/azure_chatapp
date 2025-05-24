@@ -13,10 +13,10 @@ const LVL = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, f
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
-  debug       = false,
-  context     = 'App',
-  minLevel    = 'info',           // default threshold
-  fetcher     = null,             // ← NEW injectable fetch
+  debug = false,
+  context = 'App',
+  minLevel = 'info',           // default threshold
+  fetcher = null,             // ← NEW injectable fetch
   browserService = null,          // ← NEW optional DI
   authModule = null               // ← NEW optional DI: AuthModule for auth check
 } = {}) {
@@ -40,18 +40,22 @@ export function createLogger({
       if (!_fetch) return;                   // no fetch available
 
       const response = await _fetch(endpoint, {
-        method : 'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',                   // NEW – carry cookies / CSRF exempt
-        body   : JSON.stringify({ level, context, args, ts: Date.now() })
+        body: JSON.stringify({ level, context, args, ts: Date.now() })
       });
       if (!response.ok) {
-        // Surface server-side log ingestion failures
-        console.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
+        // Surface server-side log ingestion failures - use fallback logging
+        if (typeof window !== 'undefined' && window.console && window.console.warn) {
+          window.console.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
+        }
       }
     } catch (err) {
-      // Surface client-side failures (e.g., network down, CORS, 0 response)
-      console.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
+      // Surface client-side failures (e.g., network down, CORS, 0 response) - use fallback logging
+      if (typeof window !== 'undefined' && window.console && window.console.warn) {
+        window.console.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
+      }
     }
   }
   function wrap(level, fn) {
@@ -62,10 +66,10 @@ export function createLogger({
     };
   }
   return {
-    log:   wrap('log',    console.log),
-    info:  wrap('info',   console.info),
-    warn:  wrap('warn',   console.warn),
-    error: wrap('error',  console.error),
-    debug: debug ? wrap('debug', console.debug) : () => {}
+    log: wrap('log', console.log),
+    info: wrap('info', console.info),
+    warn: wrap('warn', console.warn),
+    error: wrap('error', console.error),
+    debug: debug ? wrap('debug', console.debug) : () => { }
   };
 }

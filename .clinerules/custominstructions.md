@@ -206,19 +206,45 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 * **Logger Usage** – Exclusively use DI-provided `logger`; no direct `console.*` calls.
 * **Structured Logging** – Report errors with context and stack traces.
 * **Logger Implementation** – Structured logs sent to server endpoint (`/api/logs`); include rich metadata.
+* **Fallback Logging** – When DI logger is unavailable, use standardized fallback pattern for critical system errors.
 
 **Error Handling Pattern:**
 
 ```javascript
 function safeHandler(handler, description) {
+  // logger is guaranteed in DI for all app modules
+  const logger = DependencySystem.modules.get && DependencySystem.modules.get('logger');
   return (...args) => {
     try {
       return handler(...args);
     } catch (err) {
-      logger.error(`[${description}]`, err.stack || err);
+      if (logger && typeof logger.error === "function") {
+        logger.error(
+          `[safeHandler][${description}]`,
+          err && err.stack ? err.stack : err,
+          { context: description || "safeHandler" }
+        );
+      }
       throw err;
     }
   };
+}
+```
+
+**Fallback Logging Pattern:**
+
+```javascript
+// ONLY use for critical system errors when DI logger is unavailable
+// Examples: DependencySystem failures, logger initialization errors, configuration validation
+function logFallback(level, message, data) {
+  if (typeof window !== 'undefined' && window.console && window.console[level]) {
+    window.console[level](message, data);
+  }
+}
+
+// Usage example:
+if (typeof window !== 'undefined' && window.console && window.console.error) {
+  window.console.error('[DependencySystem] Critical error:', errorData);
 }
 ```
 
@@ -243,10 +269,11 @@ Actively detect and eliminate these anti-patterns:
 **Frontend-specific anti-patterns:**
 
 * Adding new modules without approval.
-* Using `console.*` for logging.
+* Using direct `console.*` calls (except in fallback logging patterns for critical system errors).
 * DOM readiness checks performed outside `domReadinessService`.
 * Direct DOM manipulation without sanitization.
 * Missing context tags for event listeners.
+* Duplicate safeHandler implementations (use canonical DI version).
 
 **Authentication anti-patterns (CRITICAL):**
 

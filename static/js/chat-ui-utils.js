@@ -21,16 +21,8 @@ export function createChatUIUtils(deps) {
     domReadinessService
   } = deps;
 
-  function safeHandler(handler, description) {
-    return (...args) => {
-      try {
-        return handler(...args);
-      } catch (err) {
-        logger.error(`[ChatUIUtils][${description}] Handler exception`, err, { context: description });
-        throw err;
-      }
-    };
-  }
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   function attachChatUI(chatMgr) {
     async function _setupUIElements() {

@@ -379,7 +379,8 @@ function toggleLoadingSpinner(show) {
 }
 
 /**
- * safeHandler - Ensures all event handler exceptions are logged via DI logger.
+ * safeHandler - Canonical implementation for all event handler error logging.
+ * Ensures all event handler exceptions are logged via DI logger with proper context.
  * Always use for user-initiated/UI handlers, with context tagging.
  */
 function safeHandler(handler, description) {
@@ -391,9 +392,9 @@ function safeHandler(handler, description) {
     } catch (err) {
       if (logger && typeof logger.error === "function") {
         logger.error(
-          `[app.js][${description}]`,
+          `[safeHandler][${description}]`,
           err && err.stack ? err.stack : err,
-          { context: description || "app.js" }
+          { context: description || "safeHandler" }
         );
       }
       throw err;
@@ -466,89 +467,11 @@ const uiInit = createUIInitializer({
   uiUtils
 });
 
-/**
- * Safely invokes an asynchronous initialization method on a given instance, logging warnings or errors as needed.
- *
- * Attempts to call the specified method on the provided instance. Logs a warning if the instance or method is missing, and logs and rethrows any errors encountered during execution.
- *
- * @param {object} instance - The object containing the initialization method.
- * @param {string} name - The name of the instance, used for logging context.
- * @param {string} methodName - The name of the method to invoke.
- * @returns {Promise<boolean>} Resolves to `true` if initialization succeeds or the method returns `undefined`; otherwise, resolves to the boolean value of the method's result. Returns `false` if the instance or method is missing.
- *
- * @throws {Error} If the initialization method throws an error during execution.
- */
-async function safeInit(instance, name, methodName) {
-  const logger = DependencySystem.modules.get('logger');
-  if (!instance) {
-    logger?.warn(`[safeInit] Instance ${name} is null/undefined. Cannot call ${methodName}.`, { context: `app:safeInit:${name}` });
-    return false;
-  }
-  if (typeof instance[methodName] !== 'function') {
-    logger?.warn(`[safeInit] Method ${methodName} not found on ${name}.`, { context: `app:safeInit:${name}` });
-    return false;
-  }
-  try {
-    const result = await instance[methodName]();
-    return result === undefined ? true : !!result;
-  } catch (err) {
-    logger?.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `app:safeInit:${name}:${methodName}` });
-    throw err;
-  }
-}
+// safeInit and other init helpers are now imported from shared utilities
+// This eliminates duplication across init modules
 
-/**
- * Attempts to retrieve the current authenticated user from the auth module.
- *
- * Prefers the `fetchCurrentUser()` method if available, falling back to `getCurrentUserObject()` or `getCurrentUserAsync()` if necessary. Returns `null` if no user is authenticated, the auth module is unavailable, or an error occurs during retrieval.
- *
- * @returns {Promise<Object|null>} The current user object if authenticated, or `null` if not authenticated or unavailable.
- */
-async function fetchCurrentUser() { // This is the local function in app.js, called during init step 4
-  logger.debug('[app] fetchCurrentUser (app.js local function) called.');
-  try {
-    const authModule = DependencySystem.modules.get('auth');
-    if (!authModule) {
-      logger.warn('[app] fetchCurrentUser: authModule not found in DI.');
-      return null;
-    }
-
-    // Prefer using authModule.fetchCurrentUser() as it's the designated method for this.
-    if (authModule.fetchCurrentUser) {
-      logger.debug('[app] fetchCurrentUser: Calling authModule.fetchCurrentUser().');
-      const userObj = await authModule.fetchCurrentUser();
-      if (userObj) { // userObj can be null if not authenticated or error
-        logger.info('[app] fetchCurrentUser: User object fetched via authModule.fetchCurrentUser()', { userId: userObj.id, username: userObj.username });
-        return userObj;
-      } else {
-        logger.info('[app] fetchCurrentUser: authModule.fetchCurrentUser() returned null (likely not authenticated).');
-        return null;
-      }
-    } else {
-      // Fallback or alternative, though authModule.fetchCurrentUser should be the primary
-      logger.warn('[app] fetchCurrentUser: authModule.fetchCurrentUser method not available. Trying alternatives (getCurrentUserObject/getCurrentUserAsync).');
-      if (authModule.getCurrentUserObject) { // Typically returns cached user
-        const userObjFromGetter = authModule.getCurrentUserObject();
-        if (userObjFromGetter?.id) {
-          logger.info('[app] fetchCurrentUser: User object obtained via authModule.getCurrentUserObject()', { userObjFromGetter });
-          return userObjFromGetter;
-        }
-      }
-      if (authModule.getCurrentUserAsync) { // If there's an async getter
-        const userObjAsync = await authModule.getCurrentUserAsync();
-        if (userObjAsync?.id) {
-          logger.info('[app] fetchCurrentUser: User object obtained via authModule.getCurrentUserAsync()', { userObjAsync });
-          return userObjAsync;
-        }
-      }
-    }
-    logger.info('[app] fetchCurrentUser: No user object could be fetched via authModule.');
-    return null;
-  } catch (error) {
-    logger.error('[app] fetchCurrentUser: Error during user fetching process', error, { context: 'app:fetchCurrentUser' });
-    return null; // Return null on error
-  }
-}
+// fetchCurrentUser logic is now delegated to auth module
+// This eliminates duplication and ensures single source of truth for user fetching
 
 function setupChatInitializationTrigger() {
   const projectManager = DependencySystem.modules.get('projectManager');
@@ -733,54 +656,8 @@ export async function init() {
   }
 
   try {
-    // 0.5) Load modals.html synchronously before ANY initialization
-    logStep('loadModalsHtml', 'pre');
-    let modalsHtmlLoadedSuccessfully = false;
-    try {
-      logger.info('[App.init] Attempting to load modals.html');
-      await Promise.race([
-        domReadinessService.dependenciesAndElements({
-          domSelectors: ['#modalsContainer'], // Ensure container exists
-          timeout: APP_CONFIG.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
-          context: 'app:loadModalsHtml:waitForContainer'
-        }).then(async () => { // made async
-          const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
-          if (!htmlTemplateLoader) {
-            logger.error('[App.init] htmlTemplateLoader not found in DI for modals.html loading.');
-            throw new Error('htmlTemplateLoader not available');
-          }
-          // The loadTemplate itself will dispatch 'modalsLoaded'
-          // and htmlTemplateLoader.js now has detailed logging for this.
-          const result = await htmlTemplateLoader.loadTemplate({
-            url: '/static/html/modals.html',
-            containerSelector: '#modalsContainer',
-            eventName: 'modalsLoaded' // This event is critical for ModalManager
-          });
-          modalsHtmlLoadedSuccessfully = result; // result is true on success, false on failure
-          return result; // Propagate success/failure
-        }),
-        new Promise((_, reject) =>
-          browserAPI.getWindow().setTimeout(
-            () => reject(new Error(`Timeout in loadModalsHtml after ${PHASE_TIMEOUT}ms`)),
-            PHASE_TIMEOUT
-          )
-        )
-      ]);
-      if (!modalsHtmlLoadedSuccessfully) {
-        // This case might be hit if loadTemplate itself returns false but doesn't throw (e.g. container not found)
-        logger.error('[App.init] modals.html loading reported failure (loadTemplate returned false). This will likely break ModalManager initialization.');
-        // Potentially throw here to halt initialization, as ModalManager depends on this.
-        // For now, allow ModalManager's init to fail and report, as it strictly awaits 'modalsLoaded' success.
-      } else {
-        logger.info('[App.init] modals.html loaded successfully.');
-      }
-    } catch (err) {
-      logger.error('[App.init] Error during modals.html loading phase (step 0.5).', err, { context: 'app:init:loadModalsHtml:catch' });
-      // We rethrow here because subsequent steps (like ModalManager init) are critical.
-      // ModalManager's own init will also try to wait for 'modalsLoaded' and timeout/error if it failed here.
-      throw err;
-    }
-    logStep('loadModalsHtml', 'post', { success: modalsHtmlLoadedSuccessfully });
+    // Modal loading is now handled by coreInit and modalManager
+    // This eliminates duplication and centralizes modal management
 
     // 1) Initialize core systems using factory
     logStep('initializeCoreSystems', 'pre');
@@ -820,21 +697,26 @@ export async function init() {
     // Early app:ready dispatch: emits right after auth is ready (guaranteed single-fire)
     if (!_appReadyDispatched) fireAppReady(true);
 
-    // 4) If authenticated, fetch current user
+    // 4) If authenticated, fetch current user via auth module
     logStep('fetchCurrentUser', 'pre', { authed: !!appModule.state.isAuthenticated });
     if (appModule.state.isAuthenticated) {
-      const user = await Promise.race([
-        fetchCurrentUser(),
-        new Promise((_, reject) =>
-          browserAPI.getWindow().setTimeout(
-            () => reject(new Error('Timeout in fetchCurrentUser')),
-            PHASE_TIMEOUT
+      const authModule = DependencySystem.modules.get('auth');
+      if (authModule?.fetchCurrentUser) {
+        const user = await Promise.race([
+          authModule.fetchCurrentUser(),
+          new Promise((_, reject) =>
+            browserAPI.getWindow().setTimeout(
+              () => reject(new Error('Timeout in fetchCurrentUser')),
+              PHASE_TIMEOUT
+            )
           )
-        )
-      ]);
-      if (user) {
-        app.setCurrentUser(user);
-        browserAPI.setCurrentUser(user);
+        ]);
+        if (user) {
+          app.setCurrentUser(user);
+          browserAPI.setCurrentUser(user);
+        }
+      } else {
+        logger.warn('[App.init] Auth module fetchCurrentUser method not available', { context: 'app:init:fetchCurrentUser' });
       }
     }
     logStep('fetchCurrentUser', 'post');
@@ -884,95 +766,8 @@ export async function init() {
         )
       ]);
 
-      // Register navigation views
-      if (!navigationService.hasView('projectList')) {
-        navigationService.registerView('projectList', {
-          show: async () => {
-            try {
-              const dashboard = DependencySystem.modules.get('projectDashboard');
-              if (dashboard?.components?.projectList?.show) {
-                await dashboard.components.projectList.show();
-                return true;
-              }
-              const plc = DependencySystem.modules.get('projectListComponent');
-              if (plc?.show) {
-                await plc.show();
-                return true;
-              }
-              return false;
-            } catch (err) {
-              logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:show' });
-              throw err;
-            }
-          },
-          hide: async () => {
-            try {
-              const dashboard = DependencySystem.modules.get('projectDashboard');
-              if (dashboard?.components?.projectList?.hide) {
-                await dashboard.components.projectList.hide();
-                return true;
-              }
-              const plc = DependencySystem.modules.get('projectListComponent');
-              if (plc?.hide) {
-                await plc.hide();
-                return true;
-              }
-              return false;
-            } catch (err) {
-              logger.error('[initializeUIComponents]', err, { context: 'app:initializeUIComponents:projectList:hide' });
-              throw err;
-            }
-          }
-        });
-      }
-
-      // Enhanced projectDetails view registration with dependency waiting
-      if (!navigationService.hasView('projectDetails')) {
-        navigationService.registerView('projectDetails', {
-          show: async (params) => {
-            try {
-              await domReadinessService.dependenciesAndElements({
-                deps: ['projectDashboard', 'projectDetailsComponent'],
-                timeout: 10000,
-                context: 'app.js:nav:projectDetails'
-              });
-
-              const dashboard = DependencySystem.modules.get('projectDashboard');
-              if (dashboard?.showProjectDetails) {
-                await dashboard.showProjectDetails(params.projectId);
-                return true;
-              }
-              const pdc = DependencySystem.modules.get('projectDetailsComponent');
-              if (pdc?.showProjectDetails) {
-                await pdc.showProjectDetails(params.projectId);
-                return true;
-              }
-              return false;
-            } catch (err) {
-              logger.error('[navigationService]', err, { context: 'app:navigationService:projectDetails:show' });
-              throw err;
-            }
-          },
-          hide: async () => {
-            try {
-              const dashboard = DependencySystem.modules.get('projectDashboard');
-              if (dashboard?.components?.projectDetails?.hideProjectDetails) {
-                await dashboard.components.projectDetails.hideProjectDetails();
-                return true;
-              }
-              const pdc = DependencySystem.modules.get('projectDetailsComponent');
-              if (pdc?.hideProjectDetails) {
-                await pdc.hideProjectDetails();
-                return true;
-              }
-              return false;
-            } catch (err) {
-              logger.error('[navigationService]', err, { context: 'app:navigationService:projectDetails:hide' });
-              throw err;
-            }
-          }
-        });
-      }
+      // Navigation views are now registered by uiInit.registerNavigationViews()
+      // This eliminates duplication and centralizes navigation view management
     }
     logStep('navigationService', 'post');
 
@@ -1061,10 +856,6 @@ export async function init() {
 if (typeof window !== 'undefined') {
   // Setup global error handling using errorInit module
   errorInit.initializeErrorHandling();
-
-  const doc = browserAPI.getDocument();
-  // Use forceShowLoginModal from authInit module
-  const forceShowLoginModal = authInit.forceShowLoginModal;
 
   // ---------------------------------------------------------------------
   // 🚀 Auto-bootstrap the application
