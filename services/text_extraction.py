@@ -5,7 +5,6 @@ Service for extracting text content from various file formats.
 Supports plain text, PDF, DOC/DOCX, JSON, CSV, and code files.
 """
 
-import os
 import json
 import csv
 import re
@@ -55,6 +54,7 @@ except ImportError:
 
 class TextExtractionError(Exception):
     """Exception raised for errors during text extraction."""
+
 
 class TextExtractor:
     """
@@ -107,7 +107,8 @@ class TextExtractor:
             return []
 
         # For small texts, just return as a single chunk
-        if len(text) < chunk_size * 4:  # Rough estimation
+        # Use canonical token counting instead of hardcoded heuristic
+        if count_tokens_text(text) < chunk_size:
             return [text]
 
         chunks = []
@@ -119,8 +120,8 @@ class TextExtractor:
         current_size = 0
 
         for sentence in sentences:
-            # Estimate sentence tokens
-            sentence_tokens = len(sentence) // 4
+            # Use canonical token counting instead of hardcoded len(sentence) // 4
+            sentence_tokens = count_tokens_text(sentence)
 
             if current_size + sentence_tokens > chunk_size and current_chunk:
                 # Save current chunk
@@ -132,7 +133,8 @@ class TextExtractor:
 
                 # Work backwards from the end to get overlap
                 for s in reversed(current_chunk):
-                    s_tokens = len(s) // 4
+                    # Use canonical token counting for overlap calculation
+                    s_tokens = count_tokens_text(s)
                     if overlap_tokens + s_tokens <= overlap:
                         overlap_sentences.insert(0, s)
                         overlap_tokens += s_tokens
@@ -152,7 +154,6 @@ class TextExtractor:
             chunks.append(" ".join(current_chunk))
 
         return chunks
-
 
     async def extract_text(
         self,
@@ -486,7 +487,9 @@ class TextExtractor:
             else:
                 formatted_text = text
 
-            token_count = count_tokens_text(formatted_text)  # Use the canonical token counter
+            token_count = count_tokens_text(
+                formatted_text
+            )  # Use the canonical token counter
 
             metadata = {
                 **file_info,

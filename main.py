@@ -29,7 +29,7 @@ Key Integration Points:
 
 import os
 import logging
-from typing import Dict, Any, Optional, cast
+from typing import Dict, Any
 
 import sentry_sdk
 from sentry_sdk.integrations.logging import LoggingIntegration
@@ -37,7 +37,6 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 # from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration # Unused
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
-from sentry_sdk.types import Event, Hint
 from fastapi import FastAPI, Request, HTTPException, Response
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -90,7 +89,7 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
             "http://localhost:8000",
             "http://localhost:3000",
             "http://127.0.0.1:8000",
-            "http://127.0.0.1:3000"
+            "http://127.0.0.1:3000",
         ]
 
     if is_production:
@@ -201,7 +200,7 @@ from config import settings  # noqa: E402
 from db import init_db, get_async_session_context  # noqa: E402
 from utils.auth_utils import clean_expired_tokens  # noqa: E402
 from utils.db_utils import schedule_token_cleanup  # noqa: E402
-from utils.sentry_config import filter_sensitive_event  # Canonical Sentry filter
+from utils.sentry_utils import filter_sensitive_event  # Canonical Sentry filter
 
 # ----- Ensure ALL models are registered for migrations/table creation -----
 import models  # noqa: E402, F401 # F401: imported but unused - common for model registration

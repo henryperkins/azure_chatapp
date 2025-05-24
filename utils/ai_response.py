@@ -33,15 +33,15 @@ class AIResponseOptions:
 
     def to_api_dict(self, force_reasoning_for_model: Optional[str] = None) -> dict[str, Any]:
         d = {
-            "image_data"               : self.image_data,
-            "vision_detail"            : self.vision_detail,
-            "enable_thinking"          : self.enable_thinking,
-            "thinking_budget"          : self.thinking_budget,
+            "image_data": self.image_data,
+            "vision_detail": self.vision_detail,
+            "enable_thinking": self.enable_thinking,
+            "thinking_budget": self.thinking_budget,
             "enable_markdown_formatting": self.enable_markdown_formatting,
-            "stream"                   : self.stream,
-            "max_tokens"               : self.max_tokens,
-            "reasoning_effort"         : self.reasoning_effort,
-            "temperature"              : self.temperature,
+            "stream": self.stream,
+            "max_tokens": self.max_tokens,
+            "reasoning_effort": self.reasoning_effort,
+            "temperature": self.temperature,
             **self.extra_params,
         }
         # Drop reasoning_summary – we never want to request a summary
@@ -115,7 +115,7 @@ async def generate_ai_response(
                     knowledge_context = await retrieve_knowledge_context(
                         query=last_user_content,
                         project_id=conversation.project_id,  # type: ignore[arg-type]
-                        db=db
+                        db=db,
                     )
                 else:
                     logger.warning(f"Invalid project_id type: {type(conversation.project_id)}")

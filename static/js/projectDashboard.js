@@ -249,13 +249,28 @@ export function createProjectDashboard(deps) {
         this._setupEventListeners();
         this._registerNavigationViews();
 
+        // CONSOLIDATED: Check initial authentication state from appModule.state (reuse existing appModule variable)
+        const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+
+        this.logger.debug('[ProjectDashboard][initialize] Checking initial auth state', {
+          isAuthenticated,
+          appModuleExists: !!appModule,
+          context: 'projectDashboard'
+        });
+
         // Si el usuario ya está autenticado, mostrar la vista de proyectos
-        if (this.auth?.isAuthenticated?.()) {
+        if (isAuthenticated) {
           try {
             await this.showProjectList();
           } catch (err) {
             this.logger.error('[ProjectDashboard][initialize] showProjectList failed', err, { context: 'projectDashboard' });
           }
+        } else {
+          // Show login required state
+          const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
+          const mainCnt = this.domAPI.getElementById('mainContent');
+          if (loginMsg) loginMsg.classList.remove('hidden');
+          if (mainCnt) mainCnt.classList.add('hidden');
         }
 
         // Mark initialized
@@ -404,7 +419,11 @@ export function createProjectDashboard(deps) {
 
         // If no project object supplied, load from projectManager
         if (!project) {
-          if (this.auth?.isAuthenticated?.() && this.projectManager?.loadProjectDetails) {
+          // CONSOLIDATED: Check authentication state from appModule.state
+          const appModuleRef = this.app?.DependencySystem?.modules?.get?.('appModule');
+          const isAuthenticated = appModuleRef?.state?.isAuthenticated ?? false;
+
+          if (isAuthenticated && this.projectManager?.loadProjectDetails) {
             project = await this.projectManager.loadProjectDetails(projectId);
             if (!project) {
               await this.showProjectList();

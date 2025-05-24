@@ -128,7 +128,8 @@ export function createUIInitializer({
         eventHandlers,
         domReadinessService,
         logger,
-        sanitizer
+        sanitizer,
+        DependencySystem
       });
       DependencySystem.register('projectDetailsEnhancements', projectDetailsEnhancementsInstance);
 
@@ -153,7 +154,8 @@ export function createUIInitializer({
         projectManager: DependencySystem.modules.get('projectManager'),
         app: DependencySystem.modules.get('app'),
         chatManager: DependencySystem.modules.get('chatManager'),
-        domReadinessService
+        domReadinessService,
+        DependencySystem
       });
       DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
     }

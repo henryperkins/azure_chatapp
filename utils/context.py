@@ -13,14 +13,13 @@ and response_utils.py.
 """
 
 import logging
-# NOTE: utils.context keeps legacy helpers; new code should prefer utils.tokens
+import json
 from typing import List, Any, Union, AsyncGenerator, cast
 
 # Unified token helpers
 from utils.tokens import count_tokens_messages
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-import json
 from utils.openai import openai_chat
 
 
@@ -55,7 +54,9 @@ async def do_summarization(
     try:
         # Collect all response chunks from the async generator
         complete_response: dict[str, Any] = {}
-        result: Union[dict[str, Any], AsyncGenerator[Union[dict[str, Any], bytes], None]] = await openai_chat(
+        result: Union[
+            dict[str, Any], AsyncGenerator[Union[dict[str, Any], bytes], None]
+        ] = await openai_chat(
             messages=summarization_input,
             model_name=model_name,
             max_completion_tokens=300,
@@ -105,37 +106,8 @@ class ContextTokenTracker:
         self.used_tokens += tokens
 
 
-async def trim_context_to_window(
-    msgs: list[dict],
-    model_id: str,
-    max_ctx: int,
-) -> tuple[list[dict], int]:
-    """
-    Trims a list of message dicts so the total token count (by model) does not exceed max_ctx.
-    Returns (trimmed_msgs, removed_tokens): dropped oldest messages as needed.
-    """
-    total_tokens = count_tokens_messages(msgs, model_id)
-    if total_tokens <= max_ctx:
-        return msgs, 0
-
-    trimmed = list(msgs)  # shallow copy to preserve caller's list
-    removed_tokens = 0
-
-    # Preferential trimming strategy:
-    #   1. Drop *non-system* messages (oldest first) to preserve knowledge-base
-    #      context that is usually encoded as `role == "system"`.
-    #   2. If only system messages remain and we still exceed the window, fall
-    #      back to FIFO trimming.
-    while trimmed and count_tokens_messages(trimmed, model_id) > max_ctx:
-        # Locate first candidate that is *not* a system-level message.
-        idx_to_remove = next(
-            (i for i, m in enumerate(trimmed) if m.get("role") != "system"),
-            0,  # Fallback to oldest message (idx 0) if all are system
-        )
-
-        msg = trimmed.pop(idx_to_remove)
-        removed_tokens += count_tokens_messages([msg], model_id)
-    return trimmed, removed_tokens
+# MOVED: trim_context_to_window() moved to services.context_manager for consolidation
+# Import from services.context_manager if needed: from services.context_manager import trim_context_to_window
 
 
 async def token_limit_check(chat_id: str, db: AsyncSession):
@@ -168,9 +140,3 @@ async def token_limit_check(chat_id: str, db: AsyncSession):
         logger.debug(
             f"No summarization needed for chat_id={chat_id}, tokens={total_tokens}"
         )
-
-
-# NOTE: The following token calculation functions were removed by refactor:
-#   - estimate_token_count
-#   - estimate_tokens
-# Refactor all code to use count_tokens_messages or count_tokens_text from utils.tokens directly.

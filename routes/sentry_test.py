@@ -14,7 +14,7 @@ import random
 import uuid
 import asyncio  # Added for asyncio.sleep
 
-from utils.sentry_helpers import tag_transaction, sentry_span, inject_sentry_trace_headers
+from utils.sentry_utils import tag_transaction, sentry_span, inject_sentry_trace_headers
 from utils.mcp_sentry import (
     get_issue_details,
     search_issues,

@@ -47,7 +47,7 @@ from fastapi.responses import JSONResponse
 from fastapi import Request as FastAPIRequest
 import sentry_sdk
 
-from utils.logging_config import request_id_var, trace_id_var   # NEW
+from utils.logging_config import request_id_var, trace_id_var  # NEW
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration, ignore_logger
@@ -60,11 +60,29 @@ from sentry_sdk.types import Event, Hint
 # ------------------------------------------------------------------------- #
 
 __all__ = [
-    "configure_sentry", "sentry_span", "set_sentry_tag",
-    "set_sentry_user", "set_sentry_context", "get_current_trace_id",
+    # Core configuration
+    "configure_sentry",
+    "filter_sensitive_event",
+    # Span and tracing helpers
+    "sentry_span",
+    "set_sentry_tag",
+    "set_sentry_user",
+    "set_sentry_context",
+    "get_current_trace_id",
+    "extract_sentry_trace",
+    "tag_transaction",
+    # Response helpers
+    "inject_sentry_trace_headers",
+    "make_sentry_trace_response",
+    # Background tasks
     "create_background_task",
-    "request_id_var",          # NEW
-    "trace_id_var",            # NEW
+    # Breadcrumbs and messages
+    "capture_breadcrumb",
+    "capture_custom_message",
+    "capture_critical_issue_with_logs",
+    # Context variables (from logging_config)
+    "request_id_var",
+    "trace_id_var",
 ]
 
 # ------------------------------------------------------------------------- #
@@ -154,7 +172,9 @@ def _filter_event(event: Event) -> Event:
 # ------------------------------------------------------------------------- #
 # Sentry before_send hooks                                                  #
 # ------------------------------------------------------------------------- #
-def filter_sensitive_event(event: Event, hint: Optional[Hint] = None) -> Optional[Event]:
+def filter_sensitive_event(
+    event: Event, hint: Optional[Hint] = None
+) -> Optional[Event]:
     """
     Main `before_send` hook.
     • Scrubs sensitive fields.
@@ -220,7 +240,8 @@ def configure_sentry(
     sql_flag = (
         enable_sqlalchemy
         if enable_sqlalchemy is not None
-        else str(os.getenv("SENTRY_SQLA_ASYNC_ENABLED", "false")).lower() in {"1", "true"}
+        else str(os.getenv("SENTRY_SQLA_ASYNC_ENABLED", "false")).lower()
+        in {"1", "true"}
     )
     if sql_flag:
         integrations.append(SqlalchemyIntegration())
@@ -358,7 +379,10 @@ def make_sentry_trace_response(
 # Context-aware background tasks helper                                     #
 # ------------------------------------------------------------------------- #
 def create_background_task(
-    coro_func: Callable[..., "asyncio.Future[Any]"] | Callable[..., "AsyncGenerator[Any, None]"],
+    coro_func: (
+        Callable[..., "asyncio.Future[Any]"]
+        | Callable[..., "AsyncGenerator[Any, None]"]
+    ),
     *args: Any,
     **kwargs: Any,
 ) -> asyncio.Task[Any]:
@@ -379,7 +403,8 @@ def create_background_task(
 # Sentry middleware helpers (extract_sentry_trace, tag_transaction, capture_breadcrumb)
 # ------------------------------------------------------------------------- #
 
-def extract_sentry_trace(request: 'FastAPIRequest') -> dict[str, str]:
+
+def extract_sentry_trace(request: "FastAPIRequest") -> dict[str, str]:
     """
     Extracts Sentry tracing headers from a FastAPI request for distributed tracing.
     Returns a dictionary of relevant headers for Sentry's continue_trace.
@@ -390,6 +415,7 @@ def extract_sentry_trace(request: 'FastAPIRequest') -> dict[str, str]:
         if value:
             trace_headers[header] = value
     return trace_headers
+
 
 def tag_transaction(key: str, value: Any) -> None:
     """
@@ -405,7 +431,10 @@ def tag_transaction(key: str, value: Any) -> None:
     except Exception:
         pass
 
-def capture_breadcrumb(category: str, message: str, level: str = "info", data: dict | None = None) -> None:
+
+def capture_breadcrumb(
+    category: str, message: str, level: str = "info", data: dict | None = None
+) -> None:
     """
     Record a custom Sentry breadcrumb with optional extra data.
     """
@@ -418,6 +447,7 @@ def capture_breadcrumb(category: str, message: str, level: str = "info", data: d
         )
     except Exception:
         pass
+
 
 # ------------------------------------------------------------------------- #
 # Misc utilities                                                             #

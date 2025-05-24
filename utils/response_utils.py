@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Azure OpenAI Configuration
 AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT.rstrip("/")
 AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
-API_VERSION = "2025-02-01-preview"
+API_VERSION = "2025-03-01-preview"
 
 
 async def create_standard_response(
