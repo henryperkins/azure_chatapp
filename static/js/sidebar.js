@@ -663,6 +663,36 @@ export function createSidebar({
         description: 'Auto-close sidebar on mobile after link click'
       }
     );
+
+    /* ── Mobile bottom nav (lg:hidden) ───────────────────────────── */
+    const mobileNavBtns = domAPI.querySelectorAll('.mobile-nav-item');
+    mobileNavBtns.forEach(btn => {
+      const tab = btn.dataset?.tab;
+      if (!tab) return;               // safety
+
+      // Decide what each button does
+      const action = () => {
+        // visual “active” state
+        mobileNavBtns.forEach(b => b.classList.toggle('active', b === btn));
+
+        if (tab === 'chat') {                 // hide sidebar, stay in chat
+          closeSidebar();
+        } else if (tab === 'projects') {      // open sidebar on “Projects” tab
+          if (!visible) showSidebar();
+          activateTab('projects');
+        } else if (tab === 'settings') {      // open sidebar settings panel
+          if (!visible) showSidebar();
+          toggleSettingsPanel();
+        }
+      };
+
+      eventHandlers.trackListener(
+        btn,
+        'click',
+        safeHandler(action, `MobileBottomNav:${tab}`),
+        { context: 'Sidebar', description: `Mobile bottom nav (${tab})` }
+      );
+    });
   }
 
   function restorePersistentState() {
