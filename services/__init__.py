@@ -58,6 +58,8 @@ __all__ = [
     "update_knowledge_base",
     "delete_knowledge_base",
     "toggle_project_kb",
+    "attach_github_repository",
+    "detach_github_repository",
     "get_project_file_list",
     "get_knowledge_base_health",
 ]

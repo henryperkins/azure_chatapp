@@ -10,7 +10,6 @@ Consolidated routes for knowledge base management with improved:
 """
 
 import logging
-import io, os
 from uuid import UUID
 from typing import Any, Optional, Dict, List
 
@@ -47,8 +46,9 @@ from services.knowledgebase_service import (
     delete_knowledge_base as kb_service_delete_kb,
     toggle_project_kb,
     upload_file_to_project,
+    attach_github_repository as kb_attach_repository,
+    detach_github_repository as kb_detach_repository,
 )
-from services.github_service import GitHubService
 
 # Models and Utils
 from models.project import Project
@@ -504,38 +504,20 @@ async def attach_github_repository(
     """
     try:
         current_user = current_user_tuple[0]
-        project: Project = await validate_project_access(project_id, current_user, db)
-        if not project.knowledge_base:
-            raise HTTPException(status_code=400, detail="Project has no knowledge base")
+        # Validate project access
+        await validate_project_access(project_id, current_user, db)
 
-        github_service = GitHubService(
-            token=getattr(current_user, "github_token", None)
+        result = await kb_attach_repository(
+            project_id=project_id,
+            repo_url=repo_data.repo_url,
+            db=db,
+            branch=repo_data.branch or "main",
+            file_paths=repo_data.file_paths,
+            user_id=current_user.id,
         )
-        branch = repo_data.branch if repo_data.branch else "main"
-        repo_path = github_service.clone_repository(
-            repo_url=repo_data.repo_url, branch=branch
-        )
-
-        file_paths = repo_data.file_paths or []
-        fetched_files = github_service.fetch_files(repo_path, file_paths)
-
-        for abs_path in fetched_files:
-            filename = os.path.basename(abs_path)
-            data = open(abs_path, "rb").read()
-            upload_file = UploadFile(filename=filename, file=io.BytesIO(data))
-            await upload_file_to_project(
-                project_id=project_id,
-                file=upload_file,
-                db=db,
-                user_id=current_user.id,
-            )
 
         return await create_standard_response(
-            {
-                "repo_url": repo_data.repo_url,
-                "files_processed": len(fetched_files),
-            },
-            "GitHub repository attached successfully",
+            result, "GitHub repository attached successfully"
         )
 
     except HTTPException:
@@ -559,21 +541,18 @@ async def detach_github_repository(
     """
     try:
         current_user = current_user_tuple[0]
-        project: Project = await validate_project_access(project_id, current_user, db)
-        if not project.knowledge_base:
-            raise HTTPException(status_code=400, detail="Project has no knowledge base")
+        # Validate project access
+        await validate_project_access(project_id, current_user, db)
 
-        github_service = GitHubService(
-            token=getattr(current_user, "github_token", None)
+        result = await kb_detach_repository(
+            project_id=project_id,
+            repo_url=repo_data.repo_url,
+            db=db,
+            user_id=current_user.id,
         )
 
-        repo_path = github_service.clone_repository(repo_url=repo_data.repo_url)
-        file_paths = github_service.fetch_files(repo_path, [])
-        github_service.remove_files(repo_path, file_paths)
-
         return await create_standard_response(
-            {"repo_url": repo_data.repo_url, "files_removed": len(file_paths)},
-            "GitHub repository detached successfully",
+            result, "GitHub repository detached successfully"
         )
 
     except HTTPException:
