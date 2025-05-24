@@ -1,45 +1,23 @@
-/**
- * ProjectDetailsComponent (guardrails-compliant, fully featured)
- * Strict factory-export, dependency-injected, context-logged, modular project details UI.
- * All interactive/business logic is present (files/convos/artifacts/stats/chats/etc.).
- *
- * All guardrails enforced:
- *   - Export only `createProjectDetailsComponent` factory, no top-level logic.
- *   - Validate/fail on all required dependencies up front. DI only.
- *   - All logging via DI-provided logger, with context.
- *   - All DOM/app readiness via DI domReadinessService (never custom events/polling).
- *   - Never access window/document/console except via injected domAPI (DI).
- *   - All network, modals, subcomponents via injected services/classes.
- *   - All user HTML sanitized via sanitizer.sanitize.
- *   - All event listeners tracked/cleaned/removed via eventHandlers, with context.
- *   - No direct mutation of app.state or global.
- *   - No side effects at import.
- */
-
 const MODULE_CONTEXT = "ProjectDetailsComponent";
 
-export function createProjectDetailsComponent(deps) {
-  const {
-    // Required
-    domAPI,
-    htmlTemplateLoader,
-    domReadinessService,
-    eventHandlers,
-    navigationService,
-    sanitizer,
-    logger,
-    projectManager,
-    APP_CONFIG,
-    // Optional
-    modalManager,
-    FileUploadComponentClass,
-    knowledgeBaseComponent = null,
-    modelConfig = null,
-    chatManager = null,
-    apiClient = null,
-    app = null               // ← NUEVO
-  } = deps || {};
-
+export function createProjectDetailsComponent({
+  domAPI,
+  htmlTemplateLoader,
+  domReadinessService,
+  eventHandlers,
+  navigationService,
+  sanitizer,
+  logger,
+  projectManager,
+  APP_CONFIG,
+  modalManager = null,
+  FileUploadComponentClass = null,
+  knowledgeBaseComponent = null,
+  modelConfig = null,
+  chatManager = null,
+  apiClient = null,
+  app = null
+} = {}) {
   const missing = [];
   if (!domAPI) missing.push("domAPI");
   if (!htmlTemplateLoader) missing.push("htmlTemplateLoader");
@@ -48,14 +26,12 @@ export function createProjectDetailsComponent(deps) {
   if (!navigationService) missing.push("navigationService");
   if (!sanitizer) missing.push("sanitizer");
   if (!logger) missing.push("logger");
-  // Allow projectManager to be null initially - it gets set later via setProjectManager()
   if (missing.length) {
     if (logger && logger.error) {
       logger.error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`, { context: MODULE_CONTEXT });
     }
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`);
   }
-
   return new ProjectDetailsComponent({
     domAPI,
     htmlTemplateLoader,
@@ -93,10 +69,6 @@ class ProjectDetailsComponent {
     this.modelConfig = deps.modelConfig;
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
-
-    // Close the constructor here
-
-    // Begin field assignments that must occur on each instance
     this.containerId = "projectDetailsView";
     this.templatePath = "/static/html/project_details.html";
     this.state = {
@@ -115,15 +87,9 @@ class ProjectDetailsComponent {
     this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
   }
 
-  setProjectManager(pm) {
-    this.projectManager = pm;
-  }
-  setChatManager(cm) {
-    this.chatManager = cm;
-  }
+  setProjectManager(pm) { this.projectManager = pm; }
+  setChatManager(cm) { this.chatManager = cm; }
 
-
-  // --- Logging (guardrails) ---
   _logInfo(msg, meta) { try { this.logger.info(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
   _logWarn(msg, meta) { try { this.logger.warn(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
   _logError(msg, err, meta) {
@@ -137,10 +103,8 @@ class ProjectDetailsComponent {
     };
   }
 
-  // --- State ---
   _setState(partial) { this.state = { ...this.state, ...partial }; }
 
-  // --- Template & Readiness ---
   async _loadTemplate() {
     if (this.state.templateLoaded) return true;
     this._setState({ loading: true });
@@ -157,8 +121,6 @@ class ProjectDetailsComponent {
         containerSelector: `#${this.containerId}`,
         eventName: 'projectDetailsTemplateLoaded'
       });
-
-      // htmlTemplateLoader puede devolver `undefined`; considéralo éxito salvo que sea `false`
       if (loadResult === false) {
         this._setState({ loading: false });
         return false;
@@ -166,7 +128,6 @@ class ProjectDetailsComponent {
       this.elements.container = container;
       this._setState({ templateLoaded: true, loading: false });
       this._logInfo("Template loaded");
-
       return true;
     } catch (err) {
       this._logError(`Failed to load template`, err);
@@ -186,46 +147,36 @@ class ProjectDetailsComponent {
       '.project-tab', '#chatTab', '#filesTab', '#knowledgeTab', '#settingsTab'
     ];
     const optionalSelectors = [
-      // FIXED: Removed non-existent elements that were causing timeout warnings
-      // "#projectDescription", "#projectGoals", "#projectInstructions", // These don't exist in current template
-      "#knowledgeSearchInput", "#searchKnowledgeBtn", // Search elements (exist in HTML)
-      "#knowledgeResults", // Results container (exists in HTML)
-      "#kbToggle", "#reprocessButton", "#setupButton", "#settingsButton", // Action buttons (exist in HTML)
-      "#modelSelect", // Model selection (exists in HTML)
-      "#knowledgeBaseName", "#kbModelDisplay", "#kbVersionDisplay", "#kbLastUsedDisplay", // Display elements (exist in HTML)
-      "#kbDocCount", "#kbChunkCount", // Stats elements (exist in HTML)
-      "#projectNameInput", "#projectDescriptionInput", // Settings tab elements (exist in HTML)
-      "#archiveProjectBtn", "#deleteProjectBtn", // Danger zone buttons (exist in HTML)
-      "#editProjectBtn", "#projectMenuBtn", "#projectFab" // Action buttons (exist in HTML)
+      "#knowledgeSearchInput", "#searchKnowledgeBtn",
+      "#knowledgeResults",
+      "#kbToggle", "#reprocessButton", "#setupButton", "#settingsButton",
+      "#modelSelect",
+      "#knowledgeBaseName", "#kbModelDisplay", "#kbVersionDisplay", "#kbLastUsedDisplay",
+      "#kbDocCount", "#kbChunkCount",
+      "#projectNameInput", "#projectDescriptionInput",
+      "#archiveProjectBtn", "#deleteProjectBtn",
+      "#editProjectBtn", "#projectMenuBtn", "#projectFab"
     ];
     try {
       await this.domReadinessService.elementsReady(coreSelectors, {
         timeout: this.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 5000,
         context: `${MODULE_CONTEXT}::_ensureElementsReady`
       });
-      // fire-and-forget for optional elements – do NOT block init
-      // ENHANCED: Reduced timeout and improved error handling for optional elements
       this.domReadinessService.elementsReady(optionalSelectors, {
         observeMutations: true,
-        timeout: 2000, // Reduced timeout for optional elements
+        timeout: 2000,
         context: `${MODULE_CONTEXT}::optionalElements`
       }).catch((err) => {
-        // Log as info instead of warning since these are truly optional
         this._logInfo(`Some optional elements not found within timeout, continuing anyway`, {
           missingElements: err?.message || 'unknown',
           context: `${MODULE_CONTEXT}::optionalElements`
         });
       });
-      // Map elements cache
       const $ = (sel) => this.elements.container.querySelector(sel);
       this.elements.title = $("#projectTitle");
       this.elements.backBtn = $("#backToProjectsBtn");
-
-      // Cache tab buttons with better error handling
       this.elements.tabBtns = this.elements.container.querySelectorAll(".project-tab");
       this._logInfo(`Found ${this.elements.tabBtns.length} tab buttons`);
-
-      // Log each tab button for debugging
       this.elements.tabBtns.forEach((btn, index) => {
         this._logInfo(`Tab button ${index}: ${btn.dataset?.tab || 'no-tab-data'}`, {
           element: btn.tagName,
@@ -233,7 +184,6 @@ class ProjectDetailsComponent {
           dataset: btn.dataset
         });
       });
-
       this.elements.tabs = {
         chat: $("#chatTab"),
         files: $("#filesTab"),
@@ -241,24 +191,19 @@ class ProjectDetailsComponent {
         knowledge: $("#knowledgeTab"),
         settings: $("#settingsTab")
       };
-
-      // Validate tab content elements
       Object.entries(this.elements.tabs).forEach(([tabName, tabElement]) => {
         if (!tabElement) {
           this._logWarn(`Tab content element not found: ${tabName}`);
         }
       });
-      // Details tab elements
       this.elements.projectNameDisplay = $("#projectNameDisplay");
       this.elements.projectDescriptionDisplay = $("#projectDescriptionDisplay");
       this.elements.projectGoalsDisplay = $("#projectGoalsDisplay");
       this.elements.projectInstructionsDisplay = $("#projectInstructionsDisplay");
       this.elements.projectCreatedDate = $("#projectCreatedDate");
-      // Optional: lists/containers for subcomponents
       this.elements.filesList = $("#filesList");
       this.elements.conversationsList = $("#conversationsList");
       this.elements.artifactsList = $("#artifactsList");
-      // Upload/drag zone
       this.elements.fileInput = $("#fileInput");
       this.elements.uploadBtn = $("#uploadFileBtn");
       this.elements.dragZone = $("#dragDropZone");
@@ -273,9 +218,7 @@ class ProjectDetailsComponent {
     }
   }
 
-  // --- Initialize complex subcomponents and event flows ---
   async _initSubComponents() {
-    // File Upload Component
     if (this.FileUploadComponentClass && !this.fileUploadComponent && this.elements.fileInput) {
       try {
         this.fileUploadComponent = new this.FileUploadComponentClass({
@@ -283,7 +226,7 @@ class ProjectDetailsComponent {
           domAPI: this.domAPI,
           projectManager: this.projectManager,
           app: this.eventHandlers.DependencySystem.modules.get("app"),
-          domReadinessService: this.domReadinessService,      // ← NEW
+          domReadinessService: this.domReadinessService,
           logger: this.logger,
           onUploadComplete: this._safeHandler(async () => {
             if (!this.projectId) return;
@@ -304,27 +247,19 @@ class ProjectDetailsComponent {
     }
   }
 
-  // Main business/event logic wiring:
   _bindEventListeners() {
-    // Use correct context for project details component
     this.eventHandlers.cleanupListeners({ context: 'ProjectDetailsComponent' });
-
-    // Cancel any in-flight async ops to avoid memory-leak / state bleed
     this._cleanupPendingOperations();
     if (!this.elements.container) {
       this._logWarn('Container element not found, cannot bind event listeners');
       return;
     }
-
-    // Back button
     if (this.elements.backBtn) {
       this.eventHandlers.trackListener(
         this.elements.backBtn, "click", this._safeHandler(
           () => { this.navigationService.navigateToProjectList(); }, "BackBtn"
         ), { context: 'ProjectDetailsComponent', description: "BackButton" });
     }
-
-    // Tab buttons - ensure they exist and are properly bound
     if (this.elements.tabBtns && this.elements.tabBtns.length > 0) {
       this._logInfo(`Binding ${this.elements.tabBtns.length} tab buttons`);
       this.elements.tabBtns.forEach((btn, index) => {
@@ -332,10 +267,8 @@ class ProjectDetailsComponent {
           this._logWarn(`Tab button ${index} missing or invalid dataset.tab`, { btn });
           return;
         }
-
         const tabName = btn.dataset.tab;
         this._logInfo(`Binding tab button: ${tabName}`);
-
         this.eventHandlers.trackListener(
           btn, "click", this._safeHandler((ev) => {
             this._logInfo(`Tab clicked: ${tabName}`);
@@ -352,10 +285,7 @@ class ProjectDetailsComponent {
         container: !!this.elements.container
       });
     }
-
-    // Example: event bus listeners
     const doc = this.domAPI.getDocument();
-    // Multi-source event flows for files/convos/artifacts/stats/knowledge
     this.eventHandlers.trackListener(doc, "projectFilesLoaded",
       this._safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
       { context: 'ProjectDetailsComponent', description: "FilesLoaded" });
@@ -374,9 +304,6 @@ class ProjectDetailsComponent {
       this._safeHandler(
         async (e) => {
           if (!this.knowledgeBaseComponent) return;
-          /* Ensure KnowledgeBaseComponent has captured its DOM elements
-             before attempting to render. This prevents a race-condition
-             where the KB event fires before KBC.initialize() has run. */
           try {
             await this.knowledgeBaseComponent.initialize?.(
               false,
@@ -402,11 +329,9 @@ class ProjectDetailsComponent {
     );
   }
 
-  // --- Tab switching ---
   switchTab(tabName) {
     if (!this.elements.tabs[tabName]) return;
     this._setState({ activeTab: tabName });
-    // Highlight the buttons
     this.elements.tabBtns?.forEach(btn => {
       const active = btn.dataset.tab === tabName;
       btn.classList.toggle("tab-active", active);
@@ -418,14 +343,12 @@ class ProjectDetailsComponent {
     });
     this._logInfo(`Activated tab: ${tabName}`);
     this._loadTabContent(tabName);
-
     if (tabName === 'conversations' || tabName === 'chat') {
       this._restoreChatAndModelConfig();
       this._updateNewChatButtonState();
     }
   }
 
-  // --- Per-tab: load/refresh data on view, call PM or init subcomponents as needed ----
   _loadTabContent(tab) {
     if (!this.projectId) return;
     switch (tab) {
@@ -447,11 +370,9 @@ class ProjectDetailsComponent {
             .catch(e => this._logError("Error initializing knowledgeBaseComponent", e));
         }
         break;
-      // extend
     }
   }
 
-  // --- DATA: fetch
   async _fetchProjectData(projectId) {
     this._logInfo(`Fetching data for project ${projectId}...`);
     try {
@@ -467,13 +388,10 @@ class ProjectDetailsComponent {
     }
   }
 
-  // --- Main render (title/details/etc.) + per-tab specialized rendering
   _renderProjectData() {
     if (!this.elements.container || !this.projectData) return;
     const { name, description, goals, customInstructions, created_at } = this.projectData;
     if (this.elements.title) this.elements.title.textContent = name || "Untitled Project";
-
-    // Render project details in the details tab
     if (this.elements.projectNameDisplay) {
       this.elements.projectNameDisplay.textContent = name || "Untitled Project";
     }
@@ -492,8 +410,6 @@ class ProjectDetailsComponent {
     if (this.elements.projectCreatedDate && created_at) {
       this.elements.projectCreatedDate.textContent = this._formatDate(created_at);
     }
-
-    // MAY trigger tab data reloads/rendering here for first view
   }
 
   _formatDate(dateString) {
@@ -505,7 +421,6 @@ class ProjectDetailsComponent {
     }
   }
 
-  // --- Renderers for lists/files/artifacts/convos/stats, always sanitized, all events tracked
   renderFiles(files) {
     const c = this.elements.filesList;
     if (!c) return;
@@ -550,23 +465,12 @@ class ProjectDetailsComponent {
   renderStats(s = {}) {
     const c = this.elements.container;
     if (!c) return;
-
     const sel = (id) => c.querySelector(id);
-
-    // Counts
     if (sel('#fileCount') && s.fileCount !== undefined) sel('#fileCount').textContent = s.fileCount;
     if (sel('#conversationCount') && s.conversationCount !== undefined) sel('#conversationCount').textContent = s.conversationCount;
     if (sel('#artifactCount') && s.artifactCount !== undefined) sel('#artifactCount').textContent = s.artifactCount;
-
-    // (mobile refactor) Token usage UI removed — stats now handled elsewhere
   }
 
-  // --- File/Conversation/Artifact Item DOM (sanitized, event-tracked) ---
-
-  /**
-   * Visually highlight the conversation that is currently open
-   * @param {string|number} activeId
-   */
   _highlightActiveConversation(activeId) {
     const list = this.elements?.conversationsList;
     if (!list) return;
@@ -578,7 +482,6 @@ class ProjectDetailsComponent {
     });
   }
 
-  // ─── Desactivar UI de chat en caso de error / KB inactivo ───
   disableChatUI(reason = 'Chat unavailable') {
     try {
       const input = this.domAPI.getElementById('chatInput');
@@ -592,7 +495,7 @@ class ProjectDetailsComponent {
       });
       const chatBox = this.domAPI.querySelector('#chatTab .chat-container');
       if (chatBox) this.domAPI.addClass(chatBox, 'opacity-40');
-    } catch {/* silent */ }
+    } catch {}
   }
 
   _fileItem(file) {
@@ -600,7 +503,6 @@ class ProjectDetailsComponent {
     const div = doc.createElement("div");
     div.className = "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-xs hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.fileId = file.id;
-    // Offer safe display and controls, all sanitized
     this._setHTML(div, `
       <div class="flex items-center gap-3 min-w-0 flex-1">
         <span class="text-xl text-primary">📄</span>
@@ -673,7 +575,6 @@ class ProjectDetailsComponent {
     return div;
   }
 
-  // --- File download/delete/confirm helpers ---
   async _confirmDeleteFile(fileId, fileName) {
     if (!this.projectId || !fileId) return;
     if (!this.modalManager) return;
@@ -697,17 +598,13 @@ class ProjectDetailsComponent {
     catch (e) { this._logError("Error downloading file", e); }
   }
 
-
   async _openConversation(cv) {
     if (!this.projectId || !cv?.id) return;
-    // ----- Cancel/concurrency handling -----
     if (!this._pendingOperations) this._pendingOperations = new Map();
     const operationKey = `conversation_${cv.id}`;
-    // Cancel any existing
     if (this._pendingOperations.has(operationKey)) {
       this._pendingOperations.get(operationKey).cancel();
     }
-    // CancelableOperation class definition (injected/defined inline here, singleton-per-method)
     class CancelableOperation {
       constructor() {
         this.canceled = false;
@@ -738,37 +635,29 @@ class ProjectDetailsComponent {
 
     return operation.execute(async () => {
       try {
-        // Revalidate project context; set if not present/doesn't match
         const currentProject = this.projectManager.getCurrentProject?.();
         if (!currentProject || currentProject.id !== this.projectId) {
           this.app?.setCurrentProject?.({ id: this.projectId });
           try {
-            // Optionally load full project details if possible
             const projectDetails = await this.projectManager.loadProjectDetails(this.projectId);
             if (projectDetails) {
               this.app?.setCurrentProject?.(projectDetails);
             }
           } catch (_e) {
             this._logError("Error loading project before conversation", _e);
-            // continue
           }
         }
-        // Now get conversation, with context fix
         await this.projectManager.getConversation(cv.id);
         if (operation.canceled) return null;
         if (this.navigationService) {
           this.navigationService.navigateToConversation(this.projectId, cv.id);
         }
-        // ENSURE the per-project chatManager is initialized and loads the selected conversation
         if (this.chatManager && typeof this.chatManager.loadConversation === "function") {
-          // CRITICAL FIX: Ensure ChatManager is initialized with project ID before loading conversation
           if (!this.chatManager.projectId || this.chatManager.projectId !== this.projectId) {
             this._logInfo("ChatManager not initialized for current project, initializing first", {
               currentProjectId: this.projectId,
               chatManagerProjectId: this.chatManager.projectId
             });
-
-            // Try to sync project ID from canonical source first
             if (this.chatManager.forceProjectIdSync) {
               const syncedProjectId = this.chatManager.forceProjectIdSync();
               this._logInfo("Attempted ChatManager project ID sync", {
@@ -776,8 +665,6 @@ class ProjectDetailsComponent {
                 expectedProjectId: this.projectId
               });
             }
-
-            // Initialize ChatManager with current project ID
             await this.chatManager.initialize({
               projectId: this.projectId,
               containerSelector: "#chatTab .chat-container",
@@ -788,8 +675,6 @@ class ProjectDetailsComponent {
               minimizeButtonSelector: "#minimizeChatBtn"
             });
           }
-
-          // Now load the conversation with proper project context
           this._logInfo("Loading conversation in ChatManager", { conversationId: cv.id, projectId: this.projectId });
           await this.chatManager.loadConversation(cv.id);
         }
@@ -803,7 +688,6 @@ class ProjectDetailsComponent {
     });
   }
 
-  // Clean up pending operations on hide/destroy
   _cleanupPendingOperations() {
     if (this._pendingOperations) {
       for (const op of this._pendingOperations.values()) {
@@ -813,14 +697,11 @@ class ProjectDetailsComponent {
     }
   }
 
-
-  // -- Utility (defensive rendering, format helpers) --
   _safeAttr(str) { return String(str || "").replace(/[<>"']/g, "_"); }
   _safeTxt(str) { return this.sanitizer.sanitize(String(str ?? "")); }
   _formatBytes(b) { if (!b) return "0 B"; const n = parseInt(b, 10); return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : n > 1e3 ? (n / 1e3).toFixed(1) + " kB" : n + " B"; }
   _setHTML(el, raw) { this.domAPI.setInnerHTML(el, raw); }
 
-  // --- LIFECYCLE ---
   async initialize() {
     if (this.state.initialized) return;
     this._logInfo("Initializing...");
@@ -862,7 +743,6 @@ class ProjectDetailsComponent {
     this._logInfo("Initializing subcomponents", { projectId });
     await this._initSubComponents();
 
-    /* ── Token-stats UI exists now → start manager ── */
     try {
       const tsm = this.eventHandlers.DependencySystem?.modules?.get?.('tokenStatsManager');
       if (tsm?.initialize) await tsm.initialize();
@@ -870,14 +750,12 @@ class ProjectDetailsComponent {
       this._logWarn('TokenStatsManager initialise failed (non-blocking)', { err: e?.message });
     }
 
-    /* ── Ensure UI-polish module runs (idempotent) ── */
     try {
       const pde =
         this.eventHandlers?.DependencySystem?.modules?.get?.(
           'projectDetailsEnhancements'
         );
       if (pde?.initialize) {
-        // Safe to call multiple times – module early-exits if already done
         await pde.initialize();
       }
     } catch (err) {
@@ -889,14 +767,11 @@ class ProjectDetailsComponent {
 
     this._bindEventListeners();
     this._logInfo("Event listeners bound for project details view", { projectId });
-
-    // New Conversation button state, chat/model, KB tab, stats—all advanced flows restored!
     this._updateNewChatButtonState();
     this._logInfo("Restoring chat manager for project details view", { projectId });
     this._restoreChatAndModelConfig();
     this._restoreKnowledgeTab();
     this._restoreStatsCounts();
-
     this.switchTab(activeTab || "chat");
     this._setState({ loading: false });
     this._logInfo(`View for project ${this.projectId} is now visible.`);
@@ -912,40 +787,34 @@ class ProjectDetailsComponent {
 
   destroy() {
     this.hide();
-    this._cleanupPendingOperations();    // safety
+    this._cleanupPendingOperations();
     this._logInfo("Destroyed.");
   }
 
-  // Expose simple wrapper so external callers (Dashboard) can refresh data
+  cleanup() { this.destroy(); }
+
   renderProject(projectObj) {
     if (!projectObj) return;
     this.projectData = projectObj;
     this._renderProjectData();
   }
 
-  // --- Button state for new conversation ---
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#newConversationBtn");
     if (!newChatBtn) return;
-
     const alreadyBound = newChatBtn.hasAttribute('data-newchat-bound');
-
-    // Project/auth ready?
     const kbActive =
       !!this.projectData?.knowledge_base &&
       this.projectData.knowledge_base.is_active !== false;
-
     const ready =
       this.state.projectDataLoaded &&
       (this.auth?.isAuthenticated?.() ?? false) &&
       kbActive;
-
     newChatBtn.disabled = !ready;
     newChatBtn.classList.toggle("btn-disabled", !ready);
     newChatBtn.title = ready
       ? 'Start a new conversation'
       : (kbActive ? 'Sign-in required' : 'Knowledge Base required');
-
     if (!alreadyBound) {
       this.eventHandlers.trackListener(
         newChatBtn,
@@ -957,7 +826,6 @@ class ProjectDetailsComponent {
     }
   }
 
-  // --- Modal confirm and create new conversation logic ---
   async _createNewConversation() {
     if (!this.projectId || !this.state.projectDataLoaded) return;
     if (this.projectManager.projectLoadingInProgress) return;
@@ -968,7 +836,6 @@ class ProjectDetailsComponent {
     } catch (err) { this._logError("Error creating new conversation", err); }
   }
 
-  // --- Restore chat/model config and panel (on chat/conversations tab) ---
   _restoreChatAndModelConfig() {
     const tab = this.state.activeTab;
     if ((tab === "conversations" || tab === "chat") &&
@@ -989,10 +856,8 @@ class ProjectDetailsComponent {
           .catch((err) => { this._logError("Error initializing chatManager", err); });
       }
     }
-    // [REMOVED] Model configuration UI in Project Details has been eliminated; use the sidebar
   }
 
-  // --- KB subcomponent hook (re-init on tab switch/delayed inject) ---
   _restoreKnowledgeTab() {
     if (this.knowledgeBaseComponent && this.state.activeTab === "knowledge") {
       const kbData = this.projectData?.knowledge_base;
@@ -1001,7 +866,6 @@ class ProjectDetailsComponent {
     }
   }
 
-  // --- Restore stats rendering (fileCount, convoCount, etc.) ---
   _restoreStatsCounts() {
     if (!this.projectId) return;
     this.projectManager.loadProjectStats(this.projectId)
@@ -1013,7 +877,6 @@ class ProjectDetailsComponent {
   setKnowledgeBaseComponent(kbcInstance) {
     this.knowledgeBaseComponent = kbcInstance;
     this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
-    // If the knowledge tab is already active or becomes active, ensure KBC is initialized
     if (this.state.activeTab === "knowledge" && this.knowledgeBaseComponent && this.projectId) {
       const kbData = this.projectData?.knowledge_base;
       this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
