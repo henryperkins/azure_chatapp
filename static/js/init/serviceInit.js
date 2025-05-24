@@ -207,7 +207,8 @@ export function createServiceInitializer({
             }
           },
           domReadinessService,
-          logger
+          logger,
+          DependencySystem
         });
         DependencySystem.register('uiRenderer', uiRenderer);
         logger.log('[serviceInit] uiRenderer created and registered successfully', { context: 'serviceInit:registerAdvancedServices' });

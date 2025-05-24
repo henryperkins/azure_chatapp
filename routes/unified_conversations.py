@@ -32,7 +32,7 @@ from db import get_async_session
 from services.conversation_service import ConversationService, get_conversation_service
 from services.token_service import estimate_input_tokens
 from utils.auth_utils import get_current_user_and_token
-from utils.sentry_helpers import sentry_span, make_sentry_trace_response
+from utils.sentry_utils import sentry_span, make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
 
@@ -53,7 +53,9 @@ class ConversationCreate(BaseModel):
 
     title: str = Field(..., min_length=1, max_length=100)
     model_id: str = Field("claude-3-sonnet-20240229")
-    model_params: Optional[dict] = Field(default_factory=dict, alias="model_config")  # ← NEW
+    model_params: Optional[dict] = Field(
+        default_factory=dict, alias="model_config"
+    )  # ← NEW
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
@@ -65,7 +67,9 @@ class ConversationUpdate(BaseModel):
 
     title: Optional[str] = Field(None, min_length=1, max_length=100)
     model_id: Optional[str] = None
-    model_params: Optional[dict] = Field(default_factory=dict, alias="model_config")  # ← NEW
+    model_params: Optional[dict] = Field(
+        default_factory=dict, alias="model_config"
+    )  # ← NEW
     kb_enabled: Optional[bool] = False
     sentry_trace: Optional[str] = Field(None, description="Frontend trace ID")
 
@@ -192,20 +196,34 @@ async def create_conversation(
                 await validate_project_access(project_id, current_user, db)
 
             # Fetch Project and eagerly load its knowledge_base
-            stmt = select(Project).options(selectinload(Project.knowledge_base)).where(Project.id == project_id)
+            stmt = (
+                select(Project)
+                .options(selectinload(Project.knowledge_base))
+                .where(Project.id == project_id)
+            )
             result = await db.execute(stmt)
             project = result.scalar_one_or_none()
             if not project:
                 transaction.set_tag("error.type", "project_retrieval")
-                metrics.incr("conversation.create.failure", tags={"reason": "project_not_found_post_validation"})
+                metrics.incr(
+                    "conversation.create.failure",
+                    tags={"reason": "project_not_found_post_validation"},
+                )
                 logger.error(f"Project {project_id} not found after access validation.")
-                raise HTTPException(status_code=404, detail="Project not found despite access validation.")
+                raise HTTPException(
+                    status_code=404,
+                    detail="Project not found despite access validation.",
+                )
 
             # Knowledge Base Validation
             if not project.knowledge_base:
                 transaction.set_tag("error.type", "validation")
-                metrics.incr("conversation.create.failure", tags={"reason": "kb_missing"})
-                raise HTTPException(status_code=400, detail="Project has no knowledge base")
+                metrics.incr(
+                    "conversation.create.failure", tags={"reason": "kb_missing"}
+                )
+                raise HTTPException(
+                    status_code=400, detail="Project has no knowledge base"
+                )
             # Create conversation
             with sentry_span(op="db.create", description="Create conversation record"):
                 from sqlalchemy.exc import IntegrityError
@@ -216,7 +234,7 @@ async def create_conversation(
                         title=conversation_data.title,
                         model_id=conversation_data.model_id,
                         project_id=project_id,
-                        model_config=conversation_data.model_params,   # ← CHANGED
+                        model_config=conversation_data.model_params,  # ← CHANGED
                         kb_enabled=conversation_data.kb_enabled or False,
                     )
                     transaction.set_tag("conversation.id", str(conv.id))
@@ -383,7 +401,7 @@ async def update_project_conversation(
                 project_id=project_id,
                 title=update_data.title,
                 model_id=update_data.model_id,
-                model_config=update_data.model_params,         # ← CHANGED
+                model_config=update_data.model_params,  # ← CHANGED
                 kb_enabled=update_data.kb_enabled,
             )
 
@@ -488,7 +506,7 @@ async def create_project_conversation_message(
     payload: dict = Body(...),
     current_user_tuple: tuple = Depends(get_current_user_and_token),
     conv_service: ConversationService = Depends(get_conversation_service),
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
 ):
     """Process message with AI response tracing"""
     transaction = start_transaction(
@@ -519,10 +537,27 @@ async def create_project_conversation_message(
 
             # Defensive: Replace any FieldInfo values with their default or a safe fallback
             from pydantic.fields import FieldInfo
+
             for k, v in merged_dict.items():
                 if isinstance(v, FieldInfo):
                     # Use default if available, else sensible fallback
-                    merged_dict[k] = v.default if v.default is not None else ("" if k in ["raw_text", "role", "vision_detail", "reasoning_effort", "sentry_trace", "image_data"] else False)
+                    merged_dict[k] = (
+                        v.default
+                        if v.default is not None
+                        else (
+                            ""
+                            if k
+                            in [
+                                "raw_text",
+                                "role",
+                                "vision_detail",
+                                "reasoning_effort",
+                                "sentry_trace",
+                                "image_data",
+                            ]
+                            else False
+                        )
+                    )
 
             try:
                 new_msg = MessageCreate(**merged_dict)
@@ -857,17 +892,20 @@ async def batch_delete_conversations(
 
 # --- Token Estimation Endpoint for Live Chat Input ---
 
+
 class TokenEstimationRequest(BaseModel):
     current_input: str
 
+
 class TokenEstimationResponse(BaseModel):
     estimated_tokens_for_input: int
+
 
 @router.post(
     "/{project_id}/conversations/{conversation_id}/estimate-tokens",
     response_model=TokenEstimationResponse,
     summary="Estimate tokens for current input in a conversation",
-    tags=["Conversations"]
+    tags=["Conversations"],
 )
 async def estimate_tokens_for_input_in_conversation(
     project_id: UUID,
@@ -891,11 +929,14 @@ async def estimate_tokens_for_input_in_conversation(
         return TokenEstimationResponse(estimated_tokens_for_input=input_tokens)
     except Exception as e:
         logger.exception(f"Token estimation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to estimate tokens: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to estimate tokens: {str(e)}"
+        )
 
 
 class TokenStatsResponse(BaseModel):
     """Response model for token statistics API"""
+
     context_token_usage: int
     message_count: int
     user_msg_tokens: int
@@ -904,11 +945,12 @@ class TokenStatsResponse(BaseModel):
     knowledge_tokens: int
     total_tokens: int
 
+
 @router.get(
     "/{project_id}/conversations/{conversation_id}/token-stats",
     response_model=TokenStatsResponse,
     summary="Get detailed token statistics for a conversation",
-    tags=["Conversations"]
+    tags=["Conversations"],
 )
 async def get_conversation_token_stats(
     project_id: UUID,
@@ -948,23 +990,37 @@ async def get_conversation_token_stats(
                 limit=9999,
             )
 
-            # Calculate token breakdowns
-            user_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "user")
-            ai_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "assistant")
-            system_msg_tokens = sum(msg.get("token_count", 0) for msg in messages if msg.get("role") == "system")
+            # Calculate token breakdowns - handle None values properly
+            user_msg_tokens = sum(
+                msg.get("token_count") or 0
+                for msg in messages
+                if msg.get("role") == "user"
+            )
+            ai_msg_tokens = sum(
+                msg.get("token_count") or 0
+                for msg in messages
+                if msg.get("role") == "assistant"
+            )
+            system_msg_tokens = sum(
+                msg.get("token_count") or 0
+                for msg in messages
+                if msg.get("role") == "system"
+            )
 
             # Get knowledge tokens from metadata if available
             knowledge_tokens = 0
             for msg in messages:
-                if msg.get("role") == "system" and msg.get("extra_data", {}).get("used_knowledge_context"):
-                    knowledge_tokens += msg.get("token_count", 0)
+                if msg.get("role") == "system" and msg.get("extra_data", {}).get(
+                    "used_knowledge_context"
+                ):
+                    knowledge_tokens += msg.get("token_count") or 0
 
             # Calculate total tokens
             total_tokens = user_msg_tokens + ai_msg_tokens + system_msg_tokens
 
             # Return token stats
             return TokenStatsResponse(
-                context_token_usage=conv_data.get("context_token_usage", 0),
+                context_token_usage=conv_data.get("context_token_usage") or 0,
                 message_count=len(messages),
                 user_msg_tokens=user_msg_tokens,
                 ai_msg_tokens=ai_msg_tokens,

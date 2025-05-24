@@ -16,7 +16,7 @@ export function createChatExtensions(options) {
   if (!options.DependencySystem) throw new Error('Missing DependencySystem');
   if (!options.eventHandlers) throw new Error('Missing eventHandlers');
   if (!options.chatManager) throw new Error('Missing chatManager');
-  if (!options.auth) throw new Error('Missing auth');
+
   if (!options.app) throw new Error('Missing app');
   if (!options.domAPI) throw new Error('Missing domAPI');
   if (!options.domReadinessService) throw new Error('Missing domReadinessService');
@@ -27,7 +27,6 @@ export function createChatExtensions(options) {
     DependencySystem,
     eventHandlers,
     chatManager,
-    auth,
     app,
     domAPI,
     domReadinessService,
@@ -44,7 +43,7 @@ export function createChatExtensions(options) {
       { timeout: 8000, observeMutations: true, context: 'chatExtensions.init' }
     );
     await domReadinessService.dependenciesAndElements({
-      deps: ['chatManager', 'auth', 'app'],
+      deps: ['chatManager', 'app'],
       domSelectors: ['#projectChatTitleEditBtn', '#projectChatTitle'],
       timeout: 8000,
       context: 'chatExtensions.init'
@@ -69,8 +68,8 @@ export function createChatExtensions(options) {
     editBtns.forEach((btn) => {
       if (btn.hasAttribute("data-chat-title-handler-bound")) return;
 
-      const container    = btn.closest(".chat-title-row") || btn.parentElement;
-      const chatTitleEl  = container?.querySelector("#projectChatTitle");
+      const container = btn.closest(".chat-title-row") || btn.parentElement;
+      const chatTitleEl = container?.querySelector("#projectChatTitle");
       if (!chatTitleEl) return;
 
       trackListener(btn, "click",
@@ -79,7 +78,7 @@ export function createChatExtensions(options) {
       );
       btn.setAttribute("data-chat-title-handler-bound", "true");
     });
-// (logic now exclusively targets the project chat title.)
+    // (logic now exclusively targets the project chat title.)
   }
 
   function handleTitleEditClick(editTitleBtn, chatTitleEl) {
@@ -127,7 +126,11 @@ export function createChatExtensions(options) {
         return;
       }
 
-      if (!auth || typeof auth.isAuthenticated !== "function" || !auth.isAuthenticated()) {
+      // CONSOLIDATED: Check authentication state from appModule.state
+      const appModule = app?.DependencySystem?.modules?.get?.('appModule');
+      const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+
+      if (!isAuthenticated) {
         chatTitleEl.textContent = originalTitle;
         return;
       }
@@ -146,10 +149,10 @@ export function createChatExtensions(options) {
 
       var endpoint = "/api/projects/" + projectId + "/conversations/" + conversationId;
       app.apiRequest(endpoint, {
-        method : 'PATCH',
-        body   : { title: newTitle }
+        method: 'PATCH',
+        body: { title: newTitle }
       })
-        .catch(function() {
+        .catch(function () {
           chatTitleEl.textContent = originalTitle;
         });
     }
@@ -182,7 +185,7 @@ export function createChatExtensions(options) {
       });
     }
 
-    trackListener(editTitleBtn, "click", function() {
+    trackListener(editTitleBtn, "click", function () {
       completeEditing(true);
     }, {
       description: "Chat title save", once: true, context: MODULE_CONTEXT

@@ -10,13 +10,14 @@ knowledge retrieval, and token estimation.
 
 import logging
 
-from typing import Any, List, Optional, Union
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from config import settings, Settings
 from models.conversation import Conversation
+
 # The utils.model_registry module may be stubbed or monkey-patched in unit tests
 # (e.g. tests that only need get_model_config).  Access to
 # `validate_model_and_params` is optional for those scenarios.  We therefore
@@ -36,33 +37,24 @@ except (ImportError, AttributeError):  # pragma: no cover
             "test context. This stub should never be invoked – if you see "
             "this error, adjust the test or provide a suitable monkeypatch."
         )
-from utils.tokens import count_tokens_messages, count_tokens_text  # Canonical token counters
+
+
+# Note: calculate_tokens() removed - use utils.tokens functions directly
+from utils.tokens import count_tokens_text  # Still needed for augment_with_knowledge
 
 # Forward-compat shim – most helpers now live in *utils.model_registry* and
 # *utils.tokens*.  We re-export them here so existing imports keep working.
 
 # Central wrappers -----------------------------------------------------------
 
+
 def get_model_config(model_name: str, config: Settings = settings):  # type: ignore[override]
     return _central_get_model_config(model_name, config)
 
+
 validate_model_and_params = _central_validate  # alias for callers
 
-# --- Backward compatibility: token counting wrapper ---
-
-async def calculate_tokens(
-    content: Union[str, List[dict[str, Any]]],
-    model_id: Optional[str] = None,
-) -> int:
-    """
-    Back-compat token estimator.
-
-    Accepts either raw text or a list of message dicts and forwards to
-    utils.tokens helpers.
-    """
-    if isinstance(content, list):
-        return count_tokens_messages(content, model_id=model_id)
-    return count_tokens_text(str(content), model_id=model_id)
+# Note: calculate_tokens() removed - use utils.tokens.count_tokens_text() or count_tokens_messages() directly
 
 
 # tiktoken is optional; utils.tokens handles absence gracefully.
@@ -85,6 +77,7 @@ logger = logging.getLogger(__name__)
 
 
 # --- Core Functions (legacy implementations kept for backward compatibility) ---
+
 
 async def retrieve_knowledge_context(
     query: str,
@@ -218,7 +211,9 @@ async def augment_with_knowledge(
     user_message: str,
     db: AsyncSession,
     max_context_tokens: int = DEFAULT_MAX_CONTEXT_TOKENS,
-    model_config_override: dict[str, Any] | None = None,  # Allow passing specific model config
+    model_config_override: (
+        dict[str, Any] | None
+    ) = None,  # Allow passing specific model config
     results_limit: int = 5,
 ) -> list[dict[str, Any]]:
     """
@@ -281,7 +276,7 @@ async def augment_with_knowledge(
     # --- Retrieve KB context via shared helper ------------------------
     ctx_text = await retrieve_knowledge_context(
         query=user_message,
-        project_id=project.id,        # type: ignore[arg-type]
+        project_id=project.id,  # type: ignore[arg-type]
         db=db,
         top_k=results_limit,
         score_threshold=DEFAULT_SCORE_THRESHOLD,

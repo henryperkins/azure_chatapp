@@ -10,7 +10,6 @@ Project management routes with full Sentry integration for:
 import logging
 import random
 import time
-import uuid  # Added import for uuid
 from uuid import UUID
 from typing import Optional, Tuple, Union
 from enum import Enum
@@ -19,13 +18,15 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, select, true
-from sqlalchemy.orm import selectinload, attributes as orm_attributes  # Added for selectinload and flag_modified
+from sqlalchemy.orm import (
+    selectinload,
+    attributes as orm_attributes,
+)  # Added for selectinload and flag_modified
 from sentry_sdk import (
     capture_exception,
     configure_scope,
     start_transaction,
     set_tag,
-    set_context,
     metrics,
     capture_message,
 )
@@ -46,7 +47,7 @@ from utils.db_utils import get_all_by_condition, save_model
 from utils.response_utils import create_standard_response
 from utils.serializers import serialize_project
 from services.file_storage import get_file_storage
-from utils.sentry_helpers import sentry_span
+from utils.sentry_utils import sentry_span
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -127,6 +128,7 @@ async def create_project(
 
             # Create project (with auto-KB) via service
             from services.project_service import create_project as svc_create_project
+
             project = await svc_create_project(
                 user_id=current_user.id,
                 name=project_data.name,
@@ -138,6 +140,7 @@ async def create_project(
             )
 
             from services.conversation_service import ConversationService
+
             conv_service = ConversationService(db)
             default_conversation = await conv_service.create_conversation(
                 user_id=current_user.id,
@@ -147,7 +150,9 @@ async def create_project(
             )
 
             duration = (time.time() - start_time) * 1000
-            metrics.distribution("project.create.duration", duration, unit="millisecond")
+            metrics.distribution(
+                "project.create.duration", duration, unit="millisecond"
+            )
             metrics.incr("project.create.success")
 
             with configure_scope() as scope:
@@ -162,37 +167,60 @@ async def create_project(
                 .where(User.id == current_user.id)
                 .options(
                     selectinload(User.conversations),
-                    selectinload(User.project_associations).selectinload(ProjectUserAssociation.project)
+                    selectinload(User.project_associations).selectinload(
+                        ProjectUserAssociation.project
+                    ),
                 )
             )
             user_result = await db.execute(user_stmt)
             user_to_update = user_result.scalar_one_or_none()
 
             if not user_to_update:
-                logger.error(f"User {current_user.id} not found in current session with selectinload.")
-                raise HTTPException(status_code=500, detail="User session error during project creation (selectinload)")
+                logger.error(
+                    f"User {current_user.id} not found in current session with selectinload."
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="User session error during project creation (selectinload)",
+                )
 
             project_for_prefs_update = await db.get(Project, project.id)
             if not project_for_prefs_update:
-                logger.error(f"Project {project.id} not found in current session before updating user preferences.")
-                raise HTTPException(status_code=500, detail="Project session error during user preferences update")
+                logger.error(
+                    f"Project {project.id} not found in current session before updating user preferences."
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Project session error during user preferences update",
+                )
             await db.refresh(project_for_prefs_update)
 
             if user_to_update.preferences is None:
                 user_to_update.preferences = {}
-            user_to_update.preferences["last_project_id"] = str(project_for_prefs_update.id)
+            user_to_update.preferences["last_project_id"] = str(
+                project_for_prefs_update.id
+            )
 
             temp_projects_list = user_to_update.preferences.get("projects", [])
-            temp_projects_list.append({"id": str(project_for_prefs_update.id), "title": project_for_prefs_update.name})
+            temp_projects_list.append(
+                {
+                    "id": str(project_for_prefs_update.id),
+                    "title": project_for_prefs_update.name,
+                }
+            )
             user_to_update.preferences["projects"] = temp_projects_list
 
             orm_attributes.flag_modified(user_to_update, "preferences")
             await save_model(db, user_to_update)
 
-            logger.info(f"Created project {project_for_prefs_update.id} with KB {getattr(project_for_prefs_update, 'knowledge_base', None) and project_for_prefs_update.knowledge_base.id}")
+            logger.info(
+                f"Created project {project_for_prefs_update.id} with KB {getattr(project_for_prefs_update, 'knowledge_base', None) and project_for_prefs_update.knowledge_base.id}"
+            )
 
             # For the final response, ensure the main project object is fully loaded as needed for serialization
-            await db.refresh(project_for_prefs_update, ["knowledge_base", "conversations"])
+            await db.refresh(
+                project_for_prefs_update, ["knowledge_base", "conversations"]
+            )
 
             return await create_standard_response(
                 serialize_project(project_for_prefs_update),
@@ -248,7 +276,7 @@ async def list_projects(
                 condition = true()
                 span.set_tag("admin.all_users", True)
             else:
-                condition = (Project.user_id == current_user.id)
+                condition = Project.user_id == current_user.id
 
             projects = await get_all_by_condition(
                 db,
@@ -310,7 +338,9 @@ async def get_project(
         try:
             proj_id: Union[str, int, UUID] = coerce_project_id(project_id)
         except Exception as coercion_err:
-            logger.exception(f"Project ID coercion failed for {project_id}: {coercion_err}")
+            logger.exception(
+                f"Project ID coercion failed for {project_id}: {coercion_err}"
+            )
             metrics.incr("project.view.failure", tags={"reason": "id_coercion"})
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -338,13 +368,24 @@ async def get_project(
                         proj_id, current_user, db, ProjectAccessLevel.READ
                     )
                 except HTTPException as perm_err:
-                    logger.warning(f"Permission denied for user {current_user.id} on project {proj_id}: {perm_err}")
-                    metrics.incr("project.view.failure", tags={"reason": "permission_denied"})
+                    logger.warning(
+                        f"Permission denied for user {current_user.id} on project {proj_id}: {perm_err}"
+                    )
+                    metrics.incr(
+                        "project.view.failure", tags={"reason": "permission_denied"}
+                    )
                     raise
                 except Exception as perm_err:
-                    logger.error(f"Unexpected permission check error for project {proj_id}: {perm_err}")
-                    metrics.incr("project.view.failure", tags={"reason": "permission_check_error"})
-                    raise HTTPException(status_code=403, detail="Permission check failed") from perm_err
+                    logger.error(
+                        f"Unexpected permission check error for project {proj_id}: {perm_err}"
+                    )
+                    metrics.incr(
+                        "project.view.failure",
+                        tags={"reason": "permission_check_error"},
+                    )
+                    raise HTTPException(
+                        status_code=403, detail="Permission check failed"
+                    ) from perm_err
 
                 with configure_scope() as scope:
                     scope.set_context("project", serialize_project(project))
@@ -783,9 +824,7 @@ async def get_project_stats(
                         select(func.count(ProjectFile.id)).where(
                             ProjectFile.project_id == project_id,
                             ProjectFile.config.isnot(None),
-                            ProjectFile.config.contains(
-                                {"processed_for_search": True}
-                            ),
+                            ProjectFile.config.contains({"processed_for_search": True}),
                         )
                     )
                     processed = processed_result.scalar() or 0
@@ -796,7 +835,7 @@ async def get_project_stats(
                     "id": None,
                     "is_active": False,
                     "indexed_files": 0,
-                    "error": str(kb_err)
+                    "error": str(kb_err),
                 }
 
             usage_percentage = (
