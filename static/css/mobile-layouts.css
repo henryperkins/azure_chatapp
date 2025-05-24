@@ -111,7 +111,7 @@
 
 /* Sidebar Layout */
 .sidebar {
-  @apply bg-base-100 border-r border-base-200;
+  @apply bg-base-100 border border-base-200 rounded-2xl shadow-sm;
   @apply flex flex-col h-full;
 }
 
