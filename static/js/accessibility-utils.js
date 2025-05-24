@@ -79,7 +79,7 @@ export function createAccessibilityEnhancements({
       this.debug =
         typeof createDebugTools === 'function'
           ? createDebugTools({ contextPrefix: MODULE_CONTEXT })
-          : { start: () => null, stop: () => {}, trace: fn => fn() };
+          : { start: () => null, stop: () => { }, trace: fn => fn() };
       this.keyboardShortcutsEnabled = true;
       this.lastFocusedElement = null;
       this.mutationObservers = [];
@@ -159,75 +159,76 @@ export function createAccessibilityEnhancements({
           this.debug.stop(traceId, '_handleGlobalKeydown: skipped');
           return;
         }
-let sidebar = null;
-if (this.DependencySystem && typeof this.DependencySystem.waitFor === 'function') {
-  try {
-    sidebar = await this.DependencySystem.waitFor('sidebar', null, 3000);
-  } catch (err) {
-    logger.error('[AccessibilityUtils][_handleGlobalKeydown] DependencySystem.waitFor failed', err, { context: MODULE_CONTEXT });
-    if (this.errorReporter) {
-      this.errorReporter.capture(err, { module: MODULE_CONTEXT, source: '_handleGlobalKeydown.DependencySystem.waitFor' });
-    }
-  }
-}
-// Defensive: Graceful fallback if sidebar cannot be injected
-const safeSidebar = sidebar && typeof sidebar === "object" ? sidebar : undefined;
-if (this._noMods(e)) {
-  let handled = false;
-  switch (e.key) {
-    case '/':
-    case '`':
-    case '\\':
-      if (typeof safeSidebar?.toggleSidebar === "function") {
-        safeSidebar.toggleSidebar();
-        handled = true;
-      } else {
-        this.announce?.('Sidebar unavailable. Cannot toggle sidebar.', 'polite');
-        handled = true;
-      }
-      break;
-    case '1':
-    case '2':
-    case '3': {
-      const mapping = { '1': 'recent', '2': 'starred', '3': 'projects' };
-      if (typeof safeSidebar?.activateTab === "function") {
-        safeSidebar.activateTab(mapping[e.key]);
-        handled = true;
-      } else {
-        this.announce?.('Sidebar unavailable. Tab shortcut disabled.', 'polite');
-        handled = true;
-      }
-      break;
-    }
-    case 'p':
-    case 'P':
-      if (typeof safeSidebar?.togglePin === "function") {
-        safeSidebar.togglePin();
-        handled = true;
-      } else {
-        this.announce?.('Sidebar unavailable. Pin shortcut disabled.', 'polite');
-        handled = true;
-      }
-      break;
-    case 'n':
-    case 'N':
-      this.domAPI.getElementById('sidebarNewProjectBtn')?.click();
-      handled = true;
-      break;
-    case 's':
-    case 'S':
-      this._focusElement('#sidebarProjectSearch');
-      handled = true;
-      break;
-    case '?':
-      this._toggleKeyboardHelp();
-      handled = true;
-      break;
-    default:
-      handled = false;
-  }
-  if (handled) e.preventDefault();
-}
+
+        let sidebar = null;
+        if (this.DependencySystem && typeof this.DependencySystem.waitFor === 'function') {
+          try {
+            sidebar = await this.DependencySystem.waitFor('sidebar', null, 3000);
+          } catch (err) {
+            logger.error('[AccessibilityUtils][_handleGlobalKeydown] DependencySystem.waitFor failed', err, { context: MODULE_CONTEXT });
+            if (this.errorReporter) {
+              this.errorReporter.capture(err, { module: MODULE_CONTEXT, source: '_handleGlobalKeydown.DependencySystem.waitFor' });
+            }
+          }
+        }
+        // Defensive: Graceful fallback if sidebar cannot be injected
+        const safeSidebar = sidebar && typeof sidebar === "object" ? sidebar : undefined;
+        if (this._noMods(e)) {
+          let handled = false;
+          switch (e.key) {
+            case '/':
+            case '`':
+            case '\\':
+              if (typeof safeSidebar?.toggleSidebar === "function") {
+                safeSidebar.toggleSidebar();
+                handled = true;
+              } else {
+                this.announce?.('Sidebar unavailable. Cannot toggle sidebar.', 'polite');
+                handled = true;
+              }
+              break;
+            case '1':
+            case '2':
+            case '3': {
+              const mapping = { '1': 'recent', '2': 'starred', '3': 'projects' };
+              if (typeof safeSidebar?.activateTab === "function") {
+                safeSidebar.activateTab(mapping[e.key]);
+                handled = true;
+              } else {
+                this.announce?.('Sidebar unavailable. Tab shortcut disabled.', 'polite');
+                handled = true;
+              }
+              break;
+            }
+            case 'p':
+            case 'P':
+              if (typeof safeSidebar?.togglePin === "function") {
+                safeSidebar.togglePin();
+                handled = true;
+              } else {
+                this.announce?.('Sidebar unavailable. Pin shortcut disabled.', 'polite');
+                handled = true;
+              }
+              break;
+            case 'n':
+            case 'N':
+              this.domAPI.getElementById('sidebarNewProjectBtn')?.click();
+              handled = true;
+              break;
+            case 's':
+            case 'S':
+              this._focusElement('#sidebarProjectSearch');
+              handled = true;
+              break;
+            case '?':
+              this._toggleKeyboardHelp();
+              handled = true;
+              break;
+            default:
+              handled = false;
+          }
+          if (handled) e.preventDefault();
+        }
         if (e.key === 'Escape') {
           if (this._closeKeyboardHelpIfOpen()) {
             e.preventDefault();

@@ -22,9 +22,9 @@ export function createSidebarEnhancements({
   eventHandlers,
   DependencySystem,
   domAPI,
-  modelConfig, // for injecting model config UI if needed
+  _modelConfig, // for injecting model config UI if needed (unused for now)
   logger,
-  safeHandler
+  _safeHandler // unused for now, but kept for future use
 }) {
   if (!eventHandlers) throw new Error('eventHandlers required for sidebar-enhancements');
   if (!domAPI) throw new Error('domAPI required for sidebar-enhancements');
@@ -70,10 +70,14 @@ export function createSidebarEnhancements({
           oldToggle,
           'click',
           () => {
-            newCheckbox.checked = !newCheckbox.checked;
+            domAPI.setProperty(newCheckbox, 'checked', !newCheckbox.checked);
             updateChevronRotation(chevron, newCheckbox.checked);
           },
-          `sidebar-enhancements: migrate legacy toggle ${oldToggleId}`
+          {
+            description: `Migrate legacy toggle ${oldToggleId}`,
+            context: MODULE_NAME,
+            source: 'migrateLegacyToggle'
+          }
         );
       }
       if (newCheckbox) {
@@ -83,11 +87,22 @@ export function createSidebarEnhancements({
           () => {
             updateChevronRotation(chevron, newCheckbox.checked);
           },
-          `sidebar-enhancements: checkbox change ${newCheckboxId}`
+          {
+            description: `Checkbox change ${newCheckboxId}`,
+            context: MODULE_NAME,
+            source: 'migrateLegacyToggle'
+          }
         );
       }
     } catch (err) {
-      // Notification removed per checklist; fail silently or log as needed.
+      if (logger && typeof logger.error === 'function') {
+        logger.error(`[${MODULE_NAME}][migrateLegacyToggle] Failed to migrate legacy toggle`, err, {
+          context: MODULE_NAME,
+          oldToggleId,
+          newCheckboxId,
+          chevronId
+        });
+      }
     }
   }
 
@@ -113,13 +128,26 @@ export function createSidebarEnhancements({
     try {
       const btn = domAPI.getElementById('manageProjectsLink');
       if (!btn) return;
-      EH.trackListener(btn, 'click', e => {
-        e.preventDefault();
-        const sidebar = DependencySystem?.modules?.get('sidebar');
-        sidebar?.activateTab('projects');
-      }, 'sidebar-enhancements: manage projects link');
+      EH.trackListener(
+        btn,
+        'click',
+        e => {
+          e.preventDefault();
+          const sidebar = DependencySystem?.modules?.get('sidebar');
+          sidebar?.activateTab('projects');
+        },
+        {
+          description: 'Manage projects link click',
+          context: MODULE_NAME,
+          source: 'initManageProjectsLink'
+        }
+      );
     } catch (err) {
-      // Notification removed per checklist; fail silently or log as needed.
+      if (logger && typeof logger.error === 'function') {
+        logger.error(`[${MODULE_NAME}][initManageProjectsLink] Failed to initialize manage projects link`, err, {
+          context: MODULE_NAME
+        });
+      }
     }
   }
 
