@@ -1,28 +1,7 @@
 /**
- * accessibility-utils.js – Centralized accessibility + keyboard shortcut helpers, teardown-safe.
- *
- * ## Purpose
- * Modular accessibility improvement for SPA UIs: keyboard navigation, modal focus, skip links, etc.
- *
- * ## Design
- * - Exported via a factory function `createAccessibilityEnhancements({ ... })`.
- * - NO direct window/global usage: all dependencies (domAPI, eventHandlers, DependencySystem, createDebugTools, logger, domReadinessService) must be injected as named parameters (DI).
- * - NO side-effects on import: must be explicitly initialized by calling `accessibilityModule.init()`.
- * - All DOM events must register via eventHandlers.trackListener with a module context.
- * - All state is internal to the class instance; nothing leaks to window or global scope.
- * - Full teardown support: all listeners cleaned via eventHandlers.cleanupListeners({ context: MODULE_CONTEXT }) in destroy().
- *
- * ## Exports:
- *   createAccessibilityEnhancements({ ... })
- *
- * ## DI requirements:
- *   - domAPI: { getElementById, querySelector, querySelectorAll, createElement, getDocument, getBody, getActiveElement, getComputedStyle } (required)
- *   - eventHandlers: { trackListener, cleanupListeners } (required)
- *   - logger: logging/observability interface as per DI (required)
- *   - domReadinessService: required for readiness flows (required)
- *   - [DependencySystem]: Strongly recommended for registration.
- *   - [createDebugTools]: Optional, for perf tracing.
- *   - [errorReporter]: Optional, for external error capture.
+ * accessibility-utils.js – accessibility & keyboard-shortcut helpers.
+ * Factory: createAccessibilityEnhancements({...}).
+ * Core DI: domAPI, eventHandlers, logger, domReadinessService (+ optional deps).
  */
 
 export function createAccessibilityEnhancements({
@@ -596,6 +575,9 @@ export function createAccessibilityEnhancements({
 
   const instance = new AccessibilityUtilsModule();
   function cleanup() {
+    if (eventHandlers?.cleanupListeners) {
+      eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+    }
     instance.destroy();
   }
 
