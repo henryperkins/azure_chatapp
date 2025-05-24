@@ -25,8 +25,8 @@ from services.knowledgebase_helpers import (
     KBConfig,
     StorageManager,
     TokenManager,
-    VectorDBManager,          # ← NEW (re-uses shared impl)
-    MetadataHelper,           # ← NEW (re-uses shared impl)
+    VectorDBManager,  # ← NEW (re-uses shared impl)
+    MetadataHelper,  # ← NEW (re-uses shared impl)
 )
 from services.project_service import (
     check_knowledge_base_status as get_project_files_stats,
@@ -60,8 +60,6 @@ from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
 
 logger = logging.getLogger(__name__)
-
-
 
 
 # ---------------------------------------------------------------------
@@ -248,10 +246,7 @@ async def upload_file_to_project(
         )
 
     # Estimate tokens
-    token_data = await _estimate_file_tokens(
-        contents,
-        file_info["sanitized_filename"]
-    )
+    token_data = await _estimate_file_tokens(contents, file_info["sanitized_filename"])
 
     # Check if token estimation itself returned an error in its metadata
     if "error" in token_data.get("metadata", {}):
@@ -274,7 +269,7 @@ async def upload_file_to_project(
     # Store file
     storage = StorageManager.get()
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    rel_path  = f"{project_id}/{timestamp}_{file_info['sanitized_filename']}"
+    rel_path = f"{project_id}/{timestamp}_{file_info['sanitized_filename']}"
     stored_path = await storage.save_file(contents, rel_path, project_id=project_id)
 
     # Create file record
@@ -385,7 +380,7 @@ async def search_project_context(
     query: str,
     db: AsyncSession,
     top_k: int = 5,
-    filters: dict[str, Any] | None = None,     # ← new
+    filters: dict[str, Any] | None = None,  # ← new
 ) -> dict[str, Any]:
     """
     Performs a semantic search against a project's knowledge base and returns relevant results.
@@ -409,7 +404,7 @@ async def search_project_context(
     filter_metadata = {"project_id": str(project_id)}
     if project.knowledge_base:
         filter_metadata["knowledge_base_id"] = str(project.knowledge_base.id)
-    if filters:                                  # ← new
+    if filters:  # ← new
         filter_metadata.update(filters)
 
     results = await _execute_search(vector_db, query, filter_metadata, top_k)
@@ -513,6 +508,7 @@ async def _validate_user_and_project(
     Wrapper – forwards to project_service.validate_project_access to avoid code duplication.
     """
     from services.project_service import validate_project_access
+
     user = None
     if user_id is not None:
         user = await get_by_id(db, User, user_id)
@@ -520,7 +516,7 @@ async def _validate_user_and_project(
             raise HTTPException(status_code=404, detail="User not found")
     return await validate_project_access(
         project_id=project_id,
-        user=user,               # None ⇒ skip ownership check
+        user=user,  # None ⇒ skip ownership check
         db=db,
         skip_ownership_check=user is None,
     )
@@ -548,9 +544,7 @@ async def _process_upload_file_info(file: UploadFile) -> dict[str, Any]:
     }
 
 
-async def _estimate_file_tokens(
-    contents: bytes, filename: str
-) -> dict[str, Any]:
+async def _estimate_file_tokens(contents: bytes, filename: str) -> dict[str, Any]:
     """
     Estimate the number of tokens in the file contents.
 
@@ -584,8 +578,6 @@ async def _estimate_file_tokens(
         }
 
     return {"token_estimate": tok_count, "metadata": tok_metadata}
-
-
 
 
 async def _create_file_record(
@@ -623,7 +615,9 @@ async def _delete_file_from_storage(storage: Any, file_path: str) -> str:
         return "storage_deletion_failed"
 
 
-async def _delete_file_vectors(project_id: UUID, file_id: UUID, db: AsyncSession) -> None:
+async def _delete_file_vectors(
+    project_id: UUID, file_id: UUID, db: AsyncSession
+) -> None:
     try:
         vector_db = await VectorDBManager.get_for_project(project_id, db=db)
         await vector_db.delete_by_filter({"file_id": str(file_id)})
@@ -635,7 +629,9 @@ async def _execute_search(
     vector_db: VectorDB, query: str, filter_metadata: dict[str, Any], top_k: int
 ) -> List[dict[str, Any]]:
     clean_query = (
-        await MetadataHelper.expand_query(query) if len(query.split()) > 3 else query.strip()
+        await MetadataHelper.expand_query(query)
+        if len(query.split()) > 3
+        else query.strip()
     ) or query[:100]
 
     results = await vector_db.search(
@@ -677,8 +673,6 @@ async def _enhance_with_file_info(
     return enhanced
 
 
-
-
 # --- Minimal status export for API route compatibility ---
 async def get_kb_status(project_id: UUID, db: AsyncSession):
     """
@@ -688,23 +682,32 @@ async def get_kb_status(project_id: UUID, db: AsyncSession):
     file_stats = await get_project_files_stats(project_id, db)
     return {"file_stats": file_stats, "project_id": str(project_id)}
 
+
 # ──────────────────────────────────────────────────────────────
 #  Public helpers consumed by routes/knowledge_base_routes.py
 # ──────────────────────────────────────────────────────────────
-async def get_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> dict[str, Any]:
+async def get_knowledge_base(
+    knowledge_base_id: UUID, db: AsyncSession
+) -> dict[str, Any]:
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
     return serialize_knowledge_base(kb)
 
-async def list_knowledge_bases(db: AsyncSession, active_only: bool = False) -> list[dict[str, Any]]:
+
+async def list_knowledge_bases(
+    db: AsyncSession, active_only: bool = False
+) -> list[dict[str, Any]]:
     stmt = select(KnowledgeBase)
     if active_only:
         stmt = stmt.where(KnowledgeBase.is_active.is_(True))
     result = await db.execute(stmt)
     return [serialize_knowledge_base(k) for k in result.scalars().all()]
 
-async def update_knowledge_base(knowledge_base_id: UUID, update_data: dict[str, Any], db: AsyncSession) -> dict[str, Any]:
+
+async def update_knowledge_base(
+    knowledge_base_id: UUID, update_data: dict[str, Any], db: AsyncSession
+) -> dict[str, Any]:
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -714,7 +717,10 @@ async def update_knowledge_base(knowledge_base_id: UUID, update_data: dict[str, 
     await save_model(db, kb)
     return serialize_knowledge_base(kb)
 
-async def delete_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> dict[str, Any]:
+
+async def delete_knowledge_base(
+    knowledge_base_id: UUID, db: AsyncSession
+) -> dict[str, Any]:
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
@@ -722,7 +728,10 @@ async def delete_knowledge_base(knowledge_base_id: UUID, db: AsyncSession) -> di
     await db.commit()
     return {"deleted_id": str(knowledge_base_id)}
 
-async def toggle_project_kb(project_id: UUID, enable: bool, user_id: Optional[int], db: AsyncSession) -> dict[str, Any]:
+
+async def toggle_project_kb(
+    project_id: UUID, enable: bool, user_id: Optional[int], db: AsyncSession
+) -> dict[str, Any]:
     project = await _validate_user_and_project(project_id, user_id, db)
     if not project.knowledge_base:
         raise HTTPException(status_code=404, detail="Project has no knowledge base")
@@ -730,13 +739,17 @@ async def toggle_project_kb(project_id: UUID, enable: bool, user_id: Optional[in
     await save_model(db, project.knowledge_base)
     return {"knowledge_base_id": str(project.knowledge_base.id), "is_active": enable}
 
-async def get_knowledge_base_health(knowledge_base_id: UUID, db: AsyncSession) -> dict[str, Any]:
+
+async def get_knowledge_base_health(
+    knowledge_base_id: UUID, db: AsyncSession
+) -> dict[str, Any]:
     kb = await get_by_id(db, KnowledgeBase, knowledge_base_id)
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
     vdb = await VectorDBManager.get_for_project(kb.project_id, db=db)
     stats = await vdb.get_stats()
     return {"knowledge_base_id": str(kb.id), "vector_db": stats}
+
 
 async def get_project_file_list(
     project_id: UUID,
@@ -752,10 +765,14 @@ async def get_project_file_list(
         stmt = stmt.where(ProjectFile.file_type == file_type)
     stmt = stmt.order_by(ProjectFile.created_at.desc()).offset(skip).limit(limit)
     rows = (await db.execute(stmt)).scalars().all()
-    total = await db.scalar(select(func.count(ProjectFile.id)).where(ProjectFile.project_id == project_id))
+    total = await db.scalar(
+        select(func.count(ProjectFile.id)).where(ProjectFile.project_id == project_id)
+    )
     return {
         "files": [serialize_project_file(f, include_content=False) for f in rows],
         "count": len(rows),
         "total": total or 0,
     }
+
+
 # Restore expected import for API routes and service consumers

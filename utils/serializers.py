@@ -94,19 +94,37 @@ def serialize_conversation(conversation: Conversation) -> dict[str, Any]:
     # Instead of using __dict__, access attributes directly from the ORM object
     # This is safer and more standard for SQLAlchemy models.
     return {
-        "id": serialize_uuid(conversation.id if hasattr(conversation, 'id') else None),
-        "title": conversation.title if hasattr(conversation, 'title') else None,
-        "model_id": conversation.model_id if hasattr(conversation, 'model_id') else None,
-        "project_id": serialize_uuid(conversation.project_id if hasattr(conversation, 'project_id') else None),
-        "created_at": serialize_datetime(conversation.created_at if hasattr(conversation, 'created_at') else None),
-        "updated_at": serialize_datetime(conversation.updated_at if hasattr(conversation, 'updated_at') else None),
-        "is_deleted": conversation.is_deleted if hasattr(conversation, 'is_deleted') else False,
-        "user_id": serialize_uuid(conversation.user_id if hasattr(conversation, 'user_id') else None),
-        "knowledge_base_id": serialize_uuid(conversation.knowledge_base_id if hasattr(conversation, 'knowledge_base_id') else None),
-        "model_config": getattr(conversation, 'model_config', {}) or {},
-        "kb_enabled": getattr(conversation, 'kb_enabled', False),
-        "context_token_usage": getattr(conversation, 'context_token_usage', None),
-        "extra_data": conversation.extra_data if hasattr(conversation, 'extra_data') else {},
+        "id": serialize_uuid(conversation.id if hasattr(conversation, "id") else None),
+        "title": conversation.title if hasattr(conversation, "title") else None,
+        "model_id": (
+            conversation.model_id if hasattr(conversation, "model_id") else None
+        ),
+        "project_id": serialize_uuid(
+            conversation.project_id if hasattr(conversation, "project_id") else None
+        ),
+        "created_at": serialize_datetime(
+            conversation.created_at if hasattr(conversation, "created_at") else None
+        ),
+        "updated_at": serialize_datetime(
+            conversation.updated_at if hasattr(conversation, "updated_at") else None
+        ),
+        "is_deleted": (
+            conversation.is_deleted if hasattr(conversation, "is_deleted") else False
+        ),
+        "user_id": serialize_uuid(
+            conversation.user_id if hasattr(conversation, "user_id") else None
+        ),
+        "knowledge_base_id": serialize_uuid(
+            conversation.knowledge_base_id
+            if hasattr(conversation, "knowledge_base_id")
+            else None
+        ),
+        "model_config": getattr(conversation, "model_config", {}) or {},
+        "kb_enabled": getattr(conversation, "kb_enabled", False),
+        "context_token_usage": getattr(conversation, "context_token_usage", None),
+        "extra_data": (
+            conversation.extra_data if hasattr(conversation, "extra_data") else {}
+        ),
     }
 
 
@@ -127,7 +145,9 @@ def serialize_message(message: Message) -> dict[str, Any]:
         "raw_text": getattr(message, "raw_text", None),
         "formatted_text": getattr(message, "formatted_text", None),
         "token_count": getattr(message, "token_count", None),
-        "content": getattr(message, "raw_text", None),  # TEMP for legacy, remove in future
+        "content": getattr(
+            message, "raw_text", None
+        ),  # TEMP for legacy, remove in future
         "metadata": message.get_metadata_dict(),
         "created_at": serialize_datetime(message.created_at),
         "updated_at": serialize_datetime(message.updated_at),
@@ -191,9 +211,10 @@ def serialize_project_file(
         "filename": file.filename,
         "file_size": file.file_size,
         "file_type": file.file_type,
+        "token_estimate": file.config.get("token_count", 0) if file.config else 0,
         "created_at": serialize_datetime(file.created_at),
         "updated_at": serialize_datetime(file.updated_at),
-        "metadata": file.metadata or {},
+        "config": file.config or {},
     }
 
     if include_file_path:
@@ -260,6 +281,7 @@ def serialize_vector_result(result: dict[str, Any]) -> dict[str, Any]:
         "metadata": result.get("metadata", {}),
         "file_info": result.get("file_info", {}),
     }
+
 
 # ------------------------------------------------------------------
 # Generic helper: convert any SQLAlchemy ORM object / collection to
