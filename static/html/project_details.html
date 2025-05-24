@@ -1,338 +1,382 @@
 <!-- Mobile-First Project Details Template -->
 <div id="projectDetailsContainer" class="project-details-container">
-<div class="project-details">
-  <!-- Mobile Header -->
-  <header class="project-header">
-    <div class="flex items-center gap-3 mb-4">
-      <button id="backToProjectsBtn" class="btn btn-ghost btn-square lg:hidden">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-        </svg>
-      </button>
-      <div class="flex-1 min-w-0">
-        <h1 id="projectTitle" class="text-xl lg:text-2xl font-bold truncate">Project Title</h1>
-        <div class="flex items-center gap-2 mt-1">
-          <!-- Token usage badge removed for mobile refactor -->
-          <span class="badge badge-outline badge-sm">
-            <span id="conversationCount">0</span> chats
-          </span>
-        </div>
-      </div>
-      <div class="flex gap-2">
-        <button id="editProjectBtn" class="btn btn-ghost btn-square">
+  <div class="project-details">
+    <!-- Mobile Header -->
+    <header class="project-header">
+      <div class="flex items-center gap-3 mb-4">
+        <button id="backToProjectsBtn" class="btn btn-ghost btn-square lg:hidden">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
           </svg>
         </button>
-        <button id="projectMenuBtn" class="btn btn-ghost btn-square">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
-          </svg>
-        </button>
-      </div>
-    </div>
-    <!-- Mobile-Optimized Stats -->
-    <div class="project-stats">
-      <!-- Token usage (hook for TokenStatsManager) -->
-      <div id="tokenUsageStat" class="project-stat">
-        <div id="tokenStatsCurrentUsage" class="text-2xl font-bold text-warning">0</div>
-        <div class="text-sm text-base-content/70">Tokens</div>
-        <button id="tokenStatsBtn" class="btn btn-ghost btn-xs" aria-label="Token stats">⋯</button>
-      </div>
-      <div class="project-stat">
-        <div class="text-2xl font-bold text-success" id="fileCount">0</div>
-        <div class="text-sm text-base-content/70">Files</div>
-      </div>
-      <div class="project-stat">
-        <div class="text-2xl font-bold text-info" id="artifactCount">0</div>
-        <div class="text-sm text-base-content/70">Artifacts</div>
-      </div>
-    </div>
-  </header>
-
-  <!-- Mobile-First Tab Navigation -->
-  <div class="project-tabs">
-    <button class="project-tab active" data-tab="chat">
-      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
-      </svg>
-      Chat
-    </button>
-    <button class="project-tab" data-tab="files">
-      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-      </svg>
-      Files
-    </button>
-    <button class="project-tab" data-tab="knowledge">
-      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-      </svg>
-      <span class="hidden sm:inline">Knowledge</span>
-      <span class="sm:hidden">KB</span>
-    </button>
-    <button class="project-tab" data-tab="settings">
-      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-      </svg>
-      Settings
-    </button>
-  </div>
-
-  <!-- Tab Content -->
-  <div class="project-tab-content">
-    <!-- Chat Tab (Mobile-First) -->
-    <div id="chatTab" class="tab-pane active">
-      <!-- Chat interface from chat-mobile.html goes here -->
-      <div class="chat-container">
-        <div id="chatMessages" class="chat-messages"></div>
-        <div class="chat-input-container">
-          <div class="chat-input-row">
-            <input id="chatInput" class="chat-input" type="text" placeholder="Type your message...">
-            <button id="chatSendBtn" class="chat-send-btn">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
-              </svg>
-            </button>
+        <div class="flex-1 min-w-0">
+          <h1 id="projectTitle" class="text-xl lg:text-2xl font-bold truncate">Project Title</h1>
+          <div class="flex items-center gap-2 mt-1">
+            <!-- Token usage badge removed for mobile refactor -->
+            <span class="badge badge-outline badge-sm">
+              <span id="conversationCount">0</span> chats
+            </span>
           </div>
         </div>
-      </div>
-      <!-- Mobile Conversation History -->
-      <div class="mt-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="font-semibold">Recent Conversations</h3>
-          <button id="newConversationBtn" class="btn btn-primary btn-sm">
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        <div class="flex gap-2">
+          <button id="editProjectBtn" class="btn btn-ghost btn-square">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
-            New
+          </button>
+          <button id="projectMenuBtn" class="btn btn-ghost btn-square">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+            </svg>
           </button>
         </div>
-        <div id="conversationsList" class="space-y-2"></div>
       </div>
+      <!-- Mobile-Optimized Stats -->
+      <div class="project-stats">
+        <!-- Token usage (hook for TokenStatsManager) -->
+        <div id="tokenUsageStat" class="project-stat">
+          <div id="tokenStatsCurrentUsage" class="text-2xl font-bold text-warning">0</div>
+          <div class="text-sm text-base-content/70">Tokens</div>
+          <button id="tokenStatsBtn" class="btn btn-ghost btn-xs" aria-label="Token stats">⋯</button>
+        </div>
+        <div class="project-stat">
+          <div class="text-2xl font-bold text-success" id="fileCount">0</div>
+          <div class="text-sm text-base-content/70">Files</div>
+        </div>
+        <div class="project-stat">
+          <div class="text-2xl font-bold text-info" id="artifactCount">0</div>
+          <div class="text-sm text-base-content/70">Artifacts</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Mobile-First Tab Navigation -->
+    <div class="project-tabs">
+      <button class="project-tab active" data-tab="chat">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+        Chat
+      </button>
+      <button class="project-tab" data-tab="files">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        Files
+      </button>
+      <button class="project-tab" data-tab="knowledge">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <span class="hidden sm:inline">Knowledge</span>
+        <span class="sm:hidden">KB</span>
+      </button>
+      <button class="project-tab" data-tab="settings">
+        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        </svg>
+        Settings
+      </button>
     </div>
-    <!-- Files Tab -->
-    <div id="filesTab" class="tab-pane hidden">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="font-semibold">Project Files</h3>
-        <button id="uploadFileBtn" class="btn btn-primary btn-sm">
-          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-          </svg>
-          Upload
-        </button>
-      </div>
-      <!-- Enhanced File Upload Component Template (inlined) -->
-      <div id="dragDropZone" class="file-upload-container" tabindex="0"
-           aria-labelledby="file-upload-title" aria-describedby="file-upload-instructions">
 
-        <!-- Upload area -->
-        <div class="text-center">
-          <div class="file-upload-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-          </div>
-          <h3 id="file-upload-title" class="file-upload-title">Upload Files</h3>
-          <p id="file-upload-instructions" class="file-upload-instructions">
-            Drag and drop files here, or <label for="fileInput" class="file-upload-browse-btn">browse</label>
-          </p>
-          <div class="text-xs text-base-content/60 mt-1">
-            Supports: TXT, MD, CSV, JSON, PDF, DOC, DOCX, PY, JS, HTML, CSS
-          </div>
-        </div>
-
-        <!-- Hidden file input -->
-        <input id="fileInput" type="file" class="file-upload-input" multiple
-               aria-label="File upload" accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,.py,.js,.html,.css" />
-
-        <!-- File progress indicator (hidden by default) -->
-        <div id="filesUploadProgress" class="file-upload-progress hidden">
-          <div class="file-upload-progress-label" aria-live="polite">
-            Uploading files... <span id="file-upload-progress-percent">0%</span>
-          </div>
-          <div class="file-upload-progress-bar">
-            <progress id="fileProgressBar" value="0" max="100" class="progress progress-primary w-full"></progress>
-          </div>
-          <p id="uploadStatus" class="text-xs text-base-content/60 mt-1">Uploading...</p>
-        </div>
-
-        <!-- Error message area (hidden by default) -->
-        <div id="file-upload-error" class="file-upload-error hidden" role="alert" aria-live="assertive"></div>
-
-        <!-- File preview area (hidden by default) -->
-        <ul id="file-preview-list" class="file-preview-list hidden" aria-label="Selected files"></ul>
-      </div>
-
-      <!-- File preview item template (cloned by JS) -->
-      <template id="file-preview-template">
-        <li class="file-preview-item">
-          <div class="file-preview-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-          <div class="file-preview-details">
-            <div class="file-preview-name" title="\${filename}">\${filename}</div>
-            <div class="file-preview-info">
-              <span class="file-preview-type">\${filetype}</span>
-              <span class="file-preview-size">\${filesize}</span>
+    <!-- Tab Content -->
+    <div class="project-tab-content">
+      <!-- Chat Tab (Mobile-First) -->
+      <div id="chatTab" class="tab-pane active">
+        <!-- Chat interface from chat-mobile.html goes here -->
+        <div class="chat-container">
+          <div id="chatMessages" class="chat-messages"></div>
+          <div class="chat-input-container">
+            <div class="chat-input-row">
+              <input id="chatInput" class="chat-input" type="text" placeholder="Type your message...">
+              <button id="chatSendBtn" class="chat-send-btn">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
             </div>
           </div>
-          <div class="file-preview-actions">
-            <button type="button" class="file-preview-delete" aria-label="Remove file">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </div>
+        <!-- Mobile Conversation History -->
+        <div class="mt-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold">Recent Conversations</h3>
+            <button id="newConversationBtn" class="btn btn-primary btn-sm">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
               </svg>
+              New
             </button>
           </div>
-        </li>
-      </template>
+          <div id="conversationsList" class="space-y-2"></div>
+        </div>
+      </div>
+      <!-- Files Tab -->
+      <div id="filesTab" class="tab-pane hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold">Project Files</h3>
+          <button id="uploadFileBtn" class="btn btn-primary btn-sm">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Upload
+          </button>
+        </div>
+        <!-- Enhanced File Upload Component Template (inlined) -->
+        <div id="dragDropZone" class="file-upload-container" tabindex="0" aria-labelledby="file-upload-title"
+          aria-describedby="file-upload-instructions">
 
-      <!-- Error and success status icons (for state changes) -->
-      <template id="upload-status-icons">
-        <svg class="upload-success-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        <svg class="upload-error-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-        <svg class="upload-file-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <svg class="upload-image-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <svg class="upload-pdf-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-          <text x="12" y="16" text-anchor="middle" font-size="7" font-weight="bold" fill="currentColor">PDF</text>
-        </svg>
-      </template>
-      <!-- File List -->
-      <div id="filesList" class="grid gap-3"></div>
-    </div>
-    <!-- Knowledge Tab -->
-    <div id="knowledgeTab" class="tab-pane hidden">
-      <div class="mb-4">
-        <h3 class="font-semibold mb-2">Knowledge Base</h3>
-        <!-- Enhanced Knowledge Base Component Template (inlined) -->
-        <div class="knowledge-base-component">
-          <!-- Knowledge Base Toggle -->
-          <div class="kb-toggle-section mb-4">
-            <label class="flex items-center space-x-3">
-              <input type="checkbox" id="kbToggle" class="form-checkbox h-5 w-5 text-blue-600">
-              <span class="text-sm font-medium text-gray-700">Enable Knowledge Base</span>
-            </label>
-            <p class="text-xs text-gray-500 mt-1">
-              Use uploaded documents to enhance AI responses
+          <!-- Upload area -->
+          <div class="text-center">
+            <div class="file-upload-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+            </div>
+            <h3 id="file-upload-title" class="file-upload-title">Upload Files</h3>
+            <p id="file-upload-instructions" class="file-upload-instructions">
+              Drag and drop files here, or <label for="fileInput" class="file-upload-browse-btn">browse</label>
             </p>
+            <div class="text-xs text-base-content/60 mt-1">
+              Supports: TXT, MD, CSV, JSON, PDF, DOC, DOCX, PY, JS, HTML, CSS
+            </div>
           </div>
-          <div class="kb-controls space-y-3">
-            <div class="model-selection">
-              <label for="modelSelect" class="block text-sm font-medium text-gray-700 mb-1">
-                Embedding Model
+
+          <!-- Hidden file input -->
+          <input id="fileInput" type="file" class="file-upload-input" multiple aria-label="File upload"
+            accept=".txt,.md,.csv,.json,.pdf,.doc,.docx,.py,.js,.html,.css" />
+
+          <!-- File progress indicator (hidden by default) -->
+          <div id="filesUploadProgress" class="file-upload-progress hidden">
+            <div class="file-upload-progress-label" aria-live="polite">
+              Uploading files... <span id="file-upload-progress-percent">0%</span>
+            </div>
+            <div class="file-upload-progress-bar">
+              <progress id="fileProgressBar" value="0" max="100" class="progress progress-primary w-full"></progress>
+            </div>
+            <p id="uploadStatus" class="text-xs text-base-content/60 mt-1">Uploading...</p>
+          </div>
+
+          <!-- Error message area (hidden by default) -->
+          <div id="file-upload-error" class="file-upload-error hidden" role="alert" aria-live="assertive"></div>
+
+          <!-- File preview area (hidden by default) -->
+          <ul id="file-preview-list" class="file-preview-list hidden" aria-label="Selected files"></ul>
+        </div>
+
+        <!-- File preview item template (cloned by JS) -->
+        <template id="file-preview-template">
+          <li class="file-preview-item">
+            <div class="file-preview-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div class="file-preview-details">
+              <div class="file-preview-name" title="\${filename}">\${filename}</div>
+              <div class="file-preview-info">
+                <span class="file-preview-type">\${filetype}</span>
+                <span class="file-preview-size">\${filesize}</span>
+              </div>
+            </div>
+            <div class="file-preview-actions">
+              <button type="button" class="file-preview-delete" aria-label="Remove file">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </li>
+        </template>
+
+        <!-- Error and success status icons (for state changes) -->
+        <template id="upload-status-icons">
+          <svg class="upload-success-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+          </svg>
+          <svg class="upload-error-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+          <svg class="upload-file-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <svg class="upload-image-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          <svg class="upload-pdf-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+            <text x="12" y="16" text-anchor="middle" font-size="7" font-weight="bold" fill="currentColor">PDF</text>
+          </svg>
+        </template>
+        <!-- File List -->
+        <div id="filesList" class="grid gap-3"></div>
+      </div>
+      <!-- Knowledge Tab -->
+      <div id="knowledgeTab" class="tab-pane hidden">
+        <div class="mb-4">
+          <h3 class="font-semibold mb-2">Knowledge Base</h3>
+          <!-- Enhanced Knowledge Base Component Template (inlined) -->
+          <div class="knowledge-base-component">
+            <!-- Knowledge Base Toggle -->
+            <div class="kb-toggle-section mb-4">
+              <label class="flex items-center space-x-3">
+                <input type="checkbox" id="kbToggle" class="form-checkbox h-5 w-5 text-blue-600">
+                <span class="text-sm font-medium text-gray-700">Enable Knowledge Base</span>
               </label>
-              <select id="modelSelect" class="form-select w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                <option value="">Select a model...</option>
-                <option value="text-embedding-ada-002">OpenAI Ada-002</option>
-                <option value="text-embedding-3-small">OpenAI Embedding-3-Small</option>
-                <option value="text-embedding-3-large">OpenAI Embedding-3-Large</option>
-              </select>
+              <p class="text-xs text-gray-500 mt-1">
+                Use uploaded documents to enhance AI responses
+              </p>
             </div>
-            <div class="kb-actions flex flex-wrap gap-2">
-              <button id="setupButton"
-                      class="btn btn-primary px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50">
-                Setup KB
-              </button>
-              <button id="reprocessButton"
-                      class="btn btn-secondary px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50">
-                Reprocess
-              </button>
-              <button id="settingsButton"
-                      class="btn btn-outline px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
-                Settings
-              </button>
-            </div>
-            <!-- Status Display -->
-            <div id="kbStatus" class="kb-status"></div>
-            <!-- Processing Progress -->
-            <div id="kbProgress" class="kb-progress hidden">
-              <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
-                <span>Processing knowledge base...</span>
-                <span class="progress-percentage">0%</span>
+            <div class="kb-controls space-y-3">
+              <!-- Knowledge Base Search -->
+              <div class="kb-search">
+                <label for="knowledgeSearchInput" class="block text-sm font-medium text-gray-700 mb-1">
+                  Search Knowledge Base
+                </label>
+                <div class="flex gap-2">
+                  <input id="knowledgeSearchInput" type="text" placeholder="Search documents..."
+                    class="form-input flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                  <button id="searchKnowledgeBtn"
+                    class="btn btn-primary px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                    Search
+                  </button>
+                </div>
               </div>
-              <div class="w-full bg-gray-200 rounded-full h-2">
-                <div class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+              <div class="model-selection">
+                <label for="modelSelect" class="block text-sm font-medium text-gray-700 mb-1">
+                  Embedding Model
+                </label>
+                <select id="modelSelect"
+                  class="form-select w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">Select a model...</option>
+                  <option value="text-embedding-ada-002">OpenAI Ada-002</option>
+                  <option value="text-embedding-3-small">OpenAI Embedding-3-Small</option>
+                  <option value="text-embedding-3-large">OpenAI Embedding-3-Large</option>
+                </select>
               </div>
-            </div>
-            <!-- Knowledge Base Info -->
-            <div id="kbInfo" class="kb-info hidden">
-              <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
-                <h4 class="text-sm font-medium text-blue-800 mb-2">Knowledge Base Status</h4>
-                <div class="text-sm text-blue-700">
-                  <div class="kb-stats space-y-1">
-                    <div>Documents: <span id="kbDocCount">0</span></div>
-                    <div>Chunks: <span id="kbChunkCount">0</span></div>
-                    <div>Last Updated: <span id="kbLastUpdated">Never</span></div>
+              <div class="kb-actions flex flex-wrap gap-2">
+                <button id="setupButton"
+                  class="btn btn-primary px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50">
+                  Setup KB
+                </button>
+                <button id="reprocessButton"
+                  class="btn btn-secondary px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50">
+                  Reprocess
+                </button>
+                <button id="settingsButton"
+                  class="btn btn-outline px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2">
+                  Settings
+                </button>
+              </div>
+              <!-- Status Display -->
+              <div id="kbStatus" class="kb-status">
+                <div id="knowledgeStatus" class="hidden">
+                  <span id="kbStatusBadge" class="badge badge-success badge-sm">Active</span>
+                </div>
+                <div id="knowledgeBaseInactive" class="text-sm text-gray-500">
+                  Knowledge Base is not configured for this project.
+                </div>
+              </div>
+              <!-- Processing Progress -->
+              <div id="kbProgress" class="kb-progress hidden">
+                <div class="flex items-center justify-between text-sm text-gray-600 mb-2">
+                  <span>Processing knowledge base...</span>
+                  <span class="progress-percentage">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                  <div class="bg-green-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+              </div>
+              <!-- Knowledge Base Info -->
+              <div id="kbInfo" class="kb-info hidden">
+                <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <h4 class="text-sm font-medium text-blue-800 mb-2">Knowledge Base Status</h4>
+                  <div class="text-sm text-blue-700">
+                    <div class="kb-stats space-y-1">
+                      <div>Name: <span id="knowledgeBaseName">Project Knowledge Base</span></div>
+                      <div>Model: <span id="kbModelDisplay">Not Set</span></div>
+                      <div>Version: <span id="kbVersionDisplay">v1</span></div>
+                      <div>Documents: <span id="kbDocCount">0</span></div>
+                      <div>Chunks: <span id="kbChunkCount">0</span></div>
+                      <div>Last Used: <span id="kbLastUsedDisplay">Never</span></div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
+        <!-- Search Results -->
+        <div id="knowledgeResults" class="space-y-3"></div>
       </div>
-      <!-- Search Results -->
-      <div id="knowledgeResults" class="space-y-3"></div>
-    </div>
-    <!-- Settings Tab -->
-    <div id="settingsTab" class="tab-pane hidden">
-      <div class="space-y-6">
-        <!-- Project Settings -->
-        <div class="card">
-          <h3 class="font-semibold mb-3">Project Settings</h3>
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium mb-1">Project Name</label>
-              <input id="projectNameInput" type="text" class="input w-full">
-            </div>
-            <div>
-              <label class="block text-sm font-medium mb-1">Description</label>
-              <textarea id="projectDescriptionInput" class="textarea w-full" rows="3"></textarea>
+      <!-- Settings Tab -->
+      <div id="settingsTab" class="tab-pane hidden">
+        <div class="space-y-6">
+          <!-- Project Settings -->
+          <div class="card">
+            <h3 class="font-semibold mb-3">Project Settings</h3>
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium mb-1">Project Name</label>
+                <input id="projectNameInput" type="text" class="input w-full">
+              </div>
+              <div>
+                <label class="block text-sm font-medium mb-1">Description</label>
+                <textarea id="projectDescriptionInput" class="textarea w-full" rows="3"></textarea>
+              </div>
             </div>
           </div>
-        </div>
-        <!-- Danger Zone -->
-        <div class="card border-error/20">
-          <h3 class="font-semibold text-error mb-3">Danger Zone</h3>
-          <div class="space-y-3">
-            <button id="archiveProjectBtn" class="btn btn-warning w-full">
-              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
-              </svg>
-              Archive Project
-            </button>
-            <button id="deleteProjectBtn" class="btn btn-error w-full">
-              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-              </svg>
-              Delete Project
-            </button>
+          <!-- Danger Zone -->
+          <div class="card border-error/20">
+            <h3 class="font-semibold text-error mb-3">Danger Zone</h3>
+            <div class="space-y-3">
+              <button id="archiveProjectBtn" class="btn btn-warning w-full">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                </svg>
+                Archive Project
+              </button>
+              <button id="deleteProjectBtn" class="btn btn-error w-full">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Delete Project
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 </div>
-</div>
 <!-- Mobile FAB for Quick Actions -->
-<button id="projectFab" class="fixed bottom-20 right-4 w-14 h-14 bg-primary text-primary-content rounded-full shadow-lg lg:hidden">
+<button id="projectFab"
+  class="fixed bottom-20 right-4 w-14 h-14 bg-primary text-primary-content rounded-full shadow-lg lg:hidden">
   <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
   </svg>
 </button>

@@ -56,19 +56,19 @@ class ModalManager {
     this.logger =
       logger ||
       this.DependencySystem?.modules?.get?.('logger') ||
-      { error: () => {}, warn: () => {}, info: () => {}, log: () => {}, debug: () => {} };
+      { error: () => { }, warn: () => { }, info: () => { }, log: () => { }, debug: () => { } };
     this.errorReporter =
       errorReporter ||
       this.DependencySystem?.modules?.get?.('errorReporter') ||
-      { report: () => {} };
+      { report: () => { } };
     this.app = this.DependencySystem?.modules?.get?.('app') || null;
 
     // ─── Deferred “fully-ready” promise ─────────────────────────
     this._readyResolve = null;
-    this._readyReject  = null;
+    this._readyReject = null;
     this._readyPromise = new Promise((res, rej) => {
       this._readyResolve = res;
-      this._readyReject  = rej;
+      this._readyReject = rej;
     });
 
     this.activeModal = null;
@@ -226,7 +226,7 @@ class ModalManager {
       this.logger.debug?.('[ModalManager] init: Awaiting core dependencies (eventHandlers, domAPI).');
       await domReadinessService.dependenciesAndElements({
         deps: ['eventHandlers', 'domAPI'],
-        timeout: 5000, 
+        timeout: 5000,
         context: 'modalManager.init:coreDeps'
       });
       this.logger.debug?.('[ModalManager] init: Core dependencies ready.');
@@ -245,6 +245,7 @@ class ModalManager {
          This guarantees that the required 'modalsLoaded' event
          will fire, allowing init() to proceed without timing out.
       ---------------------------------------------------------- */
+      let shouldWaitForEvent = true;
       try {
         const container = this.domAPI.getElementById('modalsContainer');
         const modalsAlreadyInjected =
@@ -253,7 +254,12 @@ class ModalManager {
         const htmlTemplateLoader =
           this.DependencySystem?.modules?.get?.('htmlTemplateLoader');
 
-        if (!modalsAlreadyInjected && htmlTemplateLoader?.loadTemplate) {
+        if (modalsAlreadyInjected) {
+          this.logger.info?.(
+            '[ModalManager] init: Modals already injected, skipping load and event wait.'
+          );
+          shouldWaitForEvent = false;
+        } else if (htmlTemplateLoader?.loadTemplate) {
           this.logger.info?.(
             '[ModalManager] init: Loading /static/html/modals.html template eagerly.'
           );
@@ -274,6 +280,22 @@ class ModalManager {
                 { context: 'modalManager' }
               )
             );
+        } else {
+          this.logger.warn?.(
+            '[ModalManager] init: htmlTemplateLoader not available and modals not pre-injected. Emitting synthetic modalsLoaded event.'
+          );
+          // Emit synthetic event to unblock initialization
+          const doc = this.domAPI.getDocument();
+          this.domAPI.dispatchEvent(
+            doc,
+            new CustomEvent('modalsLoaded', {
+              detail: {
+                success: false,
+                error: 'htmlTemplateLoader not available',
+                synthetic: true
+              }
+            })
+          );
         }
       } catch (err) {
         this.logger.warn?.(
@@ -281,23 +303,39 @@ class ModalManager {
           err,
           { context: 'modalManager' }
         );
+        // Emit synthetic event to unblock initialization
+        const doc = this.domAPI.getDocument();
+        this.domAPI.dispatchEvent(
+          doc,
+          new CustomEvent('modalsLoaded', {
+            detail: {
+              success: false,
+              error: err.message || 'Unexpected error during modal load',
+              synthetic: true
+            }
+          })
+        );
       }
 
-      this.logger.info?.("[ModalManager] init: Waiting for 'modalsLoaded' event...");
-      // CRITICAL CHANGE: Strict wait for modalsLoaded.
-      // If modals.html fails to load or the event doesn't fire, ModalManager init will fail.
-      const modalsLoadedEventData = await domReadinessService.waitForEvent('modalsLoaded', {
-        timeout: 15000, // Increased timeout to 15s for modals.html loading
-        context: 'modalManager.init:waitForModalsLoaded'
-      });
+      if (shouldWaitForEvent) {
+        this.logger.info?.("[ModalManager] init: Waiting for 'modalsLoaded' event...");
+        // CRITICAL CHANGE: Strict wait for modalsLoaded.
+        // If modals.html fails to load or the event doesn't fire, ModalManager init will fail.
+        const modalsLoadedEventData = await domReadinessService.waitForEvent('modalsLoaded', {
+          timeout: 15000, // Increased timeout to 15s for modals.html loading
+          context: 'modalManager.init:waitForModalsLoaded'
+        });
 
-      if (!modalsLoadedEventData?.detail?.success) {
-        const errorMsg = modalsLoadedEventData?.detail?.error || 'modalsLoaded event reported failure or missing success flag';
-        this.logger.error?.(`[ModalManager] init: 'modalsLoaded' event indicated failure. Error: ${errorMsg}`, { eventDetail: modalsLoadedEventData?.detail });
-        throw new Error(`[ModalManager] 'modalsLoaded' event reported failure: ${errorMsg}`);
+        if (!modalsLoadedEventData?.detail?.success && !modalsLoadedEventData?.detail?.synthetic) {
+          const errorMsg = modalsLoadedEventData?.detail?.error || 'modalsLoaded event reported failure or missing success flag';
+          this.logger.error?.(`[ModalManager] init: 'modalsLoaded' event indicated failure. Error: ${errorMsg}`, { eventDetail: modalsLoadedEventData?.detail });
+          throw new Error(`[ModalManager] 'modalsLoaded' event reported failure: ${errorMsg}`);
+        }
+        this.logger.info?.("[ModalManager] init: 'modalsLoaded' event received.", { synthetic: modalsLoadedEventData?.detail?.synthetic });
+      } else {
+        this.logger.info?.("[ModalManager] init: Skipping 'modalsLoaded' event wait - modals already present.");
       }
-      this.logger.info?.("[ModalManager] init: 'modalsLoaded' event received and indicates success.");
-      
+
       // The one-time listener for 'modalsLoaded' to re-scan is removed as we now strictly await it.
       // If it was necessary due to late injection by other means, that's a separate issue.
       // For now, assume modals.html load is the sole trigger for 'modalsLoaded'.
@@ -380,15 +418,15 @@ class ModalManager {
     const modalEl = this.domAPI.getElementById(modalId);
     if (!modalEl) {
       this.logger.warn?.(`[ModalManager] show(${modalName}): Modal element with ID "${modalId}" NOT FOUND in DOM. Cannot show. This is unexpected if init was successful.`, { modalName, modalId });
-      return false; 
+      return false;
     }
     this.logger.debug?.(`[ModalManager] show(${modalName}): Found modal element for ID "${modalId}". Proceeding to show.`);
 
     // Dynamic content for error modal
     if (modalName === 'error') {
-      const titleEl   = modalEl.querySelector('#errorModalTitle');
+      const titleEl = modalEl.querySelector('#errorModalTitle');
       const messageEl = modalEl.querySelector('#errorModalMessage');
-      if (titleEl   && options.title)   titleEl.textContent   = options.title;
+      if (titleEl && options.title) titleEl.textContent = options.title;
       if (messageEl && options.message) messageEl.textContent = options.message;
       this.logger.debug?.(`[ModalManager] show(${modalName}): Populated error modal content.`, { title: options.title });
     }
@@ -565,11 +603,11 @@ class ProjectModal {
     this.logger =
       logger ||
       this.DependencySystem?.modules?.get?.('logger') ||
-      { error: () => {}, warn: () => {}, info: () => {}, log: () => {}, debug: () => {} };
+      { error: () => { }, warn: () => { }, info: () => { }, log: () => { }, debug: () => { } };
     this.errorReporter =
       errorReporter ||
       this.DependencySystem?.modules?.get?.('errorReporter') ||
-      { report: () => {} };
+      { report: () => { } };
 
     this.modalElement = null;
     this.formElement = null;
@@ -740,15 +778,15 @@ class ProjectModal {
 
   setupEventListeners() {
     if (!this.modalElement) {
-       this.logger.warn?.('[ProjectModal] setupEventListeners: modalElement is null. Cannot set up common listeners.');
-       // If modalElement is null, formElement is also likely null or irrelevant.
-       return;
+      this.logger.warn?.('[ProjectModal] setupEventListeners: modalElement is null. Cannot set up common listeners.');
+      // If modalElement is null, formElement is also likely null or irrelevant.
+      return;
     }
     if (!this.formElement) {
       this.logger.warn?.('[ProjectModal] setupEventListeners: formElement is null. Cannot set up form submit listener.');
       // Proceed to set up modal-specific listeners like ESC and backdrop if modalElement exists
     }
-    
+
     this.logger.debug?.('[ProjectModal] Setting up event listeners.');
 
     if (this.formElement) {
@@ -761,7 +799,7 @@ class ProjectModal {
         'submit',
         submitHandler,
         'ProjectModal form submit', // More specific description
-        { passive: false } 
+        { passive: false }
       );
     }
 
@@ -835,7 +873,7 @@ class ProjectModal {
 
     const saveBtn = this.modalElement.querySelector('#projectSaveBtn');
     if (!saveBtn) {
-        this.logger.warn?.('[ProjectModal] handleSubmit: Save button #projectSaveBtn not found. UI update for loading state will fail.');
+      this.logger.warn?.('[ProjectModal] handleSubmit: Save button #projectSaveBtn not found. UI update for loading state will fail.');
     }
 
     try {
@@ -848,7 +886,7 @@ class ProjectModal {
       };
       // projectId from hidden input for existing projects, or null/empty for new.
       // this.currentProjectId is set when opening for an existing project.
-      const projectIdFromForm = formData.get('projectId'); 
+      const projectIdFromForm = formData.get('projectId');
       const idToSave = projectIdFromForm || this.currentProjectId; // Prefer form ID if available, else currentProjectId
 
       this.logger.debug?.(`[ProjectModal] handleSubmit: Project data extracted. Name: "${projectData.name}", Form ID: "${projectIdFromForm}", Current Edit ID: "${this.currentProjectId}", Effective ID for save: "${idToSave}"`);
@@ -857,7 +895,7 @@ class ProjectModal {
         this.logger.warn?.('[ProjectModal] handleSubmit: Project name is empty after trim. Aborting save.');
         // TODO: Implement user-facing validation feedback (e.g., highlight field, show message)
         this.errorReporter.report?.(new Error('Validation: Project name empty'), {
-            module: 'ProjectModal', fn: 'handleSubmit', validationError: true, field: 'name'
+          module: 'ProjectModal', fn: 'handleSubmit', validationError: true, field: 'name'
         });
         if (saveBtn) this._setButtonLoading(saveBtn, false); // Reset button if validation fails early
         return;
@@ -867,7 +905,7 @@ class ProjectModal {
       this.logger.info?.(`[ProjectModal] handleSubmit: Attempting to save project. ID: ${idToSave || '(new project)'}, Name: "${projectData.name}"`);
 
       await this.saveProject(idToSave, projectData); // Use idToSave (could be null for new project)
-      
+
       this.logger.info?.(`[ProjectModal] handleSubmit: Project save successful. ID: ${idToSave || '(new project after save)'}, Name: "${projectData.name}"`);
       this.closeModal();
 

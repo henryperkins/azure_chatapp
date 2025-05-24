@@ -584,9 +584,13 @@ export function createAccessibilityEnhancements({
     }
 
     _safeHandler(handler, description) {
-      // Use canonical safeHandler from DI
+      // Use canonical safeHandler from DI - this is the correct pattern
       const safeHandler = DependencySystem.modules.get('safeHandler');
-      return safeHandler ? safeHandler(handler, description) : handler;
+      if (!safeHandler) {
+        logger.warn('[AccessibilityUtils] safeHandler not available in DI, using raw handler', { context: MODULE_CONTEXT });
+        return handler;
+      }
+      return safeHandler(handler, description);
     }
   }
 

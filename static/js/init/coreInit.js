@@ -245,13 +245,26 @@ export function createCoreInitializer({
       projectDetailsComponent.setChatManager(chatManager);
     }
 
-    // 7. EventHandlers init
+    // 7. modalManager.init (handles modal loading internally with proper timeouts)
+    // CRITICAL: Initialize modalManager BEFORE eventHandlers to avoid circular dependency
+    // eventHandlers.init() may need to access modal elements, so modals must be loaded first
+    if (modalManager.init) {
+      try {
+        await modalManager.init();
+        logger.log('[coreInit] modalManager initialization complete', { context: 'coreInit' });
+      } catch (err) {
+        logger.error('[coreInit] Error in modalManager.init', err, { context: 'coreInit:modalManager:init' });
+        throw err;
+      }
+    }
+
+    // 8. EventHandlers init (now that modals are ready)
     if (eventHandlers?.init) {
       await eventHandlers.init();
       logger.log('[coreInit] eventHandlers initialization complete', { context: 'coreInit' });
     }
 
-    // 8. ProjectDashboard
+    // 9. ProjectDashboard
     const projectDashboard = createProjectDashboard({
       dependencySystem: DependencySystem,
       domAPI,
@@ -264,7 +277,7 @@ export function createCoreInitializer({
     });
     DependencySystem.register('projectDashboard', projectDashboard);
 
-    // 9. Project modal
+    // 10. Project modal
     const projectModal = createProjectModal({
       DependencySystem,
       eventHandlers,
@@ -274,7 +287,7 @@ export function createCoreInitializer({
     });
     DependencySystem.register('projectModal', projectModal);
 
-    // 9.5. Sidebar
+    // 11. Sidebar
     const sidebar = createSidebar({
       eventHandlers,
       DependencySystem,
@@ -294,35 +307,6 @@ export function createCoreInitializer({
       APP_CONFIG
     });
     DependencySystem.register('sidebar', sidebar);
-
-    // 10. Wait for modals to load (event-based or fallback)
-    let modalsLoadedSuccess = false;
-    const injected = domAPI.getElementById('modalsContainer')?.childElementCount > 0;
-    if (injected) {
-      modalsLoadedSuccess = true;
-    } else {
-      await new Promise((res) => {
-        eventHandlers.trackListener(
-          domAPI.getDocument(),
-          'modalsLoaded',
-          (e) => {
-            modalsLoadedSuccess = !!(e?.detail?.success);
-            res(true);
-          },
-          { once: true, description: 'modalsLoaded for coreInit', context: 'coreInit' }
-        );
-      });
-    }
-
-    // 11. modalManager.init
-    if (modalManager.init) {
-      try {
-        await modalManager.init();
-      } catch (err) {
-        logger.error('[coreInit] Error in modalManager.init', err, { context: 'coreInit:modalManager:init' });
-        throw err;
-      }
-    }
 
     logger.log('[coreInit][initializeCoreSystems] Complete', { context: 'coreInit' });
     return true;
