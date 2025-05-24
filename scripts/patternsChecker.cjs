@@ -102,6 +102,9 @@ const DEFAULT_CONFIG = {
 //   rules depend on) must be exempt from some checks to avoid false positives.
 const WRAPPER_FILE_REGEX = /(?:^|[\\/])(domAPI|eventHandler|eventHandlers|domReadinessService|browserService)\.(js|ts)$/i;
 
+//  Node / tooling files (CLI, tests, repo scripts) – console* is allowed
+const NODE_SCRIPT_REGEX = /(?:^|[\\/])(scripts|tests)[\\/].+\.(?:c?js|mjs|ts)$/i;
+
 let currentConfig = DEFAULT_CONFIG;
 
 /* ───────────────────────── Load Config ─────────────────────────── */
@@ -423,6 +426,7 @@ function vDI(err, file, isAppJs, config) {
   const serviceNamesConfig = config.serviceNames || DEFAULT_CONFIG.serviceNames;
   const bannedGlobals = ["window", "document"];
   const isLoggerJs = /\/logger\.(js|ts)$/i.test(file);
+  const isNodeScript = NODE_SCRIPT_REGEX.test(file);
 
   const diParamsInFactory = new Set();
   const destructuredServices = new Set();
@@ -587,7 +591,14 @@ function vDI(err, file, isAppJs, config) {
 
     CallExpression(p) {
       const cNode = p.node.callee;
-      if (cNode.type === "MemberExpression" && cNode.object.name === "console" && !isLoggerJs) {
+      if (
+        cNode.type === "MemberExpression" &&
+        cNode.object.type === "Identifier" &&
+        cNode.object.name === "console" &&
+        !p.scope.hasBinding("console") &&     // honour local shadowing
+        !isLoggerJs &&                        // logger implementation file
+        !isNodeScript                         // CLI / test / tooling files
+      ) {
         const badMethod = cNode.property.name;
         err.push(
           E(
@@ -1429,23 +1440,48 @@ function vErrorLog(err, file, moduleCtx, config) {
 
       p.traverse({
         CallExpression(q) {
+          /* Determine whether this is a logger-error call:
+           *   1. logger.error(...)
+           *   2. logger.withContext('X').error(...)
+           */
           const cal = q.node.callee;
-          if (
-            cal.type === "MemberExpression" &&
-            cal.object.name === loggerName &&
-            cal.property.name === "error"
-          ) {
-            const includesErrorArg = q.node.arguments.some(a => {
-              const argPath = q.get(`arguments.${q.node.arguments.indexOf(a)}`);
-              const resolved = getExpressionSourceNode(argPath);
-              return resolved && resolved.type === "Identifier" && resolved.name === errId;
-            });
-            const lastArgIndex = q.node.arguments.length - 1;
-            const lastArgPath = q.get(`arguments.${lastArgIndex}`);
-            const lastArgNode = getExpressionSourceNode(lastArgPath);
-            const hasContext = lastArgNode?.type === "ObjectExpression" && hasProp(lastArgNode, "context");
-            if (includesErrorArg && hasContext) loggedCorrectly = true;
+          let loggerCallType = null;   // "direct" | "bound" | null
+          if (cal.type === "MemberExpression" && cal.property.name === "error") {
+            // 1) direct
+            if (cal.object.type === "Identifier" && cal.object.name === loggerName) {
+              loggerCallType = "direct";
+            }
+            // 2) bound via withContext
+            if (
+              cal.object.type === "CallExpression" &&
+              cal.object.callee?.type === "MemberExpression" &&
+              cal.object.callee.property.name === "withContext" &&
+              cal.object.callee.object.type === "Identifier" &&
+              cal.object.callee.object.name === loggerName
+            ) {
+              loggerCallType = "bound";
+            }
           }
+          if (!loggerCallType) return;
+
+          const includesErrorArg = q.node.arguments.some((a, idx) => {
+            const argPath = q.get(`arguments.${idx}`);
+            const resolved = getExpressionSourceNode(argPath);
+            return resolved && resolved.type === "Identifier" && resolved.name === errId;
+          });
+
+          let hasContextMeta = false;
+          if (loggerCallType === "bound") {
+            // withContext already supplies context
+            hasContextMeta = true;
+          } else {
+            const lastArgPath = q.get(`arguments.${q.node.arguments.length - 1}`);
+            const lastArgNode = getExpressionSourceNode(lastArgPath);
+            hasContextMeta =
+              lastArgNode?.type === "ObjectExpression" && hasProp(lastArgNode, "context");
+          }
+
+          if (includesErrorArg && hasContextMeta) loggedCorrectly = true;
         },
         TryStatement() {
           hasNestedTry = true;
