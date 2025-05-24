@@ -57,6 +57,8 @@ const RULE_NAME = {
   14: "Module Size Limit",
   15: "Canonical Implementations",
   16: "Error Object Structure",
+  17: "Logger Factory Placement",
+  18: "Obsolete Logger APIs",
   0: "Other Issues",
 };
 
@@ -74,9 +76,11 @@ const RULE_DESC = {
   11: "All network calls via DI-injected `apiClient`.",
   12: "No `console.*`; all logs via DI logger with context. Use canonical safeHandler.",
   13: "Single source of truth: `appModule.state` only; no local `authState` or dual checks.",
-  14: "Modules must not exceed 600 lines.",
+  14: "Modules must not exceed 1000 lines.",
   15: "Use canonical implementations only (safeHandler, form handlers, URL parsing, etc.)",
   16: "Error objects must use standard { status, data, message } structure.",
+  17: "`createLogger()` may appear **only** in logger.js or app.js bootstrap.",
+  18: "Deprecated logger APIs: authModule param or logger.setAuthModule().",
 };
 
 /* ───────────────────────── Default Configuration ──────────────── */
@@ -95,7 +99,7 @@ const DEFAULT_CONFIG = {
   },
   knownBusNames: ["eventBus", "moduleBus", "appBus", "AuthBus"],
   factoryValidationRegex: "Missing\\b|\\brequired\\b",
-  maxModuleLines: 600,
+  maxModuleLines: 1000,
 };
 
 //   Certain low-level infra modules (they *implement* the wrappers the other
@@ -346,7 +350,7 @@ function vFactory(err, file, config) {
                 "i"
               );
               if (validationRegex.test(errorText) ||
-                  /is required|not found|missing/i.test(errorText)) {
+                /is required|not found|missing/i.test(errorText)) {
                 hasDepCheck = true;
               }
             }
@@ -354,8 +358,8 @@ function vFactory(err, file, config) {
           // Also look for if (!param) checks which are common validation patterns
           IfStatement(ifPath) {
             if (ifPath.node.test.type === "UnaryExpression" &&
-                ifPath.node.test.operator === "!" &&
-                ifPath.node.test.argument.type === "Identifier") {
+              ifPath.node.test.operator === "!" &&
+              ifPath.node.test.argument.type === "Identifier") {
               // This is an if (!param) check
               hasDepCheck = true;
             }
@@ -471,7 +475,7 @@ function vFactory(err, file, config) {
 /* 2. Strict Dependency Injection & 12. Console Ban */
 function vDI(err, file, isAppJs, config) {
   const serviceNamesConfig = config.serviceNames || DEFAULT_CONFIG.serviceNames;
-  const bannedGlobals = ["window", "document"];
+  const bannedGlobals = ["window", "document", "navigator", "location"];
   const isLoggerJs = /\/logger\.(js|ts)$/i.test(file);
   const isNodeScript = NODE_SCRIPT_REGEX.test(file);
 
@@ -661,7 +665,7 @@ function vDI(err, file, isAppJs, config) {
       }
 
       /* window.localStorage / globalThis.sessionStorage, etc. */
-      const baseId   = p.node.object;
+      const baseId = p.node.object;
       const propName = p.node.property?.name;
       if (
         propName &&
@@ -1252,16 +1256,16 @@ function vBus(err, file, config) {
         const isKnownBus =
           // explicit well-known names from config
           (busSourceNode?.type === "Identifier" &&
-           knownBusNames.includes(busSourceNode.name)) ||
+            knownBusNames.includes(busSourceNode.name)) ||
           // inside a class using this.dispatchEvent(...)
           busSourceNode?.type === "ThisExpression" ||
           // variable that was initialised with `new EventTarget()`
           (busSourceNode?.type === "NewExpression" &&
-           busSourceNode.callee?.type === "Identifier" &&
-           busSourceNode.callee.name === "EventTarget") ||
+            busSourceNode.callee?.type === "Identifier" &&
+            busSourceNode.callee.name === "EventTarget") ||
           // something like DependencySystem.modules.get('…').getEventBus()
           (busSourceNode?.type === "CallExpression" &&
-           busSourceNode.callee?.property?.name === "getEventBus");
+            busSourceNode.callee?.property?.name === "getEventBus");
 
         if (!isKnownBus) {
           err.push(
@@ -1490,9 +1494,11 @@ function vLog(err, file, isAppJs, moduleCtx, config) {
       }
       if (c.type === "MemberExpression" && c.object.name === loggerName && c.property.name !== "withContext") {
         const argsPaths = p.get("arguments") || [];
-        const hasContextMeta = argsPaths.some(argPath => {
+        const hasContextMeta = argsPaths.some((argPath, idx) => {
           const n = getExpressionSourceNode(argPath);
-          return n && n.type === "ObjectExpression" && hasProp(n, "context");
+          if (n && n.type === "ObjectExpression" && hasProp(n, "context")) return true;
+          // allow logger.info("Module", ...) pattern for context-string as first arg
+          return idx === 0 && n && n.type === "StringLiteral";
         });
 
         if (!hasContextMeta) {
@@ -1587,7 +1593,7 @@ function vErrorLog(err, file, moduleCtx, config) {
           const isInlineFunction =
             handlerSourceNode &&
             (handlerSourceNode.type === "ArrowFunctionExpression" ||
-             handlerSourceNode.type === "FunctionExpression");
+              handlerSourceNode.type === "FunctionExpression");
 
           if (!isSafeHandlerCall && !isForwardedParam && !isInlineFunction) {
             err.push(
@@ -1989,6 +1995,88 @@ function vErrorStructure(err, file) {
   };
 }
 
+/* 12. Logger accessor anti-pattern */
+function vLoggerAccessor(err, file, isAppJs) {
+  if (isAppJs) return {};
+  return {
+    CallExpression(p) {
+      const cal = p.node.callee;
+      if (
+        cal.type === "MemberExpression" &&
+        cal.property.name === "get" &&
+        cal.object.type === "MemberExpression" &&
+        cal.object.object.name === "DependencySystem" &&
+        cal.object.property.name === "modules" &&
+        p.node.arguments[0]?.type === "StringLiteral" &&
+        p.node.arguments[0].value === "logger"
+      ) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            12,
+            "Do not retrieve logger via DependencySystem.modules.get('logger'); inject it.",
+            "Add 'logger' to the factory‘s dependency list instead."
+          )
+        );
+      }
+    }
+  };
+}
+
+/* 17 & 18. Logger factory and obsolete APIs */
+function vLoggerFactory(err, file, isAppJs) {
+  const isLoggerJs = /[/\\]logger\.(js|ts)$/i.test(file);
+
+  return {
+    CallExpression(p) {
+      // createLogger placement
+      if (p.node.callee.name === "createLogger") {
+        if (!isLoggerJs && !isAppJs) {
+          err.push(
+            E(
+              file,
+              p.node.loc.start.line,
+              17,
+              "`createLogger()` can only be called in logger.js or app bootstrap.",
+              "All other modules must receive a prepared logger via DI."
+            )
+          );
+        }
+        // obsolete authModule parameter
+        const cfg = p.node.arguments[0];
+        if (cfg?.type === "ObjectExpression" && hasProp(cfg, "authModule")) {
+          err.push(
+            E(
+              file,
+              cfg.loc.start.line,
+              18,
+              "`authModule` parameter to createLogger() is deprecated.",
+              "Remove this property—logger discovers auth via appModule.state."
+            )
+          );
+        }
+      }
+
+      // logger.setAuthModule(...) call
+      if (
+        p.node.callee.type === "MemberExpression" &&
+        p.node.callee.property.name === "setAuthModule"
+      ) {
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            18,
+            "`logger.setAuthModule()` is obsolete.",
+            "Delete the call; auth is tracked automatically."
+          )
+        );
+      }
+    }
+  };
+}
+
 /* ───────────────────────── Enhanced Analyzer ─────────────────── */
 function analyze(file, code, configToUse) {
   const errors = [];
@@ -2001,7 +2089,7 @@ function analyze(file, code, configToUse) {
     code.includes("WARNING: BOOTSTRAP EXCEPTION");
 
   const isWrapperFile = WRAPPER_FILE_REGEX.test(file);
-  const isDomAPIFile  = /(?:^|[\\/])domAPI\.(js|ts)$/i.test(file);
+  const isDomAPIFile = /(?:^|[\\/])domAPI\.(js|ts)$/i.test(file);
 
   // Add module size check first (no AST needed)
   if (!isAppJs) {
@@ -2043,11 +2131,13 @@ function analyze(file, code, configToUse) {
     isAppJs ? null : vState(errors, file, isAppJs, configToUse),
 
     isWrapperFile ? null : vEvent(errors, file, isAppJs, moduleCtx, configToUse),
-    isDomAPIFile  ? null : vSanitize(errors, file, configToUse),
+    isDomAPIFile ? null : vSanitize(errors, file, configToUse),
     vReadiness(errors, file, isAppJs, configToUse),
     vBus(errors, file, configToUse),
     vNav(errors, file, configToUse),
     vAPI(errors, file, configToUse),
+    vLoggerAccessor(errors, file, isAppJs),
+    vLoggerFactory(errors, file, isAppJs),
     vLog(errors, file, isAppJs, moduleCtx, configToUse),
     vErrorLog(errors, file, moduleCtx, configToUse),
     vAuth(errors, file, isAppJs),

@@ -14,7 +14,7 @@ import random
 import uuid
 import asyncio  # Added for asyncio.sleep
 
-from utils.sentry_utils import tag_transaction, sentry_span, inject_sentry_trace_headers
+from utils.sentry_utils import tag_transaction, sentry_span_context, inject_sentry_trace_headers
 from utils.mcp_sentry import (
     get_issue_details,
     search_issues,
@@ -109,7 +109,7 @@ async def test_sentry_performance(response: Response):
     inject_sentry_trace_headers(response)
 
     # Create a span for a simulated database operation
-    with sentry_span(op="db.query", description="Simulate database query") as span:
+    with sentry_span_context("db.query", "Simulate database query") as span:
         # Add database query details
         span.set_tag("db.type", "postgresql")
         span.set_tag("db.operation", "SELECT")
@@ -121,8 +121,8 @@ async def test_sentry_performance(response: Response):
         await asyncio.sleep(0.1)  # 100ms simulated database query
 
     # Create a span for a simulated HTTP request
-    with sentry_span(
-        op="http.client", description="Simulate external API call"
+    with sentry_span_context(
+        "http.client", "Simulate external API call"
     ) as span:
         # Add HTTP request details
         span.set_tag("http.method", "GET")
@@ -133,15 +133,15 @@ async def test_sentry_performance(response: Response):
         await asyncio.sleep(0.2)  # 200ms simulated API call
 
         # Create a nested span
-        with sentry_span(
-            op="serialization", description="Process API response"
+        with sentry_span_context(
+            "serialization", "Process API response"
         ) as child_span:
             child_span.set_data("serialization.format", "json")
             child_span.set_data("response.size", 1240)
             await asyncio.sleep(0.05)  # 50ms simulated processing
 
     # Create a span for cache operations
-    with sentry_span(op="cache.get", description="Check cache") as span:
+    with sentry_span_context("cache.get", "Check cache") as span:
         span.set_tag("cache.type", "redis")
         span.set_data("cache.key", f"user:preferences:{random.randint(1000, 9999)}")
         span.set_data("cache.hit", False)
@@ -176,7 +176,7 @@ async def test_sentry_profiling():
     logger.info(f"Starting profiling test with ID: {profile_id}")
 
     # CPU-intensive operations to profile
-    with sentry_span(op="cpu.intensive", description="Fibonacci calculation"):
+    with sentry_span_context("cpu.intensive", "Fibonacci calculation"):
         # Function that triggers a performance bottleneck
         def fibonacci(n):
             if n <= 1:
@@ -186,12 +186,12 @@ async def test_sentry_profiling():
         # Calculate Fibonacci numbers
         results = []
         for i in range(10, 30):
-            with sentry_span(op="fibonacci.calc", description=f"Calculate fib({i})"):
+            with sentry_span_context("fibonacci.calc", f"Calculate fib({i})"):
                 result = fibonacci(i)
                 results.append(result)
 
     # String manipulation operations
-    with sentry_span(op="string.manipulation", description="String operations"):
+    with sentry_span_context("string.manipulation", "String operations"):
         strings = []
         for i in range(1000):
             s = f"test-string-{i}-{uuid.uuid4()}"
@@ -204,7 +204,7 @@ async def test_sentry_profiling():
         _ = joined[::-1]  # Result unused but operation preserved for profiling
 
     # Memory operations
-    with sentry_span(op="memory.intensive", description="Memory operations"):
+    with sentry_span_context("memory.intensive", "Memory operations"):
         # Create large list
         large_list = [random.random() for _ in range(100000)]
 
@@ -245,8 +245,8 @@ async def test_sentry_mcp(issue_id: Optional[str] = None):
     try:
         # If issue_id is provided, get details for that specific issue
         if issue_id:
-            with sentry_span(
-                op="mcp.issue_details", description=f"Get issue details for {issue_id}"
+            with sentry_span_context(
+                "mcp.issue_details", f"Get issue details for {issue_id}"
             ):
                 issue_details = get_issue_details(issue_id)
 
@@ -268,14 +268,16 @@ async def test_sentry_mcp(issue_id: Optional[str] = None):
 
         # Otherwise, search for recent issues
         else:
-            with sentry_span(
-                op="mcp.search_issues", description="Search for recent issues"
+            with sentry_span_context(
+                "mcp.search_issues", "Search for recent issues"
             ):
                 issues = search_issues("is:unresolved", limit=5)
 
                 # Format the results
                 formatted_issues = []
                 for issue in issues:
+                    if not isinstance(issue, dict):
+                        continue
                     formatted_issues.append(
                         {
                             "id": issue.get("id"),
@@ -331,7 +333,7 @@ async def test_distributed_tracing(response: Response):
     logger.info(f"Starting distributed tracing test with ID: {trace_id}")
 
     # Simulate a complex distributed transaction
-    with sentry_span(op="service.auth", description="Authentication Service") as span:
+    with sentry_span_context("service.auth", "Authentication Service") as span:
         span.set_data("service.name", "auth-service")
         span.set_tag("service.tier", "frontend")
 
@@ -346,8 +348,8 @@ async def test_distributed_tracing(response: Response):
         }  # Not used in this test but preserved for demonstration
 
     # Simulate next service in the chain
-    with sentry_span(
-        op="service.business_logic", description="Business Logic Service"
+    with sentry_span_context(
+        "service.business_logic", "Business Logic Service"
     ) as span:
         span.set_data("service.name", "logic-service")
         span.set_tag("service.tier", "middleware")
@@ -356,21 +358,21 @@ async def test_distributed_tracing(response: Response):
         await asyncio.sleep(0.1)
 
         # Nested span for specific operation
-        with sentry_span(op="business.validation", description="Validate Request"):
+        with sentry_span_context("business.validation", "Validate Request"):
             await asyncio.sleep(0.03)
 
     # Simulate data service
-    with sentry_span(op="service.data", description="Data Service") as span:
+    with sentry_span_context("service.data", "Data Service") as span:
         span.set_data("service.name", "data-service")
         span.set_tag("service.tier", "backend")
 
         # Simulate data processing
-        with sentry_span(op="db.read", description="Database Read"):
+        with sentry_span_context("db.read", "Database Read"):
             span.set_tag("db.type", "postgresql")
             await asyncio.sleep(0.07)
 
         # Simulate data transform
-        with sentry_span(op="data.transform", description="Transform Results"):
+        with sentry_span_context("data.transform", "Transform Results"):
             await asyncio.sleep(0.04)
 
     logger.info(f"Completed distributed tracing test with ID: {trace_id}")
