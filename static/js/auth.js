@@ -431,7 +431,9 @@ export function createAuthModule(deps) {
         try {
           response = JSON.parse(response);
         } catch (parseErr) {
-          logger.warn('[AuthModule][verifyAuthState] API response was a string, failed to parse as JSON.', { responseString: response, error: parseErr.message, context: 'verifyAuthState:jsonParseError' });
+          logger.error('[AuthModule][verifyAuthState] API response was a string, failed to parse as JSON.',
+            parseErr,
+            { responseString: response, context: 'verifyAuthState:jsonParseError' });
           // Depending on backend, an unparsable string might mean an error page or non-JSON success.
           // For now, assume it's a failure if it's not parsable and was expected to be JSON.
           // If backend sometimes sends non-JSON success, this needs adjustment.
@@ -468,7 +470,12 @@ export function createAuthModule(deps) {
       if (finalUserObject?.id) {
         logger.info('[AuthModule][verifyAuthState] Verification successful: Valid user object with ID found.', { username: finalUserObject.username, userId: finalUserObject.id, context: 'verifyAuthState:successWithUserObject' });
         // KILOCODE: Added detailed logging before broadcast
-        logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (user object):', { authenticated: true, userObject: JSON.parse(JSON.stringify(finalUserObject)), source: 'verify_success_with_user_id' });
+        logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (user object):', {
+          authenticated: true,
+          userObject: JSON.parse(JSON.stringify(finalUserObject)),
+          source: 'verify_success_with_user_id',
+          context: 'verifyAuthState:preBroadcast:user'
+        });
         broadcastAuth(true, finalUserObject, 'verify_success_with_user_id');
         return true;
       }
@@ -485,7 +492,12 @@ export function createAuthModule(deps) {
         const tempUserObj = usernameFromResponse ? { username: usernameFromResponse, id: `flag-auth-${Date.now()}` } : null;
         logger.info('[AuthModule][verifyAuthState] Verification successful: Authenticated by boolean flag.', { username: tempUserObj?.username, context: 'verifyAuthState:successWithFlag' });
         // KILOCODE: Added detailed logging before broadcast
-        logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (flag):', { authenticated: true, userObject: JSON.parse(JSON.stringify(tempUserObj)), source: 'verify_success_via_flag' });
+        logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (flag):', {
+          authenticated: true,
+          userObject: JSON.parse(JSON.stringify(tempUserObj)),
+          source: 'verify_success_via_flag',
+          context: 'verifyAuthState:preBroadcast:flag'
+        });
         broadcastAuth(true, tempUserObj, 'verify_success_via_flag');
         return true;
       }
@@ -499,7 +511,12 @@ export function createAuthModule(deps) {
         await clearTokenState({ source: 'verify_negative_no_cookies_after_api_check' });
       }
       // KILOCODE: Added detailed logging before broadcast
-      logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (negative API):', { authenticated: false, userObject: null, source: 'verify_negative_after_api_check' });
+      logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (negative API):', {
+        authenticated: false,
+        userObject: null,
+        source: 'verify_negative_after_api_check',
+        context: 'verifyAuthState:preBroadcast:negativeApi'
+      });
       broadcastAuth(false, null, 'verify_negative_after_api_check');
       return false;
 
@@ -510,7 +527,12 @@ export function createAuthModule(deps) {
         logger.warn('[AuthModule][verifyAuthState] Server error (500). Clearing token state.', { context: 'verifyAuthState:error500' });
         await clearTokenState({ source: 'verify_500_error' });
         // KILOCODE: Added detailed logging before broadcast
-        logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (500 error):', { authenticated: false, userObject: null, source: 'verify_500_error' });
+        logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (500 error):', {
+          authenticated: false,
+          userObject: null,
+          source: 'verify_500_error',
+          context: 'verifyAuthState:preBroadcast:500'
+        });
         broadcastAuth(false, null, 'verify_500_error');
         return false;
       }
@@ -522,10 +544,17 @@ export function createAuthModule(deps) {
           logger.info('[AuthModule][verifyAuthState] Token refresh successful after 401. Re-verifying.', { context: 'verifyAuthState:postRefreshAttempt' });
           return await verifyAuthState(true); // Force re-verification after refresh
         } catch (refreshErr) {
-          logger.warn('[AuthModule][verifyAuthState] Token refresh failed after 401.', { error: refreshErr.message, context: 'verifyAuthState:refreshFailed' });
+          logger.error('[AuthModule][verifyAuthState] Token refresh failed after 401.',
+            refreshErr,
+            { context: 'verifyAuthState:refreshFailed' });
           await clearTokenState({ source: 'refresh_failed_after_401_in_verify' });
           // KILOCODE: Added detailed logging before broadcast
-          logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (refresh failed):', { authenticated: false, userObject: null, source: 'refresh_failed_after_401_in_verify' });
+          logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (refresh failed):', {
+            authenticated: false,
+            userObject: null,
+            source: 'refresh_failed_after_401_in_verify',
+            context: 'verifyAuthState:preBroadcast:refreshFailed'
+          });
           broadcastAuth(false, null, 'refresh_failed_after_401_in_verify');
           return false;
         }
@@ -535,7 +564,9 @@ export function createAuthModule(deps) {
       const hasCookiesOnNetworkError = publicAuth.hasAuthCookies(); // Re-check, might have changed
       if (hasCookiesOnNetworkError && (error.status === 0 || !error.status)) {
         const currentAuth = getAppState().isAuthenticated;
-        logger.warn('[AuthModule][verifyAuthState] Network error occurred, but auth cookies are present. Maintaining current auth state.', { errorMessage: error.message, currentAuth, context: 'verifyAuthState:networkErrorWithCookies' });
+        logger.warn('[AuthModule][verifyAuthState] Network error occurred, but auth cookies are present. Maintaining current auth state.',
+          error,
+          { currentAuth, context: 'verifyAuthState:networkErrorWithCookies' });
         // Do not change authentication state here; return existing state.
         // The user might be temporarily offline but still "logged in".
         return currentAuth;
@@ -545,7 +576,12 @@ export function createAuthModule(deps) {
       logger.warn(`[AuthModule][verifyAuthState] Unhandled error (status: ${error.status || 'unknown'}). Clearing token state.`, { context: 'verifyAuthState:unhandledErrorClear' });
       await clearTokenState({ source: `verify_unhandled_error_status_${error.status || 'unknown'}` });
       // KILOCODE: Added detailed logging before broadcast
-      logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (unhandled error):', { authenticated: false, userObject: null, source: `verify_unhandled_error_status_${error.status || 'unknown'}` });
+      logger.debug('[AuthModule][verifyAuthState] PRE-BROADCAST (unhandled error):', {
+        authenticated: false,
+        userObject: null,
+        source: `verify_unhandled_error_status_${error.status || 'unknown'}`,
+        context: 'verifyAuthState:preBroadcast:unhandledError'
+      });
       broadcastAuth(false, null, `verify_unhandled_error_status_${error.status || 'unknown'}`);
       return false;
     } finally {
@@ -593,7 +629,9 @@ export function createAuthModule(deps) {
           }
         }
       } catch (cookieErr) {
-        logger.warn('[AuthModule][loginUser] Error reading cookies after login.', { error: cookieErr.message, context: 'loginUser:cookieReadError' });
+        logger.error('[AuthModule][loginUser] Error reading cookies after login.',
+          cookieErr,
+          { context: 'loginUser:cookieReadError' });
       }
 
       // Determine user object from response
@@ -622,7 +660,9 @@ export function createAuthModule(deps) {
       _lastLoginTimestamp = Date.now();
       return response; // Return full API response
     } catch (error) {
-      logger.error('[AuthModule][loginUser] Login attempt failed.', { username: username, error: error.message, status: error.status, data: error.data, context: 'loginUser:error' });
+      logger.error('[AuthModule][loginUser] Login attempt failed.',
+        error,
+        { username: username, context: 'loginUser:error' });
       await clearTokenState({ source: 'login_api_error' }); // Clear any partial token state on login failure
       throw error; // Re-throw for form handler
     }
@@ -648,7 +688,9 @@ export function createAuthModule(deps) {
       logger.info('[AuthModule][logout] Logout API call successful.', { context: 'logout:apiSuccess' });
     } catch (err) {
       // Log error but don't re-throw; user is already logged out on client-side.
-      logger.warn('[AuthModule][logout] Error calling logout API endpoint. User is already logged out locally.', { error: err.message, status: err.status, context: 'logout:apiError' });
+      logger.error('[AuthModule][logout] Error calling logout API endpoint. User is already logged out locally.',
+        err,
+        { context: 'logout:apiError' });
     }
     logger.info('[AuthModule][logout] Logout process completed on client-side.', { context: 'logout:end' });
   }
@@ -685,7 +727,9 @@ export function createAuthModule(deps) {
       await verifyAuthState(true);
       return response; // Return full API response
     } catch (error) {
-      logger.error('[AuthModule][registerUser] Registration failed.', { username: trimmedUsername, error: error.message, status: error.status, data: error.data, context: 'registerUser:error' });
+      logger.error('[AuthModule][registerUser] Registration failed.',
+        error,
+        { username: trimmedUsername, context: 'registerUser:error' });
       await clearTokenState({ source: 'register_api_error' }); // Clear any partial state
       throw error;
     }
@@ -1011,7 +1055,7 @@ export function createAuthModule(deps) {
         authenticated: finalState.isAuthenticated,
         user: finalState.currentUser,
         username: finalState.currentUser?.username || null,
-        error: null, // No error at this stage of emitting 'authReady'
+        errorDetail: null, // No error at this stage of emitting 'authReady'
         timestamp: Date.now(),
         source: 'init_auth_module_ready'
       };
@@ -1021,14 +1065,6 @@ export function createAuthModule(deps) {
       } else {
         logger.debug('[AuthModule][init] Dispatching authReady event.', { detail: readyEventDetail, context: 'init:dispatchAuthReady' });
         AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
-        try {
-          const doc = domAPI.getDocument();
-          if (doc) {
-            domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
-          }
-        } catch (docErr) {
-          logger.error('[AuthModule][init] Failed to dispatch authReady on document.', { error: docErr, context: 'init:dispatchAuthReady' });
-        }
       }
 
       // Final broadcast based on the state determined during init.
@@ -1039,7 +1075,9 @@ export function createAuthModule(deps) {
 
       return verified; // Return the result of the initial verification attempt
     } catch (err) {
-      logger.error('[AuthModule][init] Unhandled error during initialization process.', { error: err, stack: err.stack, context: 'init:unhandledError' });
+      logger.error('[AuthModule][init] Unhandled error during initialization process.',
+        err,
+        { stack: err.stack, context: 'init:unhandledError' });
       await clearTokenState({ source: 'init_unhandled_error' });
 
       // Mark as ready even on error, but ensure auth state is cleared
