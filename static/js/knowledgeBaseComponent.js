@@ -171,10 +171,24 @@ export function createKnowledgeBaseComponent(options = {}) {
       // For model/validation logic
       this._debounce = this._debounce.bind(this);
 
-      this.searchHandler = createKnowledgeBaseSearchHandler(this);
+      // Initialize handlers asynchronously
+      this.searchHandler = null;
       this.manager = createKnowledgeBaseManager(this);
 
+      // Initialize search handler asynchronously
+      this._initializeSearchHandler();
+
       // this._bindEventHandlers(); // Call this after _initElements in initialize
+    }
+
+    async _initializeSearchHandler() {
+      try {
+        this.searchHandler = await createKnowledgeBaseSearchHandler(this);
+        this.logger.debug(`[${MODULE}] Search handler initialized successfully.`, { context: MODULE });
+      } catch (error) {
+        this.logger.error(`[${MODULE}] Failed to initialize search handler: ${error.message}`, { error, context: MODULE });
+        this.searchHandler = null;
+      }
     }
 
     _initElements() {
@@ -339,10 +353,48 @@ export function createKnowledgeBaseComponent(options = {}) {
       };
 
       // Search UI
-      addListener("searchButton", "click", () => this.searchHandler.triggerSearch());
-      addListener("searchInput", "input", (e) => this.searchHandler.debouncedSearch(e.target.value));
-      addListener("searchInput", "keyup", (e) => { if (e.key === "Enter") this.searchHandler.triggerSearch(); });
-      addListener("resultModal", "keydown", (e) => this.searchHandler.handleResultModalKeydown(e));
+      addListener("searchButton", "click", () => {
+        if (this.searchHandler && typeof this.searchHandler.triggerSearch === 'function') {
+          this.searchHandler.triggerSearch();
+        } else {
+          this.logger.error(`[${MODULE}] searchHandler.triggerSearch is not available`, {
+            searchHandler: this.searchHandler,
+            context: MODULE_CONTEXT
+          });
+        }
+      });
+      addListener("searchInput", "input", (e) => {
+        if (this.searchHandler && typeof this.searchHandler.debouncedSearch === 'function') {
+          this.searchHandler.debouncedSearch(e.target.value);
+        } else {
+          this.logger.error(`[${MODULE}] searchHandler.debouncedSearch is not available`, {
+            searchHandler: this.searchHandler,
+            context: MODULE_CONTEXT
+          });
+        }
+      });
+      addListener("searchInput", "keyup", (e) => {
+        if (e.key === "Enter") {
+          if (this.searchHandler && typeof this.searchHandler.triggerSearch === 'function') {
+            this.searchHandler.triggerSearch();
+          } else {
+            this.logger.error(`[${MODULE}] searchHandler.triggerSearch is not available`, {
+              searchHandler: this.searchHandler,
+              context: MODULE_CONTEXT
+            });
+          }
+        }
+      });
+      addListener("resultModal", "keydown", (e) => {
+        if (this.searchHandler && typeof this.searchHandler.handleResultModalKeydown === 'function') {
+          this.searchHandler.handleResultModalKeydown(e);
+        } else {
+          this.logger.error(`[${MODULE}] searchHandler.handleResultModalKeydown is not available`, {
+            searchHandler: this.searchHandler,
+            context: MODULE_CONTEXT
+          });
+        }
+      });
 
       // Management UI
       addListener("kbToggle", "change", (e) => this.manager.toggleKnowledgeBase(e.target.checked));

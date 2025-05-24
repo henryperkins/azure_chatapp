@@ -485,6 +485,51 @@ export function createChatManager(deps = {}) {
       }
     }
 
+    /**
+     * Force synchronization of project ID from canonical appModule.state (appState.js)
+     * @returns {string|null} The resolved project ID or null if none found
+     */
+    forceProjectIdSync() {
+      logger.debug(`[ChatManager][forceProjectIdSync] Current project ID: ${this.projectId}`, { context: "chatManager" });
+
+      // Get project ID from canonical appModule.state (appState.js)
+      const appModule = this.DependencySystem?.modules?.get('appModule');
+      const appProjectId = appModule?.state?.currentProjectId;
+
+      if (this.isValidProjectId(appProjectId)) {
+        logger.info(`[ChatManager][forceProjectIdSync] Synced project ID from appModule.state: ${appProjectId}`, {
+          context: "chatManager",
+          oldProjectId: this.projectId,
+          newProjectId: appProjectId
+        });
+        this.projectId = appProjectId;
+        return appProjectId;
+      }
+
+      // Try to get from URL as fallback
+      const navigationService = this.DependencySystem?.modules?.get('navigationService');
+      const urlProjectId = navigationService?.getUrlParams?.()?.project;
+
+      if (this.isValidProjectId(urlProjectId)) {
+        logger.info(`[ChatManager][forceProjectIdSync] Synced project ID from URL: ${urlProjectId}`, {
+          context: "chatManager",
+          oldProjectId: this.projectId,
+          newProjectId: urlProjectId
+        });
+        this.projectId = urlProjectId;
+        return urlProjectId;
+      }
+
+      logger.warn(`[ChatManager][forceProjectIdSync] Could not resolve valid project ID`, {
+        context: "chatManager",
+        currentProjectId: this.projectId,
+        appProjectId,
+        urlProjectId
+      });
+
+      return null;
+    }
+
     cleanup() {
       logger.info(`[ChatManager][cleanup] Cleaning up ChatManager for project ${this.projectId}.`, { context: "chatManager" });
       this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
@@ -519,13 +564,59 @@ export function createChatManager(deps = {}) {
     }
 
     async loadConversation(conversationId) {
-      if (!conversationId) return false;
-      if (!this.isAuthenticated()) return false;
-      if (!this.isValidProjectId(this.projectId)) {
-        const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot load conversation.`;
-        logger.error("[ChatManager][loading conversation]" + errorMsg, new Error(errorMsg), { context: "chatManager" });
-        this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
+      if (!conversationId) {
+        logger.warn("[ChatManager][loadConversation] No conversation ID provided", { context: "chatManager" });
         return false;
+      }
+
+      if (!this.isAuthenticated()) {
+        logger.warn("[ChatManager][loadConversation] User not authenticated", { context: "chatManager" });
+        return false;
+      }
+
+      // ENHANCED: Try to get project ID from multiple sources if not set
+      if (!this.isValidProjectId(this.projectId)) {
+        logger.warn(`[ChatManager][loadConversation] Invalid project ID (${this.projectId}), attempting to resolve from app state`, {
+          context: "chatManager",
+          conversationId,
+          currentProjectId: this.projectId
+        });
+
+        // Try to get project ID from canonical appModule.state (appState.js)
+        const appModule = this.DependencySystem?.modules?.get('appModule');
+        const appProjectId = appModule?.state?.currentProjectId;
+
+        if (this.isValidProjectId(appProjectId)) {
+          logger.info(`[ChatManager][loadConversation] Found valid project ID from app state: ${appProjectId}`, {
+            context: "chatManager",
+            conversationId,
+            resolvedProjectId: appProjectId
+          });
+          this.projectId = appProjectId;
+        } else {
+          // Try to get from URL as last resort
+          const navigationService = this.DependencySystem?.modules?.get('navigationService');
+          const urlProjectId = navigationService?.getUrlParams?.()?.project;
+
+          if (this.isValidProjectId(urlProjectId)) {
+            logger.info(`[ChatManager][loadConversation] Found valid project ID from URL: ${urlProjectId}`, {
+              context: "chatManager",
+              conversationId,
+              resolvedProjectId: urlProjectId
+            });
+            this.projectId = urlProjectId;
+          } else {
+            const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot load conversation. App project: ${appProjectId}, URL project: ${urlProjectId}`;
+            logger.error("[ChatManager][loading conversation]" + errorMsg, new Error(errorMsg), {
+              context: "chatManager",
+              conversationId,
+              appProjectId,
+              urlProjectId
+            });
+            this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
+            return false;
+          }
+        }
       }
 
       // Update the current conversation ID in token stats manager
