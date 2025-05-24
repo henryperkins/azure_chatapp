@@ -95,7 +95,6 @@ input, select, textarea {
   -webkit-overflow-scrolling: touch;
 }
 
-.chat-message,
 .file-preview-item {
   @apply max-w-[85%] p-3 rounded-2xl;
   @apply break-words;
@@ -103,15 +102,8 @@ input, select, textarea {
   animation: mobile-fade-in 0.3s ease-out forwards;
 }
 
-.user-message {
-  @apply self-end bg-primary text-primary-content;
-  @apply rounded-br-md;
-}
-
-.ai-message {
-  @apply self-start bg-base-200 text-base-content;
-  @apply rounded-bl-md;
-}
+.user-message { @apply self-end flex; }
+.ai-message   { @apply self-start flex; }
 
 /* File Upload */
 .file-upload-container {
@@ -189,3 +181,36 @@ input, select, textarea {
 .conversation-item:hover   { @apply bg-base-200; }
 .conversation-item.active  { @apply bg-primary/10 border-primary; }
 .conversation-item .badge  { @apply bg-base-200 border-none text-xs; }
+
+/* ─── Chat bubble visuals ────────────────────────────────────────── */
+.message-bubble {
+  @apply inline-block px-4 py-3 rounded-2xl leading-relaxed shadow-sm
+         break-words;
+  max-width: calc(100% - 2rem);
+  position: relative;
+}
+
+/* user / AI colour variants */
+.user-message .message-bubble { @apply bg-primary text-primary-content rounded-br-lg; }
+.ai-message   .message-bubble { @apply bg-base-200 text-base-content   rounded-bl-lg; }
+
+/* speech-tail triangles */
+.user-message .message-bubble::after {
+  content: '';
+  position: absolute;
+  right: -6px;
+  bottom: 12px;
+  border: 6px solid transparent;
+  border-left-color: rgb(var(--p));          /* primary */
+}
+.ai-message .message-bubble::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  bottom: 12px;
+  border: 6px solid transparent;
+  border-right-color: rgb(var(--b2));        /* base-200 */
+}
+
+/* ensure container itself has no padding/background */
+.chat-message { padding: 0 !important; background: transparent !important; }
