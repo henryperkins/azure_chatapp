@@ -32,7 +32,7 @@ from db import get_async_session
 from services.conversation_service import ConversationService, get_conversation_service
 from services.token_service import estimate_input_tokens
 from utils.auth_utils import get_current_user_and_token
-from utils.sentry_utils import sentry_span, make_sentry_trace_response
+from utils.sentry_utils import sentry_span_context, make_sentry_trace_response
 from services.project_service import validate_project_access
 from utils.serializers import serialize_conversation
 
@@ -113,10 +113,9 @@ async def list_project_conversations(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """List all conversations for a project with full monitoring"""
-    with sentry_span(
+    with sentry_span_context(
         op="conversation",
-        name="List Project Conversations",
-        description=f"List all conversations for project {project_id}",
+        description=f"List Project Conversations: List all conversations for project {project_id}",
     ) as span:
         try:
             current_user = current_user_tuple[0]
@@ -192,7 +191,7 @@ async def create_conversation(
             transaction.set_tag("model.id", conversation_data.model_id)
 
             # Validate project access
-            with sentry_span(op="access.check", description="Validate project access"):
+            with sentry_span_context(op="access.check", description="Validate project access"):
                 await validate_project_access(project_id, current_user, db)
 
             # Fetch Project and eagerly load its knowledge_base
@@ -225,7 +224,7 @@ async def create_conversation(
                     status_code=400, detail="Project has no knowledge base"
                 )
             # Create conversation
-            with sentry_span(op="db.create", description="Create conversation record"):
+            with sentry_span_context(op="db.create", description="Create conversation record"):
                 from sqlalchemy.exc import IntegrityError
 
                 try:
@@ -313,10 +312,9 @@ async def get_project_conversation(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """Get conversation with performance tracing"""
-    with sentry_span(
+    with sentry_span_context(
         op="conversation",
-        name="Get Conversation",
-        description=f"Get conversation {conversation_id}",
+        description=f"Get Conversation: Get conversation {conversation_id}",
     ) as span:
         try:
             current_user = current_user_tuple[0]
@@ -593,7 +591,7 @@ async def create_project_conversation_message(
 
             # Process message
             message_metrics = {}
-            with sentry_span(
+            with sentry_span_context(
                 op="message.process", description="Handle message"
             ) as span:
                 start_time = time.time()
@@ -631,7 +629,7 @@ async def create_project_conversation_message(
             if not isinstance(role_val, str):
                 role_val = "user" if role_val is None else str(role_val)
             if role_val.lower() == "user":
-                with sentry_span(
+                with sentry_span_context(
                     op="ai.response", description="Generate AI response"
                 ) as ai_span:
                     ai_start = time.time()
@@ -746,7 +744,7 @@ async def summarize_conversation(
                 return {"summary": "No messages to summarize", "message_count": 0}
 
             # Generate summary
-            with sentry_span(op="ai.summarize", description="Generate summary") as span:
+            with sentry_span_context(op="ai.summarize", description="Generate summary") as span:
                 start_time = time.time()
 
                 summary = await conv_service.generate_conversation_summary(
@@ -832,7 +830,7 @@ async def batch_delete_conversations(
             failed_ids = []
 
             for conv_id in batch_data.conversation_ids:
-                with sentry_span(
+                with sentry_span_context(
                     op="db.delete", description=f"Delete {conv_id}"
                 ) as span:
                     try:
@@ -960,10 +958,9 @@ async def get_conversation_token_stats(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """Get detailed token usage statistics for a conversation"""
-    with sentry_span(
+    with sentry_span_context(
         op="conversation",
-        name="Get Token Stats",
-        description=f"Get token stats for conversation {conversation_id}",
+        description=f"Get Token Stats: Get token stats for conversation {conversation_id}",
     ) as span:
         try:
             current_user = current_user_tuple[0]
@@ -1054,10 +1051,9 @@ async def list_project_conversation_messages(
     conv_service: ConversationService = Depends(get_conversation_service),
 ):
     """List messages with performance tracing"""
-    with sentry_span(
+    with sentry_span_context(
         op="conversation",
-        name="List Messages",
-        description=f"List messages for {conversation_id}",
+        description=f"List Messages: List messages for {conversation_id}",
     ) as span:
         try:
             current_user = current_user_tuple[0]
