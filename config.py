@@ -137,7 +137,7 @@ class Settings:
     AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT", "")
     AZURE_O1_MAX_IMAGES = int(os.getenv("AZURE_O1_MAX_IMAGES", "10"))
     AZURE_DEFAULT_API_VERSION = "2025-03-01-preview"
-    AZURE_REASONING_API_VERSION = "2025-03-01-preview"
+    AZURE_REASONING_API_VERSION = "2025-04-01-preview"
 
     AZURE_OPENAI_MODELS: dict[str, dict[str, Any]] = {
         "o1": {

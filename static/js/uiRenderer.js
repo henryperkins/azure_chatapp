@@ -183,8 +183,25 @@ export function createUiRenderer(deps = {}) {
     isConversationStarredFn,
     toggleStarConversationCb
   ) {
-    await ensureSidebarReady();
+    try {
+      await ensureSidebarReady();
+    } catch (err) {
+      logger.error('[UiRenderer][renderConversations] Sidebar not ready', err, { context: CONTEXT });
+      return;
+    }
+
     const RECENT_CONVERSATIONS_LIST_SELECTOR = '#recentChatsSection ul';
+
+    // Check authentication state before proceeding
+    const appModule = deps.DependencySystem?.modules?.get('appModule');
+    if (!appModule?.state?.isAuthenticated) {
+      logger.info('[UiRenderer][renderConversations] User not authenticated, skipping conversation rendering', { context: CONTEXT });
+      const listElement = _clearList(RECENT_CONVERSATIONS_LIST_SELECTOR);
+      if (listElement) {
+        _displayMessageInList(listElement, 'Please log in to view conversations.');
+      }
+      return;
+    }
     const listElement = _clearList(RECENT_CONVERSATIONS_LIST_SELECTOR);
     if (!listElement) return;
     if (!projectId) {
@@ -386,10 +403,31 @@ export function createUiRenderer(deps = {}) {
    * @param {Array} projects - Array of project objects.
    */
   async function renderProjects(projects = []) {
-    await ensureSidebarReady();
+    try {
+      await ensureSidebarReady();
+    } catch (err) {
+      logger.error('[UiRenderer][renderProjects] Sidebar not ready', err, { context: CONTEXT });
+      return;
+    }
+
     const PROJECT_LIST_SELECTOR = '#projectsSection ul';
+
+    // Check authentication state before proceeding
+    const appModule = deps.DependencySystem?.modules?.get('appModule');
+    if (!appModule?.state?.isAuthenticated) {
+      logger.info('[UiRenderer][renderProjects] User not authenticated, skipping project rendering', { context: CONTEXT });
+      const listElement = _clearList(PROJECT_LIST_SELECTOR);
+      if (listElement) {
+        _displayMessageInList(listElement, 'Please log in to view projects.');
+      }
+      return;
+    }
+
     const listElement = _clearList(PROJECT_LIST_SELECTOR);
-    if (!listElement) return;
+    if (!listElement) {
+      logger.warn('[UiRenderer][renderProjects] Project list element not found', { selector: PROJECT_LIST_SELECTOR, context: CONTEXT });
+      return;
+    }
 
     if (logger && logger.info) {
       const sample = Array.isArray(projects) ? projects.slice(0, 2) : projects;

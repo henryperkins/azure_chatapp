@@ -220,7 +220,20 @@ class ProjectDetailsComponent {
       const $ = (sel) => this.elements.container.querySelector(sel);
       this.elements.title = $("#projectTitle");
       this.elements.backBtn = $("#backToProjectsBtn");
+
+      // Cache tab buttons with better error handling
       this.elements.tabBtns = this.elements.container.querySelectorAll(".project-tab");
+      this._logInfo(`Found ${this.elements.tabBtns.length} tab buttons`);
+
+      // Log each tab button for debugging
+      this.elements.tabBtns.forEach((btn, index) => {
+        this._logInfo(`Tab button ${index}: ${btn.dataset?.tab || 'no-tab-data'}`, {
+          element: btn.tagName,
+          classes: btn.className,
+          dataset: btn.dataset
+        });
+      });
+
       this.elements.tabs = {
         chat: $("#chatTab"),
         files: $("#filesTab"),
@@ -228,6 +241,13 @@ class ProjectDetailsComponent {
         knowledge: $("#knowledgeTab"),
         settings: $("#settingsTab")
       };
+
+      // Validate tab content elements
+      Object.entries(this.elements.tabs).forEach(([tabName, tabElement]) => {
+        if (!tabElement) {
+          this._logWarn(`Tab content element not found: ${tabName}`);
+        }
+      });
       // Details tab elements
       this.elements.projectNameDisplay = $("#projectNameDisplay");
       this.elements.projectDescriptionDisplay = $("#projectDescriptionDisplay");
@@ -286,44 +306,68 @@ class ProjectDetailsComponent {
 
   // Main business/event logic wiring:
   _bindEventListeners() {
-    this.eventHandlers.cleanupListeners({ context: 'Sidebar' });
+    // Use correct context for project details component
+    this.eventHandlers.cleanupListeners({ context: 'ProjectDetailsComponent' });
 
     // Cancel any in-flight async ops to avoid memory-leak / state bleed
     this._cleanupPendingOperations();
-    if (!this.elements.container) return;
-    // Back
+    if (!this.elements.container) {
+      this._logWarn('Container element not found, cannot bind event listeners');
+      return;
+    }
+
+    // Back button
     if (this.elements.backBtn) {
       this.eventHandlers.trackListener(
         this.elements.backBtn, "click", this._safeHandler(
           () => { this.navigationService.navigateToProjectList(); }, "BackBtn"
-        ), { context: 'Sidebar', description: "BackButton" });
+        ), { context: 'ProjectDetailsComponent', description: "BackButton" });
     }
-    // Tabs
-    this.elements.tabBtns?.forEach(btn => {
-      this.eventHandlers.trackListener(
-        btn, "click", this._safeHandler((ev) => {
-          const tabName = ev.currentTarget.dataset.tab;
-          this.switchTab(tabName);
-        }, `Tab:${btn.dataset.tab}`),
-        { context: 'Sidebar', description: `TabBtn:${btn.dataset.tab}` }
-      );
-    });
+
+    // Tab buttons - ensure they exist and are properly bound
+    if (this.elements.tabBtns && this.elements.tabBtns.length > 0) {
+      this._logInfo(`Binding ${this.elements.tabBtns.length} tab buttons`);
+      this.elements.tabBtns.forEach((btn, index) => {
+        if (!btn || !btn.dataset || !btn.dataset.tab) {
+          this._logWarn(`Tab button ${index} missing or invalid dataset.tab`, { btn });
+          return;
+        }
+
+        const tabName = btn.dataset.tab;
+        this._logInfo(`Binding tab button: ${tabName}`);
+
+        this.eventHandlers.trackListener(
+          btn, "click", this._safeHandler((ev) => {
+            this._logInfo(`Tab clicked: ${tabName}`);
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.switchTab(tabName);
+          }, `Tab:${tabName}`),
+          { context: 'ProjectDetailsComponent', description: `TabBtn:${tabName}` }
+        );
+      });
+    } else {
+      this._logWarn('No tab buttons found or tabBtns is empty', {
+        tabBtns: this.elements.tabBtns,
+        container: !!this.elements.container
+      });
+    }
 
     // Example: event bus listeners
     const doc = this.domAPI.getDocument();
     // Multi-source event flows for files/convos/artifacts/stats/knowledge
     this.eventHandlers.trackListener(doc, "projectFilesLoaded",
       this._safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
-      { context: 'Sidebar', description: "FilesLoaded" });
+      { context: 'ProjectDetailsComponent', description: "FilesLoaded" });
     this.eventHandlers.trackListener(doc, "projectConversationsLoaded",
       this._safeHandler((e) => this.renderConversations(e.detail?.conversations || []), "ConversationsLoaded"),
-      { context: 'Sidebar', description: "ConversationsLoaded" });
+      { context: 'ProjectDetailsComponent', description: "ConversationsLoaded" });
     this.eventHandlers.trackListener(doc, "projectArtifactsLoaded",
       this._safeHandler((e) => this.renderArtifacts(e.detail?.artifacts || []), "ArtifactsLoaded"),
-      { context: 'Sidebar', description: "ArtifactsLoaded" });
+      { context: 'ProjectDetailsComponent', description: "ArtifactsLoaded" });
     this.eventHandlers.trackListener(doc, "projectStatsLoaded",
       this._safeHandler((e) => this.renderStats(e.detail), "StatsLoaded"),
-      { context: 'Sidebar', description: "StatsLoaded" });
+      { context: 'ProjectDetailsComponent', description: "StatsLoaded" });
     this.eventHandlers.trackListener(
       doc,
       "projectKnowledgeBaseLoaded",
@@ -354,7 +398,7 @@ class ProjectDetailsComponent {
         },
         "KnowledgeLoaded"
       ),
-      { context: 'Sidebar', description: "KnowledgeLoaded" }
+      { context: 'ProjectDetailsComponent', description: "KnowledgeLoaded" }
     );
   }
 
