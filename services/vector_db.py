@@ -915,12 +915,11 @@ async def initialize_project_vector_db(
 ) -> VectorDB:
     """
     Initializes a VectorDB for a project, loading from disk if an index file is present.
-    This function resolves the 'initialize_project_vector_db' undefined error.
-    Allows overriding the default embedding model if provided.
+    Delegates to VectorDBManager.get_for_project for canonical logic.
     """
-    path = os.path.join(storage_root, str(project_id), "index.json")
-    # Use a default model name unless an embedding_model is explicitly provided
-    model_name = embedding_model or "all-MiniLM-L6-v2"
-    vdb = VectorDB(embedding_model=model_name, use_faiss=True, storage_path=path)
-    await vdb.load_from_disk()
-    return vdb
+    from services.knowledgebase_helpers import VectorDBManager   # import locally to avoid circulars
+    return await VectorDBManager.get_for_project(
+        project_id=project_id,
+        model_name=embedding_model,   # may be None ➜ manager resolves default / KB setting
+        db=None,                      # legacy wrapper keeps same public API
+    )
