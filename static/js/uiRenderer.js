@@ -47,7 +47,7 @@ export function createUiRenderer(deps = {}) {
   function _clearList(selector) {
     const listElement = domAPI.querySelector(selector);
     if (listElement) {
-      listElement.innerHTML = '';
+      domAPI.setInnerHTML(listElement, '');   // sanitised
     }
     return listElement;
   }
@@ -199,6 +199,7 @@ export function createUiRenderer(deps = {}) {
     if (!projectId) {
       if (logger && logger.info)
         logger.info('[UiRenderer][renderConversations] called with empty/null projectId', {
+          context: CONTEXT,
           module: CONTEXT,
           fn: 'renderConversations',
           projectId,
@@ -250,6 +251,7 @@ export function createUiRenderer(deps = {}) {
         logger.info(
           `[UiRenderer][renderConversations] arrayLength=${Array.isArray(conversations) ? conversations.length : 'non-array'}`,
           {
+            context: CONTEXT,
             module: CONTEXT,
             fn: 'renderConversations',
             projectId,
@@ -284,6 +286,7 @@ export function createUiRenderer(deps = {}) {
         "[UiRenderer][renderConversations] Error loading conversations",
         error,
         {
+          context: CONTEXT,
           module: CONTEXT,
           fn: 'renderConversations',
           projectId,
@@ -426,6 +429,7 @@ export function createUiRenderer(deps = {}) {
       logger.info(
         `[UiRenderer][renderProjects] arrayLength=${Array.isArray(projects) ? projects.length : 'non-array'}`,
         {
+          context: CONTEXT,
           module: CONTEXT,
           fn: 'renderProjects',
           projectsSample: sample,
