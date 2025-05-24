@@ -18,11 +18,12 @@ import os
 import logging
 from typing import Optional
 
+
 def init_telemetry(
     app_name: Optional[str] = None,
     app_version: Optional[str] = None,
     environment: Optional[str] = None,
-    sentry_dsn: Optional[str] = None
+    sentry_dsn: Optional[str] = None,
 ) -> None:
     """
     Initialize all telemetry systems in the correct order.
@@ -35,6 +36,7 @@ def init_telemetry(
     """
     # 1️⃣ ALWAYS initialize structured logging first
     from utils.logging_config import init_structured_logging
+
     init_structured_logging()
 
     logger = logging.getLogger(__name__)
@@ -51,17 +53,21 @@ def init_telemetry(
 
     # Environment-aware sampling rates
     if environment == "production":
-        traces_sample_rate = 0.1      # 10% in production
-        profiles_sample_rate = 0.0    # Disable expensive profiling
+        traces_sample_rate = 0.1  # 10% in production
+        profiles_sample_rate = 0.0  # Disable expensive profiling
     elif environment == "staging":
-        traces_sample_rate = 0.3      # 30% in staging
+        traces_sample_rate = 0.3  # 30% in staging
         profiles_sample_rate = 0.0
     else:
-        traces_sample_rate = 0.02     # 2% in development
+        traces_sample_rate = 0.02  # 2% in development
         profiles_sample_rate = 0.0
 
-    # Build release string
-    release = f"{app_name}@{app_version}" if app_version != "unknown" else app_name
+    # Build release string with commit SHA
+    git_sha = os.getenv("GIT_SHA", "dev")[:7]  # First 7 chars of commit SHA
+    if app_version != "unknown":
+        release = f"{app_name}@{app_version}+{git_sha}"
+    else:
+        release = f"{app_name}+{git_sha}"
 
     configure_sentry(
         dsn=sentry_dsn,
@@ -69,13 +75,19 @@ def init_telemetry(
         release=release,
         traces_sample_rate=traces_sample_rate,
         profiles_sample_rate=profiles_sample_rate,
-        enable_sqlalchemy=False  # Keep disabled for async safety
+        enable_sqlalchemy=False,  # Keep disabled for async safety
     )
 
-    logger.info("Telemetry initialization complete", extra={
-        "app_name": app_name,
-        "app_version": app_version,
-        "environment": environment,
-        "sentry_enabled": bool(sentry_dsn and os.getenv("SENTRY_ENABLED", "").lower() in {"1", "true", "yes"}),
-        "traces_sample_rate": traces_sample_rate
-    })
+    logger.info(
+        "Telemetry initialization complete",
+        extra={
+            "app_name": app_name,
+            "app_version": app_version,
+            "environment": environment,
+            "sentry_enabled": bool(
+                sentry_dsn
+                and os.getenv("SENTRY_ENABLED", "").lower() in {"1", "true", "yes"}
+            ),
+            "traces_sample_rate": traces_sample_rate,
+        },
+    )
