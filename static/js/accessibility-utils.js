@@ -584,17 +584,9 @@ export function createAccessibilityEnhancements({
     }
 
     _safeHandler(handler, description) {
-      return (...args) => {
-        try {
-          return handler(...args);
-        } catch (err) {
-          logger.error(`[AccessibilityUtils][${description}]`, err && err.stack ? err.stack : err, { context: MODULE_CONTEXT });
-          if (this.errorReporter) {
-            this.errorReporter.capture(err, { module: MODULE_CONTEXT, source: description });
-          }
-          throw err;
-        }
-      };
+      // Use canonical safeHandler from DI
+      const safeHandler = DependencySystem.modules.get('safeHandler');
+      return safeHandler ? safeHandler(handler, description) : handler;
     }
   }
 

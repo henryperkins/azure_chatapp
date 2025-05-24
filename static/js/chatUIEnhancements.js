@@ -38,25 +38,8 @@ export function createChatUIEnhancements(deps = {}) {
     messageContainer: null // ← cache current chat container
   };
 
-  /**
-   * Safe handler wrapper for all event handlers. Logs errors with context.
-   * @param {Function} fn - The handler function.
-   * @param {string} description - A description for logging context.
-   * @returns {Function} Wrapped handler.
-   */
-  function safeHandler(fn, description) {
-    const context = `${MODULE_CONTEXT}:${description}`;
-    return function(...args) {
-      try {
-        return fn(...args);
-      } catch (err) {
-        logger.error(`[${MODULE_CONTEXT}] Handler execution failed for: ${description}`, err, {
-          context
-        });
-        throw err; // Re-throw to allow upstream handling if needed
-      }
-    };
-  }
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   /**
    * Async readiness helper for chat UI elements.
@@ -240,7 +223,7 @@ export function createChatUIEnhancements(deps = {}) {
     const messageEl = createMessageElement(message, sender, timestamp, messageId);
     const chatContainer =
       state.messageContainer || domAPI.getElementById('chatMessages'); // Use cached or find default
-      if (chatContainer && messageEl) {
+    if (chatContainer && messageEl) {
       domAPI.appendChild(chatContainer, messageEl); // Use domAPI for append
       scrollToBottom(chatContainer);
       logger.info(`[${MODULE_CONTEXT}] Message appended to container`, {
@@ -650,7 +633,7 @@ export function createChatUIEnhancements(deps = {}) {
 
     const chatContainer =
       state.messageContainer || domAPI.getElementById('chatMessages');
-      if (!chatContainer) {
+    if (!chatContainer) {
       logger.warn(`[${MODULE_CONTEXT}] Chat container not found for typing indicator`, {
         context
       });

@@ -99,16 +99,8 @@ export function createUiRenderer(deps = {}) {
     return [];
   }
 
-  function safeHandler(handler, description) {
-    return (...args) => {
-      try {
-        return handler(...args);
-      } catch (err) {
-        logger.error(`[UiRenderer][${description}]`, err && err.stack ? err.stack : err, { context: CONTEXT });
-        throw err;
-      }
-    }
-  }
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   function _createConversationListItem(
     conversation,
@@ -118,7 +110,7 @@ export function createUiRenderer(deps = {}) {
   ) {
     // Robust: allow sidebar to be undefined/null and fallback safely
     const isStarredFn = typeof isConversationStarredFn === 'function' ? isConversationStarredFn : () => false;
-    const toggleStarCb = typeof toggleStarConversationCb === 'function' ? toggleStarConversationCb : () => {};
+    const toggleStarCb = typeof toggleStarConversationCb === 'function' ? toggleStarConversationCb : () => { };
 
     const li = domAPI.createElement('li');
     li.className = 'py-1';
@@ -357,7 +349,7 @@ export function createUiRenderer(deps = {}) {
         _displayMessageInList(
           listElement,
           searchTerm ? 'No starred conversations match your search.'
-                     : 'No starred conversations in this project.'
+            : 'No starred conversations in this project.'
         );
       } else {
         conversations.forEach((convo) => {

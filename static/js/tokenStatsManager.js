@@ -94,28 +94,8 @@ export function createTokenStatsManager({
     }
   }
 
-  /**
-   * Safe event handler wrapper
-   */
-  function safeHandler(fn, description) {
-    return (...args) => {
-      try {
-        return fn(...args);
-      } catch (err) {
-        _logError(`Error in handler [${description}]`, err);
-        try {
-          logger.error(`[${MODULE_CONTEXT}] Exception in safeHandler [${description}]`, err, { context: MODULE_CONTEXT });
-        } catch (logErr) {
-          try {
-            logger.error(`[${MODULE_CONTEXT}] Failed to log error in safeHandler`, logErr, { context: MODULE_CONTEXT });
-          } catch (finalErr) {
-            // If logging fails, do nothing further to avoid infinite loop
-          }
-        }
-        throw err;
-      }
-    };
-  }
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
 
   /**
    * Initialize the token stats manager
