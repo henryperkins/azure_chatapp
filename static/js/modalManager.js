@@ -975,17 +975,37 @@ export function createModalManager({
 }
 
 /**
- * Returns an instance of ProjectModal class.
+ * Factory that creates a **ProjectModal** instance.
+ * Validates required dependencies and exposes a compliant public API that
+ * includes a mandatory `cleanup()` method for listener/resource teardown.
+ *
+ * @param {Object} deps
+ * @param {Object} deps.projectManager          – Required
+ * @param {Object} deps.eventHandlers           – Required
+ * @param {Object} deps.domAPI                  – Required
+ * @param {Object} deps.domReadinessService     – Required
+ * @param {Object} [deps.DependencySystem]      – Optional DI container
+ * @param {Object} [deps.domPurify]             – Optional sanitizer
+ * @returns {Object} Public API surface for the created ProjectModal
  */
-export function createProjectModal({
-  projectManager,
-  eventHandlers,
-  DependencySystem,
-  domAPI,
-  domPurify,
-  domReadinessService
-} = {}) {
-  return new ProjectModal({
+export function createProjectModal(deps = {}) {
+  const {
+    projectManager,
+    eventHandlers,
+    DependencySystem,
+    domAPI,
+    domPurify,
+    domReadinessService
+  } = deps;
+
+  // ─── Dependency validation (Factory Rule #1) ────────────────────────────────
+  if (!projectManager)  throw new Error('[createProjectModal] Missing dependency: projectManager');
+  if (!eventHandlers)   throw new Error('[createProjectModal] Missing dependency: eventHandlers');
+  if (!domAPI)          throw new Error('[createProjectModal] Missing dependency: domAPI');
+  if (!domReadinessService) throw new Error('[createProjectModal] Missing dependency: domReadinessService');
+
+  // ─── Instance creation ──────────────────────────────────────────────────────
+  const instance = new ProjectModal({
     projectManager,
     eventHandlers,
     DependencySystem,
@@ -993,4 +1013,23 @@ export function createProjectModal({
     domPurify,
     domReadinessService
   });
+
+  // ─── Exposed public API (no direct instance leak) ───────────────────────────
+  return {
+    // Conveniences mirroring underlying instance ------------------------------
+    initialize : (...args) => instance.init(...args),
+    openModal  : (...args) => instance.openModal(...args),
+    closeModal : (...args) => instance.closeModal(...args),
+
+    // Optional direct access (kept minimal & explicit)
+    getInstance: () => instance,
+
+    // MANDATORY cleanup hook per guardrails -----------------------------------
+    cleanup    : () => {
+      if (eventHandlers?.cleanupListeners) {
+        eventHandlers.cleanupListeners({ context: 'projectModal' });
+      }
+      instance.destroy();
+    }
+  };
 }

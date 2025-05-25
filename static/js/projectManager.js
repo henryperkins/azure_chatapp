@@ -203,9 +203,8 @@ export function createProjectManager({
         FILE_DOWNLOAD: apiEndpoints.FILE_DOWNLOAD || '/api/projects/{id}/files/{file_id}/download/',
         ARTIFACT_DOWNLOAD:
           apiEndpoints.ARTIFACT_DOWNLOAD || '/api/projects/{id}/artifacts/{artifact_id}/download/'
-      };
-    }
-
+  };
+}
     _req(url, opts = {}, contextLabel = 'n/a') {
       if (typeof this.apiRequest !== 'function') {
         throw new Error('[ProjectManager] apiRequest missing');
@@ -998,6 +997,13 @@ export function createProjectManager({
   DependencySystem.register?.('projectManager', instance);
 
   function cleanup() {
+    // Canonical event listener cleanup per guardrails
+    // Centralized cleanup for event listeners via eventHandlers module per guardrails
+    const eventHandlers = DependencySystem.modules.get('eventHandlers');
+    if (eventHandlers?.cleanupListeners) {
+      eventHandlers.cleanupListeners({ context: MODULE });
+    }
+    DependencySystem.modules.get('eventHandlers')?.cleanupListeners?.({ context: "ProjectManager" });
     instance.destroy();
   }
 
