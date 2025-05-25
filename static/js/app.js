@@ -68,6 +68,8 @@ const uiUtils = {
   fileIcon: globalFileIcon
 };
 
+import { createLogger } from './logger.js';
+
 // ---------------------------------------------------------------------------
 // 1) Create base services
 // ---------------------------------------------------------------------------
@@ -85,10 +87,18 @@ if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
-// Logger: Import factory but defer creation until DependencySystem is ready
-import { createLogger } from './logger.js';
-
-// Logger will be created in serviceInit.registerBasicServices() to resolve circular dependency
+// --- 1) Early real logger --------------------------------------------------
+const loggerInstance = createLogger({
+  endpoint        : APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
+  enableServer    : APP_CONFIG.LOGGING?.BACKEND_ENABLED ?? true,
+  debug           : APP_CONFIG.DEBUG === true,
+  minLevel        : APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
+  consoleEnabled  : APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
+  browserService  : browserServiceInstance,
+  sessionIdProvider : getSessionId
+});
+DependencySystem.register('logger', loggerInstance);
+const logger = loggerInstance;
 
 // Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
@@ -104,11 +114,11 @@ DependencySystem.register('domPurify', sanitizer);  // legacy alias
 
 // ──  now it is safe to create domAPI  ────────────────────────────
 const domAPI = createDomAPI({
-  documentObject: browserAPI.getDocument(),
-  windowObject: browserAPI.getWindow(),
-  debug: APP_CONFIG.DEBUG === true,
-  logger,
-  sanitizer                      // ← now defined
+  documentObject : browserAPI.getDocument(),
+  windowObject   : browserAPI.getWindow(),
+  debug          : APP_CONFIG.DEBUG === true,
+  logger         : logger,
+  sanitizer
 });
 
 /* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
@@ -215,16 +225,13 @@ const serviceInit = createServiceInitializer({
   createNavigationService,
   createHtmlTemplateLoader,
   createUiRenderer,
-  createLogger,
+  logger,
   getSessionId
 });
 
 // Register basic services (this creates the logger)
 serviceInit.registerBasicServices();
 serviceInit.registerAdvancedServices();
-
-// Get logger from DI after it's created
-const logger = DependencySystem.modules.get('logger');
 
 // ---------------------------------------------------------------------------
 // Create API client (now should be available via serviceInit)
