@@ -170,7 +170,11 @@ async def receive_logs(
         if level in ("warn", "warning", "error", "critical", "fatal"):
             lvl_num   = level_map.get(level, logging.INFO)
             summary_c = f"{color}{summary}{reset}"
-            logger.log(lvl_num, summary_c, extra=sanitized_entry)
+
+            # Remove keys that collide with built-in LogRecord attributes
+            extra_for_logger = {k: v for k, v in sanitized_entry.items() if k != "args"}
+
+            logger.log(lvl_num, summary_c, extra=extra_for_logger)
 
         # --- Async write to log file ---
         try:
