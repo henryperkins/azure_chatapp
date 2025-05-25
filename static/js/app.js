@@ -345,8 +345,6 @@ function safeHandler(handler, description) {
   };
 }
 
-// Register safeHandler in DI system for use by all modules (single registration)
-DependencySystem.register('safeHandler', safeHandler);
 
 // ---------------------------------------------------------------------------
 // Utility functions
