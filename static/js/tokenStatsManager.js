@@ -33,6 +33,10 @@ export function createTokenStatsManager({
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: domReadinessService`);
   if (!DependencySystem) throw new Error('Missing DependencySystem');
 
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
+  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
+
   // Module state
   const state = {
     initialized: false,
@@ -659,11 +663,5 @@ export function createTokenStatsManager({
     fetchConversationTokenStats,
     setInputTokenCount,
     cleanup
-  };
-}
-initialize,
-  fetchConversationTokenStats,
-  setInputTokenCount,
-  cleanup
   };
 }

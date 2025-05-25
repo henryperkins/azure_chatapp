@@ -12,7 +12,9 @@ function createProjectDetailsEnhancements(deps) {
   if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
 
   const { domAPI, browserService, eventHandlers, domReadinessService, logger, sanitizer, DependencySystem } = deps;
+  // Use canonical safeHandler from DI
   const safeHandler = DependencySystem.modules.get('safeHandler');
+  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
   // Validate required dependencies
   if (!domAPI) throw new Error('[createProjectDetailsEnhancements] Missing dependency: domAPI');
