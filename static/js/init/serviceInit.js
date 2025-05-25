@@ -117,13 +117,14 @@ export function createServiceInitializer({
         apiRequest = createApiClient({
           APP_CONFIG,
           globalUtils: {
-            shouldSkipDedup: globalUtils.shouldSkipDedup,
-            stableStringify: globalUtils.stableStringify,
-            normaliseUrl: globalUtils.normaliseUrl,
-            isAbsoluteUrl: globalUtils.isAbsoluteUrl
+            shouldSkipDedup : globalUtils.shouldSkipDedup,
+            stableStringify : globalUtils.stableStringify,
+            normaliseUrl    : globalUtils.normaliseUrl,
+            isAbsoluteUrl   : globalUtils.isAbsoluteUrl
           },
-          getAuthModule: () => DependencySystem.modules.get('auth'),
-          browserService: browserServiceInstance
+          getAuthModule : () => DependencySystem.modules.get('auth'),
+          browserService: browserServiceInstance,
+          logger        : logger               // ← provide required DI logger
         });
         DependencySystem.register('apiRequest', apiRequest);
       }
