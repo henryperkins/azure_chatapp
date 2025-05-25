@@ -17,7 +17,10 @@ const REQUIRED_ENDPOINT_KEYS = [
   'AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'
 ];
 
-export const resolveApiEndpoints = (cfg) => {
+export const resolveApiEndpoints = (
+  cfg = {},
+  { logger: injectedLogger = null, DependencySystem = null } = {},
+) => {
   // If no override provided, use defaults
   if (!cfg?.API_ENDPOINTS) {
     return DEFAULT_API_ENDPOINTS;
@@ -25,6 +28,12 @@ export const resolveApiEndpoints = (cfg) => {
 
   // Merge overrides with defaults to ensure required keys are present
   const merged = { ...DEFAULT_API_ENDPOINTS, ...cfg.API_ENDPOINTS };
+
+  // DI logger (no global console ‑ guardrail #12)
+  const _logger =
+    injectedLogger ||
+    DependencySystem?.modules?.get?.('logger') ||
+    { error: () => { }, warn: () => { }, info: () => { } };
 
   // Validate that all required keys are present and non-empty
   const missingKeys = [];
@@ -47,24 +56,22 @@ export const resolveApiEndpoints = (cfg) => {
       errors.push(`Empty required endpoint keys: ${emptyKeys.join(', ')}`);
     }
 
-    // Use fallback logging for critical configuration errors
-    if (typeof window !== 'undefined' && window.console && window.console.error) {
-      window.console.error('[apiEndpoints] Configuration validation failed:', errors.join('; '));
-      window.console.error('[apiEndpoints] Provided config:', cfg.API_ENDPOINTS);
-      window.console.error('[apiEndpoints] Merged result:', merged);
-    }
+    _logger.error?.('[apiEndpoints] Configuration validation failed', {
+      context : 'apiEndpoints:resolveApiEndpoints',
+      errors,
+      provided: cfg?.API_ENDPOINTS,
+      merged
+    });
 
     throw new Error(`API endpoint configuration invalid: ${errors.join('; ')}`);
   }
 
-  // Use fallback logging for successful endpoint validation
-  if (typeof window !== 'undefined' && window.console && window.console.log) {
-    window.console.log('[apiEndpoints] Successfully resolved and validated endpoints:', {
-      overrides: Object.keys(cfg.API_ENDPOINTS),
-      total: Object.keys(merged).length,
-      required: REQUIRED_ENDPOINT_KEYS.length
-    });
-  }
+  _logger.info?.('[apiEndpoints] Successfully resolved and validated endpoints', {
+    context : 'apiEndpoints:resolveApiEndpoints',
+    overrides: Object.keys(cfg?.API_ENDPOINTS ?? {}),
+    total: Object.keys(merged).length,
+    required: REQUIRED_ENDPOINT_KEYS.length
+  });
 
   return merged;
 };
