@@ -1003,8 +1003,8 @@ export function createAuthModule(deps) {
 
       // Mark auth module as ready in the canonical state
       const appModuleRef = DependencySystem?.modules?.get('appModule');
-      if (appModuleRef?.setLifecycleState) {
-        appModuleRef.setLifecycleState({ isReady: true });
+      if (appModuleRef?.setAppLifecycleState) {
+        appModuleRef.setAppLifecycleState({ isReady: true });
       }
       logger.info('[AuthModule][init] Auth module is now ready.', { context: 'init' });
 
@@ -1041,8 +1041,8 @@ export function createAuthModule(deps) {
 
       // Mark as ready even on error, but ensure auth state is cleared
       const appModuleRef = DependencySystem?.modules?.get('appModule');
-      if (appModuleRef?.setLifecycleState) {
-        appModuleRef.setLifecycleState({ isReady: true });
+      if (appModuleRef?.setAppLifecycleState) {
+        appModuleRef.setAppLifecycleState({ isReady: true });
       }
       broadcastAuth(false, null, 'init_unhandled_error');
       throw err;
