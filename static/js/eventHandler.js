@@ -36,6 +36,7 @@ export function createEventHandlers({
   storage,
   logger,           // STRICT: must be provided via DI
   errorReporter,    // STRICT: must be provided via DI
+  safeHandler,      // NEW – canonical wrapper (required)
   domReadinessService // Optional, but if provided, must be validated
 } = {}) {
   // === Dependency validation block (must be at the very top for pattern checker) ===
@@ -62,6 +63,12 @@ export function createEventHandlers({
   const MODULE = 'EventHandler';
   let _domReadinessService = domReadinessService || null;
   function setDomReadinessService(svc) { _domReadinessService = svc; }
+
+  // --- safeHandler canonical dependency check ---
+  const SH = safeHandler || DependencySystem.modules.get('safeHandler');
+  if (typeof SH !== 'function') {
+    throw new Error('[eventHandler] Missing safeHandler dependency');
+  }
 
   logger.debug('[EventHandler] Factory initialized', {
     MODULE,
@@ -211,7 +218,7 @@ export function createEventHandlers({
 
     const open = () => {
       if (typeof onOpen === 'function') {
-        onOpen(modal);
+        SH(onOpen, `EventHandler:setupModal:onOpen`)(modal);
       }
       if (modalManager?.show) {
         modalManager.show(modalId);
@@ -233,12 +240,12 @@ export function createEventHandlers({
         domAPI.removeAttribute(modal, 'open');
       }
       if (typeof onClose === 'function') {
-        onClose(modal);
+        SH(onClose, `EventHandler:setupModal:onClose`)(modal);
       }
     };
 
     if (openBtn) {
-      trackListener(openBtn, 'click', open, {
+      trackListener(openBtn, 'click', SH(open, `EventHandler:setupModal:open`), {
         description: `Open Modal ${modalId}`,
         module: MODULE,
         context: 'modal',
@@ -246,7 +253,7 @@ export function createEventHandlers({
       });
     }
     if (closeBtn) {
-      trackListener(closeBtn, 'click', close, {
+      trackListener(closeBtn, 'click', SH(close, `EventHandler:setupModal:closeBtn`), {
         description: `Close Modal ${modalId} via Button`,
         module: MODULE,
         context: 'modal',
@@ -257,18 +264,18 @@ export function createEventHandlers({
     trackListener(
       modal,
       'keydown',
-      (e) => {
+      SH((e) => {
         if (e.key === 'Escape') close();
-      },
+      }, `EventHandler:setupModal:keydown`),
       { description: `Modal ESC Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
     trackListener(
       modal,
       'click',
-      (e) => {
+      SH((e) => {
         if (domAPI.isSameNode(e.target, modal)) close();
-      },
+      }, `EventHandler:setupModal:backdropClick`),
       { description: `Modal Backdrop Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
@@ -312,14 +319,14 @@ export function createEventHandlers({
         if (!browserService?.FormData)
           throw new Error('[EventHandler][setupForm] browserService.FormData unavailable (strict DI)');
         const formData = new browserService.FormData(form);
-        await submitHandler(formData, form);
+        await SH(submitHandler, 'EventHandler:setupForm:submitHandler')(formData, form);
         if (resetOnSuccess && typeof form.reset === 'function') { // form.reset is a direct DOM call
           domAPI.callMethod(form, 'reset'); // Assumed domAPI.callMethod or similar
         }
       } catch (error) {
         if (options.onError) {
           try {
-            options.onError(error);
+            SH(options.onError, 'EventHandler:setupForm:onError')(error);
           } catch (err) {
             logger.error(`[${MODULE}][setupForm][handleSubmit][onError]`, err, {
               context: 'form-submit',
@@ -346,7 +353,7 @@ export function createEventHandlers({
       }
     };
 
-    trackListener(form, 'submit', handleSubmit, {
+    trackListener(form, 'submit', SH(handleSubmit, 'EventHandler:setupForm:handleSubmit'), {
       passive: false,
       description: `Form Submit ${formId}`,
       module: MODULE,
@@ -706,10 +713,10 @@ export function createEventHandlers({
     trackListener(
       domAPI.getDocument(),
       'requestLogin',
-      () => {
+      SH(() => {
         const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
         currentModalManager?.show?.('login');
-      },
+      }, 'EventHandler:requestLogin'),
       { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE, source: 'requestLogin' }
     );
 
@@ -719,7 +726,7 @@ export function createEventHandlers({
     trackListener(
       domAPI.getDocument(),
       'modalsLoaded',
-      () => { bindAuthButtonDelegate(); setupLoginModalTabs(); },
+      SH(() => { bindAuthButtonDelegate(); setupLoginModalTabs(); }, 'EventHandler:modalsLoaded'),
       { once: true, description: 'Rebind login / tabs after modalsLoaded', context: 'auth', module: MODULE, source: 'modalsLoaded' }
     );
 

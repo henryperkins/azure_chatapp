@@ -321,20 +321,6 @@ Object.defineProperty(app, 'isInitializing', {
 // Force currentUser to null in DI
 DependencySystem.register('currentUser', null);
 
-// ---------------------------------------------------------------------------
-// Utility functions
-// ---------------------------------------------------------------------------
-function toggleLoadingSpinner(show) {
-  const spinner = domAPI.getElementById('appLoadingSpinner');
-  if (spinner) {
-    if (show) {
-      domAPI.removeClass(spinner, 'hidden');
-    } else {
-      domAPI.addClass(spinner, 'hidden');
-    }
-  }
-}
-
 /**
  * safeHandler - Canonical implementation for all event handler error logging.
  * Ensures all event handler exceptions are logged via DI logger with proper context.
@@ -360,8 +346,86 @@ function safeHandler(handler, description) {
 }
 
 // Register safeHandler in DI system for use by all modules (single registration)
-if (DependencySystem && typeof DependencySystem.register === 'function' && !DependencySystem.modules?.has?.('safeHandler')) {
-  DependencySystem.register('safeHandler', safeHandler);
+DependencySystem.register('safeHandler', safeHandler);
+
+// ---------------------------------------------------------------------------
+// Utility functions
+// ---------------------------------------------------------------------------
+function toggleLoadingSpinner(show) {
+  const spinner = domAPI.getElementById('appLoadingSpinner');
+  if (spinner) {
+    if (show) {
+      domAPI.removeClass(spinner, 'hidden');
+    } else {
+      domAPI.addClass(spinner, 'hidden');
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 6) Early app module (using factory)
+// ---------------------------------------------------------------------------
+const appModule = createAppStateManager({ DependencySystem, logger });
+DependencySystem.register('appModule', appModule);
+
+// ---------------------------------------------------------------------------
+// 7) Define app object early (CRITICAL FIX)
+// ---------------------------------------------------------------------------
+const app = {}; // This will be enriched later
+DependencySystem.register('app', app);
+
+/* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
+const eventHandlers = createEventHandlers({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  APP_CONFIG,
+  logger,
+  errorReporter: createErrorReporterStub({ logger }),
+  sanitizer,
+  app,
+  projectManager: null,
+  modalManager: null,
+  safeHandler            // NEW
+});
+DependencySystem.register('eventHandlers', eventHandlers);
+
+/* Correct domReadinessService creation — after eventHandlers are available. */
+const domReadinessService = createDomReadinessService({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  eventHandlers,
+  logger
+});
+DependencySystem.register('domReadinessService', domReadinessService);
+
+/* Wire the circular dependency */
+eventHandlers.setDomReadinessService(domReadinessService);
+
+// Immediately after logger is created/registered, wire it into browserService
+browserServiceInstance.setLogger?.(logger);
+
+// ---------------------------------------------------------------------------
+// Early 'app:ready' dispatch helper
+// ---------------------------------------------------------------------------
+let _appReadyDispatched = false;
+/**
+ * fireAppReady – Emits the global "app:ready" event exactly once.
+ * Subsequent calls are ignored.
+ *
+ * @param {boolean} success - true if init succeeded.
+ * @param {Error|null} error - optional error object on failure.
+ */
+function fireAppReady(success = true, error = null) {
+  if (_appReadyDispatched) return;
+  _appReadyDispatched = true;
+  // app object is already registered at line 133, no need to register again
+  const detail = success ? { success } : { success, error };
+  const evt = eventHandlers.createCustomEvent('app:ready', { detail });
+  AppBus.dispatchEvent(evt);
+  domAPI.dispatchEvent(domAPI.getDocument(), evt);
+  DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', { success, error, context: 'app' });
 }
 
 // ---------------------------------------------------------------------------

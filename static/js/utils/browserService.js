@@ -47,7 +47,7 @@ export function normaliseUrl(u = '') {
 export const normalizeUrl = normaliseUrl;
 
 export function createBrowserService({ windowObject, logger } = {}) {
-  const _logger = logger;
+  let _logger = logger;
 
   let _currentUser = null;
 
@@ -284,5 +284,6 @@ export function createBrowserService({ windowObject, logger } = {}) {
 
     /* correlation helpers */
     getSessionId : () => getSessionId(),
+    setLogger(newLogger) { _logger = newLogger; },
   };
 }
