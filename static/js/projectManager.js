@@ -192,7 +192,10 @@ export function createProjectManager({
         DETAIL: apiEndpoints.DETAIL || '/api/projects/{id}/',
         STATS: apiEndpoints.STATS || '/api/projects/{id}/stats/',
         FILES: apiEndpoints.FILES || '/api/projects/{id}/files/',
-        CONVOS: apiEndpoints.CONVERSATIONS(projectId) || '/api/projects/{id}/conversations/',
+        // Always store a string template; never invoke endpoint factories here
+        CONVOS: (typeof apiEndpoints.CONVERSATIONS === 'string'
+          ? apiEndpoints.CONVERSATIONS
+          : '/api/projects/{id}/conversations/'),
         ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
         KB_LIST_URL_TEMPLATE:
           apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/',
