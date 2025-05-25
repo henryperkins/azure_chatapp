@@ -50,27 +50,7 @@ export function isAbsoluteUrl(url = '') {
  * CONSOLIDATED: normaliseUrl moved to browserService.js to eliminate duplication.
  * This is a re-export for backward compatibility.
  */
-export function normaliseUrl(u = '') {
-  // Delegate to browserService implementation to avoid duplication
-  if (typeof window !== 'undefined' && window.DependencySystem) {
-    const browserService = window.DependencySystem.modules?.get?.('browserService');
-    if (browserService?.normaliseUrl) {
-      return browserService.normaliseUrl(u);
-    }
-  }
-  // Fallback implementation if DI not available
-  try {
-    const url = new URL(u, u.startsWith('http') ? undefined : 'http://_');
-    const raw = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
-    const path = raw || '/';
-    return path + url.search + url.hash;
-  } catch {
-    return u;
-  }
-}
-
-/* U.S.-spelling alias kept for backward compatibility */
-export const normalizeUrl = normaliseUrl;
+export { normaliseUrl, normalizeUrl } from './browserService.js';
 
 /**
  * Returns true when a GET request to `url` should NOT be deduplicated
