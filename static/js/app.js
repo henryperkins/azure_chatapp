@@ -90,7 +90,8 @@ if (!DependencySystem?.modules?.get) {
 // --- 1) Early real logger --------------------------------------------------
 const loggerInstance = createLogger({
   endpoint        : APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
-  enableServer    : APP_CONFIG.LOGGING?.BACKEND_ENABLED ?? true,
+  // Start with local-only logging; authInit will enable the remote sink
+  enableServer    : false,
   debug           : APP_CONFIG.DEBUG === true,
   minLevel        : APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
   consoleEnabled  : APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
