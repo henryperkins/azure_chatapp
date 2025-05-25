@@ -101,6 +101,23 @@ const loggerInstance = createLogger({
 DependencySystem.register('logger', loggerInstance);
 const logger = loggerInstance;
 
+// ---------------------------------------------------------------------------
+//  Canonical safeHandler – must exist before createEventHandlers is invoked
+// ---------------------------------------------------------------------------
+function safeHandler(handler, description = 'safeHandler') {
+  const log = DependencySystem.modules.get?.('logger');
+  return (...args) => {
+    try { return handler(...args); }
+    catch (err) {
+      log?.error?.(`[safeHandler][${description}]`,
+                   err?.stack || err,
+                   { context: description });
+      throw err;
+    }
+  };
+}
+DependencySystem.register('safeHandler', safeHandler);
+
 // Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
 DependencySystem.register('AppBus', AppBus);
@@ -147,7 +164,8 @@ const eventHandlers = createEventHandlers({
   sanitizer,
   app,
   projectManager: null,
-  modalManager: null
+  modalManager: null,
+  safeHandler    // provide canonical wrapper
   // domReadinessService to be injected after instantiation
 });
 DependencySystem.register('eventHandlers', eventHandlers);
@@ -360,49 +378,6 @@ function toggleLoadingSpinner(show) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// 6) Early app module (using factory)
-// ---------------------------------------------------------------------------
-const appModule = createAppStateManager({ DependencySystem, logger });
-DependencySystem.register('appModule', appModule);
-
-// ---------------------------------------------------------------------------
-// 7) Define app object early (CRITICAL FIX)
-// ---------------------------------------------------------------------------
-const app = {}; // This will be enriched later
-DependencySystem.register('app', app);
-
-/* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
-const eventHandlers = createEventHandlers({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  APP_CONFIG,
-  logger,
-  errorReporter: createErrorReporterStub({ logger }),
-  sanitizer,
-  app,
-  projectManager: null,
-  modalManager: null,
-  safeHandler            // NEW
-});
-DependencySystem.register('eventHandlers', eventHandlers);
-
-/* Correct domReadinessService creation — after eventHandlers are available. */
-const domReadinessService = createDomReadinessService({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  eventHandlers,
-  logger
-});
-DependencySystem.register('domReadinessService', domReadinessService);
-
-/* Wire the circular dependency */
-eventHandlers.setDomReadinessService(domReadinessService);
-
-// Immediately after logger is created/registered, wire it into browserService
-browserServiceInstance.setLogger?.(logger);
 
 // ---------------------------------------------------------------------------
 // Early 'app:ready' dispatch helper
