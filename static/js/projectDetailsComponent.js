@@ -16,7 +16,8 @@ export function createProjectDetailsComponent({
   modelConfig = null,
   chatManager = null,
   apiClient = null,
-  app = null
+  app = null,
+  DependencySystem,
 } = {}) {
   const missing = [];
   if (!domAPI) missing.push("domAPI");
@@ -47,7 +48,9 @@ export function createProjectDetailsComponent({
     knowledgeBaseComponent,
     modelConfig,
     chatManager,
-    apiClient
+    apiClient,
+    app,
+    DependencySystem,
   });
 
   // Expose only the canonical public API for compliance (no dynamic shape)
@@ -119,6 +122,11 @@ class ProjectDetailsComponent {
     this.fileUploadComponent = null;
     this.elements = {};
     this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
+    // Canonical safeHandler injected via DI, fallback is error.
+    this.safeHandler = this.eventHandlers?.DependencySystem?.modules?.get?.('safeHandler');
+    if (typeof this.safeHandler !== 'function') {
+      throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: safeHandler`);
+    }
   }
 
   setProjectManager(pm) {
@@ -140,12 +148,7 @@ class ProjectDetailsComponent {
     try { this.logger.error(`[${MODULE_CONTEXT}] ${msg}`, err && err.stack ? err.stack : err, { context: MODULE_CONTEXT, ...meta }); }
     catch { throw new Error(`[${MODULE_CONTEXT}] ${msg}: ${err && err.stack ? err.stack : err}`); }
   }
-  _safeHandler(fn, description) {
-    return (...args) => {
-      try { return fn.apply(this, args); }
-      catch (err) { this._logError(`In handler [${description}]`, err); throw err; }
-    };
-  }
+  // Canonical safeHandler injected via DI, local fallback removed.
 
   _setState(partial) { this.state = { ...this.state, ...partial }; }
 
@@ -781,6 +784,7 @@ class ProjectDetailsComponent {
 
   async initialize() {
     if (this.state.initialized) return;
+    await this.domReadinessService.waitForEvent('app:ready');
     this._logInfo("Initializing...");
     this._setState({ initialized: true });
     this._logInfo("Initialized successfully.");

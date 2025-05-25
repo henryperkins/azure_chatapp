@@ -53,7 +53,13 @@ export function createEventHandlers({
     throw new Error('[eventHandler] Missing APP_CONFIG');
   }
   if (!logger) {
-    throw new Error('[eventHandler] Missing logger');
+    logger = (typeof window !== 'undefined' && window.console) ? window.console : {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      log: () => {},
+    };
   }
   if (!errorReporter) {
     throw new Error('[eventHandler] Missing errorReporter');
