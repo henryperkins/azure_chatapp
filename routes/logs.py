@@ -158,6 +158,13 @@ async def receive_logs(
             or log_entry.get("trace_id")
         )
 
+        # ---------------------------------------------------------------
+        # Strip logging-reserved keys so logger.log(extra=…) never fails
+        # ---------------------------------------------------------------
+        reserved = {"args", "msg", "message", "levelname", "levelno"}
+        for k in reserved:
+            sanitized_entry.pop(k, None)
+
         # --- Log rotation: if file >10MB, rotate ---
         log_path = os.getenv("CLIENT_LOG_FILE", "client_logs.jsonl")
         max_bytes = 10 * 1024 * 1024
@@ -172,7 +179,7 @@ async def receive_logs(
             summary_c = f"{color}{summary}{reset}"
 
             # Remove keys that collide with built-in LogRecord attributes
-            extra_for_logger = {k: v for k, v in sanitized_entry.items() if k != "args"}
+            extra_for_logger = {k: v for k, v in sanitized_entry.items() if k not in reserved}
 
             logger.log(lvl_num, summary_c, extra=extra_for_logger)
 
