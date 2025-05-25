@@ -59,6 +59,7 @@ import { createUiRenderer } from './uiRenderer.js';
 
 import MODAL_MAPPINGS from './modalConstants.js';
 import { createFileUploadComponent } from './FileUploadComponent.js';
+import { createSafeHandler } from './safeHandler.js'; // Canonical SafeHandler factory
 
 // ---------------------------------------------------------------------------
 // UI helpers for KnowledgeBaseComponent
@@ -88,16 +89,14 @@ if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
-// --- 1) Early logger REMOVED: logger is now initialized after serviceInit basic services (see below)
-
-// ---------------------------------------------------------------------------
-//  Canonical safeHandler – must exist before createEventHandlers is invoked
-// ---------------------------------------------------------------------------
-const safeHandler = DependencySystem.modules.get('safeHandler');
-if (typeof safeHandler !== 'function') {
-  throw new Error('[App] safeHandler not registered in DependencySystem');
+// --- EARLY SAFEHANDLER: Register dummy for boot phase to break logger/safeHandler/eventHandlers chain ---
+function __dummySafeHandler(fn) {
+  return typeof fn === "function" ? fn : () => {};
 }
-DependencySystem.register('safeHandler', safeHandler);
+__dummySafeHandler.cleanup = function() {};
+DependencySystem.register('safeHandler', __dummySafeHandler);
+
+// --- 1) Early logger REMOVED: logger is now initialized after serviceInit basic services (see below)
 
 // Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
@@ -146,7 +145,7 @@ const eventHandlers = createEventHandlers({
   app,
   projectManager: null,
   modalManager: null,
-  safeHandler    // provide canonical wrapper
+  safeHandler: DependencySystem.modules.get('safeHandler')  // fetch via DI (avoid TDZ)
   // domReadinessService to be injected after instantiation
 });
 DependencySystem.register('eventHandlers', eventHandlers);
@@ -232,6 +231,10 @@ const loggerInstance = createLogger({
 });
 DependencySystem.register('logger', loggerInstance);
 const logger = loggerInstance; // Make it available to the rest of app.js
+
+ // Instantiate and register canonical safeHandler after logger is available
+const safeHandler = createSafeHandler({ logger });
+DependencySystem.register('safeHandler', safeHandler);
 
 // Now inject the fully configured logger into serviceInit if it needs it for advanced services
 serviceInit.setLogger(logger);
@@ -389,7 +392,7 @@ const authInit = createAuthInitializer({
   eventHandlers,
   logger,
   sanitizer,
-  safeHandler,
+  safeHandler: DependencySystem.modules.get('safeHandler'),
   domReadinessService,
   APP_CONFIG
 });
@@ -403,7 +406,7 @@ const errorInit = createErrorInitializer({
   browserService: browserServiceInstance,
   eventHandlers,
   logger,
-  safeHandler
+  safeHandler: DependencySystem.modules.get('safeHandler')
 });
 DependencySystem.register('errorInit', errorInit);
 
@@ -432,7 +435,7 @@ const uiInit = createUIInitializer({
   domReadinessService,
   logger,
   APP_CONFIG,
-  safeHandler,
+  safeHandler: DependencySystem.modules.get('safeHandler'),
   sanitizer,
   createProjectDetailsEnhancements,
   createTokenStatsManager,
