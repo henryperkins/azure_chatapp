@@ -94,7 +94,8 @@ let logger = createLogger({
   debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
   minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
   fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
-  enableServer: false, // Prevent backend POSTs before authModule is available
+  enableServer: true,  // Send logs from the very start
+  allowUnauthenticated: true,
   sessionIdProvider: () => getSessionId(),
   traceIdProvider: () => DependencySystem?.modules?.get?.('traceId') ?? null
 });
