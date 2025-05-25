@@ -34,6 +34,7 @@ export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logge
 
   // Use canonical safeHandler from DI
   const safeHandler = DependencySystem.modules.get('safeHandler');
+  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
   // -- Init function, call once when DOM is ready and deps are injected
   function init() {

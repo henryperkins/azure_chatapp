@@ -173,20 +173,9 @@ export function createProjectDashboard({
      * Utility: wrap any event handler using canonical safeHandler from DI
      */
     _wrapHandler(handlerFn, description) {
-      const safeHandler = this.dependencySystem.modules.get('safeHandler');
-      if (!safeHandler) {
-        logger.warn('[ProjectDashboard] safeHandler not available in DI, using fallback', { context: 'projectDashboard' });
-        return (...args) => {
-          try {
-            return handlerFn(...args);
-          } catch (err) {
-            logger.error(`[ProjectDashboard][${description}]`, err, {
-              context: 'projectDashboard'
-            });
-            throw err;
-          }
-        };
-      }
+      const safeHandler = DependencySystem.modules.get('safeHandler');
+      if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
+
       return safeHandler(handlerFn, `ProjectDashboard:${description}`);
     }
 
