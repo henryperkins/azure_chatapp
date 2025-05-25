@@ -177,8 +177,13 @@ async def receive_logs(
             rotated = f"client_logs_{ts}.jsonl"
             await aioos.rename(log_path, rotated)     # ← REPLACE
 
-        # Terminal echo **only** for WARN/ERROR+
-        if level in ("warn", "warning", "error", "critical", "fatal"):
+        # Terminal echo for all client levels ≥ INFO
+        # (includes 'log', which we map to INFO)
+        if level in (
+            "info", "log",
+            "warn", "warning",
+            "error", "critical", "fatal"
+        ):
             lvl_num   = level_map.get(level, logging.INFO)
             summary_c = f"{color}{summary}{reset}"
 
