@@ -557,6 +557,16 @@ export async function init() {
     logger.info('[App.init] Core systems initialization phase completed.');
 
     logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...');
+    
+    // Debug: Check which modules are already available
+    const modulesStatus = {
+      auth: !!DependencySystem.modules.get('auth'),
+      eventHandlers: !!DependencySystem.modules.get('eventHandlers'),
+      modalManager: !!DependencySystem.modules.get('modalManager'),
+      sidebar: !!DependencySystem.modules.get('sidebar')
+    };
+    logger.info('[App.init] Modules status before wait:', modulesStatus);
+    
     await domReadinessService.dependenciesAndElements({
       deps: ['auth', 'eventHandlers', 'modalManager'],
       timeout: PHASE_TIMEOUT, // Use PHASE_TIMEOUT
@@ -590,7 +600,25 @@ export async function init() {
     }
 
     logger.log('[App.init] Initializing UI Components...');
+    
+    // Debug: Check DOM elements before UI init
+    const domElementsStatus = {
+      mainSidebar: !!domAPI.getElementById('mainSidebar'),
+      navToggleBtn: !!domAPI.getElementById('navToggleBtn'),
+      authButton: !!domAPI.getElementById('authButton'),
+      modalsContainer: !!domAPI.getElementById('modalsContainer')
+    };
+    logger.info('[App.init] DOM elements status before UI init:', domElementsStatus);
+    
     await uiInit.initializeUIComponents();
+    
+    // Debug: Check modules after UI init
+    const modulesAfterUI = {
+      sidebar: !!DependencySystem.modules.get('sidebar'),
+      sidebarInitialized: DependencySystem.modules.get('sidebar')?.initialized || false
+    };
+    logger.info('[App.init] Modules after UI init:', modulesAfterUI);
+    
     logger.info('[App.init] UI components initialization completed.');
 
     const mc = DependencySystem.modules.get('modelConfig');
@@ -616,6 +644,30 @@ export async function init() {
 
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
+
+    // Debug: Force sidebar visibility check
+    logger.info('[App.init] Final debug - checking sidebar state');
+    const sidebar = DependencySystem.modules.get('sidebar');
+    const sidebarEl = domAPI.getElementById('mainSidebar');
+    if (sidebarEl) {
+      const sidebarClasses = Array.from(sidebarEl.classList);
+      const viewportWidth = browserAPI.getWindow().innerWidth;
+      logger.info('[App.init] Sidebar final state:', {
+        sidebarExists: !!sidebar,
+        elementExists: !!sidebarEl,
+        classes: sidebarClasses,
+        viewportWidth,
+        hasTranslateXFull: sidebarClasses.includes('-translate-x-full'),
+        hasTranslateX0: sidebarClasses.includes('translate-x-0')
+      });
+      
+      // Force sidebar visible on desktop if not already
+      if (viewportWidth >= 768 && sidebarClasses.includes('-translate-x-full')) {
+        logger.warn('[App.init] FORCING sidebar visible on desktop');
+        sidebarEl.classList.remove('-translate-x-full');
+        sidebarEl.classList.add('translate-x-0');
+      }
+    }
 
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
