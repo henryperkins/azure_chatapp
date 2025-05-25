@@ -19,7 +19,9 @@ export function createLogger({
   browserService = null,
   sessionIdProvider = null,
   traceIdProvider = null,
-  safeHandler = null
+  safeHandler = null,
+  allowUnauthenticated = false,   // NEW
+  consoleEnabled       = true     // NEW
 } = {}) {
   let _minLvlNum = LEVELS[minLevel] ?? 10;
   let _enableServer = enableServer;
@@ -45,7 +47,7 @@ export function createLogger({
     if (typeof DependencySystem !== 'undefined' && DependencySystem?.modules?.get) {
       appModule = DependencySystem.modules.get('appModule');
     }
-    if (appModule?.state?.isAuthenticated === false) return;
+    if (!allowUnauthenticated && appModule?.state?.isAuthenticated === false) return;
 
     if (LEVELS[level] < _minLvlNum) return;
 
@@ -99,7 +101,10 @@ export function createLogger({
   const _c = (typeof window !== 'undefined' && window.console) || { log: () => { }, info: () => { }, warn: () => { }, error: () => { }, debug: () => { } };
   function wrap(level, fn = _c.log) {
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
-    return (...args) => { safe(`[${context}]`, ...args); void send(level, args); };
+    return (...args) => {
+      if (consoleEnabled) safe(`[${context}]`, ...args);
+      void send(level, args);
+    };
   }
 
   // Mutators for runtime control
@@ -113,7 +118,7 @@ export function createLogger({
     info: wrap('info', _c.info),
     warn: wrap('warn', _c.warn),
     error: wrap('error', _c.error),
-    debug: debug ? wrap('debug', _c.debug) : () => { },
+    debug: debug ? wrap('debug', _c.debug ?? _c.log) : () => { },
     critical: wrap('critical', _c.error),
     fatal: wrap('fatal', _c.error),
     setServerLoggingEnabled,
