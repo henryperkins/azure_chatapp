@@ -42,16 +42,36 @@ await this.domReadinessService.dependenciesAndElements(['#myElement']);
 ```javascript
 // Always track with context
 eventHandlers.trackListener(element, 'click', handler, { context: 'ModuleName' });
+
 // Cleanup by context
-eventHandlers.cleanupListeners({ context: 'ModuleName' });
+  return {
+    // Show the project details view.
+    show: (...args) => instance.show(...args),
+    // Hide the project details view.
+    hide: (...args) => instance.hide(...args),
+    // Initialize the component.
+    initialize: (...args) => instance.initialize(...args),
+     // Render the given project object to the UI.
+    renderProject: (...args) => instance.renderProject(...args),
+
+    cleanup: () => {
+      eventHandlers.cleanupListeners({ context: "ProjectDetailsComponent" });
+      instance.cleanup();
+    }
+  };
 ```
 
 ## Authentication (BREAKING CHANGE Dec 2024)
 
 ### ✅ NEW Pattern (ONLY)
 ```javascript
-// Read state - SINGLE source
+// Read state - SINGLE source via DependencySystem
+const appModule = DependencySystem.modules.get('appModule');
 const { isAuthenticated, currentUser } = appModule.state;
+
+// OR using helper methods:
+const isAuthenticated = appModule.isAuthenticated();
+const currentUser = appModule.getCurrentUser();
 
 // Listen for changes
 auth.AuthBus.addEventListener('authStateChanged', (event) => {
@@ -63,6 +83,7 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 - Local `authState` variables
 - `auth.isAuthenticated()` fallbacks
 - Module-level `setAuthState()` methods
+- Direct `appModule.state` access without DependencySystem
 
 ## Canonical Implementations (USE THESE)
 
@@ -70,6 +91,8 @@ auth.AuthBus.addEventListener('authStateChanged', (event) => {
 |---------|----------|---------|
 | SafeHandler | `app.js` | `DependencySystem.modules.get('safeHandler')` |
 | Logger Factory | `logger.js` | `createLogger({ context, debug, minLevel, sessionIdProvider, traceIdProvider })` |
+| App State | `appState.js` | `DependencySystem.modules.get('appModule')` |
+| Auth State | `appModule.state` | `.isAuthenticated`, `.currentUser` |
 | Project State | `appModule.state` | `.currentProjectId`, `.currentProject` |
 | Form Handlers | `auth.js` | `createAuthFormHandler()` |
 | URL Parsing | `navigationService` | `.navigateTo()`, `.parseURL()` |
@@ -143,7 +166,7 @@ export function createMyModule({ logger, apiClient, domAPI }) {
 - Direct console.* calls (use injected logger)
 - Accessing logger via DependencySystem.modules.get() in modules
 - Missing context parameter in log calls
-- Calling setAuthModule() (method removed - uses appModule.state automatically)
+- Direct `appModule.state` access without getting appModule from DependencySystem first
 - Including authModule parameter in createLogger() factory
 
 ## Quick Reference
@@ -156,6 +179,7 @@ export function createMyModule({ logger, apiClient, domAPI, navigationService, d
 
   // Use canonical implementations
   const safeHandler = DependencySystem.modules.get('safeHandler');
+  const appModule = DependencySystem.modules.get('appModule');
   const { isAuthenticated } = appModule.state;
 
   // Track all listeners
