@@ -355,142 +355,6 @@ export function createEventHandlers({
     });
   }
 
-  let initialized = false;
-  async function init() {
-    if (initialized) {
-      return this; // Return API object early
-    }
-
-    if (!_domReadinessService) {
-      throw new Error('[eventHandler.init] domReadinessService must be set via setDomReadinessService before calling init()');
-    }
-    const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10000;
-
-    // Ensure the DOM is fully loaded before initialization
-    await _domReadinessService.documentReady();
-
-    // Wait for core dependencies and the body to exist
-    await _domReadinessService.dependenciesAndElements({
-      deps: [
-        'app',
-        'auth',
-        'projectManager',
-        'modalManager',
-        'domAPI',
-        'browserService'
-      ],
-      domSelectors: ['body'],
-      timeout: dependencyWaitTimeout,
-      context: 'eventHandler.init'
-    });
-
-    // -- Strict document/body readiness
-    await _domReadinessService.documentReady();
-
-    // -- DOM event-dependent setup
-    const runDomDependentSetup = () => {
-      setupCommonElements();
-      setupNavigationElements();
-      setupContentElements();
-    };
-
-    runDomDependentSetup();
-
-    // Modal loading is now handled by modalManager.init() in coreInit
-    // modalManager.init() is called BEFORE eventHandlers.init(), so modals should be ready
-    try {
-      // Wait for the project modal form to appear
-      // modalManager.init() has already completed, so this should be quick
-      await _domReadinessService.elementsReady('#projectModalForm', {
-        timeout: 3000, // Short timeout since modalManager has already initialized
-        context: 'eventHandler.init:modalForm'
-      }).then(() => {
-        setupProjectModalForm();
-        logger.info(
-          `[${MODULE}][init] Project modal form setup completed`,
-          { context: 'eventHandler.init:modalForm' }
-        );
-      }).catch((error) => {
-        logger.warn(`[${MODULE}][init] elementsReady('#projectModalForm') failed - modal form may not be available`, error, { context: 'eventHandler.init:modalForm' });
-        // Don't throw - this is not critical for app initialization
-      });
-    } catch (error) {
-      logger.error(`[${MODULE}][init] Error during modal form setup`, error, { context: 'eventHandler.init:modalForm' });
-      // Don't throw - this is not critical for app initialization
-    }
-
-    // LOGIN BUTTON / MODAL HANDLING
-    function bindAuthButtonDelegate() {
-      if (authButtonDelegationBound) return;
-      let parentNode = domAPI.getElementById('header') || domAPI.getDocument();
-      const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-      if (!currentModalManager || typeof currentModalManager.show !== 'function') {
-        return;
-      }
-      delegate(
-        parentNode,
-        'click',
-        '#authButton',
-        (e) => {
-          domAPI.preventDefault(e);
-          try {
-            currentModalManager.show('login');
-          } catch (error) {
-            logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, {
-              context: 'auth'
-            });
-          }
-        },
-        { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
-      );
-      authButtonDelegationBound = true;
-    }
-
-    // Listen for requestLogin event
-    trackListener(
-      domAPI.getDocument(),
-      'requestLogin',
-      () => {
-        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-        if (currentModalManager && typeof currentModalManager.show === 'function') {
-          currentModalManager.show('login');
-        }
-      },
-      {
-        description: 'Show Login Modal (Global Event)',
-        context: 'auth',
-        module: MODULE,
-        source: 'requestLogin'
-      }
-    );
-
-    bindAuthButtonDelegate();
-
-    // Rebind after modalsLoaded
-    trackListener(
-      domAPI.getDocument(),
-      'modalsLoaded',
-      (event) => {
-        bindAuthButtonDelegate();
-        setupLoginModalTabs();
-      },
-      {
-        once: true,
-        description: 'Rebind login and setup tabs after modalsLoaded',
-        context: 'auth',
-        module: MODULE,
-        source: 'modalsLoaded'
-      }
-    );
-
-    // --- FAST-PATH: modals may already be injected before this listener is registered
-    if (domAPI.getElementById('modalsContainer')?.childElementCount > 0) {
-      setupLoginModalTabs();
-    }
-
-    initialized = true;
-    return this;
-  }
 
   function setupCommonElements() {
     const darkModeToggle = domAPI.getElementById('darkModeToggle');
@@ -752,24 +616,121 @@ export function createEventHandlers({
     // You could add more explicit cleanup logic here if stateful singletons or intervals are added
   }
 
-  return {
+  // ─── Public API object (assembled before init) ────────────────────────────
+  const eventHandlerAPI = {
     trackListener,
     cleanupListeners,
     delegate,
-    debounce: globalDebounce,
+    debounce        : globalDebounce,
     toggleVisible,
     setupCollapsible,
     setupModal,
     setupForm,
-    init,
     PRIORITY,
     untrackListener,
     createCustomEvent,
-    setProjectManager: (pm) => {
-      _projectManager = pm;
-    },
-    setDomReadinessService, // <-- add to API
+    setProjectManager : (pm) => { _projectManager = pm; },
+    setDomReadinessService,
     DependencySystem,
-    cleanup, // Expose cleanup API per guardrail
+    cleanup
   };
+
+  // ――― init becomes a method of the API object ―――
+  let initialized = false;
+  eventHandlerAPI.init = async function () {
+    if (initialized) return eventHandlerAPI;           // ✅ return full API
+
+    if (!_domReadinessService) {
+      throw new Error('[eventHandler.init] domReadinessService must be set via setDomReadinessService before calling init()');
+    }
+
+    const dependencyWaitTimeout = APP_CONFIG?.TIMEOUTS?.DEPENDENCY_WAIT ?? 10000;
+
+    /* --- DOM & dependency readiness --- */
+    await _domReadinessService.documentReady();
+    await _domReadinessService.dependenciesAndElements({
+      deps        : ['app','auth','projectManager','modalManager','domAPI','browserService'],
+      domSelectors: ['body'],
+      timeout     : dependencyWaitTimeout,
+      context     : 'eventHandler.init'
+    });
+
+    /* --- in-DOM setup formerly in the old init() --- */
+    await _domReadinessService.documentReady();
+    setupCommonElements();
+    setupNavigationElements();
+    setupContentElements();
+
+    /* ---- project modal form wait (unchanged) ---- */
+    try {
+      await _domReadinessService.elementsReady('#projectModalForm', {
+        timeout: 3000,
+        context: 'eventHandler.init:modalForm'
+      }).then(() => {
+        setupProjectModalForm();
+        logger.info(`[${MODULE}][init] Project modal form setup completed`,
+                    { context: 'eventHandler.init:modalForm' });
+      }).catch((error) => {
+        logger.warn(`[${MODULE}][init] elementsReady('#projectModalForm') failed`,
+                    error,
+                    { context: 'eventHandler.init:modalForm' });
+      });
+    } catch (error) {
+      logger.error(`[${MODULE}][init] Error during modal form setup`, error,
+                   { context: 'eventHandler.init:modalForm' });
+    }
+
+    /* ---- login-modal delegation (logic kept verbatim) ---- */
+    function bindAuthButtonDelegate() {
+      if (authButtonDelegationBound) return;
+      const parentNode = domAPI.getElementById('header') || domAPI.getDocument();
+      const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
+      if (!currentModalManager?.show) return;
+      delegate(
+        parentNode,
+        'click',
+        '#authButton',
+        (e) => {
+          domAPI.preventDefault(e);
+          try { currentModalManager.show('login'); }
+          catch (error) {
+            logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, { context: 'auth' });
+          }
+        },
+        { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
+      );
+      authButtonDelegationBound = true;
+    }
+
+    /* global requestLogin listener */
+    trackListener(
+      domAPI.getDocument(),
+      'requestLogin',
+      () => {
+        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
+        currentModalManager?.show?.('login');
+      },
+      { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE, source: 'requestLogin' }
+    );
+
+    bindAuthButtonDelegate();
+
+    /* re-bind after modalsLoaded */
+    trackListener(
+      domAPI.getDocument(),
+      'modalsLoaded',
+      () => { bindAuthButtonDelegate(); setupLoginModalTabs(); },
+      { once: true, description: 'Rebind login / tabs after modalsLoaded', context: 'auth', module: MODULE, source: 'modalsLoaded' }
+    );
+
+    /* fast-path if modals already present */
+    if (domAPI.getElementById('modalsContainer')?.childElementCount > 0) {
+      setupLoginModalTabs();
+    }
+
+    initialized = true;
+    return eventHandlerAPI;                             // ✅
+  };
+
+  return eventHandlerAPI;
 }
