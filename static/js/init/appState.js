@@ -75,6 +75,16 @@ export function createAppStateManager({ DependencySystem, logger }) {
       }
     },
 
+    /* ─── DEPRECATED SHIM (will be removed Q3-2024) ───
+     * Some legacy modules still invoke appModule.setLifecycleState().
+     * Keep a thin alias so they don’t throw while we finish the migration.
+     */
+    setLifecycleState(...args) {
+      // optional: surface a gentle warning once per session
+      logger?.warn?.('[appState] setLifecycleState() is deprecated – use setAppLifecycleState()', { context: 'appState:compat' });
+      return this.setAppLifecycleState(...args);
+    },
+
     // Helper method to get current authentication status
     isAuthenticated() {
       return this.state.isAuthenticated;
