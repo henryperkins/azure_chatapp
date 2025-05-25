@@ -32,7 +32,7 @@ export function createProjectDetailsComponent({
     }
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`);
   }
-  return new ProjectDetailsComponent({
+  const instance = new ProjectDetailsComponent({
     domAPI,
     htmlTemplateLoader,
     domReadinessService,
@@ -49,6 +49,34 @@ export function createProjectDetailsComponent({
     chatManager,
     apiClient
   });
+
+  // Expose only the canonical public API for compliance (no dynamic shape)
+  return {
+    /**
+     * Show the project details view.
+     */
+    show: (...args) => instance.show(...args),
+    /**
+     * Hide the project details view.
+     */
+    hide: (...args) => instance.hide(...args),
+    /**
+     * Initialize the component.
+     */
+    initialize: (...args) => instance.initialize(...args),
+    /**
+     * Render the given project object to the UI.
+     */
+    renderProject: (...args) => instance.renderProject(...args),
+    /**
+     * Cleanup logic for ProjectDetailsComponent: detaches listeners, aborts async, and hides UI.
+     * Ensures compliance with frontend pattern rules.
+     */
+    cleanup: () => {
+      eventHandlers.cleanupListeners({ context: "ProjectDetailsComponent" });
+      instance.cleanup();
+    }
+  };
 }
 
 class ProjectDetailsComponent {
@@ -495,7 +523,9 @@ class ProjectDetailsComponent {
       });
       const chatBox = this.domAPI.querySelector('#chatTab .chat-container');
       if (chatBox) this.domAPI.addClass(chatBox, 'opacity-40');
-    } catch {}
+    } catch {
+      /* intentionally empty */
+    }
   }
 
   _fileItem(file) {
@@ -786,8 +816,11 @@ class ProjectDetailsComponent {
   }
 
   destroy() {
+    // Ensure cleanup of all listeners for this context
+    this.eventHandlers.cleanupListeners({ context: 'ProjectDetailsComponent' });
     this.hide();
     this._cleanupPendingOperations();
+    this.eventHandlers.cleanupListeners({ context: 'Sidebar' });
     this._logInfo("Destroyed.");
   }
 

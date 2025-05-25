@@ -159,37 +159,31 @@ export function createProjectListComponent(deps) {
     }
     function _bindEventListeners() {
         const doc = domAPI?.getDocument?.();
-        const safe = (fn, dsc) => (...a) => {
-            try { return fn(...a); }
-            catch (err) {
-                logger.error(`[ProjectListComponent][${dsc}]`, err, { context: MODULE_CONTEXT });
-                throw err;
-            }
-        };
+        const safeHandler = app?.DependencySystem?.modules?.get?.('safeHandler');
         const projectsLoadedHandler = (e) => renderProjects(e.detail);
 
         eventHandlers.trackListener(
             doc,
             "projectsLoaded",
-            safe(projectsLoadedHandler, 'projectsLoaded'),
+            safeHandler(projectsLoadedHandler, 'ProjectListComponent:projectsLoaded'),
             { context: MODULE_CONTEXT }
         );
         eventHandlers.trackListener(
             gridElement,
             "click",
-            safe((e) => _handleCardClick(e), 'gridElement:click'),
+            safeHandler((e) => _handleCardClick(e), 'ProjectListComponent:gridElement:click'),
             { context: MODULE_CONTEXT }
         );
         eventHandlers.trackListener(
             doc,
             "projectCreated",
-            safe((e) => _handleProjectCreated(e.detail), 'projectCreated'),
+            safeHandler((e) => _handleProjectCreated(e.detail), 'ProjectListComponent:projectCreated'),
             { context: MODULE_CONTEXT }
         );
         eventHandlers.trackListener(
             doc,
             "projectUpdated",
-            safe((e) => _handleProjectUpdated(e.detail), 'projectUpdated'),
+            safeHandler((e) => _handleProjectUpdated(e.detail), 'ProjectListComponent:projectUpdated'),
             { context: MODULE_CONTEXT }
         );
 
@@ -219,8 +213,8 @@ export function createProjectListComponent(deps) {
         };
 
         // Listen to both variants.
-        eventHandlers.trackListener(doc, "authStateChanged", safe(handleAuthStateChange, 'authStateChanged'), { context: MODULE_CONTEXT });
-        eventHandlers.trackListener(doc, "auth:stateChanged", safe(handleAuthStateChange, 'auth:stateChanged'), { context: MODULE_CONTEXT });
+        eventHandlers.trackListener(doc, "authStateChanged", safeHandler(handleAuthStateChange, 'ProjectListComponent:authStateChanged'), { context: MODULE_CONTEXT });
+        eventHandlers.trackListener(doc, "auth:stateChanged", safeHandler(handleAuthStateChange, 'ProjectListComponent:auth:stateChanged'), { context: MODULE_CONTEXT });
 
         _bindFilterEvents();
 
@@ -253,7 +247,7 @@ export function createProjectListComponent(deps) {
     function _bindSingleFilterTab(tab, filterValue) {
         if (!filterValue) return;
         const clickHandler = () => _setFilter(filterValue);
-        eventHandlers.trackListener(tab, "click", clickHandler, { context: MODULE_CONTEXT });
+        eventHandlers.trackListener(tab, "click", clickHandler, { context: MODULE_CONTEXT + ':bindSingleFilterTab:click' });
 
         eventHandlers.trackListener(tab, "keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
@@ -261,7 +255,7 @@ export function createProjectListComponent(deps) {
                 _setFilter(filterValue);
                 tab.focus();
             }
-        }, { context: MODULE_CONTEXT });
+        }, { context: MODULE_CONTEXT + ':bindSingleFilterTab:keydown' });
     }
     function _bindFilterTablistKeyboardNav(container, tabs) {
         eventHandlers.trackListener(container, "keydown", (event) => {
@@ -283,7 +277,7 @@ export function createProjectListComponent(deps) {
                 event.preventDefault();
                 tabs[tabs.length - 1].focus();
             }
-        }, { context: MODULE_CONTEXT });
+        }, { context: MODULE_CONTEXT + ':bindFilterTablistKeyboardNav' });
     }
     function _setFilter(filter) {
         _setState({ filter });
@@ -631,7 +625,8 @@ export function createProjectListComponent(deps) {
             eventHandlers.trackListener(
                 createBtn,
                 "click",
-                () => _openNewProjectModal()
+                () => _openNewProjectModal(),
+                { context: MODULE_CONTEXT + ':showEmptyState:createBtn' }
             );
         }
     }
@@ -691,7 +686,8 @@ export function createProjectListComponent(deps) {
             eventHandlers.trackListener(
                 retryBtn,
                 "click",
-                () => _loadProjects()
+                () => _loadProjects(),
+                { context: MODULE_CONTEXT + ':showErrorState:retryBtn' }
             );
         }
     }
@@ -822,7 +818,7 @@ export function createProjectListComponent(deps) {
         eventHandlers.trackListener(button, 'click', (e) => {
             e.stopPropagation();
             _handleAction(btnDef.action, btnDef.projectId);
-        });
+        }, { context: MODULE_CONTEXT + ':createActionButton:click' });
         return button;
     }
     function _formatDate(dateString) {
@@ -855,10 +851,11 @@ export function createProjectListComponent(deps) {
     function onViewProject(projectObjOrId) {
         const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
         // --- Set project context before navigation ---
-        if (projectManager && typeof projectManager.setCurrentProject === "function") {
+        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
+        if (appModule && typeof appModule.setCurrentProject === "function") {
             // Already have project object
             if (typeof projectObjOrId === "object" && projectObjOrId.id) {
-                projectManager.setCurrentProject(projectObjOrId);
+                appModule.setCurrentProject(projectObjOrId);
             } else if (projectId) {
                 // Try to locate project object in state
                 const projectObj = state.projects.find(p => {
@@ -866,9 +863,9 @@ export function createProjectListComponent(deps) {
                     return String(pid) === String(projectId);
                 });
                 if (projectObj) {
-                    projectManager.setCurrentProject(projectObj);
+                    appModule.setCurrentProject(projectObj);
                 } else {
-                    projectManager.setCurrentProject({ id: projectId });
+                    appModule.setCurrentProject({ id: projectId });
                 }
             }
         }

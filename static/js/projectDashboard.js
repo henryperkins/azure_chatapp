@@ -959,7 +959,10 @@ export function createProjectDashboard(deps) {
             context: 'ProjectDashboard_template'
           });
         } catch (err) {
-          // This is non-fatal; log as warn to avoid noisy error reporting
+          // This is non-fatal; log as error per pattern, also warn for visibility
+          logger.error('[ProjectDashboard][_initializeComponents:detailsTemplate]', err, {
+            context: 'projectDashboard'
+          });
           logger.warn('[ProjectDashboard][_initializeComponents:detailsTemplate] Event timeout – continuing', {
             err: err?.message || err,
             context: 'projectDashboard'
@@ -987,6 +990,7 @@ export function createProjectDashboard(deps) {
             context: 'ProjectDashboard_template'
           });
         } catch (err) {
+          logger.error('[ProjectDashboard][_initializeComponents:listTemplate] Failed waiting for projectListHtmlLoaded', err, { context: 'projectDashboard' });
           logger.warn('[ProjectDashboard][_initializeComponents:listTemplate] Event timeout – continuing', {
             err: err?.message || err,
             context: 'projectDashboard'
@@ -1006,9 +1010,7 @@ export function createProjectDashboard(deps) {
           });
           await this.components.projectList.initialize();
         } catch (err) {
-          logger.error('[ProjectDashboard][_initializeComponents:projectList]', err, {
-            context: 'projectDashboard'
-          });
+          logger.error('[ProjectDashboard][_initializeComponents:projectList] Failed to initialize ProjectListComponent', err, { context: 'projectDashboard' });
         }
       }
 
@@ -1100,9 +1102,9 @@ export function createProjectDashboard(deps) {
           context: 'ProjectDashboard::detailsTplContainer'
         })
           .then(loadDetailsTemplate)
-          .catch(loadDetailsTemplate);          // fallback – still attempt
+          .catch(err => { logger.error('[ProjectDashboard][detailsTemplateLoader]', err, { context: 'projectDashboard' }); loadDetailsTemplate(); });          // fallback – still attempt
       } else {
-        loadDetailsTemplate().catch(() => { });
+        loadDetailsTemplate().catch(err => { logger.error('[ProjectDashboard][detailsTemplateLoader]', err, { context: 'projectDashboard' }); });
       }
     }
   } catch (err) {
@@ -1131,9 +1133,9 @@ export function createProjectDashboard(deps) {
           context: 'ProjectDashboard::listTplContainer'
         })
           .then(loadListTemplate)
-          .catch(loadListTemplate);      // fallback – still attempt
+          .catch(err => { logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' }); loadListTemplate(); });      // fallback – still attempt
       } else {
-        loadListTemplate().catch(() => { });
+        loadListTemplate().catch(err => { logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' }); });
       }
     }
   } catch (err) {
@@ -1145,6 +1147,9 @@ export function createProjectDashboard(deps) {
   }
 
   function cleanup() {
+    if (eventHandlers?.cleanupListeners) {
+      eventHandlers.cleanupListeners({ context: 'projectDashboard' });
+    }
     dashboard.cleanup();
   }
 
