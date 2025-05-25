@@ -698,14 +698,32 @@ export function createEventHandlers({
       if (authButtonDelegationBound) return;
       const parentNode = domAPI.getElementById('header') || domAPI.getDocument();
       const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-      if (!currentModalManager?.show) return;
+      
+      logger.info('[EventHandler] bindAuthButtonDelegate', {
+        parentNodeExists: !!parentNode,
+        modalManagerExists: !!currentModalManager,
+        modalManagerHasShow: !!(currentModalManager?.show),
+        context: 'eventHandler.bindAuthButtonDelegate'
+      });
+      
+      if (!currentModalManager?.show) {
+        logger.warn('[EventHandler] modalManager not available for auth button', {
+          context: 'eventHandler.bindAuthButtonDelegate'
+        });
+        return;
+      }
+      
       delegate(
         parentNode,
         'click',
         '#authButton',
         (e) => {
           domAPI.preventDefault(e);
-          try { currentModalManager.show('login'); }
+          logger.info('[EventHandler] Auth button clicked', { context: 'eventHandler.authButton' });
+          try { 
+            currentModalManager.show('login'); 
+            logger.info('[EventHandler] Login modal requested', { context: 'eventHandler.authButton' });
+          }
           catch (error) {
             logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, { context: 'auth' });
           }
