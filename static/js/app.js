@@ -350,11 +350,21 @@ let _appReadyDispatched = false;
 function fireAppReady(success = true, error = null) {
   if (_appReadyDispatched) return;
   _appReadyDispatched = true;
-  // app object is already registered at line 133, no need to register again
+
+  // expose flag for modules that check it via DependencySystem.modules.get('app')
+  app._appReadyDispatched = true;
+
   const detail = success ? { success } : { success, error };
-  const evt = eventHandlers.createCustomEvent('app:ready', { detail });
-  AppBus.dispatchEvent(evt);
-  domAPI.dispatchEvent(domAPI.getDocument(), evt);
+  const drs = DependencySystem.modules.get?.('domReadinessService');
+  if (drs?.emitReplayable) {
+    // Use replay-capable emitter so late listeners resolve immediately
+    drs.emitReplayable('app:ready', detail);
+  } else {
+    const evt = eventHandlers.createCustomEvent('app:ready', { detail });
+    AppBus.dispatchEvent(evt);
+    domAPI.dispatchEvent(domAPI.getDocument(), evt);
+  }
+
   DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', { success, error, context: 'app' });
 }
 
