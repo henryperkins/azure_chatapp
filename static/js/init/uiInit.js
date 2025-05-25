@@ -217,16 +217,16 @@ export function createUIInitializer({
 
     // Initialize ProjectModal
     const projectModalInstance = DependencySystem.modules.get('projectModal');
-    if (projectModalInstance && typeof projectModalInstance.init === 'function') {
+    if (projectModalInstance && typeof projectModalInstance.initialize === 'function') {
       try {
         logger.log('[UIInit] Initializing ProjectModal instance.', { context: 'uiInit:createAndRegisterUIComponents' });
-        await projectModalInstance.init();
+        await projectModalInstance.initialize();
       } catch (err) {
         logger.error('[UIInit] ProjectModal initialization failed', err, { context: 'uiInit:projectModalInit' });
         // Depending on severity, might want to throw or handle gracefully
       }
     } else {
-      logger.warn('[UIInit] ProjectModal instance or its init method not found in DI.', { context: 'uiInit:createAndRegisterUIComponents' });
+      logger.warn('[UIInit] ProjectModal instance or its initialize method not found in DI.', { context: 'uiInit:createAndRegisterUIComponents' });
     }
 
     logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });

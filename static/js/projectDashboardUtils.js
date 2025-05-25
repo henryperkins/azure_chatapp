@@ -97,8 +97,9 @@ function createUIUtils({ eventHandlers, sanitizer, domAPI }) {
   };
 }
 
-function bindEditButton(deps) {
-  const { domAPI, projectManager, eventHandlers, DependencySystem } = deps;
+// The following helper function signatures and calls enforce strict DI as positional parameters, no destructuring/closure DI
+
+function bindEditButton(eventHandlers, domAPI, projectManager, DependencySystem) {
   const editBtn = domAPI.getElementById('editProjectBtn');
   if (!editBtn) return;
 
@@ -116,8 +117,7 @@ function bindEditButton(deps) {
   });
 }
 
-function bindPinButton(deps) {
-  const { domAPI, projectManager, eventHandlers } = deps;
+function bindPinButton(eventHandlers, logger, domAPI, projectManager) {
   const pinBtn = domAPI.getElementById('pinProjectBtn');
   if (!pinBtn) return;
 
@@ -129,7 +129,7 @@ function bindPinButton(deps) {
     try {
       await projectManager.togglePinProject(currentProject.id);
     } catch (error) {
-      // console.error('Error toggling project pin:', error); // Removed
+      logger.error('Error toggling project pin', error, { context: 'ProjectDashboardUtils:pinBtn' });
     }
   };
   eventHandlers.trackListener(pinBtn, 'click', handler, {
@@ -139,8 +139,7 @@ function bindPinButton(deps) {
   });
 }
 
-function bindArchiveButton(deps) {
-  const { domAPI, projectManager, modalManager, eventHandlers } = deps;
+function bindArchiveButton(eventHandlers, logger, domAPI, projectManager, modalManager) {
   const archiveBtn = domAPI.getElementById('archiveProjectBtn');
   if (!archiveBtn) return;
 
@@ -161,7 +160,7 @@ function bindArchiveButton(deps) {
           await projectManager.toggleArchiveProject(currentProject.id);
           projectManager.loadProjects?.();
         } catch (error) {
-          // console.error('Error toggling project archive:', error); // Removed
+          logger.error('Error toggling project archive', error, { context: 'ProjectDashboardUtils:archiveBtn' });
         }
       },
     });
@@ -175,17 +174,10 @@ function bindArchiveButton(deps) {
 
 
 // --- setupEventListeners refactored (Guideline #2) ---
-function setupEventListeners({
-  projectManager,
-  modalManager,
-  eventHandlers,
-  DependencySystem,
-  domAPI
-}) {
-  const deps = { projectManager, modalManager, eventHandlers, DependencySystem, domAPI };
-  bindEditButton(deps);
-  bindPinButton(deps);
-  bindArchiveButton(deps);
+function setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, DependencySystem) {
+  bindEditButton(eventHandlers, domAPI, projectManager, DependencySystem);
+  bindPinButton(eventHandlers, logger, domAPI, projectManager);
+  bindArchiveButton(eventHandlers, logger, domAPI, projectManager, modalManager);
 }
 
 
@@ -198,56 +190,59 @@ export function createProjectDashboardUtils(options = {}) {
   // Resolve all dependencies using the helper
   const deps = _resolveDependencies({ DependencySystem, ...options });
   const { eventHandlers, projectManager, modalManager, sanitizer, domAPI } = deps;
-
-  const ProjectDashboardUtilsAPI = {};
-
-  // Create UIUtils with necessary dependencies (Guideline #2)
-  ProjectDashboardUtilsAPI.UIUtils = createUIUtils({
-    eventHandlers,
-    sanitizer,
-    domAPI
-  });
+  const logger = _getDependency(options.logger, 'logger', DependencySystem, false);
+  // Only use canonical bus found via DependencySystem.modules.get('eventBus')
+  const eventBus = DependencySystem?.modules?.get?.("eventBus");
 
   let initialized = false;
 
-  // Make setupEventListeners part of the returned API if needed externally,
-  // otherwise keep it internal and call it from init.
-  const _setupEventListenersInternal = () => {
-    setupEventListeners({
-      projectManager,
-      modalManager,
+  return {
+    UIUtils: createUIUtils({
       eventHandlers,
-      DependencySystem,
+      sanitizer,
       domAPI
-    });
-  };
+    }),
 
-  ProjectDashboardUtilsAPI.init = function () {
-    if (initialized) return this;
-    initialized = true;
-    try {
-        _setupEventListenersInternal();
+    init: function () {
+      if (initialized) return this;
+      initialized = true;
+      try {
+        setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, DependencySystem);
         const doc = domAPI.getDocument();
         if (doc) {
-            domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));
+          domAPI.dispatchEvent(doc, new CustomEvent('projectDashboardUtilsInitialized'));
         }
 
-        // --- Standardized "projectdashboardutils:initialized" event ---
-        const d = typeof document !== "undefined" ? document : null;
-        if (d) d.dispatchEvent(new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } }));
-
-    } catch(error) {
+        // Canonical event bus usage only if present
+        if (eventBus && typeof eventBus.dispatchEvent === "function") {
+          eventBus.dispatchEvent(
+            new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } })
+          );
+        } else if (domAPI?.getDocument && domAPI?.dispatchEvent) {
+          const eDoc = domAPI.getDocument();
+          if (eDoc) {
+            domAPI.dispatchEvent(eDoc, new CustomEvent('projectdashboardutils:initialized', { detail: { success: true } }));
+          }
+        }
+      } catch(error) {
         initialized = false;
+        logger && logger.error('Error in ProjectDashboardUtils.init', error, { context: 'ProjectDashboardUtils:init' });
+      }
+      return this;
+    },
+
+    // Factory standard: must expose cleanup directly as named API
+    cleanup: function () {
+      eventHandlers.cleanupListeners?.({ context: 'projectActions' });
+      eventHandlers.cleanupListeners?.({ context: 'uiUtils' });
+      initialized = false;
+    },
+
+    // Backward compatible destroy (alias)
+    destroy: function () {
+      eventHandlers.cleanupListeners?.({ context: 'projectActions' });
+      eventHandlers.cleanupListeners?.({ context: 'uiUtils' });
+      initialized = false;
     }
-    return this;
   };
-
-   ProjectDashboardUtilsAPI.destroy = function() {
-       eventHandlers.cleanupListeners?.({ context: 'projectActions' });
-       eventHandlers.cleanupListeners?.({ context: 'uiUtils' });
-       initialized = false;
-   }
-
-  // Return the constructed API object (Guideline #1)
-  return ProjectDashboardUtilsAPI;
 }

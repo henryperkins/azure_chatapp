@@ -123,10 +123,14 @@ class ProjectDetailsComponent {
 
   setProjectManager(pm) {
     this.projectManager = pm;
+    this._logInfo('ProjectManager set, dispatching projectManagerReady event', { hasProjectManager: !!pm });
     // emit event so deferred show() can continue
     try {
       this.bus.dispatchEvent(new Event('projectManagerReady'));
-    } catch { /* noop */ }
+      this._logInfo('projectManagerReady event dispatched successfully');
+    } catch (err) {
+      this._logError('Failed to dispatch projectManagerReady event', err);
+    }
   }
   setChatManager(cm) { this.chatManager = cm; }
 
@@ -791,14 +795,26 @@ class ProjectDetailsComponent {
       return;
     }
     if (!this.projectManager) {
-      this._logWarn('ProjectManager not yet available – defer show()');
-      // Re-attempt once the DI setter provides the projectManager
-      this.bus.addEventListener(
-        'projectManagerReady',
-        this._safeHandler(() => this.show({ projectId, activeTab }), 'DeferredShow'),
-        { once: true }
-      );
-      return;
+      // Try to get ProjectManager from DI system as fallback
+      const pmFromDI = this.eventHandlers?.DependencySystem?.modules?.get?.('projectManager');
+      if (pmFromDI) {
+        this._logInfo('ProjectManager found in DI system, setting it directly', { projectId, activeTab });
+        this.setProjectManager(pmFromDI);
+        // Continue with show() since we now have projectManager
+      } else {
+        this._logWarn('ProjectManager not yet available – defer show()', { projectId, activeTab });
+        // Re-attempt once the DI setter provides the projectManager
+        this._logInfo('Setting up projectManagerReady event listener for deferred show()');
+        this.bus.addEventListener(
+          'projectManagerReady',
+          this._safeHandler(() => {
+            this._logInfo('projectManagerReady event received, retrying show()', { projectId, activeTab });
+            this.show({ projectId, activeTab });
+          }, 'DeferredShow'),
+          { once: true }
+        );
+        return;
+      }
     }
     this.projectId = projectId;
     this._setState({ loading: true });
