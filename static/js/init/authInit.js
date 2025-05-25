@@ -32,6 +32,15 @@ export function createAuthInitializer({
    * Initialize the authentication system
    */
   async function initializeAuthSystem() {
+    // Wait for app:ready and required DOM elements before any DOM/global work
+    await domReadinessService.waitForEvent('app:ready');
+    await domReadinessService.dependenciesAndElements({
+      deps: ['auth', 'eventHandlers'],
+      domSelectors: ['#authForm', '#loginBtn'],
+      timeout: 8000,
+      context: 'authInit.initializeAuthSystem'
+    });
+
     const auth = DependencySystem.modules.get('auth');
     if (!auth?.init) {
       throw new Error('[authInit] Auth module is missing or invalid.');
@@ -88,7 +97,7 @@ export function createAuthInitializer({
     // auth.js's broadcastAuth (via app.setAuthState) has already updated appModule.state
     // before this event listener is triggered.
     // This function now primarily reacts to that pre-established state.
-    const appModule      = DependencySystem.modules.get('appModule');
+    const appModule = DependencySystem.modules.get('appModule');
     const projectManager = DependencySystem.modules.get('projectManager');   // ← referenced later
 
     logger.info('[authInit][handleAuthStateChange]', {

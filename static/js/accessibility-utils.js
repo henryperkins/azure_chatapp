@@ -48,13 +48,14 @@ export function createAccessibilityEnhancements({
   }
 
   class AccessibilityUtilsModule {
-    constructor() {
+    constructor(safeHandler) {
       this.domAPI = domAPI;
       this.eventHandlers = eventHandlers;
       this.DependencySystem = DependencySystem;
       this.domReadinessService = domReadinessService;
       this.errorReporter = errorReporter;
       this.logger = logger;
+      this.safeHandler = safeHandler;
       this.debug =
         typeof createDebugTools === 'function'
           ? createDebugTools({ contextPrefix: MODULE_CONTEXT })
@@ -68,7 +69,7 @@ export function createAccessibilityEnhancements({
     async init() {
       const traceId = this.debug.start('init');
       try {
-        await domReadinessService.documentReady();
+        await this.domReadinessService.waitForEvent('app:ready');
         if (this._destroyed) return;
 
         this._bindGlobalShortcuts();
@@ -227,10 +228,10 @@ export function createAccessibilityEnhancements({
       this._trackListener(
         this.domAPI.getDocument(),
         'keydown',
-        e => this._safeHandler(this._handleGlobalKeydown.bind(this), '_handleGlobalKeydown')(e),
+        this.safeHandler(this._handleGlobalKeydown.bind(this), '_handleGlobalKeydown'),
         { description: 'Global keyboard shortcuts' }
       );
-      const closeHelpHandler = this._safeHandler((e) => {
+      const closeHelpHandler = this.safeHandler((e) => {
         const button = e.target.closest('#keyboardHelp button');
         if (button) this._closeKeyboardHelpIfOpen();
       }, 'Help dialog close button click');
@@ -283,7 +284,7 @@ export function createAccessibilityEnhancements({
       this._trackListener(
         this.domAPI.getDocument(),
         'invalid',
-        this._safeHandler((e) => {
+        this.safeHandler((e) => {
           if (e.target.classList.contains('validator')) {
             this._handleFormValidation(e.target, false);
           }
@@ -293,7 +294,7 @@ export function createAccessibilityEnhancements({
       this._trackListener(
         this.domAPI.getDocument(),
         'change',
-        this._safeHandler((e) => {
+        this.safeHandler((e) => {
           if (e.target.classList.contains('validator')) {
             this._handleFormValidation(e.target, e.target.validity.valid);
           }
@@ -370,7 +371,7 @@ export function createAccessibilityEnhancements({
           });
         };
         const dialogObserver = new MutationObserver(
-          this._safeHandler(dialogObserverCallback, 'dialogObserverCallback')
+          this.safeHandler(dialogObserverCallback, 'dialogObserverCallback')
         );
         this.mutationObservers.push(dialogObserver);
         this.domAPI
@@ -392,7 +393,7 @@ export function createAccessibilityEnhancements({
           });
         };
         const bodyObserver = new MutationObserver(
-          this._safeHandler(bodyObserverCallback, 'bodyObserverCallback')
+          this.safeHandler(bodyObserverCallback, 'bodyObserverCallback')
         );
         bodyObserver.observe(this.domAPI.getBody(), { childList: true, subtree: true });
         this.mutationObservers.push(bodyObserver);
@@ -409,7 +410,7 @@ export function createAccessibilityEnhancements({
       try {
         const skipLink = this.domAPI.querySelector('.skip-to-content');
         if (!skipLink) return;
-        const skipHandler = this._safeHandler(e => {
+        const skipHandler = this.safeHandler(e => {
           e.preventDefault();
           const targetId = skipLink.getAttribute('href')?.substring(1);
           if (targetId) {
@@ -441,7 +442,7 @@ export function createAccessibilityEnhancements({
         if (!focusables.length) return;
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
-        const keydownHandler = this._safeHandler(e => {
+        const keydownHandler = this.safeHandler(e => {
           if (e.key === 'Tab') {
             const currentActiveElement = this.domAPI.getActiveElement();
             if (e.shiftKey && currentActiveElement === first) {
@@ -562,18 +563,15 @@ export function createAccessibilityEnhancements({
       }
     }
 
-    _safeHandler(handler, description) {
-      // Use canonical safeHandler from DI - this is the correct pattern
-      const safeHandler = DependencySystem.modules.get('safeHandler');
-      if (!safeHandler) {
-        logger.warn('[AccessibilityUtils] safeHandler not available in DI, using raw handler', { context: MODULE_CONTEXT });
-        return handler;
-      }
-      return safeHandler(handler, description);
-    }
+    // _safeHandler removed (DI canonical safeHandler always used)
   }
 
-  const instance = new AccessibilityUtilsModule();
+  // Inject canonical safeHandler from DI and fail fast if not present/correct
+  const safeHandler = DependencySystem?.modules?.get?.('safeHandler');
+  if (typeof safeHandler !== 'function') {
+    throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: safeHandler`);
+  }
+  const instance = new AccessibilityUtilsModule(safeHandler);
   function cleanup() {
     if (eventHandlers?.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });

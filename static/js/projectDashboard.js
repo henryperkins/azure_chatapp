@@ -12,28 +12,29 @@
  * - Navigation via navigationService
  */
 
-export function createProjectDashboard(deps) {
+export function createProjectDashboard({
+  DependencySystem,
+  domAPI,
+  browserService,
+  eventHandlers,
+  domReadinessService,
+  logger,
+  sanitizer,
+  APP_CONFIG
+}) {
   // ─────────────────────────────────────────────────────────────────────────
   // 1) Validate dependencies upfront
   // ─────────────────────────────────────────────────────────────────────────
-  if (!deps || typeof deps !== 'object') {
+  if (!DependencySystem || typeof DependencySystem !== 'object') {
     throw new Error('[createProjectDashboard] A dependencies object is required.');
   }
 
   const {
-    dependencySystem,
-    domAPI,
-    browserService,
-    eventHandlers,
-    domReadinessService,
-    logger,
-    sanitizer,
-    APP_CONFIG
-  } = deps;
+    modules: {
+      get: getModule
+    }
+  } = DependencySystem;
 
-  if (!dependencySystem) {
-    throw new Error('[createProjectDashboard] Missing dependency: dependencySystem');
-  }
   if (!domAPI) {
     throw new Error('[createProjectDashboard] Missing dependency: domAPI');
   }
@@ -69,7 +70,7 @@ export function createProjectDashboard(deps) {
   class ProjectDashboard {
     constructor() {
       // Basic DI references
-      this.dependencySystem = dependencySystem;
+      this.dependencySystem = DependencySystem;
       this.domAPI = domAPI;
       this.browserService = browserService;
       this.domReadinessService = domReadinessService;
@@ -220,13 +221,10 @@ export function createProjectDashboard(deps) {
           logger.debug?.('[ProjectDashboard] Proceeding before app:ready (bootstrap phase).', { context: 'projectDashboard' });
         }
 
-        // Check authentication (read from app.state or auth module)
-        // Lack of authentication at this stage is **not** an error – the user may
-        // simply be visiting the landing page before logging in.  Treat it as a
-        // normal control-flow branch and surface as a warning-level log instead
-        // of an error to avoid noisy error tracking alerts.
+        // Canonical authentication via appModule.state (avoid var redeclaration)
+        const authenticated = appModule?.state?.isAuthenticated ?? false;
 
-        if (!this.auth?.isAuthenticated?.()) {
+        if (!authenticated) {
           logger.warn('[ProjectDashboard][initialize] User not authenticated – dashboard initialisation deferred until login.', { context: 'projectDashboard' });
 
           // Re-use the same handler that reacts to AuthBus updates so visual
@@ -249,17 +247,14 @@ export function createProjectDashboard(deps) {
         this._setupEventListeners();
         this._registerNavigationViews();
 
-        // CONSOLIDATED: Check initial authentication state from appModule.state (reuse existing appModule variable)
-        const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
-
         this.logger.debug('[ProjectDashboard][initialize] Checking initial auth state', {
-          isAuthenticated,
+          authenticated,
           appModuleExists: !!appModule,
           context: 'projectDashboard'
         });
 
         // Si el usuario ya está autenticado, mostrar la vista de proyectos
-        if (isAuthenticated) {
+        if (authenticated) {
           try {
             await this.showProjectList();
           } catch (err) {
@@ -1083,10 +1078,10 @@ export function createProjectDashboard(deps) {
   // Try to find htmlTemplateLoader in dependency system and trigger load
   try {
     const htmlTemplateLoader =
-      dependencySystem?.modules?.get?.('htmlTemplateLoader') ||
+      DependencySystem?.modules?.get?.('htmlTemplateLoader') ||
       (dashboard.components.projectDetails && dashboard.components.projectDetails.htmlTemplateLoader);
     if (htmlTemplateLoader?.loadTemplate) {
-      const drs = dependencySystem?.modules?.get?.('domReadinessService');
+      const drs = DependencySystem?.modules?.get?.('domReadinessService');
 
       const loadDetailsTemplate = () =>
         htmlTemplateLoader.loadTemplate({
@@ -1114,10 +1109,10 @@ export function createProjectDashboard(deps) {
   // ==== Speculative/Eager Project List Template Loading (wait for container) ====
   try {
     const htmlTemplateLoader =
-      dependencySystem?.modules?.get?.('htmlTemplateLoader');
+      DependencySystem?.modules?.get?.('htmlTemplateLoader');
 
     if (htmlTemplateLoader?.loadTemplate) {
-      const drs = dependencySystem?.modules?.get?.('domReadinessService');
+      const drs = DependencySystem?.modules?.get?.('domReadinessService');
 
       const loadListTemplate = () =>
         htmlTemplateLoader.loadTemplate({

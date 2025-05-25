@@ -93,17 +93,9 @@ if (!DependencySystem?.modules?.get) {
 // ---------------------------------------------------------------------------
 //  Canonical safeHandler – must exist before createEventHandlers is invoked
 // ---------------------------------------------------------------------------
-function safeHandler(handler, description = 'safeHandler') {
-  const log = DependencySystem.modules.get?.('logger');
-  return (...args) => {
-    try { return handler(...args); }
-    catch (err) {
-      log?.error?.(`[safeHandler][${description}]`,
-        err?.stack || err,
-        { context: description });
-      throw err;
-    }
-  };
+const safeHandler = DependencySystem.modules.get('safeHandler');
+if (typeof safeHandler !== 'function') {
+  throw new Error('[App] safeHandler not registered in DependencySystem');
 }
 DependencySystem.register('safeHandler', safeHandler);
 
@@ -245,8 +237,6 @@ const logger = loggerInstance; // Make it available to the rest of app.js
 serviceInit.setLogger(logger);
 
 serviceInit.registerAdvancedServices();
-// ...existing code...
-
 // ---------------------------------------------------------------------------
 // Create API client (now should be available via serviceInit)
 // ---------------------------------------------------------------------------
@@ -629,28 +619,8 @@ export async function init() {
       fireAppReady(true);
     }
 
-    // Add debug functions
-    const window = browserAPI.getWindow();
-    if (window) {
-      window.debugSidebarAuth = () => {
-        const sidebar = DependencySystem.modules.get('sidebar');
-        return sidebar?.debugAuthState ? sidebar.debugAuthState() : (logger.warn('[App] Sidebar debug function not available'), null);
-      };
-      window.debugAppState = () => {
-        const appModuleRef = DependencySystem.modules.get('appModule');
-        const authModuleRef = DependencySystem.modules.get('auth');
-        const state = {
-          appState: appModuleRef?.state,
-          authInfo: {
-            isAuthenticated: authModuleRef?.isAuthenticated?.(),
-            currentUser: authModuleRef?.getCurrentUserObject?.()
-          }
-        };
-        logger.info('[App] Debug app state requested', state);
-        return state;
-      };
-      logger.info('[App] Debug functions available: window.debugSidebarAuth(), window.debugAppState()');
-    }
+    // Expose debug helpers after app:ready
+    exposeDebugHelpers();
 
     return true;
   } catch (err) {
@@ -670,9 +640,66 @@ export async function init() {
     toggleLoadingSpinner(false);
   }
 }
-// ...existing code...
 
 // ---------------------------------------------------------------------------
+// Expose debug helpers after app:ready (Phase 3 compliance)
+// ---------------------------------------------------------------------------
+async function exposeDebugHelpers() {
+  await domReadinessService.waitForEvent('app:ready');
+  const windowObj = browserAPI.getWindow();
+  if (windowObj) {
+    windowObj.debugSidebarAuth = () => {
+      const sidebar = DependencySystem.modules.get('sidebar');
+      return sidebar?.debugAuthState ? sidebar.debugAuthState() : (logger.warn('[App] Sidebar debug function not available'), null);
+    };
+    windowObj.debugAppState = () => {
+      const appModuleRef = DependencySystem.modules.get('appModule');
+      const state = {
+        appState: appModuleRef?.state,
+        authInfo: {
+          isAuthenticated: appModuleRef?.state?.isAuthenticated,
+          currentUser: appModuleRef?.state?.currentUser
+        }
+      };
+      logger.info('[App] Debug app state requested', state);
+      return state;
+    };
+    logger.info('[App] Debug functions available: window.debugSidebarAuth(), window.debugAppState()');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-bootstrap when running in browser
+// ---------------------------------------------------------------------------
+if (typeof window !== 'undefined') {
+  // ---------------------------------------------------------------------
+  // 🚀 Auto-bootstrap the application
+  // ---------------------------------------------------------------------
+  // app.js is the only file in the codebase allowed to run side-effects at
+  // import time.  Previous refactors accidentally removed the automatic
+  // invocation of `init()`, leaving the loading spinner visible forever
+  // because initialization never started.  We restore the behaviour by
+  // kicking off the async init sequence once the module is evaluated in the
+  // browser environment.  Any error is surfaced through the DI-provided
+  // logger so that it reaches the unified logging pipeline.
+
+  (async () => {
+    try {
+      await init();
+    } catch (err) {
+      const log = DependencySystem?.modules?.get?.('logger');
+      if (log?.error) {
+        log.error('[app.js][bootstrap] init() failed', err, { context: 'app:bootstrap' });
+      }
+      // Fire app:ready with failure so external listeners are unblocked
+      try {
+        fireAppReady(false, err);
+      } catch (e) {
+        logger.error('[app.js][bootstrap] Error in fireAppReady', e, { context: 'app:bootstrap:fireAppReady' });
+      }
+    }
+  })();
+}
 // Auto-bootstrap when running in browser
 // ---------------------------------------------------------------------------
 if (typeof window !== 'undefined') {

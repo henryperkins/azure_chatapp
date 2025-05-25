@@ -33,17 +33,6 @@ export function createTokenStatsManager({
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: domReadinessService`);
   if (!DependencySystem) throw new Error('Missing DependencySystem');
 
-  // Canonical safeHandler
-  const safeHandler =
-    DependencySystem?.modules?.get?.('safeHandler') ||
-    ((handler, description) => (...args) => {
-      try { return handler(...args); }
-      catch (err) {
-        logger.error(`[${MODULE_CONTEXT}][${description}]`, err, { context: MODULE_CONTEXT });
-        throw err;
-      }
-    });
-
   // Module state
   const state = {
     initialized: false,
@@ -136,7 +125,7 @@ export function createTokenStatsManager({
             missing: requiredSel
           });
           logger.error(`[${MODULE_CONTEXT}] elementsReady failed`, err,
-                       { context: MODULE_CONTEXT, phase: 'init', missing: requiredSel });
+            { context: MODULE_CONTEXT, phase: 'init', missing: requiredSel });
           state.initializing = null;   // allow future retries
           return false;                // non-fatal
         }
@@ -152,7 +141,7 @@ export function createTokenStatsManager({
       } catch (err) {
         _logError('Failed to initialize token stats manager', err);
         logger.error(`[${MODULE_CONTEXT}] Failed to initialize token stats manager`, err,
-                     { context: MODULE_CONTEXT });
+          { context: MODULE_CONTEXT });
       } finally {
         state.initializing = null;
       }
@@ -176,9 +165,9 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         tokenUsageStat,
         'click',
-        safeHandler(() => {
+        () => {
           _showTokenStatsModal();
-        }, 'tokenUsageStatClick'),
+        },
         { context: MODULE_CONTEXT }
       );
     }
@@ -189,9 +178,9 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         tokenStatsBtn,
         'click',
-        safeHandler(() => {
+        () => {
           _showTokenStatsModal();
-        }, 'tokenStatsBtnClick'),
+        },
         { context: MODULE_CONTEXT }
       );
     }
@@ -202,9 +191,9 @@ export function createTokenStatsManager({
       eventHandlers.trackListener(
         refreshTokenStatsBtn,
         'click',
-        safeHandler(() => {
+        () => {
           _refreshTokenStats();
-        }, 'refreshTokenStatsBtnClick'),
+        },
         { context: MODULE_CONTEXT }
       );
     }
@@ -280,9 +269,9 @@ export function createTokenStatsManager({
         eventHandlers.trackListener(
           closeBtn,
           'click',
-          safeHandler(() => {
+          () => {
             modalManager.hide('tokenStats');
-          }, 'closeTokenStatsModal'),
+          },
           { context: MODULE_CONTEXT }
         );
       } catch (err) {
@@ -304,9 +293,9 @@ export function createTokenStatsManager({
         eventHandlers.trackListener(
           exportBtn,
           'click',
-          safeHandler(() => {
+          () => {
             _exportTokenStats();
-          }, 'exportTokenStats'),
+          },
           { context: MODULE_CONTEXT }
         );
       } catch (err) {
@@ -670,5 +659,11 @@ export function createTokenStatsManager({
     fetchConversationTokenStats,
     setInputTokenCount,
     cleanup
+  };
+}
+initialize,
+  fetchConversationTokenStats,
+  setInputTokenCount,
+  cleanup
   };
 }
