@@ -372,11 +372,21 @@ export function createSidebar({
 
   function toggleSidebar(forceVisible) {
     const willShow = forceVisible !== undefined ? !!forceVisible : !visible;
+    logger.info('[Sidebar] toggleSidebar called', {
+      forceVisible,
+      currentVisible: visible,
+      willShow,
+      context: 'Sidebar'
+    });
     willShow ? showSidebar() : closeSidebar();
   }
 
   function showSidebar() {
-    if (visible) return;
+    if (visible) {
+      logger.info('[Sidebar] showSidebar called but already visible', { context: 'Sidebar' });
+      return;
+    }
+    logger.info('[Sidebar] showSidebar - making sidebar visible', { context: 'Sidebar' });
     visible = true;
 
     el.classList.remove('-translate-x-full');
@@ -670,6 +680,15 @@ export function createSidebar({
   function restorePersistentState() {
     pinned = (storageAPI.getItem('sidebarPinned') === 'true');
     const isDesktop = viewportAPI.getInnerWidth() >= 768;
+    
+    logger.info('[Sidebar] restorePersistentState', {
+      pinned,
+      isDesktop,
+      viewportWidth: viewportAPI.getInnerWidth(),
+      elementExists: !!el,
+      context: 'Sidebar'
+    });
+    
     if (pinned || isDesktop) {
       el.classList.add('sidebar-pinned');
       el.classList.remove('-translate-x-full');
@@ -681,6 +700,9 @@ export function createSidebar({
       if (btnToggle) {
         btnToggle.setAttribute('aria-expanded', 'true');
       }
+      logger.info('[Sidebar] Sidebar made visible', { context: 'Sidebar' });
+    } else {
+      logger.info('[Sidebar] Sidebar kept hidden', { context: 'Sidebar' });
     }
     updatePinButtonVisual();
   }
@@ -727,13 +749,37 @@ export function createSidebar({
       await sidebarMobileDock.init();
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.init", { context: 'Sidebar' });
-      sidebarAuth.init(); // sidebarAuth will now use appModule.state
+      try {
+        sidebarAuth.init(); // sidebarAuth will now use appModule.state
+        logger.info("[Sidebar] sidebarAuth.init completed", { context: 'Sidebar' });
+      } catch (err) {
+        logger.error("[Sidebar] sidebarAuth.init failed", err, { context: 'Sidebar' });
+        // Don't throw - continue with sidebar initialization
+      }
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.setupInlineAuthForm", { context: 'Sidebar' });
-      sidebarAuth.setupInlineAuthForm();
+      try {
+        sidebarAuth.setupInlineAuthForm();
+        logger.info("[Sidebar] sidebarAuth.setupInlineAuthForm completed", { context: 'Sidebar' });
+      } catch (err) {
+        logger.error("[Sidebar] sidebarAuth.setupInlineAuthForm failed", err, { context: 'Sidebar' });
+        // Don't throw - continue with sidebar initialization
+      }
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState", { context: 'Sidebar' });
-      restorePersistentState();
+      try {
+        restorePersistentState();
+        logger.info("[Sidebar] restorePersistentState completed", { context: 'Sidebar' });
+      } catch (err) {
+        logger.error("[Sidebar] restorePersistentState failed", err, { context: 'Sidebar' });
+        // Fallback: Force sidebar visible on desktop
+        if (viewportAPI.getInnerWidth() >= 768 && el) {
+          logger.warn("[Sidebar] Forcing sidebar visible as fallback", { context: 'Sidebar' });
+          el.classList.remove('-translate-x-full');
+          el.classList.add('translate-x-0');
+          visible = true;
+        }
+      }
 
       // Initial auth state sync using the now guaranteed ready appModule.state
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initial auth state sync", { context: 'Sidebar' });
