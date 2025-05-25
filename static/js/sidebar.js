@@ -690,11 +690,22 @@ export function createSidebar({
 
     try {
       await domReadinessService.dependenciesAndElements({
-        deps: ['eventHandlers', 'auth', 'appModule'],
+        deps: ['eventHandlers', 'appModule'], // Ensure appModule is ready
         domSelectors: ['#mainSidebar'],
         timeout: 15000, // Increased timeout for critical dependencies
         context: 'Sidebar'
       });
+
+      // Wait for authentication to be ready
+      await domReadinessService.waitForEvent('authReady', {
+        timeout: 15000, // Adjust timeout as needed
+        context: 'Sidebar.init:waitForAuthReady'
+      });
+
+      const appModule = DependencySystem.modules.get('appModule');
+      if (!appModule || !appModule.state) {
+        throw new Error('[Sidebar] appModule or appModule.state not available after authReady.');
+      }
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom", { context: 'Sidebar' });
       findDom();
@@ -716,7 +727,7 @@ export function createSidebar({
       await sidebarMobileDock.init();
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.init", { context: 'Sidebar' });
-      sidebarAuth.init();
+      sidebarAuth.init(); // sidebarAuth will now use appModule.state
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.setupInlineAuthForm", { context: 'Sidebar' });
       sidebarAuth.setupInlineAuthForm();
@@ -724,18 +735,15 @@ export function createSidebar({
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState", { context: 'Sidebar' });
       restorePersistentState();
 
-      // Force initial auth state sync to ensure sidebar shows correct state
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: forcing initial auth state sync", { context: 'Sidebar' });
-      const appModule = DependencySystem.modules.get('appModule');
-      if (appModule && appModule.state) {
-        sidebarAuth.handleGlobalAuthStateChange({
-          detail: {
-            authenticated: appModule.state.isAuthenticated,
-            user: appModule.state.currentUser,
-            source: 'sidebar_init_sync'
-          }
-        });
-      }
+      // Initial auth state sync using the now guaranteed ready appModule.state
+      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initial auth state sync", { context: 'Sidebar' });
+      sidebarAuth.handleGlobalAuthStateChange({
+        detail: {
+          authenticated: appModule.state.isAuthenticated,
+          user: appModule.state.currentUser,
+          source: 'sidebar_init_sync_after_authReady'
+        }
+      });
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: bindDomEvents", { context: 'Sidebar' });
       bindDomEvents();
@@ -750,67 +758,17 @@ export function createSidebar({
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
 
-      try {
-        const appModule = DependencySystem.modules?.get?.('appModule');
-        const currentAuthStatus = appModule?.state?.isAuthenticated ?? false;
-        const currentUser = appModule?.state?.currentUser ?? null;
-
-        logger.debug('[Sidebar][init] Syncing auth state on init from appModule.state:', {
-          isAuthenticated: currentAuthStatus,
-          user: currentUser,
-          appModuleExists: !!appModule,
-          appStateExists: !!appModule?.state,
-          context: 'Sidebar:init:authStateSync'
-        });
-
-        // ENHANCED: Force immediate auth state sync
-        await sidebarAuth.handleGlobalAuthStateChange({
-          detail: {
-            authenticated: currentAuthStatus,
-            user: currentUser,
-            source: 'sidebar_init_sync'
-          }
-        });
-
-        // ENHANCED: Also trigger a manual auth state check to ensure we have the latest state
-        setTimeout(() => {
-          const latestAppModule = DependencySystem.modules?.get?.('appModule');
-          const latestAuthStatus = latestAppModule?.state?.isAuthenticated ?? false;
-          const latestUser = latestAppModule?.state?.currentUser ?? null;
-
-          logger.debug('[Sidebar][init] Delayed auth state re-sync:', {
-            isAuthenticated: latestAuthStatus,
-            user: latestUser,
-            changed: latestAuthStatus !== currentAuthStatus,
-            context: 'Sidebar:init:delayedAuthStateResync'
-          });
-
-          if (latestAuthStatus !== currentAuthStatus) {
-            sidebarAuth.handleGlobalAuthStateChange({
-              detail: {
-                authenticated: latestAuthStatus,
-                user: latestUser,
-                source: 'sidebar_init_delayed_sync'
-              }
-            });
-          }
-        }, 100); // Small delay to allow for any pending auth state updates
-
-      } catch (syncErr) {
-        logger.error('[Sidebar] Auth state sync failed during init', syncErr && syncErr.stack ? syncErr.stack : syncErr, { context: 'Sidebar:init:authSyncFailure' });
-      }
-
       eventHandlers.trackListener(
         domAPI.getDocument(),
         'app:ready',
         safeHandler(() => {
-          logger.debug('[Sidebar] App ready event received, re-syncing auth state', { context: 'Sidebar:appReadyListener' });
-          const appModule = DependencySystem.modules?.get?.('appModule');
-          const currentAuthStatus = appModule?.state?.isAuthenticated ?? false;
-          const currentUser = appModule?.state?.currentUser ?? null;
-          sidebarAuth.handleGlobalAuthStateChange({
-            detail: { authenticated: currentAuthStatus, user: currentUser }
-          });
+          logger.debug('[Sidebar] App ready event received, re-syncing auth state if necessary', { context: 'Sidebar:appReadyListener' });
+          const currentAppModule = DependencySystem.modules?.get?.('appModule');
+          if (currentAppModule?.state) {
+            sidebarAuth.handleGlobalAuthStateChange({
+              detail: { authenticated: currentAppModule.state.isAuthenticated, user: currentAppModule.state.currentUser, source: 'sidebar_app_ready_sync' }
+            });
+          }
         }, 'Sidebar:app:ready'),
         { context: 'Sidebar:appReadyListener', description: 'Re-sync auth state after app ready', once: true }
       );
