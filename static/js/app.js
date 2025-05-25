@@ -85,21 +85,10 @@ if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
-// Logger: Import first for early DI registration
+// Logger: Import factory but defer creation until DependencySystem is ready
 import { createLogger } from './logger.js';
 
-// PHASE 1: Create a basic logger for early DI (no authModule yet)
-let logger = createLogger({
-  context: 'App',
-  debug: APP_CONFIG && APP_CONFIG.DEBUG === true,
-  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-  fetcher: browserAPI.getWindow()?.fetch?.bind?.(browserAPI.getWindow()) || null,
-  enableServer: true,  // Send logs from the very start
-  allowUnauthenticated: true,
-  sessionIdProvider: () => getSessionId(),
-  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId') ?? null
-});
-DependencySystem.register('logger', logger);
+// Logger will be created in serviceInit.registerBasicServices() to resolve circular dependency
 
 // Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
@@ -215,8 +204,7 @@ const serviceInit = createServiceInitializer({
   domAPI,
   browserServiceInstance,
   eventHandlers,
-  domReadinessService,  // Make sure this is passed
-  logger,
+  domReadinessService,
   sanitizer,
   APP_CONFIG,
   uiUtils,
@@ -226,12 +214,17 @@ const serviceInit = createServiceInitializer({
   createAccessibilityEnhancements,
   createNavigationService,
   createHtmlTemplateLoader,
-  createUiRenderer
+  createUiRenderer,
+  createLogger,
+  getSessionId
 });
 
-// Register basic services
+// Register basic services (this creates the logger)
 serviceInit.registerBasicServices();
 serviceInit.registerAdvancedServices();
+
+// Get logger from DI after it's created
+const logger = DependencySystem.modules.get('logger');
 
 // ---------------------------------------------------------------------------
 // Create API client (now should be available via serviceInit)
@@ -601,6 +594,13 @@ export async function init() {
     {
       const logger = DependencySystem.modules.get('logger');
       logger?.setServerLoggingEnabled?.(true);
+
+      // Upgrade logger with API client for proper CSRF handling (after auth is ready)
+      const apiClientObject = DependencySystem.modules.get('apiClientObject');
+      if (apiClientObject && logger?.upgradeWithApiClient) {
+        logger.upgradeWithApiClient(apiClientObject);
+        logger.info('[App.init] Logger upgraded with API client for CSRF support', { context: 'app:init:logger' });
+      }
     }
 
     // Early app:ready dispatch: emits right after auth is ready (guaranteed single-fire)
