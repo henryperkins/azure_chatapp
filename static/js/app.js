@@ -183,27 +183,7 @@ DependencySystem.register('domReadinessService', domReadinessService);
 /* Wire the circular dependency */
 eventHandlers.setDomReadinessService(domReadinessService);
 
-// ---------------------------------------------------------------------------
-// Early 'app:ready' dispatch helper
-// ---------------------------------------------------------------------------
-let _appReadyDispatched = false;
-/**
- * fireAppReady – Emits the global "app:ready" event exactly once.
- * Subsequent calls are ignored.
- *
- * @param {boolean} success - true if init succeeded.
- * @param {Error|null} error - optional error object on failure.
- */
-function fireAppReady(success = true, error = null) {
-  if (_appReadyDispatched) return;
-  _appReadyDispatched = true;
-  // app object is already registered at line 133, no need to register again
-  const detail = success ? { success } : { success, error };
-  const evt = eventHandlers.createCustomEvent('app:ready', { detail });
-  AppBus.dispatchEvent(evt);
-  domAPI.dispatchEvent(domAPI.getDocument(), evt);
-  DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', { success, error, context: 'app' });
-}
+// (duplicate safeHandler and app:ready dispatch helper removed)
 
 // ---------------------------------------------------------------------------
 // 8) Register all factory functions before using them
@@ -339,29 +319,6 @@ Object.defineProperty(app, 'isInitializing', {
 // Force currentUser to null in DI
 DependencySystem.register('currentUser', null);
 
-/**
- * safeHandler - Canonical implementation for all event handler error logging.
- * Ensures all event handler exceptions are logged via DI logger with proper context.
- * Always use for user-initiated/UI handlers, with context tagging.
- */
-function safeHandler(handler, description) {
-  // logger is guaranteed in DI for all app modules
-  const logger = DependencySystem.modules.get && DependencySystem.modules.get('logger');
-  return (...args) => {
-    try {
-      return handler(...args);
-    } catch (err) {
-      if (logger && typeof logger.error === "function") {
-        logger.error(
-          `[safeHandler][${description}]`,
-          err && err.stack ? err.stack : err,
-          { context: description || "safeHandler" }
-        );
-      }
-      throw err;
-    }
-  };
-}
 
 
 // ---------------------------------------------------------------------------
