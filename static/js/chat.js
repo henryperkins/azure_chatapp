@@ -537,13 +537,8 @@ export function createChatManager(deps = {}) {
       this.eventHandlers.cleanupListeners?.({ context: "chatManager" }); // General listeners for this manager instance
       this.eventHandlers.cleanupListeners?.({ context: "chatManagerNewConvoBtn" });
       this.eventHandlers.cleanupListeners?.({ context: 'chatManagerAuthRetryListener' });
-
-
-      // DO NOT clean up 'chatManagerAppEvents' here as they are global app/auth listeners
-      // and should persist for the lifetime of the chatManager instance,
-      // unless chatManager itself is being completely destroyed and removed from DI.
-      // If this cleanup is for project change, these global listeners should remain.
-      // If it's for full app shutdown, then they can be removed by a higher-level orchestrator.
+      // Enforce full context cleanup as per codebase event pattern rule:
+      this.eventHandlers.cleanupListeners?.({ context: "chatManagerAppEvents" }); // Clean global app/auth listeners
 
       const chatUIEnh = this.DependencySystem?.modules?.get?.('chatUIEnhancements');
       chatUIEnh?.cleanup?.(); // Assuming this cleans up its own tracked listeners
@@ -1438,7 +1433,11 @@ export function createChatManager(deps = {}) {
     deleteConversation: instance.deleteConversation.bind(instance),
     setImage: instance.setImage.bind(instance),
     updateModelConfig: instance.updateModelConfig.bind(instance),
-    cleanup: instance.cleanup.bind(instance),
+    // Ensure eventHandlers.cleanupListeners is called directly in the module API, per .clinerules contract
+    cleanup: () => {
+      eventHandlers.cleanupListeners?.({ context: "chatManager" });
+      instance.cleanup();
+    },
     chatBus: instance.chatBus
   };
 }

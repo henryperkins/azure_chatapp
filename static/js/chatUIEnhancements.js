@@ -111,6 +111,9 @@ export function createChatUIEnhancements(deps = {}) {
           context
         });
       } catch (err) {
+        logger.error('[chatUIEnhancements] Error during chat UI initialization', err, {
+          context
+        });
         logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, {
           context
         });
