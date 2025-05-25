@@ -218,5 +218,15 @@ export function createAppStateManager({ DependencySystem, logger }) {
     }
   };
 
-  return appModule;
+  return {
+    ...appModule,
+    cleanup() {
+      // Clear any stored state if needed during shutdown
+      const eventHandlers = DependencySystem.modules.get('eventHandlers');
+      if (eventHandlers) {
+        eventHandlers.cleanupListeners({ context: 'appState' });
+      }
+      logger.debug('[appState] Cleanup completed', { context: 'appState:cleanup' });
+    }
+  };
 }
