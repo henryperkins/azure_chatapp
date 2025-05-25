@@ -11,6 +11,7 @@ import logging
 from datetime import datetime
 from typing import Optional, Any, Tuple
 import os
+import http.cookies
 
 from config import settings
 import jwt
@@ -21,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_async_session_context
 from models.user import User, TokenBlacklist
+from utils.logging_config import request_id_var, trace_id_var
 
 
 logger = logging.getLogger(__name__)
@@ -48,8 +50,13 @@ if not JWT_SECRET:
     #   its own random key.
     JWT_SECRET = "dev-insecure-default-secret"
     logger.warning(
-        "JWT_SECRET not configured – using insecure default for development. "
-        "Set settings.JWT_SECRET or env JWT_SECRET to avoid this warning."
+        "JWT_SECRET not configured - using insecure default for development",
+        extra={
+            "event_type": "jwt_secret_fallback",
+            "environment": getattr(settings, "ENV", "development"),
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
 
 JWT_ALGORITHM = "HS256"
@@ -76,14 +83,28 @@ def create_access_token(data: dict) -> str:
             },
         )
         logger.debug(
-            "Created token with jti=%s for sub=%s, type=%s",
-            data.get("jti"),
-            data.get("sub"),
-            data.get("type"),
+            "Created JWT token successfully",
+            extra={
+                "event_type": "jwt_token_created",
+                "jti": data.get("jti"),
+                "sub": data.get("sub"),
+                "token_type": data.get("type"),
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
         return token
     except Exception as exc:
-        logger.error("Failed to create JWT: %s", exc)
+        logger.error(
+            "Failed to create JWT token",
+            extra={
+                "event_type": "jwt_token_creation_failed",
+                "error": str(exc),
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
+            exc_info=True,
+        )
         raise
 
 
@@ -253,6 +274,10 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
     returning the number of records deleted.
     Also logs a summary of active blacklisted tokens by type.
     """
+    # Use a timezone-naive UTC timestamp so Postgres doesn’t raise
+    # “offset-naive and offset-aware datetimes” errors when comparing.
+    # The database `expires` column stores naive timestamps (UTC), so we align
+    # the Python value accordingly.
     now = datetime.utcnow()
 
     # Delete expired blacklist entries
@@ -263,17 +288,34 @@ async def clean_expired_tokens(db: AsyncSession) -> int:
 
     # Log active token counts by type
     token_count_query = (
-        select(TokenBlacklist.token_type, func.count("*"))
+        select(TokenBlacklist.token_type, func.count(TokenBlacklist.id))
         .where(TokenBlacklist.expires >= now)
         .group_by(TokenBlacklist.token_type)
     )
     result = await db.execute(token_count_query)
     token_counts = result.all() if hasattr(result, "all") else []
     for token_type, count in token_counts:
-        logger.info("Active blacklisted tokens of type '%s': %s", token_type, count)
+        logger.info(
+            "Active blacklisted tokens by type",
+            extra={
+                "event_type": "blacklisted_tokens_count",
+                "token_type": token_type,
+                "count": count,
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
+        )
 
     if deleted_count > 0:
-        logger.info("Cleaned up %s expired blacklisted tokens.", deleted_count)
+        logger.info(
+            "Cleaned up expired blacklisted tokens",
+            extra={
+                "event_type": "blacklisted_tokens_cleanup",
+                "deleted_count": deleted_count,
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
+        )
     return deleted_count
 
 
@@ -293,18 +335,29 @@ def validate_csrf_token(request: Request) -> None:
     csrf_cookie = request.cookies.get("csrf_token")
     csrf_header = request.headers.get("x-csrf-token")
     logger.warning(
-        "[CSRF CHECK] request.method=%s csrf_cookie=%r csrf_header=%r raw_cookies=%r",
-        request.method,
-        csrf_cookie,
-        csrf_header,
-        request.headers.get("cookie"),
+        "CSRF token validation check",
+        extra={
+            "event_type": "csrf_validation_check",
+            "method": request.method,
+            "csrf_cookie_present": bool(csrf_cookie),
+            "csrf_header_present": bool(csrf_header),
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
     if not csrf_cookie or not csrf_header or csrf_cookie != csrf_header:
         logger.error(
-            "[CSRF FAILURE] CSRF mismatch: cookie=%r header=%r all_cookies=%r",
-            csrf_cookie,
-            csrf_header,
-            request.headers.get("cookie"),
+            "CSRF token validation failed",
+            extra={
+                "event_type": "csrf_validation_failure",
+                "csrf_cookie_present": bool(csrf_cookie),
+                "csrf_header_present": bool(csrf_header),
+                "tokens_match": (
+                    csrf_cookie == csrf_header if csrf_cookie and csrf_header else False
+                ),
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
         raise HTTPException(
             status_code=403,
@@ -331,26 +384,41 @@ def extract_token(request_or_websocket, token_type="access"):
 
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
 
-    # --- BEGIN ADDED LOGGING ---
+    # Log incoming request details
     if hasattr(request_or_websocket, "headers"):
         raw_cookie_header = request_or_websocket.headers.get(
             "cookie", "[No Cookie Header]"
         )
         if debugging:
             logger.debug(
-                f"[AUTH_EXTRACT] Incoming raw cookie header for {token_type}: {raw_cookie_header}"
+                "Extracting token from request headers",
+                extra={
+                    "event_type": "token_extraction_start",
+                    "token_type": token_type,
+                    "has_cookie_header": bool(
+                        raw_cookie_header != "[No Cookie Header]"
+                    ),
+                    "request_id": request_id_var.get(),
+                    "trace_id": trace_id_var.get(),
+                },
             )
-    # --- END ADDED LOGGING ---
 
     # First check standard cookies (HTTP)
     if hasattr(request_or_websocket, "cookies") and request_or_websocket.cookies:
         token = request_or_websocket.cookies.get(cookie_name)
         if token:
             source = "cookie"
-            # --- BEGIN ADDED LOGGING ---
             if debugging:
-                logger.debug(f"[AUTH_EXTRACT] Found '{cookie_name}' in parsed cookies.")
-            # --- END ADDED LOGGING ---
+                logger.debug(
+                    "Token found in parsed cookies",
+                    extra={
+                        "event_type": "token_found_in_cookies",
+                        "cookie_name": cookie_name,
+                        "token_type": token_type,
+                        "request_id": request_id_var.get(),
+                        "trace_id": trace_id_var.get(),
+                    },
+                )
 
     # Then check Authorization header (for access tokens)
     if not token and hasattr(request_or_websocket, "headers"):
@@ -358,10 +426,16 @@ def extract_token(request_or_websocket, token_type="access"):
         if auth_header.lower().startswith("bearer ") and token_type == "access":
             token = auth_header[7:]
             source = "auth_header"
-            # --- BEGIN ADDED LOGGING ---
             if debugging:
-                logger.debug(f"[AUTH_EXTRACT] Found token in Authorization header.")
-            # --- END ADDED LOGGING ---
+                logger.debug(
+                    "Token found in Authorization header",
+                    extra={
+                        "event_type": "token_found_in_auth_header",
+                        "token_type": token_type,
+                        "request_id": request_id_var.get(),
+                        "trace_id": trace_id_var.get(),
+                    },
+                )
 
     # For WebSockets, parse cookie header if still no token found
     if not token and hasattr(request_or_websocket, "headers"):
@@ -369,34 +443,61 @@ def extract_token(request_or_websocket, token_type="access"):
         if cookie_header:
             # Use SimpleCookie for robust cookie parsing
             try:
-                import http.cookies
-
                 parsed_cookies = http.cookies.SimpleCookie()
                 parsed_cookies.load(cookie_header)
                 if cookie_name in parsed_cookies:
                     token = parsed_cookies[cookie_name].value
                     source = "ws_cookie_header"
-                    # --- BEGIN ADDED LOGGING ---
                     if debugging:
                         logger.debug(
-                            f"[AUTH_EXTRACT] Found '{cookie_name}' via manual header parse."
+                            "Token found via manual cookie header parsing",
+                            extra={
+                                "event_type": "token_found_in_ws_header",
+                                "cookie_name": cookie_name,
+                                "token_type": token_type,
+                                "request_id": request_id_var.get(),
+                                "trace_id": trace_id_var.get(),
+                            },
                         )
-                    # --- END ADDED LOGGING ---
             except Exception as parse_err:
                 if debugging:
                     logger.warning(
-                        f"[AUTH_EXTRACT] Error parsing cookie header: {parse_err}"
+                        "Error parsing cookie header for token extraction",
+                        extra={
+                            "event_type": "cookie_header_parse_error",
+                            "error": str(parse_err),
+                            "token_type": token_type,
+                            "request_id": request_id_var.get(),
+                            "trace_id": trace_id_var.get(),
+                        },
                     )
 
     # Log outcome in debug mode
     if debugging:
         if token:
             logger.debug(
-                f"[AUTH_EXTRACT_RESULT] Token ({token_type}) found via {source}: {token[:10]}..."
+                "Token extraction successful",
+                extra={
+                    "event_type": "token_extraction_success",
+                    "token_type": token_type,
+                    "source": source,
+                    "token_preview": token[:10] + "..." if token else None,
+                    "request_id": request_id_var.get(),
+                    "trace_id": trace_id_var.get(),
+                },
             )
         else:
             logger.debug(
-                f"[AUTH_EXTRACT_RESULT] No {token_type} token found in request. Raw Header: {raw_cookie_header}"
+                "Token extraction failed - no token found",
+                extra={
+                    "event_type": "token_extraction_failure",
+                    "token_type": token_type,
+                    "has_cookie_header": bool(
+                        raw_cookie_header != "[No Cookie Header]"
+                    ),
+                    "request_id": request_id_var.get(),
+                    "trace_id": trace_id_var.get(),
+                },
             )
 
     return token
@@ -417,11 +518,27 @@ async def get_user_from_token(
     Raises HTTPException if the token is invalid, revoked, expired, or if the user is not found/disabled.
     """
     logger.info(
-        f"[GET_USER_FROM_TOKEN] Attempting to get user from token. Expected type: {expected_type}. Token (first 10 chars): {token[:10] if token else 'None'}"
+        "Attempting to get user from token",
+        extra={
+            "event_type": "get_user_from_token_start",
+            "expected_type": expected_type,
+            "token_present": bool(token),
+            "token_preview": token[:10] if token else None,
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
 
     if not token:
-        logger.warning(f"[GET_USER_FROM_TOKEN] No {expected_type} token provided.")
+        logger.warning(
+            "No token provided for user authentication",
+            extra={
+                "event_type": "missing_token",
+                "expected_type": expected_type,
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
+        )
         raise HTTPException(
             status_code=401,
             detail=f"Missing {expected_type} token",
@@ -432,7 +549,13 @@ async def get_user_from_token(
     decoded = await verify_token(token, expected_type=expected_type, db_session=db)
     if not decoded:
         logger.warning(
-            "[GET_USER_FROM_TOKEN] Token verification failed or token was None after verify_token call."
+            "Token verification failed or returned None",
+            extra={
+                "event_type": "token_verification_failed",
+                "expected_type": expected_type,
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
         # verify_token itself should raise HTTPException, but as a safeguard:
         raise HTTPException(
@@ -441,20 +564,42 @@ async def get_user_from_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     logger.info(
-        "[GET_USER_FROM_TOKEN] Token decoded: %s, jti: %s",
-        decoded.get("sub"),
-        decoded.get("jti"),
+        "Token decoded successfully",
+        extra={
+            "event_type": "token_decoded",
+            "sub": decoded.get("sub"),
+            "jti": decoded.get("jti"),
+            "expected_type": expected_type,
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
 
     username = decoded.get("sub")
     if not username:
-        logger.warning("[GET_USER_FROM_TOKEN] Token missing 'sub' (subject) claim.")
+        logger.warning(
+            "Token missing subject claim",
+            extra={
+                "event_type": "missing_subject_claim",
+                "jti": decoded.get("jti"),
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
+        )
         raise HTTPException(
             status_code=401,
             detail="Invalid token payload: missing subject",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info("[GET_USER_FROM_TOKEN] Username from token: %s", username)
+    logger.info(
+        "Username extracted from token",
+        extra={
+            "event_type": "username_extracted",
+            "username": username,
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
+    )
 
     # Fetch user from DB
     result = await db.execute(select(User).where(User.username == username))
@@ -462,7 +607,14 @@ async def get_user_from_token(
 
     if not user:
         logger.warning(
-            f"[GET_USER_FROM_TOKEN] User '{username}' from token not found in database."
+            "User not found in database",
+            extra={
+                "event_type": "user_not_found",
+                "username": username,
+                "jti": decoded.get("jti"),
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
         raise HTTPException(
             status_code=401,
@@ -470,22 +622,42 @@ async def get_user_from_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     logger.info(
-        "[GET_USER_FROM_TOKEN] User '%s' found in database. ID: %s",
-        username,
-        user.id,
+        "User found in database",
+        extra={
+            "event_type": "user_found",
+            "username": username,
+            "user_id": user.id,
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
 
     if not user.is_active:
         logger.warning(
-            "[GET_USER_FROM_TOKEN] Attempt to use token for disabled account: %s",
-            username,
+            "Attempt to use token for disabled account",
+            extra={
+                "event_type": "disabled_account_access",
+                "username": username,
+                "user_id": user.id,
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
         raise HTTPException(
             status_code=403,
             detail="Account disabled",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    logger.info("[GET_USER_FROM_TOKEN] User '%s' is active.", username)
+    logger.info(
+        "User account is active",
+        extra={
+            "event_type": "user_active_verified",
+            "username": username,
+            "user_id": user.id,
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
+    )
 
     # Attach token metadata to the user object (optional)
     user.jti = decoded.get("jti")
@@ -515,18 +687,36 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
     """
     debugging = hasattr(settings, "DEBUG") and settings.DEBUG
     logger.info(
-        f"[GET_CURRENT_USER_AND_TOKEN] Attempting to extract access token. Request cookies: {request.cookies}"
+        "Attempting to extract access token from request",
+        extra={
+            "event_type": "get_current_user_start",
+            "has_cookies": bool(request.cookies),
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
 
     token = extract_token(request)  # extract_token already has good logging
     if not token:
         logger.warning(
-            "[GET_CURRENT_USER_AND_TOKEN] Access token not found after extract_token call."
+            "Access token not found in request",
+            extra={
+                "event_type": "access_token_not_found",
+                "request_id": request_id_var.get(),
+                "trace_id": trace_id_var.get(),
+            },
         )
         # Log headers for more context if debugging is enabled
         if debugging:
             logger.debug(
-                f"[GET_CURRENT_USER_AND_TOKEN] Request headers for missing token: {request.headers}"
+                "Request headers for missing token debug",
+                extra={
+                    "event_type": "missing_token_debug",
+                    "has_auth_header": bool(request.headers.get("authorization")),
+                    "has_cookie_header": bool(request.headers.get("cookie")),
+                    "request_id": request_id_var.get(),
+                    "trace_id": trace_id_var.get(),
+                },
             )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -534,7 +724,13 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
             headers={"WWW-Authenticate": "Bearer"},
         )
     logger.info(
-        f"[GET_CURRENT_USER_AND_TOKEN] Token extracted (first 10 chars): {token[:10]}"
+        "Token extracted successfully",
+        extra={
+            "event_type": "token_extracted",
+            "token_preview": token[:10],
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
 
     # Token verification + user load within a single DB session
@@ -543,9 +739,14 @@ async def get_current_user_and_token(request: Request) -> Tuple[User, str]:
             token, db, request=request, expected_type="access"
         )
     logger.info(
-        "[GET_CURRENT_USER_AND_TOKEN] Successfully retrieved user: %s (ID: %s)",
-        user.username,
-        user.id,
+        "Successfully retrieved user from token",
+        extra={
+            "event_type": "get_current_user_success",
+            "username": user.username,
+            "user_id": user.id,
+            "request_id": request_id_var.get(),
+            "trace_id": trace_id_var.get(),
+        },
     )
     return user, token
 

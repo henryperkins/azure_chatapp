@@ -406,7 +406,10 @@ export function createEventHandlers({
         context: 'eventHandler.init:modalForm'
       }).then(() => {
         setupProjectModalForm();
-        logger.info(`[${MODULE}][init] Project modal form setup completed`);
+        logger.info(
+          `[${MODULE}][init] Project modal form setup completed`,
+          { context: 'eventHandler.init:modalForm' }
+        );
       }).catch((error) => {
         logger.warn(`[${MODULE}][init] elementsReady('#projectModalForm') failed - modal form may not be available`, error, { context: 'eventHandler.init:modalForm' });
         // Don't throw - this is not critical for app initialization
@@ -745,7 +748,7 @@ export function createEventHandlers({
 
   function cleanup() {
     // Cleans up all event listeners and module state
-    cleanupListeners();
+    cleanupListeners({ context: MODULE });
     // You could add more explicit cleanup logic here if stateful singletons or intervals are added
   }
 

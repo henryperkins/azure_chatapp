@@ -69,6 +69,12 @@ export function createProjectDetailsComponent({
      */
     renderProject: (...args) => instance.renderProject(...args),
     /**
+     * Inject or replace the KnowledgeBaseComponent instance after creation.
+     * Needed by UIInit during bootstrap.
+     */
+    setKnowledgeBaseComponent: (...args) =>
+      instance.setKnowledgeBaseComponent(...args),
+    /**
      * Cleanup logic for ProjectDetailsComponent: detaches listeners, aborts async, and hides UI.
      * Ensures compliance with frontend pattern rules.
      */
@@ -115,7 +121,13 @@ class ProjectDetailsComponent {
     this.auth = this.eventHandlers.DependencySystem?.modules?.get("auth");
   }
 
-  setProjectManager(pm) { this.projectManager = pm; }
+  setProjectManager(pm) {
+    this.projectManager = pm;
+    // emit event so deferred show() can continue
+    try {
+      this.bus.dispatchEvent(new Event('projectManagerReady'));
+    } catch { /* noop */ }
+  }
   setChatManager(cm) { this.chatManager = cm; }
 
   _logInfo(msg, meta) { try { this.logger.info(`[${MODULE_CONTEXT}] ${msg}`, { context: MODULE_CONTEXT, ...meta }); } catch (e) { return; } }
@@ -174,14 +186,21 @@ class ProjectDetailsComponent {
       '#projectTitle', '#backToProjectsBtn',
       '.project-tab', '#chatTab', '#filesTab', '#knowledgeTab', '#settingsTab'
     ];
+    // Optional but expected selectors; if missing we continue with warning.
     const optionalSelectors = [
+      // Knowledge tab
       "#knowledgeSearchInput", "#searchKnowledgeBtn",
       "#knowledgeResults",
       "#kbToggle", "#reprocessButton", "#setupButton", "#settingsButton",
       "#modelSelect",
       "#knowledgeBaseName", "#kbModelDisplay", "#kbVersionDisplay", "#kbLastUsedDisplay",
       "#kbDocCount", "#kbChunkCount",
+      // Project metadata editing
       "#projectNameInput", "#projectDescriptionInput",
+      // File-upload controls (previously missing – caused FileUploadComponent crash)
+      "#fileInput", "#uploadFileBtn", "#dragDropZone",
+      "#filesUploadProgress", "#fileProgressBar", "#uploadStatus",
+      // Misc project actions
       "#archiveProjectBtn", "#deleteProjectBtn",
       "#editProjectBtn", "#projectMenuBtn", "#projectFab"
     ];
@@ -247,31 +266,55 @@ class ProjectDetailsComponent {
   }
 
   async _initSubComponents() {
-    if (this.FileUploadComponentClass && !this.fileUploadComponent && this.elements.fileInput) {
-      try {
-        this.fileUploadComponent = new this.FileUploadComponentClass({
-          eventHandlers: this.eventHandlers,
-          domAPI: this.domAPI,
-          projectManager: this.projectManager,
-          app: this.eventHandlers.DependencySystem.modules.get("app"),
-          domReadinessService: this.domReadinessService,
-          logger: this.logger,
-          onUploadComplete: this._safeHandler(async () => {
-            if (!this.projectId) return;
-            await this.projectManager.loadProjectFiles(this.projectId);
-          }, "UploadComplete"),
-          elements: {
-            fileInput: this.elements.fileInput,
-            uploadBtn: this.elements.uploadBtn,
-            dragZone: this.elements.dragZone,
-            uploadProgress: this.elements.uploadProgress,
-            progressBar: this.elements.progressBar,
-            uploadStatus: this.elements.uploadStatus
-          }
-        });
-        const initFn = this.fileUploadComponent.init || this.fileUploadComponent.initialize;
-        if (typeof initFn === "function") await initFn.call(this.fileUploadComponent);
-      } catch (err) { this._logError("Error initializing FileUploadComponent", err); }
+    if (!this.FileUploadComponentClass || this.fileUploadComponent) return;
+    if (!this.projectManager) {
+      this._logWarn('ProjectManager not yet available – skipping FileUploadComponent init');
+      return;
+    }
+
+    // Validate presence of all required DOM nodes before instantiation.
+    const required = {
+      fileInput: this.elements.fileInput,
+      uploadBtn: this.elements.uploadBtn,
+      dragZone: this.elements.dragZone,
+      uploadProgress: this.elements.uploadProgress,
+      progressBar: this.elements.progressBar,
+      uploadStatus: this.elements.uploadStatus
+    };
+    const missingKeys = Object.entries(required)
+      .filter(([_, el]) => !el)
+      .map(([k]) => k);
+
+    if (missingKeys.length) {
+      this._logError(
+        `Cannot initialize FileUploadComponent; missing elements: ${missingKeys.join(
+          ", "
+        )}`,
+        new Error("Missing DOM Elements")
+      );
+      return;
+    }
+
+    try {
+      this.fileUploadComponent = new this.FileUploadComponentClass({
+        eventHandlers: this.eventHandlers,
+        domAPI: this.domAPI,
+        projectManager: this.projectManager,
+        app: this.eventHandlers.DependencySystem.modules.get("app"),
+        domReadinessService: this.domReadinessService,
+        logger: this.logger,
+        onUploadComplete: this._safeHandler(async () => {
+          if (!this.projectId) return;
+          await this.projectManager.loadProjectFiles(this.projectId);
+        }, "UploadComplete"),
+        elements: required
+      });
+      const initFn =
+        this.fileUploadComponent.init || this.fileUploadComponent.initialize;
+      if (typeof initFn === "function")
+        await initFn.call(this.fileUploadComponent);
+    } catch (err) {
+      this._logError("Error initializing FileUploadComponent", err);
     }
   }
 
@@ -747,6 +790,16 @@ class ProjectDetailsComponent {
       this.navigationService.navigateToProjectList();
       return;
     }
+    if (!this.projectManager) {
+      this._logWarn('ProjectManager not yet available – defer show()');
+      // Re-attempt once the DI setter provides the projectManager
+      this.bus.addEventListener(
+        'projectManagerReady',
+        this._safeHandler(() => this.show({ projectId, activeTab }), 'DeferredShow'),
+        { once: true }
+      );
+      return;
+    }
     this.projectId = projectId;
     this._setState({ loading: true });
     const templateLoaded = await this._loadTemplate();
@@ -797,6 +850,19 @@ class ProjectDetailsComponent {
 
     this._bindEventListeners();
     this._logInfo("Event listeners bound for project details view", { projectId });
+    /* Re-request conversation list now that listeners are active.
+       The initial load in loadProjectDetails may have fired before
+       listeners were registered, leaving the UI empty. */
+    try {
+      if (this.projectManager?.loadProjectConversations) {
+        this._logInfo('Reloading conversations post listener-binding', {
+          projectId
+        });
+        await this.projectManager.loadProjectConversations(projectId);
+      }
+    } catch (err) {
+      this._logError('Error reloading conversations after listener bind', err);
+    }
     this._updateNewChatButtonState();
     this._logInfo("Restoring chat manager for project details view", { projectId });
     this._restoreChatAndModelConfig();
