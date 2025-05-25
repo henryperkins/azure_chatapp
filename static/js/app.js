@@ -88,22 +88,7 @@ if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
-// --- 1) Early real logger --------------------------------------------------
-// We want early-phase diagnostics to reach the backend as soon as possible.
-// Therefore server logging is enabled from the start **but** we mark the
-// logger as `allowUnauthenticated` so POSTs are allowed before auth/CSRF.
-const loggerInstance = createLogger({
-  endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
-  enableServer: true,                 // remote sink active immediately
-  allowUnauthenticated: true,            // permit unauthenticated POSTs
-  debug: APP_CONFIG.DEBUG === true,
-  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
-  consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
-  browserService: browserServiceInstance,
-  sessionIdProvider: getSessionId
-});
-DependencySystem.register('logger', loggerInstance);
-const logger = loggerInstance;
+// --- 1) Early logger REMOVED: logger is now initialized after serviceInit basic services (see below)
 
 // ---------------------------------------------------------------------------
 //  Canonical safeHandler – must exist before createEventHandlers is invoked
@@ -223,18 +208,44 @@ const serviceInit = createServiceInitializer({
   uiUtils,
   globalUtils: { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl, isValidProjectId },
   createFileUploadComponent,
-  createApiClient,
+  createApiClient, // apiClient factory
   createAccessibilityEnhancements,
   createNavigationService,
   createHtmlTemplateLoader,
   createUiRenderer,
-  logger,
+  // logger will be created after serviceInit.registerBasicServices()
   getSessionId
 });
 
 // Register basic services (this creates the logger)
-serviceInit.registerBasicServices();
+serviceInit.registerBasicServices(); // This should now create and register apiClientObject
+
+// Create logger AFTER apiClientObject is available via DependencySystem
+const apiClientObjectForLogger = DependencySystem.modules.get('apiClientObject');
+if (!apiClientObjectForLogger) {
+  // Fallback or error if apiClientObject is somehow not registered by serviceInit
+  console.error('[App] apiClientObject not found after serviceInit.registerBasicServices(). Logger might not have CSRF protection.');
+}
+
+const loggerInstance = createLogger({
+  endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
+  enableServer: true,
+  debug: APP_CONFIG.DEBUG === true,
+  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
+  consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
+  browserService: browserServiceInstance,
+  sessionIdProvider: getSessionId,
+  apiClient: apiClientObjectForLogger, // Provide apiClient directly
+  safeHandler: DependencySystem.modules.get('safeHandler') // Ensure safeHandler is available
+});
+DependencySystem.register('logger', loggerInstance);
+const logger = loggerInstance; // Make it available to the rest of app.js
+
+// Now inject the fully configured logger into serviceInit if it needs it for advanced services
+serviceInit.setLogger(logger);
+
 serviceInit.registerAdvancedServices();
+// ...existing code...
 
 // ---------------------------------------------------------------------------
 // Create API client (now should be available via serviceInit)
@@ -514,21 +525,11 @@ export async function init() {
   // Ensure the DOM is fully loaded before initialization
   await domReadinessService.documentReady();
 
-  // ────────── timing helpers ──────────
-  const phaseTimings = Object.create(null);     // { [phase]: { start, end } }
-  const SLOW_PHASE = 4_000;                     // ms – warn if phase ≥ 4 s
-  function _now() {
-    const w = browserAPI.getWindow();
-    return (w?.performance?.now?.()) ?? Date.now();
-  }
+  const GLOBAL_INIT_TIMEOUT_MS = 15000; // 15 seconds
+  const PHASE_TIMEOUT = 5000; // 5 seconds
 
-  // Global emergency fail-safe: if this init hasn't completed in the configured time, forcibly log & dispatch 'app:ready' with error
+  // Global emergency fail-safe
   let globalInitTimeoutFired = false;
-  const GLOBAL_INIT_TIMEOUT_MS = (
-    (APP_CONFIG && APP_CONFIG.TIMEOUTS && typeof APP_CONFIG.TIMEOUTS.GLOBAL_INIT === 'number')
-      ? APP_CONFIG.TIMEOUTS.GLOBAL_INIT
-      : 90000 // Default: 90 seconds
-  );
   const globalInitTimeoutId = browserAPI.getWindow().setTimeout(() => {
     globalInitTimeoutFired = true;
     const err = new Error(
@@ -553,236 +554,113 @@ export async function init() {
 
   toggleLoadingSpinner(true);
 
-  // Per-phase timeout in ms for each awaited step
-  const PHASE_TIMEOUT = 12000; // 12s per step to catch long hangs
-
-  // Diagnostic step marker
-  function logStep(phase, stage, extra = {}) {
-    const t = _now();
-    if (stage === 'pre') {
-      phaseTimings[phase] = { start: t };             // mark start
-    } else if (stage === 'post') {
-      const rec = phaseTimings[phase] || (phaseTimings[phase] = {});
-      rec.end = t;
-      const dur = rec.end - (rec.start ?? rec.end);
-      logger.log('[App.init][TIMING]', { phase, duration: Math.round(dur), context: 'app:init:timing' });
-      if (dur >= SLOW_PHASE) {
-        logger.warn(`[App.init] Phase "${phase}" took ${Math.round(dur)} ms`, { phase, duration: dur, context: 'app:init:timing' });
-      }
-    }
-    logger.log('[App.init]', { phase, stage, ts: t, ...extra });
-  }
-
   try {
-    // 0) Initialize error handling first (after DOM/event infrastructure is ready)
-    logStep('initializeErrorHandling', 'pre');
-    try {
-      errorInit.initializeErrorHandling();
-      logger.info('[App.init] Error handling initialization completed', { context: 'app:init:errorHandling' });
-    } catch (err) {
-      logger.error('[App.init] Error handling initialization failed', err, { context: 'app:init:errorHandling' });
-      // Continue with init even if error handling setup fails
-    }
-    logStep('initializeErrorHandling', 'post');
+    logger.log('[App.init] Initializing Error Handling...');
+    errorInit.initializeErrorHandling();
+    logger.info('[App.init] Error handling initialization completed.');
 
-    // 1) Initialize core systems using factory
-    logStep('initializeCoreSystems', 'pre');
-    await Promise.race([
-      coreInit.initializeCoreSystems(),
-      new Promise((_, reject) =>
-        browserAPI.getWindow().setTimeout(
-          () => reject(new Error('Timeout in initializeCoreSystems')),
-          PHASE_TIMEOUT
-        )
-      )
-    ]);
-    logStep('initializeCoreSystems', 'post');
+    logger.log('[App.init] Initializing Core Systems...');
+    await coreInit.initializeCoreSystems();
     logger.info('[App.init] Core systems initialization phase completed.');
 
-    /* ── Wait for critical DI modules via domReadinessService ─────────── */
-    logStep('depsReady', 'pre');
+    logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...');
     await domReadinessService.dependenciesAndElements({
       deps: ['auth', 'eventHandlers', 'modalManager'],
-      timeout: APP_CONFIG.TIMEOUTS?.DEPENDENCY_WAIT ?? PHASE_TIMEOUT,
+      timeout: PHASE_TIMEOUT, // Use PHASE_TIMEOUT
       context: 'app.init:depsReady'
     });
-    logStep('depsReady', 'post');
+    logger.info('[App.init] Critical DI modules ready.');
 
-    // 3) Initialize auth system with safeHandler wrapper and timeout cleanup
-    logStep('initializeAuthSystem', 'pre');
-
-    // Wrap auth bus listeners in safeHandler
+    logger.log('[App.init] Initializing Auth System...');
     const safeAuthInit = safeHandler(
       () => authInit.initializeAuthSystem(),
       'authInit.initializeAuthSystem'
     );
+    await safeAuthInit();
+    logger.info('[App.init] Auth system initialization completed.');
 
-    await Promise.race([
-      safeAuthInit(),
-      new Promise((_, reject) =>
-        browserAPI.getWindow().setTimeout(
-          () => reject(new Error('Timeout in initializeAuthSystem')),
-          PHASE_TIMEOUT
-        )
-      )
-    ]);
-    logStep('initializeAuthSystem', 'post');
+    // Logger is now created after API client is ready, so no upgrade needed.
 
-    // ─── elevate logger to full remote mode once auth is wired ───
-    {
-      const logger = DependencySystem.modules.get('logger');
-      logger?.setServerLoggingEnabled?.(true);
-
-      // Upgrade logger with API client for proper CSRF handling (after auth is ready)
-      const apiClientObject = DependencySystem.modules.get('apiClientObject');
-      if (apiClientObject && logger?.upgradeWithApiClient) {
-        logger.upgradeWithApiClient(apiClientObject);
-        logger.info('[App.init] Logger upgraded with API client for CSRF support', { context: 'app:init:logger' });
-      }
-    }
-
-    // 4) If authenticated, fetch current user via auth module
-    logStep('fetchCurrentUser', 'pre', { authed: !!appModule.state.isAuthenticated });
     if (appModule.state.isAuthenticated) {
+      logger.log('[App.init] Fetching Current User...');
       const authModule = DependencySystem.modules.get('auth');
       if (authModule?.fetchCurrentUser) {
-        const user = await Promise.race([
-          authModule.fetchCurrentUser(),
-          new Promise((_, reject) =>
-            browserAPI.getWindow().setTimeout(
-              () => reject(new Error('Timeout in fetchCurrentUser')),
-              PHASE_TIMEOUT
-            )
-          )
-        ]);
+        const user = await authModule.fetchCurrentUser();
         if (user) {
           app.setCurrentUser(user);
           browserAPI.setCurrentUser(user);
         }
       } else {
-        logger.warn('[App.init] Auth module fetchCurrentUser method not available', { context: 'app:init:fetchCurrentUser' });
+        logger.warn('[App.init] Auth module fetchCurrentUser method not available');
       }
+      logger.info('[App.init] Fetch current user step completed.');
     }
-    logStep('fetchCurrentUser', 'post');
 
-    // 5) Initialize UI components using factory (ensures UI is ready before auth state callbacks)
-    logStep('initializeUIComponents', 'pre');
-    await Promise.race([
-      uiInit.initializeUIComponents(),
-      new Promise((_, reject) =>
-        browserAPI.getWindow().setTimeout(
-          () => reject(new Error('Timeout in initializeUIComponents')),
-          PHASE_TIMEOUT
-        )
-      )
-    ]);
-    logStep('initializeUIComponents', 'post');
+    logger.log('[App.init] Initializing UI Components...');
+    await uiInit.initializeUIComponents();
+    logger.info('[App.init] UI components initialization completed.');
 
-    // 6) (Optional) initialize leftover model config UI
-    logStep('modelConfig.initializeUI', 'pre');
     const mc = DependencySystem.modules.get('modelConfig');
     if (mc?.initializeUI) {
+      logger.log('[App.init] Initializing Model Config UI...');
       mc.initializeUI();
+      logger.info('[App.init] Model Config UI initialization completed.');
     }
-    logStep('modelConfig.initializeUI', 'post');
 
-    // 7) Register app-level listeners
-    logStep('registerAppListeners', 'pre');
+    logger.log('[App.init] Registering App Listeners...');
     registerAppListeners();
-    logStep('registerAppListeners', 'post');
+    logger.info('[App.init] App listeners registered.');
 
-    // 8) Initialize navigation service
-    logStep('navigationService', 'pre');
+    logger.log('[App.init] Initializing Navigation Service...');
     const navService = DependencySystem.modules.get('navigationService');
     if (!navService) {
       throw new Error('[App] NavigationService missing from DI. Aborting initialization.');
     }
-    let navigationService = navService;
-
-    if (navigationService?.init) {
-      await Promise.race([
-        navigationService.init(),
-        new Promise((_, reject) =>
-          browserAPI.getWindow().setTimeout(
-            () => reject(new Error('Timeout in navigationService.init')),
-            PHASE_TIMEOUT
-          )
-        )
-      ]);
-
-      // Navigation views are now registered by uiInit.registerNavigationViews()
-      // This eliminates duplication and centralizes navigation view management
+    if (navService?.init) {
+      await navService.init();
     }
-    logStep('navigationService', 'post');
+    logger.info('[App.init] Navigation service initialization completed.');
 
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
-
-    // Log a compact summary of all timings
-    Object.entries(phaseTimings).forEach(([p, { start, end }]) => {
-      if (start && end) {
-        const d = Math.round(end - start);
-        logger.info(`[App.init] Phase "${p}" duration: ${d} ms`);
-      }
-    });
-
-    // Log DOM selector wait stats
-    const selStats = domReadinessService.getSelectorTimings?.() || {};
-    Object.entries(selStats)
-      .sort(([, a], [, b]) => b - a)
-      .forEach(([sel, ms]) =>
-        logger.info(`[Perf] DOM selector "${sel}" waited ${ms} ms total`));
-    domAPI.dispatchEvent(
-      domAPI.getDocument(),
-      eventHandlers.createCustomEvent('app:domSelectorTimings', { detail: selStats })
-    );
 
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
       fireAppReady(true);
     }
 
-    // Add debug functions to browserAPI window for troubleshooting
+    // Add debug functions
     const window = browserAPI.getWindow();
     if (window) {
       window.debugSidebarAuth = () => {
         const sidebar = DependencySystem.modules.get('sidebar');
-        if (sidebar?.debugAuthState) {
-          return sidebar.debugAuthState();
-        } else {
-          // Announce using accessibilityUtils if present, else warn
-          const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
-          if (accessibilityUtils?.announce) {
-            accessibilityUtils.announce('Sidebar module unavailable. Debug action skipped.', 'assertive');
-          }
-          logger.warn('[App] Sidebar debug function not available', { context: 'app:debug' });
-          return null;
-        }
+        return sidebar?.debugAuthState ? sidebar.debugAuthState() : (logger.warn('[App] Sidebar debug function not available'), null);
       };
-
       window.debugAppState = () => {
-        const appModule = DependencySystem.modules.get('appModule');
-        const authModule = DependencySystem.modules.get('auth');
+        const appModuleRef = DependencySystem.modules.get('appModule');
+        const authModuleRef = DependencySystem.modules.get('auth');
         const state = {
-          appState: appModule?.state,
+          appState: appModuleRef?.state,
           authInfo: {
-            isAuthenticated: authModule?.isAuthenticated?.(),
-            currentUser: authModule?.getCurrentUserObject?.()
+            isAuthenticated: authModuleRef?.isAuthenticated?.(),
+            currentUser: authModuleRef?.getCurrentUserObject?.()
           }
         };
-        logger.info('[App] Debug app state requested', state, { context: 'app:debug' });
+        logger.info('[App] Debug app state requested', state);
         return state;
       };
-
-      logger.info('[App] Debug functions available: window.debugSidebarAuth(), window.debugAppState()', { context: 'app:debug' });
+      logger.info('[App] Debug functions available: window.debugSidebarAuth(), window.debugAppState()');
     }
 
     return true;
   } catch (err) {
-    logger.error('[init]', err, { context: 'app:init', ts: Date.now() });
+    logger.error('[init] Initialization failed', err, { context: 'app:init', ts: Date.now() });
     handleInitError(err);
-    fireAppReady(false, err);
-    throw err;
+    if (!globalInitTimeoutFired) {
+      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
+      fireAppReady(false, err);
+    }
+    throw err; // Re-throw the error after handling
   } finally {
     _globalInitInProgress = false;
     appModule.setAppLifecycleState({
@@ -792,6 +670,7 @@ export async function init() {
     toggleLoadingSpinner(false);
   }
 }
+// ...existing code...
 
 // ---------------------------------------------------------------------------
 // Auto-bootstrap when running in browser
@@ -825,4 +704,3 @@ if (typeof window !== 'undefined') {
     }
   })();
 }
-
