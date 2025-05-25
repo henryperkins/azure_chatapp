@@ -146,13 +146,18 @@ export function createAuthModule(deps) {
   let csrfToken = '';
   let csrfTokenPromise = null;
   let _lastLoginTimestamp = 0;
+  // Prevent log-storm: remember last value we logged
+  let _lastLoggedCsrfPresence = null;
   function getCSRFToken() {
     const current = readCookie('csrf_token');
     if (current && current !== csrfToken) csrfToken = current;
-    if (current) {
-      logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] using cookie value [masked]', { context: 'getCSRFToken' });
-    } else {
-      logger.log('[DIAGNOSTIC][auth.js][getCSRFToken] no CSRF cookie found', { context: 'getCSRFToken' });
+    // ↓ Only log when cookie-presence state changes
+    if ((current ? 'has' : 'none') !== _lastLoggedCsrfPresence) {
+      _lastLoggedCsrfPresence = current ? 'has' : 'none';
+      logger.debug(
+        `[DIAGNOSTIC][auth.js][getCSRFToken] ${current ? 'cookie present' : 'no CSRF cookie'}`,
+        { context: 'getCSRFToken' }
+      );
     }
     return csrfToken;
   }
