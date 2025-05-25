@@ -43,12 +43,8 @@ export function createLogger({
   async function send(level, args) {
     if (!_enableServer) return;
 
-    // Use canonical appModule.state (follows Dec 2024 auth guardrails)
-    let appModule = null;
-    if (typeof DependencySystem !== 'undefined' && DependencySystem?.modules?.get) {
-      appModule = DependencySystem.modules.get('appModule');
-    }
-    if (!allowUnauthenticated && appModule?.state?.isAuthenticated === false) return;
+    // If you need authentication logic, pass isAuthenticated directly via createLogger options in DI.
+
 
     if (LEVELS[level] < _minLvlNum) return;
 
@@ -83,42 +79,53 @@ export function createLogger({
           return; // Success with API client
         } catch (apiErr) {
           // Fall back to direct fetch if API client fails
+          // THIS FALLBACK IS PROBLEMATIC AS IT BYPASSES CSRF
+          // Per user request, this fallback should be reconsidered or removed
+          // For now, keeping the log but the fetch call below will be removed or conditional
           const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
           _c.warn(`[Logger] API client failed for ${endpoint} (Level: ${level}), falling back to direct fetch: ${apiErr && apiErr.message ? apiErr.message : apiErr}`);
+          // If apiClient is provided, we should NOT fall back to a fetch without CSRF.
+          // Throw or log critical error.
+          _c.error(`[Logger] CRITICAL: API client failed for ${endpoint}. Log NOT sent via fallback to prevent CSRF bypass. Error: ${apiErr?.message}`);
+          return; // Do not proceed to insecure fallback if apiClient was intended to be used.
         }
       }
 
-      // Fallback to direct fetch (without CSRF protection)
-      const _fetch =
-        fetcher ||
-        browserService?.fetch ||
-        (typeof window !== 'undefined' && window.fetch) ||
-        (typeof fetch === 'function' ? fetch : null);
-      if (!_fetch) return;                   // no fetch available
+      // Fallback to direct fetch (without CSRF protection) - This section should ideally be removed if apiClient is always present.
+      // If apiClient is null (e.g. very early logger before DI is set up, and allowUnauthenticated is true)
+      // then this fetch might be used.
+      if (!apiClient) { // Only use direct fetch if apiClient was not provided/configured
+        const _fetch =
+          fetcher ||
+          browserService?.fetch ||
+          (typeof window !== 'undefined' && window.fetch) ||
+          (typeof fetch === 'function' ? fetch : null);
+        if (!_fetch) return;                   // no fetch available
 
-      const response = await _fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Request-ID': reqId,
-          'X-Correlation-ID': reqId,
-          ...(traceId ? { 'X-Trace-ID': traceId } : {})
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          level,
-          context,
-          args,
-          ts: Date.now(),
-          request_id: reqId,
-          session_id: sessionId,
-          trace_id: traceId
-        })
-      });
-      if (!response.ok) {
-        // Surface server-side log ingestion failures - use fallback logging
-        const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
-        _c.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
+        const response = await _fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Request-ID': reqId,
+            'X-Correlation-ID': reqId,
+            ...(traceId ? { 'X-Trace-ID': traceId } : {})
+          },
+          credentials: 'include', // This might be an issue if cookies are not correctly set for unauthenticated requests
+          body: JSON.stringify({
+            level,
+            context,
+            args,
+            ts: Date.now(),
+            request_id: reqId,
+            session_id: sessionId,
+            trace_id: traceId
+          })
+        });
+        if (!response.ok) {
+          // Surface server-side log ingestion failures - use fallback logging
+          const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
+          _c.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
+        }
       }
     } catch (err) {
       // Surface client-side failures (e.g., network down, CORS, 0 response) - use fallback logging
@@ -144,6 +151,8 @@ export function createLogger({
   // Upgrade logger with API client for proper CSRF handling
   function upgradeWithApiClient(newApiClient) {
     if (newApiClient && typeof newApiClient.post === 'function') {
+      // This function is now largely redundant if logger is created with apiClient.
+      // Kept for now in case of specific scenarios, but its usage in app.js is removed.
       apiClient = newApiClient;
     }
   }

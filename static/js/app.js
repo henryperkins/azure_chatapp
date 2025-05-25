@@ -124,16 +124,16 @@ const domAPI = createDomAPI({
   documentObject: browserAPI.getDocument(),
   windowObject: browserAPI.getWindow(),
   debug: APP_CONFIG.DEBUG === true,
-  logger: logger,
+  // logger is registered later; domAPI will pick it up via DependencySystem DI after logger is registered.
   sanitizer
 });
 
 /* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
 
 // ---------------------------------------------------------------------------
-// 6) Early app module (using factory)
+// 6) Early app module (using factory) — NO LOGGER YET
 // ---------------------------------------------------------------------------
-const appModule = createAppStateManager({ DependencySystem, logger });
+const appModule = createAppStateManager({ DependencySystem /* logger registered later */ });
 DependencySystem.register('appModule', appModule);
 
 // ---------------------------------------------------------------------------
@@ -148,8 +148,8 @@ const eventHandlers = createEventHandlers({
   domAPI,
   browserService: browserServiceInstance,
   APP_CONFIG,
-  logger,
-  errorReporter: createErrorReporterStub({ logger }),
+  // logger registered later via DependencySystem
+  errorReporter: createErrorReporterStub({ /* logger registered later */ }),
   sanitizer,
   app,
   projectManager: null,
@@ -164,8 +164,8 @@ const domReadinessService = createDomReadinessService({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
-  eventHandlers,
-  logger
+  eventHandlers
+  // logger registered later via DependencySystem
 });
 DependencySystem.register('domReadinessService', domReadinessService);
 

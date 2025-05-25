@@ -333,11 +333,11 @@ class ModalManager {
           context: 'modalManager.init:waitForModalsLoaded'
         });
 
-        if (!modalsLoadedEventData?.detail?.success && !modalsLoadedEventData?.detail?.synthetic) {
+        if (!modalsLoadedEventData?.detail?.success) { // Removed: && !modalsLoadedEventData?.detail?.synthetic
           const errorMsg = modalsLoadedEventData?.detail?.error || 'modalsLoaded event reported failure or missing success flag';
           this.logger.error?.(`[ModalManager] init: 'modalsLoaded' event indicated failure. Error: ${errorMsg}`, { eventDetail: modalsLoadedEventData?.detail });
-          // Don't throw error - continue with fallback initialization
-          this.logger.warn?.(`[ModalManager] init: Continuing initialization despite modalsLoaded failure to prevent app startup blockage`);
+          // FAIL HARD: Throw an error if modalsLoaded event indicates failure.
+          throw new Error(`[ModalManager] Modals failed to load: ${errorMsg}`);
         }
         this.logger.info?.("[ModalManager] init: 'modalsLoaded' event received.", { synthetic: modalsLoadedEventData?.detail?.synthetic });
       } else {
