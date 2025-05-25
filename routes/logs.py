@@ -92,8 +92,8 @@ async def receive_logs(
         if level not in level_map:
             level = "info"
         ctx = log_entry.get("context", "client")
-        args = log_entry.get("args", [])
-        summary = args[0] if args else ""
+        payload_args = log_entry.get("args", [])
+        summary = payload_args[0] if payload_args else ""
         color = get_color_for_level(level)
         reset = Style.RESET_ALL if hasattr(Style, "RESET_ALL") else ""
 
@@ -149,6 +149,10 @@ async def receive_logs(
 
         # Add correlation/meta if present
         sanitized_entry = sanitize(log_entry)
+        # ---- prevent LogRecord key collision ----
+        original_args = sanitized_entry.pop("args", None)  # drop reserved key
+        if original_args is not None:
+            sanitized_entry["client_args"] = original_args  # keep a safe copy
         sanitized_entry["request_id"] = request.headers.get(
             "X-Request-ID"
         ) or log_entry.get("request_id")
@@ -215,7 +219,7 @@ async def receive_logs(
                     extra={
                         "browser": True,
                         "source": ctx,
-                        "args": args,
+                        "client_args": payload_args,
                         "raw": sanitized_entry,
                     },
                 )
