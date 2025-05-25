@@ -7,13 +7,12 @@ with advanced organization, filtering, and export capabilities.
 
 import logging
 import base64
-from typing import Dict, Any, List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, or_, func, select
 from models.artifact import Artifact
-from fastapi import HTTPException
 from models.user import User
 
 from services.project_service import validate_project_access, validate_resource_access
@@ -88,7 +87,7 @@ async def create_artifact(
         Created Artifact object
     """
     # ----- canonical access check -------------------------------------
-    user  = await db.get(User, user_id) if user_id is not None else None
+    user = await db.get(User, user_id) if user_id is not None else None
     project = await validate_project_access(
         project_id=project_id,
         user=user,

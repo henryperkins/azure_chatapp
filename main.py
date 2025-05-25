@@ -188,13 +188,16 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Suppress /api/log_notification and common vulnerability scan paths in access logs
+# Suppress noisy access logs
 # -----------------------------------------------------------------------------
+# Filters out:
+#   • Client log ingestion (/api/logs, /api/log_notification)
+#   • Common WordPress/PHP vulnerability scans
 class SuppressUnwantedLogsFilter(logging.Filter):
     def filter(self, record):
         msg = str(record.getMessage())
-        # Suppress any access log for /api/log_notification
-        if "/api/log_notification" in msg:
+        # Suppress any access log for log-ingestion endpoints
+        if any(path in msg for path in ("/api/log_notification", "/api/logs")):
             return False
 
         # Suppress common WordPress/PHP vulnerability scan paths

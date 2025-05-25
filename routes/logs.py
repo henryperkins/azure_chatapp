@@ -1,18 +1,18 @@
 from fastapi import APIRouter, Request, Response, status, Depends
-import sys
 import json
 import os
 import re
 import time
 import logging
+from typing import Optional, Literal, cast
 from pydantic import BaseModel, ValidationError
 from utils.sentry_utils import capture_custom_message
 from utils.auth_utils import get_current_user
 from models.user import User
-from config import settings     # NEW
+from config import settings  # NEW
 
 import aiofiles
-from aiofiles import os as aioos     # ← ADD
+from aiofiles import os as aioos  # ← ADD
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -21,9 +21,8 @@ limiter = Limiter(key_func=get_remote_address)
 
 # -------- client-log rate limit ------------------------------------------
 _DEFAULT_RATE = "100/minute"
-LOGS_RATE_LIMIT = (
-    getattr(settings, "CLIENT_LOG_RATE_LIMIT", None)
-    or ("1000/minute" if getattr(settings, "DEBUG", False) else _DEFAULT_RATE)
+LOGS_RATE_LIMIT = getattr(settings, "CLIENT_LOG_RATE_LIMIT", None) or (
+    "1000/minute" if getattr(settings, "DEBUG", False) else _DEFAULT_RATE
 )
 
 # Add colorama and initialize (safe even if multiple imports)
@@ -46,11 +45,27 @@ except ImportError:
     Style = StyleDummy()
 
 logger = logging.getLogger("api.logs")
+
+# ---------------------------------------------------------------------------
+# Duplicate-error suppression (in-memory, process-wide)
+# Keeps last timestamp for each ERROR/CRITICAL message and skips console output
+# if the *identical* message reappears within SUPPRESS_WINDOW seconds.
+# Still archived to JSONL file so nothing is lost.
+# ---------------------------------------------------------------------------
+_SUPPRESS_WINDOW = int(os.getenv("CLIENT_LOG_ERR_WINDOW", "30"))
+_error_cache: dict[str, float] = {}
 level_map = {
-    "debug": logging.DEBUG, "info": logging.INFO, "log": logging.INFO,
-    "warn": logging.WARNING, "warning": logging.WARNING,
-    "error": logging.ERROR, "critical": logging.CRITICAL, "fatal": logging.CRITICAL,
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "log": logging.INFO,
+    "warn": logging.WARNING,
+    "warning": logging.WARNING,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+    "fatal": logging.CRITICAL,
 }
+
+
 class ClientLog(BaseModel):
     level: str = "info"
     context: str = "client"
@@ -60,7 +75,22 @@ class ClientLog(BaseModel):
     session_id: str | None = None
     trace_id: str | None = None  # ← NEW
 
+
 router = APIRouter()
+
+
+# Optional authentication dependency for logging endpoint
+async def get_current_user_optional(request: Request) -> Optional[User]:
+    """
+    Optional authentication dependency that returns None if user is not authenticated
+    instead of raising an exception. This allows the logs endpoint to work for both
+    authenticated and unauthenticated users.
+    """
+    try:
+        return await get_current_user(request)
+    except Exception:
+        # User is not authenticated, return None
+        return None
 
 
 def get_color_for_level(level: str):
@@ -77,18 +107,21 @@ def get_color_for_level(level: str):
 
 
 @router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit(LOGS_RATE_LIMIT)        # uses dynamic value
+@limiter.limit(LOGS_RATE_LIMIT, exempt_when=lambda: settings.DEBUG)  # Disable rate limit entirely when DEBUG=True
 async def receive_logs(
-    request: Request, current_user: User = Depends(get_current_user)
+    request: Request, current_user: Optional[User] = Depends(get_current_user_optional)
 ):
     try:
         try:
-            log_entry = ClientLog(**(await request.json())).dict()
+            log_entry = ClientLog(**(await request.json())).model_dump()
         except ValidationError as ve:
             logger.warning("Bad client-log payload", extra={"errors": ve.errors()})
             return Response(status_code=400)
 
+        # Normalize log level
         level = str(log_entry.get("level", "info")).lower()
+        if level == "warn":  # unify non-standard alias early
+            level = "warning"
         if level not in level_map:
             level = "info"
         ctx = log_entry.get("context", "client")
@@ -157,10 +190,9 @@ async def receive_logs(
             "X-Request-ID"
         ) or log_entry.get("request_id")
         sanitized_entry["session_id"] = log_entry.get("session_id")
-        sanitized_entry["trace_id"] = (
-            request.headers.get("X-Trace-ID")
-            or log_entry.get("trace_id")
-        )
+        sanitized_entry["trace_id"] = request.headers.get(
+            "X-Trace-ID"
+        ) or log_entry.get("trace_id")
 
         # ---------------------------------------------------------------
         # Strip logging-reserved keys so logger.log(extra=…) never fails
@@ -175,22 +207,36 @@ async def receive_logs(
         if os.path.exists(log_path) and os.path.getsize(log_path) > max_bytes:
             ts = time.strftime("%Y%m%d-%H%M%S")
             rotated = f"client_logs_{ts}.jsonl"
-            await aioos.rename(log_path, rotated)     # ← REPLACE
+            await aioos.rename(log_path, rotated)  # ← REPLACE
 
         # Terminal echo for all client levels ≥ INFO
         # (includes 'log', which we map to INFO)
-        if level in (
-            "info", "log",
-            "warn", "warning",
-            "error", "critical", "fatal"
-        ):
-            lvl_num   = level_map.get(level, logging.INFO)
+        if level in ("info", "log", "warn", "warning", "error", "critical", "fatal"):
+            lvl_num = level_map.get(level, logging.INFO)
             summary_c = f"{color}{summary}{reset}"
 
-            # Remove keys that collide with built-in LogRecord attributes
-            extra_for_logger = {k: v for k, v in sanitized_entry.items() if k not in reserved}
+            # Skip repetitive low-signal diagnostic noise
+            # e.g. "[DIAGNOSTIC][auth.js][getCSRFToken] …"
+            if lvl_num == logging.INFO and "diagnostic" in ctx.lower():
+                # Still write to JSONL file, but do not spam server console
+                sanitized_entry["skipped_console"] = True
+            else:
+                # Remove keys that collide with built-in LogRecord attributes
+                extra_for_logger = {
+                    k: v for k, v in sanitized_entry.items() if k not in reserved
+                }
 
-            logger.log(lvl_num, summary_c, extra=extra_for_logger)
+                # Duplicate-error suppression ────────────────────────────────
+                if lvl_num >= logging.ERROR:
+                    now_ts = time.time()
+                    last_ts = _error_cache.get(summary)
+                    _error_cache[summary] = now_ts  # always update
+                    if last_ts and now_ts - last_ts < _SUPPRESS_WINDOW:
+                        sanitized_entry["skipped_console"] = True
+                    else:
+                        logger.log(lvl_num, summary_c, extra=extra_for_logger)
+                else:
+                    logger.log(lvl_num, summary_c, extra=extra_for_logger)
 
         # --- Async write to log file ---
         try:
@@ -207,20 +253,26 @@ async def receive_logs(
         # Integration: Forward client log to Sentry as a message (retaining details)
         try:
             msg = f"[{ctx}] {level.upper()}: {summary}"
-            if level == "warn":
-                level = "warning"
-            if level in ("warning", "warn", "error", "critical", "fatal"):
+            # Determine final sentry level (Literal for static type checkers)
+            send_level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = (
+                cast(
+                    Literal["fatal", "critical", "error", "warning", "info", "debug"],
+                    level if level in ("fatal", "critical", "error", "warning", "info", "debug") else "info",
+                )
+            )
+            if send_level in ("warning", "error", "critical", "fatal"):
                 # Set Sentry tags for correlation
                 import sentry_sdk
 
                 with sentry_sdk.configure_scope() as scope:
                     scope.set_tag("session_id", sanitized_entry.get("session_id"))
                     scope.set_tag("request_id", sanitized_entry.get("request_id"))
-                    scope.set_tag("trace_id"  , sanitized_entry.get("trace_id"))  # NEW
+                    scope.set_tag("trace_id", sanitized_entry.get("trace_id"))  # NEW
 
+                # Use validated Literal type for Sentry message level
                 capture_custom_message(
                     message=msg,
-                    level=level,
+                    level=send_level,  # type: ignore[arg-type] – casted Literal safe for runtime but static checker complains
                     extra={
                         "browser": True,
                         "source": ctx,
@@ -229,7 +281,9 @@ async def receive_logs(
                     },
                 )
         except Exception as sentry_exc:
-            logger.error("Failed to forward log to Sentry", extra={"error": str(sentry_exc)})
+            logger.error(
+                "Failed to forward log to Sentry", extra={"error": str(sentry_exc)}
+            )
 
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as e:

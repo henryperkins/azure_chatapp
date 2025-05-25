@@ -890,9 +890,6 @@ async def process_files_for_project(
 
     return results
 
-
-
-
 async def get_vector_db(
     model_name: str, storage_path: str, load_existing: bool = True
 ) -> VectorDB:

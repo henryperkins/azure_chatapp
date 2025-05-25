@@ -46,19 +46,17 @@ from sqlalchemy.exc import SQLAlchemyError
 from functools import wraps
 from db import get_async_session_context
 
-from sqlalchemy import select, func
+from sqlalchemy import select
 from utils.serializers import (
     serialize_knowledge_base,
-    serialize_project_file,
 )
 
 from models.project_file import ProjectFile
 from models.project import Project
 from models.knowledge_base import KnowledgeBase
 from models.user import User
-from services.vector_db import VectorDB, process_file_for_search, get_vector_db
+from services.vector_db import VectorDB, process_file_for_search
 from services.github_service import GitHubService
-from utils.file_validation import FileValidator, sanitize_filename
 from utils.db_utils import get_by_id, save_model
 from utils.serializers import serialize_vector_result
 

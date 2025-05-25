@@ -9,7 +9,7 @@ We now clarify:
 """
 
 from uuid import UUID
-from typing import Optional, Any, List, Type, Union  # Added Union to imports
+from typing import Optional, Any, Type, Union  # Added Union to imports
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
