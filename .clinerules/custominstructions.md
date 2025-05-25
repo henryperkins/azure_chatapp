@@ -2,7 +2,7 @@
 
 ## 🚨 CRITICAL RULES
 1. **NO NEW MODULES** - Work within existing module structure only
-2. **Modules < 600 lines** - Split if approaching limit
+2. **Modules < 1000 lines** - Split if approaching limit
 3. **Single Source of Truth** - No duplicate implementations
 
 ## Frontend Architecture

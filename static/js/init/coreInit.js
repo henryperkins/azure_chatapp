@@ -231,6 +231,13 @@ export function createCoreInitializer({
       logger
     });
     const projectManager = pmFactory.instance;
+
+    // Ensure projectManager is explicitly registered in DependencySystem
+    if (!DependencySystem.modules.has('projectManager')) {
+      DependencySystem.register('projectManager', projectManager);
+      logger.log('[coreInit] projectManager explicitly registered in DependencySystem', { context: 'coreInit' });
+    }
+
     eventHandlers.setProjectManager?.(projectManager);
 
     // Update components with projectManager reference
@@ -278,11 +285,29 @@ export function createCoreInitializer({
     DependencySystem.register('projectDashboard', projectDashboard);
 
     // 10. Project modal
+    const registeredProjectManager = DependencySystem.modules.get('projectManager');
+    if (!registeredProjectManager) {
+      logger.error('[coreInit] projectManager not found in DependencySystem', {
+        context: 'coreInit',
+        availableModules: Array.from(DependencySystem.modules.keys())
+      });
+      throw new Error('[coreInit] projectManager must be registered before creating projectModal');
+    }
+
+    logger.log('[coreInit] Creating projectModal with all required dependencies', {
+      context: 'coreInit',
+      hasProjectManager: !!registeredProjectManager,
+      hasEventHandlers: !!eventHandlers,
+      hasDomAPI: !!domAPI,
+      hasDomReadinessService: !!domReadinessService
+    });
+
     const projectModal = createProjectModal({
-      DependencySystem,
+      projectManager: registeredProjectManager,
       eventHandlers,
+      DependencySystem,
       domAPI,
-      browserService,
+      domReadinessService,
       domPurify: sanitizer
     });
     DependencySystem.register('projectModal', projectModal);

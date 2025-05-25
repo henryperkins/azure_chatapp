@@ -1108,7 +1108,7 @@ export function createProjectDashboard(deps) {
       }
     }
   } catch (err) {
-    logger.warn('[ProjectDashboard] Unable to fire-and-forget details template load', err, { context: 'projectDashboard' });
+    logger.error('[ProjectDashboard] Unable to fire-and-forget details template load', err, { context: 'projectDashboard' });
   }
 
   // ==== Speculative/Eager Project List Template Loading (wait for container) ====
@@ -1139,7 +1139,7 @@ export function createProjectDashboard(deps) {
       }
     }
   } catch (err) {
-    logger.warn(
+    logger.error(
       '[ProjectDashboard] Unable to fire-and-forget list template load',
       err,
       { context: 'projectDashboard' }
