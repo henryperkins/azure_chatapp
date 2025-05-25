@@ -28,6 +28,7 @@ import { createUIInitializer } from './init/uiInit.js';
 import { createAuthInitializer } from './init/authInit.js';
 import { createAppStateManager } from './init/appState.js';
 import { createErrorInitializer } from './init/errorInit.js';
+import { safeInit } from './utils/initHelpers.js';
 
 import {
   shouldSkipDedup,
@@ -88,15 +89,18 @@ if (!DependencySystem?.modules?.get) {
 }
 
 // --- 1) Early real logger --------------------------------------------------
+// We want early-phase diagnostics to reach the backend as soon as possible.
+// Therefore server logging is enabled from the start **but** we mark the
+// logger as `allowUnauthenticated` so POSTs are allowed before auth/CSRF.
 const loggerInstance = createLogger({
-  endpoint        : APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
-  // Start with local-only logging; authInit will enable the remote sink
-  enableServer    : false,
-  debug           : APP_CONFIG.DEBUG === true,
-  minLevel        : APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
-  consoleEnabled  : APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
-  browserService  : browserServiceInstance,
-  sessionIdProvider : getSessionId
+  endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
+  enableServer: true,                 // remote sink active immediately
+  allowUnauthenticated: true,            // permit unauthenticated POSTs
+  debug: APP_CONFIG.DEBUG === true,
+  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
+  consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
+  browserService: browserServiceInstance,
+  sessionIdProvider: getSessionId
 });
 DependencySystem.register('logger', loggerInstance);
 const logger = loggerInstance;
@@ -110,8 +114,8 @@ function safeHandler(handler, description = 'safeHandler') {
     try { return handler(...args); }
     catch (err) {
       log?.error?.(`[safeHandler][${description}]`,
-                   err?.stack || err,
-                   { context: description });
+        err?.stack || err,
+        { context: description });
       throw err;
     }
   };
@@ -132,10 +136,10 @@ DependencySystem.register('domPurify', sanitizer);  // legacy alias
 
 // ──  now it is safe to create domAPI  ────────────────────────────
 const domAPI = createDomAPI({
-  documentObject : browserAPI.getDocument(),
-  windowObject   : browserAPI.getWindow(),
-  debug          : APP_CONFIG.DEBUG === true,
-  logger         : logger,
+  documentObject: browserAPI.getDocument(),
+  windowObject: browserAPI.getWindow(),
+  debug: APP_CONFIG.DEBUG === true,
+  logger: logger,
   sanitizer
 });
 
@@ -324,9 +328,8 @@ Object.defineProperty(app, 'isInitializing', {
   configurable: true
 });
 
-// Force currentUser to null in DI
-DependencySystem.register('currentUser', null);
-
+// `currentUser` is accessible exclusively via `appModule.state.currentUser`.
+// No separate DI registration is required (avoids duplicate sources of truth).
 
 
 // ---------------------------------------------------------------------------
@@ -571,8 +574,16 @@ export async function init() {
   }
 
   try {
-    // Modal loading is now handled by coreInit and modalManager
-    // This eliminates duplication and centralizes modal management
+    // 0) Initialize error handling first (after DOM/event infrastructure is ready)
+    logStep('initializeErrorHandling', 'pre');
+    try {
+      errorInit.initializeErrorHandling();
+      logger.info('[App.init] Error handling initialization completed', { context: 'app:init:errorHandling' });
+    } catch (err) {
+      logger.error('[App.init] Error handling initialization failed', err, { context: 'app:init:errorHandling' });
+      // Continue with init even if error handling setup fails
+    }
+    logStep('initializeErrorHandling', 'post');
 
     // 1) Initialize core systems using factory
     logStep('initializeCoreSystems', 'pre');
@@ -597,10 +608,17 @@ export async function init() {
     });
     logStep('depsReady', 'post');
 
-    // 3) Initialize auth system
+    // 3) Initialize auth system with safeHandler wrapper and timeout cleanup
     logStep('initializeAuthSystem', 'pre');
+
+    // Wrap auth bus listeners in safeHandler
+    const safeAuthInit = safeHandler(
+      () => authInit.initializeAuthSystem(),
+      'authInit.initializeAuthSystem'
+    );
+
     await Promise.race([
-      authInit.initializeAuthSystem(),
+      safeAuthInit(),
       new Promise((_, reject) =>
         browserAPI.getWindow().setTimeout(
           () => reject(new Error('Timeout in initializeAuthSystem')),
@@ -622,9 +640,6 @@ export async function init() {
         logger.info('[App.init] Logger upgraded with API client for CSRF support', { context: 'app:init:logger' });
       }
     }
-
-    // Early app:ready dispatch: emits right after auth is ready (guaranteed single-fire)
-    if (!_appReadyDispatched) fireAppReady(true);
 
     // 4) If authenticated, fetch current user via auth module
     logStep('fetchCurrentUser', 'pre', { authed: !!appModule.state.isAuthenticated });
@@ -650,7 +665,7 @@ export async function init() {
     }
     logStep('fetchCurrentUser', 'post');
 
-    // 5) Initialize UI components using factory (modals already loaded in step 0.5)
+    // 5) Initialize UI components using factory (ensures UI is ready before auth state callbacks)
     logStep('initializeUIComponents', 'pre');
     await Promise.race([
       uiInit.initializeUIComponents(),
@@ -750,7 +765,6 @@ export async function init() {
         const authModule = DependencySystem.modules.get('auth');
         const state = {
           appState: appModule?.state,
-          // CONSOLIDATED: No separate authState - all auth info is in appState
           authInfo: {
             isAuthenticated: authModule?.isAuthenticated?.(),
             currentUser: authModule?.getCurrentUserObject?.()
@@ -783,9 +797,6 @@ export async function init() {
 // Auto-bootstrap when running in browser
 // ---------------------------------------------------------------------------
 if (typeof window !== 'undefined') {
-  // Setup global error handling using errorInit module
-  errorInit.initializeErrorHandling();
-
   // ---------------------------------------------------------------------
   // 🚀 Auto-bootstrap the application
   // ---------------------------------------------------------------------
@@ -814,3 +825,4 @@ if (typeof window !== 'undefined') {
     }
   })();
 }
+

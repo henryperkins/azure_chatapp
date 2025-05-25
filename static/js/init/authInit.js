@@ -43,19 +43,19 @@ export function createAuthInitializer({
       eventHandlers.trackListener(
         auth.AuthBus,
         'authStateChanged',
-        (event) => {
+        safeHandler((event) => {
           logger.info('[authInit][AuthBus] Received authStateChanged', event?.detail, { context: 'authInit:authStateChanged' });
           handleAuthStateChange(event);
-        },
+        }, 'AuthBus authStateChanged handler'),
         { description: '[authInit] AuthBus authStateChanged', context: 'authInit' }
       );
       eventHandlers.trackListener(
         auth.AuthBus,
         'authReady',
-        (event) => {
+        safeHandler((event) => {
           logger.info('[authInit][AuthBus] Received authReady', event?.detail, { context: 'authInit:authReady' });
           handleAuthStateChange(event);
-        },
+        }, 'AuthBus authReady handler'),
         { description: '[authInit] AuthBus authReady', context: 'authInit' }
       );
     } else {
@@ -254,8 +254,8 @@ export function createAuthInitializer({
       if (modalManager && typeof modalManager.show === 'function') {
         modalManager.show('login');
       } else {
-        // Fallback: try the native dialog element directly
-        const doc = DependencySystem.modules.get('domAPI')?.getDocument?.();
+        // Fallback: try the native dialog element directly using injected domAPI
+        const doc = domAPI.getDocument();
         const loginDlg = doc?.getElementById('loginModal');
         if (loginDlg) domAPI.callMethod(loginDlg, 'showModal');
       }
