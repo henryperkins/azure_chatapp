@@ -161,6 +161,37 @@ class CustomJsonFormatter(logging.Formatter):
 
         return json.dumps(log_record)
 
+# ─── NEW: human-readable, colourised console formatter ────────────────
+try:
+    from colorama import init as _c_init, Fore, Style     # optional
+    _c_init()                                             # safe if re-called
+except ImportError:                                       # graceful fallback
+    class _Dummy: RESET_ALL = ""
+    class Fore:  RED=YELLOW=CYAN=GREEN=MAGENTA=RESET=""   # type: ignore
+    class Style: BRIGHT=NORMAL=DIM=""                     # type: ignore
+
+class ColoredTextFormatter(logging.Formatter):
+    _LEVEL_COLOURS = {
+        logging.DEBUG   : Fore.CYAN,
+        logging.INFO    : Fore.GREEN,
+        logging.WARNING : Fore.YELLOW + Style.BRIGHT,
+        logging.ERROR   : Fore.RED + Style.BRIGHT,
+        logging.CRITICAL: Fore.MAGENTA + Style.BRIGHT,
+    }
+    RESET = Style.RESET_ALL if hasattr(Style, "RESET_ALL") else ""
+
+    def format(self, record: logging.LogRecord) -> str:
+        ts   = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created))
+        lvl  = record.levelname
+        colour = self._LEVEL_COLOURS.get(record.levelno, "")
+        msg  = record.getMessage()
+        rid  = getattr(record, "request_id", "") or ""
+        tid  = getattr(record, "trace_id",   "") or ""
+        parts = [ts, f"{colour}{lvl}{self.RESET}", record.name + ":", msg]
+        if rid: parts.append(f"req={rid}")
+        if tid: parts.append(f"trace={tid}")
+        return " ".join(parts)
+
 
 def _cycle_level(root: logging.Logger) -> None:
     """
@@ -224,34 +255,30 @@ def init_structured_logging():
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
 
-    # Create a stream handler for stdout
-    stream_handler = logging.StreamHandler(sys.stdout)
-
     # Add all filters in order
     context_filter = ContextFilter()
     rate_limiting_filter = RateLimitingFilter()
     sensitive_data_filter = SensitiveDataFilter()
 
+    # 2️⃣ CONSOLE handler → coloured text
+    stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.addFilter(context_filter)
     stream_handler.addFilter(rate_limiting_filter)
     stream_handler.addFilter(sensitive_data_filter)
-
-    # Create and set the custom JSON formatter
-    formatter = CustomJsonFormatter(
-        "%(timestamp)s %(level)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s %(request_id)s %(trace_id)s"
-    )
-    stream_handler.setFormatter(formatter)
-
-    # Add the handler to the root logger
+    stream_handler.setFormatter(ColoredTextFormatter())
     root_logger.addHandler(stream_handler)
 
-    # Optional rotating file sink
+    # 3️⃣ FILE handler (optional) → JSON
     log_file = os.getenv("LOG_FILE")
     if log_file:
         from logging.handlers import RotatingFileHandler
         fh = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3)
-        fh.setFormatter(formatter)
-        fh.addFilter(context_filter); fh.addFilter(rate_limiting_filter); fh.addFilter(sensitive_data_filter)
+        fh.setFormatter(CustomJsonFormatter(
+            "%(timestamp)s %(level)s %(name)s %(module)s %(funcName)s %(lineno)d %(message)s %(request_id)s %(trace_id)s"
+        ))
+        fh.addFilter(context_filter)
+        fh.addFilter(rate_limiting_filter)
+        fh.addFilter(sensitive_data_filter)
         root_logger.addHandler(fh)
 
     # Set up signal handler for runtime log level cycling (SIGUSR2)
