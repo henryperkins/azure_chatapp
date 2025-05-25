@@ -56,7 +56,7 @@ export function createServiceInitializer({
   function registerBasicServices() {
     try {
       // PHASE 1: Register the DI-provided logger per .clinerules
-      safeRegister('logger', logger);
+      if (logger) safeRegister('logger', logger);
 
       // Register core browser and DOM services
       safeRegister('domAPI', domAPI);
