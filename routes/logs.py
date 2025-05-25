@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 from utils.sentry_utils import capture_custom_message
 from utils.auth_utils import get_current_user
 from models.user import User
+from config import settings     # NEW
 
 import aiofiles
 from aiofiles import os as aioos     # ← ADD
@@ -17,6 +18,13 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 limiter = Limiter(key_func=get_remote_address)
+
+# -------- client-log rate limit ------------------------------------------
+_DEFAULT_RATE = "100/minute"
+LOGS_RATE_LIMIT = (
+    getattr(settings, "CLIENT_LOG_RATE_LIMIT", None)
+    or ("1000/minute" if getattr(settings, "DEBUG", False) else _DEFAULT_RATE)
+)
 
 # Add colorama and initialize (safe even if multiple imports)
 try:
@@ -69,7 +77,7 @@ def get_color_for_level(level: str):
 
 
 @router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit("100/minute")
+@limiter.limit(LOGS_RATE_LIMIT)        # uses dynamic value
 async def receive_logs(
     request: Request, current_user: User = Depends(get_current_user)
 ):
