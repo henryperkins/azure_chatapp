@@ -116,6 +116,11 @@ export function createErrorInitializer({
   return {
     setupGlobalErrorHandling,
     setupSpecificErrorHandlers,
-    initializeErrorHandling
+    initializeErrorHandling,
+    cleanup() {
+      // Cleanup error handling event listeners
+      eventHandlers.cleanupListeners({ context: 'errorInit' });
+      logger.debug('[errorInit] Cleanup completed', { context: 'errorInit:cleanup' });
+    }
   };
 }

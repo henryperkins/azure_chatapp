@@ -120,7 +120,7 @@ export function createDomAPI({
         el.innerHTML = sanitizer.sanitize(html);
       } else {
         // SECURITY WARNING: Setting innerHTML without a sanitizer is dangerous!
-        _logger.warn('[domAPI] setInnerHTML called without sanitizer (auto-escaped)');
+        _logger.warn('[domAPI] setInnerHTML called without sanitizer (auto-escaped)', { context: 'domAPI:setInnerHTML' });
         // Basic escape to avoid XSS when sanitizer missing
         el.textContent = String(html).replace(/<[^>]*>?/gm, '');
       }
@@ -139,7 +139,7 @@ export function createDomAPI({
       (windowObject?.getComputedStyle)
         ? windowObject.getComputedStyle(el)
         : (() => {
-            _logger.warn('[domAPI] getComputedStyle fallback returned stub');
+            _logger.warn('[domAPI] getComputedStyle fallback returned stub', { context: 'domAPI:getComputedStyle' });
             return { visibility: '', display: '' };
           })(),
 
@@ -180,8 +180,8 @@ export function createDomAPI({
       while (node && node.nodeType === 1) {
         try {
           if (matches.call(node, selector)) return node;
-        } catch {
-          /* intentionally ignored */ void 0;
+        } catch (err) {
+          _logger.warn('[domAPI] closest selector match failed', { error: err.message, selector, context: 'domAPI:closest' });
         }
         node = node.parentElement || node.parentNode;
       }
@@ -281,8 +281,8 @@ export function createDomAPI({
       try {
         if (prop in el)           el[prop] = value;         // preferencia a propiedad DOM
         else                      el.setAttribute(prop, value); // fallback atributo
-      } catch {
-        /* intentionally ignored */ void 0;
+      } catch (err) {
+        _logger.warn('[domAPI] setProperty failed', { error: err.message, prop, context: 'domAPI:setProperty' });
       }
     },
 
@@ -419,7 +419,13 @@ export function createDomAPI({
        – add the missing remove variant if not present */
 
     /* selection helpers required by copy-to-clipboard code */
-    selectElement  : (el)        => { try { el?.select?.(); } catch { } },
+    selectElement  : (el)        => {
+      try {
+        el?.select?.();
+      } catch (err) {
+        _logger.warn('[domAPI] selectElement failed', { error: err.message, context: 'domAPI:selectElement' });
+      }
+    },
 
     /* parent / insertion helpers used by chat UI modules */
     getParentNode  : (el)        => el?.parentNode ?? null,

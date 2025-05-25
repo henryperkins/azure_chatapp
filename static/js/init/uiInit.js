@@ -112,7 +112,7 @@ export function createUIInitializer({
       ]);
       return true;
     } catch (err) {
-      logger.warn(`[${context}] ModalManager not ready after ${timeout}ms – continuing`, { context, error: err.message });
+      logger.error(`[${context}] ModalManager not ready after ${timeout}ms – continuing`, err, { context });
       return false;
     }
   }
@@ -173,8 +173,7 @@ export function createUIInitializer({
         });
         DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
       } catch (err) {
-        logger.warn('[UIInit] KnowledgeBaseComponent creation failed; falling back to placeholder.', { context: 'uiInit:createAndRegisterUIComponents', error: err?.message });
-        logger.error('[UIInit] KnowledgeBaseComponent creation failed', err, { context: 'uiInit:createAndRegisterUIComponents:KnowledgeBaseComponent' });
+        logger.error('[UIInit] KnowledgeBaseComponent creation failed; falling back to placeholder.', err, { context: 'uiInit:createAndRegisterUIComponents' });
         throw err;
       }
     }
@@ -382,6 +381,11 @@ export function createUIInitializer({
   return {
     initializeUIComponents,
     waitForModalReadinessWithTimeout,
-    registerNavigationViews
+    registerNavigationViews,
+    cleanup() {
+      // Cleanup any event listeners registered during UI initialization
+      eventHandlers.cleanupListeners({ context: 'uiInit' });
+      logger.debug('[uiInit] Cleanup completed', { context: 'uiInit:cleanup' });
+    }
   };
 }

@@ -19,8 +19,16 @@ export function createApiClient({
   APP_CONFIG,
   globalUtils,
   getAuthModule,
-  browserService
+  browserService,
+  logger
 }) {
+  // Dependency validation (MANDATORY for factories)
+  if (!APP_CONFIG) throw new Error('[apiClient] Missing APP_CONFIG dependency');
+  if (!globalUtils) throw new Error('[apiClient] Missing globalUtils dependency');
+  if (!getAuthModule) throw new Error('[apiClient] Missing getAuthModule dependency');
+  if (!browserService) throw new Error('[apiClient] Missing browserService dependency');
+  if (!logger) throw new Error('[apiClient] Missing logger dependency');
+
   const pending = new Map();
   const BASE_URL = APP_CONFIG?.BASE_API_URL || '';
 
@@ -49,6 +57,7 @@ export function createApiClient({
     try {
       normUrl = globalUtils.normaliseUrl(fullUrl);
     } catch (err) {
+      logger.error('[apiClient] URL normalization failed', err, { context: 'apiClient:normaliseUrl', url: fullUrl });
       normUrl = fullUrl; // Fallback to fullUrl if normalization fails
     }
 
@@ -83,6 +92,7 @@ export function createApiClient({
         try {
           restOpts.body = JSON.stringify(restOpts.body);
         } catch (err) {
+          logger.error('[apiClient] Failed to serialize request body.', err, { context: 'apiClient:jsonStringify', url: normUrl });
           return Promise.reject(new Error("Failed to serialize request body."));
         }
       }
@@ -101,31 +111,41 @@ export function createApiClient({
     );
 
     const p = (async () => {
+      let resp;
+      let payload = null;
+      let contentType = '';
       try {
         if (!browserService?.fetch) throw new Error('[apiClient] browserService.fetch unavailable');
-        const resp = await browserService.fetch(normUrl, restOpts);
+        resp = await browserService.fetch(normUrl, restOpts);
 
         // ---------- NEW unified response handling ----------
-        const contentType = resp.headers.get('content-type') || '';
-        let payload = null;
+        contentType = resp.headers.get('content-type') || '';
 
-        if (resp.status !== 204) {                // 204 = No-Content
+        if (resp.status !== 204) { // 204 = No-Content
           if (contentType.includes('application/json')) {
-            try { payload = await resp.json(); } catch { payload = null; }
+            try { payload = await resp.json(); }
+            catch (err) {
+              logger.error('[apiClient] JSON parse error in API response', err, { context: 'apiClient:jsonParse', url: normUrl, status: resp.status });
+              payload = null;
+            }
           } else {
-            try { payload = await resp.text(); } catch { payload = null; }
+            try { payload = await resp.text(); }
+            catch (err) {
+              logger.error('[apiClient] Text parse error in API response', err, { context: 'apiClient:textParse', url: normUrl, status: resp.status });
+              payload = null;
+            }
           }
         }
 
-        if (resp.ok) {                     // 2xx
+        if (resp.ok) { // 2xx
           if (returnFullResponse) {
             return {
-              data   : payload,                       // may be null
-              status : resp.status,
+              data: payload,
+              status: resp.status,
               headers: Object.fromEntries(resp.headers.entries())
             };
           }
-          return payload;                  // <- what callers will receive
+          return payload;
         }
 
         // ----- non-OK: throw rich error object -----
@@ -138,8 +158,12 @@ export function createApiClient({
 
         const err = new Error(humanMsg);
         err.status = resp.status;
-        err.data   = payload;          // keep full payload for callers
+        err.data = payload;
+        logger.error('[apiClient] API response not OK', err, { context: 'apiClient:apiError', url: normUrl, status: resp.status, payload });
         throw err;
+      } catch (outerErr) {
+        logger.error('[apiClient] Unexpected API error', outerErr, { context: 'apiClient:outerCatch', url: normUrl, method, opts: restOpts });
+        throw outerErr;
       } finally {
         browserService.clearTimeout(timer);
         if (method === "GET") pending.delete(key);
@@ -157,5 +181,14 @@ export function createApiClient({
     mainApiRequest(url, { ...opts, method: 'GET',  params }, skip);
 
   mainApiRequest.fetch = mainApiRequest; // Expose the main function as .fetch
-  return mainApiRequest;
+
+  // Expose cleanup
+  const cleanup = () => pending.clear();
+
+  return {
+    fetch: mainApiRequest,
+    get: mainApiRequest.get,
+    post: mainApiRequest.post,
+    cleanup
+  };
 }
