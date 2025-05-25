@@ -45,7 +45,6 @@ export function createChatManager(deps = {}) {
     modelConfig,
     projectDetailsComponent,
     isValidProjectId,
-    isAuthenticated,
     domAPI,
     navAPI,
     DOMPurify,
@@ -72,7 +71,6 @@ export function createChatManager(deps = {}) {
   if (!apiRequest) throw new Error('Missing apiRequest in createChatManager');
   if (!app) throw new Error('Missing app in createChatManager');
   if (!isValidProjectId) throw new Error('Missing isValidProjectId in createChatManager');
-  if (!isAuthenticated) throw new Error('Missing isAuthenticated in createChatManager');
   if (!DOMPurify) throw new Error('Missing DOMPurify in createChatManager');
   if (!apiEndpoints) throw new Error('Missing apiEndpoints in createChatManager');
   if (!domReadinessService) throw new Error('Missing domReadinessService in createChatManager');
@@ -182,7 +180,6 @@ export function createChatManager(deps = {}) {
       this.eventHandlers = _EH;
       this.projectDetails = projectDetailsComponent;
       this.isValidProjectId = isValidProjectId;
-      this.isAuthenticated = isAuthenticated;
       this.DOMPurify = DOMPurify;
       this.chatBus = eventBusFactory();
       this.projectId = null;
@@ -565,9 +562,13 @@ export function createChatManager(deps = {}) {
         return false;
       }
 
-      if (!this.isAuthenticated()) {
-        logger.warn("[ChatManager][loadConversation] User not authenticated", { context: "chatManager" });
-        return false;
+      {
+        // Centralized canonical authentication check
+        const appModule = this.DependencySystem?.modules?.get('appModule');
+        if (!appModule?.state?.isAuthenticated) {
+          logger.warn("[ChatManager][loadConversation] User not authenticated", { context: "chatManager" });
+          return false;
+        }
       }
 
       // ENHANCED: Try to get project ID from multiple sources if not set
@@ -683,8 +684,12 @@ export function createChatManager(deps = {}) {
         this.projectId = this.isValidProjectId(overrideProjectId) ? overrideProjectId : this.projectId;
       }
 
-      if (!this.isAuthenticated()) {
-        throw new Error("Not authenticated");
+      {
+        // Centralized canonical authentication check
+        const appModule = this.DependencySystem?.modules?.get('appModule');
+        if (!appModule?.state?.isAuthenticated) {
+          throw new Error("Not authenticated");
+        }
       }
       if (!this.isValidProjectId(this.projectId)) {
         const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot create new conversation.`;
@@ -815,8 +820,12 @@ export function createChatManager(deps = {}) {
       }
 
       return this.messageQueue.add(async (abortSignal) => {
-        if (!this.isAuthenticated()) {
-          return;
+        {
+          // Centralized canonical authentication check
+          const appModule = this.DependencySystem?.modules?.get('appModule');
+          if (!appModule?.state?.isAuthenticated) {
+            return;
+          }
         }
         if (!this.isValidProjectId(this.projectId)) {
           const errorMsg = `No valid project ID (${this.projectId}). Select a project before sending messages.`;
@@ -976,8 +985,12 @@ export function createChatManager(deps = {}) {
       if (!this.currentConversationId) {
         return false;
       }
-      if (!this.isAuthenticated()) {
-        return false;
+      {
+        // Centralized canonical authentication check
+        const appModule = this.DependencySystem?.modules?.get('appModule');
+        if (!appModule?.state?.isAuthenticated) {
+          return false;
+        }
       }
       if (!this.isValidProjectId(this.projectId)) {
         const errorMsg = `Invalid or missing project ID (${this.projectId}). Cannot delete conversation.`;

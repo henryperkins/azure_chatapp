@@ -12,8 +12,18 @@
  */
 
 export function createAppStateManager({ DependencySystem, logger }) {
-  if (!DependencySystem || !logger) {
+  if (!DependencySystem) {
     throw new Error('[appState] Missing required dependencies for app state management.');
+  }
+  // Allow logger to be missing at first; fallback to window.console or a no-op.
+  if (!logger) {
+    logger = (typeof window !== 'undefined' && window.console) ? window.console : {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      log: () => {},
+    };
   }
 
   const appModule = {

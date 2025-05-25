@@ -36,9 +36,21 @@ export function createServiceInitializer({
 }) {
   if (
     !DependencySystem || !domAPI || !browserServiceInstance || !eventHandlers ||
-    !domReadinessService || !sanitizer || !APP_CONFIG || !logger || !getSessionId
+    !domReadinessService || !sanitizer || !APP_CONFIG || !getSessionId
   ) {
     throw new Error('[serviceInit] Missing required dependencies for service initialization.');
+  }
+  // Capture whether a real logger instance was provided by caller
+  const providedLogger = !!logger;
+  // Allow logger to be missing at first; fallback to window.console or a no-op.
+  if (!providedLogger) {
+    logger = (typeof window !== 'undefined' && window.console) ? window.console : {
+      info: () => {},
+      warn: () => {},
+      error: () => {},
+      debug: () => {},
+      log: () => {},
+    };
   }
 
   // Helper: register only if not already present
@@ -55,8 +67,8 @@ export function createServiceInitializer({
    */
   function registerBasicServices() {
     try {
-      // PHASE 1: Register the DI-provided logger per .clinerules
-      if (logger) safeRegister('logger', logger);
+      // PHASE 1: Register the real logger only if it was supplied externally.
+      if (providedLogger) safeRegister('logger', logger);
 
       // Register core browser and DOM services
       safeRegister('domAPI', domAPI);
@@ -234,9 +246,20 @@ export function createServiceInitializer({
     }
   }
 
+  /**
+   * setLogger – Inject a fully configured logger after initial bootstrap.
+   * Prevent duplicate-module errors by registering only once.
+   * @param {object} newLogger – fully initialized logger instance
+   */
+  function setLogger(newLogger) {
+    if (!newLogger) return;
+    logger = newLogger;
+    safeRegister('logger', newLogger);
+  }
   return {
     registerBasicServices,
     registerAdvancedServices,
+    setLogger,
     cleanup() {
       // Service registration doesn't create event listeners directly
       eventHandlers.cleanupListeners({ context: 'serviceInit' });

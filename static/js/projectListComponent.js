@@ -134,17 +134,9 @@ export function createProjectListComponent(deps) {
             logger.error('[ProjectListComponent] Failed to dispatch initialized event', err, { context: MODULE_CONTEXT });
         }
 
-        // CONSOLIDATED: Check initial authentication state from appModule.state
-        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
-        const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+        // Remove any local isAuthenticated flags, always use appModule.state.isAuthenticated or listen to auth.AuthBus
 
-        logger.debug('[ProjectListComponent][initialize] Checking initial auth state', {
-            isAuthenticated,
-            appModuleExists: !!appModule,
-            context: MODULE_CONTEXT
-        });
-
-        if (isAuthenticated) {
+        if (app?.DependencySystem?.modules?.get?.('appModule')?.state?.isAuthenticated) {
             _loadProjects();
         } else {
             _showLoginRequired();

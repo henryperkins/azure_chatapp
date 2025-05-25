@@ -252,23 +252,6 @@ export function createProjectManager({
       }
     }
 
-    _authOk(failEvent, extraDetail = {}) {
-      // CONSOLIDATED: Single source of truth - only check appModule.state
-      const appModule = this.DependencySystem?.modules?.get('appModule');
-      if (appModule?.state?.isAuthenticated) {
-        logger.debug(`[${MODULE}][_authOk] Auth check passed via appModule.state.`, { context: MODULE });
-        return true;
-      }
-      logger.warn(`[${MODULE}][_authOk] Auth check failed. Emitting ${failEvent}.`, { failEvent, extraDetail, context: MODULE });
-      this._emit(failEvent, { error: 'auth_required', ...extraDetail });
-      return false;
-    }
-
-    _handleErr(eventName, err, fallback, extra = {}) {
-      this._emit(eventName, { error: err?.message, ...extra });
-      return fallback;
-    }
-
     async loadProjects(filter = 'all') {
       if (this._loadProjectsDebounceTimer) {
         clearTimeout(this._loadProjectsDebounceTimer);
@@ -279,7 +262,7 @@ export function createProjectManager({
             resolve(this.projects || []);
             return;
           }
-          if (!this._authOk('projectsLoaded', { filter })) {
+          if (!this.app?.state?.isAuthenticated) {
             resolve([]);
             return;
           }
@@ -328,9 +311,6 @@ export function createProjectManager({
       }
       if (!this.app || !this.app.state || !this.app.state.currentUser) {
         this._emit('projectDetailsError', { error: 'User not authenticated', status: 403 });
-        return null;
-      }
-      if (!this._authOk('projectDetailsError', { id })) {
         return null;
       }
       let detailUrlTemplate;
@@ -526,7 +506,7 @@ export function createProjectManager({
     }
 
     async saveProject(id, payload) {
-      if (!this._authOk('projectSaveError', { id })) throw new Error('auth');
+      if (!this.app?.state?.isAuthenticated) throw new Error('auth');
       const isUpdate = Boolean(id);
       const url = isUpdate ? this._CONFIG.DETAIL.replace('{id}', id) : this._CONFIG.PROJECTS;
       const method = isUpdate ? 'PATCH' : 'POST';
@@ -546,7 +526,7 @@ export function createProjectManager({
     }
 
     async deleteProject(id) {
-      if (!this._authOk('projectDeleteError', { id })) throw new Error('auth');
+      if (!this.app?.state?.isAuthenticated) throw new Error('auth');
       try {
         await this._req(
           this._CONFIG.DETAIL.replace('{id}', id),
@@ -568,7 +548,7 @@ export function createProjectManager({
     }
 
     async toggleArchiveProject(id) {
-      if (!this._authOk('projectArchiveToggled', { id })) throw new Error('auth');
+      if (!this.app?.state?.isAuthenticated) throw new Error('auth');
       try {
         const res = await this._req(
           this._CONFIG.ARCHIVE.replace('{id}', id),
@@ -641,7 +621,7 @@ export function createProjectManager({
     }
 
     async getConversation(conversationId) {
-      if (!this._authOk('conversationLoadError', { conversationId })) {
+      if (!this.app?.state?.isAuthenticated) {
         throw new Error('auth');
       }
       const projectId = this._getEffectiveProjectId();
@@ -752,7 +732,7 @@ export function createProjectManager({
     }
 
     async deleteFile(projectId, fileId) {
-      if (!this._authOk('projectFileDeleteError', { projectId, fileId })) {
+      if (!this.app?.state?.isAuthenticated) {
         throw new Error('auth');
       }
       const url = this._CONFIG.FILE_DETAIL.replace('{id}', projectId).replace('{file_id}', fileId);
