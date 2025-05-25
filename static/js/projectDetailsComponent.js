@@ -310,7 +310,7 @@ class ProjectDetailsComponent {
         app: this.eventHandlers.DependencySystem.modules.get("app"),
         domReadinessService: this.domReadinessService,
         logger: this.logger,
-        onUploadComplete: this._safeHandler(async () => {
+        onUploadComplete: this.safeHandler(async () => {
           if (!this.projectId) return;
           await this.projectManager.loadProjectFiles(this.projectId);
         }, "UploadComplete"),
@@ -334,7 +334,7 @@ class ProjectDetailsComponent {
     }
     if (this.elements.backBtn) {
       this.eventHandlers.trackListener(
-        this.elements.backBtn, "click", this._safeHandler(
+        this.elements.backBtn, "click", this.safeHandler(
           () => { this.navigationService.navigateToProjectList(); }, "BackBtn"
         ), { context: 'ProjectDetailsComponent', description: "BackButton" });
     }
@@ -348,7 +348,7 @@ class ProjectDetailsComponent {
         const tabName = btn.dataset.tab;
         this._logInfo(`Binding tab button: ${tabName}`);
         this.eventHandlers.trackListener(
-          btn, "click", this._safeHandler((ev) => {
+          btn, "click", this.safeHandler((ev) => {
             this._logInfo(`Tab clicked: ${tabName}`);
             ev.preventDefault();
             ev.stopPropagation();
@@ -365,21 +365,21 @@ class ProjectDetailsComponent {
     }
     const doc = this.domAPI.getDocument();
     this.eventHandlers.trackListener(doc, "projectFilesLoaded",
-      this._safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
+      this.safeHandler((e) => this.renderFiles(e.detail?.files || []), "FilesLoaded"),
       { context: 'ProjectDetailsComponent', description: "FilesLoaded" });
     this.eventHandlers.trackListener(doc, "projectConversationsLoaded",
-      this._safeHandler((e) => this.renderConversations(e.detail?.conversations || []), "ConversationsLoaded"),
+      this.safeHandler((e) => this.renderConversations(e.detail?.conversations || []), "ConversationsLoaded"),
       { context: 'ProjectDetailsComponent', description: "ConversationsLoaded" });
     this.eventHandlers.trackListener(doc, "projectArtifactsLoaded",
-      this._safeHandler((e) => this.renderArtifacts(e.detail?.artifacts || []), "ArtifactsLoaded"),
+      this.safeHandler((e) => this.renderArtifacts(e.detail?.artifacts || []), "ArtifactsLoaded"),
       { context: 'ProjectDetailsComponent', description: "ArtifactsLoaded" });
     this.eventHandlers.trackListener(doc, "projectStatsLoaded",
-      this._safeHandler((e) => this.renderStats(e.detail), "StatsLoaded"),
+      this.safeHandler((e) => this.renderStats(e.detail), "StatsLoaded"),
       { context: 'ProjectDetailsComponent', description: "StatsLoaded" });
     this.eventHandlers.trackListener(
       doc,
       "projectKnowledgeBaseLoaded",
-      this._safeHandler(
+      this.safeHandler(
         async (e) => {
           if (!this.knowledgeBaseComponent) return;
           try {
@@ -604,11 +604,11 @@ class ProjectDetailsComponent {
     const [downloadBtn, deleteBtn] = div.querySelectorAll("button");
     this.eventHandlers.trackListener(
       downloadBtn, "click",
-      this._safeHandler(() => this._downloadFile(file.id, file.filename), `DownloadFile_${file.id}`),
+      this.safeHandler(() => this._downloadFile(file.id, file.filename), `DownloadFile_${file.id}`),
       { context: this.listenersContext, description: `DownloadFile_${file.id}` });
     this.eventHandlers.trackListener(
       deleteBtn, "click",
-      this._safeHandler(() => this._confirmDeleteFile(file.id, file.filename), `DeleteFile_${file.id}`),
+      this.safeHandler(() => this._confirmDeleteFile(file.id, file.filename), `DeleteFile_${file.id}`),
       { context: this.listenersContext, description: `DeleteFile_${file.id}` });
     return div;
   }
@@ -628,7 +628,7 @@ class ProjectDetailsComponent {
     `);
     this.eventHandlers.trackListener(
       div, "click",
-      this._safeHandler(() => this._openConversation(cv), `OpenConversation_${cv.id}`),
+      this.safeHandler(() => this._openConversation(cv), `OpenConversation_${cv.id}`),
       { context: this.listenersContext, description: `OpenConversation_${cv.id}` });
     return div;
   }
@@ -650,7 +650,7 @@ class ProjectDetailsComponent {
     const btn = div.querySelector("[data-action=download]");
     this.eventHandlers.trackListener(
       btn, "click",
-      this._safeHandler(() => this.projectManager.downloadArtifact(this.projectId, art.id), `DownloadArtifact_${art.id}`),
+      this.safeHandler(() => this.projectManager.downloadArtifact(this.projectId, art.id), `DownloadArtifact_${art.id}`),
       { context: this.listenersContext, description: `DownloadArtifact_${art.id}` });
     return div;
   }
@@ -663,7 +663,7 @@ class ProjectDetailsComponent {
       message: `Delete “${this._safeTxt(fileName || fileId)}” permanently?`,
       confirmText: "Delete",
       confirmClass: "btn-error",
-      onConfirm: this._safeHandler(async () => {
+      onConfirm: this.safeHandler(async () => {
         try {
           await this.projectManager.deleteFile(this.projectId, fileId);
           await this.projectManager.loadProjectFiles(this.projectId);
@@ -811,7 +811,7 @@ class ProjectDetailsComponent {
         this._logInfo('Setting up projectManagerReady event listener for deferred show()');
         this.bus.addEventListener(
           'projectManagerReady',
-          this._safeHandler(() => {
+          this.safeHandler(() => {
             this._logInfo('projectManagerReady event received, retrying show()', { projectId, activeTab });
             this.show({ projectId, activeTab });
           }, 'DeferredShow'),
@@ -938,7 +938,7 @@ class ProjectDetailsComponent {
       this.eventHandlers.trackListener(
         newChatBtn,
         "click",
-        this._safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
+        this.safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
         { context: this.listenersContext, description: "NewConversationBtn" }
       );
       newChatBtn.setAttribute('data-newchat-bound', '1');
