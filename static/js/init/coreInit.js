@@ -236,6 +236,8 @@ export function createCoreInitializer({
     if (!DependencySystem.modules.has('projectManager')) {
       DependencySystem.register('projectManager', projectManager);
       logger.log('[coreInit] projectManager explicitly registered in DependencySystem', { context: 'coreInit' });
+    } else {
+      logger.log('[coreInit] projectManager already registered in DependencySystem', { context: 'coreInit' });
     }
 
     eventHandlers.setProjectManager?.(projectManager);
@@ -353,5 +355,12 @@ export function createCoreInitializer({
     return true;
   }
 
-  return { initializeCoreSystems };
+  return { 
+    initializeCoreSystems,
+    cleanup() {
+      // Cleanup any event listeners registered by core initialization
+      eventHandlers.cleanupListeners({ context: 'coreInit' });
+      logger.debug('[coreInit] Cleanup completed', { context: 'coreInit:cleanup' });
+    }
+  };
 }

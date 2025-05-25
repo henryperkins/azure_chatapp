@@ -223,6 +223,11 @@ export function createServiceInitializer({
 
   return {
     registerBasicServices,
-    registerAdvancedServices
+    registerAdvancedServices,
+    cleanup() {
+      // Service registration doesn't create event listeners directly
+      eventHandlers.cleanupListeners({ context: 'serviceInit' });
+      logger.debug('[serviceInit] Cleanup completed', { context: 'serviceInit:cleanup' });
+    }
   };
 }

@@ -39,12 +39,12 @@ export function createAuthInitializer({
 
     // Register auth event listeners before init
     if (auth.AuthBus) {
-      logger.log('[authInit] Registering AuthBus listeners before auth.init');
+      logger.info('[authInit] Registering AuthBus listeners before auth.init', { context: 'authInit:init' });
       eventHandlers.trackListener(
         auth.AuthBus,
         'authStateChanged',
         (event) => {
-          logger.log('[authInit][AuthBus] Received authStateChanged', event?.detail);
+          logger.info('[authInit][AuthBus] Received authStateChanged', event?.detail, { context: 'authInit:authStateChanged' });
           handleAuthStateChange(event);
         },
         { description: '[authInit] AuthBus authStateChanged', context: 'authInit' }
@@ -53,20 +53,20 @@ export function createAuthInitializer({
         auth.AuthBus,
         'authReady',
         (event) => {
-          logger.log('[authInit][AuthBus] Received authReady', event?.detail);
+          logger.info('[authInit][AuthBus] Received authReady', event?.detail, { context: 'authInit:authReady' });
           handleAuthStateChange(event);
         },
         { description: '[authInit] AuthBus authReady', context: 'authInit' }
       );
     } else {
-      logger.warn('[authInit] No AuthBus instance for auth event registration');
+      logger.warn('[authInit] No AuthBus instance for auth event registration', { context: 'authInit:init' });
     }
 
     try {
       // auth.init() is responsible for verifying auth and calling broadcastAuth,
       // which in turn calls appModule.setAuthState().
       // So, appModule.state.isAuthenticated will be updated by auth.init() itself.
-      logger.log('[authInit] Calling auth.init()');
+      logger.info('[authInit] Calling auth.init()', { context: 'authInit:init' });
       await auth.init();
 
       renderAuthHeader(); // Ensure this renders based on the now canonical appModule.state
@@ -91,9 +91,10 @@ export function createAuthInitializer({
     const appModule      = DependencySystem.modules.get('appModule');
     const projectManager = DependencySystem.modules.get('projectManager');   // ← referenced later
 
-    logger.log('[authInit][handleAuthStateChange]', {
+    logger.info('[authInit][handleAuthStateChange]', {
       eventDetail: event?.detail,
-      appModuleState: JSON.stringify(appModule.state)
+      appModuleState: JSON.stringify(appModule.state),
+      context: 'authInit:handleAuthStateChange'
     });
 
     const isAuthenticated = appModule.state.isAuthenticated; // Read from canonical source
@@ -149,13 +150,13 @@ export function createAuthInitializer({
     try {
       const appModule = DependencySystem.modules.get('appModule');
       if (!appModule) {
-        logger.error('[authInit][renderAuthHeader] appModule not found in DI. Cannot render header accurately.');
+        logger.error('[authInit][renderAuthHeader] appModule not found in DI. Cannot render header accurately.', { context: 'authInit:renderAuthHeader' });
         return;
       }
       const isAuth = appModule.state.isAuthenticated;
       const user = appModule.state.currentUser; // Use canonical source
 
-      logger.debug('[authInit][renderAuthHeader] Rendering auth header', { isAuth, user });
+      logger.debug('[authInit][renderAuthHeader] Rendering auth header', { isAuth, user, context: 'authInit:renderAuthHeader' });
 
       const authBtn = domAPI.getElementById('authButton');
       const userMenu = domAPI.getElementById('userMenu');
@@ -229,8 +230,8 @@ export function createAuthInitializer({
           'click',
           safeHandler((e) => {
             domAPI.preventDefault(e);
-            logger.debug('[authInit][renderAuthHeader] Logout button clicked.');
-            authMod?.logout?.().catch(err => logger.error('[authInit] Error during logout action from button:', err));
+            logger.debug('[authInit][renderAuthHeader] Logout button clicked.', { context: 'authInit:logout' });
+            authMod?.logout?.().catch(err => logger.error('[authInit] Error during logout action from button:', err, { context: 'authInit:logout' }));
           }, 'Auth logout button click'),
           { description: 'Auth logout button click', context: 'authInit', once: false } // Ensure it can be clicked multiple times if needed
         );
@@ -265,6 +266,11 @@ export function createAuthInitializer({
     initializeAuthSystem,
     handleAuthStateChange,
     renderAuthHeader,
-    forceShowLoginModal
+    forceShowLoginModal,
+    cleanup() {
+      // Cleanup auth-related event listeners
+      eventHandlers.cleanupListeners({ context: 'authInit' });
+      logger.debug('[authInit] Cleanup completed', { context: 'authInit:cleanup' });
+    }
   };
 }
