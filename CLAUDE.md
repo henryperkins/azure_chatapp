@@ -164,40 +164,98 @@ The frontend uses a modular ES6 architecture with strict dependency injection an
 
 ## Code Guardrails
 
-### Frontend Guardrails
+### Frontend Guardrails (Actual Implementation)
 
-1. **Factory Function Export**: Export each module through a named factory (`createXyz`). Validate all dependencies at the top and expose a cleanup API. No top-level logic.
-2. **Strict Dependency Injection**: No direct access to `window`, `document`, `console`, or any global directly. Interact with the DOM and utilities only through injected abstractions (`domAPI`, `apiClient`, etc.).
-3. **Pure Imports**: No side effects at import time; all initialization occurs inside the factory.
-4. **Centralized Event Handling**: Register listeners with `eventHandlers.trackListener(..., { context })` and remove them with `eventHandlers.cleanupListeners({ context })`.
-5. **Context Tags**: Supply a unique `context` string for every listener and log message.
-6. **Sanitize All User HTML**: Always call `sanitizer.sanitize()` before inserting user content into the DOM.
-7. **domReadinessService Only**: All DOM and application readiness must be performed solely via DI-injected `domReadinessService`:
+1. **Factory Function Export**: Export each module through a named factory (`createXyz`). Validate dependencies and expose cleanup API:
    ```js
-   await domReadinessService.waitForEvent('app:ready');
-   await domReadinessService.dependenciesAndElements(['#myElement']);
+   export function createMyModule({ DependencySystem, logger, domAPI }) {
+     if (!DependencySystem || !logger || !domAPI) {
+       throw new Error('[myModule] Missing required dependencies');
+     }
+     return { cleanup() { /* cleanup logic */ } };
+   }
    ```
-8. **Authentication State Management**: Single source of truth is `appModule.state.isAuthenticated` and `appModule.state.currentUser`. No local auth state variables.
-9. **Module Event Bus**: When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.
-10. **Navigation Service**: Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.
-11. **Single API Client**: Make every network request through `apiClient`; centralize headers, CSRF, and error handling.
-12. **Structured Logging**:
-    - All logging through DI-provided logger with correlation IDs and context tracking
-    - Direct use of `console.*` is forbidden (use logger.info, logger.error, etc.)
-    - Every logger message must include a context string
-    - Use `safeHandler` for wrapping event handlers to ensure errors are logged
-    - Logger supports server-side log ingestion with session and trace correlation
 
-### Backend Guardrails
+2. **Strict Dependency Injection**: No direct globals. Use injected abstractions:
+   - `domAPI` for DOM manipulation (not `document`)
+   - `apiClient` for HTTP requests (not `fetch`)
+   - `logger` for logging (not `console`)
+   - `browserService` for browser APIs (not `window`)
 
-1. **FastAPI Initialization**: Defined in `main.py`, with modularized APIRouters.
-2. **Dependency Injection**: Use FastAPI's `Depends()`, avoid global state.
-3. **Service Structure**: Clearly isolated, no HTTP responses, raise domain exceptions.
-4. **Async ORM**: Use async SQLAlchemy ORM through utility patterns.
-5. **Security**: Cookie-based sessions, validate all user/session claims.
-6. **Configuration**: Environment-driven via Pydantic BaseSettings.
-7. **Import Safety**: No side-effects, I/O, or HTTP calls at import-time.
-8. **Async Design**: No blocking calls in async code paths.
+3. **Pure Imports**: No side effects at import time. Only `app.js` is exempt as the bootstrap orchestrator.
+
+4. **Centralized Event Handling**: Use `eventHandlers.trackListener()` with context:
+   ```js
+   eventHandlers.trackListener(element, 'click', handler, { context: 'ModuleName' });
+   eventHandlers.cleanupListeners({ context: 'ModuleName' });
+   ```
+
+5. **Authentication State**: Single source of truth is `appModule.state.isAuthenticated` and `appModule.state.currentUser`. No local auth state variables.
+
+6. **Structured Logging**: Use DI logger with correlation IDs:
+   ```js
+   logger.info('Operation completed', { context: 'ModuleName.operation', userId: user.id });
+   logger.error('Operation failed', error, { context: 'ModuleName.operation' });
+   ```
+
+7. **DOM Readiness**: Use `domReadinessService` for all DOM/dependency waiting:
+   ```js
+   await domReadinessService.documentReady();
+   await domReadinessService.dependenciesAndElements({
+     deps: ['auth', 'modalManager'],
+     domSelectors: ['#myElement']
+   });
+   ```
+
+8. **Error Handling**: Use `safeHandler` for event handlers:
+   ```js
+   const safeHandler = DependencySystem.modules.get('safeHandler');
+   const handler = safeHandler(myFunction, 'ModuleName.handler');
+   ```
+
+### Backend Guardrails (Actual Implementation)
+
+1. **FastAPI Initialization**: Defined in `main.py` with modularized APIRouters:
+   ```python
+   app.include_router(auth_router, prefix="/api/auth", tags=["authentication"])
+   app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
+   app.include_router(project_files_router, prefix="/api/projects/{project_id}/files", tags=["files"])
+   ```
+
+2. **Route Structure**: Thin controllers that delegate to services:
+   ```python
+   @router.post("/", response_model=dict)
+   async def create_project(
+       project_data: ProjectCreate,
+       current_user_tuple: Tuple[User, str] = Depends(get_current_user_and_token),
+       db: AsyncSession = Depends(get_async_session),
+   ):
+       # Delegate to service layer
+       project = await svc_create_project(user_id=current_user.id, ...)
+   ```
+
+3. **Service Layer**: Business logic with domain exceptions (no HTTPException):
+   ```python
+   async def create_project(user_id: int, name: str, db: AsyncSession) -> Project:
+       if not name.strip():
+           raise ValueError("Project name cannot be empty")  # Domain exception
+   ```
+
+4. **Structured Logging**: Context variables and JSON formatting:
+   ```python
+   from utils.logging_config import request_id_var, trace_id_var
+   logger.info("Project created", extra={
+       "request_id": request_id_var.get(),
+       "project_id": str(project.id)
+   })
+   ```
+
+5. **Sentry Integration**: Performance tracing and error monitoring:
+   ```python
+   with sentry_span_context(op="project", description="Create project") as span:
+       span.set_tag("user.id", str(current_user.id))
+       metrics.incr("project.create.success")
+   ```
 
 ## Common Workflows
 
@@ -222,48 +280,72 @@ The frontend uses a modular ES6 architecture with strict dependency injection an
 
 ### Pattern Checker for Frontend
 
-The project includes a pattern checker tool that validates frontend code against the guardrails:
+The project includes a comprehensive pattern checker (`scripts/patternsChecker.cjs`) that validates frontend code against 18 specific guardrail rules:
 
 ```bash
 # Run pattern checker on specific files
-node scripts/patternsChecker.cjs path/to/file.js
+node scripts/patternsChecker.cjs static/js/**/*.js
 
 # Check for violations of a specific rule
-node scripts/patternsChecker.cjs --rule=1 path/to/file.js
+node scripts/patternsChecker.cjs --rule=1 static/js/myModule.js
 ```
 
-This tool validates:
-- Factory function exports
-- Dependency injection
-- Pure imports
-- Event handling
-- Proper error logging
-- And more according to the frontend guardrails
+**Validated Rules** (from actual implementation):
+1. Factory Function Export - `createXyz` pattern with dependency validation
+2. Strict Dependency Injection - No direct `window`, `document`, `console` access
+3. Pure Imports - No side effects at import time
+4. Centralized Event Handling - `eventHandlers.trackListener` usage
+5. Context Tags - Required context strings for all listeners/logs
+6. Sanitize All User HTML - `sanitizer.sanitize()` before DOM insertion
+7. domReadinessService Only - No custom DOM readiness patterns
+8. Authentication State Management - Single source via `appModule.state`
+9. Module Event Bus - Dedicated EventTarget usage
+10. Navigation Service - Centralized routing
+11. Single API Client - No direct fetch usage
+12. Structured Logging - DI logger with context required
+13. Authentication Consolidation - No duplicate auth patterns
+14. Module Size Limit - Maximum 1000 lines per module
+15. Canonical Implementations - Use approved patterns only
+16. Error Object Structure - Standard `{ status, data, message }` format
+17. Logger Factory Placement - Only in `logger.js` or `app.js`
+18. Obsolete Logger APIs - Deprecated patterns detection
+
+**Configuration** (from `package.json`):
+```json
+"patternsChecker": {
+  "objectNames": {
+    "globalApp": "appModule",
+    "stateProperty": "state"
+  },
+  "knownBusNames": ["eventBus", "moduleBus", "appBus", "AuthBus"]
+}
+```
 
 ## Recent Refactoring Progress (app.js)
 
 ### Completed Refactoring (24% Size Reduction)
 
-**Original**: 1,611 lines → **Current**: 1,224 lines (**387 lines removed**)
+**Original**: 1,611 lines → **Current**: 1,224 lines (**387 lines removed**, 24% reduction)
 
 #### Successful Extractions (Following Guardrails):
 
-1. **authInit.js** (239 lines)
-   - Auth system initialization
-   - Auth state change handling
-   - Auth header rendering
-   - Login modal management
+1. **authInit.js** (239 lines) - Authentication system initialization
+   - Auth system initialization with dependency validation
+   - Auth state change handling via AuthBus events
+   - Auth header rendering and UI updates
+   - Login modal management and form handling
 
-2. **appState.js** (86 lines)
-   - Centralized app state management
-   - Authentication state tracking
-   - Lifecycle state management
-   - Helper methods for state access
+2. **appState.js** (86 lines) - Centralized application state
+   - Single source of truth for authentication state (`isAuthenticated`, `currentUser`)
+   - Project state management (`currentProjectId`, `currentProject`)
+   - Lifecycle state tracking (`isInitialized`, `isShuttingDown`)
+   - Helper methods for state access and updates
 
-3. **errorInit.js** (108 lines)
-   - Global error handling setup
-   - Unhandled promise rejection tracking
-   - Centralized error logging
+3. **errorInit.js** (108 lines) - Global error handling
+   - Global error handling setup with structured logging
+   - Unhandled promise rejection tracking and reporting
+   - Centralized error logging with correlation IDs
+   - Sentry integration for error monitoring
 
 #### Key Guardrails Compliance Lessons:
 
@@ -281,3 +363,65 @@ While respecting the "no new modules" rule, further reduction is possible by:
 - Simplifying the main init() function complexity
 
 The refactoring successfully reduced app.js complexity while maintaining all functionality and strictly following project guardrails.
+
+## Development Workflow
+
+### Frontend Development (Actual Patterns)
+
+1. **Module Creation**: Follow factory pattern with strict dependency validation:
+   ```js
+   export function createMyModule({ DependencySystem, logger, domAPI, apiClient }) {
+     // Validate all dependencies first
+     if (!DependencySystem || !logger || !domAPI || !apiClient) {
+       throw new Error('[MyModule] Missing required dependencies');
+     }
+     // Module implementation
+     return { cleanup() { /* cleanup logic */ } };
+   }
+   ```
+
+2. **Testing**: Use pattern checker for code quality validation:
+   ```bash
+   node scripts/patternsChecker.cjs static/js/**/*.js
+   ```
+
+3. **Debugging**: Use structured logging with correlation IDs:
+   ```js
+   logger.info('Operation started', { context: 'MyModule.operation', userId: user.id });
+   ```
+
+4. **Event Handling**: Always use centralized event system with context:
+   ```js
+   eventHandlers.trackListener(element, 'click', handler, { context: 'MyModule' });
+   ```
+
+### Backend Development (Actual Patterns)
+
+1. **Route Creation**: Thin controllers that delegate to services:
+   ```python
+   @router.post("/")
+   async def create_item(data: ItemCreate, user: User = Depends(get_current_user)):
+       return await item_service.create(user.id, data.dict())
+   ```
+
+2. **Service Implementation**: Business logic with domain exceptions:
+   ```python
+   async def create_item(user_id: int, data: dict) -> Item:
+       if not data.get('name'):
+           raise ValueError("Name is required")  # Domain exception, not HTTPException
+   ```
+
+3. **Database Operations**: Async SQLAlchemy with proper session management:
+   ```python
+   async def get_items(user_id: int, db: AsyncSession) -> List[Item]:
+       result = await db.execute(select(Item).where(Item.user_id == user_id))
+       return result.scalars().all()
+   ```
+
+4. **Error Handling**: Structured logging with context variables:
+   ```python
+   logger.error("Operation failed", extra={
+       "request_id": request_id_var.get(),
+       "user_id": str(user_id)
+   })
+   ```
