@@ -16,12 +16,13 @@ export function createLogger({
   context = 'App',
   minLevel = 'debug',
   fetcher = null,
+  apiClient = null,           // NEW: Use centralized API client
   browserService = null,
   sessionIdProvider = null,
   traceIdProvider = null,
   safeHandler = null,
   allowUnauthenticated = false,   // NEW
-  consoleEnabled       = true     // NEW
+  consoleEnabled = true     // NEW
 } = {}) {
   let _minLvlNum = LEVELS[minLevel] ?? 10;
   let _enableServer = enableServer;
@@ -52,13 +53,6 @@ export function createLogger({
     if (LEVELS[level] < _minLvlNum) return;
 
     try {
-      const _fetch =
-        fetcher ||
-        browserService?.fetch ||
-        (typeof window !== 'undefined' && window.fetch) ||
-        (typeof fetch === 'function' ? fetch : null);
-      if (!_fetch) return;                   // no fetch available
-
       // Generate request ID for correlation tracking
       const reqId = generateRequestId();
 
@@ -67,6 +61,40 @@ export function createLogger({
         (typeof window !== 'undefined' && window.__APP_SESSION_ID) ||
         'unknown-session';
       const traceId = traceIdProvider?.();
+
+      // Prefer centralized API client for proper CSRF handling
+      if (apiClient?.post) {
+        try {
+          await apiClient.post(endpoint, {
+            level,
+            context,
+            args,
+            ts: Date.now(),
+            request_id: reqId,
+            session_id: sessionId,
+            trace_id: traceId
+          }, {
+            headers: {
+              'X-Request-ID': reqId,
+              'X-Correlation-ID': reqId,
+              ...(traceId ? { 'X-Trace-ID': traceId } : {})
+            }
+          });
+          return; // Success with API client
+        } catch (apiErr) {
+          // Fall back to direct fetch if API client fails
+          const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
+          _c.warn(`[Logger] API client failed for ${endpoint} (Level: ${level}), falling back to direct fetch: ${apiErr && apiErr.message ? apiErr.message : apiErr}`);
+        }
+      }
+
+      // Fallback to direct fetch (without CSRF protection)
+      const _fetch =
+        fetcher ||
+        browserService?.fetch ||
+        (typeof window !== 'undefined' && window.fetch) ||
+        (typeof fetch === 'function' ? fetch : null);
+      if (!_fetch) return;                   // no fetch available
 
       const response = await _fetch(endpoint, {
         method: 'POST',
@@ -113,6 +141,13 @@ export function createLogger({
     if (LEVELS[lvl]) _minLvlNum = LEVELS[lvl];
   }
 
+  // Upgrade logger with API client for proper CSRF handling
+  function upgradeWithApiClient(newApiClient) {
+    if (newApiClient && typeof newApiClient.post === 'function') {
+      apiClient = newApiClient;
+    }
+  }
+
   return {
     log: wrap('log', _c.log),
     info: wrap('info', _c.info),
@@ -122,6 +157,7 @@ export function createLogger({
     critical: wrap('critical', _c.error),
     fatal: wrap('fatal', _c.error),
     setServerLoggingEnabled,
-    setMinLevel
+    setMinLevel,
+    upgradeWithApiClient
   };
 }

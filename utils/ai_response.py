@@ -169,7 +169,7 @@ async def generate_ai_response(
                     lines = chunk_bytes.decode("utf-8").splitlines()
                     for line in lines:
                         if line.startswith("data: "):
-                            data_str = line[len("data: ") :]
+                            data_str = line[len("data: "):]
                             if data_str.strip() == "[DONE]":
                                 break
                             try:

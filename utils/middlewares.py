@@ -39,7 +39,8 @@ from utils.sentry_utils import (
     set_sentry_user,
     tag_transaction,
     capture_breadcrumb,
-    request_id_var, trace_id_var          # NEW
+    request_id_var,
+    trace_id_var,  # NEW
 )
 
 logger = logging.getLogger(__name__)
@@ -79,16 +80,34 @@ NORMALIZE_PATHS = ["/api/users/", "/api/projects/", "/api/items/"]
 class CSRFMiddleware(BaseHTTPMiddleware):
     """
     CSRF protection middleware. Requires X-CSRF-Token header on mutating requests.
+    Exempts certain endpoints like /api/logs that need to work without authentication.
     """
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    # Endpoints that are exempt from CSRF protection
+    CSRF_EXEMPT_PATHS = {
+        "/api/logs",  # Client logging endpoint needs to work without authentication
+    }
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            # Check if this path is exempt from CSRF protection
+            if request.url.path in self.CSRF_EXEMPT_PATHS:
+                logger.debug(f"CSRF exemption for {request.method} {request.url.path}")
+                return await call_next(request)
+
             header_token = request.headers.get("X-CSRF-Token")
             session_token = request.session.get("csrf_token")
             if not header_token or not session_token or header_token != session_token:
-                logger.warning(f"CSRF failure method={request.method} url={request.url.path} header={header_token} session={session_token}")
-                return JSONResponse(status_code=403, content={"detail": "Bad CSRF token"})
+                logger.warning(
+                    f"CSRF failure method={request.method} url={request.url.path} header={header_token} session={session_token}"
+                )
+                return JSONResponse(
+                    status_code=403, content={"detail": "Bad CSRF token"}
+                )
         return await call_next(request)
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
@@ -138,11 +157,15 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
                     trace_headers, op="http.server", name=transaction_name
                 )
                 with sentry_sdk.start_transaction(transaction):
-                    return await self._process_request(request, call_next, transaction, start_time)
+                    return await self._process_request(
+                        request, call_next, transaction, start_time
+                    )
             with sentry_sdk.start_transaction(
                 op="http.server", name=transaction_name
             ) as transaction:
-                return await self._process_request(request, call_next, transaction, start_time)
+                return await self._process_request(
+                    request, call_next, transaction, start_time
+                )
         except Exception as exc:  # noqa: BLE001
             logger.error("Request processing error", exc_info=True)
             if sentry_sdk.Hub.current.client:
@@ -164,10 +187,12 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         # Extract or generate request ID for correlation tracking
         request_id = (
-            request.headers.get("X-Request-ID") or
-            request.headers.get("X-Correlation-ID") or
-            str(uuid.uuid4())
-        )[:128]  # Cap to prevent malicious headers
+            request.headers.get("X-Request-ID")
+            or request.headers.get("X-Correlation-ID")
+            or str(uuid.uuid4())
+        )[
+            :128
+        ]  # Cap to prevent malicious headers
 
         # Get trace ID from Sentry transaction
         trace_id = transaction.trace_id if hasattr(transaction, "trace_id") else ""
@@ -204,9 +229,7 @@ class SentryTracingMiddleware(BaseHTTPMiddleware):
         trans_status = (
             "ok"
             if response.status_code < 400
-            else "invalid_argument"
-            if response.status_code < 500
-            else "internal_error"
+            else "invalid_argument" if response.status_code < 500 else "internal_error"
         )
         transaction.set_status(trans_status)
         transaction.set_data("response_time_ms", (time.time() - start_time) * 1000)

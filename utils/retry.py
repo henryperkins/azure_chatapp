@@ -2,8 +2,8 @@ import logging, time, functools
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES  = 3
-RETRY_DELAY  = 1.5
+MAX_RETRIES = 3
+RETRY_DELAY = 1.5
 
 class RateLimitError(Exception):
     pass

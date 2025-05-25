@@ -58,8 +58,6 @@ __all__ = [
     "update_knowledge_base",
     "delete_knowledge_base",
     "toggle_project_kb",
-    "attach_github_repository",
-    "detach_github_repository",
     "get_project_file_list",
     "get_knowledge_base_health",
 ]
@@ -164,10 +162,11 @@ import socket
 
 
 if not hasattr(socket, "_orig_socketpair"):
-    socket._orig_socketpair = socket.socketpair  # type: ignore[attr-defined]
+    # Store the original implementation for fallback use
+    socket._orig_socketpair = socket.socketpair  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
-def _socketpair_fallback(family=socket.AF_UNIX, type=socket.SOCK_STREAM, proto=0):  # noqa: D401
+def _socketpair_fallback(family=socket.AF_UNIX, sock_type=socket.SOCK_STREAM, proto=0):  # noqa: D401
     """A safe replacement for socket.socketpair for restricted sandboxes.
 
     It provides the subset of functionality required by asyncio's selector
@@ -177,7 +176,8 @@ def _socketpair_fallback(family=socket.AF_UNIX, type=socket.SOCK_STREAM, proto=0
     """
 
     try:
-        return socket._orig_socketpair(family, type, proto)  # type: ignore[attr-defined]
+        # Attempt the original call first; fall back if unavailable
+        return socket._orig_socketpair(family, sock_type, proto)  # type: ignore[attr-defined]  # pylint: disable=protected-access
     except (OSError, PermissionError):
         # Fallback to os.pipe() based pair
         r_fd, w_fd = os.pipe()

@@ -11,7 +11,7 @@ import json
 import os
 import time
 import importlib
-from typing import Any, Optional, Union, List, Tuple, Callable
+from typing import Any, Optional, Union, List, Tuple
 
 import sentry_sdk
 from sentry_sdk import configure_scope
@@ -79,8 +79,6 @@ class ConfigurationError(SentryMCPError):
 
 class CacheMissError(SentryMCPError):
     """Raised when requested data is not in cache"""
-
-
 
 
 # Cache configuration

@@ -220,7 +220,7 @@ export function createUiRenderer(deps = {}) {
         conversationsUrl = apiEndpoints.CONVERSATIONS(projectId);
       } else {
         conversationsUrl = (
-          apiEndpoints.CONVOS ||
+          apiEndpoints.CONVERSATIONS(projectId) ||
           apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE
         )?.replace('{id}', projectId);
       }
@@ -330,7 +330,7 @@ export function createUiRenderer(deps = {}) {
         conversationsUrl = apiEndpoints.CONVERSATIONS(projectId);
       } else {
         conversationsUrl = (
-          apiEndpoints.CONVOS ||
+          apiEndpoints.CONVERSATIONS(projectId) ||
           apiEndpoints.PROJECT_CONVERSATIONS_URL_TEMPLATE
         )?.replace('{id}', projectId);
       }

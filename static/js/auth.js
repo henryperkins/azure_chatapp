@@ -66,7 +66,7 @@ export function createAuthModule(deps) {
   }
 
   // === 3) DOM/COOKIE & STATE MANAGEMENT ===
-  // CONSOLIDATED: No local authState - appModule.state is the single source of truth
+  // CONSOLIDATED: No local authState - appModule.state is the single source of truth per .clinerules
 
   const AuthBus = new EventTarget();
 
@@ -282,14 +282,12 @@ export function createAuthModule(deps) {
   /**
    * Broadcasts authentication state changes to the application and updates relevant UI elements.
    *
-   * If the authentication state or user object has changed, updates the internal state, synchronizes with the central app module if available, updates the user menu in the UI, and dispatches an `authStateChanged` event on both the `AuthBus` and the document.
+   * Updates the canonical appModule.state and dispatches authStateChanged events. This is the ONLY
+   * function that should modify authentication state per .clinerules single source of truth.
    *
    * @param {boolean} authenticated - Whether the user is authenticated.
    * @param {object|null} [userObject=null] - The current user object, or `null` if not authenticated.
    * @param {string} [source='unknown'] - The source of the state change for diagnostic purposes.
-   *
-   * @remark
-   * If no change in authentication state or user object is detected, no events are dispatched and the UI is not updated.
    */
   function broadcastAuth(authenticated, userObject = null, source = 'unknown') {
     const appModuleRef = DependencySystem?.modules?.get('appModule');
@@ -320,35 +318,12 @@ export function createAuthModule(deps) {
         context: 'broadcastAuth:appModuleUpdate'
       });
 
-      // SINGLE SOURCE OF TRUTH: Update only appModule.state
+      // SINGLE SOURCE OF TRUTH: Update only appModule.state per .clinerules
       appModuleRef.setAuthState({
         isAuthenticated: authenticated,
         currentUser: userObject
       });
 
-      // Event dispatching should happen AFTER appModule state is updated.
-      logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Broadcasting authStateChanged event', { source, authenticated, userId: userObject?.id, context: 'broadcastAuth:dispatchEvents' });
-
-      // Custom: Update username in header's userMenu for a single-line greeting. (No double "Hello,")
-      try {
-        const doc = domAPI.getDocument?.();
-        const userMenu = doc && doc.getElementById && doc.getElementById('userMenu');
-        if (userMenu) {
-          const usernameDisplay = userMenu.querySelector('#usernameDisplay');
-          const initialsSpan = userMenu.querySelector('#userInitials');
-          if (usernameDisplay && userObject?.username) {
-            // Only set username, do not prepend 'Hello,' (it's in markup)
-            usernameDisplay.textContent = userObject.username;
-          }
-          if (initialsSpan && userObject?.username) {
-            // Set user initials (e.g., "AB" for Alice Bob)
-            const initials = userObject.username.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-            initialsSpan.textContent = initials;
-          }
-        }
-      } catch (DOMerr) {
-        logger.error('[AuthModule][broadcastAuth] Could not update userMenu', DOMerr, { context: 'broadcastAuth' });
-      }
       const eventDetail = {
         authenticated,
         user: userObject,
@@ -356,7 +331,7 @@ export function createAuthModule(deps) {
         source
       };
       try {
-        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Dispatching authStateChanged on AuthBus', eventDetail, { context: 'broadcastAuth' });
+        logger.log('[DIAGNOSTIC][auth.js][broadcastAuth] Broadcasting authStateChanged event', { source, authenticated, userId: userObject?.id, context: 'broadcastAuth:dispatchEvents' });
         if (!eventHandlers.createCustomEvent) {
           throw new Error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create events for guardrail compliance.');
         }
@@ -1172,11 +1147,7 @@ export function createAuthModule(deps) {
 
   // === 14) PUBLIC API EXPORT (FACTORY PATTERN) ===
   const publicAuth = {
-    // CONSOLIDATED: All state reads from appModule.state (single source of truth)
-    isAuthenticated: () => getAppState().isAuthenticated,
-    isReady: () => getAppState().isReady,
-    getCurrentUser: () => getAppState().currentUser?.username || null,
-    getCurrentUserObject: () => getAppState().currentUser,
+    // Auth actions only - state reads must go through appModule.state per guardrails
     init,
     login: loginUser,
     logout,
