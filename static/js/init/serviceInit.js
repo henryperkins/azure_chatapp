@@ -126,7 +126,10 @@ export function createServiceInitializer({
           browserService: browserServiceInstance,
           logger        : logger               // ← provide required DI logger
         });
-        DependencySystem.register('apiRequest', apiRequest);
+        // Register the API client function (not the object) for DI contract
+        DependencySystem.register('apiRequest', apiRequest.fetch);
+        // Optionally register the full apiClient object if needed by other modules
+        DependencySystem.register('apiClientObject', apiRequest);
       }
 
       // Create accessibility enhancements

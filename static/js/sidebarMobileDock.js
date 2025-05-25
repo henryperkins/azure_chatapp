@@ -15,7 +15,6 @@
  * @param {object} deps.domReadinessService - DOM readiness service
  * @param {function} deps.safeHandler - Error handling wrapper
  * @param {function} deps.onTabActivate - Callback for tab activation
- * @param {function} deps.onSettingsToggle - Callback for settings toggle
  */
 export function createSidebarMobileDock({
   domAPI,
@@ -24,8 +23,7 @@ export function createSidebarMobileDock({
   logger,
   domReadinessService,
   safeHandler,
-  onTabActivate,
-  onSettingsToggle
+  onTabActivate
 } = {}) {
 
   // Dependency validation
@@ -36,7 +34,6 @@ export function createSidebarMobileDock({
   if (!domReadinessService) throw new Error('[SidebarMobileDock] domReadinessService is required');
   if (typeof safeHandler !== 'function') throw new Error('[SidebarMobileDock] safeHandler is required');
   if (typeof onTabActivate !== 'function') throw new Error('[SidebarMobileDock] onTabActivate is required');
-  if (typeof onSettingsToggle !== 'function') throw new Error('[SidebarMobileDock] onSettingsToggle is required');
 
   const MODULE_CONTEXT = 'SidebarMobileDock';
   let mobileDockEl = null;
@@ -96,11 +93,10 @@ export function createSidebarMobileDock({
       }
     }
 
-    // Create dock buttons
+    // Create dock buttons (only 3 to match sidebar tabs)
     createDockButton('dockRecentBtn', 'Recent', '🕑', () => onTabActivate('recent'));
     createDockButton('dockStarredBtn', 'Starred', '⭐', () => onTabActivate('starred'));
     createDockButton('dockProjectsBtn', 'Projects', '📁', () => onTabActivate('projects'));
-    createDockButton('dockSettingsBtn', 'Settings', '⚙️', () => onSettingsToggle());
 
     return mobileDockEl;
   }
