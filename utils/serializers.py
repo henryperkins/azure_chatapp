@@ -18,7 +18,7 @@ from models.project_file import ProjectFile
 from models.knowledge_base import KnowledgeBase
 
 
-def serialize_datetime(dt: Optional[Union[datetime, str]]) -> Optional[str]:
+def serialize_datetime(dt: Optional[Union[datetime, date, str]]) -> Optional[str]:
     """Convert datetime or ISO string to ISO format string"""
     if dt is None:
         return None

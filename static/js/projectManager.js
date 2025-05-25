@@ -192,7 +192,7 @@ export function createProjectManager({
         DETAIL: apiEndpoints.DETAIL || '/api/projects/{id}/',
         STATS: apiEndpoints.STATS || '/api/projects/{id}/stats/',
         FILES: apiEndpoints.FILES || '/api/projects/{id}/files/',
-        CONVOS: apiEndpoints.CONVOS || '/api/projects/{id}/conversations/',
+        CONVOS: apiEndpoints.CONVERSATIONS(projectId) || '/api/projects/{id}/conversations/',
         ARTIFACTS: apiEndpoints.ARTIFACTS || '/api/projects/{id}/artifacts/',
         KB_LIST_URL_TEMPLATE:
           apiEndpoints.KB_LIST_URL_TEMPLATE || '/api/projects/{id}/knowledge-bases/',
@@ -203,8 +203,8 @@ export function createProjectManager({
         FILE_DOWNLOAD: apiEndpoints.FILE_DOWNLOAD || '/api/projects/{id}/files/{file_id}/download/',
         ARTIFACT_DOWNLOAD:
           apiEndpoints.ARTIFACT_DOWNLOAD || '/api/projects/{id}/artifacts/{artifact_id}/download/'
-  };
-}
+      };
+    }
     _req(url, opts = {}, contextLabel = 'n/a') {
       if (typeof this.apiRequest !== 'function') {
         throw new Error('[ProjectManager] apiRequest missing');
