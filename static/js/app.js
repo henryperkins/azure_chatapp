@@ -305,6 +305,14 @@ Object.assign(app, {
   }
 });
 
+// ─── Compatibility helper (remove once all callers updated) ───
+app.setLifecycleState = (...args) => {
+  DependencySystem.modules.get('logger')
+    ?.warn?.('[app] setLifecycleState() is deprecated – use appModule.setAppLifecycleState()', { context: 'app:compat' });
+  DependencySystem.modules.get('appModule')
+    ?.setAppLifecycleState?.(...args);
+};
+
 // Update app properties with required references
 app.DependencySystem = DependencySystem;
 app.apiRequest = apiRequest;
