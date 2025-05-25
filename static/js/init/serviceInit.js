@@ -21,7 +21,6 @@ export function createServiceInitializer({
   browserServiceInstance,
   eventHandlers,
   domReadinessService,
-  logger,
   sanitizer,
   APP_CONFIG,
   uiUtils,
@@ -31,11 +30,13 @@ export function createServiceInitializer({
   createAccessibilityEnhancements,
   createNavigationService,
   createHtmlTemplateLoader,
-  createUiRenderer
+  createUiRenderer,
+  logger,
+  getSessionId
 }) {
   if (
     !DependencySystem || !domAPI || !browserServiceInstance || !eventHandlers ||
-    !domReadinessService || !logger || !sanitizer || !APP_CONFIG
+    !domReadinessService || !sanitizer || !APP_CONFIG || !logger || !getSessionId
   ) {
     throw new Error('[serviceInit] Missing required dependencies for service initialization.');
   }
@@ -54,6 +55,9 @@ export function createServiceInitializer({
    */
   function registerBasicServices() {
     try {
+      // PHASE 1: Register the DI-provided logger per .clinerules
+      safeRegister('logger', logger);
+
       // Register core browser and DOM services
       safeRegister('domAPI', domAPI);
       safeRegister('browserAPI', browserServiceInstance);
@@ -70,7 +74,7 @@ export function createServiceInitializer({
       safeRegister(
         'errorReporter',
         DependencySystem.modules.get('errorReporter') ||
-        createErrorReporterStub(logger, 'serviceInit:ErrorReporterStub')
+        createErrorReporterStub({ logger: DependencySystem.modules.get('logger') })
       );
 
       // Register utility services
@@ -89,7 +93,7 @@ export function createServiceInitializer({
       safeRegister('apiEndpoints', resolvedEndpoints);
 
       // Log the full apiEndpoints map for rapid detection of bad overrides
-      logger.log('[serviceInit] API endpoints registered successfully:', {
+      logger?.log('[serviceInit] API endpoints registered successfully:', {
         endpointKeys: Object.keys(resolvedEndpoints),
         endpointCount: Object.keys(resolvedEndpoints).length,
         hasRequiredAuth: ['AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'].every(key => resolvedEndpoints[key]),
@@ -97,11 +101,13 @@ export function createServiceInitializer({
       });
 
       // Log individual endpoint mappings for debugging
-      logger.log('[serviceInit] Detailed endpoint mappings:', resolvedEndpoints, { context: 'serviceInit:registerBasicServices' });
+      logger?.log('[serviceInit] Detailed endpoint mappings:', resolvedEndpoints, { context: 'serviceInit:registerBasicServices' });
 
-      logger.log('[serviceInit] Basic services registered', { context: 'serviceInit:registerBasicServices' });
+      logger?.log('[serviceInit] Basic services registered', { context: 'serviceInit:registerBasicServices' });
     } catch (err) {
-      logger.error('[serviceInit] Failed to register basic services', err, { context: 'serviceInit:registerBasicServices' });
+      if (logger && logger.error) {
+        logger.error('[serviceInit] Failed to register basic services', err, { context: 'serviceInit:registerBasicServices' });
+      }
       throw err;
     }
   }
@@ -124,7 +130,7 @@ export function createServiceInitializer({
           },
           getAuthModule : () => DependencySystem.modules.get('auth'),
           browserService: browserServiceInstance,
-          logger        : logger               // ← provide required DI logger
+          logger        : DependencySystem.modules.get('logger')  // ← provide required DI logger
         });
         // Register the API client function (not the object) for DI contract
         DependencySystem.register('apiRequest', apiRequest.fetch);
@@ -137,7 +143,7 @@ export function createServiceInitializer({
         const accessibilityUtils = createAccessibilityEnhancements({
           domAPI,
           eventHandlers,
-          logger,
+          logger: DependencySystem.modules.get('logger'),
           domReadinessService
         });
         DependencySystem.register('accessibilityUtils', accessibilityUtils);
@@ -164,7 +170,7 @@ export function createServiceInitializer({
           apiClient: apiRequest, // Pass the 'apiRequest' instance as the 'apiClient' property
           timerAPI: browserServiceInstance,
           domReadinessService,  // NEW: Pass domReadinessService for replay capability
-          logger
+          logger: DependencySystem.modules.get('logger')
         });
         DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
       }
@@ -172,8 +178,9 @@ export function createServiceInitializer({
       // Create UI Renderer
       if (createUiRenderer && apiRequest) {
         const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
+        const logger = DependencySystem.modules.get('logger');
         if (!apiEndpoints) {
-          logger.error('[serviceInit] apiEndpoints not available for uiRenderer creation', { context: 'serviceInit:registerAdvancedServices' });
+          logger?.error('[serviceInit] apiEndpoints not available for uiRenderer creation', { context: 'serviceInit:registerAdvancedServices' });
           return;
         }
 
@@ -184,7 +191,7 @@ export function createServiceInitializer({
           apiEndpoints,
           onConversationSelect: (conversationId) => {
             // Simple callback - just log for now, actual implementation will be handled by sidebar
-            logger.info('[serviceInit] onConversationSelect called', { conversationId, context: 'serviceInit:uiRenderer' });
+            logger?.info('[serviceInit] onConversationSelect called', { conversationId, context: 'serviceInit:uiRenderer' });
             // Dispatch event for other modules to handle
             const doc = domAPI.getDocument();
             if (doc && eventHandlers?.createCustomEvent) {
@@ -198,7 +205,7 @@ export function createServiceInitializer({
           },
           onProjectSelect: (projectId) => {
             // Simple callback - just log for now, actual implementation will be handled by sidebar
-            logger.info('[serviceInit] onProjectSelect called', { projectId, context: 'serviceInit:uiRenderer' });
+            logger?.info('[serviceInit] onProjectSelect called', { projectId, context: 'serviceInit:uiRenderer' });
             // Dispatch event for other modules to handle
             const doc = domAPI.getDocument();
             if (doc && eventHandlers?.createCustomEvent) {
@@ -211,16 +218,18 @@ export function createServiceInitializer({
             }
           },
           domReadinessService,
-          logger,
+          logger: DependencySystem.modules.get('logger'),
           DependencySystem
         });
         DependencySystem.register('uiRenderer', uiRenderer);
-        logger.log('[serviceInit] uiRenderer created and registered successfully', { context: 'serviceInit:registerAdvancedServices' });
+        logger?.log('[serviceInit] uiRenderer created and registered successfully', { context: 'serviceInit:registerAdvancedServices' });
       }
 
-      logger.log('[serviceInit] Advanced services registered', { context: 'serviceInit:registerAdvancedServices' });
+      logger?.log('[serviceInit] Advanced services registered', { context: 'serviceInit:registerAdvancedServices' });
     } catch (err) {
-      logger.error('[serviceInit] Failed to register advanced services', err, { context: 'serviceInit:registerAdvancedServices' });
+      if (logger && logger.error) {
+        logger.error('[serviceInit] Failed to register advanced services', err, { context: 'serviceInit:registerAdvancedServices' });
+      }
       throw err;
     }
   }
@@ -231,7 +240,8 @@ export function createServiceInitializer({
     cleanup() {
       // Service registration doesn't create event listeners directly
       eventHandlers.cleanupListeners({ context: 'serviceInit' });
-      logger.debug('[serviceInit] Cleanup completed', { context: 'serviceInit:cleanup' });
+      const logger = DependencySystem.modules.get('logger');
+      logger?.debug('[serviceInit] Cleanup completed', { context: 'serviceInit:cleanup' });
     }
   };
 }
