@@ -131,6 +131,9 @@ export function createCoreInitializer({
     DependencySystem.register('modalManager', modalManager);
 
     // 2. Auth module
+    if (typeof apiRequest !== 'function') {
+      throw new Error('[coreInit] apiRequest dependency is missing or not a function (required for AuthModule DI, got: ' + typeof apiRequest + ') — ensure serviceInit.registerAdvancedServices() completed successfully and did not throw.');
+    }
     const authModule = createAuthModule({
       DependencySystem,
       apiClient: apiRequest,
@@ -259,6 +262,14 @@ export function createCoreInitializer({
     // eventHandlers.init() may need to access modal elements, so modals must be loaded first
     if (modalManager.init) {
       try {
+        // Ensure htmlTemplateLoader is available before modalManager.init
+        const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
+        if (!htmlTemplateLoader) {
+          logger.warn('[coreInit] htmlTemplateLoader not available yet for modalManager.init', { context: 'coreInit:modalManager:init' });
+          // Wait briefly for htmlTemplateLoader to be registered
+          await new Promise(resolve => browserService.getWindow().setTimeout(resolve, 100));
+        }
+
         await modalManager.init();
         logger.log('[coreInit] modalManager initialization complete', { context: 'coreInit' });
       } catch (err) {
@@ -355,7 +366,7 @@ export function createCoreInitializer({
     return true;
   }
 
-  return { 
+  return {
     initializeCoreSystems,
     cleanup() {
       // Cleanup any event listeners registered by core initialization

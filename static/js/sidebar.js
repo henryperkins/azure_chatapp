@@ -740,8 +740,7 @@ export function createSidebar({
         logger,
         domReadinessService,
         safeHandler,
-        onTabActivate: activateTab,
-        onSettingsToggle: toggleSettingsPanel
+        onTabActivate: activateTab
       });
       await sidebarMobileDock.init();
 
@@ -873,9 +872,9 @@ export function createSidebar({
     if (domReadinessService && domReadinessService.destroy) {
       try {
         domReadinessService.destroy();
-    } catch (err) {
-      logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar:ensureProjectDashboard' });
-    }
+      } catch (err) {
+        logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar:ensureProjectDashboard' });
+      }
     }
 
     pinned = false;
