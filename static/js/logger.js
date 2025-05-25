@@ -40,8 +40,11 @@ export function createLogger({
   async function send(level, args) {
     if (!_enableServer) return;
 
-    // ✅ CORRECT - Use canonical appModule.state (follows Dec 2024 auth guardrails)
-    const appModule = (typeof DependencySystem !== 'undefined') ? DependencySystem?.modules?.get?.('appModule') : null;
+    // Use canonical appModule.state (follows Dec 2024 auth guardrails)
+    let appModule = null;
+    if (typeof DependencySystem !== 'undefined' && DependencySystem?.modules?.get) {
+      appModule = DependencySystem.modules.get('appModule');
+    }
     if (appModule?.state?.isAuthenticated === false) return;
 
     if (LEVELS[level] < _minLvlNum) return;
