@@ -7,14 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This is a full-stack, project-based chat and knowledge management application leveraging Azure OpenAI, Anthropic Claude, JWT authentication, and modular ES6 frontend with Tailwind CSS and DaisyUI.
 
 ### Key Features
-- Project-based organization: each user can manage multiple projects
-- Real-time chat with AI models (Claude, GPT, Azure OpenAI, etc.)
-- JWT authentication with secure HttpOnly cookies and CSRF protection
-- File and artifact management per project
-- Knowledge base per project with file upload, search, and reindexing
-- Modular, event-driven frontend (ES6 modules, DependencySystem DI)
-- Tailwind CSS with DaisyUI for theming
-- Sentry integration for error and performance monitoring (backend & frontend)
+- **Project-based organization**: Each user can manage multiple projects with isolated contexts
+- **Real-time AI chat**: Support for Claude, GPT, Azure OpenAI, and other models
+- **Secure authentication**: JWT with HttpOnly cookies, CSRF protection, and session management
+- **File and artifact management**: Per-project file storage with knowledge base integration
+- **Advanced knowledge base**: Vector search, file indexing, and context retrieval
+- **Modular frontend architecture**: ES6 modules with strict dependency injection
+- **Modern UI/UX**: Tailwind CSS v4 with DaisyUI theming and mobile-responsive design
+- **Comprehensive monitoring**: Sentry integration for error tracking and performance monitoring
+- **Structured logging**: Correlation IDs, context tracking, and centralized log management
 
 ## Development Commands
 
@@ -44,11 +45,14 @@ pnpm install  # preferred (faster, reproducible)
 # Start the FastAPI backend with hot reload
 uvicorn main:app --reload
 
-# Build and watch CSS changes
+# Build and watch CSS changes (Tailwind v4)
 pnpm run watch:css  # or: npm run watch:css
 
 # Start the full development environment
 pnpm run dev  # or: npm run dev
+
+# Run pattern checker for frontend code quality
+node scripts/patternsChecker.cjs static/js/**/*.js
 ```
 
 ### Linting
@@ -86,42 +90,77 @@ pytest path/to/test_file.py
 
 ### Backend Architecture
 
-The backend follows a layered architecture:
+The backend follows a layered architecture with clear separation of concerns:
 
 1. **Route Handlers** (thin controllers): Parse requests, call services, format responses
-   - Located in `/routes/` directory
-   - Organized by domain (projects, knowledge_base, conversations)
+   - Located in `/routes/` directory with organized sub-modules:
+     - `routes/projects/`: Project-related endpoints (projects.py, files.py, artifacts.py)
+     - `routes/knowledge_base_routes.py`: Knowledge base management
+     - `routes/unified_conversations.py`: Conversation management
+     - `routes/user_preferences.py`: User settings and preferences
+     - `routes/admin.py`: Administrative functions
+     - `routes/logs.py`: Client log ingestion with rate limiting
 
 2. **Services** (business logic): All core logic, validation, state manipulation
-   - Located in `/services/` directory 
-   - Examples: `project_service.py`, `conversation_service.py`, `file_storage.py`
+   - Located in `/services/` directory with comprehensive coverage:
+     - `project_service.py`: Project access control and CRUD operations
+     - `conversation_service.py`: Chat and conversation management
+     - `file_service.py`: File storage and management (unified for projects and KB)
+     - `knowledgebase_service.py`: Vector search and knowledge base operations
+     - `vector_db.py`: Vector database operations and file processing
+     - `file_storage.py`: Physical file storage abstraction
+     - `text_extraction.py`: Document text extraction and processing
 
-3. **Models** (database): SQLAlchemy ORM models
-   - Located in `/models/` directory
-   - Define database schema and relationships
+3. **Models** (database): SQLAlchemy ORM models with relationships
+   - Located in `/models/` directory:
+     - `user.py`: User authentication and roles
+     - `project.py`: Project entities and user associations
+     - `conversation.py`: Chat conversations and metadata
+     - `message.py`: Individual messages with token tracking
+     - `project_file.py`: File metadata and relationships
+     - `artifact.py`: Generated artifacts and exports
+     - `knowledge_base.py`: Knowledge base configuration
 
 4. **Utils** (shared functionality): Cross-cutting concerns
-   - Located in `/utils/` directory
-   - Authentication, logging, error handling, serialization
+   - Located in `/utils/` directory:
+     - `auth_utils.py`: JWT authentication and session management
+     - `logging_config.py`: Structured logging with correlation IDs
+     - `db_utils.py`: Database utilities and query helpers
+     - `sentry_utils.py`: Error tracking and performance monitoring
+     - `response_utils.py`: Standardized API response formatting
 
 ### Frontend Architecture
 
-The frontend uses a modular ES6 architecture with strict dependency injection:
+The frontend uses a modular ES6 architecture with strict dependency injection and a sophisticated initialization system:
 
 1. **Main Entrypoint**: `static/js/app.js`
-   - Initializes the dependency system
-   - Registers event listeners and bootstraps UI components
+   - Orchestrates the full initialization sequence
+   - Manages dependency system and service registration
+   - Coordinates authentication, UI, and core system setup
 
-2. **Core Modules**:
-   - `projectManager.js`: Manages project data and operations
-   - `chat.js`: Handles chat UI and messaging
-   - `modelConfig.js`: Configuration for AI models
+2. **Initialization System** (`static/js/init/`):
+   - `appState.js`: Centralized application state management with single source of truth
+   - `authInit.js`: Authentication system initialization and state change handling
+   - `coreInit.js`: Core systems (modal manager, auth module, model config, chat manager)
+   - `serviceInit.js`: Service registration and dependency wiring
+   - `uiInit.js`: UI component initialization and template loading
+   - `errorInit.js`: Global error handling and unhandled promise rejection tracking
+
+3. **Core Modules**:
+   - `auth.js`: Authentication with AuthBus event system and consolidated state management
+   - `projectManager.js`: Project data operations and lifecycle management
+   - `chat.js`: Chat UI, messaging, and AI model interactions
+   - `modelConfig.js`: AI model configuration and selection
    - `sidebar.js`: Navigation and UI components
-   - `knowledgeBaseComponent.js`: Knowledge base functionality
+   - `knowledgeBaseComponent.js`: Knowledge base functionality and file management
 
-3. **Utility Modules**:
-   - Located in `/static/js/utils/`
-   - API client, DOM manipulation, storage services
+4. **Utility Modules** (`static/js/utils/`):
+   - `domAPI.js`: Abstracted DOM manipulation with dependency injection
+   - `apiClient.js`: Centralized HTTP client with CSRF and error handling
+   - `domReadinessService.js`: Unified DOM and dependency readiness management
+   - `browserService.js`: Browser API abstraction layer
+   - `logger.js`: Structured logging with correlation IDs and server integration
+   - `eventHandler.js`: Centralized event management with context tracking
 
 ## Code Guardrails
 
@@ -131,22 +170,23 @@ The frontend uses a modular ES6 architecture with strict dependency injection:
 2. **Strict Dependency Injection**: No direct access to `window`, `document`, `console`, or any global directly. Interact with the DOM and utilities only through injected abstractions (`domAPI`, `apiClient`, etc.).
 3. **Pure Imports**: No side effects at import time; all initialization occurs inside the factory.
 4. **Centralized Event Handling**: Register listeners with `eventHandlers.trackListener(..., { context })` and remove them with `eventHandlers.cleanupListeners({ context })`.
-5. **Context Tags**: Supply a unique `context` string for every listener.
+5. **Context Tags**: Supply a unique `context` string for every listener and log message.
 6. **Sanitize All User HTML**: Always call `sanitizer.sanitize()` before inserting user content into the DOM.
-7. **App Readiness via domReadinessService**: All DOM and application readiness must be performed solely via DI-injected `domReadinessService`. Use only:
+7. **domReadinessService Only**: All DOM and application readiness must be performed solely via DI-injected `domReadinessService`:
    ```js
-   await this.domReadinessService.waitForEvent(...);
-   await this.domReadinessService.dependenciesAndElements(...);
+   await domReadinessService.waitForEvent('app:ready');
+   await domReadinessService.dependenciesAndElements(['#myElement']);
    ```
-8. **Central `app.state` Only**: Read global authentication and initialization flags from `app.state`; do not mutate them directly.
-9. **Module Event Bus**: When broadcasting internal state, expose a dedicated `EventTarget` so other modules can subscribe without tight coupling.
+8. **Authentication State Management**: Single source of truth is `appModule.state.isAuthenticated` and `appModule.state.currentUser`. No local auth state variables.
+9. **Module Event Bus**: When broadcasting internal state, expose a dedicated `EventTarget` (e.g., `AuthBus`) so other modules can subscribe without tight coupling.
 10. **Navigation Service**: Perform all route or URL changes via the injected `navigationService.navigateTo(...)`.
 11. **Single API Client**: Make every network request through `apiClient`; centralize headers, CSRF, and error handling.
-12. **Logging & Observability**: 
-    - All errors, warnings, and significant control-flow branches must be logged through the DI-provided logger
-    - Direct use of `console.log`, `console.error`, etc. is forbidden
+12. **Structured Logging**:
+    - All logging through DI-provided logger with correlation IDs and context tracking
+    - Direct use of `console.*` is forbidden (use logger.info, logger.error, etc.)
     - Every logger message must include a context string
     - Use `safeHandler` for wrapping event handlers to ensure errors are logged
+    - Logger supports server-side log ingestion with session and trace correlation
 
 ### Backend Guardrails
 
@@ -210,7 +250,7 @@ This tool validates:
 
 1. **authInit.js** (239 lines)
    - Auth system initialization
-   - Auth state change handling  
+   - Auth state change handling
    - Auth header rendering
    - Login modal management
 
@@ -220,7 +260,7 @@ This tool validates:
    - Lifecycle state management
    - Helper methods for state access
 
-3. **errorInit.js** (108 lines)  
+3. **errorInit.js** (108 lines)
    - Global error handling setup
    - Unhandled promise rejection tracking
    - Centralized error logging
