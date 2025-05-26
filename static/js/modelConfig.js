@@ -76,7 +76,8 @@ export function createModelConfig({
       });
     } else {
       // fallback
-      busTarget.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
+      const eventBus = dependencySystem.modules.get('eventBus') || busTarget;
+      eventBus.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
     }
   }
 
