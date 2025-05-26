@@ -184,15 +184,26 @@ export function createCoreInitializer({
         createProjectListComponentFactory,
         createProjectModalFactory,
         createSidebarFactory
-    } = factories; // Destructure after validation for convenience
-    logger.debug('[coreInit] Phase 2: All component factories retrieved.', { context: 'coreInit' });
+    // Corrected destructuring: variable names now match the keys in the 'factories' object.
+    const {
+        createModalManager,
+        createAuthModule,
+        createProjectManager,
+        createModelConfig,
+        createProjectDashboard,
+        createProjectDetailsComponent,
+        createProjectListComponent,
+        createProjectModal,
+        createSidebar
+    } = factories;
+    logger.debug('[coreInit] Phase 2: All component factories destructured with correct names.', { context: 'coreInit' });
 
     // Phase 3: Instantiate and Register Core Services & Components
     logger.debug('[coreInit] Phase 3: Instantiating and registering core services and components.', { context: 'coreInit' });
 
     // 3.1. ModalManager
     logger.debug('[coreInit] Creating ModalManager...', { context: 'coreInit' });
-    const modalManager = createModalManagerFactory({ // Use the factory
+    const modalManager = createModalManager({ // Use corrected factory name
       domAPI,
       browserService,
       eventHandlers,
@@ -212,7 +223,7 @@ export function createCoreInitializer({
     if (!apiClientObject) { // apiAuthModule needs the full client object
         throw new Error('[coreInit] apiClientObject argument is missing.');
     }
-    const authModule = createAuthModuleFactory({ // Use the factory
+    const authModule = createAuthModule({ // Use corrected factory name
       DependencySystem,
       apiClient: apiClientObject, // Pass the full apiClientObject
       eventHandlers,
@@ -232,7 +243,7 @@ export function createCoreInitializer({
     // 3.3. ModelConfig
     // Manages model configurations; its UI (if any) is initialized via initWithReadiness.
     logger.debug('[coreInit] Creating ModelConfig...', { context: 'coreInit' });
-    const modelConfigInstance = createModelConfigFactory({
+    const modelConfigInstance = createModelConfig({ // Use corrected factory name
       dependencySystem: DependencySystem, // Retained for potential internal DI use by ModelConfig
       domReadinessService,      // Direct arg
       eventHandler: eventHandlers, // Direct arg
@@ -249,7 +260,7 @@ export function createCoreInitializer({
     // Handles the display of the project list.
     logger.debug('[coreInit] Creating ProjectListComponent (or ensuring placeholder)...', { context: 'coreInit' });
     if (!DependencySystem.modules.has('projectListComponent')) {
-      const projectListComponentInstance = createProjectListComponentFactory({
+      const projectListComponentInstance = createProjectListComponent({ // Use corrected factory name
         projectManager: null,     // Will be set after ProjectManager is created
         eventHandlers,            // Direct arg
         modalManager,             // Instance created above
@@ -266,7 +277,8 @@ export function createCoreInitializer({
         APP_CONFIG,
         logger
       });
-      DependencySystem.register('projectListComponent', plc);
+      // DependencySystem.register('projectListComponent', plc); // Original had `plc` which is undefined here. Corrected.
+      DependencySystem.register('projectListComponent', projectListComponentInstance);
     }
     
     // 3.5. ProjectDetailsComponent (Placeholder for ChatManager)
@@ -278,7 +290,7 @@ export function createCoreInitializer({
         projectDetailsComponentPlaceholder = DependencySystem.modules.get('projectDetailsComponent');
          logger.debug('[coreInit] Existing ProjectDetailsComponent placeholder found.', { context: 'coreInit' });
     } else {
-        projectDetailsComponentPlaceholder = createProjectDetailsComponentFactory({
+        projectDetailsComponentPlaceholder = createProjectDetailsComponent({ // Use corrected factory name
             projectManager: null, eventHandlers, modalManager,
             FileUploadComponentClass: FileUploadComponent, // Direct arg
             domAPI, sanitizer, app, navigationService, htmlTemplateLoader, logger, APP_CONFIG, // Direct args
@@ -304,7 +316,7 @@ export function createCoreInitializer({
     // 3.7. ProjectManager
     // Manages project data and lifecycle. Depends on ChatManager and ModelConfig.
     logger.debug('[coreInit] Creating ProjectManager...', { context: 'coreInit' });
-    const pmFactory = await createProjectManagerFactory({
+    const pmFactory = await createProjectManager({ // Use corrected factory name
       DependencySystem,           // For potential internal DI
       chatManager,                // Instance created above
       app,                        // Direct arg
@@ -344,7 +356,7 @@ export function createCoreInitializer({
     // 3.8. KnowledgeBaseComponent
     // Manages knowledge base interactions; depends on ProjectManager.
     logger.debug('[coreInit] Creating KnowledgeBaseComponent...', { context: 'coreInit' });
-    const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({ // createKnowledgeBaseComponent is a direct argument
+    const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({ // createKnowledgeBaseComponent is already correct (direct arg)
       DependencySystem,         // For potential internal DI
       apiRequest,               // Direct arg (fetch function)
       projectManager,           // Instance created above
@@ -358,7 +370,7 @@ export function createCoreInitializer({
     // Handles the display of project details; depends on ProjectManager and KnowledgeBaseComponent.
     // This overwrites the placeholder previously registered.
     logger.debug('[coreInit] Creating definitive ProjectDetailsComponent instance...', { context: 'coreInit' });
-    const finalPdc = createProjectDetailsComponentFactory({
+    const finalPdc = createProjectDetailsComponent({ // Use corrected factory name
         projectManager,           // Instance created above
         eventHandlers,            // Direct arg
         modalManager,             // Instance created above
@@ -420,7 +432,7 @@ export function createCoreInitializer({
     // 6.1. ProjectDashboard
     // Main UI container for project list and details views.
     logger.debug('[coreInit] Creating ProjectDashboard...', { context: 'coreInit' });
-    const projectDashboard = createProjectDashboardFactory({
+    const projectDashboard = createProjectDashboard({ // Use corrected factory name
       DependencySystem,         // For potential internal DI
       domAPI,                   // Direct arg
       browserService,           // Direct arg
@@ -448,7 +460,7 @@ export function createCoreInitializer({
       hasDomReadinessService: !!domReadinessService
     });
 
-    const projectModal = createProjectModalFactory({
+    const projectModal = createProjectModal({ // Use corrected factory name
       projectManager,           // Instance created above
       eventHandlers,            // Direct arg
       DependencySystem,         // For potential internal DI
@@ -463,7 +475,7 @@ export function createCoreInitializer({
     // 6.3. Sidebar
     // Main navigation sidebar; depends on various services and components.
     logger.debug('[coreInit] Creating Sidebar...', { context: 'coreInit' });
-    const sidebar = createSidebarFactory({
+    const sidebar = createSidebar({ // Use corrected factory name
       eventHandlers,            // Direct arg
       DependencySystem,         // For potential internal DI
       domAPI,                   // Direct arg

@@ -186,6 +186,14 @@ export function createUIInitializer({
         DependencySystem          // For potential internal DI use by the component
       });
       DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
+      // Initialize TokenStatsManager if it has an initialize method
+      if (typeof tokenStatsManagerInstance.initialize === 'function') {
+        logger.debug('[UIInit] Initializing TokenStatsManager...', { context: 'uiInit' });
+        await tokenStatsManagerInstance.initialize();
+        logger.debug('[UIInit] TokenStatsManager initialized.', { context: 'uiInit' });
+      } else {
+        logger.debug('[UIInit] TokenStatsManager does not have an initialize method. Skipping initialization call.', { context: 'uiInit' });
+      }
       logger.debug('[UIInit] TokenStatsManager created and registered.', { context: 'uiInit' });
     }
 
