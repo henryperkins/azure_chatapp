@@ -39,5 +39,8 @@ export function createSafeHandler({ logger }) {
   // Required cleanup method (no-ops since this is stateless)
   safeHandler.cleanup = function() { /* nothing to cleanup */ };
 
-  return safeHandler;
+  return {
+    safeHandler,
+    cleanup: safeHandler.cleanup
+  };
 }

@@ -45,12 +45,10 @@ export function createFormattingUtils({ domAPI, sanitizer, DependencySystem } = 
   // Replace any other window / document usage with domAPI equivalents.
 
   return {
-    /* existing public helpers */,
-    cleanup() {                       // Rule 4 compliance
-      DependencySystem
-        .modules
-        .get('eventHandlers')
-        ?.cleanupListeners({ context: 'FormattingUtils' });
+    // expose any helpers you actually keep
+    cleanup() {
+      const EH = DependencySystem.modules.get('eventHandlers');
+      if (EH && EH.cleanupListeners) EH.cleanupListeners({ context: 'FormattingUtils' });
     }
   };
 }

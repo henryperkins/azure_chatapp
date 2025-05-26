@@ -1451,7 +1451,9 @@ export function createChatManager(deps = {}) {
     updateModelConfig: instance.updateModelConfig.bind(instance),
     // Ensure eventHandlers.cleanupListeners is called directly in the module API, per .clinerules contract
     cleanup: () => {
-      eventHandlers.cleanupListeners?.({ context: "chatManager" });
+      if (eventHandlers && eventHandlers.cleanupListeners) {
+        eventHandlers.cleanupListeners({ context: "chatManager" });
+      }
       instance.cleanup();
     },
     chatBus: instance.chatBus

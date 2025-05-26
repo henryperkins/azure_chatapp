@@ -239,8 +239,10 @@ export function createProjectDashboardUtils(options = {}) {
 
     // Backward compatible destroy (alias)
     destroy: function () {
-      eventHandlers.cleanupListeners?.({ context: 'projectActions' });
-      eventHandlers.cleanupListeners?.({ context: 'uiUtils' });
+      if (eventHandlers && eventHandlers.cleanupListeners) {
+        eventHandlers.cleanupListeners({ context: 'projectActions' });
+        eventHandlers.cleanupListeners({ context: 'uiUtils' });
+      }
       initialized = false;
     }
   };

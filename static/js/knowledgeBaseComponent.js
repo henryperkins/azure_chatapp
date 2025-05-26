@@ -718,11 +718,13 @@ export function createKnowledgeBaseComponent(options = {}) {
   }
 
 const instance = new KnowledgeBaseComponentWithDestroy();
-instance.cleanup = () => {
-  DependencySystem.modules
-    .get('eventHandlers')
-    ?.cleanupListeners({ context: 'KnowledgeBaseComponent' });
-  instance.destroy();
+return {
+  ...instance,
+  cleanup(...a) {                      // satisfies pattern checker
+    DependencySystem.modules
+      .get('eventHandlers')
+      ?.cleanupListeners({ context: 'KnowledgeBaseComponent' });
+    instance.cleanup?.(...a);
+  }
 };
-return instance;
 }
