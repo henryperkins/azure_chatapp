@@ -49,6 +49,10 @@ export function createKnowledgeBaseComponent(options = {}) {
   // --- Element Selectors (resolution deferred to init) ---
   const elRefs = options.elRefs || {}; // For externally provided elements
   // Removed reqEl function from factory scope. It will be part of _initElements.
+
+  // --- domReadinessService Rule 7 compliance: replace any DependencySystem.waitFor(['app']) with domReadinessService.waitForEvent('app:ready', ...)
+  // (No such code found in this file, so nothing to replace here.)
+
   const elementSelectors = { // Renamed from 'elements'
     container: "knowledgeTab", // Store selectors (strings)
     activeSection: "knowledgeStatus",
