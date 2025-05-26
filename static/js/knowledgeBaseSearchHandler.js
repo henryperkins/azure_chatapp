@@ -258,7 +258,10 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
 
     chatInput.value = current ? `${current}\n\n${refText}` : refText;
     chatInput.focus();
-    chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+    ctx.domAPI.dispatchEvent(
+      chatInput,
+      ctx.eventHandlers.createCustomEvent('input', { bubbles: true })
+    );
   }
 
   /**
@@ -323,5 +326,9 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
     triggerSearch,
     hideResultDetailModal: _hideResultDetailModal, // expose for direct calls if needed
     handleResultModalKeydown,
+    cleanup() {
+      const EH = ctx.DependencySystem.modules.get('eventHandlers');
+      if (EH && EH.cleanupListeners) EH.cleanupListeners({ context: 'KnowledgeBaseSearchHandler' });
+    }
   };
 }
