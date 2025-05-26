@@ -42,15 +42,10 @@ export function createServiceInitializer({
   }
   // Capture whether a real logger instance was provided by caller
   const providedLogger = !!logger;
-  // Allow logger to be missing at first; fallback to window.console or a no-op.
+  // Allow logger to be missing at first; fallback to browserServiceInstance console or a no-op.
   if (!providedLogger) {
-    logger = (typeof window !== 'undefined' && window.console) ? window.console : {
-      info: () => {},
-      warn: () => {},
-      error: () => {},
-      debug: () => {},
-      log: () => {},
-    };
+    const winConsole = browserServiceInstance?.getWindow?.()?.console;
+    logger = winConsole ?? { info() {}, warn() {}, error() {}, debug() {}, log() {} };
   }
 
   // Helper: register only if not already present
