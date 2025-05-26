@@ -223,7 +223,9 @@
 }
 
 .loading-card {
-  @apply skeleton-card;
+  @apply skeleton rounded-2xl;
+  height: 200px;
+  width: 100%;
 }
 
 /* Loading state for messages */
