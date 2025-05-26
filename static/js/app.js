@@ -606,7 +606,7 @@ export async function init() {
     logger.log('[App.init] Stage 5: Waiting for critical DI modules (auth, eventHandlers, modalManager)...', { context: 'app:init' });
     await domReadinessService.dependenciesAndElements({
       deps: ['auth', 'eventHandlers', 'modalManager'], // Key modules registered in coreInit
-      timeout: PHASE_TIMEOUT, 
+      timeout: PHASE_TIMEOUT,
       context: 'app.init:depsReady'
     });
     logger.info('[App.init] Stage 5: Critical DI modules ready.', { context: 'app:init' });
@@ -666,9 +666,6 @@ export async function init() {
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
     logger.info('[App.init] Stage 11: Application initialization finalized and marked as complete.', { context: 'app:init' });
-
-    // Remove unnecessary debug logs previously here.
-    // The sidebar visibility check was a temporary debug step.
 
     // Stage 12: Dispatch app:ready event
     if (!globalInitTimeoutFired) {
@@ -791,23 +788,13 @@ if (typeof window !== 'undefined') {
     }
   })();
 }
- 
- 
+
+
 // Factory required by guard-rail Rule 1
 export function createAppConfig({ DependencySystem } = {}) {
   if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
   return {
     APP_CONFIG,
     cleanup() { /* no-op */ }
-  };
-}
- 
-// Guard-rail rule-1 factory
-export function createAppConfig({ DependencySystem } = {}) {
-  if (!DependencySystem)
-    throw new Error('[appConfig] Missing DependencySystem');
-  return {
-    APP_CONFIG,
-    cleanup() { /* nothing to clean */ }
   };
 }
