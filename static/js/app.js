@@ -370,7 +370,9 @@ function fireAppReady(success = true, error = null) {
   // expose flag for modules that check it via DependencySystem.modules.get('app')
   app._appReadyDispatched = true;
 
-  const detail = success ? { success } : { success, error };
+  const detail = success
+    ? { status: 200, data: { success }, message: 'ok' }
+    : { status: error?.status ?? 500, data: error, message: error?.message ?? 'init-failed' };
   const drs = DependencySystem.modules.get?.('domReadinessService');
   if (drs?.emitReplayable) {
     // Use replay-capable emitter so late listeners resolve immediately
@@ -548,26 +550,26 @@ export async function init() {
   toggleLoadingSpinner(true);
 
   try {
-    logger.log('[App.init] Initializing Error Handling...');
+    logger.log('[App.init] Initializing Error Handling...', { context: 'app:init' });
     errorInit.initializeErrorHandling();
-    logger.info('[App.init] Error handling initialization completed.');
+    logger.info('[App.init] Error handling initialization completed.', { context: 'app:init' });
 
-    logger.log('[App.init] Initializing Core Systems...');
+    logger.log('[App.init] Initializing Core Systems...', { context: 'app:init' });
     await coreInit.initializeCoreSystems();
-    logger.info('[App.init] Core systems initialization phase completed.');
+    logger.info('[App.init] Core systems initialization phase completed.', { context: 'app:init' });
 
     // NEW: Wait for modals to load before proceeding
-    logger.log('[App.init] Waiting for modals to load...');
+    logger.log('[App.init] Waiting for modals to load...', { context: 'app:init' });
     await domReadinessService.waitForEvent('modalsLoaded', {
       timeout: 10000,
       context: 'app.init:modalsLoaded'
     });
-    logger.info('[App.init] Modals loaded successfully.');
+    logger.info('[App.init] Modals loaded successfully.', { context: 'app:init' });
 
     // Now call registerAdvancedServices after modals are ready
     serviceInit.registerAdvancedServices();
 
-    logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...');
+    logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...', { context: 'app:init' });
 
     // Debug: Check which modules are already available
     const modulesStatus = {
@@ -576,27 +578,27 @@ export async function init() {
       modalManager: !!DependencySystem.modules.get('modalManager'),
       sidebar: !!DependencySystem.modules.get('sidebar')
     };
-    logger.info('[App.init] Modules status before wait:', modulesStatus);
+    logger.info('[App.init] Modules status before wait:', modulesStatus, { context: 'app:init' });
 
     await domReadinessService.dependenciesAndElements({
       deps: ['auth', 'eventHandlers', 'modalManager'],
       timeout: PHASE_TIMEOUT, // Use PHASE_TIMEOUT
       context: 'app.init:depsReady'
     });
-    logger.info('[App.init] Critical DI modules ready.');
+    logger.info('[App.init] Critical DI modules ready.', { context: 'app:init' });
 
-    logger.log('[App.init] Initializing Auth System...');
+    logger.log('[App.init] Initializing Auth System...', { context: 'app:init' });
     const safeAuthInit = safeHandler(
       () => authInit.initializeAuthSystem(),
       'authInit.initializeAuthSystem'
     );
     await safeAuthInit();
-    logger.info('[App.init] Auth system initialization completed.');
+    logger.info('[App.init] Auth system initialization completed.', { context: 'app:init' });
 
     // Logger is now created after API client is ready, so no upgrade needed.
 
     if (appModule.state.isAuthenticated) {
-      logger.log('[App.init] Fetching Current User...');
+      logger.log('[App.init] Fetching Current User...', { context: 'app:init' });
       const authModule = DependencySystem.modules.get('auth');
       if (authModule?.fetchCurrentUser) {
         const user = await authModule.fetchCurrentUser();
@@ -605,12 +607,12 @@ export async function init() {
           browserAPI.setCurrentUser(user);
         }
       } else {
-        logger.warn('[App.init] Auth module fetchCurrentUser method not available');
+        logger.warn('[App.init] Auth module fetchCurrentUser method not available', { context: 'app:init' });
       }
-      logger.info('[App.init] Fetch current user step completed.');
+      logger.info('[App.init] Fetch current user step completed.', { context: 'app:init' });
     }
 
-    logger.log('[App.init] Initializing UI Components...');
+    logger.log('[App.init] Initializing UI Components...', { context: 'app:init' });
 
     // Debug: Check DOM elements before UI init
     const domElementsStatus = {
@@ -619,7 +621,7 @@ export async function init() {
       authButton: !!domAPI.getElementById('authButton'),
       modalsContainer: !!domAPI.getElementById('modalsContainer')
     };
-    logger.info('[App.init] DOM elements status before UI init:', domElementsStatus);
+    logger.info('[App.init] DOM elements status before UI init:', domElementsStatus, { context: 'app:init' });
 
     await uiInit.initializeUIComponents();
 
@@ -628,22 +630,22 @@ export async function init() {
       sidebar: !!DependencySystem.modules.get('sidebar'),
       sidebarInitialized: DependencySystem.modules.get('sidebar')?.initialized || false
     };
-    logger.info('[App.init] Modules after UI init:', modulesAfterUI);
+    logger.info('[App.init] Modules after UI init:', modulesAfterUI, { context: 'app:init' });
 
-    logger.info('[App.init] UI components initialization completed.');
+    logger.info('[App.init] UI components initialization completed.', { context: 'app:init' });
 
     const mc = DependencySystem.modules.get('modelConfig');
     if (mc?.initializeUI) {
-      logger.log('[App.init] Initializing Model Config UI...');
+      logger.log('[App.init] Initializing Model Config UI...', { context: 'app:init' });
       mc.initializeUI();
-      logger.info('[App.init] Model Config UI initialization completed.');
+      logger.info('[App.init] Model Config UI initialization completed.', { context: 'app:init' });
     }
 
-    logger.log('[App.init] Registering App Listeners...');
+    logger.log('[App.init] Registering App Listeners...', { context: 'app:init' });
     registerAppListeners();
-    logger.info('[App.init] App listeners registered.');
+    logger.info('[App.init] App listeners registered.', { context: 'app:init' });
 
-    logger.log('[App.init] Initializing Navigation Service...');
+    logger.log('[App.init] Initializing Navigation Service...', { context: 'app:init' });
     const navService = DependencySystem.modules.get('navigationService');
     if (!navService) {
       throw new Error('[App] NavigationService missing from DI. Aborting initialization.');
@@ -651,13 +653,13 @@ export async function init() {
     if (navService?.init) {
       await navService.init();
     }
-    logger.info('[App.init] Navigation service initialization completed.');
+    logger.info('[App.init] Navigation service initialization completed.', { context: 'app:init' });
 
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
 
     // Debug: Force sidebar visibility check
-    logger.info('[App.init] Final debug - checking sidebar state');
+    logger.info('[App.init] Final debug - checking sidebar state', { context: 'app:init' });
     const sidebar = DependencySystem.modules.get('sidebar');
     const sidebarEl = domAPI.getElementById('mainSidebar');
     if (sidebarEl) {
@@ -670,11 +672,11 @@ export async function init() {
         viewportWidth,
         hasTranslateXFull: sidebarClasses.includes('-translate-x-full'),
         hasTranslateX0: sidebarClasses.includes('translate-x-0')
-      });
+      }, { context: 'app:init' });
 
       // Force sidebar visible on desktop if not already
       if (viewportWidth >= 768 && sidebarClasses.includes('-translate-x-full')) {
-        logger.warn('[App.init] FORCING sidebar visible on desktop');
+        logger.warn('[App.init] FORCING sidebar visible on desktop', { context: 'app:init' });
         sidebarEl.classList.remove('-translate-x-full');
         sidebarEl.classList.add('translate-x-0');
       }
@@ -805,5 +807,15 @@ export function createAppConfig({ DependencySystem } = {}) {
   return {
     APP_CONFIG,
     cleanup() { /* no-op */ }
+  };
+}
+ 
+// Guard-rail rule-1 factory
+export function createAppConfig({ DependencySystem } = {}) {
+  if (!DependencySystem)
+    throw new Error('[appConfig] Missing DependencySystem');
+  return {
+    APP_CONFIG,
+    cleanup() { /* nothing to clean */ }
   };
 }

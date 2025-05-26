@@ -619,8 +619,9 @@ export function createEventHandlers({
   }
 
   function cleanup() {
-    // Cleans up all event listeners and module state
-    eventHandlers.cleanupListeners({ context: MODULE });
+    // centralised cleanup – must reference the public API, not the
+    // constructor-scope variable (rule-2 DI compliance)
+    eventHandlerAPI.cleanupListeners({ context: MODULE });
     // You could add more explicit cleanup logic here if stateful singletons or intervals are added
   }
 
