@@ -20,52 +20,90 @@ export function createCoreInitializer({
   sanitizer,
   logger,
   APP_CONFIG,
-  domReadinessService
+  domReadinessService,
+  createKnowledgeBaseComponent, // Existing
+
+  // --- Core Dependencies (passed from app.js) ---
+  DependencySystem,         // The central DI container.
+  domAPI,                   // Utility for DOM interactions.
+  browserService,           // Service for browser-specific functionalities (URL, storage, window).
+  eventHandlers,            // Centralized event management.
+  sanitizer,                // HTML sanitizer (DOMPurify).
+  logger,                   // Logging utility.
+  APP_CONFIG,               // Global application configuration.
+  domReadinessService,      // Service for DOM readiness checks and waits.
+  createKnowledgeBaseComponent, // Factory for KnowledgeBaseComponent.
+
+  // --- Services & Utilities (passed from app.js, previously DI-resolved) ---
+  MODAL_MAPPINGS,           // Constant object mapping modal types to their configurations.
+  apiRequest,               // The configured API fetch function (from apiClient.fetch).
+  apiClientObject,          // The full API client instance.
+  apiEndpoints,             // Object containing resolved API endpoint URLs.
+  app,                      // The main application state object.
+  uiUtils,                  // General UI utility functions (formatting, icons).
+  navigationService,        // Service for URL parsing and navigation control.
+  globalUtils,              // Global utility functions (validation, string manipulation).
+  FileUploadComponent,      // Factory for FileUploadComponent.
+  htmlTemplateLoader,       // Service for loading HTML templates.
+  uiRenderer,               // Service for rendering UI elements/components.
+  accessibilityUtils,       // Utilities for accessibility enhancements.
+  safeHandler               // Wrapper for safe function execution with error handling.
 }) {
-  if (
-    !DependencySystem || !domAPI || !browserService ||
-    !eventHandlers || !sanitizer || !logger || !APP_CONFIG || !domReadinessService
-  ) {
-    throw new Error('[coreInit] Missing required dependencies for core initialization.');
+  // --- Dependency Validation ---
+  const requiredDeps = {
+    DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG, domReadinessService,
+    createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest, apiClientObject, apiEndpoints, app, uiUtils,
+    navigationService, globalUtils, FileUploadComponent, htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
+  };
+
+  for (const [depName, dep] of Object.entries(requiredDeps)) {
+    if (!dep) {
+      throw new Error(`[coreInit] Missing required dependency: ${depName}`);
+    }
   }
 
-  // Utility: Create or get chat manager
-  function createOrGetChatManager(apiRequest, modelConfig, projectDetailsComponent, app, apiEndpoints) {
-    const existing = DependencySystem.modules.get('chatManager');
-    if (existing) return existing;
+  // Utility: Create or get chatManager.
+  // This function ensures a single instance of ChatManager.
+  // Dependencies like `authModule`, `modelConfig`, `projectDetailsComponent` are passed directly.
+  function createOrGetChatManager(currentAuthModule, currentModelConfig, currentProjectDetailsComponent) {
+    const existingChatManager = DependencySystem.modules.get('chatManager');
+    if (existingChatManager) return existingChatManager;
 
-    const createChatManager = DependencySystem.modules.get('createChatManager');
-    if (!createChatManager) throw new Error('[coreInit] createChatManager factory not available in DI.');
+    // Retrieve the ChatManager factory from DI (as it's not a direct dependency of coreInit itself)
+    const createChatManagerFactory = DependencySystem.modules.get('createChatManager');
+    if (!createChatManagerFactory) {
+      logger.error('[coreInit] createChatManager factory not found in DependencySystem.', { context: 'coreInit:createOrGetChatManager' });
+      throw new Error('[coreInit] createChatManager factory not available in DI.');
+    }
 
-    const authModule = DependencySystem.modules.get('auth');
-    const cm = createChatManager({
-      DependencySystem,
-      apiRequest,
-      auth: authModule,
-      eventHandlers,
-      modelConfig,
-      projectDetailsComponent,
-      app,
-      domAPI,
-      domReadinessService,
-      logger,
-      navAPI: {
+    const chatManagerInstance = createChatManagerFactory({
+      DependencySystem,         // For internal DI if ChatManager needs it
+      apiRequest,               // Direct arg: API fetch function
+      auth: currentAuthModule,  // Direct arg: The created AuthModule instance
+      eventHandlers,            // Direct arg: Central event bus
+      modelConfig: currentModelConfig, // Direct arg: The created ModelConfig instance
+      projectDetailsComponent: currentProjectDetailsComponent, // Direct arg: ProjectDetailsComponent (can be placeholder initially)
+      app,                      // Direct arg: Main application object
+      domAPI,                   // Direct arg: DOM API utility
+      domReadinessService,      // Direct arg: DOM readiness service
+      logger,                   // Direct arg: Logger instance
+      navAPI: {                 // Constructed from browserService (direct arg)
         getSearch: () => browserService.getLocation().search,
         getHref: () => browserService.getLocation().href,
         pushState: (url, title = "") => browserService.pushState({}, title, url),
         getPathname: () => browserService.getLocation().pathname
       },
-      isValidProjectId: DependencySystem.modules.get('globalUtils').isValidProjectId,
-      isAuthenticated: () => !!authModule?.isAuthenticated?.(),
-      DOMPurify: DependencySystem.modules.get('sanitizer'),
-      apiEndpoints,
+      isValidProjectId: globalUtils.isValidProjectId, // From globalUtils (direct arg)
+      isAuthenticated: () => !!currentAuthModule?.isAuthenticated?.(), // Derived from currentAuthModule
+      DOMPurify: sanitizer,     // Direct arg: DOMPurify instance
+      apiEndpoints,             // Direct arg: API endpoints map
       APP_CONFIG
     });
-    DependencySystem.register('chatManager', cm);
-    return cm;
+    DependencySystem.register('chatManager', chatManagerInstance);
+    return chatManagerInstance;
   }
 
-  // Placeholder utility
+  // Placeholder utility (No changes needed, it's self-contained)
   function createPlaceholder(name) {
     return {
       state: { initialized: false },
@@ -79,53 +117,87 @@ export function createCoreInitializer({
   }
 
   /**
-   * Main core systems initialization.
-   * Registers and initializes modalManager, auth module, logger, model config, chatManager,
-   * projectManager, projectDashboard, projectListComponent, projectDetailsComponent, etc.
+   * @async
+   * @function initializeCoreSystems
+   * @description Main core systems initialization function.
+   * Orchestrates the creation and registration of essential application modules and components.
+   * The order of initialization is critical for some dependencies.
+   *
+   * Initialization Order & Rationale:
+   * 1.  **ModalManager**: Needed early for error reporting and UI interactions during bootstrap.
+   * 2.  **AuthModule**: Fundamental for user authentication state, influences other modules.
+   * 3.  **ModelConfig**: Manages model configurations, potentially used by ProjectManager and ChatManager. Initializes its UI here.
+   * 4.  **ProjectListComponent (Placeholder)**: Registered early, full init may depend on ProjectManager.
+   * 5.  **ProjectDetailsComponent (Placeholder)**: Registered early for ChatManager. Full init after ProjectManager & KnowledgeBaseComponent.
+   * 6.  **ChatManager**: Depends on AuthModule, ModelConfig, and a (potentially placeholder) ProjectDetailsComponent.
+   * 7.  **ProjectManager**: Manages project data, depends on ChatManager, ModelConfig.
+   * 8.  **KnowledgeBaseComponent**: Depends on ProjectManager. Created here and injected into ProjectDetailsComponent.
+   * 9.  **ProjectDetailsComponent (Final)**: Fully initialized with ProjectManager and KnowledgeBaseComponent.
+   * 10. **modalManager.init()**: Loads modal HTML templates. Called after other core modules are registered, before eventHandlers.init().
+   * 11. **eventHandlers.init()**: Initializes global event handlers, potentially needing modal elements.
+   * 12. **ProjectDashboard**: UI container for project views.
+   * 13. **ProjectModal**: UI for project creation/editing. Initializes its UI here.
+   * 14. **Sidebar**: Main navigation UI, depends on many core services. Initializes its UI here.
    */
   async function initializeCoreSystems() {
-    logger.log('[coreInit][initializeCoreSystems] Starting', { context: 'coreInit' });
+    logger.log('[coreInit][initializeCoreSystems] Starting core systems initialization.', { context: 'coreInit' });
 
-    // Wait for minimal DOM readiness
+    // Phase 1: DOM Readiness Check (Basic)
+    logger.debug('[coreInit] Phase 1: Waiting for basic DOM readiness (body element).', { context: 'coreInit' });
     await domReadinessService.dependenciesAndElements({
-      deps: ['domAPI'],
+      deps: ['domAPI'], // domAPI is a direct argument, this ensures it's usable
       domSelectors: ['body'],
       timeout: 10000,
-      context: 'coreInit:initializeCoreSystems'
+      context: 'coreInit:initializeCoreSystems:domReady'
     });
+    logger.debug('[coreInit] Phase 1: Basic DOM readiness confirmed.', { context: 'coreInit' });
 
-    // Get required factories from DependencySystem
-    const createModalManager = DependencySystem.modules.get('createModalManager');
-    if (!createModalManager) throw new Error('[coreInit] createModalManager factory not available in DI.');
-    const createAuthModule = DependencySystem.modules.get('createAuthModule');
-    if (!createAuthModule) throw new Error('[coreInit] createAuthModule factory not available in DI.');
-    const createProjectManager = DependencySystem.modules.get('createProjectManager');
-    if (!createProjectManager) throw new Error('[coreInit] createProjectManager factory not available in DI.');
-    const createModelConfig = DependencySystem.modules.get('createModelConfig');
-    if (!createModelConfig) throw new Error('[coreInit] createModelConfig factory not available in DI.');
-    const createProjectDashboard = DependencySystem.modules.get('createProjectDashboard');
-    if (!createProjectDashboard) throw new Error('[coreInit] createProjectDashboard factory not available in DI.');
-    const createProjectDetailsComponent = DependencySystem.modules.get('createProjectDetailsComponent');
-    if (!createProjectDetailsComponent) throw new Error('[coreInit] createProjectDetailsComponent factory not available in DI.');
-    const createProjectListComponent = DependencySystem.modules.get('createProjectListComponent');
-    if (!createProjectListComponent) throw new Error('[coreInit] createProjectListComponent factory not available in DI.');
-    const createProjectModal = DependencySystem.modules.get('createProjectModal');
-    if (!createProjectModal) throw new Error('[coreInit] createProjectModal factory not available in DI.');
-    const createSidebar = DependencySystem.modules.get('createSidebar');
-    if (!createSidebar) throw new Error('[coreInit] createSidebar factory not available in DI.');
+    // Phase 2: Retrieve Component Factories from DependencySystem
+    // These are factories for creating instances, not the instances themselves.
+    // Direct dependencies (services, utils) are already available as arguments to createCoreInitializer.
+    logger.debug('[coreInit] Phase 2: Retrieving component factories from DependencySystem.', { context: 'coreInit' });
+    const factories = {
+      createModalManager: DependencySystem.modules.get('createModalManager'),
+      createAuthModule: DependencySystem.modules.get('createAuthModule'),
+      createProjectManager: DependencySystem.modules.get('createProjectManager'),
+      createModelConfig: DependencySystem.modules.get('createModelConfig'),
+      createProjectDashboard: DependencySystem.modules.get('createProjectDashboard'),
+      createProjectDetailsComponent: DependencySystem.modules.get('createProjectDetailsComponent'),
+      createProjectListComponent: DependencySystem.modules.get('createProjectListComponent'),
+      createProjectModal: DependencySystem.modules.get('createProjectModal'),
+      createSidebar: DependencySystem.modules.get('createSidebar')
+    };
 
-    const MODAL_MAPPINGS = DependencySystem.modules.get('MODAL_MAPPINGS');
-    const apiRequest = DependencySystem.modules.get('apiRequest');
-    const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
-    const app = DependencySystem.modules.get('app');
+    for (const [factoryName, factory] of Object.entries(factories)) {
+      if (!factory) {
+        logger.error(`[coreInit] Missing required factory: ${factoryName}`, { context: 'coreInit:factoryCheck' });
+        throw new Error(`[coreInit] Missing required factory: ${factoryName}`);
+      }
+    }
+    const {
+        createModalManagerFactory, // Renamed for clarity in this scope
+        createAuthModuleFactory,
+        createProjectManagerFactory,
+        createModelConfigFactory,
+        createProjectDashboardFactory,
+        createProjectDetailsComponentFactory,
+        createProjectListComponentFactory,
+        createProjectModalFactory,
+        createSidebarFactory
+    } = factories; // Destructure after validation for convenience
+    logger.debug('[coreInit] Phase 2: All component factories retrieved.', { context: 'coreInit' });
 
-    // 1. ModalManager
-    const modalManager = createModalManager({
+    // Phase 3: Instantiate and Register Core Services & Components
+    logger.debug('[coreInit] Phase 3: Instantiating and registering core services and components.', { context: 'coreInit' });
+
+    // 3.1. ModalManager
+    logger.debug('[coreInit] Creating ModalManager...', { context: 'coreInit' });
+    const modalManager = createModalManagerFactory({ // Use the factory
       domAPI,
       browserService,
       eventHandlers,
       DependencySystem,
-      modalMapping : MODAL_MAPPINGS,
+      modalMapping : MODAL_MAPPINGS, // Use direct argument
       domPurify    : sanitizer,
       domReadinessService,   // NEW – mandatory for constructor
       logger                   // NEW – ensure structured logging
@@ -133,99 +205,113 @@ export function createCoreInitializer({
     DependencySystem.register('modalManager', modalManager);
 
     // 2. Auth module
-    if (typeof apiRequest !== 'function') {
-      throw new Error('[coreInit] apiRequest dependency is missing or not a function (required for AuthModule DI, got: ' + typeof apiRequest + ') — ensure serviceInit.registerAdvancedServices() completed successfully and did not throw.');
+    // apiRequest (fetch function) is a direct argument. apiClientObject (full client) is also a direct argument.
+    if (typeof apiRequest !== 'function') { // Should still validate the passed apiRequest if it's used directly
+      throw new Error('[coreInit] apiRequest argument is not a function.');
     }
-    const authModule = createAuthModule({
+    if (!apiClientObject) { // apiAuthModule needs the full client object
+        throw new Error('[coreInit] apiClientObject argument is missing.');
+    }
+    const authModule = createAuthModuleFactory({ // Use the factory
       DependencySystem,
-      apiClient: apiRequest,
+      apiClient: apiClientObject, // Pass the full apiClientObject
       eventHandlers,
       domAPI,
       sanitizer,
       APP_CONFIG,
       modalManager,
-      apiEndpoints,
+      apiEndpoints, // Use direct argument
       logger,
       domReadinessService
     });
     DependencySystem.register('auth', authModule);
 
     logger.log('[coreInit] auth module registered', { context: 'coreInit' });
-    // authModule.init() will be called by authInit.initializeAuthSystem() later in app.js
+    // authModule.init() will be called by authInit.initializeAuthSystem() later in app.js, not here.
 
-    // 3. Model config
-    const modelConfigInstance = createModelConfig({
-      dependencySystem: DependencySystem,
-      domReadinessService: DependencySystem.modules.get('domReadinessService'),
-      eventHandler: eventHandlers,
-      storageHandler: DependencySystem.modules.get('storage'),
-      sanitizer: DependencySystem.modules.get('sanitizer')
+    // 3.3. ModelConfig
+    // Manages model configurations; its UI (if any) is initialized via initWithReadiness.
+    logger.debug('[coreInit] Creating ModelConfig...', { context: 'coreInit' });
+    const modelConfigInstance = createModelConfigFactory({
+      dependencySystem: DependencySystem, // Retained for potential internal DI use by ModelConfig
+      domReadinessService,      // Direct arg
+      eventHandler: eventHandlers, // Direct arg
+      storageHandler: browserService, // Direct arg (browserService acts as storage)
+      sanitizer                 // Direct arg
     });
     DependencySystem.register('modelConfig', modelConfigInstance);
+    await modelConfigInstance.initWithReadiness(); // Initializes ModelConfig and its UI elements.
+    logger.debug('[coreInit] ModelConfig instance created, registered, and UI initialized.', { context: 'coreInit' });
 
-    // 4. Pre-register projectListComponent and projectDetailsComponent (instantiate or placeholder)
+    // uiUtils (direct argument) is used by KnowledgeBaseComponent later.
+
+    // 3.4. ProjectListComponent (Placeholder or Full Instance)
+    // Handles the display of the project list.
+    logger.debug('[coreInit] Creating ProjectListComponent (or ensuring placeholder)...', { context: 'coreInit' });
     if (!DependencySystem.modules.has('projectListComponent')) {
-      const plc = createProjectListComponent({
-        projectManager: null, // Will be set after projectManager is created
-        eventHandlers,
-        modalManager,
-        app,
-        router: DependencySystem.modules.get('navigationService'),
-        storage: DependencySystem.modules.get('storage'),
-        sanitizer: DependencySystem.modules.get('sanitizer'),
-        htmlSanitizer: DependencySystem.modules.get('sanitizer'),
-        apiClient: apiRequest,
-        domAPI,
-        domReadinessService,
-        browserService,
-        globalUtils: DependencySystem.modules.get('globalUtils'),
+      const projectListComponentInstance = createProjectListComponentFactory({
+        projectManager: null,     // Will be set after ProjectManager is created
+        eventHandlers,            // Direct arg
+        modalManager,             // Instance created above
+        app,                      // Direct arg
+        router: navigationService,// Direct arg
+        storage: browserService,  // Direct arg (browserService acts as storage)
+        sanitizer,                // Direct arg
+        htmlSanitizer: sanitizer, // Direct arg
+        apiClient: apiRequest,    // Direct arg (fetch function)
+        domAPI,                   // Direct arg
+        domReadinessService,      // Direct arg
+        browserService,           // Direct arg
+        globalUtils,              // Direct arg
         APP_CONFIG,
         logger
       });
       DependencySystem.register('projectListComponent', plc);
     }
-
-    if (!DependencySystem.modules.has('projectDetailsComponent')) {
-      const pdc = createProjectDetailsComponent({
-        projectManager: null, // Will be set after projectManager is created
-        eventHandlers,
-        modalManager,
-        FileUploadComponentClass: DependencySystem.modules.get('FileUploadComponent'),
-        domAPI,
-        sanitizer: DependencySystem.modules.get('sanitizer'),
-        app,
-        navigationService: DependencySystem.modules.get('navigationService'),
-        htmlTemplateLoader: DependencySystem.modules.get('htmlTemplateLoader'),
-        logger,
-        APP_CONFIG,
-        chatManager: null, // Will be set after chatManager is created
-        modelConfig: modelConfigInstance,
-        knowledgeBaseComponent: null,
-        apiClient: apiRequest,
-        domReadinessService
-      });
-      DependencySystem.register('projectDetailsComponent', pdc);
+    
+    // 3.5. ProjectDetailsComponent (Placeholder for ChatManager)
+    // A placeholder might be needed if ChatManager requires it before ProjectManager and KBC are ready.
+    // The definitive instance (`finalPdc`) is created later.
+    logger.debug('[coreInit] Creating/ensuring ProjectDetailsComponent placeholder for ChatManager...', { context: 'coreInit' });
+    let projectDetailsComponentPlaceholder;
+    if (DependencySystem.modules.has('projectDetailsComponent')) {
+        projectDetailsComponentPlaceholder = DependencySystem.modules.get('projectDetailsComponent');
+         logger.debug('[coreInit] Existing ProjectDetailsComponent placeholder found.', { context: 'coreInit' });
+    } else {
+        projectDetailsComponentPlaceholder = createProjectDetailsComponentFactory({
+            projectManager: null, eventHandlers, modalManager,
+            FileUploadComponentClass: FileUploadComponent, // Direct arg
+            domAPI, sanitizer, app, navigationService, htmlTemplateLoader, logger, APP_CONFIG, // Direct args
+            chatManager: null, modelConfig: modelConfigInstance, knowledgeBaseComponent: null,
+            apiClient: apiRequest, // Direct arg (fetch function)
+            domReadinessService, __placeholder: true // Flag as placeholder
+        });
+        DependencySystem.register('projectDetailsComponent', projectDetailsComponentPlaceholder);
+        logger.debug('[coreInit] New ProjectDetailsComponent placeholder registered.', { context: 'coreInit' });
     }
 
-    // 5. ChatManager
-    const projectDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
+    // 3.6. ChatManager
+    // Manages chat functionalities; depends on auth state, model config, and project details.
+    logger.debug('[coreInit] Creating ChatManager...', { context: 'coreInit' });
+    const authModuleInstance = DependencySystem.modules.get('auth'); // Retrieve the instance created above
     const chatManager = createOrGetChatManager(
-      apiRequest,
-      modelConfigInstance,
-      projectDetailsComponent,
-      app,
-      apiEndpoints
+      authModuleInstance,             // The AuthModule instance
+      modelConfigInstance,            // The ModelConfig instance
+      projectDetailsComponentPlaceholder // The placeholder ProjectDetailsComponent
     );
+    logger.debug('[coreInit] ChatManager instance created and registered.', { context: 'coreInit' });
 
-    // 6. ProjectManager
-    const pmFactory = await createProjectManager({
-      DependencySystem,
-      chatManager,
-      app,
-      modelConfig: modelConfigInstance,
-      apiRequest,
-      apiEndpoints,
-      storage: DependencySystem.modules.get('storage'),
+    // 3.7. ProjectManager
+    // Manages project data and lifecycle. Depends on ChatManager and ModelConfig.
+    logger.debug('[coreInit] Creating ProjectManager...', { context: 'coreInit' });
+    const pmFactory = await createProjectManagerFactory({
+      DependencySystem,           // For potential internal DI
+      chatManager,                // Instance created above
+      app,                        // Direct arg
+      modelConfig: modelConfigInstance, // Instance created above
+      apiRequest,                 // Direct arg (fetch function)
+      apiEndpoints,               // Direct arg
+      storage: browserService,    // Direct arg (browserService acts as storage)
       listenerTracker: {
         add: (el, type, handler, description) =>
           eventHandlers.trackListener(el, type, handler, { description, context: 'projectManager' }),
@@ -252,119 +338,168 @@ export function createCoreInitializer({
     if (plc && typeof plc.setProjectManager === 'function') {
       plc.setProjectManager(projectManager);
     }
-    if (projectDetailsComponent && typeof projectDetailsComponent.setProjectManager === 'function') {
-      projectDetailsComponent.setProjectManager(projectManager);
-    }
-    if (projectDetailsComponent && typeof projectDetailsComponent.setChatManager === 'function') {
-      projectDetailsComponent.setChatManager(chatManager);
+
+    logger.debug('[coreInit] ProjectManager instance created and registered.', { context: 'coreInit' });
+
+    // 3.8. KnowledgeBaseComponent
+    // Manages knowledge base interactions; depends on ProjectManager.
+    logger.debug('[coreInit] Creating KnowledgeBaseComponent...', { context: 'coreInit' });
+    const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({ // createKnowledgeBaseComponent is a direct argument
+      DependencySystem,         // For potential internal DI
+      apiRequest,               // Direct arg (fetch function)
+      projectManager,           // Instance created above
+      uiUtils,                  // Direct arg
+      sanitizer                 // Direct arg
+    });
+    DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+    logger.debug('[coreInit] KnowledgeBaseComponent instance created and registered.', { context: 'coreInit' });
+
+    // 3.9. ProjectDetailsComponent (Definitive Instance)
+    // Handles the display of project details; depends on ProjectManager and KnowledgeBaseComponent.
+    // This overwrites the placeholder previously registered.
+    logger.debug('[coreInit] Creating definitive ProjectDetailsComponent instance...', { context: 'coreInit' });
+    const finalPdc = createProjectDetailsComponentFactory({
+        projectManager,           // Instance created above
+        eventHandlers,            // Direct arg
+        modalManager,             // Instance created above
+        FileUploadComponentClass: FileUploadComponent, // Direct arg (factory)
+        domAPI,                   // Direct arg
+        sanitizer,                // Direct arg
+        app,                      // Direct arg
+        navigationService,        // Direct arg
+        htmlTemplateLoader,       // Direct arg
+        logger,                   // Direct arg
+        APP_CONFIG,               // Direct arg
+        chatManager,              // Instance created above
+        modelConfig: modelConfigInstance, // Instance created above
+        knowledgeBaseComponent: knowledgeBaseComponentInstance, // Instance created above
+        apiClient: apiRequest,    // Direct arg (fetch function)
+        domReadinessService       // Direct arg
+    });
+    DependencySystem.modules.set('projectDetailsComponent', finalPdc); // Overwrite placeholder
+    logger.debug('[coreInit] Definitive ProjectDetailsComponent instance created and registered.', { context: 'coreInit' });
+
+    // Update ChatManager with the final ProjectDetailsComponent instance
+    if (typeof chatManager.setProjectDetailsComponent === 'function') {
+        chatManager.setProjectDetailsComponent(finalPdc);
+        logger.debug('[coreInit] Updated ChatManager with the final ProjectDetailsComponent instance.', { context: 'coreInit' });
+    } else {
+        logger.warn('[coreInit] ChatManager does not have a setProjectDetailsComponent method. It might be using the placeholder or an outdated instance.', { context: 'coreInit' });
     }
 
-    // 7. modalManager.init (handles modal loading internally with proper timeouts)
-    // CRITICAL: Initialize modalManager BEFORE eventHandlers to avoid circular dependency
-    // eventHandlers.init() may need to access modal elements, so modals must be loaded first
+    // Phase 4: Initialize Modal Manager UI (Loads Modal HTML)
+    // This is done *after* core components are registered, as modals might be used by them,
+    // but *before* eventHandlers.init() which might attach listeners to modal elements.
+    logger.debug('[coreInit] Phase 4: Initializing ModalManager UI (loading modal.html)...', { context: 'coreInit' });
     if (modalManager.init) {
       try {
-        // Ensure htmlTemplateLoader is available before modalManager.init
-        const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
-        if (!htmlTemplateLoader) {
-          logger.warn('[coreInit] htmlTemplateLoader not available yet for modalManager.init', { context: 'coreInit:modalManager:init' });
-          // Wait briefly for htmlTemplateLoader to be registered
-          await new Promise(resolve => browserService.getWindow().setTimeout(resolve, 100));
-        }
-
-        await modalManager.init();
-        logger.log('[coreInit] modalManager initialization complete', { context: 'coreInit' });
+        // htmlTemplateLoader is a direct argument, so it's available.
+        await modalManager.init(); // Loads modal.html
+        logger.debug('[coreInit] Phase 4: ModalManager UI initialization complete.', { context: 'coreInit' });
       } catch (err) {
-        logger.error('[coreInit] Error in modalManager.init', err, { context: 'coreInit:modalManager:init' });
-        throw err;
+        logger.error('[coreInit] Phase 4: Error in modalManager.init()', err, { context: 'coreInit:modalManager:init' });
+        throw err; // Critical failure if modals cannot be loaded
       }
+    } else {
+        logger.warn('[coreInit] Phase 4: modalManager.init method not found. Modals may not load.', { context: 'coreInit' });
     }
 
-    // 8. EventHandlers init (now that modals are ready)
+    // Phase 5: Initialize Event Handlers
+    // Now that modals (and other UI stubs) are potentially loaded.
+    logger.debug('[coreInit] Phase 5: Initializing global event handlers...', { context: 'coreInit' });
     if (eventHandlers?.init) {
       await eventHandlers.init();
       logger.log('[coreInit] eventHandlers initialization complete', { context: 'coreInit' });
     }
 
-    // 9. ProjectDashboard
-    const projectDashboard = createProjectDashboard({
-      DependencySystem,
-      domAPI,
-      browserService,
-      eventHandlers,
-      logger,
-      sanitizer,
-      APP_CONFIG,
-      domReadinessService
+    logger.debug('[coreInit] Phase 5: Global event handlers initialization complete.', { context: 'coreInit' });
+
+    // Phase 6: Instantiate and Register Remaining UI-Oriented Core Components
+    logger.debug('[coreInit] Phase 6: Instantiating and registering remaining UI-oriented core components.', { context: 'coreInit' });
+
+    // 6.1. ProjectDashboard
+    // Main UI container for project list and details views.
+    logger.debug('[coreInit] Creating ProjectDashboard...', { context: 'coreInit' });
+    const projectDashboard = createProjectDashboardFactory({
+      DependencySystem,         // For potential internal DI
+      domAPI,                   // Direct arg
+      browserService,           // Direct arg
+      eventHandlers,            // Direct arg
+      logger,                   // Direct arg
+      sanitizer,                // Direct arg
+      APP_CONFIG,               // Direct arg
+      domReadinessService       // Direct arg
     });
     DependencySystem.register('projectDashboard', projectDashboard);
+    logger.debug('[coreInit] ProjectDashboard instance created and registered.', { context: 'coreInit' });
 
-    // 10. Project modal
-    const registeredProjectManager = DependencySystem.modules.get('projectManager');
-    if (!registeredProjectManager) {
-      logger.error('[coreInit] projectManager not found in DependencySystem', {
-        context: 'coreInit',
-        availableModules: Array.from(DependencySystem.modules.keys())
-      });
-      throw new Error('[coreInit] projectManager must be registered before creating projectModal');
+    // 6.2. ProjectModal
+    // UI for project creation and editing. Initializes its own UI elements.
+    logger.debug('[coreInit] Creating ProjectModal...', { context: 'coreInit' });
+    if (!projectManager) { // Should be available from pmFactory.instance
+      logger.error('[coreInit] ProjectManager instance is not available for ProjectModal creation.', { context: 'coreInit' });
+      throw new Error('[coreInit] ProjectManager must be available before creating ProjectModal.');
     }
-
-    logger.log('[coreInit] Creating projectModal with all required dependencies', {
+    logger.debug('[coreInit] ProjectModal dependencies check passed.', {
       context: 'coreInit',
-      hasProjectManager: !!registeredProjectManager,
+      hasProjectManager: !!projectManager, // Should be true
       hasEventHandlers: !!eventHandlers,
       hasDomAPI: !!domAPI,
       hasDomReadinessService: !!domReadinessService
     });
 
-    const projectModal = createProjectModal({
-      projectManager: registeredProjectManager,
-      eventHandlers,
-      DependencySystem,
-      domAPI,
-      domReadinessService,
-      domPurify: sanitizer
+    const projectModal = createProjectModalFactory({
+      projectManager,           // Instance created above
+      eventHandlers,            // Direct arg
+      DependencySystem,         // For potential internal DI
+      domAPI,                   // Direct arg
+      domReadinessService,      // Direct arg
+      domPurify: sanitizer      // Direct arg
     });
     DependencySystem.register('projectModal', projectModal);
+    await projectModal.initialize(); // Initializes ProjectModal and its UI elements.
+    logger.debug('[coreInit] ProjectModal instance created, registered, and UI initialized.', { context: 'coreInit' });
 
-    // 11. Sidebar
-    const sidebar = createSidebar({
-      eventHandlers,
-      DependencySystem,
-      domAPI,
-      uiRenderer: DependencySystem.modules.get('uiRenderer'),
-      storageAPI: DependencySystem.modules.get('storage'),
-      projectManager: DependencySystem.modules.get('projectManager'),
-      modelConfig: modelConfigInstance,
-      app: DependencySystem.modules.get('app'),
-      projectDashboard: DependencySystem.modules.get('projectDashboard'),
-      viewportAPI: browserService,
-      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
-      sanitizer,
-      domReadinessService,
-      logger,
-      safeHandler: DependencySystem.modules.get('safeHandler'),
+    // 6.3. Sidebar
+    // Main navigation sidebar; depends on various services and components.
+    logger.debug('[coreInit] Creating Sidebar...', { context: 'coreInit' });
+    const sidebar = createSidebarFactory({
+      eventHandlers,            // Direct arg
+      DependencySystem,         // For potential internal DI
+      domAPI,                   // Direct arg
+      uiRenderer,               // Direct arg
+      storageAPI: browserService, // Direct arg (browserService acts as storage)
+      projectManager,           // Instance created above
+      modelConfig: modelConfigInstance, // Instance created above
+      app,                      // Direct arg
+      projectDashboard,         // Instance created above
+      viewportAPI: browserService, // Direct arg
+      accessibilityUtils,       // Direct arg
+      sanitizer,                // Direct arg
+      domReadinessService,      // Direct arg
+      logger,                   // Direct arg
+      safeHandler,              // Direct arg
       APP_CONFIG
     });
     DependencySystem.register('sidebar', sidebar);
 
-    // --- NEW: Ensure the sidebar is fully initialised so that it can
-    // wire DOM listeners, react to auth state, and expose its public API.
-    // Without this call the sidebar remains dormant, causing the observed
-    // “sidebar not working / ignoring authentication” issue.
+    // Initialize the sidebar to wire up its internal listeners and UI.
+    // This was identified as a critical step to ensure sidebar functionality.
     if (sidebar?.init) {
       try {
         await sidebar.init();
-        logger.log('[coreInit] sidebar initialization complete', { context: 'coreInit:sidebar' });
+        logger.debug('[coreInit] Sidebar initialization (sidebar.init()) complete.', { context: 'coreInit:sidebar' });
       } catch (err) {
-        logger.error('[coreInit] Error in sidebar.init', err, { context: 'coreInit:sidebar:init' });
-        throw err;
+        logger.error('[coreInit] Error during sidebar.init()', err, { context: 'coreInit:sidebar:init' });
+        throw err; // Sidebar is critical, rethrow if its init fails.
       }
     } else {
-      logger.warn('[coreInit] Sidebar module missing init() method', { context: 'coreInit:sidebar' });
+      logger.warn('[coreInit] Sidebar module does not have an init() method. Sidebar may not function correctly.', { context: 'coreInit:sidebar' });
     }
+    logger.debug('[coreInit] Sidebar instance created and registered.', { context: 'coreInit' });
+    logger.debug('[coreInit] Phase 6: Remaining UI-oriented core components registered.', { context: 'coreInit' });
 
-    logger.log('[coreInit][initializeCoreSystems] Complete', { context: 'coreInit' });
+    logger.info('[coreInit][initializeCoreSystems] Core systems initialization successfully completed.', { context: 'coreInit' });
     return true;
   }
 
