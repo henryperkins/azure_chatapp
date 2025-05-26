@@ -240,11 +240,13 @@ if (DependencySystem?.modules?.has?.('safeHandler')) {
 
 // Inject the fully configured logger into serviceInit if needed
 serviceInit.setLogger(logger);
-// NOTE: serviceInit.registerAdvancedServices() will now be called in init() after modals are loaded
+// NOTE: serviceInit.registerAdvancedServices() is now called earlier.
+
+// serviceInit.registerAdvancedServices(); // MOVED EARLIER
 
 // Create API client (now should be available via serviceInit)
 // ---------------------------------------------------------------------------
-const apiRequest = DependencySystem.modules.get('apiRequest');
+// const apiRequest = DependencySystem.modules.get('apiRequest'); // Commented out
 
 // Modals.html will be loaded synchronously during init() before UI components
 
@@ -324,7 +326,7 @@ app.setLifecycleState = (...args) => {
 
 // Update app properties with required references
 app.DependencySystem = DependencySystem;
-app.apiRequest = apiRequest;
+// app.apiRequest = apiRequest; // Commented out
 app.state = appModule.state; // Point app.state to the single source of truth in appModule
 // Add isInitializing getter to delegate to appModule state
 Object.defineProperty(app, 'isInitializing', {
@@ -516,9 +518,9 @@ function handleInitError(err) {
 export async function init() {
   logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
 
-  // Ensure the DOM is fully loaded before initialization
-  await domReadinessService.documentReady();
-
+  // ---------------------------------------------------------------------------
+  // Phase 0: Pre-Initialization & Safety Checks
+  // ---------------------------------------------------------------------------
   const GLOBAL_INIT_TIMEOUT_MS = 15000; // 15 seconds
   const PHASE_TIMEOUT = 5000; // 5 seconds
 
@@ -549,24 +551,47 @@ export async function init() {
   toggleLoadingSpinner(true);
 
   try {
+    // ---------------------------------------------------------------------------
+    // Phase 1: Essential Services Setup
+    // ---------------------------------------------------------------------------
+    // Ensure the DOM is fully loaded before initialization (moved here as part of Phase 1)
+    await domReadinessService.documentReady();
+    logger.info('[App.init] DOM ready.');
+
+    // serviceInit.registerBasicServices() is called outside init, prior to logger creation.
+    // Logger creation and registration happen outside init.
+    // serviceInit.setLogger(logger) is called outside init.
+
+    // Moved serviceInit.registerAdvancedServices() call
+    if (serviceInit?.registerAdvancedServices) {
+      serviceInit.registerAdvancedServices();
+      logger.info('[App.init] Advanced services registered by serviceInit.');
+    } else {
+      logger.error('[App.init] serviceInit.registerAdvancedServices is not defined. Critical services might be missing.');
+      // throw new Error("serviceInit.registerAdvancedServices is not defined"); // Optional: fatal error
+    }
+    logger.info('[App.init] Essential services setup phase completed.');
+
+    // ---------------------------------------------------------------------------
+    // Phase 2: Core Systems and Error Handling Initialization
+    // ---------------------------------------------------------------------------
     logger.log('[App.init] Initializing Error Handling...');
     errorInit.initializeErrorHandling();
     logger.info('[App.init] Error handling initialization completed.');
 
     logger.log('[App.init] Initializing Core Systems...');
-    await coreInit.initializeCoreSystems();
+    await coreInit.initializeCoreSystems(); // This implicitly starts modal loading
     logger.info('[App.init] Core systems initialization phase completed.');
 
-    // NEW: Wait for modals to load before proceeding
-    logger.log('[App.init] Waiting for modals to load...');
+    // ---------------------------------------------------------------------------
+    // Phase 3: Post-Core & Auth Initialization
+    // ---------------------------------------------------------------------------
+    logger.log('[App.init] Waiting for modals to load (triggered by coreInit)...');
     await domReadinessService.waitForEvent('modalsLoaded', {
-      timeout: 10000,
+      timeout: 10000, // Increased timeout for modals
       context: 'app.init:modalsLoaded'
     });
     logger.info('[App.init] Modals loaded successfully.');
-
-    // Now call registerAdvancedServices after modals are ready
-    serviceInit.registerAdvancedServices();
 
     logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...');
 
@@ -594,23 +619,27 @@ export async function init() {
     await safeAuthInit();
     logger.info('[App.init] Auth system initialization completed.');
 
-    // Logger is now created after API client is ready, so no upgrade needed.
+    // Logger is now created after API client is ready, so no upgrade needed here.
 
     if (appModule.state.isAuthenticated) {
-      logger.log('[App.init] Fetching Current User...');
+      logger.log('[App.init] Fetching Current User (as part of Auth init)...');
       const authModule = DependencySystem.modules.get('auth');
       if (authModule?.fetchCurrentUser) {
         const user = await authModule.fetchCurrentUser();
         if (user) {
-          app.setCurrentUser(user);
-          browserAPI.setCurrentUser(user);
+          app.setCurrentUser(user); // Uses appModule.setAuthState internally
+          browserAPI.setCurrentUser(user); // For browser-level context if needed
         }
       } else {
         logger.warn('[App.init] Auth module fetchCurrentUser method not available');
       }
       logger.info('[App.init] Fetch current user step completed.');
     }
+    logger.info('[App.init] Post-core and auth initialization phase completed.');
 
+    // ---------------------------------------------------------------------------
+    // Phase 4: UI, Navigation, and Application Ready
+    // ---------------------------------------------------------------------------
     logger.log('[App.init] Initializing UI Components...');
 
     // Debug: Check DOM elements before UI init
@@ -641,8 +670,8 @@ export async function init() {
     }
 
     logger.log('[App.init] Registering App Listeners...');
-    registerAppListeners();
-    logger.info('[App.init] App listeners registered.');
+    registerAppListeners(); // Note: This function currently logs delegation, no direct listeners.
+    logger.info('[App.init] App listeners registration step completed.');
 
     logger.log('[App.init] Initializing Navigation Service...');
     const navService = DependencySystem.modules.get('navigationService');
@@ -654,8 +683,8 @@ export async function init() {
     }
     logger.info('[App.init] Navigation service initialization completed.');
 
-    appModule.setAppLifecycleState({ initialized: true });
-    _globalInitCompleted = true;
+    appModule.setAppLifecycleState({ initialized: true }); // Mark app as initialized in central state
+    _globalInitCompleted = true; // Mark global flag
 
     // Debug: Force sidebar visibility check
     logger.info('[App.init] Final debug - checking sidebar state');
@@ -682,37 +711,42 @@ export async function init() {
     }
 
     if (!globalInitTimeoutFired) {
-      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-      fireAppReady(true);
+      browserAPI.getWindow().clearTimeout(globalInitTimeoutId); // Clear global timeout
+      fireAppReady(true); // Dispatch app:ready event
     }
+    logger.info('[App.init] UI, Navigation, and Application Ready phase completed.');
 
-    // Expose debug helpers after app:ready
-    exposeDebugHelpers();
+    // ---------------------------------------------------------------------------
+    // Phase 5: Post-Ready Operations
+    // ---------------------------------------------------------------------------
+    exposeDebugHelpers(); // Expose debug helpers after app:ready
+    logger.info('[App.init] Post-ready operations phase completed.');
 
     return true;
   } catch (err) {
     logger.error('[init] Initialization failed', err, { context: 'app:init', ts: Date.now() });
-    handleInitError(err);
+    handleInitError(err); // Centralized error handling
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-      fireAppReady(false, err);
+      fireAppReady(false, err); // Dispatch app:ready with failure
     }
     throw err; // Re-throw the error after handling
   } finally {
-    _globalInitInProgress = false;
-    appModule.setAppLifecycleState({
+    _globalInitInProgress = false; // Reset progress flag
+    appModule.setAppLifecycleState({ // Update central lifecycle state
       initializing: false,
       currentPhase: appModule.state.initialized ? 'initialized_idle' : 'failed_idle'
     });
-    toggleLoadingSpinner(false);
+    toggleLoadingSpinner(false); // Hide loading spinner
+    logger.log('[App.init] Final cleanup completed.', { context: 'app:init:finally', ts: Date.now() });
   }
 }
 
 // ---------------------------------------------------------------------------
-// Expose debug helpers after app:ready (Phase 3 compliance)
+// Expose debug helpers after app:ready (Now part of Phase 5)
 // ---------------------------------------------------------------------------
 async function exposeDebugHelpers() {
-  await domReadinessService.waitForEvent('app:ready');
+  await domReadinessService.waitForEvent('app:ready'); // Ensure app is ready before exposing
   const windowObj = browserAPI.getWindow();
   if (windowObj) {
     windowObj.debugSidebarAuth = () => {
