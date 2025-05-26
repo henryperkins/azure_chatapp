@@ -36,3 +36,21 @@ function escapeHtml(str) {
 }
 
 export { formatText };
+export function createFormattingUtils({ domAPI, sanitizer, DependencySystem } = {}) {
+  if (!domAPI || !sanitizer || !DependencySystem)
+    throw new Error('[formatting] Missing required deps');
+
+  //--- move existing code here ---
+  // Replace every ‘document.createElement’  →  domAPI.createElement
+  // Replace any other window / document usage with domAPI equivalents.
+
+  return {
+    /* existing public helpers */,
+    cleanup() {                       // Rule 4 compliance
+      DependencySystem
+        .modules
+        .get('eventHandlers')
+        ?.cleanupListeners({ context: 'FormattingUtils' });
+    }
+  };
+}

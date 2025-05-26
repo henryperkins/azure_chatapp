@@ -377,7 +377,6 @@ function fireAppReady(success = true, error = null) {
     drs.emitReplayable('app:ready', detail);
   } else {
     const evt = eventHandlers.createCustomEvent('app:ready', { detail });
-    AppBus.dispatchEvent(evt);
     domAPI.dispatchEvent(domAPI.getDocument(), evt);
   }
 
@@ -797,4 +796,13 @@ if (typeof window !== 'undefined') {
       }
     }
   })();
+}
+ 
+// Factory wrapper (guard-rails Rule 1)
+export function createAppConfig({ DependencySystem } = {}) {
+  if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
+  return {
+    APP_CONFIG,                      // ← re-export existing constant(s)
+    cleanup() { /* nothing to cleanup */ }
+  };
 }

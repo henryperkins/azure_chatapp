@@ -21,6 +21,8 @@
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
+const MODULE_CONTEXT = 'KbResultHandlers';
+
 export function createKbResultHandlers({
   eventHandlers,
   browserService,          // NEW – safe window provider
@@ -56,22 +58,30 @@ export function createKbResultHandlers({
     // Tracked listener via eventHandlers -- never direct addEventListener
     const copyBtn = domAPI.getElementById('copyContentBtn');
     if (copyBtn) {
-      eventHandlers.trackListener(copyBtn, 'click', safeHandler(() => {
-        copyKnowledgeContent();
-      }, 'copyBtn click'));
+      eventHandlers.trackListener(
+        copyBtn,
+        'click',
+        safeHandler(copyKnowledgeContent, MODULE_CONTEXT+':copy'),
+        { context: MODULE_CONTEXT, description: 'copyBtn click' }
+      );
     }
 
     const kbModal = domAPI.getElementById('knowledgeResultModal');
     if (kbModal) {
-      eventHandlers.trackListener(kbModal, 'keydown', safeHandler((e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
-          const selection = wnd.getSelection && wnd.getSelection();
-          if (!selection || selection.toString().trim() === '') {
-            e.preventDefault();
-            copyKnowledgeContent();
+      eventHandlers.trackListener(
+        kbModal,
+        'keydown',
+        safeHandler((e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+            const selection = wnd.getSelection && wnd.getSelection();
+            if (!selection || selection.toString().trim() === '') {
+              e.preventDefault();
+              copyKnowledgeContent();
+            }
           }
-        }
-      }, 'kbModal keydown'));
+        }, MODULE_CONTEXT+':kbModalKeydown'),
+        { context: MODULE_CONTEXT, description: 'kbModal keydown' }
+      );
     }
   }
 
@@ -130,18 +140,20 @@ export function createKbResultHandlers({
     if (!kbModal) return;
 
     // Enhance style on open attribute change
-    const observer = new MutationObserver(safeHandler((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.type === 'attributes' &&
-          mutation.attributeName === 'open' &&
-          mutation.target.id === 'knowledgeResultModal' &&
-          mutation.target.hasAttribute('open')
-        ) {
-          updateResultStyleByRelevance();
-        }
-      });
-    }, 'MutationObserver callback'));
+    const observer = new MutationObserver(
+      safeHandler((mutations) => {
+        mutations.forEach((mutation) => {
+          if (
+            mutation.type === 'attributes' &&
+            mutation.attributeName === 'open' &&
+            mutation.target.id === 'knowledgeResultModal' &&
+            mutation.target.hasAttribute('open')
+          ) {
+            updateResultStyleByRelevance();
+          }
+        });
+      }, MODULE_CONTEXT+':MutationObserver'),
+    );
     observer.observe(kbModal, { attributes: true });
   }
 
@@ -207,5 +219,10 @@ export function createKbResultHandlers({
   }
 
   // Factory returns API
-  return { init };
+  return {
+    init,
+    cleanup() {
+      eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+    }
+  };
 }

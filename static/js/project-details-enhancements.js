@@ -407,7 +407,10 @@ export function createProjectDetailsEnhancements({
             'click',
             () => {
               searchInput.value = '';
-              searchInput.dispatchEvent(new Event('input'));
+              domAPI.dispatchEvent(
+                searchInput,
+                eventHandlers.createCustomEvent('input')
+              );
               searchInput.focus();
             },
             { context: CONTEXT }
@@ -562,8 +565,10 @@ export function createProjectDetailsEnhancements({
             state.currentFilter = tab.dataset.filter || 'all';
 
             // Trigger search to apply filtering
-            const event = new Event('input');
-            searchInput.dispatchEvent(event);
+            domAPI.dispatchEvent(
+              searchInput,
+              eventHandlers.createCustomEvent('input')
+            );
           },
           { context: CONTEXT }
         );
