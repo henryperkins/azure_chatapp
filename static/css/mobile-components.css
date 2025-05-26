@@ -348,7 +348,8 @@ input, select, textarea {
 }
 
 [role="tab"] {
-  @apply focus-ring;
+  @apply focus:outline-none focus:ring-2 focus:ring-primary
+         focus:ring-offset-2 focus:ring-offset-base-100;
 }
 
 [role="tab"][aria-selected="true"] {
