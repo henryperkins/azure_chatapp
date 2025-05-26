@@ -22,7 +22,8 @@
  * @param {Function} deps.dom.createMutationObserver
  * @returns {Object} ThemeManager API
  */
-export function createThemeManager({ dom, eventHandlers } = {}) {
+export function createThemeManager({ dom, eventHandlers, logger } = {}) {
+  const _logger = logger ?? { error: () => {} };
   // --- Dependency Validation ---
   if (!dom) throw new Error('DOM abstraction layer required');
 
@@ -116,19 +117,17 @@ export function createThemeManager({ dom, eventHandlers } = {}) {
     const button = dom.getElementById('darkModeToggle');
     if (!button) return;
 
-    if (eventHandlers) {
-      cleanupCallbacks.push(
-        eventHandlers.trackListener(
-          button,
-          'click',
-          handleToggleClick,
-          { context: 'ThemeManager' }
-        )
-      );
-    } else {
-      // fallback for unit tests
-      cleanupCallbacks.push(dom.addEventListener(button, 'click', handleToggleClick));
-    }
+    const evts = eventHandlers ?? {
+      trackListener: (el, t, h, o) => {
+        el.addEventListener(t, h, o);
+        return () => el.removeEventListener(t, h, o);
+      },
+      cleanupListeners: () => {}
+    };
+    cleanupCallbacks.push(
+      evts.trackListener(button, 'click', handleToggleClick,
+                         { context: 'ThemeManager' })
+    );
   };
 
   const watchSystemPreferences = () => {
@@ -176,7 +175,11 @@ export function createThemeManager({ dom, eventHandlers } = {}) {
       try {
         if (cleanup) cleanup();
       } catch (_err) {
-        void _err; // intentionally ignoring error, previously handled with notification
+        _logger.error('[ThemeManager] cleanup error',
+                      { status: _err?.status ?? 500,
+                        data: _err,
+                        message: _err?.message ?? String(_err) },
+                      { context: 'ThemeManager:teardown' });
       }
     });
     cleanupCallbacks = [];
@@ -185,7 +188,11 @@ export function createThemeManager({ dom, eventHandlers } = {}) {
       try {
         mutationObserver.disconnect();
       } catch (_err) {
-        void _err; // intentionally ignoring error, previously handled with notification
+        _logger.error('[ThemeManager] cleanup error',
+                      { status: _err?.status ?? 500,
+                        data: _err,
+                        message: _err?.message ?? String(_err) },
+                      { context: 'ThemeManager:teardown' });
       }
       mutationObserver = null;
     }
