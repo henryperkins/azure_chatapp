@@ -125,8 +125,10 @@ export function createCoreInitializer({
       browserService,
       eventHandlers,
       DependencySystem,
-      modalMapping: MODAL_MAPPINGS,
-      domPurify: sanitizer
+      modalMapping : MODAL_MAPPINGS,
+      domPurify    : sanitizer,
+      domReadinessService,   // NEW – mandatory for constructor
+      logger                   // NEW – ensure structured logging
     });
     DependencySystem.register('modalManager', modalManager);
 
