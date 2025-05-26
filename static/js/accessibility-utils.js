@@ -11,7 +11,8 @@ export function createAccessibilityEnhancements({
   domReadinessService,
   DependencySystem,
   createDebugTools,
-  errorReporter
+  errorReporter,
+  safeHandler // ← NEW: allow explicit injection to avoid timing issues
 }) {
   // Factory-level dependency validation (must be at the very top)
   if (!logger) throw new Error('Missing required dependency: logger');
@@ -566,12 +567,17 @@ export function createAccessibilityEnhancements({
     // _safeHandler removed (DI canonical safeHandler always used)
   }
 
-  // Inject canonical safeHandler from DI and fail fast if not present/correct
-  const safeHandler = DependencySystem?.modules?.get?.('safeHandler');
-  if (typeof safeHandler !== 'function') {
+  // Resolve safeHandler: prefer explicitly injected param, fallback to DependencySystem
+  const resolvedSafeHandler =
+    typeof safeHandler === 'function'
+      ? safeHandler
+      : DependencySystem?.modules?.get?.('safeHandler');
+
+  if (typeof resolvedSafeHandler !== 'function') {
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependency: safeHandler`);
   }
-  const instance = new AccessibilityUtilsModule(safeHandler);
+
+  const instance = new AccessibilityUtilsModule(resolvedSafeHandler);
   function cleanup() {
     if (eventHandlers?.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });

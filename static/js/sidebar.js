@@ -680,7 +680,7 @@ export function createSidebar({
   function restorePersistentState() {
     pinned = (storageAPI.getItem('sidebarPinned') === 'true');
     const isDesktop = viewportAPI.getInnerWidth() >= 768;
-    
+
     logger.info('[Sidebar] restorePersistentState', {
       pinned,
       isDesktop,
@@ -688,7 +688,7 @@ export function createSidebar({
       elementExists: !!el,
       context: 'Sidebar'
     });
-    
+
     if (pinned || isDesktop) {
       el.classList.add('sidebar-pinned');
       el.classList.remove('-translate-x-full');
@@ -718,11 +718,26 @@ export function createSidebar({
         context: 'Sidebar'
       });
 
-      // Wait for authentication to be ready
-      await domReadinessService.waitForEvent('authReady', {
-        timeout: 15000, // Adjust timeout as needed
-        context: 'Sidebar.init:waitForAuthReady'
-      });
+      // Wait for authentication to be ready or fallback quickly if delayed
+      try {
+        await domReadinessService.waitForEvent('authReady', {
+          timeout: 5000,
+          context: 'Sidebar.init:waitForAuthReady'
+        });
+      } catch (timeoutErr) {
+        logger.warn('[Sidebar] authReady timeout, proceeding with auth state sync fallback', { context: 'Sidebar:init:authReadyFallback' });
+        // Fallback: manually sync with current auth state
+        const appModule = DependencySystem.modules.get('appModule');
+        if (appModule?.state) {
+          sidebarAuth.handleGlobalAuthStateChange({
+            detail: {
+              authenticated: appModule.state.isAuthenticated,
+              user: appModule.state.currentUser,
+              source: 'sidebar_init_fallback_sync'
+            }
+          });
+        }
+      }
 
       const appModule = DependencySystem.modules.get('appModule');
       if (!appModule || !appModule.state) {

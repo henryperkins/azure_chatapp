@@ -145,9 +145,9 @@ export function createServiceInitializer({
           logger        : DependencySystem.modules.get('logger')  // ← provide required DI logger
         });
         // Register the API client function (not the object) for DI contract
-        DependencySystem.register('apiRequest', apiRequest.fetch);
-        // Optionally register the full apiClient object if needed by other modules
-        DependencySystem.register('apiClientObject', apiRequest);
+        safeRegister('apiRequest', apiRequest.fetch);
+        // Register the full apiClient object using safeRegister to avoid duplicates
+        safeRegister('apiClientObject', apiRequest);
       }
 
       // Create accessibility enhancements
@@ -156,7 +156,10 @@ export function createServiceInitializer({
           domAPI,
           eventHandlers,
           logger: DependencySystem.modules.get('logger'),
-          domReadinessService
+          domReadinessService,
+          DependencySystem,                               // provide DI container
+          // pass canonical safeHandler for direct use (optional)
+          safeHandler: DependencySystem.modules.get('safeHandler')
         });
         DependencySystem.register('accessibilityUtils', accessibilityUtils);
       }
