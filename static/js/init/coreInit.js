@@ -39,21 +39,45 @@ export function createCoreInitializer({
   uiRenderer,               // Service for rendering UI elements/components.
   accessibilityUtils,       // Utilities for accessibility enhancements.
   safeHandler               // Wrapper for safe function execution with error handling.
-}) {
-  // --- Dependency Validation ---
-  const requiredDeps = {
-    DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG, domReadinessService,
-    createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest, apiClientObject, apiEndpoints, app, uiUtils,
-    navigationService, globalUtils, FileUploadComponent, htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
-  };
+ }) {
+   /**
+    * Some dependencies (e.g. `apiRequest`, `apiClientObject`) are not available
+    * at *construction* time because they are registered later by
+    * `serviceInit.registerAdvancedServices()` which runs during `App.init`.
+    *
+    * Therefore we postpone the exhaustive dependency validation until the first
+    * call to `initializeCoreSystems()`.  At factory-creation time we only
+    * validate the absolutely critical low-level services that are guaranteed to
+    * exist from the early bootstrap phase.
+    */
+   const constructionRequired = {
+     DependencySystem, domAPI, browserService, eventHandlers,
+     sanitizer, APP_CONFIG, domReadinessService, createKnowledgeBaseComponent
+   };
+   for (const [depName, dep] of Object.entries(constructionRequired)) {
+     if (!dep) {
+       throw new Error(`[coreInit] Missing critical dependency during coreInit construction: ${depName}`);
+     }
+   }
 
-  for (const [depName, dep] of Object.entries(requiredDeps)) {
-    if (!dep) {
-      throw new Error(`[coreInit] Missing required dependency: ${depName}`);
-    }
-  }
+   // ────────────────────────────────────────────────────────────────────────────
+   // Runtime validation helper – executed at the top of initializeCoreSystems().
+   // ────────────────────────────────────────────────────────────────────────────
+   function validateRuntimeDeps() {
+     const runtimeRequired = {
+       DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
+       domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
+       apiClientObject, apiEndpoints, app, uiUtils, navigationService, globalUtils,
+       FileUploadComponent, htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
+     };
+     for (const [depName, dep] of Object.entries(runtimeRequired)) {
+       if (!dep) {
+         throw new Error(`[coreInit] Missing required dependency: ${depName}`);
+       }
+     }
+   }
 
-  // Utility: Create or get chatManager.
+   // Utility: Create or get chatManager.
   // This function ensures a single instance of ChatManager.
   // Dependencies like `authModule`, `modelConfig`, `projectDetailsComponent` are passed directly.
   function createOrGetChatManager(currentAuthModule, currentModelConfig, currentProjectDetailsComponent) {
@@ -132,6 +156,9 @@ export function createCoreInitializer({
    */
   async function initializeCoreSystems() {
     logger.log('[coreInit][initializeCoreSystems] Starting core systems initialization.', { context: 'coreInit' });
+
+    // Validate that all runtime dependencies are present before proceeding.
+    validateRuntimeDeps();
 
     // Phase 1: DOM Readiness Check (Basic)
     logger.debug('[coreInit] Phase 1: Waiting for basic DOM readiness (body element).', { context: 'coreInit' });
@@ -388,6 +415,25 @@ export function createCoreInitializer({
         // htmlTemplateLoader is a direct argument, so it's available.
         await modalManager.init(); // Loads modal.html
         logger.debug('[coreInit] Phase 4: ModalManager UI initialization complete.', { context: 'coreInit' });
+
+        // Explicit DOM readiness check for modals before handlers
+        if (domReadinessService && domReadinessService.dependenciesAndElements) {
+          logger.debug('[coreInit] Phase 4: Waiting for modal DOM elements readiness...', { context: 'coreInit' });
+          await domReadinessService.dependenciesAndElements({
+            domSelectors: [
+              '#loginModal',
+              '#errorModal',
+              '#confirmModal',
+              '#projectModal'
+            ],
+            timeout: 6000,
+            context: 'coreInit:modalReadiness',
+            optional: true // Don't throw if some are missing
+          });
+          logger.debug('[coreInit] Phase 4: Modal DOM elements readiness confirmed.', { context: 'coreInit' });
+        } else {
+          logger.warn('[coreInit] Phase 4: domReadinessService.dependenciesAndElements not available, cannot confirm modal DOM readiness.', { context: 'coreInit' });
+        }
       } catch (err) {
         logger.error('[coreInit] Phase 4: Error in modalManager.init()', err, { context: 'coreInit:modalManager:init' });
         throw err; // Critical failure if modals cannot be loaded
@@ -396,8 +442,7 @@ export function createCoreInitializer({
         logger.warn('[coreInit] Phase 4: modalManager.init method not found. Modals may not load.', { context: 'coreInit' });
     }
 
-    // Phase 5: Initialize Event Handlers
-    // Now that modals (and other UI stubs) are potentially loaded.
+    // Phase 5: Initialize Event Handlers (modals now confirmed ready)
     logger.debug('[coreInit] Phase 5: Initializing global event handlers...', { context: 'coreInit' });
     if (eventHandlers?.init) {
       await eventHandlers.init();

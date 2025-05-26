@@ -244,7 +244,25 @@ serviceInit.setLogger(logger);
 
 // Create API client (now should be available via serviceInit)
 // ---------------------------------------------------------------------------
-const apiRequest = DependencySystem.modules.get('apiRequest');
+/**
+ * Provide a lazy proxy for `apiRequest`.
+ * The real implementation is registered later by `serviceInit.registerAdvancedServices()`.
+ * Until then, calls will throw, preventing accidental early network access while still
+ * allowing modules to receive a *function* reference during construction.
+ */
+function apiRequestProxy(...args) {
+  const impl = DependencySystem.modules.get('apiRequest');
+  if (typeof impl !== 'function') {
+    throw new Error('[app.js] apiRequest called before it was registered by serviceInit.');
+  }
+  return impl(...args);
+}
+/* Register the proxy immediately so factories that require a function reference
+   (e.g., ChatManager) can receive it during their own initialization.  The real
+   implementation will overwrite this proxy once advanced services are registered. */
+DependencySystem.register('apiRequest', apiRequestProxy);
+/* Expose the proxy in the current module scope for subsequent usages */
+const apiRequest = apiRequestProxy;
 
 // Modals.html will be loaded synchronously during init() before UI components
 
@@ -586,6 +604,44 @@ export async function init() {
     logger.log('[App.init] Stage 2: Registering Advanced Services...', { context: 'app:init' });
     serviceInit.registerAdvancedServices();
     logger.info('[App.init] Stage 2: Advanced services registration completed.', { context: 'app:init' });
+
+    // CRITICAL: Validate advanced services before retrieving them
+    const requiredAdvancedServices = [
+      'apiRequest',
+      'apiClientObject',
+      'navigationService',
+      'htmlTemplateLoader',
+      'uiRenderer',
+      'accessibilityUtils'
+    ];
+    const missingServices = [];
+    for (const serviceName of requiredAdvancedServices) {
+      const service = DependencySystem.modules.get(serviceName);
+      if (!service) {
+        missingServices.push(serviceName);
+      }
+    }
+    if (missingServices.length > 0) {
+      const error = new Error(`[app.js] Missing advanced services: ${missingServices.join(', ')}`);
+      logger.error('[app.js] Advanced services validation failed', error, {
+        context: 'app:init',
+        missingServices,
+        availableModules: Array.from(DependencySystem.modules.keys())
+      });
+      throw error;
+    }
+
+    // NOW it's safe to retrieve advanced services
+    const apiRequestService = DependencySystem.modules.get('apiRequest');
+    const apiClientObjectService = DependencySystem.modules.get('apiClientObject');
+    const navigationServiceService = DependencySystem.modules.get('navigationService');
+    const htmlTemplateLoaderService = DependencySystem.modules.get('htmlTemplateLoader');
+    const uiRendererService = DependencySystem.modules.get('uiRenderer');
+    const accessibilityUtilsService = DependencySystem.modules.get('accessibilityUtils');
+    logger.info('[app.js] All advanced services successfully validated and retrieved', {
+      context: 'app:init',
+      services: requiredAdvancedServices
+    });
 
     // Stage 3: Initialize Core Systems & Components (Modal Manager, Auth, Project Manager, etc.)
     // This includes internal initialization of some UI like modals and model config.
