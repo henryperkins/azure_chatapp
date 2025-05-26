@@ -1,6 +1,6 @@
 /* =============================================================================
-   tailwind-mobile.css - Mobile-First Aggregator
-   Replaces the bloated 8-file CSS system with 3 focused files
+   tailwind-mobile.css - Enhanced Mobile-First Aggregator
+   Implements improved color contrast, typography, and spacing systems
 ============================================================================= */
 
 @import "tailwindcss";
@@ -10,7 +10,64 @@
   themes: azure-light --default, dracula-enhanced --prefersdark;
 }
 
-/* Enhanced Dracula Theme */
+/* Enhanced Theme Variables for Better Contrast and Consistency */
+@theme {
+  /* Spacing rhythm based on 8px units */
+  --spacing-unit: 0.5rem;
+  --spacing-xs: calc(var(--spacing-unit) * 0.5);  /* 4px */
+  --spacing-sm: calc(var(--spacing-unit) * 1);    /* 8px */
+  --spacing-md: calc(var(--spacing-unit) * 2);    /* 16px */
+  --spacing-lg: calc(var(--spacing-unit) * 3);    /* 24px */
+  --spacing-xl: calc(var(--spacing-unit) * 4);    /* 32px */
+  --spacing-2xl: calc(var(--spacing-unit) * 6);   /* 48px */
+  
+  /* Typography scale with clamp for responsive sizing */
+  --font-size-xs: clamp(0.75rem, 2vw, 0.875rem);
+  --font-size-sm: clamp(0.875rem, 2.5vw, 1rem);
+  --font-size-base: clamp(1rem, 3vw, 1.125rem);
+  --font-size-lg: clamp(1.125rem, 3.5vw, 1.25rem);
+  --font-size-xl: clamp(1.25rem, 4vw, 1.5rem);
+  --font-size-2xl: clamp(1.5rem, 5vw, 2.25rem);
+  
+  /* Consistent component sizing */
+  --btn-height-sm: 2rem;    /* 32px */
+  --btn-height-md: 2.5rem;  /* 40px */
+  --btn-height-lg: 3rem;    /* 48px */
+  
+  /* Enhanced touch targets */
+  --touch-target-min: 44px;
+  --touch-target-comfortable: 48px;
+  
+  /* Standardized transitions */
+  --transition-fast: 150ms;
+  --transition-base: 200ms;
+  --transition-slow: 300ms;
+  
+  /* Focus state variables */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+}
+
+/* Enhanced Light Theme with Better Contrast */
+@plugin "daisyui/theme" {
+  name: "azure-light";
+  default: true;
+  color-scheme: light;
+  --color-base-100: oklch(98% 0.01 270);
+  --color-base-200: oklch(95% 0.02 270);
+  --color-base-300: oklch(92% 0.03 270);
+  --color-primary: oklch(60% 0.18 275);
+  --color-secondary: oklch(70% 0.15 240);
+  --color-accent: oklch(65% 0.16 210);
+  
+  /* Message differentiation colors */
+  --color-user-message-bg: oklch(96% 0.02 220);
+  --color-user-message-text: oklch(20% 0.05 220);
+  --color-ai-message-bg: oklch(100% 0 0);
+  --color-ai-message-text: oklch(15% 0.02 270);
+}
+
+/* Enhanced Dark Theme */
 @plugin "daisyui/theme" {
   name: "dracula-enhanced";
   default: false;
@@ -27,25 +84,24 @@
   --color-success: oklch(87.1% 0.22 148);
   --color-warning: oklch(95.5% 0.14 112.8);
   --color-error: oklch(68.2% 0.21 24.4);
+  
+  /* Dark mode message colors */
+  --color-user-message-bg: oklch(35% 0.15 346.8);
+  --color-user-message-text: oklch(98% 0.01 346.8);
+  --color-ai-message-bg: oklch(25% 0.02 277.5);
+  --color-ai-message-text: oklch(95% 0.01 277.5);
 }
 
-/* Light Theme */
-@plugin "daisyui/theme" {
-  name: "azure-light";
-  default: true;
-  color-scheme: light;
-  --color-base-100: oklch(98% 0.01 270);
-  --color-base-200: oklch(95% 0.02 270);
-  --color-base-300: oklch(92% 0.03 270);
-  --color-primary: oklch(60% 0.18 275);
-  --color-secondary: oklch(70% 0.15 240);
-  --color-accent: oklch(65% 0.16 210);
-}
-
-/* Global Mobile-First Animations */
+/* Improved animations with reduced motion support */
 @keyframes mobile-fade-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { 
+    opacity: 0; 
+    transform: translateY(var(--spacing-sm)) scale(0.98); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
 }
 
 @keyframes mobile-slide-in {
@@ -58,10 +114,40 @@
   50% { opacity: 0.7; }
 }
 
-/* Global Mobile Utilities */
-.animate-mobile-fade-in { animation: mobile-fade-in 0.3s ease-out forwards; }
-.animate-mobile-slide-in { animation: mobile-slide-in 0.3s ease-out forwards; }
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Global utility classes */
+.animate-mobile-fade-in { animation: mobile-fade-in var(--transition-slow) ease-out forwards; }
+.animate-mobile-slide-in { animation: mobile-slide-in var(--transition-slow) ease-out forwards; }
 .animate-mobile-pulse { animation: mobile-pulse 2s infinite; }
+
+/* Responsive typography with clamp */
+.text-responsive-xs { font-size: var(--font-size-xs); }
+.text-responsive-sm { font-size: var(--font-size-sm); }
+.text-responsive-base { font-size: var(--font-size-base); }
+.text-responsive-lg { font-size: var(--font-size-lg); }
+.text-responsive-xl { font-size: var(--font-size-xl); }
+.text-responsive-2xl { font-size: var(--font-size-2xl); }
+
+/* Enhanced focus states */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
+  @apply focus:ring-offset-base-100;
+}
 
 /* Import focused component files */
 @import "./mobile-components.css";
