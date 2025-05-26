@@ -28,7 +28,7 @@ export function createCoreInitializer({
   // --- Services & Utilities (passed from app.js, previously DI-resolved) ---
   MODAL_MAPPINGS,           // Constant object mapping modal types to their configurations.
   apiRequest,               // The configured API fetch function (from apiClient.fetch).
-  apiClientObject,          // The full API client instance.
+  apiClientObject,          // (initial value – will be refreshed later)
   apiEndpoints,             // Object containing resolved API endpoint URLs.
   app,                      // The main application state object.
   uiUtils,                  // General UI utility functions (formatting, icons).
@@ -40,6 +40,10 @@ export function createCoreInitializer({
   accessibilityUtils,       // Utilities for accessibility enhancements.
   safeHandler               // Wrapper for safe function execution with error handling.
  }) {
+   // Allow apiClientObject to be refreshed later, after ServiceInit has
+   // registered it.  Capture in a mutable ref.
+   let apiClientObjectRef = apiClientObject;
+
    /**
     * Some dependencies (e.g. `apiRequest`, `apiClientObject`) are not available
     * at *construction* time because they are registered later by
@@ -64,10 +68,15 @@ export function createCoreInitializer({
    // Runtime validation helper – executed at the top of initializeCoreSystems().
    // ────────────────────────────────────────────────────────────────────────────
    function validateRuntimeDeps() {
+     // Pull latest apiClientObject from DI if not supplied at construction
+     if (!apiClientObjectRef) {
+       apiClientObjectRef = DependencySystem.modules.get('apiClientObject');
+     }
+
      const runtimeRequired = {
        DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
        domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
-       apiClientObject, apiEndpoints, app, uiUtils, navigationService, globalUtils,
+       apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils, navigationService, globalUtils,
        FileUploadComponent, htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
      };
      for (const [depName, dep] of Object.entries(runtimeRequired)) {
@@ -227,12 +236,12 @@ export function createCoreInitializer({
     if (typeof apiRequest !== 'function') { // Should still validate the passed apiRequest if it's used directly
       throw new Error('[coreInit] apiRequest argument is not a function.');
     }
-    if (!apiClientObject) { // apiAuthModule needs the full client object
+    if (!apiClientObjectRef) { // apiAuthModule needs the full client object
         throw new Error('[coreInit] apiClientObject argument is missing.');
     }
     const authModule = createAuthModule({ // Use corrected factory name
       DependencySystem,
-      apiClient: apiClientObject, // Pass the full apiClientObject
+      apiClient: apiClientObjectRef, // use refreshed reference
       eventHandlers,
       domAPI,
       sanitizer,
