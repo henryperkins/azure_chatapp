@@ -261,7 +261,7 @@
 
 .empty-state-icon {
   @apply w-24 h-24 text-base-content/20 mb-6;
-  @apply animate-mobile-pulse;
+  animation: mobile-pulse 2s infinite;
 }
 
 .empty-state-title {
