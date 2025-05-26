@@ -31,53 +31,44 @@ export function createModelConfig({
 
   // Validate required dependencies
   if (!dependencySystem) {
-    localLogger.error(`[${MODULE_CONTEXT}][constructor] Missing dependencySystem`, null, {
-      context: MODULE_CONTEXT,
-    });
+    const msg = `[${MODULE_CONTEXT}][constructor] Missing dependencySystem`;
+    localLogger.error(msg, { status: 'error', data: null, message: msg }, { context: MODULE_CONTEXT });
     throw new Error("[ModelConfig] dependencySystem is required");
   }
   if (!domReadinessService || typeof domReadinessService.dependenciesAndElements !== "function") {
-    localLogger.error(
-      `[${MODULE_CONTEXT}][constructor] Missing or invalid domReadinessService`,
-      null,
-      { context: MODULE_CONTEXT }
-    );
+    const msg = `[${MODULE_CONTEXT}][constructor] Missing or invalid domReadinessService`;
+    localLogger.error(msg, { status: 'error', data: null, message: msg }, { context: MODULE_CONTEXT });
     throw new Error("[ModelConfig] domReadinessService is required for readiness gating.");
   }
   if (!eventHandler) {
-    localLogger.error(`[${MODULE_CONTEXT}][constructor] Missing eventHandler`, null, {
-      context: MODULE_CONTEXT,
-    });
+    const msg = `[${MODULE_CONTEXT}][constructor] Missing eventHandler`;
+    localLogger.error(msg, { status: 'error', data: null, message: msg }, { context: MODULE_CONTEXT });
     throw new Error("[ModelConfig] eventHandler is required");
   }
   if (!storageHandler) {
-    localLogger.error(`[${MODULE_CONTEXT}][constructor] Missing storageHandler`, null, {
-      context: MODULE_CONTEXT,
-    });
+    const msg = `[${MODULE_CONTEXT}][constructor] Missing storageHandler`;
+    localLogger.error(msg, { status: 'error', data: null, message: msg }, { context: MODULE_CONTEXT });
     throw new Error("[ModelConfig] storageHandler is required");
   }
   if (!sanitizer || typeof sanitizer.sanitize !== "function") {
-    localLogger.error(`[${MODULE_CONTEXT}][constructor] Missing or invalid sanitizer`, null, {
-      context: MODULE_CONTEXT,
-    });
+    const msg = `[${MODULE_CONTEXT}][constructor] Missing or invalid sanitizer`;
+    localLogger.error(msg, { status: 'error', data: null, message: msg }, { context: MODULE_CONTEXT });
     throw new Error("[ModelConfig] sanitizer with sanitize() is required");
   }
 
   // Dedicated module event bus object. We rely on eventHandler for adding/removing listeners,
   // rather than calling addEventListener directly.
   const busTarget = new EventTarget();
+  dependencySystem?.modules?.register?.('modelConfigBus', busTarget);   // NEW
 
   function dispatchEventToBus(api, eventName, detailObj) {
     // Use eventHandler's dispatchEvent if available, otherwise fallback
     if (typeof api.evts.dispatchEvent === "function") {
-      api.evts.dispatchEvent(busTarget, new CustomEvent(eventName, { detail: detailObj }), {
-        context: MODULE_CONTEXT,
-        source: `busEvent:${eventName}`,
-      });
+      busTarget.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
     } else {
       // fallback
-      const eventBus = dependencySystem.modules.get('eventBus') || busTarget;
-      eventBus.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
+      (dependencySystem.modules.get('eventBus') ?? busTarget)
+        .dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
     }
   }
 

@@ -3,7 +3,7 @@
 // Enforces: strict DI, no direct global/console/window access,
 // required "cleanup" method, single source of truth.
 
-export function createSafeHandler({ logger }) {
+export function createSafeHandler({ logger, eventHandlers } = {}) {
   if (!logger || typeof logger.error !== 'function') {
     throw new Error('[SafeHandler] DI logger with .error() required');
   }
@@ -22,12 +22,10 @@ export function createSafeHandler({ logger }) {
         // Always use structured logging (never direct console).
         logger.error(
           '[SafeHandler] Unhandled error in handler',
-          {
-            error: err,
-            description: description || fn.name || '<anon>',
-            args,
-            context: 'SafeHandler'
-          }
+          { status: err?.status ?? 500,
+            data: err,
+            message: err?.message ?? String(err) },
+          { context: 'SafeHandler' }
         );
         // Optionally rethrow or swallow; here, swallow to suppress UI breakage.
         // Uncomment this line to propagate errors if needed:
@@ -37,7 +35,9 @@ export function createSafeHandler({ logger }) {
   }
 
   // Required cleanup method (no-ops since this is stateless)
-  safeHandler.cleanup = function() { /* nothing to cleanup */ };
+  safeHandler.cleanup = function () {
+    eventHandlers?.cleanupListeners?.({ context: 'SafeHandler' });
+  };
 
   return {
     safeHandler,
