@@ -1,39 +1,55 @@
 /* =============================================================================
-   mobile-layouts.css - Mobile-First Layout System
-   Consolidates project details, chat, and list layouts
+   mobile-layouts.css - Enhanced Mobile-First Layout System
+   Implements improved spacing rhythm, responsive grids, and accessible layouts
 ============================================================================= */
 
-/* Mobile-First Grid System */
+/* Enhanced Mobile-First Grid System */
 .mobile-grid {
-  @apply grid grid-cols-1 gap-4 p-4;
-  @apply sm:grid-cols-2 sm:gap-6;
-  @apply lg:grid-cols-3 lg:gap-8;
-  @apply xl:grid-cols-4;
+  @apply grid gap-4 p-4;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  @apply sm:gap-6 lg:gap-8;
 }
 
-/* Chat Layout */
+/* Enhanced Chat Layout with Collapsible Header */
 .chat-container {
   @apply flex flex-col h-full;
   max-height: calc(100vh - 120px);
-  @apply bg-base-100 border border-base-200 rounded-xl shadow-sm;
+  @apply bg-base-100 border-2 border-base-200 rounded-xl shadow-sm;
+}
+
+.chat-header {
+  @apply flex items-center justify-between;
+  @apply border-b border-base-200;
+  padding: var(--spacing-md);
+  @apply transition-all duration-300;
+  cursor: pointer;
+}
+
+.chat-header.collapsed {
+  padding: var(--spacing-sm);
+}
+
+.chat-header.collapsed .chat-metadata {
+  @apply hidden;
 }
 
 .chat-messages {
-  @apply flex-1 overflow-y-auto p-4;
-  @apply space-y-3;
+  @apply flex-1 overflow-y-auto;
+  padding: var(--spacing-md);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  border: 1px solid theme('colors.base.200');
-  background-color: theme('colors.base.100');
-  @apply rounded-xl;
+  scroll-padding-top: var(--spacing-md);
+  scroll-padding-bottom: var(--spacing-md);
   min-height: 300px;
 }
 
+/* Improved Chat Input with Better Mobile UX */
 .chat-input-container {
   @apply sticky bottom-0 z-20;
   @apply bg-base-100/95 backdrop-blur-sm;
-  @apply border-t border-base-200 p-4;
-  padding-bottom: calc(env(safe-area-inset-bottom, 0) + 1rem);
+  @apply border-t-2 border-base-200;
+  padding: var(--spacing-md);
+  padding-bottom: calc(env(safe-area-inset-bottom, 0) + var(--spacing-md));
 }
 
 .chat-input-row {
@@ -41,78 +57,103 @@
 }
 
 .chat-input {
-  @apply flex-1 px-4 py-3;
-  @apply border border-base-300 rounded-full;
+  @apply flex-1;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  @apply border-2 border-base-300 rounded-full;
   @apply focus:ring-2 focus:ring-primary focus:border-primary;
   @apply bg-base-200 text-base-content;
-  font-size: 16px; /* Prevent iOS zoom */
+  font-size: var(--mobile-safe-font);
+  min-height: var(--mobile-touch-target);
+  line-height: 1.6;
 }
 
 .chat-send-btn {
-  @apply w-11 h-11 rounded-full;
+  width: var(--mobile-touch-target);
+  height: var(--mobile-touch-target);
+  @apply rounded-full flex-shrink-0;
   @apply bg-primary text-primary-content;
   @apply hover:bg-primary/90 active:scale-95;
-  @apply shadow-md;
+  @apply shadow-md transition-all duration-200;
+  @apply flex items-center justify-center;
 }
 
-/* Project Details Layout */
+/* Enhanced Project Details Layout */
 .project-details {
-  @apply flex flex-col gap-6 p-4;
+  @apply flex flex-col;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md);
   @apply max-w-6xl mx-auto;
 }
 
 .project-header {
   @apply bg-base-100 rounded-2xl shadow-sm;
-  @apply border border-base-200 p-6;
+  @apply border-2 border-base-200;
+  padding: var(--spacing-lg);
 }
 
-.project-stats {
-  @apply grid grid-cols-1 gap-4;
-  @apply sm:grid-cols-2 lg:grid-cols-4;
-}
-
-.project-stat {
-  @apply bg-base-100 rounded-xl p-4;
-  @apply border border-base-200;
-  @apply text-center;
-  @apply flex flex-col items-center justify-center gap-1;
-  min-height: 100px;          /* uniform card height */
-}
-
+/* Improved Tab Navigation with Scroll Snap */
 .project-tabs {
-  @apply flex overflow-x-auto gap-1;
-  /* Hide scrollbars cross-browser */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE 10+ */
-}
-.project-tabs::-webkit-scrollbar {
-  display: none; /* Chrome/Safari/Webkit */
+  @apply flex gap-2 overflow-x-auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   scroll-snap-type: x mandatory;
+  scroll-padding: var(--spacing-sm);
+  position: relative;
+  padding: 0 var(--spacing-sm);
+}
+
+.project-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* Gradient masks for scroll indication */
+.project-tabs::before,
+.project-tabs::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.project-tabs::before {
+  left: 0;
+  background: linear-gradient(to right, var(--color-base-100), transparent);
+}
+
+.project-tabs::after {
+  right: 0;
+  background: linear-gradient(to left, var(--color-base-100), transparent);
 }
 
 .project-tab {
-  @apply flex-shrink-0 px-6 py-3;
+  @apply flex-shrink-0;
+  padding: var(--spacing-sm) var(--spacing-lg);
   @apply rounded-xl font-medium;
-  @apply border border-transparent;
+  @apply border-2 border-transparent;
   @apply transition-all duration-200;
   scroll-snap-align: start;
   min-width: 120px;
+  @apply flex items-center justify-center gap-2;
+  white-space: nowrap;
+  min-height: var(--mobile-touch-target);
+}
+
+.project-tab:hover:not(.active) {
+  @apply bg-base-200 border-base-300;
 }
 
 .project-tab.active {
   @apply bg-primary text-primary-content;
-  @apply border-primary;
+  @apply border-primary shadow-md;
+  font-weight: 500;
 }
 
-.project-tab-content {
-  @apply bg-base-100 rounded-2xl shadow-sm;
-  @apply border border-base-200 p-6;
-  min-height: 400px;
-}
-
-/* Sidebar Layout */
+/* Enhanced Sidebar Layout */
 .sidebar {
-  @apply bg-base-100 border border-base-200 rounded-xl shadow-sm;
+  @apply bg-base-100 border-2 border-base-200 rounded-xl shadow-sm;
   @apply flex flex-col h-full;
 }
 
@@ -129,55 +170,150 @@
   .sidebar.open {
     @apply translate-x-0;
   }
+  
+  /* Backdrop for mobile sidebar */
+  .sidebar-backdrop {
+    @apply fixed inset-0 bg-black/50 z-40;
+    @apply transition-opacity duration-300;
+    @apply opacity-0 pointer-events-none;
+  }
+  
+  .sidebar.open ~ .sidebar-backdrop {
+    @apply opacity-100 pointer-events-auto;
+  }
 }
 
-.sidebar-header {
-  @apply p-4 border-b border-base-200;
-}
-
-.sidebar-content {
-  @apply flex-1 overflow-y-auto p-4;
-  -webkit-overflow-scrolling: touch;
-}
-
-.sidebar-tabs {
-  @apply flex border-b border-base-200;
-}
-
-.sidebar-tab {
-  @apply flex-1 py-3 px-4 text-center;
-  @apply border-b-2 border-transparent;
-  @apply font-medium transition-colors duration-200;
-}
-
-.sidebar-tab.active {
-  @apply border-primary text-primary;
-}
-
-/* Mobile Bottom Navigation */
+/* Enhanced Mobile Bottom Navigation */
 .mobile-nav {
   @apply fixed bottom-0 left-0 right-0 z-40;
-  @apply bg-base-100 border-t border-base-200;
+  @apply bg-base-100 border-t-2 border-base-200;
   @apply flex items-center justify-around;
-  @apply h-16;
+  height: calc(var(--mobile-touch-target) + var(--spacing-md));
   padding-bottom: env(safe-area-inset-bottom, 0);
+  @apply shadow-[0_-4px_16px_rgba(0,0,0,0.1)];
 }
 
 .mobile-nav-item {
   @apply flex flex-col items-center justify-center;
   @apply min-w-12 min-h-12 p-2;
   @apply text-xs font-medium;
-  @apply transition-colors duration-200;
+  @apply transition-all duration-200;
+  @apply relative;
 }
 
 .mobile-nav-item.active {
   @apply text-primary;
 }
 
-/* Responsive Utilities */
+.mobile-nav-item.active::before {
+  content: '';
+  @apply absolute top-0 left-1/2 transform -translate-x-1/2;
+  @apply w-8 h-1 bg-primary rounded-full;
+}
+
+/* Enhanced Loading States with Skeleton Screens */
+.loading-container {
+  @apply flex items-center justify-center;
+  padding: var(--spacing-2xl);
+}
+
+.loading-grid {
+  @apply grid gap-4;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+}
+
+.loading-card {
+  @apply skeleton-card;
+}
+
+/* Loading state for messages */
+.loading-message {
+  @apply flex gap-3 p-4;
+}
+
+.loading-message .skeleton-avatar {
+  @apply skeleton rounded-full flex-shrink-0;
+  width: 40px;
+  height: 40px;
+}
+
+.loading-message .skeleton-content {
+  @apply flex-1 space-y-2;
+}
+
+.loading-message .skeleton-text:first-child {
+  width: 60%;
+}
+
+.loading-message .skeleton-text:last-child {
+  width: 80%;
+}
+
+/* Enhanced Empty States with Illustrations */
+.empty-state {
+  @apply flex flex-col items-center justify-center;
+  padding: var(--spacing-2xl);
+  @apply text-center;
+  min-height: 300px;
+}
+
+.empty-state-icon {
+  @apply w-24 h-24 text-base-content/20 mb-6;
+  @apply animate-mobile-pulse;
+}
+
+.empty-state-title {
+  font-size: var(--font-size-xl);
+  @apply font-semibold mb-3 text-base-content;
+}
+
+.empty-state-description {
+  @apply text-base-content/60 mb-8;
+  max-width: 400px;
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+}
+
+.empty-state-action {
+  @apply btn btn-primary btn-lg;
+  @apply shadow-lg hover:shadow-xl;
+}
+
+/* FAB Positioning with Safe Area Support */
+.project-fab {
+  @apply fixed z-30;
+  bottom: calc(env(safe-area-inset-bottom, 0) + var(--spacing-lg) + 60px);
+  right: var(--spacing-lg);
+  @apply w-14 h-14 bg-primary text-primary-content;
+  @apply rounded-full shadow-lg hover:shadow-xl;
+  @apply transition-all duration-300;
+  @apply flex items-center justify-center;
+}
+
+.project-fab:active {
+  @apply scale-95;
+}
+
+.project-fab.reminder-pulse {
+  animation: fab-pulse 2s ease-in-out 3;
+}
+
+@keyframes fab-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(var(--p), 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 20px rgba(var(--p), 0);
+  }
+}
+
+/* Improved Responsive Utilities */
 @media (max-width: 640px) {
   .mobile-stack {
-    @apply flex flex-col space-y-4;
+    @apply flex flex-col;
+    gap: var(--spacing-md);
   }
 
   .mobile-full {
@@ -189,15 +325,37 @@
   }
 
   .mobile-p-safe {
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-left: max(var(--spacing-md), env(safe-area-inset-left));
+    padding-right: max(var(--spacing-md), env(safe-area-inset-right));
   }
+}
+
+/* Pull-to-Refresh Indicator */
+.pull-indicator {
+  @apply absolute top-0 left-0 right-0;
+  @apply flex items-center justify-center;
+  @apply text-base-content/60 text-sm;
+  @apply transition-all duration-300;
+  height: 60px;
+  transform: translateY(-60px);
+  z-index: -1;
+}
+
+.pull-indicator.visible {
+  @apply opacity-100;
+}
+
+.mobile-loading-indicator {
+  @apply w-5 h-5 border-2 border-current;
+  @apply border-t-transparent rounded-full animate-spin;
 }
 
 /* Performance Optimizations */
 .gpu-accelerated {
   transform: translateZ(0);
   will-change: transform;
+  -webkit-transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
 }
 
 .smooth-scroll {
@@ -206,37 +364,26 @@
   overscroll-behavior: contain;
 }
 
-/* Loading States */
-.loading-container {
-  @apply flex items-center justify-center p-8;
+/* Accessibility Improvements */
+.sr-only {
+  @apply absolute w-px h-px p-0 -m-px overflow-hidden;
+  @apply whitespace-nowrap border-0;
+  clip: rect(0, 0, 0, 0);
 }
 
-.loading-grid {
-  @apply grid grid-cols-1 gap-4;
-  @apply sm:grid-cols-2 lg:grid-cols-3;
+.focus-visible:focus {
+  @apply outline-none ring-2 ring-primary ring-offset-2;
 }
 
-.loading-card {
-  @apply bg-base-200 rounded-2xl p-4;
-  /* Custom animation: subtle pulse to indicate loading */
-  animation: mobile-pulse 2s infinite;
-  height: 200px;
+/* Skip to Content Link */
+.skip-to-content {
+  @apply absolute top-0 left-0 z-50;
+  @apply bg-primary text-primary-content;
+  @apply px-4 py-2 rounded-br-lg;
+  @apply transform -translate-y-full;
+  @apply transition-transform duration-200;
 }
 
-/* Empty States */
-.empty-state {
-  @apply flex flex-col items-center justify-center;
-  @apply p-8 text-center;
-}
-
-.empty-state-icon {
-  @apply w-16 h-16 text-base-content/30 mb-4;
-}
-
-.empty-state-title {
-  @apply text-lg font-semibold mb-2;
-}
-
-.empty-state-description {
-  @apply text-base-content/70 mb-4;
+.skip-to-content:focus {
+  @apply translate-y-0;
 }
