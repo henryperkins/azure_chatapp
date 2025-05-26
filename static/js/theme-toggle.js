@@ -170,7 +170,7 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
     setupThemeObserver();
   };
 
-  const teardown = () => {
+  const cleanup = () => {
     cleanupCallbacks.forEach(cleanup => {
       try {
         if (cleanup) cleanup();
@@ -199,11 +199,18 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
     if (eventHandlers && eventHandlers.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: 'ThemeManager' });
     }
+    if (eventHandlers?.cleanupListeners) {
+      eventHandlers.cleanupListeners({ context: 'ThemeManager' });
+    }
   };
+
+  // backwards-compat
+  const teardown = cleanup;
 
   return {
     initialize,
-    teardown,
+    cleanup,          // NEW – canonical cleanup required by checker
+    teardown,         // legacy alias
     setTheme,
     getSavedTheme,
     getSystemPreference,

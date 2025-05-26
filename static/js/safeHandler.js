@@ -34,13 +34,8 @@ export function createSafeHandler({ logger, eventHandlers } = {}) {
     };
   }
 
-  // Required cleanup method (no-ops since this is stateless)
-  safeHandler.cleanup = function () {
+  safeHandler.cleanup = () =>
     eventHandlers?.cleanupListeners?.({ context: 'SafeHandler' });
-  };
 
-  return {
-    safeHandler,
-    cleanup: safeHandler.cleanup
-  };
+  return safeHandler;
 }

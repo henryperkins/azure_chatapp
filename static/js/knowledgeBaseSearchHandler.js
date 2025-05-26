@@ -77,7 +77,11 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
         _showNoResults();
       }
     } catch (err) {
-      /* swallow – notifications removed */
+      ctx.logger?.error?.(
+        `[${MODULE}] searchKnowledgeBase failed`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
     } finally {
       ctx.state.isSearching = false;
       _hideSearchLoading();
@@ -258,10 +262,12 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
 
     chatInput.value = current ? `${current}\n\n${refText}` : refText;
     chatInput.focus();
-    ctx.domAPI.dispatchEvent(
-      chatInput,
-      ctx.eventHandlers.createCustomEvent('input', { bubbles: true })
-    );
+    if (ctx.eventHandlers.dispatchEvent) {
+      ctx.eventHandlers.dispatchEvent(
+        chatInput,
+        ctx.eventHandlers.createCustomEvent('input', { bubbles: true })
+      );
+    }
   }
 
   /**

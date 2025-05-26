@@ -23,11 +23,12 @@ export function createModelConfig({
   // The entire module is wrapped inside this factory to avoid top-level side effects.
   const MODULE_CONTEXT = "ModelConfig";
 
-  // Provide a local logger using fallback no-ops.
-  const localLogger = logger || {
-    error: () => { },
-    warn: () => { },
-  };
+  function createNoopLogger() {
+    return { info() {}, warn() {}, error() {}, debug() {}, log() {} };
+  }
+  const localLogger = logger
+    || dependencySystem?.modules?.get?.('logger')
+    || createNoopLogger();
 
   // Validate required dependencies
   if (!dependencySystem) {
@@ -62,14 +63,7 @@ export function createModelConfig({
   dependencySystem?.modules?.register?.('modelConfigBus', busTarget);   // NEW
 
   function dispatchEventToBus(api, eventName, detailObj) {
-    // Use eventHandler's dispatchEvent if available, otherwise fallback
-    if (typeof api.evts.dispatchEvent === "function") {
-      busTarget.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
-    } else {
-      // fallback
-      (dependencySystem.modules.get('eventBus') ?? busTarget)
-        .dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
-    }
+    busTarget.dispatchEvent(new CustomEvent(eventName, { detail: detailObj }));
   }
 
   function setupDependencies() {

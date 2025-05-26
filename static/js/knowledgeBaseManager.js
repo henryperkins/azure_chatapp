@@ -31,13 +31,11 @@ export function createKnowledgeBaseManager(ctx) {
     throw new Error(`[${MODULE}] Logger dependency is missing from context.`);
   }
 
-  let appReadyPromise = Promise.resolve();
-  if (DependencySystem?.waitFor) {
-    appReadyPromise = DependencySystem.waitFor(["app"]).catch(err => {
-      logger.warn(`[${MODULE}] Error waiting for "app" dependency during appReadyPromise setup. Operations might proceed without full app readiness.`, { error: err, context: MODULE });
-      // Swallow, as methods will await this and might proceed if it resolves/rejects early.
-    });
-  }
+  const domReadinessService = ctx.domReadinessService
+    || ctx.getDep?.('domReadinessService');
+  const appReadyPromise = domReadinessService
+    ? domReadinessService.dependenciesAndElements({ deps: ['app'] })
+    : Promise.resolve();
 
   /**
    * Enables or disables the knowledge base for the current project.
@@ -92,7 +90,11 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Failed to toggle knowledge base status.");
       }
     } catch (err) {
-      logger.error(`[${MODULE}][toggleKnowledgeBase] Error toggling knowledge base for project ${pid}. Reverting UI.`, { error: err, context: MODULE });
+      logger.error(
+        `[${MODULE}][toggleKnowledgeBase] Error toggling knowledge base for project ${pid}. Reverting UI.`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
       if (ctx.elements.kbToggle) ctx.elements.kbToggle.checked = !enabled; // Revert UI
       ctx._updateStatusIndicator(!enabled); // Revert UI
       // Optionally, show an error to the user via ctx._showStatusAlert or similar
@@ -148,7 +150,11 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Reprocessing request failed.");
       }
     } catch (err) {
-      logger.error(`[${MODULE}][reprocessFiles] Error during reprocessing for project ${projectId}.`, { error: err, context: MODULE });
+      logger.error(
+        `[${MODULE}][reprocessFiles] Error during reprocessing for project ${projectId}.`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
       // Optionally, show an error to the user
     } finally {
       ctx._setButtonLoading(btn, false);
@@ -262,16 +268,28 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Invalid response from server");
       }
     } catch (err) {
-      logger.error(`[${MODULE}][_submitKnowledgeBaseForm] Error submitting form for project ${projectId}.`, { error: err, status: err?.status, context: MODULE });
+      logger.error(
+        `[${MODULE}][_submitKnowledgeBaseForm] Error submitting form for project ${projectId}.`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
       if (err.status === 409) {
-        logger.warn(`[${MODULE}][_submitKnowledgeBaseForm] Conflict (409) detected. Attempting to refresh project details.`, { context: MODULE });
+        logger.warn(
+          `[${MODULE}][_submitKnowledgeBaseForm] Conflict (409) detected. Attempting to refresh project details.`,
+          { status: err?.status ?? 400, data: err, message: err?.message ?? String(err) },
+          { context: MODULE }
+        );
         if (ctx.projectManager.loadProjectDetails) {
           try {
             const project = await ctx.projectManager.loadProjectDetails(projectId);
             ctx.renderKnowledgeBaseInfo(project?.knowledge_base, projectId); // Refresh UI
             hideKnowledgeBaseModal();
           } catch (refreshError) {
-            logger.error(`[${MODULE}][_submitKnowledgeBaseForm] Error refreshing project details after 409.`, { error: refreshError, context: MODULE });
+            logger.error(
+              `[${MODULE}][_submitKnowledgeBaseForm] Error refreshing project details after 409.`,
+              { status: refreshError?.status ?? 500, data: refreshError, message: refreshError?.message ?? String(refreshError) },
+              { context: MODULE }
+            );
           }
         }
       } else {
@@ -339,7 +357,11 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(resp.message || "Failed to delete knowledge base.");
       }
     } catch (err) {
-      logger.error(`[${MODULE}][handleDeleteKnowledgeBase] Error deleting KB ${kbId} for project ${projectId}.`, { error: err, context: MODULE });
+      logger.error(
+        `[${MODULE}][handleDeleteKnowledgeBase] Error deleting KB ${kbId} for project ${projectId}.`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
       ctx._showStatusAlert(`Error deleting Knowledge Base: ${err.message || 'Unknown server error'}`, "error");
     } finally {
       ctx._setButtonLoading(deleteButton, false);
@@ -385,7 +407,11 @@ export function createKnowledgeBaseManager(ctx) {
         }
       }
     } catch (err) {
-      logger.error(`[${MODULE}][showKnowledgeBaseModal] Error refreshing project details. Modal might show stale KB data.`, { error: err, context: MODULE });
+      logger.error(
+        `[${MODULE}][showKnowledgeBaseModal] Error refreshing project details. Modal might show stale KB data.`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
     }
 
     const form = ctx.elements.settingsForm;
@@ -556,7 +582,11 @@ export function createKnowledgeBaseManager(ctx) {
       }
       return kbHealthData;
     } catch (err) {
-      logger.error(`[${MODULE}][loadKnowledgeBaseHealth] Error loading health for KB ${kbId}.`, { error: err, context: MODULE });
+      logger.error(
+        `[${MODULE}][loadKnowledgeBaseHealth] Error loading health for KB ${kbId}.`,
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
       ctx._showStatusAlert(`Could not load Knowledge Base status: ${err.message}`, "error");
       return null;
     }
@@ -599,7 +629,11 @@ export function createKnowledgeBaseManager(ctx) {
         ctx.elements.knowledgeBaseFilesSection?.classList.add("hidden");
       }
     } catch (error) {
-      logger.error(`[${MODULE}][loadKnowledgeBaseFiles] Error loading files for KB ${kbId}.`, { error: error, context: MODULE });
+      logger.error(
+        `[${MODULE}][loadKnowledgeBaseFiles] Error loading files for KB ${kbId}.`,
+        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
+        { context: MODULE }
+      );
       _renderKnowledgeBaseFiles({ files: [], pagination: { total: 0 } }); // Clear UI on error
       ctx.elements.knowledgeBaseFilesSection?.classList.add("hidden");
       ctx._showStatusAlert(`Could not load files for Knowledge Base: ${error.message}`, "error");
@@ -719,7 +753,11 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(response.message || "Failed to delete file from KB.");
       }
     } catch (error) {
-      logger.error(`[${MODULE}][_handleDeleteKnowledgeBaseFile] Error deleting file ${fileId}.`, { error: error, context: MODULE });
+      logger.error(
+        `[${MODULE}][_handleDeleteKnowledgeBaseFile] Error deleting file ${fileId}.`,
+        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
+        { context: MODULE }
+      );
       ctx._showStatusAlert(`Error deleting file "${filename}": ${error.message || 'Unknown server error'}`, "error");
     }
   }
@@ -796,7 +834,11 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(response.message || "Failed to attach GitHub repository.");
       }
     } catch (error) {
-      logger.error(`[${MODULE}][handleAttachGitHubRepo] Error attaching GitHub repo.`, { error: error, context: MODULE });
+      logger.error(
+        `[${MODULE}][handleAttachGitHubRepo] Error attaching GitHub repo.`,
+        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
+        { context: MODULE }
+      );
       ctx._showStatusAlert(`Error attaching repository: ${error.message || 'Unknown server error'}`, "error");
     } finally {
       ctx._setButtonLoading(attachButton, false);
@@ -863,7 +905,11 @@ export function createKnowledgeBaseManager(ctx) {
         throw new Error(response.message || "Failed to detach GitHub repository.");
       }
     } catch (error) {
-      logger.error(`[${MODULE}][handleDetachGitHubRepo] Error detaching GitHub repo.`, { error: error, context: MODULE });
+      logger.error(
+        `[${MODULE}][handleDetachGitHubRepo] Error detaching GitHub repo.`,
+        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
+        { context: MODULE }
+      );
       ctx._showStatusAlert(`Error detaching repository: ${error.message || 'Unknown server error'}`, "error");
     } finally {
       ctx._setButtonLoading(detachButton, false);
