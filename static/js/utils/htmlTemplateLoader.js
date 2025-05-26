@@ -16,8 +16,8 @@ export function createHtmlTemplateLoader({
   eventHandlers,
   apiClient,
   timerAPI,
-  domReadinessService = null,  // NEW: For replay-able events
-  logger = DependencySystem?.modules?.get?.('logger') || { warn: () => { } }
+  domReadinessService,  // NEW: For replay-able events
+  logger = DependencySystem?.modules?.get?.('logger') || { warn () {} }
 } = {}) {
   // Guardrail checks:
   if (!DependencySystem) throw new Error('DependencySystem required by HtmlTemplateLoader');
@@ -30,6 +30,8 @@ export function createHtmlTemplateLoader({
   if (!timerAPI || typeof timerAPI.setTimeout !== 'function' || typeof timerAPI.clearTimeout !== 'function') {
     throw new Error('[HtmlTemplateLoader] timerAPI with setTimeout/clearTimeout is required');
   }
+  if (!domReadinessService?.emitReplayable)
+    throw new Error('[HtmlTemplateLoader] domReadinessService with replay capability is mandatory');
 
   // ──────────────────────────────────────────────────────────────
   // Native fetch shortcut (bypasses apiClient pre-processing).
@@ -72,7 +74,7 @@ export function createHtmlTemplateLoader({
     url,
     containerSelector,
     eventName = 'htmlTemplateLoaded',
-    timeout = 15_000 // default to 15s
+    timeout = 10_000 // default to 10s
   } = {}) {
     const isModalsHtml = url && url.includes('modals.html');
     logger.info?.(`[HtmlTemplateLoader] Attempting to load template: ${url} into ${containerSelector}`, { url, containerSelector, eventName, isModalsHtml });
@@ -98,6 +100,13 @@ export function createHtmlTemplateLoader({
       }
       return true;
     }
+
+    if (container.dataset.htmlLoading === 'true') {
+      logger.info?.('[HtmlTemplateLoader] Another fetch in-flight – waiting…', { url });
+      await domReadinessService.waitForEvent(eventName, { timeout });
+      return container.dataset.htmlLoaded === 'true';
+    }
+    container.dataset.htmlLoading = 'true';
 
     // Create a manual AbortController for this request
     const controller = new AbortController();
@@ -165,6 +174,7 @@ export function createHtmlTemplateLoader({
       });
       success = false;
     } finally {
+      delete container.dataset.htmlLoading;
       timerAPI.clearTimeout(tm);
 
       // Emit main event using replay capability
@@ -172,7 +182,7 @@ export function createHtmlTemplateLoader({
 
       // Special handling for modals.html - always emit modalsLoaded event
       if (isModalsHtml) {
-        emitEvent('modalsLoaded', { success, error: errorInfo, url });
+        emitEvent('modalsLoaded', { success, error: errorInfo, url, synthetic: false });
       }
     }
 

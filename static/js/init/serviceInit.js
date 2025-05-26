@@ -91,7 +91,7 @@ export function createServiceInitializer({
       } else {
         logger?.warn('[serviceInit] eventHandlers.setDomReadinessService is not defined. Circular dependency might not be fully resolved.', { context: 'serviceInit:registerBasicServices' });
       }
-      
+
       // Register or reuse a shared errorReporter.
       // Falls back to a stub if no real error reporter is already in DI.
       const existingErrorReporter = DependencySystem.modules.get('errorReporter');
@@ -200,6 +200,12 @@ export function createServiceInitializer({
       // Responsible for fetching and caching HTML templates.
       if (createHtmlTemplateLoader) {
         logger?.debug('[serviceInit] Creating HTML Template Loader...', { context: 'serviceInit:registerAdvancedServices' });
+
+        // ⬅ Enforce DI: hard guard for domReadinessService
+        if (!domReadinessService) {
+          throw new Error('[serviceInit] domReadinessService required for htmlTemplateLoader');
+        }
+
         const htmlTemplateLoaderInstance = createHtmlTemplateLoader({
           DependencySystem, // For internal DI
           domAPI,
@@ -207,7 +213,7 @@ export function createServiceInitializer({
           eventHandlers,
           apiClient: apiClientInstance, // Pass the created API client instance
           timerAPI: browserServiceInstance, // For timeouts/intervals
-          domReadinessService,  // For replay capability with loaded templates
+          domReadinessService,  // ⬅ inject explicitly
           logger: DependencySystem.modules.get('logger')
         });
         safeRegister('htmlTemplateLoader', htmlTemplateLoaderInstance);
