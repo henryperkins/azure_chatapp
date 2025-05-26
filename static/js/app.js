@@ -798,11 +798,12 @@ if (typeof window !== 'undefined') {
   })();
 }
  
-// Factory wrapper (guard-rails Rule 1)
+ 
+// Factory required by guard-rail Rule 1
 export function createAppConfig({ DependencySystem } = {}) {
   if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
   return {
-    APP_CONFIG,                      // ← re-export existing constant(s)
-    cleanup() { /* nothing to cleanup */ }
+    APP_CONFIG,
+    cleanup() { /* no-op */ }
   };
 }

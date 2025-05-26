@@ -112,9 +112,6 @@ export function createFileUploadComponent({
           doc,
           eventHandlers.createCustomEvent('fileuploadcomponent:initialized',{ detail:{ success:true } })
         );
-      } else {
-        doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
-          { detail: { success: true } }));
       }
     } catch (error) {
       logger.error('[FileUploadComponent][init] Initialization failed', error, { context: MODULE_CONTEXT });

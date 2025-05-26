@@ -168,6 +168,7 @@ export function createLogger({
     fatal: wrap('fatal', _c.error),
     setServerLoggingEnabled,
     setMinLevel,
-    upgradeWithApiClient
+    upgradeWithApiClient,
+    cleanup() { /* logger is stateless; nothing to clean */ }
   };
 }

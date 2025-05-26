@@ -22,9 +22,9 @@
  * @param {Function} deps.dom.createMutationObserver
  * @returns {Object} ThemeManager API
  */
-export function createThemeManager(deps) {
+export function createThemeManager({ dom, eventHandlers } = {}) {
   // --- Dependency Validation ---
-  if (!deps?.dom) throw new Error('DOM abstraction layer required');
+  if (!dom) throw new Error('DOM abstraction layer required');
 
   const requiredDomMethods = [
     'getDocumentAttribute', 'setDocumentAttribute',
@@ -33,13 +33,12 @@ export function createThemeManager(deps) {
   ];
 
   requiredDomMethods.forEach(method => {
-    if (typeof deps.dom[method] !== 'function') {
+    if (typeof dom[method] !== 'function') {
       throw new Error(`DOM.${method} implementation required`);
     }
   });
 
   // We no longer depend on "notify"
-  const { dom } = deps;
 
   // --- Constants ---
   const THEMES = Object.freeze({
@@ -117,8 +116,19 @@ export function createThemeManager(deps) {
     const button = dom.getElementById('darkModeToggle');
     if (!button) return;
 
-    const cleanup = dom.addEventListener(button, 'click', handleToggleClick);
-    cleanupCallbacks.push(cleanup);
+    if (eventHandlers) {
+      cleanupCallbacks.push(
+        eventHandlers.trackListener(
+          button,
+          'click',
+          handleToggleClick,
+          { context: 'ThemeManager' }
+        )
+      );
+    } else {
+      // fallback for unit tests
+      cleanupCallbacks.push(dom.addEventListener(button, 'click', handleToggleClick));
+    }
   };
 
   const watchSystemPreferences = () => {
@@ -178,6 +188,9 @@ export function createThemeManager(deps) {
         void _err; // intentionally ignoring error, previously handled with notification
       }
       mutationObserver = null;
+    }
+    if (eventHandlers && eventHandlers.cleanupListeners) {
+      eventHandlers.cleanupListeners({ context: 'ThemeManager' });
     }
   };
 

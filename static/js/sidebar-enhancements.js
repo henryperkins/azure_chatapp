@@ -161,5 +161,8 @@ export function createSidebarEnhancements({
     initSidebarEnhancements,
     attachSettingsPanel,
     toggleSettingsPanel,
+    cleanup() {
+      eventHandlers.cleanupListeners({ context: 'sidebar-enhancements' });
+    }
   };
 }

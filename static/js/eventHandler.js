@@ -620,7 +620,7 @@ export function createEventHandlers({
 
   function cleanup() {
     // Cleans up all event listeners and module state
-    cleanupListeners({ context: MODULE });
+    eventHandlers.cleanupListeners({ context: MODULE });
     // You could add more explicit cleanup logic here if stateful singletons or intervals are added
   }
 
