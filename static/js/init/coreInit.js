@@ -286,7 +286,7 @@ export function createCoreInitializer({
 
     // 9. ProjectDashboard
     const projectDashboard = createProjectDashboard({
-      dependencySystem: DependencySystem,
+      DependencySystem,
       domAPI,
       browserService,
       eventHandlers,

@@ -208,16 +208,13 @@ const serviceInit = createServiceInitializer({
   getSessionId
 });
 
-// Register basic services (this creates the logger)
+ // Register basic services (this creates the logger)
 serviceInit.registerBasicServices(); // This should now create and register apiClientObject
 
-// Create logger AFTER apiClientObject is available via DependencySystem
-const apiClientObjectForLogger = DependencySystem.modules.get('apiClientObject');
-if (!apiClientObjectForLogger) {
-  // Fallback or error if apiClientObject is somehow not registered by serviceInit
-  console.error('[App] apiClientObject not found after serviceInit.registerBasicServices(). Logger might not have CSRF protection.');
-}
+// ---- NEW ORDER: Logger creation/registration BEFORE advanced services ----
 
+
+/* Logger creation and SafeHandler upgrade remain in place (no changes needed here) */
 const loggerInstance = createLogger({
   endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
   enableServer: true,
@@ -226,21 +223,25 @@ const loggerInstance = createLogger({
   consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
   browserService: browserServiceInstance,
   sessionIdProvider: getSessionId,
-  apiClient: apiClientObjectForLogger, // Provide apiClient directly
+  apiClient: DependencySystem.modules.get('apiClientObject'),
   safeHandler: DependencySystem.modules.get('safeHandler') // Ensure safeHandler is available
 });
 DependencySystem.register('logger', loggerInstance);
-const logger = loggerInstance; // Make it available to the rest of app.js
+const logger = loggerInstance; // Make it available to rest of app.js
 
- // Instantiate and register canonical safeHandler after logger is available
+// Upgrade safeHandler to use the correct logger
 const safeHandler = createSafeHandler({ logger });
-DependencySystem.register('safeHandler', safeHandler);
+if (DependencySystem?.modules?.has?.('safeHandler')) {
+  DependencySystem.modules.set('safeHandler', safeHandler);
+  logger.debug('[app] safeHandler upgraded to canonical implementation', { context: 'app:safeHandler' });
+} else {
+  DependencySystem.register('safeHandler', safeHandler);
+}
 
-// Now inject the fully configured logger into serviceInit if it needs it for advanced services
+// Inject the fully configured logger into serviceInit if needed
 serviceInit.setLogger(logger);
+// NOTE: serviceInit.registerAdvancedServices() will now be called in init() after modals are loaded
 
-serviceInit.registerAdvancedServices();
-// ---------------------------------------------------------------------------
 // Create API client (now should be available via serviceInit)
 // ---------------------------------------------------------------------------
 const apiRequest = DependencySystem.modules.get('apiRequest');
@@ -556,8 +557,19 @@ export async function init() {
     await coreInit.initializeCoreSystems();
     logger.info('[App.init] Core systems initialization phase completed.');
 
+    // NEW: Wait for modals to load before proceeding
+    logger.log('[App.init] Waiting for modals to load...');
+    await domReadinessService.waitForEvent('modalsLoaded', {
+      timeout: 10000,
+      context: 'app.init:modalsLoaded'
+    });
+    logger.info('[App.init] Modals loaded successfully.');
+
+    // Now call registerAdvancedServices after modals are ready
+    serviceInit.registerAdvancedServices();
+
     logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...');
-    
+
     // Debug: Check which modules are already available
     const modulesStatus = {
       auth: !!DependencySystem.modules.get('auth'),
@@ -566,7 +578,7 @@ export async function init() {
       sidebar: !!DependencySystem.modules.get('sidebar')
     };
     logger.info('[App.init] Modules status before wait:', modulesStatus);
-    
+
     await domReadinessService.dependenciesAndElements({
       deps: ['auth', 'eventHandlers', 'modalManager'],
       timeout: PHASE_TIMEOUT, // Use PHASE_TIMEOUT
@@ -600,7 +612,7 @@ export async function init() {
     }
 
     logger.log('[App.init] Initializing UI Components...');
-    
+
     // Debug: Check DOM elements before UI init
     const domElementsStatus = {
       mainSidebar: !!domAPI.getElementById('mainSidebar'),
@@ -609,16 +621,16 @@ export async function init() {
       modalsContainer: !!domAPI.getElementById('modalsContainer')
     };
     logger.info('[App.init] DOM elements status before UI init:', domElementsStatus);
-    
+
     await uiInit.initializeUIComponents();
-    
+
     // Debug: Check modules after UI init
     const modulesAfterUI = {
       sidebar: !!DependencySystem.modules.get('sidebar'),
       sidebarInitialized: DependencySystem.modules.get('sidebar')?.initialized || false
     };
     logger.info('[App.init] Modules after UI init:', modulesAfterUI);
-    
+
     logger.info('[App.init] UI components initialization completed.');
 
     const mc = DependencySystem.modules.get('modelConfig');
@@ -660,7 +672,7 @@ export async function init() {
         hasTranslateXFull: sidebarClasses.includes('-translate-x-full'),
         hasTranslateX0: sidebarClasses.includes('translate-x-0')
       });
-      
+
       // Force sidebar visible on desktop if not already
       if (viewportWidth >= 768 && sidebarClasses.includes('-translate-x-full')) {
         logger.warn('[App.init] FORCING sidebar visible on desktop');
