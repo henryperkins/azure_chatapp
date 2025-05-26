@@ -43,204 +43,221 @@ export function createServiceInitializer({
   // Capture whether a real logger instance was provided by caller
   const providedLogger = !!logger;
   // Allow logger to be missing at first; fallback to browserServiceInstance console or a no-op.
+  // This is useful for very early bootstrap before the main logger is configured.
   if (!providedLogger) {
     const winConsole = browserServiceInstance?.getWindow?.()?.console;
+    // Use a simple console-like object if no real logger or window.console is available.
     logger = winConsole ?? { info() {}, warn() {}, error() {}, debug() {}, log() {} };
   }
 
-  // Helper: register only if not already present
+  // Helper: register a module with DependencySystem only if it's not already present.
+  // Prevents errors from re-registering modules.
   function safeRegister(name, value) {
     if (!DependencySystem?.modules?.has?.(name)) {
       DependencySystem.register(name, value);
+      logger?.debug?.(`[serviceInit] Registered "${name}"`, { context: 'serviceInit:safeRegister' });
     } else {
-      logger?.debug?.(`[serviceInit] "${name}" already registered – skipping`, { context: 'serviceInit:safeRegister' });
+      logger?.debug?.(`[serviceInit] "${name}" already registered – skipping registration.`, { context: 'serviceInit:safeRegister' });
     }
   }
 
   /**
-   * Register all basic services that were scattered in app.js
+   * Registers basic, foundational services required by many parts of the application.
+   * These include core browser utilities, DOM access, event handling, and initial error reporting.
+   * This function should be called early in the application bootstrap sequence.
    */
   function registerBasicServices() {
+    logger?.info('[serviceInit] Starting registration of basic services...', { context: 'serviceInit:registerBasicServices' });
     try {
-      // PHASE 1: Register the real logger only if it was supplied externally.
-      if (providedLogger) safeRegister('logger', logger);
+      // Register the main logger instance if it was provided externally (i.e., fully configured).
+      if (providedLogger) {
+        safeRegister('logger', logger);
+      }
 
-      // Register core browser and DOM services
-      safeRegister('domAPI', domAPI);
-      safeRegister('browserAPI', browserServiceInstance);
-      safeRegister('browserService', browserServiceInstance);
-      safeRegister('viewportAPI', browserServiceInstance); // Register as viewportAPI for components that need viewport functionality
-      safeRegister('storage', browserServiceInstance);
-      safeRegister('eventHandlers', eventHandlers);
-      safeRegister('domReadinessService', domReadinessService);
+      // Register core browser and DOM services.
+      // These are fundamental for most interactions with the browser environment.
+      safeRegister('domAPI', domAPI); // Utility for DOM manipulations.
+      safeRegister('browserAPI', browserServiceInstance); // General browser API access.
+      safeRegister('browserService', browserServiceInstance); // Alias for browserAPI.
+      safeRegister('viewportAPI', browserServiceInstance); // Specifically for viewport-related functionalities.
+      safeRegister('storage', browserServiceInstance); // For local/session storage access via browserService.
+      safeRegister('eventHandlers', eventHandlers); // Central event management system.
+      safeRegister('domReadinessService', domReadinessService); // Service for DOM readiness checks.
 
-      // Wire circular dependency with setter (post-construction)
-      eventHandlers.setDomReadinessService(domReadinessService);
-
-      // Register / reuse shared errorReporter
+      // Wire the circular dependency between eventHandlers and domReadinessService.
+      // This is done post-construction via a setter to avoid instantiation deadlocks.
+      if (eventHandlers.setDomReadinessService) {
+        eventHandlers.setDomReadinessService(domReadinessService);
+      } else {
+        logger?.warn('[serviceInit] eventHandlers.setDomReadinessService is not defined. Circular dependency might not be fully resolved.', { context: 'serviceInit:registerBasicServices' });
+      }
+      
+      // Register or reuse a shared errorReporter.
+      // Falls back to a stub if no real error reporter is already in DI.
+      const existingErrorReporter = DependencySystem.modules.get('errorReporter');
       safeRegister(
         'errorReporter',
-        DependencySystem.modules.get('errorReporter') ||
-        createErrorReporterStub({ logger: DependencySystem.modules.get('logger') })
+        existingErrorReporter || createErrorReporterStub({ logger: DependencySystem.modules.get('logger') || logger }) // Use current logger
       );
 
-      // Register utility services
+      // Register utility services (UI utils, global utils, sanitizer).
       if (uiUtils) safeRegister('uiUtils', uiUtils);
       if (globalUtils) safeRegister('globalUtils', globalUtils);
-      safeRegister('sanitizer', sanitizer);
-      safeRegister('domPurify', sanitizer); // legacy alias
+      safeRegister('sanitizer', sanitizer); // DOMPurify instance.
+      safeRegister('domPurify', sanitizer); // Legacy alias for sanitizer.
 
-      // Register file upload component factory
+      // Register FileUploadComponent factory if provided.
       if (createFileUploadComponent) {
         safeRegister('FileUploadComponent', createFileUploadComponent);
       }
 
-      // Register API endpoints (only if not already provided)
+      // Register API endpoints. Resolves them if not already present in DI.
       const resolvedEndpoints = DependencySystem.modules.get('apiEndpoints') || resolveApiEndpoints(APP_CONFIG);
       safeRegister('apiEndpoints', resolvedEndpoints);
 
-      // Log the full apiEndpoints map for rapid detection of bad overrides
-      logger?.log('[serviceInit] API endpoints registered successfully:', {
-        endpointKeys: Object.keys(resolvedEndpoints),
+      logger?.debug('[serviceInit] API endpoints registered successfully.', {
         endpointCount: Object.keys(resolvedEndpoints).length,
-        hasRequiredAuth: ['AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'].every(key => resolvedEndpoints[key]),
         context: 'serviceInit:registerBasicServices'
       });
+      // Detailed endpoint logging can be verbose; consider conditional logging based on DEBUG flags if necessary.
+      // logger?.log('[serviceInit] Detailed endpoint mappings:', resolvedEndpoints, { context: 'serviceInit:registerBasicServices' });
 
-      // Log individual endpoint mappings for debugging
-      logger?.log('[serviceInit] Detailed endpoint mappings:', resolvedEndpoints, { context: 'serviceInit:registerBasicServices' });
-
-      logger?.log('[serviceInit] Basic services registered', { context: 'serviceInit:registerBasicServices' });
+      logger?.info('[serviceInit] Basic services registration completed.', { context: 'serviceInit:registerBasicServices' });
     } catch (err) {
-      if (logger && logger.error) {
-        logger.error('[serviceInit] Failed to register basic services', err, { context: 'serviceInit:registerBasicServices' });
-      }
-      throw err;
+      logger?.error('[serviceInit] Failed to register basic services', err, { context: 'serviceInit:registerBasicServices' });
+      throw err; // Re-throw to halt initialization if basic services fail.
     }
   }
 
   /**
-   * Create and register advanced services (API client, navigation, etc.)
+   * Creates and registers advanced services, such as the API client, navigation service,
+   * HTML template loader, and UI renderer. These often depend on basic services being registered.
+   * This function is called after basic services and the main logger are set up.
    */
   function registerAdvancedServices() {
+    logger?.info('[serviceInit] Starting registration of advanced services...', { context: 'serviceInit:registerAdvancedServices' });
     try {
-      // Create API client - declare at function scope for reuse
-      let apiRequest = null;
+      // 1. API Client
+      // This creates the main API client instance used for network requests.
+      // It requires APP_CONFIG, globalUtils, an auth module accessor, browserService, and logger.
+      let apiClientInstance = null; // Renamed from apiRequest to avoid confusion with apiRequest.fetch
       if (createApiClient && globalUtils) {
-        apiRequest = createApiClient({
+        logger?.debug('[serviceInit] Creating API client...', { context: 'serviceInit:registerAdvancedServices' });
+        apiClientInstance = createApiClient({
           APP_CONFIG,
-          globalUtils: {
+          globalUtils: { // Pass specific utils needed by apiClient
             shouldSkipDedup : globalUtils.shouldSkipDedup,
             stableStringify : globalUtils.stableStringify,
             normaliseUrl    : globalUtils.normaliseUrl,
             isAbsoluteUrl   : globalUtils.isAbsoluteUrl
           },
-          getAuthModule : () => DependencySystem.modules.get('auth'),
+          getAuthModule : () => DependencySystem.modules.get('auth'), // Accessor for auth module
           browserService: browserServiceInstance,
-          logger        : DependencySystem.modules.get('logger')  // ← provide required DI logger
+          logger        : DependencySystem.modules.get('logger') // Use the DI-registered logger
         });
-        // Register the API client function (not the object) for DI contract
-        safeRegister('apiRequest', apiRequest.fetch);
-        // Register the full apiClient object using safeRegister to avoid duplicates
-        safeRegister('apiClientObject', apiRequest);
+        // Register the `fetch` method of the API client as 'apiRequest' for common use.
+        safeRegister('apiRequest', apiClientInstance.fetch);
+        // Register the full API client object as 'apiClientObject'.
+        safeRegister('apiClientObject', apiClientInstance);
+        logger?.debug('[serviceInit] API client created and registered (apiRequest, apiClientObject).', { context: 'serviceInit:registerAdvancedServices' });
+      } else {
+        logger?.warn('[serviceInit] createApiClient factory or globalUtils not provided. API client not created.', { context: 'serviceInit:registerAdvancedServices' });
       }
 
-      // Create accessibility enhancements
+      // 2. Accessibility Enhancements
+      // Creates and registers utilities for improving application accessibility.
       if (createAccessibilityEnhancements) {
-        const accessibilityUtils = createAccessibilityEnhancements({
+        logger?.debug('[serviceInit] Creating Accessibility Enhancements...', { context: 'serviceInit:registerAdvancedServices' });
+        const accessibilityUtilsInstance = createAccessibilityEnhancements({
           domAPI,
           eventHandlers,
           logger: DependencySystem.modules.get('logger'),
           domReadinessService,
-          DependencySystem,                               // provide DI container
-          // pass canonical safeHandler for direct use (optional)
-          safeHandler: DependencySystem.modules.get('safeHandler')
+          DependencySystem, // For potential internal DI
+          safeHandler: DependencySystem.modules.get('safeHandler') // Use DI-registered safeHandler
         });
-        DependencySystem.register('accessibilityUtils', accessibilityUtils);
+        // Note: `register` is used here instead of `safeRegister` if it's critical and should overwrite.
+        // Assuming safeRegister is generally preferred unless overwrite is intended.
+        safeRegister('accessibilityUtils', accessibilityUtilsInstance);
+        logger?.debug('[serviceInit] Accessibility Enhancements created and registered.', { context: 'serviceInit:registerAdvancedServices' });
       }
 
-      // Create navigation service
+      // 3. Navigation Service
+      // Manages application routing and URL manipulation.
       if (createNavigationService) {
-        const navigationService = createNavigationService({
+        logger?.debug('[serviceInit] Creating Navigation Service...', { context: 'serviceInit:registerAdvancedServices' });
+        const navigationServiceInstance = createNavigationService({
           domAPI,
           browserService: browserServiceInstance,
-          DependencySystem,
+          DependencySystem, // For internal DI
           eventHandlers
         });
-        DependencySystem.register('navigationService', navigationService);
+        safeRegister('navigationService', navigationServiceInstance);
+        logger?.debug('[serviceInit] Navigation Service created and registered.', { context: 'serviceInit:registerAdvancedServices' });
       }
 
-      // Create HTML template loader
+      // 4. HTML Template Loader
+      // Responsible for fetching and caching HTML templates.
       if (createHtmlTemplateLoader) {
-        const htmlTemplateLoader = createHtmlTemplateLoader({
-          DependencySystem,
+        logger?.debug('[serviceInit] Creating HTML Template Loader...', { context: 'serviceInit:registerAdvancedServices' });
+        const htmlTemplateLoaderInstance = createHtmlTemplateLoader({
+          DependencySystem, // For internal DI
           domAPI,
           sanitizer,
           eventHandlers,
-          apiClient: apiRequest, // Pass the 'apiRequest' instance as the 'apiClient' property
-          timerAPI: browserServiceInstance,
-          domReadinessService,  // NEW: Pass domReadinessService for replay capability
+          apiClient: apiClientInstance, // Pass the created API client instance
+          timerAPI: browserServiceInstance, // For timeouts/intervals
+          domReadinessService,  // For replay capability with loaded templates
           logger: DependencySystem.modules.get('logger')
         });
-        DependencySystem.register('htmlTemplateLoader', htmlTemplateLoader);
+        safeRegister('htmlTemplateLoader', htmlTemplateLoaderInstance);
+        logger?.debug('[serviceInit] HTML Template Loader created and registered.', { context: 'serviceInit:registerAdvancedServices' });
       }
 
-      // Create UI Renderer
-      if (createUiRenderer && apiRequest) {
-        const apiEndpoints = DependencySystem.modules.get('apiEndpoints');
-        const logger = DependencySystem.modules.get('logger');
-        if (!apiEndpoints) {
-          logger?.error('[serviceInit] apiEndpoints not available for uiRenderer creation', { context: 'serviceInit:registerAdvancedServices' });
-          return;
+      // 5. UI Renderer
+      // Handles rendering of complex UI structures or components.
+      if (createUiRenderer && apiClientInstance) { // Depends on apiClient being created
+        logger?.debug('[serviceInit] Creating UI Renderer...', { context: 'serviceInit:registerAdvancedServices' });
+        const currentApiEndpoints = DependencySystem.modules.get('apiEndpoints');
+        const currentLogger = DependencySystem.modules.get('logger');
+        if (!currentApiEndpoints) {
+          currentLogger?.error('[serviceInit] apiEndpoints not available for uiRenderer creation. Skipping UI Renderer.', { context: 'serviceInit:registerAdvancedServices' });
+        } else {
+          const uiRendererInstance = createUiRenderer({
+            domAPI,
+            eventHandlers,
+            apiRequest: apiClientInstance.fetch, // Pass the fetch method specifically
+            apiEndpoints: currentApiEndpoints,
+            // Callbacks for UI interactions, to be implemented by consuming modules (e.g., sidebar)
+            onConversationSelect: (conversationId) => {
+              logger?.debug('[serviceInit] uiRenderer: onConversationSelect triggered.', { conversationId, context: 'serviceInit:uiRenderer' });
+              const doc = domAPI.getDocument();
+              if (doc && eventHandlers?.createCustomEvent) {
+                domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('uiRenderer:conversationSelected', { detail: { conversationId } }));
+              }
+            },
+            onProjectSelect: (projectId) => {
+              logger?.debug('[serviceInit] uiRenderer: onProjectSelect triggered.', { projectId, context: 'serviceInit:uiRenderer' });
+              const doc = domAPI.getDocument();
+              if (doc && eventHandlers?.createCustomEvent) {
+                domAPI.dispatchEvent(doc, eventHandlers.createCustomEvent('uiRenderer:projectSelected', { detail: { projectId } }));
+              }
+            },
+            domReadinessService,
+            logger: currentLogger,
+            DependencySystem // For internal DI
+          });
+          safeRegister('uiRenderer', uiRendererInstance);
+          logger?.debug('[serviceInit] UI Renderer created and registered.', { context: 'serviceInit:registerAdvancedServices' });
         }
-
-        const uiRenderer = createUiRenderer({
-          domAPI,
-          eventHandlers,
-          apiRequest,
-          apiEndpoints,
-          onConversationSelect: (conversationId) => {
-            // Simple callback - just log for now, actual implementation will be handled by sidebar
-            logger?.info('[serviceInit] onConversationSelect called', { conversationId, context: 'serviceInit:uiRenderer' });
-            // Dispatch event for other modules to handle
-            const doc = domAPI.getDocument();
-            if (doc && eventHandlers?.createCustomEvent) {
-              domAPI.dispatchEvent(
-                doc,
-                eventHandlers.createCustomEvent('conversationSelected', {
-                  detail: { conversationId }
-                })
-              );
-            }
-          },
-          onProjectSelect: (projectId) => {
-            // Simple callback - just log for now, actual implementation will be handled by sidebar
-            logger?.info('[serviceInit] onProjectSelect called', { projectId, context: 'serviceInit:uiRenderer' });
-            // Dispatch event for other modules to handle
-            const doc = domAPI.getDocument();
-            if (doc && eventHandlers?.createCustomEvent) {
-              domAPI.dispatchEvent(
-                doc,
-                eventHandlers.createCustomEvent('projectSelected', {
-                  detail: { projectId }
-                })
-              );
-            }
-          },
-          domReadinessService,
-          logger: DependencySystem.modules.get('logger'),
-          DependencySystem
-        });
-        DependencySystem.register('uiRenderer', uiRenderer);
-        logger?.log('[serviceInit] uiRenderer created and registered successfully', { context: 'serviceInit:registerAdvancedServices' });
+      } else if (!apiClientInstance && createUiRenderer) {
+          logger?.warn('[serviceInit] UI Renderer requires API client, but it was not created. Skipping UI Renderer.', { context: 'serviceInit:registerAdvancedServices' });
       }
 
-      logger?.log('[serviceInit] Advanced services registered', { context: 'serviceInit:registerAdvancedServices' });
+      logger?.info('[serviceInit] Advanced services registration completed.', { context: 'serviceInit:registerAdvancedServices' });
     } catch (err) {
-      if (logger && logger.error) {
-        logger.error('[serviceInit] Failed to register advanced services', err, { context: 'serviceInit:registerAdvancedServices' });
-      }
-      throw err;
+      logger?.error('[serviceInit] Failed to register advanced services', err, { context: 'serviceInit:registerAdvancedServices' });
+      throw err; // Re-throw to halt initialization if advanced services fail.
     }
   }
 

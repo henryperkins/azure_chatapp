@@ -415,15 +415,42 @@ DependencySystem.register('errorInit', errorInit);
 // ---------------------------------------------------------------------------
 // Create core initializer
 // ---------------------------------------------------------------------------
+// Gather additional dependencies for coreInit
+const apiClientObject = DependencySystem.modules.get('apiClientObject');
+// apiRequest is already defined in this scope
+const appObj = DependencySystem.modules.get('app'); // 'app' is registered earlier
+const navigationService = DependencySystem.modules.get('navigationService');
+const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
+const uiRenderer = DependencySystem.modules.get('uiRenderer');
+const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
+// MODAL_MAPPINGS, globalUtils, uiUtils, createFileUploadComponent, apiEndpoints, safeHandler are already in scope
+
 const coreInit = createCoreInitializer({
+  // Existing dependencies
   DependencySystem,
   domAPI,
-  browserService: browserServiceInstance,
+  browserService: browserServiceInstance, // Provides 'storage' via browserServiceInstance.getStorage() or similar
   eventHandlers,
   sanitizer,
   logger,
   APP_CONFIG,
-  domReadinessService
+  domReadinessService,
+  createKnowledgeBaseComponent,
+
+  // New direct dependencies:
+  MODAL_MAPPINGS,
+  apiRequest: apiRequest, // This is the fetch function from apiClientObject.fetch
+  apiClientObject,      // Full API client object
+  apiEndpoints,
+  app: appObj,
+  uiUtils,
+  navigationService,
+  globalUtils: { shouldSkipDedup, stableStringify, normaliseUrl, isAbsoluteUrl, isValidProjectId }, // Pass the composed object
+  FileUploadComponent: createFileUploadComponent, // Pass the factory directly
+  htmlTemplateLoader,
+  uiRenderer,
+  accessibilityUtils,
+  safeHandler // Pass the upgraded safeHandler
 });
 
 // ---------------------------------------------------------------------------
@@ -550,145 +577,110 @@ export async function init() {
   toggleLoadingSpinner(true);
 
   try {
-    logger.log('[App.init] Initializing Error Handling...', { context: 'app:init' });
+    // Stage 1: Initialize Global Error Handling
+    logger.log('[App.init] Stage 1: Initializing Global Error Handling...', { context: 'app:init' });
     errorInit.initializeErrorHandling();
-    logger.info('[App.init] Error handling initialization completed.', { context: 'app:init' });
+    logger.info('[App.init] Stage 1: Global Error Handling initialization completed.', { context: 'app:init' });
 
-    logger.log('[App.init] Initializing Core Systems...', { context: 'app:init' });
-    await coreInit.initializeCoreSystems();
-    logger.info('[App.init] Core systems initialization phase completed.', { context: 'app:init' });
-
-    // NEW: Wait for modals to load before proceeding
-    logger.log('[App.init] Waiting for modals to load...', { context: 'app:init' });
-    await domReadinessService.waitForEvent('modalsLoaded', {
-      timeout: 10000,
-      context: 'app.init:modalsLoaded'
-    });
-    logger.info('[App.init] Modals loaded successfully.', { context: 'app:init' });
-
-    // Now call registerAdvancedServices after modals are ready
+    // Stage 2: Register Advanced Services (e.g., API client, specialized utilities)
+    logger.log('[App.init] Stage 2: Registering Advanced Services...', { context: 'app:init' });
     serviceInit.registerAdvancedServices();
+    logger.info('[App.init] Stage 2: Advanced services registration completed.', { context: 'app:init' });
 
-    logger.log('[App.init] Waiting for critical DI modules (auth, eventHandlers, modalManager)...', { context: 'app:init' });
+    // Stage 3: Initialize Core Systems & Components (Modal Manager, Auth, Project Manager, etc.)
+    // This includes internal initialization of some UI like modals and model config.
+    logger.log('[App.init] Stage 3: Initializing Core Systems & Components...', { context: 'app:init' });
+    await coreInit.initializeCoreSystems();
+    logger.info('[App.init] Stage 3: Core systems & components initialization phase completed.', { context: 'app:init' });
 
-    // Debug: Check which modules are already available
-    const modulesStatus = {
-      auth: !!DependencySystem.modules.get('auth'),
-      eventHandlers: !!DependencySystem.modules.get('eventHandlers'),
-      modalManager: !!DependencySystem.modules.get('modalManager'),
-      sidebar: !!DependencySystem.modules.get('sidebar')
-    };
-    logger.info('[App.init] Modules status before wait:', modulesStatus, { context: 'app:init' });
+    // Stage 4: Wait for Modals to be Loaded
+    // Modals are initialized within coreInit.initializeCoreSystems() via modalManager.init().
+    logger.log('[App.init] Stage 4: Waiting for modals to load...', { context: 'app:init' });
+    await domReadinessService.waitForEvent('modalsLoaded', {
+        timeout: 10000, // Increased timeout for modal loading
+        context: 'app.init:modalsLoaded'
+    });
+    logger.info('[App.init] Stage 4: Modals loaded successfully.', { context: 'app:init' });
 
+    // Stage 5: Wait for Critical DI Modules (ensuring key async modules from coreInit are ready)
+    logger.log('[App.init] Stage 5: Waiting for critical DI modules (auth, eventHandlers, modalManager)...', { context: 'app:init' });
     await domReadinessService.dependenciesAndElements({
-      deps: ['auth', 'eventHandlers', 'modalManager'],
-      timeout: PHASE_TIMEOUT, // Use PHASE_TIMEOUT
+      deps: ['auth', 'eventHandlers', 'modalManager'], // Key modules registered in coreInit
+      timeout: PHASE_TIMEOUT, 
       context: 'app.init:depsReady'
     });
-    logger.info('[App.init] Critical DI modules ready.', { context: 'app:init' });
+    logger.info('[App.init] Stage 5: Critical DI modules ready.', { context: 'app:init' });
 
-    logger.log('[App.init] Initializing Auth System...', { context: 'app:init' });
+    // Stage 6: Initialize Authentication System
+    logger.log('[App.init] Stage 6: Initializing Auth System...', { context: 'app:init' });
     const safeAuthInit = safeHandler(
       () => authInit.initializeAuthSystem(),
       'authInit.initializeAuthSystem'
     );
     await safeAuthInit();
-    logger.info('[App.init] Auth system initialization completed.', { context: 'app:init' });
+    logger.info('[App.init] Stage 6: Auth system initialization completed.', { context: 'app:init' });
 
-    // Logger is now created after API client is ready, so no upgrade needed.
-
+    // Stage 7: Fetch Current User if Authenticated
     if (appModule.state.isAuthenticated) {
-      logger.log('[App.init] Fetching Current User...', { context: 'app:init' });
-      const authModule = DependencySystem.modules.get('auth');
+      logger.log('[App.init] Stage 7: Fetching Current User...', { context: 'app:init' });
+      const authModule = DependencySystem.modules.get('auth'); // authModule instance from coreInit
       if (authModule?.fetchCurrentUser) {
         const user = await authModule.fetchCurrentUser();
         if (user) {
-          app.setCurrentUser(user);
-          browserAPI.setCurrentUser(user);
+          app.setCurrentUser(user); // Updates appModule state
+          browserAPI.setCurrentUser(user); // Updates browser service state (e.g., for logging)
         }
       } else {
-        logger.warn('[App.init] Auth module fetchCurrentUser method not available', { context: 'app:init' });
+        logger.warn('[App.init] Stage 7: Auth module fetchCurrentUser method not available', { context: 'app:init' });
       }
-      logger.info('[App.init] Fetch current user step completed.', { context: 'app:init' });
+      logger.info('[App.init] Stage 7: Fetch current user step completed.', { context: 'app:init' });
     }
 
-    logger.log('[App.init] Initializing UI Components...', { context: 'app:init' });
-
-    // Debug: Check DOM elements before UI init
-    const domElementsStatus = {
-      mainSidebar: !!domAPI.getElementById('mainSidebar'),
-      navToggleBtn: !!domAPI.getElementById('navToggleBtn'),
-      authButton: !!domAPI.getElementById('authButton'),
-      modalsContainer: !!domAPI.getElementById('modalsContainer')
-    };
-    logger.info('[App.init] DOM elements status before UI init:', domElementsStatus, { context: 'app:init' });
-
+    // Stage 8: Initialize Remaining UI Components (Sidebar, Dashboard views, etc.)
+    logger.log('[App.init] Stage 8: Initializing UI Components...', { context: 'app:init' });
     await uiInit.initializeUIComponents();
+    logger.info('[App.init] Stage 8: UI components initialization completed.', { context: 'app:init' });
 
-    // Debug: Check modules after UI init
-    const modulesAfterUI = {
-      sidebar: !!DependencySystem.modules.get('sidebar'),
-      sidebarInitialized: DependencySystem.modules.get('sidebar')?.initialized || false
-    };
-    logger.info('[App.init] Modules after UI init:', modulesAfterUI, { context: 'app:init' });
+    // CONSOLIDATED: Model Config UI initialization and ProjectModal initialization are now part of coreInit.js
 
-    logger.info('[App.init] UI components initialization completed.', { context: 'app:init' });
+    // Stage 9: Register App-Level Event Listeners (if any remaining)
+    // Most listeners should be within their respective modules.
+    logger.log('[App.init] Stage 9: Registering App Listeners...', { context: 'app:init' });
+    registerAppListeners(); // Currently logs delegation
+    logger.info('[App.init] Stage 9: App listeners registration step completed.', { context: 'app:init' });
 
-    const mc = DependencySystem.modules.get('modelConfig');
-    if (mc?.initializeUI) {
-      logger.log('[App.init] Initializing Model Config UI...', { context: 'app:init' });
-      mc.initializeUI();
-      logger.info('[App.init] Model Config UI initialization completed.', { context: 'app:init' });
-    }
-
-    logger.log('[App.init] Registering App Listeners...', { context: 'app:init' });
-    registerAppListeners();
-    logger.info('[App.init] App listeners registered.', { context: 'app:init' });
-
-    logger.log('[App.init] Initializing Navigation Service...', { context: 'app:init' });
-    const navService = DependencySystem.modules.get('navigationService');
+    // Stage 10: Initialize Navigation Service and Routing
+    logger.log('[App.init] Stage 10: Initializing Navigation Service...', { context: 'app:init' });
+    const navService = DependencySystem.modules.get('navigationService'); // navigationService instance from serviceInit
     if (!navService) {
-      throw new Error('[App] NavigationService missing from DI. Aborting initialization.');
+      // This check is critical as navigation is fundamental.
+      throw new Error('[App.init] Stage 10: NavigationService missing from DI. Aborting initialization.');
     }
     if (navService?.init) {
       await navService.init();
     }
-    logger.info('[App.init] Navigation service initialization completed.', { context: 'app:init' });
+    logger.info('[App.init] Stage 10: Navigation service initialization completed.', { context: 'app:init' });
 
+    // Stage 11: Finalize Initialization State
+    logger.log('[App.init] Stage 11: Finalizing Initialization State...', { context: 'app:init' });
     appModule.setAppLifecycleState({ initialized: true });
     _globalInitCompleted = true;
+    logger.info('[App.init] Stage 11: Application initialization finalized and marked as complete.', { context: 'app:init' });
 
-    // Debug: Force sidebar visibility check
-    logger.info('[App.init] Final debug - checking sidebar state', { context: 'app:init' });
-    const sidebar = DependencySystem.modules.get('sidebar');
-    const sidebarEl = domAPI.getElementById('mainSidebar');
-    if (sidebarEl) {
-      const sidebarClasses = Array.from(sidebarEl.classList);
-      const viewportWidth = browserAPI.getWindow().innerWidth;
-      logger.info('[App.init] Sidebar final state:', {
-        sidebarExists: !!sidebar,
-        elementExists: !!sidebarEl,
-        classes: sidebarClasses,
-        viewportWidth,
-        hasTranslateXFull: sidebarClasses.includes('-translate-x-full'),
-        hasTranslateX0: sidebarClasses.includes('translate-x-0')
-      }, { context: 'app:init' });
+    // Remove unnecessary debug logs previously here.
+    // The sidebar visibility check was a temporary debug step.
 
-      // Force sidebar visible on desktop if not already
-      if (viewportWidth >= 768 && sidebarClasses.includes('-translate-x-full')) {
-        logger.warn('[App.init] FORCING sidebar visible on desktop', { context: 'app:init' });
-        sidebarEl.classList.remove('-translate-x-full');
-        sidebarEl.classList.add('translate-x-0');
-      }
-    }
-
+    // Stage 12: Dispatch app:ready event
     if (!globalInitTimeoutFired) {
       browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
+      logger.log('[App.init] Stage 12: Dispatching app:ready (success).', { context: 'app:init' });
       fireAppReady(true);
     }
 
-    // Expose debug helpers after app:ready
+    // Stage 13: Expose Debug Helpers (after app:ready)
+    logger.log('[App.init] Stage 13: Exposing debug helpers...', { context: 'app:init' });
     exposeDebugHelpers();
+    logger.info('[App.init] Stage 13: Debug helpers exposed.', { context: 'app:init' });
 
     return true;
   } catch (err) {
