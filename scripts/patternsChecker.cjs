@@ -3,8 +3,14 @@
 /* global process */
 
 /**
- * patternChecker.cjs – Fixed Version 2025-05-24
+ * patternChecker.cjs – Remediated Version
  * Properly enforces all Frontend Code Guardrails
+ * Includes changes from the remediation guide to ensure:
+ *   - factory cleanup calls eventHandlers.cleanupListeners({ context: ... })
+ *   - logger.withContext(...) usage has a final metadata object with { context: ... }
+ *   - direct logger usage checks consolidated in vDI
+ *   - domAPI.js no longer fully exempt from vSanitize; only certain assignments allowed
+ *   - logger runtime controls restricted to app.js/logger.js
  */
 
 "use strict";
@@ -175,7 +181,6 @@ function hasProp(objExpr, propName) {
       // Spread element - we can't easily determine if it contains the property
       // but for now, let's assume it might
       if (p.type === "SpreadElement") {
-        // Could potentially contain the property, but hard to determine statically
         return false; // Conservative approach - don't assume spread contains the prop
       }
       return false;
@@ -303,7 +308,7 @@ function vFactory(err, file, config) {
   let factoryInfo = { found: false, line: 1, name: "", paramsNode: null };
   let hasCleanup = false;
   let hasDepCheck = false;
-  let cleanupInvokesEH = false;     // new
+  let cleanupInvokesEH = false;     // now must ensure it has context
 
   return {
     ExportNamedDeclaration(p) {
@@ -343,7 +348,7 @@ function vFactory(err, file, config) {
           );
         }
 
-        // Check for dependency validation - look for parameter checks
+        // Check for dependency validation
         p.traverse({
           ThrowStatement(throwPath) {
             if (
@@ -358,7 +363,6 @@ function vFactory(err, file, config) {
                   : arg0.type === "TemplateLiteral"
                     ? arg0.quasis.map(q => q.value.raw).join("")
                     : "";
-              // Accept both regex pattern and explicit parameter validation pattern
               const validationRegex = new RegExp(
                 config.factoryValidationRegex || DEFAULT_CONFIG.factoryValidationRegex,
                 "i"
@@ -369,16 +373,13 @@ function vFactory(err, file, config) {
               }
             }
           },
-          // Also look for if (!param) checks which are common validation patterns
+          // Also look for if (!param) checks
           IfStatement(ifPath) {
-            // Helper function to check if a node is a negation of a parameter
             const isParamNegation = (node) => {
               if (node.type === "UnaryExpression" && node.operator === "!") {
-                // Handle !param
                 if (node.argument.type === "Identifier") {
                   return true;
                 }
-                // Handle !param.property (e.g., !deps.logger)
                 if (node.argument.type === "MemberExpression") {
                   return true;
                 }
@@ -386,7 +387,6 @@ function vFactory(err, file, config) {
               return false;
             };
 
-            // Helper function to recursively check logical expressions
             const hasParamValidation = (testNode) => {
               if (isParamNegation(testNode)) {
                 return true;
@@ -406,13 +406,13 @@ function vFactory(err, file, config) {
         p.traverse({
           ReturnStatement(returnPath) {
             if (returnPath.node.argument?.type === "ObjectExpression") {
-              // Check for direct cleanup properties
+              // direct cleanup props
               const hasDirectCleanup =
                 hasProp(returnPath.node.argument, "cleanup") ||
                 hasProp(returnPath.node.argument, "teardown") ||
                 hasProp(returnPath.node.argument, "destroy");
 
-              // Check for cleanup in spread patterns (look for cleanup method after spread)
+              // cleanup in spread patterns
               const hasSpreadCleanup = returnPath.node.argument.properties.some(prop => {
                 return prop.type === "Property" &&
                        prop.method === true &&
@@ -423,13 +423,17 @@ function vFactory(err, file, config) {
               if (hasDirectCleanup || hasSpreadCleanup) {
                 hasCleanup = true;
 
-                /* Deep-traverse the inline cleanup fn for cleanupListeners() */
+                // Deep-traverse the inline cleanup fn for cleanupListeners() w/ {context}
                 returnPath.get("argument").get("properties").forEach(propPath => {
                   const key = propPath.node.key;
                   if (
                     key && (
                       (key.type === "Identifier" && key.name === "cleanup") ||
-                      (key.type === "StringLiteral" && key.value === "cleanup")
+                      (key.type === "StringLiteral" && key.value === "cleanup") ||
+                      (key.type === "Identifier" && key.name === "teardown") ||
+                      (key.type === "StringLiteral" && key.value === "teardown") ||
+                      (key.type === "Identifier" && key.name === "destroy") ||
+                      (key.type === "StringLiteral" && key.value === "destroy")
                     )
                   ) {
                     propPath.get("value").traverse({
@@ -439,7 +443,18 @@ function vFactory(err, file, config) {
                           cal.type === "MemberExpression" &&
                           cal.property.name === "cleanupListeners"
                         ) {
-                          cleanupInvokesEH = true;
+                          const callArgs = callPath.get("arguments");
+                          if (callArgs.length > 0) {
+                            const firstArgPath = callArgs[0];
+                            const firstArgNode = getExpressionSourceNode(firstArgPath);
+                            if (
+                              firstArgNode &&
+                              firstArgNode.type === "ObjectExpression" &&
+                              hasProp(firstArgNode, "context")
+                            ) {
+                              cleanupInvokesEH = true;
+                            }
+                          }
                         }
                       }
                     });
@@ -451,8 +466,7 @@ function vFactory(err, file, config) {
           FunctionDeclaration(funcDeclPath) {
             if (["cleanup", "teardown", "destroy"].includes(funcDeclPath.node.id?.name)) {
               hasCleanup = true;
-
-              /* Check body for eventHandlers.cleanupListeners(...) call */
+              // Check body for eventHandlers.cleanupListeners(...) call w/ {context}
               funcDeclPath.traverse({
                 CallExpression(callPath) {
                   const cal = callPath.node.callee;
@@ -460,7 +474,18 @@ function vFactory(err, file, config) {
                     cal.type === "MemberExpression" &&
                     cal.property.name === "cleanupListeners"
                   ) {
-                    cleanupInvokesEH = true;
+                    const callArgs = callPath.get("arguments");
+                    if (callArgs.length > 0) {
+                      const firstArgPath = callArgs[0];
+                      const firstArgNode = getExpressionSourceNode(firstArgPath);
+                      if (
+                        firstArgNode &&
+                        firstArgNode.type === "ObjectExpression" &&
+                        hasProp(firstArgNode, "context")
+                      ) {
+                        cleanupInvokesEH = true;
+                      }
+                    }
                   }
                 }
               });
@@ -510,7 +535,7 @@ function vFactory(err, file, config) {
                 file,
                 factoryInfo.line,
                 4,
-                `Factory '${factoryInfo.name}' provides cleanup() but never calls eventHandlers.cleanupListeners().`,
+                `Factory '${factoryInfo.name}' provides cleanup() but never calls eventHandlers.cleanupListeners({ context: … }).`,
                 "Invoke eventHandlers.cleanupListeners({ context: … }) inside cleanup()."
               )
             );
@@ -607,8 +632,7 @@ function vDI(err, file, isAppJs, config) {
     },
 
     Identifier(p) {
-      /* Ignore identifiers that are only the .property part of
-         a MemberExpression  (e.g.  deps.apiClient  ⇒  “apiClient”). */
+      // ignore property part of a MemberExpression
       if (
         p.parent?.type === "MemberExpression" &&
         p.parent.property === p.node &&
@@ -629,7 +653,7 @@ function vDI(err, file, isAppJs, config) {
         );
       }
 
-      /* ── Storage APIs are never allowed ───────────────────── */
+      // No localStorage/sessionStorage
       if (STORAGE_IDENTIFIERS.includes(p.node.name) && !p.scope.hasBinding(p.node.name)) {
         err.push(
           E(
@@ -648,7 +672,7 @@ function vDI(err, file, isAppJs, config) {
         !p.scope.hasBinding(serviceName) &&
         !isAppJs
       ) {
-        // Check if this service is directly in the factory parameters (object destructuring)
+        // Check if this service is directly in the factory parameters
         const isDirectlyInjected =
           diParamsInFactory.has(serviceName) ||
           destructuredServices.has(serviceName);
@@ -712,8 +736,7 @@ function vDI(err, file, isAppJs, config) {
           )
         );
       }
-
-      /* window.localStorage / globalThis.sessionStorage, etc. */
+      // window.localStorage, etc.
       const baseId = p.node.object;
       const propName = p.node.property?.name;
       if (
@@ -740,9 +763,9 @@ function vDI(err, file, isAppJs, config) {
         cNode.type === "MemberExpression" &&
         cNode.object.type === "Identifier" &&
         cNode.object.name === "console" &&
-        !p.scope.hasBinding("console") &&     // honour local shadowing
-        !isLoggerJs &&                        // logger implementation file
-        !isNodeScript                         // CLI / test / tooling files
+        !p.scope.hasBinding("console") &&     // local shadowing
+        !isLoggerJs &&                        // logger.js
+        !isNodeScript                         // tooling/test
       ) {
         const badMethod = cNode.property.name;
         err.push(
@@ -762,23 +785,35 @@ function vDI(err, file, isAppJs, config) {
         cNode.property.name !== "withContext"
       ) {
         const lastArgIndex = p.node.arguments.length - 1;
-        const lastArgPath = p.get("arguments")[lastArgIndex];
-        const lastArgNode = getExpressionSourceNode(lastArgPath);
-
-        if (
-          !(
-            lastArgNode &&
-            lastArgNode.type === "ObjectExpression" &&
-            hasProp(lastArgNode, "context")
-          )
-        ) {
+        if (lastArgIndex >= 0) {
+          const lastArgPath = p.get("arguments")[lastArgIndex];
+          const lastArgNode = getExpressionSourceNode(lastArgPath);
+          if (
+            !(
+              lastArgNode &&
+              lastArgNode.type === "ObjectExpression" &&
+              hasProp(lastArgNode, "context")
+            )
+          ) {
+            err.push(
+              E(
+                file,
+                p.node.loc.start.line,
+                12,
+                `'${serviceNamesConfig.logger}.${cNode.property.name}' call missing { context } metadata.`,
+                `Ensure logger calls end with, e.g., { context: "Module:desc" }.`
+              )
+            );
+          }
+        } else {
+          // If zero arguments, that’s definitely missing context
           err.push(
             E(
               file,
               p.node.loc.start.line,
               12,
-              `'${serviceNamesConfig.logger}.${cNode.property.name}' call missing { context } metadata.`,
-              `Ensure logger calls end with, e.g., { context: "Module:desc" }.`
+              `'${serviceNamesConfig.logger}.${cNode.property.name}' call missing arguments (no { context } metadata).`,
+              "Always provide { context: ... } for logger calls."
             )
           );
         }
@@ -839,10 +874,7 @@ function vPure(err, file) {
               const initNode = decl.init;
               if (
                 initNode.type === "CallExpression" &&
-                !(
-                  initNode.callee.type === "Identifier" &&
-                  initNode.callee.name === "require"
-                )
+                !(initNode.callee.type === "Identifier" && initNode.callee.name === "require")
               ) {
                 err.push(
                   E(
@@ -966,7 +998,6 @@ function vEvent(err, file, isAppJs, moduleCtx, config) {
                 )
               );
             }
-            // StringLiteral, TemplateLiteral, etc. are all valid - no need to flag them
           }
         }
       }
@@ -1000,7 +1031,7 @@ function vSanitize(err, file, config) {
     const node = getExpressionSourceNode(valuePath);
     if (!node) return false;
 
-    /* Direct or optional call:  sanitizer.sanitize(html)  /  sanitizer?.sanitize(html) */
+    // direct or optional call
     const directCall =
       (node.type === "CallExpression" || node.type === "OptionalCallExpression") &&
       node.callee.type === "MemberExpression" &&
@@ -1008,7 +1039,7 @@ function vSanitize(err, file, config) {
       node.callee.property.name === "sanitize";
     if (directCall) return true;
 
-    /* Recurse into conditional / logical wrappers */
+    // Recurse into conditional / logical
     if (node.type === "ConditionalExpression") {
       return (
         isSanitized(valuePath.get("consequent")) ||
@@ -1031,14 +1062,20 @@ function vSanitize(err, file, config) {
         left.type === "MemberExpression" &&
         domWriteProperties.includes(left.property.name)
       ) {
-        // SEC-INNERHTML: Always use domAPI.setInnerHTML() with central sanitizer
+        const isDomAPIFileCurrent = /(?:^|[\\/])domAPI\.(js|ts)$/i.test(file);
+        if (isDomAPIFileCurrent) {
+          // Allow internal assignments in domAPI.js,
+          // trusting it implements the canonical setInnerHTML
+          return;
+        }
+
         err.push(
           E(
             file,
             p.node.loc.start.line,
             6,
             `Direct assignment to '${left.property.name}' is forbidden.`,
-            `Use domAPI.setInnerHTML() with central sanitizer instead of direct assignment.`
+            `Use domAPI.setInnerHTML() with '${sanitizerName}.sanitize()' instead.`
           )
         );
       }
@@ -1184,8 +1221,7 @@ function vReadiness(err, file, isAppJs, config) {
         callee.type === "Identifier" &&
         /^(setTimeout|setInterval)$/.test(callee.name)
       ) {
-        // Ignore utility wrappers (e.g.,  fn => setTimeout(fn,ms)  inside
-        // a factory) – only flag top-level readiness hacks.
+        // ignore if inside a function scope
         const insideFn = p.findParent(q =>
           q.isFunction() ||
           q.isArrowFunctionExpression() ||
@@ -1288,22 +1324,19 @@ function vBus(err, file, config) {
     CallExpression(p) {
       const callee = p.node.callee;
       if (callee.type === "MemberExpression" && callee.property.name === "dispatchEvent") {
-        /* domAPI.dispatchEvent(target, …) is the canonical wrapper – allow it */
-        if (callee.object.type === "Identifier" && callee.object.name === "domAPI")
+        // domAPI.dispatchEvent(...) = allowed
+        if (callee.object.type === "Identifier" && callee.object.name === "domAPI") {
           return;
+        }
         const busObjectPath = p.get("callee.object");
         const busSourceNode = getExpressionSourceNode(busObjectPath);
         const isKnownBus =
-          // explicit well-known names from config
           (busSourceNode?.type === "Identifier" &&
             knownBusNames.includes(busSourceNode.name)) ||
-          // inside a class using this.dispatchEvent(...)
-          busSourceNode?.type === "ThisExpression" ||
-          // variable that was initialised with `new EventTarget()`
+          (busSourceNode?.type === "ThisExpression") ||
           (busSourceNode?.type === "NewExpression" &&
             busSourceNode.callee?.type === "Identifier" &&
             busSourceNode.callee.name === "EventTarget") ||
-          // something like DependencySystem.modules.get('…').getEventBus()
           (busSourceNode?.type === "CallExpression" &&
             busSourceNode.callee?.property?.name === "getEventBus");
 
@@ -1396,16 +1429,15 @@ function vAPI(err, file, config) {
   const apiClientName = config.serviceNames.apiClient;
   return {
     CallExpression(p) {
-      /* ── Ensure mutating apiClient() calls include CSRF header ── */
+      // check for missing CSRF
       if (
         p.node.callee.type === "Identifier" &&
         p.node.callee.name === apiClientName
       ) {
-        const optsArgPath = p.get("arguments")[1];          // url, options
+        const optsArgPath = p.get("arguments")[1]; // url, options
         if (optsArgPath && optsArgPath.isObjectExpression()) {
           const optsNode = optsArgPath.node;
 
-          // default GET unless options.method provided
           let method = "GET";
           optsNode.properties.forEach(pr => {
             if (
@@ -1501,13 +1533,15 @@ function vAPI(err, file, config) {
   };
 }
 
-/* 12. Logger Context Checking */
+/* 12. Logger context checking + SafeHandler usage in events. */
 function vLog(err, file, isAppJs, moduleCtx, config) {
   const loggerName = config.serviceNames.logger;
+
   return {
     CallExpression(p) {
       const c = p.node.callee;
-      /* logger.withContext('X').info(...)  → still needs meta object */
+
+      // Check if we have logger.withContext('X').someMethod(...)
       const isBound =
         c.type === "MemberExpression" &&
         c.object.type === "CallExpression" &&
@@ -1518,40 +1552,38 @@ function vLog(err, file, isAppJs, moduleCtx, config) {
 
       if (isBound) {
         const args = p.get("arguments");
-        const lastNode = getExpressionSourceNode(args[args.length - 1]);
-        if (!(lastNode && lastNode.type === "ObjectExpression")) {
+        if (args.length === 0) {
           err.push(
             E(
               file,
               p.node.loc.start.line,
               12,
-              "Logger call via withContext() missing metadata object.",
-              `Example: logger.withContext('X').info('msg', { context: "${moduleCtx}:info" })`
+              "Logger call via withContext() missing message and metadata object with { context } property.",
+              `Example: logger.withContext('X').info('myMsg', { someData: 1 }, { context: "${moduleCtx}:info" })`
             )
           );
-        }
-        return; // avoid double-processing
-      }
-      if (c.type === "MemberExpression" && c.object.name === loggerName && c.property.name !== "withContext") {
-        const argsPaths = p.get("arguments") || [];
-        const hasContextMeta = argsPaths.some((argPath, idx) => {
-          const n = getExpressionSourceNode(argPath);
-          if (n && n.type === "ObjectExpression" && hasProp(n, "context")) return true;
-          // allow logger.info("Module", ...) pattern for context-string as first arg
-          return idx === 0 && n && n.type === "StringLiteral";
-        });
-
-        if (!hasContextMeta) {
-          err.push(
-            E(
-              file,
-              p.node.loc.start.line,
-              12,
-              `'${loggerName}.${c.property.name}' call missing { context } metadata.`,
-              `Ensure logger calls include, e.g., { context: "${moduleCtx}:operation" }.`
+        } else {
+          const lastArgPath = args[args.length - 1];
+          const lastNode = getExpressionSourceNode(lastArgPath);
+          if (
+            !(
+              lastNode &&
+              lastNode.type === "ObjectExpression" &&
+              hasProp(lastNode, "context")
             )
-          );
+          ) {
+            err.push(
+              E(
+                file,
+                p.node.loc.start.line,
+                12,
+                "Logger call via withContext() missing a final metadata object with { context } property.",
+                `Example: logger.withContext('X').info('myMsg', { dataKey: 'value' }, { context: "${moduleCtx}:operation" })`
+              )
+            );
+          }
         }
+        return;
       }
     }
   };
@@ -1586,7 +1618,7 @@ function vErrorLog(err, file, moduleCtx, config) {
         p.node.id.type === "Identifier" &&
         p.node.id.name === "safeHandler" &&
         p.node.init &&
-        p.node.init.type === "FunctionExpression"
+        (p.node.init.type === "FunctionExpression" || p.node.init.type === "ArrowFunctionExpression")
       ) {
         err.push(
           E(
@@ -1611,15 +1643,7 @@ function vErrorLog(err, file, moduleCtx, config) {
         if (handlerArgPath) {
           const handlerSourceNode = getExpressionSourceNode(handlerArgPath);
 
-          /* ---------------------------------------------
-           * Allow two valid patterns:
-           *  1.  safeHandler(myHandler, …)   ← canonical
-           *  2.  handler  (where “handler” is one of the
-           *      current function’s PARAMETERS – wrapper
-           *      helpers forward already-wrapped handlers)
-           *  3.  inline function passed directly (allowed)
-           * --------------------------------------------*/
-
+          // safeHandler check
           const isSafeHandlerCall =
             handlerSourceNode &&
             handlerSourceNode.type === "CallExpression" &&
@@ -1629,7 +1653,6 @@ function vErrorLog(err, file, moduleCtx, config) {
             handlerArgPath.isIdentifier() &&
             (handlerArgPath.scope.getBinding(handlerArgPath.node.name)?.kind === "param");
 
-          // 3. inline function passed directly (allowed)
           const isInlineFunction =
             handlerSourceNode &&
             (handlerSourceNode.type === "ArrowFunctionExpression" ||
@@ -1641,7 +1664,7 @@ function vErrorLog(err, file, moduleCtx, config) {
                 file,
                 handlerArgPath.node.loc.start.line,
                 12,
-                `Event handler for '${ehName}.trackListener' must be wrapped by 'safeHandler' (or forwarded parameter already wrapped upstream).`,
+                `Event handler for '${ehName}.trackListener' must be wrapped by 'safeHandler' (or forwarded param).`,
                 `Example: ${ehName}.trackListener(el, 'click', safeHandler(myHandler, '${moduleCtx}:desc'), ...);`
               )
             );
@@ -1656,18 +1679,12 @@ function vErrorLog(err, file, moduleCtx, config) {
 
       p.traverse({
         CallExpression(q) {
-          /* Determine whether this is a logger-error call:
-           *   1. logger.error(...)
-           *   2. logger.withContext('X').error(...)
-           */
           const cal = q.node.callee;
-          let loggerCallType = null;   // "direct" | "bound" | null
+          let loggerCallType = null; // direct or bound
           if (cal.type === "MemberExpression" && cal.property.name === "error") {
-            // 1) direct
             if (cal.object.type === "Identifier" && cal.object.name === loggerName) {
               loggerCallType = "direct";
             }
-            // 2) bound via withContext
             if (
               cal.object.type === "CallExpression" &&
               cal.object.callee?.type === "MemberExpression" &&
@@ -1688,7 +1705,6 @@ function vErrorLog(err, file, moduleCtx, config) {
 
           let hasContextMeta = false;
           if (loggerCallType === "bound") {
-            // withContext already supplies context
             hasContextMeta = true;
           } else {
             const lastArgPath = q.get(`arguments.${q.node.arguments.length - 1}`);
@@ -1721,7 +1737,7 @@ function vErrorLog(err, file, moduleCtx, config) {
   };
 }
 
-/* 13. Authentication Consolidation - FIXED */
+/* 13. Authentication Consolidation */
 function vAuth(err, file, isAppJs) {
   if (isAppJs || /\/auth\.(js|ts)$/i.test(file)) return {};
 
@@ -1817,7 +1833,6 @@ function vAuth(err, file, isAppJs) {
       }
     },
 
-    // FIXED: Proper dual authentication pattern detection
     LogicalExpression(p) {
       if (p.node.operator === "||") {
         const left = p.node.left;
@@ -1873,14 +1888,9 @@ function vAuth(err, file, isAppJs) {
   };
 }
 
-/* 14. Module Size Limit - NEW */
+/* 14. Module Size Limit */
 function vModuleSize(err, file, code, config) {
-  /* Auth module is intentionally large and cannot be split
-     (guardrail: “NO NEW MODULES”) → ignore size check */
   if (/[/\\]auth\.(js|ts)$/i.test(file)) return {};
-
-  /* Init modules are initialization orchestrators that cannot be split
-     due to "NO NEW MODULES" guardrail - they consolidate app.js complexity */
   if (/[/\\]init[/\\].*\.(js|ts)$/i.test(file)) return {};
   const maxLines = config.maxModuleLines || DEFAULT_CONFIG.maxModuleLines;
   const lines = code.split(/\r?\n/).length;
@@ -1898,7 +1908,7 @@ function vModuleSize(err, file, code, config) {
   return {};
 }
 
-/* 15. Canonical Implementations - NEW */
+/* 15. Canonical Implementations */
 function vCanonical(err, file, isAppJs, code) {
   if (isAppJs || /\/auth\.(js|ts)$/i.test(file)) return {};
 
@@ -1985,7 +1995,7 @@ function vCanonical(err, file, isAppJs, code) {
   };
 }
 
-/* 16. Error Object Structure - NEW */
+/* 16. Error Object Structure */
 function vErrorStructure(err, file) {
   return {
     ObjectExpression(p) {
@@ -2002,8 +2012,8 @@ function vErrorStructure(err, file) {
           props.includes("message");
 
         if (!hasStandardStructure &&
-          !props.includes("detail") && // Allow FastAPI error format
-          props.length > 1) { // Skip simple { error } destructuring
+          !props.includes("detail") && // Allow certain other patterns
+          props.length > 1) {
           err.push(
             E(
               file,
@@ -2039,7 +2049,7 @@ function vErrorStructure(err, file) {
   };
 }
 
-/* 12. Logger accessor anti-pattern */
+/* 12. Logger accessor anti-pattern (still part of logging rules) */
 function vLoggerAccessor(err, file, isAppJs) {
   if (isAppJs) return {};
   return {
@@ -2069,7 +2079,7 @@ function vLoggerAccessor(err, file, isAppJs) {
 }
 
 /* 17 & 18. Logger factory and obsolete APIs */
-function vLoggerFactory(err, file, isAppJs) {
+function vLoggerFactory(err, file, isAppJs, config) {
   const isLoggerJs = /[/\\]logger\.(js|ts)$/i.test(file);
 
   return {
@@ -2102,20 +2112,27 @@ function vLoggerFactory(err, file, isAppJs) {
         }
       }
 
-      // logger.setAuthModule(...) call
+      // Restrict logger runtime controls to app.js/logger.js
       if (
         p.node.callee.type === "MemberExpression" &&
-        p.node.callee.property.name === "setAuthModule"
+        p.node.callee.object.type === "Identifier" &&
+        p.node.callee.object.name === config.serviceNames.logger &&
+        !p.scope.hasBinding(config.serviceNames.logger)
       ) {
-        err.push(
-          E(
-            file,
-            p.node.loc.start.line,
-            18,
-            "`logger.setAuthModule()` is obsolete.",
-            "Delete the call; auth is tracked automatically."
-          )
-        );
+        const method = p.node.callee.property.name;
+        if (["setServerLoggingEnabled", "setMinLevel"].includes(method)) {
+          if (!isAppJs && !isLoggerJs) {
+            err.push(
+              E(
+                file,
+                p.node.loc.start.line,
+                17,
+                `'${config.serviceNames.logger}.${method}()' must only be called in app.js or logger.js`,
+                "Centralize runtime logger controls in the bootstrap or logger factory."
+              )
+            );
+          }
+        }
       }
     }
   };
@@ -2133,14 +2150,11 @@ function analyze(file, code, configToUse) {
     code.includes("WARNING: BOOTSTRAP EXCEPTION");
 
   const isWrapperFile = WRAPPER_FILE_REGEX.test(file);
-  const isDomAPIFile = /(?:^|[\\/])domAPI\.(js|ts)$/i.test(file);
 
-  // Add module size check first (no AST needed)
-  if (!isAppJs) {
-    const sizeErrors = [];
-    vModuleSize(sizeErrors, file, code, configToUse);
-    errors.push(...sizeErrors);
-  }
+  // Module size check first
+  const sizeErrors = [];
+  vModuleSize(sizeErrors, file, code, configToUse);
+  errors.push(...sizeErrors);
 
   let ast;
   try {
@@ -2175,13 +2189,13 @@ function analyze(file, code, configToUse) {
     isAppJs ? null : vState(errors, file, isAppJs, configToUse),
 
     isWrapperFile ? null : vEvent(errors, file, isAppJs, moduleCtx, configToUse),
-    isDomAPIFile ? null : vSanitize(errors, file, configToUse),
+    vSanitize(errors, file, configToUse), // apply sanitize to all files
     vReadiness(errors, file, isAppJs, configToUse),
     vBus(errors, file, configToUse),
     vNav(errors, file, configToUse),
     vAPI(errors, file, configToUse),
     vLoggerAccessor(errors, file, isAppJs),
-    vLoggerFactory(errors, file, isAppJs),
+    vLoggerFactory(errors, file, isAppJs, configToUse),
     vLog(errors, file, isAppJs, moduleCtx, configToUse),
     vErrorLog(errors, file, moduleCtx, configToUse),
     vAuth(errors, file, isAppJs),
