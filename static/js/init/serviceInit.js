@@ -155,10 +155,23 @@ export function createServiceInitializer({
           browserService: browserServiceInstance,
           logger        : DependencySystem.modules.get('logger') // Use the DI-registered logger
         });
-        // Register the `fetch` method of the API client as 'apiRequest' for common use.
-        safeRegister('apiRequest', apiClientInstance.fetch);
-        // Register the full API client object as 'apiClientObject'.
-        safeRegister('apiClientObject', apiClientInstance);
+        /* ------------------------------------------------------------------
+         * Replace the early proxy with the real implementation.
+         * If a placeholder already exists (registered in app.js), we overwrite
+         * it so all modules now reference the fully-featured version.
+         * ------------------------------------------------------------------ */
+        if (DependencySystem?.modules?.has?.('apiRequest')) {
+          DependencySystem.modules.set('apiRequest', apiClientInstance.fetch);
+          logger?.debug('[serviceInit] apiRequest proxy replaced with real implementation.', { context: 'serviceInit:registerAdvancedServices' });
+        } else {
+          safeRegister('apiRequest', apiClientInstance.fetch);
+        }
+        /* Store the full API client object (create or overwrite). */
+        if (DependencySystem?.modules?.has?.('apiClientObject')) {
+          DependencySystem.modules.set('apiClientObject', apiClientInstance);
+        } else {
+          safeRegister('apiClientObject', apiClientInstance);
+        }
         logger?.debug('[serviceInit] API client created and registered (apiRequest, apiClientObject).', { context: 'serviceInit:registerAdvancedServices' });
       } else {
         logger?.warn('[serviceInit] createApiClient factory or globalUtils not provided. API client not created.', { context: 'serviceInit:registerAdvancedServices' });
