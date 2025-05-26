@@ -291,17 +291,10 @@ class ModalManager {
             '[ModalManager] init: htmlTemplateLoader not available and modals not pre-injected. Emitting synthetic modalsLoaded event.'
           );
           // Emit synthetic event to unblock initialization
-          const doc = this.domAPI.getDocument();
-          this.domAPI.dispatchEvent(
-            doc,
+          this.domAPI.dispatchEvent(this.domAPI.getDocument(),
             new CustomEvent('modalsLoaded', {
-              detail: {
-                success: true, // Change to true to allow initialization to continue
-                error: 'htmlTemplateLoader not available, continuing with fallback',
-                synthetic: true
-              }
-            })
-          );
+              detail: { success: false, error: 'loader missing (synthetic)', synthetic: true }
+            }));
           shouldWaitForEvent = false; // Don't wait for event we just dispatched
         }
       } catch (err) {
@@ -333,11 +326,8 @@ class ModalManager {
           context: 'modalManager.init:waitForModalsLoaded'
         });
 
-        if (!modalsLoadedEventData?.detail?.success) { // Removed: && !modalsLoadedEventData?.detail?.synthetic
-          const errorMsg = modalsLoadedEventData?.detail?.error || 'modalsLoaded event reported failure or missing success flag';
-          this.logger.error?.(`[ModalManager] init: 'modalsLoaded' event indicated failure. Error: ${errorMsg}`, { eventDetail: modalsLoadedEventData?.detail });
-          // FAIL HARD: Throw an error if modalsLoaded event indicates failure.
-          throw new Error(`[ModalManager] Modals failed to load: ${errorMsg}`);
+        if (!modalsLoadedEventData?.detail?.success) {
+          this.logger.warn?.('[ModalManager] modalsLoaded indicated failure – continuing in degraded mode', { detail: modalsLoadedEventData.detail });
         }
         this.logger.info?.("[ModalManager] init: 'modalsLoaded' event received.", { synthetic: modalsLoadedEventData?.detail?.synthetic });
       } else {

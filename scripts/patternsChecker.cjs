@@ -407,15 +407,15 @@ function vFactory(err, file, config) {
           ReturnStatement(returnPath) {
             if (returnPath.node.argument?.type === "ObjectExpression") {
               // Check for direct cleanup properties
-              const hasDirectCleanup = 
+              const hasDirectCleanup =
                 hasProp(returnPath.node.argument, "cleanup") ||
                 hasProp(returnPath.node.argument, "teardown") ||
                 hasProp(returnPath.node.argument, "destroy");
-              
+
               // Check for cleanup in spread patterns (look for cleanup method after spread)
               const hasSpreadCleanup = returnPath.node.argument.properties.some(prop => {
-                return prop.type === "Property" && 
-                       prop.method === true && 
+                return prop.type === "Property" &&
+                       prop.method === true &&
                        prop.key &&
                        (prop.key.name === "cleanup" || prop.key.name === "teardown" || prop.key.name === "destroy");
               });
@@ -1031,25 +1031,16 @@ function vSanitize(err, file, config) {
         left.type === "MemberExpression" &&
         domWriteProperties.includes(left.property.name)
       ) {
-        const rightNode = p.node.right;
-        // Allow safe operations: empty string, null, undefined
-        const isSafeValue =
-          (rightNode.type === "StringLiteral" && rightNode.value === "") ||
-          (rightNode.type === "Identifier" && ["null", "undefined"].includes(rightNode.name)) ||
-          (rightNode.type === "NullLiteral") ||
-          (rightNode.type === "Identifier" && rightNode.name === "undefined");
-
-        if (!isSafeValue && !isSanitized(p.get("right"))) {
-          err.push(
-            E(
-              file,
-              p.node.loc.start.line,
-              6,
-              `Direct assignment to '${left.property.name}' without '${sanitizerName}.sanitize()'.`,
-              `Always wrap user-provided HTML with '${sanitizerName}.sanitize(html)' before DOM insertion.`
-            )
-          );
-        }
+        // SEC-INNERHTML: Always use domAPI.setInnerHTML() with central sanitizer
+        err.push(
+          E(
+            file,
+            p.node.loc.start.line,
+            6,
+            `Direct assignment to '${left.property.name}' is forbidden.`,
+            `Use domAPI.setInnerHTML() with central sanitizer instead of direct assignment.`
+          )
+        );
       }
     },
     CallExpression(p) {
@@ -1887,7 +1878,7 @@ function vModuleSize(err, file, code, config) {
   /* Auth module is intentionally large and cannot be split
      (guardrail: “NO NEW MODULES”) → ignore size check */
   if (/[/\\]auth\.(js|ts)$/i.test(file)) return {};
-  
+
   /* Init modules are initialization orchestrators that cannot be split
      due to "NO NEW MODULES" guardrail - they consolidate app.js complexity */
   if (/[/\\]init[/\\].*\.(js|ts)$/i.test(file)) return {};
