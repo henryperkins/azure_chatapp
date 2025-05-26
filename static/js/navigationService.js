@@ -11,13 +11,17 @@ export function createNavigationService({
   domAPI,
   browserService,
   DependencySystem,
-  eventHandlers
+  eventHandlers,
+  logger: providedLogger            // NEW
 } = {}) {
   // === Dependency Validation ===
   if (!domAPI) throw new Error('[NavigationService] domAPI is required');
   if (!browserService) throw new Error('[NavigationService] browserService is required');
   if (!DependencySystem) throw new Error('[NavigationService] DependencySystem is required');
   if (!eventHandlers) throw new Error('[NavigationService] eventHandlers is required');
+  let logger = providedLogger
+    || DependencySystem?.modules?.get?.('logger')
+    || { error() {}, warn() {}, info() {}, debug() {}, log() {} };
 
   // === Navigation State ===
   const state = {
@@ -63,7 +67,11 @@ export function createNavigationService({
         try {
           listener[eventName](detail);
         } catch (err) {
-          // fail silently
+          logger.error(
+            '[NavigationService] transition listener failed',
+            { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+            { context: MODULE }
+          );
         }
       }
     });
@@ -184,6 +192,11 @@ export function createNavigationService({
 
       return true;
     } catch (error) {
+      logger.error(
+        '[NavigationService] activateView failed',
+        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
+        { context: MODULE }
+      );
       return false;
     }
   }
@@ -291,6 +304,11 @@ export function createNavigationService({
 
       return success;
     } catch (error) {
+      logger.error(
+        '[NavigationService] navigateTo failed',
+        { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
+        { context: MODULE }
+      );
       // Fire navigation error event
       emitNavigationEvent('navigationError', {
         from: state.currentView,
@@ -395,10 +413,11 @@ export function createNavigationService({
    */
   function init() {
     // Register popstate handler
+    const safe = DependencySystem.modules.get('safeHandler');
     eventHandlers.trackListener(
       browserService.getWindow(),
       'popstate',
-      DependencySystem.modules.get('safeHandler')(handlePopState,'NavigationService:popstate'),
+      safe(handlePopState, 'NavigationService:popstate'),
       { context: MODULE_CONTEXT, description: 'popstate' }
     );
 
