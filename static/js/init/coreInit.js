@@ -42,7 +42,9 @@ export function createCoreInitializer({
  }) {
    // Allow apiClientObject to be refreshed later, after ServiceInit has
    // registered it.  Capture in a mutable ref.
-   let apiClientObjectRef = apiClientObject;
+   let apiClientObjectRef  = apiClientObject;
+   // allow late DI-registration (set by serviceInit.registerAdvancedServices)
+   let navigationServiceRef = navigationService;
 
    /**
     * Some dependencies (e.g. `apiRequest`, `apiClientObject`) are not available
@@ -68,6 +70,9 @@ export function createCoreInitializer({
    // Runtime validation helper – executed at the top of initializeCoreSystems().
    // ────────────────────────────────────────────────────────────────────────────
    function validateRuntimeDeps() {
+     if (!navigationServiceRef) {
+       navigationServiceRef = DependencySystem.modules.get('navigationService');
+     }
      // Pull latest apiClientObject from DI if not supplied at construction
      if (!apiClientObjectRef) {
        apiClientObjectRef = DependencySystem.modules.get('apiClientObject');
@@ -76,7 +81,7 @@ export function createCoreInitializer({
      const runtimeRequired = {
        DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
        domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
-       apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils, navigationService, globalUtils,
+       apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils, navigationService : navigationServiceRef, globalUtils,
        FileUploadComponent, htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
      };
      for (const [depName, dep] of Object.entries(runtimeRequired)) {
@@ -281,7 +286,7 @@ export function createCoreInitializer({
         eventHandlers,            // Direct arg
         modalManager,             // Instance created above
         app,                      // Direct arg
-        router: navigationService,// Direct arg
+        router: navigationServiceRef, // Use refreshed ref
         storage: browserService,  // Direct arg (browserService acts as storage)
         sanitizer,                // Direct arg
         htmlSanitizer: sanitizer, // Direct arg
@@ -394,7 +399,7 @@ export function createCoreInitializer({
         domAPI,                   // Direct arg
         sanitizer,                // Direct arg
         app,                      // Direct arg
-        navigationService,        // Direct arg
+        navigationService: navigationServiceRef,
         htmlTemplateLoader,       // Direct arg
         logger,                   // Direct arg
         APP_CONFIG,               // Direct arg
