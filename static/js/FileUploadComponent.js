@@ -108,9 +108,10 @@ export function createFileUploadComponent({
       const doc = domAPI?.getDocument?.();
       if (!doc) throw new Error('[FileUploadComponent] DOM unavailable via domAPI');
       if (domAPI?.dispatchEvent) {
-        domAPI.dispatchEvent(doc,
-          new CustomEvent('fileuploadcomponent:initialized',
-            { detail: { success: true } }));
+        domAPI.dispatchEvent(
+          doc,
+          eventHandlers.createCustomEvent('fileuploadcomponent:initialized',{ detail:{ success:true } })
+        );
       } else {
         doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
           { detail: { success: true } }));

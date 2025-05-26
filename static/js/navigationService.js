@@ -398,11 +398,8 @@ export function createNavigationService({
     eventHandlers.trackListener(
       browserService.getWindow(),
       'popstate',
-      handlePopState,
-      {
-        description: 'Navigation popstate handler',
-        context: MODULE_CONTEXT
-      }
+      DependencySystem.modules.get('safeHandler')(handlePopState,'NavigationService:popstate'),
+      { context: MODULE_CONTEXT, description: 'popstate' }
     );
 
     // Notification removed (NavigationService initialized)

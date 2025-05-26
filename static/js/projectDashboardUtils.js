@@ -233,8 +233,7 @@ export function createProjectDashboardUtils(options = {}) {
 
     // Factory standard: must expose cleanup directly as named API
     cleanup: function () {
-      eventHandlers.cleanupListeners?.({ context: 'projectActions' });
-      eventHandlers.cleanupListeners?.({ context: 'uiUtils' });
+      eventHandlers.cleanupListeners?.({ context: MODULE });
       initialized = false;
     },
 
