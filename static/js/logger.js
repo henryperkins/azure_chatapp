@@ -24,6 +24,7 @@ export function createLogger({
   allowUnauthenticated = false,   // NEW
   consoleEnabled = true     // NEW
 } = {}) {
+  const _win = browserService?.getWindow?.();   // unified, DI-safe window
   let _minLvlNum = LEVELS[minLevel] ?? 10;
   let _enableServer = enableServer;
 
@@ -54,7 +55,7 @@ export function createLogger({
 
       const sessionId = sessionIdProvider?.() ||
         browserService?.getSessionId?.() ||
-        (typeof window !== 'undefined' && window.__APP_SESSION_ID) ||
+        (_win?.__APP_SESSION_ID) ||
         'unknown-session';
       const traceId = traceIdProvider?.();
 
@@ -82,7 +83,7 @@ export function createLogger({
           // THIS FALLBACK IS PROBLEMATIC AS IT BYPASSES CSRF
           // Per user request, this fallback should be reconsidered or removed
           // For now, keeping the log but the fetch call below will be removed or conditional
-          const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
+          const _c = (_win?.console) || { warn: () => { } };
           _c.warn(`[Logger] API client failed for ${endpoint} (Level: ${level}), falling back to direct fetch: ${apiErr && apiErr.message ? apiErr.message : apiErr}`);
           // If apiClient is provided, we should NOT fall back to a fetch without CSRF.
           // Throw or log critical error.
@@ -98,7 +99,7 @@ export function createLogger({
         const _fetch =
           fetcher ||
           browserService?.fetch ||
-          (typeof window !== 'undefined' && window.fetch) ||
+          (_win?.fetch) ||
           (typeof fetch === 'function' ? fetch : null);
         if (!_fetch) return;                   // no fetch available
 
@@ -123,17 +124,17 @@ export function createLogger({
         });
         if (!response.ok) {
           // Surface server-side log ingestion failures - use fallback logging
-          const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
+          const _c = (_win?.console) || { warn: () => { } };
           _c.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
         }
       }
     } catch (err) {
       // Surface client-side failures (e.g., network down, CORS, 0 response) - use fallback logging
-      const _c = (typeof window !== 'undefined' && window.console) || { warn: () => { } };
+      const _c = (_win?.console) || { warn: () => { } };
       _c.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
     }
   }
-  const _c = (typeof window !== 'undefined' && window.console) || { log: () => { }, info: () => { }, warn: () => { }, error: () => { }, debug: () => { } };
+  const _c = (_win?.console) || { log: () => { }, info: () => { }, warn: () => { }, error: () => { }, debug: () => { } };
   function wrap(level, fn = _c.log) {
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
     return (...args) => {

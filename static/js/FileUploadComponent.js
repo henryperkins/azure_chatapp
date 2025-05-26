@@ -105,16 +105,15 @@ export function createFileUploadComponent({
       _handlersBound = true;
 
       // Standardized "fileuploadcomponent:initialized" event
-      const doc = domAPI?.getDocument?.() || (typeof document !== "undefined" ? document : null);
-      if (doc) {
-        if (domAPI?.dispatchEvent) {
-          domAPI.dispatchEvent(doc,
-            new CustomEvent('fileuploadcomponent:initialized',
-              { detail: { success: true } }));
-        } else {
-          doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
+      const doc = domAPI?.getDocument?.();
+      if (!doc) throw new Error('[FileUploadComponent] DOM unavailable via domAPI');
+      if (domAPI?.dispatchEvent) {
+        domAPI.dispatchEvent(doc,
+          new CustomEvent('fileuploadcomponent:initialized',
             { detail: { success: true } }));
-        }
+      } else {
+        doc.dispatchEvent(new CustomEvent('fileuploadcomponent:initialized',
+          { detail: { success: true } }));
       }
     } catch (error) {
       logger.error('[FileUploadComponent][init] Initialization failed', error, { context: MODULE_CONTEXT });

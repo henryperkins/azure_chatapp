@@ -4,18 +4,15 @@
  * following the styling in the corresponding CSS files
  */
 
-function createProjectDetailsEnhancements(deps) {
-  // Validate dependencies
-  if (!deps || typeof deps !== 'object') {
-    throw new Error('[createProjectDetailsEnhancements] Dependencies object is required');
-  }
-  if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
-
-  const { domAPI, browserService, eventHandlers, domReadinessService, logger, sanitizer, DependencySystem } = deps;
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
-  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
-
+export function createProjectDetailsEnhancements({
+  domAPI,
+  browserService,
+  eventHandlers,
+  domReadinessService,
+  logger,
+  sanitizer,
+  DependencySystem
+} = {}) {
   // Validate required dependencies
   if (!domAPI) throw new Error('[createProjectDetailsEnhancements] Missing dependency: domAPI');
   if (!browserService) throw new Error('[createProjectDetailsEnhancements] Missing dependency: browserService');
@@ -23,6 +20,10 @@ function createProjectDetailsEnhancements(deps) {
   if (!domReadinessService) throw new Error('[createProjectDetailsEnhancements] Missing dependency: domReadinessService');
   if (!logger) throw new Error('[createProjectDetailsEnhancements] Missing dependency: logger');
   if (!sanitizer) throw new Error('[createProjectDetailsEnhancements] Missing dependency: sanitizer');
+  if (!DependencySystem) throw new Error('Missing DependencySystem');
+  // Use canonical safeHandler from DI
+  const safeHandler = DependencySystem.modules.get('safeHandler');
+  if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
   // State management
   const state = {

@@ -21,16 +21,25 @@
  *  - NO direct window, document, or singleton usage is permitted; safe for SSR/testing.
  */
 
-export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logger, DependencySystem } = {}) {
-  // === Dependency validation block ===
+export function createKbResultHandlers({
+  eventHandlers,
+  browserService,          // NEW – safe window provider
+  domAPI,
+  sanitizer,               // NEW – replaces DOMPurify
+  logger,
+  DependencySystem
+} = {}) {
+  if (!browserService) browserService = DependencySystem?.modules?.get('browserService');
+  if (!browserService) throw new Error('[kb-result-handlers] browserService dependency required');
+  if (!sanitizer)      sanitizer      = DependencySystem?.modules?.get('sanitizer');
+  if (!sanitizer)  throw new Error('[kb-result-handlers] sanitizer dependency required');
   if (!eventHandlers) throw new Error('[kb-result-handlers] eventHandlers dependency required');
-  if (!DOMPurify) throw new Error('[kb-result-handlers] DOMPurify sanitizer dependency required');
   if (!domAPI) throw new Error('[kb-result-handlers] domAPI dependency required');
   if (!logger) throw new Error('[kb-result-handlers] logger dependency required');
   if (!DependencySystem) throw new Error('Missing DependencySystem');
 
   const MODULE_CONTEXT = 'KbResultHandlers';
-  const wnd = domAPI.window || (typeof window !== 'undefined' ? window : null);
+  const wnd = browserService.getWindow?.();
 
   // Use canonical safeHandler from DI
   const safeHandler = DependencySystem.modules.get('safeHandler');
@@ -94,7 +103,7 @@ export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logge
 
       const iconSvg = feedbackEl.querySelector('svg');
       if (iconSvg) {
-        iconSvg.innerHTML = DOMPurify.sanitize('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />');
+        iconSvg.innerHTML = sanitizer.sanitize('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />');
       }
     } else {
       feedbackEl.classList.remove('alert-error');
@@ -103,7 +112,7 @@ export function createKbResultHandlers({ eventHandlers, DOMPurify, domAPI, logge
 
       const iconSvg = feedbackEl.querySelector('svg');
       if (iconSvg) {
-        iconSvg.innerHTML = DOMPurify.sanitize('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />');
+        iconSvg.innerHTML = sanitizer.sanitize('<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />');
       }
     }
 
