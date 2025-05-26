@@ -23,26 +23,47 @@ export function createUIInitializer({
   sanitizer,
   createProjectDetailsEnhancements,
   createTokenStatsManager,
-  createKnowledgeBaseComponent,
-  apiRequest,
-  uiUtils
+  createKnowledgeBaseComponent, // Factory for KnowledgeBaseComponent (though primarily used in coreInit now)
+  apiRequest,                   // The general API request function (fetch wrapper)
+  uiUtils                     // General UI utility functions
 }) {
+  /**
+   * @param {object} DependencySystem - The central DI container.
+   * @param {object} domAPI - Utility for DOM interactions.
+   * @param {object} browserService - Service for browser-specific functionalities.
+   * @param {object} eventHandlers - Centralized event management.
+   * @param {object} domReadinessService - Service for DOM readiness checks.
+   * @param {object} logger - Logging utility.
+   * @param {object} APP_CONFIG - Global application configuration.
+   * @param {function} safeHandler - Wrapper for safe function execution.
+   * @param {object} sanitizer - HTML sanitizer (DOMPurify).
+   * @param {function} createProjectDetailsEnhancements - Factory for ProjectDetailsEnhancements.
+   * @param {function} createTokenStatsManager - Factory for TokenStatsManager.
+   * @param {function} createKnowledgeBaseComponent - Factory for KnowledgeBaseComponent. (Note: KBC is now primarily initialized in coreInit)
+   * @param {function} apiRequest - The general API request function.
+   * @param {object} uiUtils - General UI utility functions.
+   */
   if (
     !DependencySystem || !domAPI || !browserService ||
-    !eventHandlers || !domReadinessService || !logger || !APP_CONFIG || !safeHandler
+    !eventHandlers || !domReadinessService || !logger || !APP_CONFIG || !safeHandler ||
+    !createProjectDetailsEnhancements || !createTokenStatsManager || !createKnowledgeBaseComponent ||
+    !apiRequest || !uiUtils
   ) {
-    throw new Error('[uiInit] Missing required dependencies for UI initialization.');
+    // Added more checks for the directly passed factories/utils
+    throw new Error('[uiInit] Missing one or more required dependencies for UI initialization.');
   }
 
   let _uiInitialized = false;
 
+  // Sets up sidebar-related UI controls and listeners.
+  // Note: Core sidebar logic (like auth state reaction) is in sidebar.js, initialized in coreInit.
   async function setupSidebarControls() {
-    // Sidebar controls are now handled by the sidebar module itself
-    // This eliminates duplication and ensures consistent sidebar behavior
-    // The sidebar module registers its own event listeners during initialization
-    logger.log('[UIInit] Sidebar controls delegated to sidebar module', { context: 'uiInit:setupSidebarControls' });
+    // This function's original primary responsibility (toggle button) is now handled by the Sidebar module itself.
+    // Kept for potential future UI-specific sidebar controls managed by uiInit.
+    logger.log('[UIInit] setupSidebarControls: Sidebar module handles its own core controls. This function is for any additional UI-specific setup if needed.', { context: 'uiInit:setupSidebarControls' });
   }
 
+  // Loads HTML templates required for different views (project list, project details).
   async function loadProjectTemplates() {
     const htmlLoader = DependencySystem.modules.get('htmlTemplateLoader');
     if (!htmlLoader?.loadTemplate) {
@@ -117,11 +138,16 @@ export function createUIInitializer({
     }
   }
 
+  // Creates and registers UI-specific components like ProjectDetailsEnhancements and TokenStatsManager.
+  // Note: Core components (ProjectModal, KnowledgeBaseComponent) are now initialized in coreInit.js.
+  // This function focuses on components that are purely UI-enhancements or late-stage additions.
   async function createAndRegisterUIComponents() {
-    logger.log('[UIInit] Creating and registering UI components', { context: 'uiInit:createAndRegisterUIComponents' });
+    logger.log('[UIInit] Starting creation and registration of late-stage UI components.', { context: 'uiInit:createAndRegisterUIComponents' });
 
-    // Project Details Enhancements - Create and register visual improvements
+    // 1. Project Details Enhancements
+    //    Provides visual improvements or minor functionalities specifically for the project details view.
     if (createProjectDetailsEnhancements) {
+      logger.debug('[UIInit] Creating ProjectDetailsEnhancements...', { context: 'uiInit' });
       const projectDetailsEnhancementsInstance = createProjectDetailsEnhancements({
         domAPI,
         browserService,
@@ -129,68 +155,56 @@ export function createUIInitializer({
         domReadinessService,
         logger,
         sanitizer,
-        DependencySystem
+        DependencySystem // For potential internal DI use by the component
       });
       DependencySystem.register('projectDetailsEnhancements', projectDetailsEnhancementsInstance);
 
-      // Initialize if available
       if (projectDetailsEnhancementsInstance.initialize) {
         await projectDetailsEnhancementsInstance.initialize().catch(err =>
-          logger.error('[UIInit] ProjectDetailsEnhancements init failed', err, { context: 'uiInit:projectDetailsEnhancements' })
+          logger.error('[UIInit] ProjectDetailsEnhancements initialization failed', err, { context: 'uiInit:projectDetailsEnhancements' })
         );
       }
+      logger.debug('[UIInit] ProjectDetailsEnhancements created and initialized.', { context: 'uiInit' });
     }
 
-    // Token Stats Manager - Create and register token stats functionality
+    // 2. Token Stats Manager
+    //    Manages and displays token statistics, potentially interacting with various core components.
     if (createTokenStatsManager) {
+      logger.debug('[UIInit] Creating TokenStatsManager...', { context: 'uiInit' });
       const tokenStatsManagerInstance = createTokenStatsManager({
-        apiClient: apiRequest,
-        domAPI,
-        eventHandlers,
-        browserService,
-        modalManager: DependencySystem.modules.get('modalManager'),
-        sanitizer,
-        logger,
-        projectManager: DependencySystem.modules.get('projectManager'),
-        app: DependencySystem.modules.get('app'),
-        chatManager: DependencySystem.modules.get('chatManager'),
-        domReadinessService,
-        DependencySystem
+        apiClient: apiRequest,    // Direct arg: API fetch function
+        domAPI,                   // Direct arg
+        eventHandlers,            // Direct arg
+        browserService,           // Direct arg
+        modalManager: DependencySystem.modules.get('modalManager'), // DI: ModalManager instance
+        sanitizer,                // Direct arg
+        logger,                   // Direct arg
+        projectManager: DependencySystem.modules.get('projectManager'), // DI: ProjectManager instance
+        app: DependencySystem.modules.get('app'),                     // DI: App object
+        chatManager: DependencySystem.modules.get('chatManager'),     // DI: ChatManager instance
+        domReadinessService,      // Direct arg
+        DependencySystem          // For potential internal DI use by the component
       });
       DependencySystem.register('tokenStatsManager', tokenStatsManagerInstance);
-    }
-
-    // Knowledge Base Component - Create and register if not already present
-    let knowledgeBaseComponentInstance = DependencySystem.modules.get('knowledgeBaseComponent');
-    if (!knowledgeBaseComponentInstance && createKnowledgeBaseComponent) {
-      try {
-        knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
-          DependencySystem,
-          apiRequest,
-          projectManager: DependencySystem.modules.get('projectManager'),
-          uiUtils,
-          sanitizer: DependencySystem.modules.get('sanitizer')
-        });
-        DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
-      } catch (err) {
-        logger.error('[UIInit] KnowledgeBaseComponent creation failed; falling back to placeholder.', err, { context: 'uiInit:createAndRegisterUIComponents' });
-        throw err;
-      }
-    }
-
-    // Project Details Component - Inject KnowledgeBaseComponent into it
-    const projectDetailsComponent = DependencySystem.modules.get('projectDetailsComponent');
-    if (projectDetailsComponent && knowledgeBaseComponentInstance) {
-      if (typeof projectDetailsComponent.setKnowledgeBaseComponent === 'function') {
-        projectDetailsComponent.setKnowledgeBaseComponent(knowledgeBaseComponentInstance);
+      // Initialize TokenStatsManager if it has an initialize method
+      if (typeof tokenStatsManagerInstance.initialize === 'function') {
+        logger.debug('[UIInit] Initializing TokenStatsManager...', { context: 'uiInit' });
+        await tokenStatsManagerInstance.initialize();
+        logger.debug('[UIInit] TokenStatsManager initialized.', { context: 'uiInit' });
       } else {
-        logger.warn('[UIInit] projectDetailsComponent is missing setKnowledgeBaseComponent method.', { context: 'uiInit:createAndRegisterUIComponents' });
+        logger.debug('[UIInit] TokenStatsManager does not have an initialize method. Skipping initialization call.', { context: 'uiInit' });
       }
-    } else if (!projectDetailsComponent) {
-      logger.warn('[UIInit] projectDetailsComponent not found in DI. Cannot inject KBC.', { context: 'uiInit:createAndRegisterUIComponents' });
+      logger.debug('[UIInit] TokenStatsManager created and registered.', { context: 'uiInit' });
     }
 
-    // Update ProjectDashboard references using the setter methods
+    // CONSOLIDATED: KnowledgeBaseComponent creation and its injection into ProjectDetailsComponent
+    // are now handled in coreInit.js, as KBC is considered a core part of project details.
+
+    // Update ProjectDashboard references:
+    // ProjectDashboard (created in coreInit) might need references to components like
+    // ProjectDetailsComponent and ProjectListComponent (also created/managed by coreInit).
+    // This ensures the dashboard can correctly display and manage these views.
+    logger.debug('[UIInit] Updating ProjectDashboard component references...', { context: 'uiInit' });
     const projectDashboardInstance = DependencySystem.modules.get('projectDashboard');
     if (projectDashboardInstance) {
       const pdcForDashboard = DependencySystem.modules.get('projectDetailsComponent');
@@ -199,39 +213,26 @@ export function createUIInitializer({
       if (pdcForDashboard && typeof projectDashboardInstance.setProjectDetailsComponent === 'function') {
         projectDashboardInstance.setProjectDetailsComponent(pdcForDashboard);
       } else if (pdcForDashboard) {
-        logger.warn('[UIInit] projectDashboardInstance missing setProjectDetailsComponent method.', { context: 'uiInit:createAndRegisterUIComponents' });
-        // Fallback to direct assignment if setter is missing but component exists (less ideal)
-        if (projectDashboardInstance.components) projectDashboardInstance.components.projectDetails = pdcForDashboard;
+        logger.warn('[UIInit] projectDashboardInstance is missing setProjectDetailsComponent method.', { context: 'uiInit:updateDashboard' });
       }
 
       if (plcForDashboard && typeof projectDashboardInstance.setProjectListComponent === 'function') {
         projectDashboardInstance.setProjectListComponent(plcForDashboard);
       } else if (plcForDashboard) {
-        logger.warn('[UIInit] projectDashboardInstance missing setProjectListComponent method.', { context: 'uiInit:createAndRegisterUIComponents' });
-        // Fallback
-        if (projectDashboardInstance.components) projectDashboardInstance.components.projectList = plcForDashboard;
+        logger.warn('[UIInit] projectDashboardInstance is missing setProjectListComponent method.', { context: 'uiInit:updateDashboard' });
       }
+      logger.debug('[UIInit] ProjectDashboard references updated.', { context: 'uiInit' });
     } else {
-      logger.warn('[UIInit] projectDashboardInstance not found. Cannot set sub-components.', { context: 'uiInit:createAndRegisterUIComponents' });
+      logger.warn('[UIInit] projectDashboardInstance not found in DI. Cannot set sub-component references.', { context: 'uiInit:updateDashboard' });
     }
 
-    // Initialize ProjectModal
-    const projectModalInstance = DependencySystem.modules.get('projectModal');
-    if (projectModalInstance && typeof projectModalInstance.initialize === 'function') {
-      try {
-        logger.log('[UIInit] Initializing ProjectModal instance.', { context: 'uiInit:createAndRegisterUIComponents' });
-        await projectModalInstance.initialize();
-      } catch (err) {
-        logger.error('[UIInit] ProjectModal initialization failed', err, { context: 'uiInit:projectModalInit' });
-        // Depending on severity, might want to throw or handle gracefully
-      }
-    } else {
-      logger.warn('[UIInit] ProjectModal instance or its initialize method not found in DI.', { context: 'uiInit:createAndRegisterUIComponents' });
-    }
+    // CONSOLIDATED: ProjectModal initialization is now handled in coreInit.js.
 
-    logger.log('[UIInit] All UI components created and registered', { context: 'uiInit:createAndRegisterUIComponents' });
+    logger.log('[UIInit] Late-stage UI component creation and registration completed.', { context: 'uiInit:createAndRegisterUIComponents' });
   }
 
+  // Registers views with the NavigationService.
+  // These views define how different application states (e.g., project list, project details) are shown and hidden.
   async function registerNavigationViews() {
     const navigationService = DependencySystem.modules.get('navigationService');
     if (!navigationService || typeof navigationService.registerView !== 'function') {
@@ -339,41 +340,57 @@ export function createUIInitializer({
 
   async function initializeUIComponents() {
     if (_uiInitialized) {
+      logger.debug('[UIInit] UI components already initialized. Skipping.', { context: 'uiInit:initializeUIComponents' });
       return;
     }
 
     try {
-      logger.log('[UIInit] Starting UI component initialization', { context: 'uiInit:initializeUIComponents' });
+      logger.log('[UIInit] Starting full UI initialization process...', { context: 'uiInit:initializeUIComponents' });
 
-      // First, wait for critical DOM elements
+      // Step 1: Wait for critical DOM elements required for base layout.
+      // These selectors should correspond to elements present in the initial HTML (index.html).
+      logger.debug('[UIInit] Step 1: Waiting for critical base DOM elements...', { context: 'uiInit' });
       await domReadinessService.dependenciesAndElements({
         domSelectors: [
-          '#projectListView',     // contenedor que ya existe en el HTML base
-          '#projectDetailsView'   // idem
+          '#projectListView',     // Container for the project list view
+          '#projectDetailsView'   // Container for the project details view
         ],
-        timeout: 10000, // Adjusted timeout for clarity
-        context: 'uiInit:initializeUIComponents:domCheck'
+        timeout: 10000, 
+        context: 'uiInit:initializeUIComponents:baseDomCheck'
       });
+      logger.debug('[UIInit] Step 1: Critical base DOM elements ready.', { context: 'uiInit' });
 
-      // Setup sidebar functionality
+      // Step 2: Setup sidebar related UI controls (if any beyond core sidebar module).
+      logger.debug('[UIInit] Step 2: Setting up sidebar controls...', { context: 'uiInit' });
       await setupSidebarControls();
+      logger.debug('[UIInit] Step 2: Sidebar controls setup complete.', { context: 'uiInit' });
 
-      // Load templates
+      // Step 3: Load HTML templates for dynamic views.
+      logger.debug('[UIInit] Step 3: Loading project HTML templates...', { context: 'uiInit' });
       await loadProjectTemplates();
+      logger.debug('[UIInit] Step 3: Project HTML templates loaded.', { context: 'uiInit' });
 
-      // Wait for modal readiness
-      await waitForModalReadiness();
+      // Step 4: Wait for ModalManager to be ready (modals.html loaded and processed).
+      // ModalManager is initialized in coreInit, but its templates are loaded asynchronously.
+      logger.debug('[UIInit] Step 4: Waiting for ModalManager readiness...', { context: 'uiInit' });
+      await waitForModalReadiness(); // Uses internal timeout
+      logger.debug('[UIInit] Step 4: ModalManager ready.', { context: 'uiInit' });
 
-      // Create and register UI components
+      // Step 5: Create and register late-stage UI components.
+      // (e.g., ProjectDetailsEnhancements, TokenStatsManager)
+      logger.debug('[UIInit] Step 5: Creating and registering late-stage UI components...', { context: 'uiInit' });
       await createAndRegisterUIComponents();
+      logger.debug('[UIInit] Step 5: Late-stage UI components registered.', { context: 'uiInit' });
 
-      // Register navigation views
+      // Step 6: Register navigation views with the NavigationService.
+      logger.debug('[UIInit] Step 6: Registering navigation views...', { context: 'uiInit' });
       await registerNavigationViews();
+      logger.debug('[UIInit] Step 6: Navigation views registered.', { context: 'uiInit' });
 
-      logger.log('[UIInit] UI component initialization completed successfully', { context: 'uiInit:initializeUIComponents' });
+      logger.log('[UIInit] Full UI component initialization completed successfully.', { context: 'uiInit:initializeUIComponents' });
       _uiInitialized = true;
     } catch (err) {
-      logger.error('[UIInit] Error during UI initialization', err, { context: 'uiInit:initializeUIComponents' });
+      logger.error('[UIInit] Critical error during UI initialization sequence', err, { context: 'uiInit:initializeUIComponents' });
       throw err;
     }
   }
