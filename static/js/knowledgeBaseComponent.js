@@ -721,9 +721,8 @@ const instance = new KnowledgeBaseComponentWithDestroy();
 return {
   ...instance,
   cleanup(...a) {                      // satisfies pattern checker
-    DependencySystem.modules
-      .get('eventHandlers')
-      ?.cleanupListeners({ context: 'KnowledgeBaseComponent' });
+    (instance.getDep("DependencySystem")?.modules.get("eventHandlers") || instance.eventHandlers)
+      ?.cleanupListeners({ context: "KnowledgeBaseComponent" });
     instance.cleanup?.(...a);
   }
 };

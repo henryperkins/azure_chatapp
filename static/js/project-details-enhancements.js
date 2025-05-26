@@ -816,5 +816,3 @@ export function createProjectDetailsEnhancements({
   };
 }
 
-// Export the factory function
-export { createProjectDetailsEnhancements };

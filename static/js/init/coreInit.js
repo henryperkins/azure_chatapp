@@ -24,15 +24,6 @@ export function createCoreInitializer({
   createKnowledgeBaseComponent, // Existing
 
   // --- Core Dependencies (passed from app.js) ---
-  DependencySystem,         // The central DI container.
-  domAPI,                   // Utility for DOM interactions.
-  browserService,           // Service for browser-specific functionalities (URL, storage, window).
-  eventHandlers,            // Centralized event management.
-  sanitizer,                // HTML sanitizer (DOMPurify).
-  logger,                   // Logging utility.
-  APP_CONFIG,               // Global application configuration.
-  domReadinessService,      // Service for DOM readiness checks and waits.
-  createKnowledgeBaseComponent, // Factory for KnowledgeBaseComponent.
 
   // --- Services & Utilities (passed from app.js, previously DI-resolved) ---
   MODAL_MAPPINGS,           // Constant object mapping modal types to their configurations.
@@ -175,17 +166,6 @@ export function createCoreInitializer({
       }
     }
     const {
-        createModalManagerFactory, // Renamed for clarity in this scope
-        createAuthModuleFactory,
-        createProjectManagerFactory,
-        createModelConfigFactory,
-        createProjectDashboardFactory,
-        createProjectDetailsComponentFactory,
-        createProjectListComponentFactory,
-        createProjectModalFactory,
-        createSidebarFactory
-    // Corrected destructuring: variable names now match the keys in the 'factories' object.
-    const {
         createModalManager,
         createAuthModule,
         createProjectManager,
@@ -280,7 +260,7 @@ export function createCoreInitializer({
       // DependencySystem.register('projectListComponent', plc); // Original had `plc` which is undefined here. Corrected.
       DependencySystem.register('projectListComponent', projectListComponentInstance);
     }
-    
+
     // 3.5. ProjectDetailsComponent (Placeholder for ChatManager)
     // A placeholder might be needed if ChatManager requires it before ProjectManager and KBC are ready.
     // The definitive instance (`finalPdc`) is created later.
