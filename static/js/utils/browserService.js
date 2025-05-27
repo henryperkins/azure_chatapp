@@ -116,6 +116,13 @@ export function createBrowserService({ windowObject, logger } = {}) {
       });
     }
 
+    // ---- ALIAS NEEDED BY domReadinessService -----------------
+    // Keeps the same semantics but accepts the new opts-object signature.
+    function waitForDependencies(deps = [], { timeout = 15000, context = null } = {}) {
+      return waitFor(deps, context, timeout);
+    }
+    //-----------------------------------------------------------
+
     function has(dep) {
       return modules.has(dep);
     }
@@ -131,6 +138,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
       modules,
       register,
       waitFor,
+      waitForDependencies,   // ← export the alias
       has,
       cleanupModuleListeners,
     };
@@ -138,6 +146,13 @@ export function createBrowserService({ windowObject, logger } = {}) {
 
   if (!windowObject.DependencySystem || typeof windowObject.DependencySystem.register !== 'function') {
     windowObject.DependencySystem = createFallbackDependencySystem();
+  }
+
+  // Ensure modern alias exists even when host page provided its own DS
+  if (typeof windowObject.DependencySystem.waitForDependencies !== 'function'
+      && typeof windowObject.DependencySystem.waitFor === 'function') {
+    windowObject.DependencySystem.waitForDependencies = (deps = [], { timeout = 15000, context = null } = {}) =>
+      windowObject.DependencySystem.waitFor(deps, context, timeout);
   }
 
   // reuse shared helper – avoids keeping two divergent copies
