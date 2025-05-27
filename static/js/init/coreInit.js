@@ -73,16 +73,26 @@ export function createCoreInitializer({
      if (!navigationServiceRef) {
        navigationServiceRef = DependencySystem.modules.get('navigationService');
      }
-     // Pull latest apiClientObject from DI if not supplied at construction
      if (!apiClientObjectRef) {
        apiClientObjectRef = DependencySystem.modules.get('apiClientObject');
+     }
+     /* pull late-registered advanced services created by serviceInit.registerAdvancedServices() */
+     if (!htmlTemplateLoader) {
+       htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
+     }
+     if (!uiRenderer) {
+       uiRenderer = DependencySystem.modules.get('uiRenderer');
+     }
+     if (!accessibilityUtils) {
+       accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
      }
 
      const runtimeRequired = {
        DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
        domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
-       apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils, navigationService : navigationServiceRef, globalUtils,
-       FileUploadComponent, htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
+       apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils,
+       navigationService : navigationServiceRef, globalUtils, FileUploadComponent,
+       htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
      };
      for (const [depName, dep] of Object.entries(runtimeRequired)) {
        if (!dep) {
