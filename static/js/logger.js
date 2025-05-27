@@ -26,11 +26,16 @@ export function createLogger({
   safeHandler = null,
   allowUnauthenticated = false,   // NEW
   consoleEnabled = true,    // NEW
-  eventHandlers = null      // NEW
+  eventHandlers = null,     // NEW
+  maxEventsPerMinute = 60   // Rate limit (events/min)
 } = {}) {
   const _win = browserService?.getWindow?.();   // unified, DI-safe window
   let _minLvlNum = LEVELS.get(minLevel) ?? 10;
   let _enableServer = enableServer;
+
+  // Rate-limiting state
+  let _rateWindowStart = Date.now();
+  let _eventsThisWindow = 0;
 
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
@@ -52,6 +57,16 @@ export function createLogger({
 
 
     if ((LEVELS.get(level) ?? 99) < _minLvlNum) return;
+
+    // ------- Rate limiter --------
+    const now = Date.now();
+    if (now - _rateWindowStart > 60000) {         // reset every minute
+      _rateWindowStart = now;
+      _eventsThisWindow = 0;
+    }
+    if (_eventsThisWindow >= maxEventsPerMinute) return; // drop excess
+    _eventsThisWindow++;
+    // ------------------------------
 
     try {
       // Generate request ID for correlation tracking
@@ -95,43 +110,8 @@ export function createLogger({
           return; // Do not proceed to insecure fallback if apiClient was intended to be used.
         }
       }
-
-      // Fallback to direct fetch (without CSRF protection) - This section should ideally be removed if apiClient is always present.
-      // If apiClient is null (e.g. very early logger before DI is set up, and allowUnauthenticated is true)
-      // then this fetch might be used.
-      if (!apiClient) { // Only use direct fetch if apiClient was not provided/configured
-        const _fetch =
-          fetcher ||
-          browserService?.fetch ||
-          (_win?.fetch) ||
-          (typeof fetch === 'function' ? fetch : null);
-        if (!_fetch) return;                   // no fetch available
-
-        const response = await _fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Request-ID': reqId,
-            'X-Correlation-ID': reqId,
-            ...(traceId ? { 'X-Trace-ID': traceId } : {})
-          },
-          credentials: 'include', // This might be an issue if cookies are not correctly set for unauthenticated requests
-          body: JSON.stringify({
-            level,
-            context,
-            args,
-            ts: Date.now(),
-            request_id: reqId,
-            session_id: sessionId,
-            trace_id: traceId
-          })
-        });
-        if (!response.ok) {
-          // Surface server-side log ingestion failures - use fallback logging
-          const _c = (_win?.console) || { warn: () => { } };
-          _c.warn(`[Logger] Server responded with ${response.status} for ${endpoint} (Level: ${level})`);
-        }
-      }
+      /* Insecure direct-fetch fallback removed – logger relies solely
+         on apiClient.post to respect CSRF & auth. */
     } catch (err) {
       // Surface client-side failures (e.g., network down, CORS, 0 response) - use fallback logging
       const _c = (_win?.console) || { warn: () => { } };
