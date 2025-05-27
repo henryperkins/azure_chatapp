@@ -78,9 +78,10 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
       }
     } catch (err) {
       ctx.logger?.error?.(
-        `[${MODULE}] searchKnowledgeBase failed`,
-        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
-        { context: MODULE }
+        MODULE,
+        'searchKnowledgeBase failed',
+        err,
+        { context: MODULE, status: err?.status ?? 500, data: err, message: err?.message ?? String(err) }
       );
     } finally {
       ctx.state.isSearching = false;
