@@ -243,5 +243,10 @@ export function createHtmlTemplateLoader({
     return results;
   }
 
-  return { loadTemplate, loadAppTemplates };
+  // Guardrails: expose cleanup in factory return
+  function cleanup() {
+    // No-op, present for API uniformity. If listeners or timeouts were set up by this module, clear here.
+  }
+
+  return { loadTemplate, loadAppTemplates, cleanup };
 }
