@@ -136,6 +136,15 @@ export function createChatManager(deps = {}) {
       this.queue = [];
       this.isProcessing = false;
     }
+
+    /**
+     * Replace the (placeholder) ProjectDetailsComponent reference with the
+     * final instance registered later by coreInit.
+     * Called by coreInit once the definitive component is ready.
+     */
+    setProjectDetailsComponent(component) {
+      if (component) this.projectDetails = component;
+    }
     add(task) {
       return new Promise((resolve) => {
         this.queue.push({ task, resolve });
@@ -1449,6 +1458,7 @@ export function createChatManager(deps = {}) {
     deleteConversation: instance.deleteConversation.bind(instance),
     setImage: instance.setImage.bind(instance),
     updateModelConfig: instance.updateModelConfig.bind(instance),
+    setProjectDetailsComponent: (comp) => instance.setProjectDetailsComponent(comp),
     // Ensure eventHandlers.cleanupListeners is called directly in the module API, per .clinerules contract
     cleanup: () => {
       if (eventHandlers && eventHandlers.cleanupListeners) {
