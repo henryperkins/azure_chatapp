@@ -35,10 +35,10 @@ export function createAuthInitializer({
     // Wait for app:ready and required DOM elements before any DOM/global work
     await domReadinessService.waitForEvent('app:ready');
     await domReadinessService.dependenciesAndElements({
-      deps: ['auth', 'eventHandlers'],
-      domSelectors: ['#authForm', '#loginBtn'],
-      timeout: 8000,
-      context: 'authInit.initializeAuthSystem'
+      deps        : ['auth', 'eventHandlers'],
+      domSelectors: ['#loginModalForm', '#authButton'],   // real elements
+      timeout     : 8000,
+      context     : 'authInit.initializeAuthSystem'
     });
 
     const auth = DependencySystem.modules.get('auth');
