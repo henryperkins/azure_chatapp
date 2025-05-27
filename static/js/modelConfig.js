@@ -24,7 +24,8 @@ export function createModelConfig({
   const MODULE_CONTEXT = "ModelConfig";
 
   function createNoopLogger() {
-    return { info() {}, warn() {}, error() {}, debug() {}, log() {} };
+    return ['info', 'warn', 'error', 'debug', 'log']
+      .reduce((acc, m) => { acc[m] = () => {}; return acc; }, {});
   }
   const localLogger = logger
     || dependencySystem?.modules?.get?.('logger')
