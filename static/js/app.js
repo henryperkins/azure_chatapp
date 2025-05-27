@@ -551,6 +551,16 @@ export async function init() {
       throw error;
     }
 
+    // --- Pass advanced-service instances to coreInit ------------------------
+    coreInit.setAdvancedServices({
+      htmlTemplateLoader : DependencySystem.modules.get('htmlTemplateLoader'),
+      uiRenderer         : DependencySystem.modules.get('uiRenderer'),
+      accessibilityUtils : DependencySystem.modules.get('accessibilityUtils'),
+      navigationService  : DependencySystem.modules.get('navigationService'),
+      apiClientObject    : DependencySystem.modules.get('apiClientObject'),
+    });
+    // ------------------------------------------------------------------------
+
     // Stage 3
     logger.log('[App.init] Stage 3: core systems (modals, etc.)', { context: 'app:init' });
     await coreInit.initializeCoreSystems();
