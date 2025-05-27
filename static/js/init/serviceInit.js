@@ -175,6 +175,18 @@ export function createServiceInitializer({
           safeRegister('apiClientObject', apiClientInstance);
         }
         logger?.debug('[serviceInit] API client created and registered (apiRequest, apiClientObject).', { context: 'serviceInit:registerAdvancedServices' });
+
+        /* ─────────────────────────────────────────────────────────────
+           Upgrade the early-created logger with the fully-featured
+           apiClient so that server-side logging starts working now.
+        ───────────────────────────────────────────────────────────── */
+        const globalLogger = DependencySystem.modules.get('logger');
+        if (apiClientInstance && globalLogger?.upgradeWithApiClient) {
+          globalLogger.upgradeWithApiClient(apiClientInstance);
+          globalLogger.debug?.('[serviceInit] Logger upgraded with apiClient', {
+            context: 'serviceInit:registerAdvancedServices'
+          });
+        }
       } else {
         logger?.warn('[serviceInit] createApiClient factory or globalUtils not provided. API client not created.', { context: 'serviceInit:registerAdvancedServices' });
       }
