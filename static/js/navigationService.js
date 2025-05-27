@@ -301,14 +301,15 @@ export function createNavigationService({
           to: viewId,
           params,
           navigationId: navId,
-          error: 'View activation failed'
+          status: 500,
+          data: null,
+          message: 'View activation failed'
         });
       }
 
       return success;
     } catch (error) {
-      logger.error(
-        '[NavigationService] navigateTo failed',
+      logger.error('[NavigationService][navigateTo] before-navigate error',
         { status: error?.status ?? 500, data: error, message: error?.message ?? String(error) },
         { context: MODULE }
       );
@@ -318,7 +319,9 @@ export function createNavigationService({
         to: viewId,
         params,
         navigationId: navId,
-        error: error.message || 'Unknown error'
+        status: error?.status ?? 500,
+        data: error,
+        message: error?.message ?? 'Unknown error'
       });
       return false;
     } finally {
@@ -399,14 +402,22 @@ export function createNavigationService({
     const conversationId = params.chatId;
 
     // Determine target view based on URL parameters
-    if (projectId) {
-      if (conversationId) {
-        navigateToConversation(projectId, conversationId, { addToHistory: false });
+    try {
+      if (projectId) {
+        if (conversationId) {
+          navigateToConversation(projectId, conversationId, { addToHistory: false });
+        } else {
+          navigateToProject(projectId, { addToHistory: false });
+        }
       } else {
-        navigateToProject(projectId, { addToHistory: false });
+        navigateToProjectList({ addToHistory: false });
       }
-    } else {
-      navigateToProjectList({ addToHistory: false });
+    } catch (err) {
+      logger.error('[NavigationService][handlePopState] failure',
+        { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE }
+      );
+      return;
     }
   }
 

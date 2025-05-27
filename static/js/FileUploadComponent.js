@@ -36,7 +36,12 @@ export function createFileUploadComponent({
     try {
       const ds = eventHandlers?.DependencySystem;
       logger = ds?.modules?.get?.('logger');
-    } catch { /* ignore – will be re-checked below */ }
+    } catch (err) {
+      logger.error('[FileUploadComponent] Auto-resolve logger failed',
+        { status: 500, data: err, message: err?.message ?? String(err) },
+        { context: MODULE_CONTEXT }
+      );
+    }
   }
   // === Dependency validation block ===
   if (!app) throw new Error("[FileUploadComponent] Missing app");
@@ -239,11 +244,14 @@ export function createFileUploadComponent({
     const { validFiles, invalidFiles } = _validateFiles(files);
 
     invalidFiles.forEach(({ file, error }) => {
-      logger.error('[FileUploadComponent][_uploadFiles] Invalid file', {
-        fileName: file?.name,
-        error,
-        context: MODULE_CONTEXT
-      });
+      logger.error('[FileUploadComponent][_uploadFiles] Invalid file',
+        {
+          status: 400,
+          data: { fileName: file?.name },
+          message: String(error)
+        },
+        { context: MODULE_CONTEXT }
+      );
     });
 
     if (validFiles.length === 0) {
@@ -272,10 +280,14 @@ export function createFileUploadComponent({
       await projectManager.uploadFileWithRetry(pid, { file });
       _updateUploadProgress(1, 0);
     } catch (error) {
-      logger.error('[FileUploadComponent][_uploadFile] Upload failed', error, {
-        fileName: file?.name,
-        context: MODULE_CONTEXT
-      });
+      logger.error('[FileUploadComponent][_uploadFile] Upload failed',
+        {
+          status: 400,
+          data: { fileName: file?.name },
+          message: String(error)
+        },
+        { context: MODULE_CONTEXT }
+      );
       _updateUploadProgress(0, 1);
     }
   }
@@ -306,17 +318,29 @@ export function createFileUploadComponent({
           const tempFile = new File([file], sanitizedName, { type: file.type });
           file = tempFile;
         } catch (err) {
-          logger.error('[FileUploadComponent][_validateFiles] File name sanitization failed', err, {
-            fileName: file?.name,
-            context: MODULE_CONTEXT
+          logger.error('[FileUploadComponent][_validateFiles] File name sanitization failed',
+            {
+              status: 400,
+              data: { fileName: file?.name },
+              message: String(err)
+            },
+            { context: MODULE_CONTEXT }
+          );
+          invalidFiles.push({
+            status: 400,
+            data: { file },
+            message: 'Filename contains invalid characters'
           });
-          invalidFiles.push({ file: file, error: `Filename contains invalid characters` });
           continue;
         }
       }
 
       if (file.name.length === 0 || file.name === '.' || file.name === '..') {
-        invalidFiles.push({ file: file, error: `Invalid filename` });
+        invalidFiles.push({
+          status: 400,
+          data: { file },
+          message: 'Invalid filename'
+        });
         continue;
       }
 
@@ -326,13 +350,15 @@ export function createFileUploadComponent({
 
       if (!isValidExt) {
         invalidFiles.push({
-          file,
-          error: `Invalid file type (${ext || 'none'}). Allowed: ${allowedExtensions.join(', ')}`
+          status: 400,
+          data: { file },
+          message: `Invalid file type (${ext || 'none'}). Allowed: ${allowedExtensions.join(', ')}`
         });
       } else if (!isValidSize) {
         invalidFiles.push({
-          file,
-          error: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`
+          status: 400,
+          data: { file },
+          message: `File too large (${(file.size / (1024 * 1024)).toFixed(1)}MB > ${maxSizeMB}MB)`
         });
       } else {
         validFiles.push(file);

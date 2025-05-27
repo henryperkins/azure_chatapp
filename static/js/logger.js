@@ -147,8 +147,7 @@ export function createLogger({
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
     return (...args) => {
       if (consoleEnabled) safe(`[${context}]`, ...args);
-      void send(level, args);
-      return { status:0, data:null, message:'noop' };
+      void send(level, args);            // fire-and-forget
     };
   }
 

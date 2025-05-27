@@ -52,3 +52,23 @@ export function createFormattingUtils({ domAPI, sanitizer, DependencySystem } = 
     }
   };
 }
+/**
+ * formatting.js
+ * Formatting utilities with strict DI.
+ */
+export function createFormatting({ domAPI } = {}) {
+  if (!domAPI) throw new Error('[formatting] domAPI is required');
+  // ... rest of the module logic ...
+  function htmlToText(html) {
+    const div = domAPI?.createElement
+      ? domAPI.createElement('div')
+      : (() => { throw new Error('[formatting] domAPI missing'); })();
+    div.innerHTML = html;
+    return div.textContent || '';
+  }
+  // ... other formatting helpers ...
+  return {
+    htmlToText
+    // ...other exports...
+  };
+}
