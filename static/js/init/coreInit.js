@@ -277,35 +277,18 @@ export function createCoreInitializer({
     // uiUtils (direct argument) is used by KnowledgeBaseComponent later.
 
     // 3.5. ProjectDetailsComponent (Placeholder for ChatManager)
-    // A placeholder might be needed if ChatManager requires it before ProjectManager and KBC are ready.
-    // The definitive instance (`finalPdc`) is created later.
-    logger.debug('[coreInit] Creating/ensuring ProjectDetailsComponent placeholder for ChatManager...', { context: 'coreInit' });
-    let projectDetailsComponentPlaceholder;
-    if (DependencySystem.modules.has('projectDetailsComponent')) {
-        projectDetailsComponentPlaceholder = DependencySystem.modules.get('projectDetailsComponent');
-         logger.debug('[coreInit] Existing ProjectDetailsComponent placeholder found.', { context: 'coreInit' });
-    } else {
-        projectDetailsComponentPlaceholder = createProjectDetailsComponent({
-            projectManager: null,
-            eventHandlers,
-            modalManager,
-            FileUploadComponentClass: FileUploadComponent,
-            domAPI,
-            sanitizer,
-            app,
-            navigationService : navigationServiceRef,
-            htmlTemplateLoader: htmlTemplateLoaderRef,
-            logger,
-            APP_CONFIG,
-            chatManager              : null,
-            modelConfig              : modelConfigInstance,
-            knowledgeBaseComponent   : null,
-            apiClient                : apiRequest,
-            domReadinessService,
-            __placeholder            : true
-        });
-        DependencySystem.register('projectDetailsComponent', projectDetailsComponentPlaceholder);
-        logger.debug('[coreInit] New ProjectDetailsComponent placeholder registered.', { context: 'coreInit' });
+    // Use a minimal placeholder until projectManager exists.
+    logger.debug('[coreInit] Ensuring ProjectDetailsComponent placeholder...', { context: 'coreInit' });
+    let projectDetailsComponentPlaceholder =
+        DependencySystem.modules.get('projectDetailsComponent');
+
+    if (!projectDetailsComponentPlaceholder) {
+      projectDetailsComponentPlaceholder = createPlaceholder('ProjectDetailsComponent');
+      DependencySystem.register('projectDetailsComponent',
+                                projectDetailsComponentPlaceholder);
+      logger.debug('[coreInit] Placeholder ProjectDetailsComponent registered.', {
+        context: 'coreInit'
+      });
     }
 
     // 3.6. ChatManager
@@ -494,6 +477,11 @@ export function createCoreInitializer({
     const plc = DependencySystem.modules.get('projectListComponent');
     if (plc && typeof projectDashboard.setProjectListComponent === 'function') {
       projectDashboard.setProjectListComponent(plc);
+    }
+
+    const pdc = DependencySystem.modules.get('projectDetailsComponent');
+    if (pdc && typeof projectDashboard.setProjectDetailsComponent === 'function') {
+      projectDashboard.setProjectDetailsComponent(pdc);
     }
 
     logger.debug('[coreInit] ProjectDashboard instance created and registered.', { context: 'coreInit' });
