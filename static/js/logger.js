@@ -138,7 +138,10 @@ export function createLogger({
       _c.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
     }
   }
-  function createNoopConsole(){ return {log(){},info(){},warn(){},error(){},debug(){}};}
+  function createNoopConsole() {
+    return ['log', 'info', 'warn', 'error', 'debug']
+      .reduce((o, m) => { o[m] = () => {}; return o; }, {});
+  }
   const _c = (_win?.console) || createNoopConsole();
   function wrap(level, fn = _c.log) {
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
