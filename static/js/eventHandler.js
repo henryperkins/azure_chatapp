@@ -68,9 +68,11 @@ export function createEventHandlers({
   const MODULE = 'EventHandler';
   let _domReadinessService = domReadinessService || null;
   function setDomReadinessService(svc) { _domReadinessService = svc; }
+  function setLogger(newLogger)      { if (newLogger) logger = newLogger; }
+  function setSafeHandler(newSH)     { if (typeof newSH === 'function') SH = newSH; }
 
   // --- safeHandler canonical dependency check ---
-  const SH = safeHandler || DependencySystem.modules.get('safeHandler');
+  let   SH = safeHandler || DependencySystem.modules.get('safeHandler');
   if (typeof SH !== 'function') {
     throw new Error('[eventHandler] Missing safeHandler dependency');
   }
@@ -644,6 +646,8 @@ export function createEventHandlers({
     createCustomEvent,
     setProjectManager : (pm) => { _projectManager = pm; },
     setDomReadinessService,
+    setLogger,
+    setSafeHandler,
     DependencySystem,
     cleanup
   };

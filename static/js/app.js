@@ -151,7 +151,8 @@ const eventHandlers = createEventHandlers({
   app,
   projectManager: null,
   modalManager: null,
-  safeHandler: DependencySystem.modules.get('safeHandler') // fetch via DI (avoid TDZ)
+  safeHandler: DependencySystem.modules.get('safeHandler'), // fetch via DI (avoid TDZ)
+  logger        : tempLogger,   // ensure temp logger goes in
   // domReadinessService to be injected after instantiation
 });
 DependencySystem.register('eventHandlers', eventHandlers);
@@ -248,6 +249,10 @@ if (DependencySystem.modules.has('safeHandler')) {
 } else {
   DependencySystem.register('safeHandler', safeHandler);
 }
+
+// ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
+eventHandlers.setLogger(logger);
+eventHandlers.setSafeHandler(safeHandler);
 
 // Expose an opportunity for serviceInit to accept logger
 serviceInit.setLogger(logger);
@@ -706,26 +711,6 @@ if (typeof window !== 'undefined') {
         fireAppReady(false, err);
       } catch (e) {
         logger.error('[app.js][bootstrap] Error in fireAppReady', e, { context: 'app:bootstrap:fireAppReady' });
-      }
-    }
-  })();
-}
-// Duplicate block is presumably from prior merges, but we can keep it:
-if (typeof window !== 'undefined') {
-  (async () => {
-    try {
-      await init();
-    } catch (err) {
-      const log = DependencySystem?.modules?.get?.('logger');
-      if (log?.error) {
-        log.error('[app.js][bootstrap] init() failed', err, { context: 'app:bootstrap' });
-      }
-      try {
-        fireAppReady(false, err);
-      } catch (e) {
-        logger.error('[app.js][bootstrap] Error in fireAppReady', e, {
-          context: 'app:bootstrap:fireAppReady'
-        });
       }
     }
   })();
