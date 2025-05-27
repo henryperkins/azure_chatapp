@@ -32,8 +32,8 @@ export function createAuthInitializer({
    * Initialize the authentication system
    */
   async function initializeAuthSystem() {
-    // Wait for app:ready and required DOM elements before any DOM/global work
-    await domReadinessService.waitForEvent('app:ready');
+    // Wait only for the document itself – do NOT block on app:ready
+    await domReadinessService.documentReady();
     await domReadinessService.dependenciesAndElements({
       deps        : ['auth', 'eventHandlers'],
       domSelectors: ['#loginModalForm', '#authButton'],   // real elements
