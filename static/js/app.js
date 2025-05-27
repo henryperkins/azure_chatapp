@@ -267,6 +267,11 @@ appModule.setLogger?.(logger);            // ← NEW
 // ── NOW that a real logger exists, wire the foundational services ──
 serviceInit.registerBasicServices();
 
+// ----- retrofit final errorReporter into early-created eventHandlers -----
+eventHandlers.setErrorReporter?.(
+  DependencySystem.modules.get('errorReporter')
+);
+
 
 // Provide a lazy proxy for apiRequest until advanced services
 function apiRequestProxy(...args) {
