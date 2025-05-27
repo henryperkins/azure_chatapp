@@ -206,8 +206,8 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
 
   return {
     initialize,
-    cleanup,          // NEW – canonical cleanup required by checker
-    teardown,         // legacy alias
+    cleanup,
+    teardown,
     setTheme,
     getSavedTheme,
     getSystemPreference,
