@@ -170,27 +170,93 @@
   .sidebar.open {
     @apply translate-x-0;
   }
-  
+
   /* Backdrop for mobile sidebar */
   .sidebar-backdrop {
     @apply fixed inset-0 bg-black/50 z-40;
     @apply transition-opacity duration-300;
     @apply opacity-0 pointer-events-none;
   }
-  
-  .sidebar.open ~ .sidebar-backdrop {
+
+  .sidebar.open~.sidebar-backdrop {
     @apply opacity-100 pointer-events-auto;
   }
 }
 
-/* Enhanced Mobile Bottom Navigation */
+/* Enhanced Mobile Bottom Navigation with Better Touch Targets */
+.sidebar-dock {
+  @apply fixed bottom-0 left-0 right-0 z-40;
+  @apply bg-base-100/95 backdrop-blur-md;
+  @apply border-t border-base-200;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dock-nav {
+  @apply flex items-center justify-around relative;
+  height: 64px;
+  /* Increased from current implementation */
+}
+
+.dock-btn {
+  @apply flex flex-col items-center justify-center;
+  @apply relative flex-1 h-full;
+  @apply text-base-content/60 transition-all;
+  min-width: 64px;
+  gap: 2px;
+}
+
+.dock-btn--active {
+  @apply text-primary;
+}
+
+.dock-icon {
+  @apply w-6 h-6 transition-transform;
+}
+
+.dock-btn--active .dock-icon {
+  transform: translateY(-2px);
+}
+
+.dock-label {
+  @apply text-xs font-medium;
+}
+
+.dock-indicator {
+  @apply absolute bottom-0 left-1/2 -translate-x-1/2;
+  @apply w-12 h-1 bg-primary rounded-full;
+  @apply opacity-0 scale-x-0 transition-all;
+}
+
+.dock-btn--active .dock-indicator {
+  @apply opacity-100 scale-x-100;
+}
+
+.dock-fab {
+  @apply absolute -top-6 right-4;
+  @apply w-14 h-14 bg-primary text-primary-content;
+  @apply rounded-full shadow-lg;
+  @apply flex items-center justify-center;
+  @apply hover:shadow-xl active:scale-95;
+  @apply transition-all duration-200;
+}
+
+.dock-badge {
+  @apply absolute -top-1 -right-1;
+  @apply w-5 h-5 bg-error text-error-content;
+  @apply rounded-full text-xs font-bold;
+  @apply flex items-center justify-center;
+  @apply animate-pulse;
+}
+
+/* Legacy mobile-nav support */
 .mobile-nav {
   @apply fixed bottom-0 left-0 right-0 z-40;
   @apply bg-base-100 border-t-2 border-base-200;
   @apply flex items-center justify-around;
   height: calc(var(--mobile-touch-target) + var(--spacing-md));
   padding-bottom: env(safe-area-inset-bottom, 0);
-  box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.1);
 }
 
 .mobile-nav-item {
@@ -305,10 +371,12 @@
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(0, 132, 255, 0.4);
   }
+
   50% {
     transform: scale(1.05);
     box-shadow: 0 0 0 20px rgba(0, 132, 255, 0);
   }
+
   100% {
     transform: scale(1);
     box-shadow: 0 0 0 0 rgba(0, 132, 255, 0.4);

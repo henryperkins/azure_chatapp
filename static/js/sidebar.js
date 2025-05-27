@@ -721,7 +721,7 @@ export function createSidebar({
       // Wait for authentication to be ready or fallback quickly if delayed
       try {
         await domReadinessService.waitForEvent('authReady', {
-          timeout: 5000,
+          timeout: 2000, // Reduced from 5000ms to 2000ms for faster recovery
           context: 'Sidebar.init:waitForAuthReady'
         });
       } catch (timeoutErr) {
