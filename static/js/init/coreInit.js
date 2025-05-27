@@ -42,9 +42,11 @@ export function createCoreInitializer({
  }) {
    // Allow apiClientObject to be refreshed later, after ServiceInit has
    // registered it.  Capture in a mutable ref.
-   let apiClientObjectRef  = apiClientObject;
-   // allow late DI-registration (set by serviceInit.registerAdvancedServices)
-   let navigationServiceRef = navigationService;
+   let apiClientObjectRef      = apiClientObject;
+   let navigationServiceRef    = navigationService;
+   let htmlTemplateLoaderRef   = htmlTemplateLoader;
+   let uiRendererRef           = uiRenderer;
+   let accessibilityUtilsRef   = accessibilityUtils;
 
    /**
     * Some dependencies (e.g. `apiRequest`, `apiClientObject`) are not available
@@ -70,29 +72,15 @@ export function createCoreInitializer({
    // Runtime validation helper – executed at the top of initializeCoreSystems().
    // ────────────────────────────────────────────────────────────────────────────
    function validateRuntimeDeps() {
-     if (!navigationServiceRef) {
-       navigationServiceRef = DependencySystem.modules.get('navigationService');
-     }
-     if (!apiClientObjectRef) {
-       apiClientObjectRef = DependencySystem.modules.get('apiClientObject');
-     }
-     /* pull late-registered advanced services created by serviceInit.registerAdvancedServices() */
-     if (!htmlTemplateLoader) {
-       htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
-     }
-     if (!uiRenderer) {
-       uiRenderer = DependencySystem.modules.get('uiRenderer');
-     }
-     if (!accessibilityUtils) {
-       accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
-     }
-
      const runtimeRequired = {
        DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
        domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
        apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils,
        navigationService : navigationServiceRef, globalUtils, FileUploadComponent,
-       htmlTemplateLoader, uiRenderer, accessibilityUtils, safeHandler
+       htmlTemplateLoader : htmlTemplateLoaderRef,
+       uiRenderer         : uiRendererRef,
+       accessibilityUtils : accessibilityUtilsRef,
+       safeHandler
      };
      for (const [depName, dep] of Object.entries(runtimeRequired)) {
        if (!dep) {
@@ -410,7 +398,7 @@ export function createCoreInitializer({
         sanitizer,                // Direct arg
         app,                      // Direct arg
         navigationService: navigationServiceRef,
-        htmlTemplateLoader,       // Direct arg
+        htmlTemplateLoader: htmlTemplateLoaderRef,
         logger,                   // Direct arg
         APP_CONFIG,               // Direct arg
         chatManager,              // Instance created above
@@ -528,14 +516,14 @@ export function createCoreInitializer({
       eventHandlers,            // Direct arg
       DependencySystem,         // For potential internal DI
       domAPI,                   // Direct arg
-      uiRenderer,               // Direct arg
+      uiRenderer: uiRendererRef,
       storageAPI: browserService, // Direct arg (browserService acts as storage)
       projectManager,           // Instance created above
       modelConfig: modelConfigInstance, // Instance created above
       app,                      // Direct arg
       projectDashboard,         // Instance created above
       viewportAPI: browserService, // Direct arg
-      accessibilityUtils,       // Direct arg
+      accessibilityUtils: accessibilityUtilsRef,
       sanitizer,                // Direct arg
       domReadinessService,      // Direct arg
       logger,                   // Direct arg
@@ -564,7 +552,22 @@ export function createCoreInitializer({
     return true;
   }
 
+  function setAdvancedServices({
+    htmlTemplateLoader,
+    uiRenderer,
+    accessibilityUtils,
+    navigationService,
+    apiClientObject
+  } = {}) {
+    if (htmlTemplateLoader)   htmlTemplateLoaderRef   = htmlTemplateLoader;
+    if (uiRenderer)           uiRendererRef           = uiRenderer;
+    if (accessibilityUtils)   accessibilityUtilsRef   = accessibilityUtils;
+    if (navigationService)    navigationServiceRef    = navigationService;
+    if (apiClientObject)      apiClientObjectRef      = apiClientObject;
+  }
+
   return {
+    setAdvancedServices,
     initializeCoreSystems,
     cleanup() {
       // Cleanup any event listeners registered by core initialization
