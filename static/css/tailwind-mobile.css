@@ -20,7 +20,7 @@
   --spacing-lg: calc(var(--spacing-unit) * 3);    /* 24px */
   --spacing-xl: calc(var(--spacing-unit) * 4);    /* 32px */
   --spacing-2xl: calc(var(--spacing-unit) * 6);   /* 48px */
-  
+
   /* Typography scale with clamp for responsive sizing */
   --font-size-xs: clamp(0.75rem, 2vw, 0.875rem);
   --font-size-sm: clamp(0.875rem, 2.5vw, 1rem);
@@ -28,21 +28,21 @@
   --font-size-lg: clamp(1.125rem, 3.5vw, 1.25rem);
   --font-size-xl: clamp(1.25rem, 4vw, 1.5rem);
   --font-size-2xl: clamp(1.5rem, 5vw, 2.25rem);
-  
+
   /* Consistent component sizing */
   --btn-height-sm: 2rem;    /* 32px */
   --btn-height-md: 2.5rem;  /* 40px */
   --btn-height-lg: 3rem;    /* 48px */
-  
+
   /* Enhanced touch targets */
   --touch-target-min: 44px;
   --touch-target-comfortable: 48px;
-  
+
   /* Standardized transitions */
   --transition-fast: 150ms;
   --transition-base: 200ms;
   --transition-slow: 300ms;
-  
+
   /* Focus state variables */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
@@ -59,7 +59,7 @@
   --color-primary: oklch(60% 0.18 275);
   --color-secondary: oklch(70% 0.15 240);
   --color-accent: oklch(65% 0.16 210);
-  
+
   /* Message differentiation colors */
   --color-user-message-bg: oklch(96% 0.02 220);
   --color-user-message-text: oklch(20% 0.05 220);
@@ -84,7 +84,7 @@
   --color-success: oklch(87.1% 0.22 148);
   --color-warning: oklch(95.5% 0.14 112.8);
   --color-error: oklch(68.2% 0.21 24.4);
-  
+
   /* Dark mode message colors */
   --color-user-message-bg: oklch(35% 0.15 346.8);
   --color-user-message-text: oklch(98% 0.01 346.8);
@@ -94,13 +94,13 @@
 
 /* Improved animations with reduced motion support */
 @keyframes mobile-fade-in {
-  from { 
-    opacity: 0; 
-    transform: translateY(var(--spacing-sm)) scale(0.98); 
+  from {
+    opacity: 0;
+    transform: translateY(var(--spacing-sm)) scale(0.98);
   }
-  to { 
-    opacity: 1; 
-    transform: translateY(0) scale(1); 
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 

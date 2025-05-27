@@ -10,7 +10,7 @@
   --mobile-border-radius: 12px;
   --mobile-shadow: 0 2px 8px rgba(0,0,0,0.1);
   --mobile-shadow-elevated: 0 4px 16px rgba(0,0,0,0.15);
-  
+
   /* Icon system standardization */
   --icon-size-sm: 20px;
   --icon-size-md: 24px;
@@ -33,8 +33,8 @@ input[type="button"], input[type="submit"],
 }
 
 /* Enhanced Mobile-Safe Typography */
-html { 
-  font-size: var(--mobile-safe-font); 
+html {
+  font-size: var(--mobile-safe-font);
   -webkit-text-size-adjust: 100%;
 }
 

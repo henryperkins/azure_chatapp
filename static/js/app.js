@@ -91,9 +91,9 @@ if (!DependencySystem?.modules?.get) {
 
 // --- EARLY SAFEHANDLER: Register dummy for boot phase to break logger/safeHandler/eventHandlers chain ---
 function __dummySafeHandler(fn) {
-  return typeof fn === "function" ? fn : () => {};
+  return typeof fn === "function" ? fn : () => { };
 }
-__dummySafeHandler.cleanup = function () {};
+__dummySafeHandler.cleanup = function () { };
 DependencySystem.register('safeHandler', __dummySafeHandler);
 
 // Dedicated App Event Bus
@@ -413,7 +413,7 @@ const coreInit = createCoreInitializer({
   MODAL_MAPPINGS,
   apiRequest,
   apiClientObject,
-  apiEndpoints        : DependencySystem.modules.get('apiEndpoints'),   // ← ADD
+  apiEndpoints: DependencySystem.modules.get('apiEndpoints'),   // ← ADD
   app: appObj,
   uiUtils,
   navigationService,
@@ -554,11 +554,11 @@ export async function init() {
 
     // --- Pass advanced-service instances to coreInit ------------------------
     coreInit.setAdvancedServices({
-      htmlTemplateLoader : DependencySystem.modules.get('htmlTemplateLoader'),
-      uiRenderer         : DependencySystem.modules.get('uiRenderer'),
-      accessibilityUtils : DependencySystem.modules.get('accessibilityUtils'),
-      navigationService  : DependencySystem.modules.get('navigationService'),
-      apiClientObject    : DependencySystem.modules.get('apiClientObject'),
+      htmlTemplateLoader: DependencySystem.modules.get('htmlTemplateLoader'),
+      uiRenderer: DependencySystem.modules.get('uiRenderer'),
+      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
+      navigationService: DependencySystem.modules.get('navigationService'),
+      apiClientObject: DependencySystem.modules.get('apiClientObject'),
     });
     // ------------------------------------------------------------------------
 
@@ -738,6 +738,6 @@ export function createAppConfig({ DependencySystem } = {}) {
   if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
   return {
     APP_CONFIG,
-    cleanup() {}
+    cleanup() { }
   };
 }

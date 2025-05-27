@@ -6,7 +6,7 @@
     <h1 class="text-responsive-2xl font-bold">Projects</h1>
     <button id="createProjectBtn" class="btn btn-primary flex items-center gap-2" aria-label="Create new project">
       <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
       </svg>
       <span class="hidden sm:inline">New Project</span>
       <span class="sm:hidden">New</span>
@@ -15,40 +15,22 @@
 
   <!-- Enhanced Filters with Scroll Indication -->
   <div class="relative mb-6">
-    <div id="projectFilterTabs"
-         class="project-tabs flex gap-2 overflow-x-auto scrollbar-none"
-         role="tablist"
-         aria-label="Project filters">
-      <button class="project-tab active"
-              data-filter="all"
-              id="filterTabAll"
-              role="tab"
-              aria-selected="true"
-              tabindex="0">
+    <div id="projectFilterTabs" class="project-tabs flex gap-2 overflow-x-auto scrollbar-none" role="tablist"
+      aria-label="Project filters">
+      <button class="project-tab active" data-filter="all" id="filterTabAll" role="tab" aria-selected="true"
+        tabindex="0">
         All
       </button>
-      <button class="project-tab"
-              data-filter="recent"
-              id="filterTabRecent"
-              role="tab"
-              aria-selected="false"
-              tabindex="-1">
+      <button class="project-tab" data-filter="recent" id="filterTabRecent" role="tab" aria-selected="false"
+        tabindex="-1">
         Recent
       </button>
-      <button class="project-tab"
-              data-filter="pinned"
-              id="filterTabPinned"
-              role="tab"
-              aria-selected="false"
-              tabindex="-1">
+      <button class="project-tab" data-filter="pinned" id="filterTabPinned" role="tab" aria-selected="false"
+        tabindex="-1">
         Pinned
       </button>
-      <button class="project-tab"
-              data-filter="archived"
-              id="filterTabArchived"
-              role="tab"
-              aria-selected="false"
-              tabindex="-1">
+      <button class="project-tab" data-filter="archived" id="filterTabArchived" role="tab" aria-selected="false"
+        tabindex="-1">
         Archived
       </button>
     </div>
@@ -57,65 +39,136 @@
   <!-- Enhanced Search -->
   <div class="relative mb-6 mobile-p-safe">
     <div class="relative">
-      <svg class="icon-sm absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50 pointer-events-none"
-           fill="none" stroke="currentColor" viewBox="0 0 24 24"
-           aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      <svg class="icon-sm absolute left-3 top-1/2 -translate-y-1/2 text-base-content/50 pointer-events-none" fill="none"
+        stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
       </svg>
-      <input
-        id="projectSearchInput"
-        type="search"
-        class="input w-full pl-10 pr-10"
-        placeholder="Search projects..."
-        inputmode="search"
-        enterkeyhint="search"
-        aria-label="Search projects"
-      >
+      <input id="projectSearchInput" type="search" class="input w-full pl-10 pr-10" placeholder="Search projects..."
+        inputmode="search" enterkeyhint="search" aria-label="Search projects">
       <button id="clearSearchBtn"
-              class="btn btn-ghost btn-square btn-sm absolute right-1 top-1/2 -translate-y-1/2 hidden"
-              aria-label="Clear search">
+        class="btn btn-ghost btn-square btn-sm absolute right-1 top-1/2 -translate-y-1/2 hidden"
+        aria-label="Clear search">
         <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>
     </div>
   </div>
 
   <!-- Project Grid -->
-  <div id="projectCardsPanel"
-       class="mobile-grid mobile-p-safe"
-       role="tabpanel"
-       aria-labelledby="filterTabAll"
-       tabindex="0">
+  <div id="projectCardsPanel" class="mobile-grid mobile-p-safe" role="tabpanel" aria-labelledby="filterTabAll"
+    tabindex="0">
     <!-- Projects will be inserted here -->
   </div>
 
   <!-- Enhanced Empty State -->
-  <div id="emptyState" class="empty-state hidden flex flex-col items-center justify-center py-12 text-center text-base-content/70">
-    <svg class="empty-state-icon w-12 h-12 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-      <path stroke-linecap="round" stroke-linejoin="round"
-            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
-    </svg>
-    <h3 class="empty-state-title text-lg font-semibold mb-2">No projects found</h3>
-    <p class="empty-state-description text-sm mb-4">
-      Create your first project to start organizing your AI conversations
-    </p>
-    <button class="empty-state-action btn btn-primary flex items-center gap-2" aria-label="Create your first project">
-      <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/>
+  <div id="emptyState" class="empty-state hidden">
+    <div class="empty-state-icon">
+      <svg class="w-24 h-24 text-base-content/20 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
       </svg>
-      Create Your First Project
+    </div>
+    <h3 class="empty-state-title">No projects yet</h3>
+    <p class="empty-state-description">
+      Start a new project to begin organizing your AI conversations
+    </p>
+    <button class="empty-state-action" aria-label="Create your first project">
+      <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+      </svg>
+      New Project
     </button>
   </div>
 
-  <!-- Loading State -->
-  <div id="loadingState" class="loading-grid hidden grid grid-cols-2 gap-4">
-    <div class="loading-card"></div>
-    <div class="loading-card"></div>
-    <div class="loading-card"></div>
-    <div class="loading-card"></div>
-    <div class="loading-card"></div>
-    <div class="loading-card"></div>
-  </div>
+  <!-- Project Card Template (for reference) -->
+  <template id="projectCardTemplate">
+    <div class="project-card group">
+      <!-- Primary content -->
+      <div class="project-card-header">
+        <div class="project-card-title">
+          <h3 class="project-name truncate mb-1">Project Name</h3>
+          <p class="project-card-description">
+            Project description that provides context...
+          </p>
+        </div>
+        <!-- Single action menu instead of multiple buttons -->
+        <div class="project-card-actions">
+          <div class="project-card-menu">
+            <button class="project-card-menu-btn" aria-label="Project actions">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+              </svg>
+            </button>
+            <ul class="dropdown-content menu bg-base-100 rounded-xl z-50 w-48 p-2 shadow-xl border border-base-300">
+              <li><a href="#" data-action="view">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  View
+                </a></li>
+              <li><a href="#" data-action="edit">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </a></li>
+              <li><a href="#" data-action="delete" class="text-error">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
+                </a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metadata footer -->
+      <div class="project-card-footer">
+        <div class="project-card-meta">
+          <span class="project-card-meta-item">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Updated 2h ago
+          </span>
+          <span class="project-card-meta-item">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            12 conversations
+          </span>
+        </div>
+        <div class="project-card-badges">
+          <span class="project-card-badge">Active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status indicator -->
+    <div class="project-card-status" data-status="active">
+      <span class="sr-only">Active project</span>
+    </div>
+</div>
+</template>
+
+<!-- Loading State -->
+<div id="loadingState" class="loading-grid grid grid-cols-2 gap-4 hidden">
+  <div class="loading-card"></div>
+  <div class="loading-card"></div>
+  <div class="loading-card"></div>
+  <div class="loading-card"></div>
+  <div class="loading-card"></div>
+  <div class="loading-card"></div>
+</div>
 </div>
