@@ -162,8 +162,9 @@ const domReadinessService = createDomReadinessService({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
-  eventHandlers
-  // logger is registered later
+  eventHandlers,
+  APP_CONFIG,               // ← ADD
+  logger: tempLogger        // ← ADD
 });
 DependencySystem.register('domReadinessService', domReadinessService);
 
