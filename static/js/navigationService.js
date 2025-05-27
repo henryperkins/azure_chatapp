@@ -413,11 +413,11 @@ export function createNavigationService({
    */
   function init() {
     // Register popstate handler
-    const safe = DependencySystem.modules.get('safeHandler');
+    const safeHandler = DependencySystem.modules.get('safeHandler');
     eventHandlers.trackListener(
       browserService.getWindow(),
       'popstate',
-      safe(handlePopState, 'NavigationService:popstate'),
+      safeHandler(handlePopState, 'NavigationService:popstate'),
       { context: MODULE_CONTEXT, description: 'popstate' }
     );
 
