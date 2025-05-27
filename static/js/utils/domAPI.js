@@ -27,10 +27,13 @@ export function createDomAPI({
   };
 
   // unified warn/error sink (no direct console)
-  const _logger =
+  let _logger =
     logger ||
     DependencySystem?.modules?.get?.('logger') ||
     { warn: () => { }, error: () => { } };
+
+  /* allow late upgrade when real logger is ready */
+  function setLogger(newLogger) { if (newLogger) _logger = newLogger; }
 
   // Guardrails: expose `cleanup()` in factory return for compliance
   function cleanup() {
@@ -269,6 +272,7 @@ export function createDomAPI({
     createSVGElement: (tag) =>
       documentObject.createElementNS('http://www.w3.org/2000/svg', tag),
     getProperty: (el, prop) => el?.[prop],
+    setLogger,      // ← NEW
     cleanup
   };
 }
