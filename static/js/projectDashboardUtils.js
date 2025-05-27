@@ -40,12 +40,12 @@ function _resolveDependencies(opts) {
   };
 }
 
-// --- Centralized sanitizer helper (Guideline #6) ---
-function _safeSetInnerHTML(el, html, sanitizer) {
+ // --- Centralized sanitizer helper (Guideline #6) ---
+function _safeSetInnerHTML(el, html, sanitizer, domAPI) {
   if (!sanitizer?.sanitize) {
     throw new Error(`[${MODULE}] sanitizer.sanitize is required for setting innerHTML`);
   }
-  el.innerHTML = sanitizer.sanitize(html);
+  domAPI.setInnerHTML(el, sanitizer.sanitize(html));
 }
 
 // --- UI Utils helpers refactored (Guideline #2) ---
@@ -54,7 +54,7 @@ function applyCommonProps(element, options, domAPI, sanitizer) {
   if (options.id) element.id = options.id;
   if (options.textContent !== undefined) element.textContent = options.textContent;
   if (options.innerHTML !== undefined) {
-    _safeSetInnerHTML(element, options.innerHTML, sanitizer);
+    _safeSetInnerHTML(element, options.innerHTML, sanitizer, domAPI);
   }
   Object.entries(options).forEach(([key, value]) => {
     if (key.startsWith('data-')) element.setAttribute(key, value);

@@ -120,7 +120,7 @@ export function createAuthModule(deps) {
       btn.disabled = true;
       btn.dataset.originalText = btn.textContent;
       const htmlContent = `<span class="loading loading-spinner loading-xs"></span> ${loadingText}`;
-      btn.innerHTML = sanitizer.sanitize(htmlContent);
+      domAPI.setInnerHTML(btn, sanitizer.sanitize(htmlContent));
     } else {
       btn.disabled = false;
       if (btn.dataset.originalText) {

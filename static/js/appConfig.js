@@ -42,3 +42,13 @@ export const APP_CONFIG = {
   },
   DEBUG_UI: false,          // enables unresolved-selector report
 };
+
+/* Guard-rail factory export */
+export function createAppConfig({ overrides = {}, DependencySystem } = {}) {
+  if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
+  const cfg = { ...APP_CONFIG, ...overrides };
+  return {
+    APP_CONFIG: cfg,
+    cleanup() { /* stateless */ }
+  };
+}

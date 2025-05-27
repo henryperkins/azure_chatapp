@@ -22,7 +22,8 @@ export function createLogger({
   traceIdProvider = null,
   safeHandler = null,
   allowUnauthenticated = false,   // NEW
-  consoleEnabled = true     // NEW
+  consoleEnabled = true,    // NEW
+  eventHandlers = null      // NEW
 } = {}) {
   const _win = browserService?.getWindow?.();   // unified, DI-safe window
   let _minLvlNum = LEVELS[minLevel] ?? 10;
@@ -169,6 +170,9 @@ export function createLogger({
     setServerLoggingEnabled,
     setMinLevel,
     upgradeWithApiClient,
-    cleanup() { /* logger is stateless; nothing to clean */ }
+    cleanup() {
+      if (eventHandlers?.cleanupListeners)
+        eventHandlers.cleanupListeners({ context: 'logger' });
+    }
   };
 }
