@@ -962,17 +962,31 @@ class ProjectDetailsComponent {
       const chatTabContent = this.elements.tabs.chat;
       if (chatTabContent) {
         this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
-        this.chatManager.initialize({
-          projectId: this.projectId,
-          containerSelector: "#chatTab .chat-container",
-          messageContainerSelector: "#chatMessages",
-          inputSelector: "#chatInput",
-          sendButtonSelector: "#chatSendBtn",
-          titleSelector: "#chatTitle",
-          minimizeButtonSelector: "#minimizeChatBtn"
-        })
-          .then(() => this._logInfo("chatManager initialized for project details view", { projectId: this.projectId }))
-          .catch((err) => { this._logError("Error initializing chatManager", err); });
+
+        // First, load the chat UI template into the container
+        const htmlLoader = this.DependencySystem?.modules?.get('htmlTemplateLoader');
+        if (htmlLoader?.loadTemplate) {
+          htmlLoader.loadTemplate({
+            url: '/static/html/chat_ui.html',
+            containerSelector: "#chatUIContainer",
+            eventName: 'chatUITemplateLoaded',
+            append: false // Replace content instead of appending
+          }).then(() => {
+            // After template is loaded, initialize the chat manager
+            this.chatManager.initialize({
+              projectId: this.projectId,
+              containerSelector: "#chatUIContainer .chat-container",
+              messageContainerSelector: "#chatMessages",
+              inputSelector: "#chatInput",
+              sendButtonSelector: "#chatSendBtn",
+              titleSelector: "#chatTitle"
+            });
+          }).catch(err => {
+            this._logError("Failed to load chat UI template", err);
+          });
+        } else {
+          this._logError("htmlTemplateLoader not available");
+        }
       }
     }
   }

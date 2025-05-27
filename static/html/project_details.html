@@ -1,7 +1,7 @@
 <!-- Mobile-First Project Details Template (Complete) -->
 <div id="projectDetailsContainer" class="project-details-container">
   <div class="project-details">
-    
+
     <!-- HEADER & STATS -->
     <header class="project-header p-4 border-b border-base-200">
       <div class="flex items-center gap-3 mb-4">
@@ -136,27 +136,12 @@
 
       <!-- CHAT TAB -->
       <div id="chatTab" class="tab-pane" role="tabpanel" aria-labelledby="tab-chat">
-        <!-- Example Chat section -->
-        <div class="chat-container">
-          <div id="chatMessages" class="chat-messages bg-base-200 p-3 rounded mb-3">
-            <!-- Chat messages go here -->
-          </div>
-          <div class="chat-input-container">
-            <div class="chat-input-row flex gap-2">
-              <input id="chatInput" class="chat-input flex-1 input input-bordered" type="text"
-                     placeholder="Type your message..."
-                     aria-label="Chat message input">
-              <button id="chatSendBtn" class="chat-send-btn btn btn-primary" aria-label="Send message">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                </svg>
-              </button>
-            </div>
-          </div>
+        <!-- Chat UI Container - Will be populated by chatManager -->
+        <div id="chatUIContainer">
+          <!-- chat_ui.html will be injected here -->
         </div>
 
-        <!-- Recent Conversations (example) -->
+        <!-- Recent Conversations section -->
         <div class="mt-6">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold">Recent Conversations</h3>
@@ -242,7 +227,7 @@
           <!-- File preview list (hidden by default) -->
           <ul id="file-preview-list" class="file-preview-list hidden mt-4 space-y-2" aria-label="Selected files"></ul>
         </div>
-        
+
         <!-- File preview item template -->
         <template id="file-preview-template">
           <li class="file-preview-item flex items-center gap-2 p-2 bg-base-200 rounded">
@@ -290,7 +275,7 @@
           <!-- Expandable Section -->
           <div class="expandable-section" aria-expanded="false">
             <button class="expandable-header flex items-center justify-between w-full p-3 bg-base-100 rounded"
-                    onclick="this.parentElement.setAttribute('aria-expanded', 
+                    onclick="this.parentElement.setAttribute('aria-expanded',
                       this.parentElement.getAttribute('aria-expanded') === 'true' ? 'false' : 'true')">
               <h3 class="font-semibold">Project Information</h3>
               <svg class="icon-sm expandable-indicator" fill="none" stroke="currentColor" viewBox="0 0 24 24">
