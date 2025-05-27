@@ -78,6 +78,17 @@ import { createLogger } from './logger.js';
 const browserServiceInstance = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
+/* ------------------------------------------------------------------ *
+ * Early temporary logger – used by domAPI, eventHandlers, etc.
+ * Must exist BEFORE any module that expects a logger.
+ * ------------------------------------------------------------------ */
+const tempLogger = {
+  error: (...a) => console.error('[TempLogger]', ...a),
+  warn : (...a) => console.warn ('[TempLogger]', ...a),
+  info : (...a) => console.info ('[TempLogger]', ...a),
+  debug: (...a) => console.debug('[TempLogger]', ...a),
+  log  : (...a) => console.log  ('[TempLogger]', ...a),
+};
 registerSessionBrowserService(browserServiceInstance);
 const browserAPI = browserServiceInstance;
 
@@ -133,14 +144,6 @@ const app = {}; // This will be enriched later
 DependencySystem.register('app', app);
 
 /* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
-// Create temporary logger stub for early initialization
-const tempLogger = {
-  error: (...args) => console.error('[TempLogger]', ...args),
-  warn: (...args) => console.warn('[TempLogger]', ...args),
-  info: (...args) => console.info('[TempLogger]', ...args),
-  debug: (...args) => console.debug('[TempLogger]', ...args),
-  log: (...args) => console.log('[TempLogger]', ...args)
-};
 
 const eventHandlers = createEventHandlers({
   DependencySystem,
