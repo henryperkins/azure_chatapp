@@ -4,7 +4,13 @@
  * Guardrails-compliant factory export exclusively. No top-level logic or direct DOM/global access.
  * All dependencies (including domReadinessService, logger) injected via DI; no side effects at import time.
  *
- * Provides UI gating helpers for safe DOM event binding (esp. chat UI) per project/timing.
+ * Provides comprehensive UI management for chat interface:
+ * - Message rendering and display
+ * - Input handling and submission
+ * - Typing indicators
+ * - UI state management (empty states, loading)
+ * - Mobile-specific enhancements
+ * - Project-specific chat integration
  */
 
 export function createChatUIEnhancements(deps = {}) {
@@ -27,7 +33,10 @@ export function createChatUIEnhancements(deps = {}) {
     initialized: false,
     initializing: null,
     typingIndicatorVisible: false,
-    messageContainer: null // ← cache current chat container
+    messageContainer: null, // ← cache current chat container
+    activeTab: null,        // Track active tab for project context
+    projectId: null,        // Store current project ID
+    isMobile: browserService?.isMobile || false
   };
 
   // Use canonical safeHandler from DI
@@ -53,35 +62,27 @@ export function createChatUIEnhancements(deps = {}) {
       logger.error(`[${MODULE_CONTEXT}] Invalid domSelectors param for whenChatUIReady`, {
         context
       });
-      throw new Error(`[${MODULE_CONTEXT}] Must provide one or more selectors to whenChatUIReady`);
+      return Promise.reject(new Error('Invalid domSelectors'));
     }
+
     try {
-      await domReadinessService.dependenciesAndElements({
-        domSelectors,
+      await domReadinessService.elementsReady(domSelectors, {
         timeout,
-        context
-      });
-      // Optionally validate post-gating presence (defensive)
-      const doc = domAPI.getDocument();
-      if (doc) {
-        for (const sel of domSelectors) {
-          if (!domAPI.querySelector(sel)) {
-            logger.error(`[${MODULE_CONTEXT}] Selector ${sel} still missing after readiness wait`, {
-              context
-            });
-            throw new Error(`[${MODULE_CONTEXT}] DOM selector missing after gating: ${sel}`);
-          }
-        }
-      }
-      logger.info(`[${MODULE_CONTEXT}] DOM readiness achieved for selectors`, {
         context,
-        domSelectors
+        observeMutations: true
       });
+      logger.debug(`[${MODULE_CONTEXT}] Chat UI elements ready`, {
+        context,
+        selectors: domSelectors
+      });
+      return Promise.resolve();
     } catch (err) {
-      logger.error(`[${MODULE_CONTEXT}] DOM readiness failed for selectors: ${domSelectors.join(', ')}`, err, {
-        context
+      logger.error(`[${MODULE_CONTEXT}] Chat UI elements not ready within timeout`, err, {
+        context,
+        timeout,
+        selectors: domSelectors
       });
-      throw err;
+      return Promise.reject(err);
     }
   }
 
@@ -89,12 +90,18 @@ export function createChatUIEnhancements(deps = {}) {
    * Initialize chat UI enhancements. Waits for required DOM elements.
    * Attaches event listeners to the default chat UI selectors if found.
    *
-   * @param {Object} options - Initialization options (currently unused).
+   * @param {Object} options - Initialization options
+   * @param {string} [options.projectId] - Optional project ID for project-specific chat
    * @returns {Promise<void>} A promise that resolves when initialization is complete or fails.
    */
   function initialize(options = {}) {
     if (state.initialized) return Promise.resolve();
     if (state.initializing) return state.initializing;
+
+    // Store project ID if provided
+    if (options.projectId) {
+      state.projectId = options.projectId;
+    }
 
     // Project-only selectors for chat UI
     const CHAT_SELECTORS = [
@@ -118,7 +125,7 @@ export function createChatUIEnhancements(deps = {}) {
           context
         });
         state.initializing = null;
-        return; // allow another “initialize()” call later
+        return; // allow another "initialize()" call later
       }
 
       const chatInput = domAPI.getElementById('chatInput');
@@ -178,15 +185,299 @@ export function createChatUIEnhancements(deps = {}) {
         );
       }
 
+      // Setup chat header collapse functionality
+      setupChatHeaderCollapse();
+
+      // Setup mobile-specific enhancements
+      if (state.isMobile) {
+        setupMobileEnhancements();
+      }
+
+      // Setup project-specific enhancements if in project context
+      if (state.projectId) {
+        setupProjectChatEnhancements();
+      }
 
       state.initialized = true;
       state.initializing = null;
-      logger.info('[chatUIEnhancements] Initialization complete', {
-        context
+
+      logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements initialized`, {
+        context,
+        projectId: state.projectId || 'global'
       });
+
+      return Promise.resolve();
     })();
 
     return state.initializing;
+  }
+
+  /**
+   * Setup collapsible chat header functionality
+   */
+  function setupChatHeaderCollapse() {
+    const chatHeader = domAPI.getElementById('chatHeader');
+    const chatMetadata = domAPI.getElementById('chatMetadata');
+
+    if (!chatHeader || !chatMetadata) return;
+
+    eventHandlers.trackListener(
+      chatHeader,
+      'click',
+      safeHandler(() => {
+        const isExpanded = chatHeader.getAttribute('aria-expanded') === 'true';
+        const newState = !isExpanded;
+
+        chatHeader.setAttribute('aria-expanded', newState ? 'true' : 'false');
+        chatMetadata.style.display = newState ? 'flex' : 'none';
+
+        // Rotate chevron
+        const indicator = chatHeader.querySelector('.expandable-indicator');
+        if (indicator) {
+          indicator.style.transform = newState ? 'rotate(0deg)' : 'rotate(-90deg)';
+        }
+      }, 'chatHeaderToggle'),
+      {
+        context: MODULE_CONTEXT,
+        description: 'Chat header collapse toggle'
+      }
+    );
+  }
+
+  /**
+   * Setup mobile-specific enhancements for chat UI
+   */
+  function setupMobileEnhancements() {
+    // Improve touch targets
+    domAPI.querySelectorAll('#chatHeader button, #chatInput, #chatSendBtn').forEach(el => {
+      if (el.tagName === 'BUTTON' && !el.classList.contains('btn-lg')) {
+        el.style.minHeight = '44px'; // Ensure minimum touch target size
+      }
+    });
+
+    // Improve keyboard experience for input
+    const chatInput = domAPI.getElementById('chatInput');
+    if (chatInput) {
+      // Prevent iOS zoom by ensuring font size is at least 16px
+      chatInput.style.fontSize = '16px';
+
+      // Add proper mobile keyboard support
+      chatInput.setAttribute('inputmode', 'text');
+      chatInput.setAttribute('enterkeyhint', 'send');
+    }
+
+    // Setup pull-to-refresh for chat messages
+    setupPullToRefresh();
+  }
+
+  /**
+   * Setup pull-to-refresh functionality for chat messages
+   */
+  function setupPullToRefresh() {
+    try {
+      const chatMessages = domAPI.getElementById('chatMessages');
+      if (!chatMessages) return;
+
+      let startY = 0;
+      let isPulling = false;
+      let refreshTriggered = false;
+
+      // Create pull indicator if it doesn't exist
+      let pullIndicator = domAPI.getElementById('chatPullToRefreshIndicator');
+      if (!pullIndicator) {
+        pullIndicator = domAPI.createElement('div');
+        pullIndicator.id = 'chatPullToRefreshIndicator';
+        pullIndicator.className = 'pull-to-refresh-indicator';
+        domAPI.setInnerHTML(pullIndicator, `
+          <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Refreshing...</span>
+        `);
+        domAPI.setStyle(pullIndicator, 'position', 'absolute');
+        domAPI.setStyle(pullIndicator, 'top', '0');
+        domAPI.setStyle(pullIndicator, 'left', '0');
+        domAPI.setStyle(pullIndicator, 'right', '0');
+        domAPI.setStyle(pullIndicator, 'display', 'flex');
+        domAPI.setStyle(pullIndicator, 'justify-content', 'center');
+        domAPI.setStyle(pullIndicator, 'align-items', 'center');
+        domAPI.setStyle(pullIndicator, 'padding', '10px');
+        domAPI.setStyle(pullIndicator, 'background', 'var(--color-base-200)');
+        domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+        domAPI.setStyle(pullIndicator, 'transition', 'transform 0.3s ease');
+        domAPI.setStyle(pullIndicator, 'z-index', '10');
+
+        const container = domAPI.querySelector('.chat-container');
+        if (container) {
+          domAPI.appendChild(container, pullIndicator);
+        }
+      }
+
+      // Touch event handlers
+      const onTouchStart = (e) => {
+        if (chatMessages.scrollTop === 0) {
+          startY = e.touches[0].clientY;
+          isPulling = true;
+        }
+      };
+
+      const onTouchMove = (e) => {
+        if (!isPulling) return;
+
+        const currentY = e.touches[0].clientY;
+        const diff = currentY - startY;
+
+        if (diff > 0 && diff < 100) {
+          domAPI.setStyle(pullIndicator, 'transform', `translateY(${diff - 50}px)`);
+          if (diff > 70 && !refreshTriggered) {
+            domAPI.addClass(pullIndicator, 'visible');
+          }
+        }
+      };
+
+      const onTouchEnd = () => {
+        if (!isPulling) return;
+
+        const pullDistance = parseInt(pullIndicator.style.transform.replace('translateY(', '').replace('px)', '')) + 50;
+
+        if (pullDistance > 20) {
+          refreshTriggered = true;
+          domAPI.setStyle(pullIndicator, 'transform', 'translateY(0)');
+
+          // Reload conversation if in project context
+          if (state.projectId && chatManager) {
+            const currentConversationId = chatManager.currentConversationId;
+            if (currentConversationId) {
+              chatManager.loadConversation(currentConversationId)
+                .finally(() => {
+                  browserService.setTimeout(() => {
+                    domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+                    domAPI.removeClass(pullIndicator, 'visible');
+                    isPulling = false;
+                    refreshTriggered = false;
+                  }, 1000);
+                });
+            } else {
+              resetPullIndicator();
+            }
+          } else {
+            resetPullIndicator();
+          }
+        } else {
+          // Not pulled far enough, reset
+          resetPullIndicator();
+        }
+      };
+
+      function resetPullIndicator() {
+        domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+        domAPI.removeClass(pullIndicator, 'visible');
+        isPulling = false;
+        refreshTriggered = false;
+      }
+
+      // Attach event listeners
+      eventHandlers.trackListener(
+        chatMessages,
+        'touchstart',
+        onTouchStart,
+        { context: MODULE_CONTEXT }
+      );
+
+      eventHandlers.trackListener(
+        chatMessages,
+        'touchmove',
+        onTouchMove,
+        { context: MODULE_CONTEXT }
+      );
+
+      eventHandlers.trackListener(
+        chatMessages,
+        'touchend',
+        onTouchEnd,
+        { context: MODULE_CONTEXT }
+      );
+    } catch (error) {
+      logger.error('[setupPullToRefresh]', error, { context: MODULE_CONTEXT });
+    }
+  }
+
+  /**
+   * Setup project-specific chat enhancements
+   */
+  function setupProjectChatEnhancements() {
+    // Setup "New Conversation" button if available
+    const newConversationBtn = domAPI.getElementById('newConversationBtn');
+    if (newConversationBtn && !newConversationBtn.dataset.bound) {
+      eventHandlers.trackListener(
+        newConversationBtn,
+        'click',
+        safeHandler(() => {
+          if (chatManager && typeof chatManager.createNewConversation === 'function') {
+            chatManager.createNewConversation()
+              .catch(err => {
+                logger.error('[chatUIEnhancements] Error creating new conversation', err, {
+                  context: MODULE_CONTEXT
+                });
+              });
+          }
+        }, 'newConversationClick'),
+        {
+          context: MODULE_CONTEXT,
+          description: 'New conversation button click'
+        }
+      );
+      newConversationBtn.dataset.bound = '1';
+    }
+
+    // Setup conversation list item clicks
+    setupConversationListItemClicks();
+  }
+
+  /**
+   * Setup click handlers for conversation list items
+   */
+  function setupConversationListItemClicks() {
+    const conversationsList = domAPI.getElementById('conversationsList');
+    if (!conversationsList) return;
+
+    // Use event delegation for conversation items
+    eventHandlers.trackListener(
+      conversationsList,
+      'click',
+      safeHandler((event) => {
+        // Find closest conversation item
+        const conversationItem = domAPI.closest(event.target, '.conversation-item');
+        if (!conversationItem) return;
+
+        // Get conversation ID
+        const conversationId = domAPI.getDataAttribute(conversationItem, 'conversationId');
+        if (!conversationId) return;
+
+        // Load conversation if chatManager is available
+        if (chatManager && typeof chatManager.loadConversation === 'function') {
+          // Highlight active conversation
+          domAPI.querySelectorAll('.conversation-item.active').forEach(item => {
+            domAPI.removeClass(item, 'active');
+          });
+          domAPI.addClass(conversationItem, 'active');
+
+          // Load conversation
+          chatManager.loadConversation(conversationId)
+            .catch(err => {
+              logger.error('[chatUIEnhancements] Error loading conversation', err, {
+                context: MODULE_CONTEXT,
+                conversationId
+              });
+            });
+        }
+      }, 'conversationItemClick'),
+      {
+        context: MODULE_CONTEXT,
+        description: 'Conversation item click'
+      }
+    );
   }
 
   /**
@@ -252,217 +543,169 @@ export function createChatUIEnhancements(deps = {}) {
     let idx = 1;
 
     while ((match = citeRegex.exec(content)) !== null) {
-      const textBefore = content.substring(lastIndex, match.index);
-      if (textBefore) {
+      // Add text before the citation
+      if (match.index > lastIndex) {
+        const textBefore = content.substring(lastIndex, match.index);
         domAPI.appendChild(fragment, domAPI.createTextNode(textBefore));
       }
 
+      // Create citation element
       const citeId = match[1];
-      // Sanitize the ID before embedding in data attribute
-      const safeId = sanitizer.sanitize(citeId);
-      const number = idx++;
+      const citeEl = domAPI.createElement('sup');
+      citeEl.className = 'citation';
+      citeEl.dataset.citeId = citeId;
 
-      // Create the superscript element using domAPI
-      const supEl = domAPI.createElement('sup');
-      supEl.className = 'msg-citation';
-      supEl.setAttribute('data-citation-id', safeId);
-      supEl.setAttribute('tabindex', '0'); // Make it focusable
-      supEl.style.cursor = 'pointer';
-      supEl.style.color = '#1565c0'; // Example styling
-      supEl.setAttribute('aria-label', `Citation ${number}`);
-      supEl.setAttribute('title', 'View source');
-      domAPI.appendChild(supEl, domAPI.createTextNode(String(number)));
+      // Create clickable link inside sup
+      const citeLink = domAPI.createElement('a');
+      citeLink.href = '#';
+      citeLink.className = 'citation-link';
+      citeLink.textContent = `[${idx}]`;
 
-      domAPI.appendChild(fragment, supEl);
-      lastIndex = citeRegex.lastIndex;
+      // Add click handler to citation
+      eventHandlers.trackListener(
+        citeLink,
+        'click',
+        safeHandler((e) => {
+          e.preventDefault();
+          // Dispatch citation click event
+          const doc = domAPI.getDocument();
+          if (doc) {
+            const event = new CustomEvent('citationClick', {
+              detail: { citeId }
+            });
+            doc.dispatchEvent(event);
+          }
+        }, 'citationClick'),
+        { context: MODULE_CONTEXT }
+      );
+
+      domAPI.appendChild(citeEl, citeLink);
+      domAPI.appendChild(fragment, citeEl);
+
+      lastIndex = match.index + match[0].length;
+      idx++;
     }
 
-    // Append any remaining text after the last match
-    const textAfter = content.substring(lastIndex);
-    if (textAfter) {
+    // Add remaining text after last citation
+    if (lastIndex < content.length) {
+      const textAfter = content.substring(lastIndex);
       domAPI.appendChild(fragment, domAPI.createTextNode(textAfter));
     }
 
     return fragment;
   }
 
-
   /**
-   * Create an enhanced message element.
+   * Creates a message element for display in the chat UI.
    * @param {string} message - The message content.
-   * @param {'user'|'ai'|string} sender - The sender ('user' or 'ai').
-   * @param {number} [timestamp] - Optional message timestamp (defaults to now).
-   * @param {string|number} [messageId] - Optional unique message ID (for retry).
-   * @returns {HTMLElement|null} The message element or null if creation fails.
+   * @param {string} sender - The message sender ('user' or 'ai').
+   * @param {number} [timestamp] - Optional timestamp for the message.
+   * @param {string|number} [messageId] - Optional message ID.
+   * @returns {HTMLElement} The created message element.
    */
-  function createMessageElement(message, sender, timestamp, messageId = null) {
+  function createMessageElement(message, sender, timestamp = Date.now(), messageId = null) {
     const context = `${MODULE_CONTEXT}::createMessageElement`;
-    const isUser = sender === 'user';
-    const messageClass = isUser ? 'user-message' : 'ai-message';
+    try {
+      const isUser = sender === 'user';
 
-    // Create message container
-    const messageEl = domAPI.createElement('div');
-    if (!messageEl) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create message container div`, {
-        context
-      });
-      return null;
-    }
-    messageEl.className = `chat-message ${messageClass}`;
-    if (messageId !== null) {
-      messageEl.setAttribute('data-message-id', messageId);
-    }
+      // Create message container
+      const messageEl = domAPI.createElement('div');
+      messageEl.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+      if (messageId) {
+        messageEl.dataset.messageId = messageId;
+      }
 
+      // Create avatar
+      const avatarEl = domAPI.createElement('div');
+      avatarEl.className = 'message-avatar';
 
-    // Create message bubble
-    const bubbleEl = domAPI.createElement('div');
-    if (!bubbleEl) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create message bubble div`, {
-        context
-      });
-      return null;
-    }
-    bubbleEl.className = 'message-bubble';
+      // Set avatar content based on sender
+      if (isUser) {
+        avatarEl.innerHTML = sanitizer.sanitize(`
+          <svg class="w-8 h-8 text-primary" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
+          </svg>
+        `);
+      } else {
+        avatarEl.innerHTML = sanitizer.sanitize(`
+          <svg class="w-8 h-8 text-secondary" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"></path>
+            <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"></path>
+          </svg>
+        `);
+      }
 
-    // Process and set message content
-    if (!isUser && typeof message === "string") {
-      // Use DOM building function for AI content with citations
-      const processedContentFragment = renderCitationsAsDOM(message);
-      domAPI.appendChild(bubbleEl, processedContentFragment);
-    } else {
-      // For user messages or non-string content, sanitize and set as text
-      // Note: If user messages could contain Markdown/HTML, a similar DOM building
-      // or stricter sanitization/rendering step would be needed. Assuming plain text here.
-      const safeText = sanitizer.sanitize(String(message)); // Sanitize potential text content
-      domAPI.appendChild(bubbleEl, domAPI.createTextNode(safeText));
-    }
+      // Create message content container
+      const contentEl = domAPI.createElement('div');
+      contentEl.className = 'message-content';
 
-    // Create metadata element
-    const metadataEl = domAPI.createElement('div');
-    if (!metadataEl) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create message metadata div`, {
-        context
-      });
-      return null;
-    }
-    metadataEl.className = 'message-metadata';
+      // Create message bubble
+      const bubbleEl = domAPI.createElement('div');
+      bubbleEl.className = 'message-bubble';
 
-    // Format and add timestamp
-    const time = new Date(timestamp || Date.now()).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-    domAPI.appendChild(metadataEl, domAPI.createTextNode(time));
+      // Process and set message content
+      if (!isUser && typeof message === "string") {
+        // Use DOM building function for AI content with citations
+        const processedContentFragment = renderCitationsAsDOM(message);
+        domAPI.appendChild(bubbleEl, processedContentFragment);
+      } else {
+        // For user messages or non-string content, sanitize and set as text
+        const safeText = sanitizer.sanitize(String(message));
+        domAPI.setInnerHTML(bubbleEl, safeText);
+      }
 
+      // Create message footer with timestamp
+      const footerEl = domAPI.createElement('div');
+      footerEl.className = 'message-footer text-xs opacity-70';
 
-    // Create message actions
-    const actionsEl = domAPI.createElement('div');
-    if (!actionsEl) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create message actions div`, {
-        context
-      });
-      return null;
-    }
-    actionsEl.className = 'message-actions';
+      // Format timestamp
+      const date = new Date(timestamp);
+      const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      domAPI.setTextContent(footerEl, timeStr);
 
-    // Add copy and retry button for AI messages
-    if (!isUser) {
-      // Copy Button
-      const copyBtn = domAPI.createElement('button');
-      if (copyBtn) {
-        copyBtn.className = 'message-action-btn';
+      // Add copy button for AI messages
+      if (!isUser) {
+        const actionsEl = domAPI.createElement('div');
+        actionsEl.className = 'message-actions';
+
+        const copyBtn = domAPI.createElement('button');
+        copyBtn.className = 'btn btn-ghost btn-xs';
         copyBtn.setAttribute('aria-label', 'Copy message');
-        // Build SVG via DOM API if possible, otherwise sanitize innerHTML
-        // For simplicity with complex SVGs, sanitize static innerHTML here.
-        const copySvg = sanitizer.sanitize(
-          '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>'
-        );
-        domAPI.setInnerHTML(copyBtn, copySvg); // Use domAPI wrapper for innerHTML
+        copyBtn.innerHTML = sanitizer.sanitize(`
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+          </svg>
+        `);
 
+        // Add click handler to copy button
         eventHandlers.trackListener(
           copyBtn,
           'click',
-          safeHandler(() => copyMessageToClipboard(message), 'copyMessageButtonClick'),
-          {
-            context: MODULE_CONTEXT,
-            description: 'Copy message to clipboard handler'
-          }
+          safeHandler(() => {
+            copyMessageToClipboard(message);
+          }, 'copyMessage'),
+          { context: MODULE_CONTEXT }
         );
+
         domAPI.appendChild(actionsEl, copyBtn);
-      } else {
-        logger.warn(`[${MODULE_CONTEXT}] Failed to create copy button`, {
-          context
-        });
+        domAPI.appendChild(contentEl, actionsEl);
       }
 
+      // Assemble message element
+      domAPI.appendChild(contentEl, bubbleEl);
+      domAPI.appendChild(contentEl, footerEl);
+      domAPI.appendChild(messageEl, avatarEl);
+      domAPI.appendChild(messageEl, contentEl);
 
-      // Retry Button
-      const retryBtn = domAPI.createElement('button');
-      if (retryBtn) {
-        retryBtn.className = 'message-action-btn';
-        retryBtn.setAttribute('aria-label', 'Retry message');
-        // Sanitize static SVG innerHTML
-        const retrySvg = sanitizer.sanitize(
-          '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 .49-7H1"/></svg>'
-        );
-        domAPI.setInnerHTML(retryBtn, retrySvg); // Use domAPI wrapper for innerHTML
-
-        eventHandlers.trackListener(
-          retryBtn,
-          'click',
-          safeHandler(async () => {
-            const retryContext = `${MODULE_CONTEXT}::retryMessageClick`;
-            try {
-              if (chatManager && typeof chatManager.retryMessage === "function") {
-                if (messageId === null || messageId === undefined) {
-                  logger.warn(`[${MODULE_CONTEXT}] Retry button clicked for message without ID`, {
-                    context: retryContext
-                  });
-                } else {
-                  await chatManager.retryMessage(messageId);
-                  logger.info(`[${MODULE_CONTEXT}] Retry message requested`, {
-                    context: retryContext,
-                    messageId
-                  });
-                }
-              } else {
-                logger.error(`[${MODULE_CONTEXT}] chatManager.retryMessage missing or not DI-ed`, {
-                  context: retryContext,
-                  messageId
-                });
-              }
-            } catch (err) {
-              logger.error(`[${MODULE_CONTEXT}] Retry message error`, err, {
-                context: retryContext,
-                messageId
-              });
-            }
-          }, 'retryMessageButtonClick'),
-          {
-            context: MODULE_CONTEXT,
-            description: 'Retry message handler'
-          }
-        );
-        domAPI.appendChild(actionsEl, retryBtn);
-      } else {
-        logger.warn(`[${MODULE_CONTEXT}] Failed to create retry button`, {
-          context
-        });
-      }
+      return messageEl;
+    } catch (err) {
+      logger.error(`[${MODULE_CONTEXT}] Error creating message element`, err, {
+        context,
+        sender,
+        messageId: messageId || 'N/A'
+      });
+      return null;
     }
-
-    // Assemble the message element
-    domAPI.appendChild(messageEl, bubbleEl);
-    domAPI.appendChild(messageEl, metadataEl);
-    domAPI.appendChild(messageEl, actionsEl);
-
-    logger.info(`[${MODULE_CONTEXT}] Message element created`, {
-      context,
-      sender,
-      messageId: messageId || 'N/A'
-    });
-
-    return messageEl;
   }
 
   /**
@@ -477,7 +720,6 @@ export function createChatUIEnhancements(deps = {}) {
     // Set sanitized HTML, then get textContent which is plain text
     domAPI.setInnerHTML(tempEl, sanitizedMessage); // Use domAPI wrapper for innerHTML
     const textContent = domAPI.getTextContent(tempEl); // Use domAPI wrapper for textContent
-
 
     const doc = domAPI.getDocument();
 
@@ -502,17 +744,20 @@ export function createChatUIEnhancements(deps = {}) {
       logger.warn(`[${MODULE_CONTEXT}] Clipboard API not available, using fallback copy method`, {
         context
       });
+
       const textarea = domAPI.createElement('textarea');
-      if (!textarea) {
-        logger.error(`[${MODULE_CONTEXT}] Failed to create textarea for fallback copy`, {
-          context
-        });
-        showCopyFeedback(false);
-        return;
-      }
-      domAPI.setValue(textarea, textContent); // Use domAPI wrapper for value
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
+      domAPI.setStyle(textarea, 'position', 'fixed');
+      domAPI.setStyle(textarea, 'top', '0');
+      domAPI.setStyle(textarea, 'left', '0');
+      domAPI.setStyle(textarea, 'width', '2em');
+      domAPI.setStyle(textarea, 'height', '2em');
+      domAPI.setStyle(textarea, 'padding', '0');
+      domAPI.setStyle(textarea, 'border', 'none');
+      domAPI.setStyle(textarea, 'outline', 'none');
+      domAPI.setStyle(textarea, 'boxShadow', 'none');
+      domAPI.setStyle(textarea, 'background', 'transparent');
+      domAPI.setValue(textarea, textContent);
+
       domAPI.appendChild(doc.body, textarea);
 
       try {
@@ -542,50 +787,54 @@ export function createChatUIEnhancements(deps = {}) {
   }
 
   /**
-   * Show feedback after copy attempt using a temporary toast element.
-   * @param {boolean} success - Whether the copy was successful.
+   * Show feedback toast for copy operation
+   * @param {boolean} success - Whether the copy operation was successful
    */
   function showCopyFeedback(success) {
     const context = `${MODULE_CONTEXT}::showCopyFeedback`;
-    const doc = domAPI.getDocument();
+    try {
+      // Create toast element
+      const toast = domAPI.createElement('div');
+      toast.className = `copy-toast ${success ? 'success' : 'error'}`;
+      toast.textContent = success ? 'Copied to clipboard!' : 'Failed to copy';
 
-    // Remove existing toast if present
-    const existing = domAPI.getElementById('chatCopyToast');
-    if (existing && existing.parentNode) {
-      domAPI.removeChild(existing.parentNode, existing);
-    }
-
-    // Create toast notification
-    const toast = domAPI.createElement('div');
-    if (!toast) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create copy feedback toast element`, {
-        context
-      });
-      return;
-    }
-    domAPI.setElementId(toast, 'chatCopyToast'); // Use domAPI wrapper for ID
-    domAPI.setClassName(toast, `fixed bottom-4 right-4 px-4 py-2 rounded-lg shadow-lg ${success ? 'bg-success text-success-content' : 'bg-error text-error-content'} transition-opacity duration-300`); // Use domAPI wrapper for className
-    domAPI.setTextContent(toast, success ? 'Copied to clipboard!' : 'Failed to copy text'); // Use domAPI wrapper for textContent
-
-    // Add to document body using domAPI
-    domAPI.appendChild(doc.body, toast);
-    logger.info(`[${MODULE_CONTEXT}] Copy feedback toast shown (success: ${success})`, {
-      context
-    });
-
-    // Remove after delay
-    browserService.setTimeout(() => {
-      // Use domAPI wrapper for style
+      // Style the toast
+      domAPI.setStyle(toast, 'position', 'fixed');
+      domAPI.setStyle(toast, 'bottom', '20px');
+      domAPI.setStyle(toast, 'left', '50%');
+      domAPI.setStyle(toast, 'transform', 'translateX(-50%)');
+      domAPI.setStyle(toast, 'padding', '8px 16px');
+      domAPI.setStyle(toast, 'background', success ? 'var(--color-success)' : 'var(--color-error)');
+      domAPI.setStyle(toast, 'color', 'white');
+      domAPI.setStyle(toast, 'border-radius', '4px');
+      domAPI.setStyle(toast, 'z-index', '9999');
       domAPI.setStyle(toast, 'opacity', '0');
+      domAPI.setStyle(toast, 'transition', 'opacity 0.3s ease');
+
+      // Add to DOM
+      const doc = domAPI.getDocument();
+      domAPI.appendChild(doc.body, toast);
+
+      // Animate in
       browserService.setTimeout(() => {
-        if (toast.parentNode) {
-          domAPI.removeChild(toast.parentNode, toast); // Use domAPI wrapper for removeChild
-          logger.info(`[${MODULE_CONTEXT}] Copy feedback toast removed`, {
-            context
-          });
-        }
-      }, 300); // Fade out duration
-    }, 2000); // Display duration
+        domAPI.setStyle(toast, 'opacity', '1');
+      }, 10);
+
+      // Remove after delay
+      browserService.setTimeout(() => {
+        domAPI.setStyle(toast, 'opacity', '0');
+        browserService.setTimeout(() => {
+          if (toast.parentNode) {
+            domAPI.removeChild(toast.parentNode, toast);
+          }
+        }, 300);
+      }, 2000);
+    } catch (err) {
+      logger.error(`[${MODULE_CONTEXT}] Error showing copy feedback`, err, {
+        context,
+        success
+      });
+    }
   }
 
   /**
@@ -615,141 +864,120 @@ export function createChatUIEnhancements(deps = {}) {
   }
 
   /**
-   * Show typing indicator in the chat container.
+   * Scroll a container to the bottom.
+   * @param {HTMLElement} container - The container to scroll.
+   */
+  function scrollToBottom(container) {
+    if (!container) return;
+
+    // Use requestAnimationFrame for smooth scrolling after DOM updates
+    browserService.requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+  }
+
+  /**
+   * Show typing indicator in the chat UI.
    */
   function showTypingIndicator() {
     const context = `${MODULE_CONTEXT}::showTypingIndicator`;
     if (state.typingIndicatorVisible) {
-      logger.debug(`[${MODULE_CONTEXT}] Typing indicator already visible`, {
+      logger.debug(`[${MODULE_CONTEXT}] Typing indicator already visible, skipping`, {
         context
       });
       return;
     }
 
-    const chatContainer =
-      state.messageContainer || domAPI.getElementById('chatMessages');
-    if (!chatContainer) {
-      logger.warn(`[${MODULE_CONTEXT}] Chat container not found for typing indicator`, {
+    const container = state.messageContainer || domAPI.getElementById('chatMessages');
+    if (!container) {
+      logger.warn(`[${MODULE_CONTEXT}] Cannot show typing indicator, container not found`, {
         context
       });
       return;
     }
 
-    // Create indicator element using domAPI
+    // Create typing indicator element
     const indicatorEl = domAPI.createElement('div');
-    if (!indicatorEl) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create typing indicator element`, {
-        context
-      });
-      return;
-    }
-    domAPI.setElementId(indicatorEl, 'typingIndicator');
-    domAPI.setClassName(indicatorEl, 'chat-message ai-message');
+    indicatorEl.id = 'typingIndicator';
+    indicatorEl.className = 'typing-indicator';
 
-    // Create typing dots container using domAPI
-    const indicatorContent = domAPI.createElement('div');
-    if (!indicatorContent) {
-      logger.error(`[${MODULE_CONTEXT}] Failed to create typing indicator content element`, {
-        context
-      });
-      // Clean up partially created element if any
-      if (indicatorEl && indicatorEl.parentNode) {
-        domAPI.removeChild(indicatorEl.parentNode, indicatorEl);
-      }
-      return;
-    }
-    domAPI.setClassName(indicatorContent, 'typing-indicator');
+    // Create dots
+    const dotsContainer = domAPI.createElement('div');
+    dotsContainer.className = 'typing-dots';
 
-    // Create individual span dots using domAPI instead of innerHTML
     for (let i = 0; i < 3; i++) {
-      const span = domAPI.createElement('span');
-      domAPI.appendChild(indicatorContent, span);
+      const dot = domAPI.createElement('div');
+      dot.className = 'typing-dot';
+      domAPI.appendChild(dotsContainer, dot);
     }
 
-    domAPI.appendChild(indicatorEl, indicatorContent);
-    domAPI.appendChild(chatContainer, indicatorEl); // Use domAPI for append
-    scrollToBottom(chatContainer);
+    domAPI.appendChild(indicatorEl, dotsContainer);
+    domAPI.appendChild(container, indicatorEl);
 
+    scrollToBottom(container);
     state.typingIndicatorVisible = true;
-    logger.info(`[${MODULE_CONTEXT}] Typing indicator shown`, {
+
+    logger.debug(`[${MODULE_CONTEXT}] Typing indicator shown`, {
       context
     });
   }
 
   /**
-   * Hide typing indicator if currently visible.
+   * Hide typing indicator in the chat UI.
    */
   function hideTypingIndicator() {
     const context = `${MODULE_CONTEXT}::hideTypingIndicator`;
     if (!state.typingIndicatorVisible) {
-      logger.debug(`[${MODULE_CONTEXT}] Typing indicator already hidden`, {
+      logger.debug(`[${MODULE_CONTEXT}] No typing indicator visible, skipping`, {
         context
       });
       return;
     }
 
-    const chatContainer =
-      state.messageContainer || domAPI.getElementById('chatMessages');
-    // Find the indicator element using querySelector on the container
-    const indicator =
-      domAPI.querySelector(chatContainer, '#typingIndicator');
+    const indicator = domAPI.getElementById('typingIndicator');
     if (indicator && indicator.parentNode) {
-      domAPI.removeChild(indicator.parentNode, indicator); // Use domAPI for removeChild
-      logger.info(`[${MODULE_CONTEXT}] Typing indicator hidden`, {
+      domAPI.removeChild(indicator.parentNode, indicator);
+      state.typingIndicatorVisible = false;
+      logger.debug(`[${MODULE_CONTEXT}] Typing indicator removed`, {
         context
       });
     } else {
-      logger.warn(`[${MODULE_CONTEXT}] Typing indicator element not found to hide`, {
+      logger.warn(`[${MODULE_CONTEXT}] Cannot hide typing indicator, element not found`, {
         context
       });
+      // Reset state anyway to avoid getting stuck
+      state.typingIndicatorVisible = false;
     }
-
-    state.typingIndicatorVisible = false;
   }
 
   /**
-   * Scroll chat container to bottom using scrollTop.
-   * @param {HTMLElement} container - The chat container element.
+   * Set the active message container for the chat UI.
+   * This allows the module to work with different chat containers.
+   * @param {HTMLElement} messageContainer - The container element for chat messages.
    */
-  function scrollToBottom(container) {
-    if (!container) return;
-    // Direct DOM property access for performance and standard behavior
-    container.scrollTop = container.scrollHeight;
-  }
+  function setMessageContainer(messageContainer) {
+    const context = `${MODULE_CONTEXT}::setMessageContainer`;
 
-  /**
-   * Clean up all resources, primarily event listeners tracked by eventHandlers.
-   */
-  function cleanup() {
-    const context = `${MODULE_CONTEXT}::cleanup`;
-    if (eventHandlers.cleanupListeners) {
-      eventHandlers.cleanupListeners({
-        context: MODULE_CONTEXT
-      });
-      logger.info(`[${MODULE_CONTEXT}] Event listeners cleaned up`, {
-        context
-      });
-    }
-    hideTypingIndicator(); // Ensure indicator is removed on cleanup
-    state.initialized = false;
-    state.initializing = null;
-    state.typingIndicatorVisible = false;
-    state.messageContainer = null; // Clear cached container on cleanup
-    logger.info(`[${MODULE_CONTEXT}] Module state reset`, {
-      context
+    hideTypingIndicator(); // remove orphan indicator from old pane if any
+
+    /* remember the active container so showTypingIndicator/… work for both
+       the global chat and the per-project chat inside Project Details */
+    state.messageContainer = messageContainer || null; // Cache the provided container
+    state.typingIndicatorVisible = false; // reset state for new pane
+
+    logger.debug(`[${MODULE_CONTEXT}] Message container set`, {
+      context,
+      containerId: messageContainer?.id || 'null'
     });
   }
 
   /**
-   * Attach or re-attach enhanced event handlers to specific chat UI elements.
-   * This is useful when the chat UI might be dynamically replaced (e.g., in modals).
-   * Cleans up previous listeners for this module's context before adding new ones.
-   *
-   * @param {Object} params - DOM handles and callbacks.
-   *   @param {HTMLElement} params.inputField - The chat input element.
-   *   @param {HTMLElement} params.sendButton - The send button element.
-   *   @param {HTMLElement} [params.messageContainer] - Optional message container element to cache.
-   *   @param {Function} params.onSend - Callback function when a message should be sent (triggered by Enter key or Send button click). Receives the input value.
+   * Attach event handlers to chat UI elements.
+   * @param {Object} options - Options for attaching event handlers.
+   * @param {HTMLElement} options.inputField - The input field element.
+   * @param {HTMLElement} options.sendButton - The send button element.
+   * @param {HTMLElement} options.messageContainer - The container for messages.
+   * @param {Function} options.onSend - Callback function when a message is sent.
    */
   function attachEventHandlers({
     inputField,
@@ -758,24 +986,19 @@ export function createChatUIEnhancements(deps = {}) {
     onSend
   }) {
     const context = `${MODULE_CONTEXT}::attachEventHandlers`;
-    logger.info(`[${MODULE_CONTEXT}] Attaching enhanced event handlers`, {
-      context
-    });
 
-    /* ‼️ Prevent listener duplication when ChatManager re-binds to a new pane */
-    eventHandlers.cleanupListeners({
-      context: MODULE_CONTEXT
-    });
-    logger.debug(`[${MODULE_CONTEXT}] Cleaned up previous listeners for re-attachment`, {
-      context
-    });
+    if (!inputField || !sendButton || !messageContainer) {
+      logger.error(`[${MODULE_CONTEXT}] Missing required elements for attaching event handlers`, {
+        context,
+        hasInputField: !!inputField,
+        hasSendButton: !!sendButton,
+        hasMessageContainer: !!messageContainer
+      });
+      return;
+    }
 
-    hideTypingIndicator(); // remove orphan indicator from old pane if any
-
-    /* remember the active container so showTypingIndicator/… work for both
-       the global chat and the per-project chat inside Project Details */
-    state.messageContainer = messageContainer || null; // Cache the provided container
-    state.typingIndicatorVisible = false; // reset state for new pane
+    // Set the active message container
+    setMessageContainer(messageContainer);
 
     // Enhanced submit on Enter (no Shift)
     if (inputField && typeof onSend === 'function') {
@@ -793,13 +1016,6 @@ export function createChatUIEnhancements(deps = {}) {
           description: 'Enhanced chat input handler on keydown'
         }
       );
-      logger.debug(`[${MODULE_CONTEXT}] Keydown listener attached to inputField`, {
-        context
-      });
-    } else {
-      logger.warn(`[${MODULE_CONTEXT}] Input field or onSend callback missing, skipping keydown listener attachment`, {
-        context
-      });
     }
 
     // Send button click handler
@@ -815,15 +1031,11 @@ export function createChatUIEnhancements(deps = {}) {
           description: 'Send button click handler'
         }
       );
-      logger.debug(`[${MODULE_CONTEXT}] Click listener attached to sendButton`, {
-        context
-      });
-    } else {
-      logger.warn(`[${MODULE_CONTEXT}] Send button or onSend callback missing, skipping click listener attachment`, {
-        context
-      });
     }
-    // Could add enhanced copy, emoji menu, etc.
+
+    logger.info(`[${MODULE_CONTEXT}] Event handlers attached to chat UI elements`, {
+      context
+    });
   }
 
   /**
@@ -842,80 +1054,38 @@ export function createChatUIEnhancements(deps = {}) {
     }
 
     return new Promise((resolve) => {
-      // Sanitize user-provided conversation title before embedding
-      const safeTitle = conversationTitle ? sanitizer.sanitize(conversationTitle) : "this conversation";
-      // Sanitize the entire message string containing static text and sanitized title
-      const msg = sanitizer.sanitize(
-        `Are you sure you want to delete <strong>${safeTitle}</strong>? This action cannot be undone.`
-      );
-      const confirmBtnId = "confirmDeleteBtn_" + Math.random().toString(36).slice(2, 10);
-      const cancelBtnId = "cancelDeleteBtn_" + Math.random().toString(36).slice(2, 10);
+      const modalContext = `${MODULE_CONTEXT}:deleteConversationModal`;
+      const confirmBtnId = 'confirmDeleteConversation';
+      const cancelBtnId = 'cancelDeleteConversation';
 
-      // Sanitize the entire modal HTML string before passing it to showModal
-      const modalHtml = sanitizer.sanitize(`
-        <div class="p-4">
-          <div class="text-lg font-bold mb-2 text-error">Delete Conversation</div>
-          <div class="mb-4">${msg}</div>
-          <div class="flex flex-row-reverse gap-2">
-            <button class="btn btn-error btn-sm" id="${confirmBtnId}">Delete</button>
-            <button class="btn btn-outline btn-sm" id="${cancelBtnId}">Cancel</button>
+      // Sanitize conversation title for display
+      const safeTitle = sanitizer.sanitize(conversationTitle || 'this conversation');
+
+      const modalContent = `
+        <div class="modal-content p-6">
+          <h3 class="text-lg font-bold mb-4">Delete Conversation</h3>
+          <p class="mb-6">Are you sure you want to delete "${safeTitle}"? This action cannot be undone.</p>
+          <div class="modal-actions flex justify-end gap-2">
+            <button id="${cancelBtnId}" class="btn btn-ghost">Cancel</button>
+            <button id="${confirmBtnId}" class="btn btn-error">Delete</button>
           </div>
         </div>
-      `);
+      `;
 
-      // showModal safely mounts a modal and returns its DOM for wiring
-      const modalEl = modalManager.showModal({
-        content: modalHtml,
-        closeOnBackdrop: false, // User must click a button
-        width: 390,
-        context: MODULE_CONTEXT // Context for modal manager's tracking
+      // Function to handle modal close with result
+      const handleClose = (confirmed) => {
+        modalManager.closeModal();
+        resolve(confirmed);
+      };
+
+      // Show the modal
+      modalManager.showModal({
+        content: modalContent,
+        onClose: () => handleClose(false)
       });
 
-      if (!modalEl) {
-        logger.error(`[${MODULE_CONTEXT}] modalManager.showModal returned null`, {
-          context
-        });
-        resolve(false); // Cannot show modal, treat as cancel
-        return;
-      }
-
-      const modalContext = `confirmDeleteModal:${confirmBtnId}`; // Specific context for modal listeners
-
-      function handleClose(confirmed) {
-        // Use domAPI wrapper for checking parentNode and removing
-        if (modalEl && domAPI.getParentNode(modalEl)) {
-          modalManager.closeModal(modalEl);
-          logger.info(`[${MODULE_CONTEXT}] Modal closed`, {
-            context: modalContext,
-            confirmed
-          });
-        } else {
-          logger.warn(`[${MODULE_CONTEXT}] Modal element not found or already removed during close`, {
-            context: modalContext
-          });
-        }
-
-        if (confirmed) {
-          logger.info(`[${MODULE_CONTEXT}] User confirmed conversation delete`, {
-            context: modalContext
-          });
-        } else {
-          logger.info(`[${MODULE_CONTEXT}] User canceled conversation delete`, {
-            context: modalContext
-          }); // Use info for cancel, not warn
-        }
-        // Cleanup listeners specifically for this modal instance
-        eventHandlers.cleanupListeners({
-          context: modalContext
-        });
-        resolve(!!confirmed);
-      }
-
-      // Hook buttons via DI event handler, always with context
-      const doc = domAPI.getDocument();
+      // Get buttons and attach event listeners
       const confirmBtn = domAPI.getElementById(confirmBtnId);
-      const cancelBtn = domAPI.getElementById(cancelBtnId);
-
       if (confirmBtn) {
         eventHandlers.trackListener(
           confirmBtn,
@@ -935,6 +1105,7 @@ export function createChatUIEnhancements(deps = {}) {
         });
       }
 
+      const cancelBtn = domAPI.getElementById(cancelBtnId);
       if (cancelBtn) {
         eventHandlers.trackListener(
           cancelBtn,
@@ -956,6 +1127,29 @@ export function createChatUIEnhancements(deps = {}) {
     });
   }
 
+  /**
+   * Clean up all event listeners and resources.
+   */
+  function cleanup() {
+    const context = `${MODULE_CONTEXT}::cleanup`;
+    logger.info(`[${MODULE_CONTEXT}] Cleaning up chat UI enhancements`, {
+      context
+    });
+
+    // Clean up all event listeners
+    eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
+
+    // Reset state
+    state.initialized = false;
+    state.initializing = null;
+    state.typingIndicatorVisible = false;
+    state.messageContainer = null;
+
+    logger.info(`[${MODULE_CONTEXT}] Chat UI enhancements cleaned up`, {
+      context
+    });
+  }
+
   // Public API
   return {
     initialize,
@@ -965,6 +1159,9 @@ export function createChatUIEnhancements(deps = {}) {
     createMessageElement,
     attachEventHandlers,
     confirmDeleteConversationModal,
-    renderCitationsAsDOM // Exporting the DOM-building function, not string renderer
+    renderCitationsAsDOM,
+    setMessageContainer,
+    setupMobileEnhancements,
+    setupProjectChatEnhancements
   };
 }

@@ -28,7 +28,6 @@ export function createProjectDetailsEnhancements({
   // State management
   const state = {
     initialized: false,
-    // Token stats removed for mobile refactor
     activeTab: 'chat',
     // Project list state
     projectListInitialized: false,
@@ -38,11 +37,6 @@ export function createProjectDetailsEnhancements({
 
   // Event tracking context
   const CONTEXT = 'projectEnhancements';
-
-  /**
-   * Convert linear progress to circular progress for token usage
-   */
-  // (Mobile refactor) Legacy token usage indicator removed
 
   /**
    * Generate a simple sparkline visualization with random data
@@ -195,7 +189,7 @@ export function createProjectDetailsEnhancements({
           fabElement,
           'touchend',
           () => {
-            fabElement.style.transform = '';
+            fabElement.style.transform = 'scale(1)';
           },
           { context: CONTEXT }
         );
@@ -206,30 +200,36 @@ export function createProjectDetailsEnhancements({
   }
 
   /**
-   * Enhance empty states with better visuals
+   * Enhance empty state displays with more visual appeal
    */
   function enhanceEmptyStates() {
     try {
-      // Find all empty state messages
-      const emptyStates = domAPI.querySelectorAll('.text-base-content\\/60.text-center.py-8');
+      // Find all empty state elements
+      const emptyStates = domAPI.querySelectorAll('.empty-state');
 
       emptyStates.forEach(emptyState => {
-        const message = emptyState.textContent.trim();
-        const parentId = emptyState.parentElement?.id || '';
+        // Skip if already enhanced
+        if (emptyState.classList.contains('enhanced')) return;
 
-        // Create enhanced empty state
+        // Create enhanced empty state element
         const enhancedEmptyState = domAPI.createElement('div');
-        enhancedEmptyState.className = 'empty-state';
+        enhancedEmptyState.className = 'empty-state enhanced';
 
-        // Configure icon and text based on container context
-        let icon, title, description;
+        // Get parent ID to determine context
+        const parentId = emptyState.parentElement?.id || '';
+        const message = emptyState.textContent || '';
 
-        if (parentId.includes('file')) {
+        // Customize based on context
+        let icon = '';
+        let title = '';
+        let description = '';
+
+        if (parentId.includes('filesList')) {
           icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>`;
-          title = 'No Files Yet';
-          description = 'Upload files to your project to get started';
+          title = 'No Files Uploaded';
+          description = 'Upload files to use in your conversations';
         } else if (parentId.includes('artifactsList')) {
           icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
@@ -238,22 +238,21 @@ export function createProjectDetailsEnhancements({
           description = 'Artifacts will appear here when created during conversations';
         } else if (parentId.includes('conversationsList')) {
           icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>`;
           title = 'No Conversations Yet';
-          description = 'Start a new chat to begin your project';
-        } else if (parentId.includes('knowledgeProcessedFiles')) {
+          description = 'Start a new conversation to chat with the AI';
+        } else if (parentId.includes('knowledgeResults')) {
           icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>`;
-          title = 'Knowledge Base Empty';
-          description = 'Upload files to add them to your knowledge base';
+          title = 'Knowledge Search';
+          description = 'Search your project knowledge base';
         } else {
-          // Fallback
           icon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>`;
-          title = 'Nothing Here Yet';
+          title = 'No Content';
           description = message;
         }
 
@@ -272,7 +271,7 @@ export function createProjectDetailsEnhancements({
     }
   }
 
-  /**
+    /**
    * Track active tab changes to update FAB behavior
    */
   function setupTabTracking() {
@@ -291,7 +290,7 @@ export function createProjectDetailsEnhancements({
               // Always show FAB, but change its appearance based on context
               const tabToIconMap = {
                 files: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>',
-                chat: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>',
+                chat: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>',
                 knowledge: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>',
                 details: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>',
                 artifacts: '<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>'
@@ -301,127 +300,28 @@ export function createProjectDetailsEnhancements({
               if (tabToIconMap[tabId]) {
                 domAPI.setInnerHTML(fab, sanitizer.sanitize(tabToIconMap[tabId]));
               }
-
-              // Update title/aria-label based on tab
-              const tabToTitleMap = {
-                files: 'Upload Files',
-                chat: 'New Conversation',
-                knowledge: 'Search Knowledge Base',
-                details: 'Edit Project Details',
-                artifacts: 'View Artifacts'
-              };
-
-              if (tabToTitleMap[tabId]) {
-                fab.title = tabToTitleMap[tabId];
-                fab.setAttribute('aria-label', tabToTitleMap[tabId]);
-              }
             }
           }
         };
 
-        const tabUnsub = eventHandlers.trackListener(
+        // Add click handler to track tab changes
+        eventHandlers.trackListener(
           button,
           'click',
-          tabHandler,
+          safeHandler(tabHandler, 'tabClick'),
           { context: CONTEXT }
         );
+
+        // Check if this tab is already active
+        if (button.classList.contains('active')) {
+          const tabId = button.getAttribute('data-tab');
+          if (tabId) {
+            state.activeTab = tabId;
+          }
+        }
       });
     } catch (error) {
       logger.error('[setupTabTracking]', error, { context: CONTEXT });
-    }
-  }
-
-  /**
-   * Enhance project list with improved visuals and interactions
-   */
-  function enhanceProjectList() {
-    try {
-      // Get the project list container
-      const projectList = domAPI.getElementById('projectList');
-      if (!projectList) return;
-
-      // Apply enhancements to project cards
-      enhanceProjectCards();
-
-      // Add search and filtering enhancements
-      setupProjectSearchFiltering();
-
-      // Add animation to "New Project" button
-      const createBtn = domAPI.getElementById('projectListCreateBtn');
-      if (createBtn) {
-        createBtn.classList.add('enhanced-btn');
-      }
-
-      // Make sure list is visible with a smooth fade-in
-      projectList.style.opacity = '1';
-
-      // Mobile-specific enhancements
-      if (browserService && browserService.isMobile) {
-        // Improve touch targets
-        domAPI.querySelectorAll('#projectList .btn, #projectList button').forEach(btn => {
-          if (!btn.classList.contains('btn-lg')) {
-            btn.style.minHeight = '44px'; // Ensure minimum touch target size
-          }
-        });
-
-        // Improve keyboard experience for search input
-        const searchInput = domAPI.getElementById('projectSearchInput');
-        if (searchInput) {
-          // Prevent iOS zoom by ensuring font size is at least 16px
-          searchInput.style.fontSize = '16px';
-
-          // Add proper mobile keyboard support
-          searchInput.setAttribute('inputmode', 'search');
-          searchInput.setAttribute('enterkeyhint', 'search');
-
-          // Clear button for mobile
-          const clearBtn = domAPI.createElement('button');
-          clearBtn.className = 'input-clear-btn';
-          domAPI.setInnerHTML(clearBtn, sanitizer.sanitize(`
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          `));
-
-          // Insert clear button after search input
-          domAPI.insertBefore(
-            searchInput.parentNode,
-            clearBtn,
-            domAPI.getProperty(searchInput, 'nextSibling')
-          );
-
-          // Initially hidden
-          clearBtn.style.display = 'none';
-
-          // Show/hide clear button based on input content
-          eventHandlers.trackListener(
-            searchInput,
-            'input',
-            () => {
-              clearBtn.style.display = searchInput.value ? 'flex' : 'none';
-            },
-            { context: CONTEXT }
-          );
-
-          // Clear input when button is clicked
-          eventHandlers.trackListener(
-            clearBtn,
-            'click',
-            () => {
-              searchInput.value = '';
-              domAPI.dispatchEvent(
-                searchInput,
-                eventHandlers.createCustomEvent('input')
-              );
-              searchInput.focus();
-            },
-            { context: CONTEXT }
-          );
-        }
-      }
-
-      state.projectListInitialized = true;
-      logger.debug('[enhanceProjectList] Project list enhancements applied', { context: CONTEXT });
-    } catch (error) {
-      logger.error('[enhanceProjectList]', error, { context: CONTEXT });
     }
   }
 
@@ -445,156 +345,45 @@ export function createProjectDetailsEnhancements({
 
           badgeElems.forEach(badge => {
             const tip = badge.dataset.tip;
-
-            // Replace emoji-based badges with styled badges
             if (tip === 'Pinned') {
-              badge.classList.add('badge', 'badge-pinned');
-              domAPI.setInnerHTML(badge, sanitizer.sanitize(`
-                <svg xmlns="http://www.w3.org/2000/svg" class="metadata-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              badge.innerHTML = sanitizer.sanitize(`
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
-                <span>Pinned</span>
-              `));
+              `);
+              badge.classList.add('text-warning');
             } else if (tip === 'Archived') {
-              badge.classList.add('badge', 'badge-archived');
-              domAPI.setInnerHTML(badge, sanitizer.sanitize(`
-                <svg xmlns="http://www.w3.org/2000/svg" class="metadata-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              badge.innerHTML = sanitizer.sanitize(`
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
-                <span>Archived</span>
-              `));
+              `);
+              badge.classList.add('text-error');
             }
           });
         }
 
-        // Add metadata to the footer
-        const footer = card.querySelector('.mt-auto');
-        if (footer) {
-          // Create metadata container if it doesn't exist
-          let metadataDiv = footer.querySelector('.metadata');
-          if (!metadataDiv) {
-            metadataDiv = domAPI.createElement('div');
-            metadataDiv.className = 'metadata mt-2';
-
-            // Append metadata about activity/date (using existing date if available)
-            const dateText = footer.textContent?.trim() || '';
-            if (dateText) {
-              domAPI.setInnerHTML(metadataDiv, sanitizer.sanitize(`
-                <div class="metadata-item">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="metadata-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span>${dateText}</span>
-                </div>
-              `));
-            }
-
-            footer.appendChild(metadataDiv);
-          }
-        }
-      });
-    } catch (error) {
-      logger.error('[enhanceProjectCards]', error, { context: CONTEXT });
-    }
-  }
-
-  /**
-   * Setup enhanced search and filtering for project list
-   */
-  function setupProjectSearchFiltering() {
-    try {
-      const searchInput = domAPI.getElementById('projectSearchInput');
-      if (!searchInput) return;
-
-      // Add real-time search filtering
-      const handleSearch = (e) => {
-        const searchTerm = e.target.value.toLowerCase().trim();
-        state.searchTerm = searchTerm;
-
-        const projectCards = domAPI.querySelectorAll('.project-card');
-        const noProjectsMessage = domAPI.getElementById('noProjectsMessage');
-
-        let visibleCount = 0;
-
-        projectCards.forEach(card => {
-          const projectName = card.querySelector('.project-name')?.textContent?.toLowerCase() || '';
-          const projectDescription = card.querySelector('.text-sm.text-base-content\\/70')?.textContent?.toLowerCase() || '';
-
-          // Check if the card matches the search term
-          const matches = projectName.includes(searchTerm) || projectDescription.includes(searchTerm);
-
-          // Also check if it matches the current filter
-          const isPinned = card.innerHTML.includes('Pinned');
-          const isArchived = card.innerHTML.includes('Archived');
-
-          let matchesFilter = true;
-          if (state.currentFilter === 'pinned' && !isPinned) {
-            matchesFilter = false;
-          } else if (state.currentFilter === 'archived' && !isArchived) {
-            matchesFilter = false;
-          }
-
-          // Show/hide based on filter and search
-          const shouldShow = matches && matchesFilter;
-          card.style.display = shouldShow ? '' : 'none';
-
-          if (shouldShow) visibleCount++;
-        });
-
-        // Show/hide no projects message
-        if (noProjectsMessage) {
-          noProjectsMessage.style.display = visibleCount === 0 ? 'block' : 'none';
-        }
-      };
-
-      // Track search input events
-      eventHandlers.trackListener(
-        searchInput,
-        'input',
-        handleSearch,
-        { context: CONTEXT }
-      );
-
-      // Add filter tab click tracking
-      const filterTabs = domAPI.querySelectorAll('#projectFilterTabs .tab');
-      filterTabs.forEach(tab => {
+        // Add hover effect for cards
         eventHandlers.trackListener(
-          tab,
-          'click',
+          card,
+          'mouseenter',
           () => {
-            state.currentFilter = tab.dataset.filter || 'all';
+            card.classList.add('hover');
+          },
+          { context: CONTEXT }
+        );
 
-            // Trigger search to apply filtering
-            domAPI.dispatchEvent(
-              searchInput,
-              eventHandlers.createCustomEvent('input')
-            );
+        eventHandlers.trackListener(
+          card,
+          'mouseleave',
+          () => {
+            card.classList.remove('hover');
           },
           { context: CONTEXT }
         );
       });
     } catch (error) {
-      logger.error('[setupProjectSearchFiltering]', error, { context: CONTEXT });
-    }
-  }
-
-  /**
-   * Initialize project list enhancements
-   */
-  async function initializeProjectList() {
-    try {
-      // Wait for project list elements to be ready
-      await domReadinessService.dependenciesAndElements({
-        domSelectors: ['#projectList', '#projectCardsPanel', '#projectFilterTabs'],
-        context: CONTEXT + '_projectList'
-      });
-
-      enhanceProjectList();
-      logger.debug('[initializeProjectList] Project list initialized', { context: CONTEXT });
-      return true;
-    } catch (error) {
-      logger.error('[initializeProjectList]', error, { context: CONTEXT });
-      return false;
+      logger.error('[enhanceProjectCards]', error, { context: CONTEXT });
     }
   }
 
@@ -618,152 +407,320 @@ export function createProjectDetailsEnhancements({
         <span class="ml-2">Pull to refresh</span>
       `));
 
-      // Insert at the top of the conversations list
-      domAPI.insertBefore(conversationsList, pullIndicator, domAPI.getProperty(conversationsList, 'firstChild'));
+      // Add to DOM
+      const container = conversationsList.parentElement;
+      if (container) {
+        domAPI.insertBefore(container, pullIndicator, container.firstChild);
+      }
 
-      // State variables for tracking pull gesture
+      // Track pull state
       let startY = 0;
       let currentY = 0;
       let isPulling = false;
       let refreshTriggered = false;
 
-      // Touch event handlers using strict DI practices
-      const onTouchStart = (e) => {
-        try {
-          const scrollTop = domAPI.getProperty(conversationsList, 'scrollTop');
-          if (scrollTop <= 5) {
-            const touches = domAPI.getProperty(e, 'touches');
-            startY = domAPI.getProperty(touches[0], 'clientY');
-            isPulling = true;
-          }
-        } catch (err) {
-          logger.error('[setupPullToRefresh][onTouchStart]', err, { context: CONTEXT });
+      // Touch start handler
+      const handleTouchStart = (e) => {
+        // Only enable pull if at the top of the list
+        if (conversationsList.scrollTop <= 0) {
+          startY = e.touches[0].clientY;
+          isPulling = true;
         }
       };
 
-      const onTouchMove = (e) => {
-        try {
-          if (!isPulling) return;
-          const touches = domAPI.getProperty(e, 'touches');
-          currentY = domAPI.getProperty(touches[0], 'clientY');
-          const pullDistance = currentY - startY;
+      // Touch move handler
+      const handleTouchMove = (e) => {
+        if (!isPulling) return;
 
-          // Only allow pulling down, not up
-          if (pullDistance <= 0) {
-            isPulling = false;
-            return;
+        currentY = e.touches[0].clientY;
+        const pullDistance = currentY - startY;
+
+        // Only allow pulling down
+        if (pullDistance > 0) {
+          // Calculate pull percentage (max 100px pull)
+          const pullPercent = Math.min(pullDistance / 100, 1);
+
+          // Transform the indicator
+          domAPI.setStyle(pullIndicator, 'transform', `translateY(${pullDistance / 2}px)`);
+
+          // Show indicator when pulling
+          if (pullDistance > 20) {
+            domAPI.addClass(pullIndicator, 'visible');
           }
 
-          // Apply resistance to the pull
-          const resistance = 0.4;
-          const transformY = Math.min(pullDistance * resistance, 80);
-
-          domAPI.setStyle(pullIndicator, 'transform', `translateY(${transformY}px)`);
-          domAPI.addClass(pullIndicator, 'visible');
-
-          // If pulled far enough, mark as ready to refresh
-          if (transformY > 60 && !refreshTriggered) {
+          // Change text when pulled enough to refresh
+          if (pullDistance > 70 && !refreshTriggered) {
             domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
               <div class="mobile-loading-indicator"></div>
               <span class="ml-2">Release to refresh</span>
             `));
-            refreshTriggered = true;
-          } else if (transformY <= 60 && refreshTriggered) {
-            domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
-              <div class="mobile-loading-indicator"></div>
-              <span class="ml-2">Pull to refresh</span>
-            `));
-            refreshTriggered = false;
           }
 
           // Prevent default scrolling
-          domAPI.preventDefault(e);
-        } catch (err) {
-          logger.error('[setupPullToRefresh][onTouchMove]', err, { context: CONTEXT });
+          e.preventDefault();
         }
       };
 
-      const onTouchEnd = () => {
-        try {
-          if (!isPulling) return;
+      // Touch end handler
+      const handleTouchEnd = (e) => {
+        if (!isPulling) return;
 
-          // If we pulled far enough, trigger refresh
-          if (refreshTriggered) {
-            domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
-              <div class="mobile-loading-indicator"></div>
-              <span class="ml-2">Refreshing...</span>
-            `));
+        const pullDistance = currentY - startY;
 
-            // Reload conversation list data
-            const projectIdEl = domAPI.querySelector('[data-project-id]');
-            const DependencySystem = eventHandlers.DependencySystem;
-            if (projectIdEl && DependencySystem?.modules?.get('projectManager')) {
-              const projectId = domAPI.getDataAttribute(projectIdEl, 'projectId');
-              const projectManager = DependencySystem.modules.get('projectManager');
-              // Refresh conversations
-              projectManager.loadProjectConversations(projectId)
-                .finally(() => {
-                  browserService.setTimeout(() => {
-                    domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-                    domAPI.removeClass(pullIndicator, 'visible');
-                    isPulling = false;
-                    refreshTriggered = false;
-                  }, 1000);
-                });
-            } else {
-              browserService.setTimeout(() => {
-                domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-                domAPI.removeClass(pullIndicator, 'visible');
-                isPulling = false;
-                refreshTriggered = false;
-              }, 1000);
-            }
+        // If pulled far enough, trigger refresh
+        if (pullDistance > 70) {
+          refreshTriggered = true;
+
+          // Show loading state
+          domAPI.setInnerHTML(pullIndicator, sanitizer.sanitize(`
+            <div class="mobile-loading-indicator animate-spin"></div>
+            <span class="ml-2">Refreshing...</span>
+          `));
+
+          // Reload conversation list data
+          const projectIdEl = domAPI.querySelector('[data-project-id]');
+          const DependencySystem = eventHandlers.DependencySystem;
+          if (projectIdEl && DependencySystem?.modules?.get('projectManager')) {
+            const projectId = domAPI.getDataAttribute(projectIdEl, 'projectId');
+            const projectManager = DependencySystem.modules.get('projectManager');
+            // Refresh conversations
+            projectManager.loadProjectConversations(projectId)
+              .finally(() => {
+                browserService.setTimeout(() => {
+                  domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+                  domAPI.removeClass(pullIndicator, 'visible');
+                  isPulling = false;
+                  refreshTriggered = false;
+                }, 1000);
+              });
           } else {
-            // Not pulled far enough, reset
-            domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-            domAPI.removeClass(pullIndicator, 'visible');
+            // If we can't find the project manager, just reset
+            browserService.setTimeout(() => {
+              domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+              domAPI.removeClass(pullIndicator, 'visible');
+              isPulling = false;
+              refreshTriggered = false;
+            }, 1000);
           }
+        } else {
+          // Reset if not pulled far enough
+          domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+          domAPI.removeClass(pullIndicator, 'visible');
           isPulling = false;
-          refreshTriggered = false;
-        } catch (err) {
-          logger.error('[setupPullToRefresh][onTouchEnd]', err, { context: CONTEXT });
         }
       };
 
-      // Track touch events with proper context tagging
+      // Add event listeners
       eventHandlers.trackListener(
         conversationsList,
         'touchstart',
-        onTouchStart,
+        safeHandler(handleTouchStart, 'pullToRefreshStart'),
         { context: CONTEXT }
       );
+
       eventHandlers.trackListener(
         conversationsList,
         'touchmove',
-        onTouchMove,
+        safeHandler(handleTouchMove, 'pullToRefreshMove'),
         { context: CONTEXT }
       );
+
       eventHandlers.trackListener(
         conversationsList,
         'touchend',
-        onTouchEnd,
+        safeHandler(handleTouchEnd, 'pullToRefreshEnd'),
         { context: CONTEXT }
       );
+
+      logger.info('[setupPullToRefresh] Pull-to-refresh initialized for conversations list', {
+        context: CONTEXT
+      });
     } catch (error) {
-      logger.error('[setupPullToRefresh]', error, { context: 'project-details:pull-to-refresh' });
+      logger.error('[setupPullToRefresh]', error, { context: CONTEXT });
     }
   }
 
   /**
-   * Apply all enhancements
+   * Initialize project list enhancements
+   */
+  async function initializeProjectList() {
+    try {
+      if (state.projectListInitialized) return;
+
+      // Wait for DOM to be ready for project list
+      await domReadinessService.dependenciesAndElements({
+        domSelectors: ['.project-list-container'],
+        context: CONTEXT
+      });
+
+      // Apply project list enhancements
+      enhanceProjectCards();
+      setupProjectFilters();
+
+      state.projectListInitialized = true;
+      logger.info('[initializeProjectList] Project list enhancements initialized', {
+        context: CONTEXT
+      });
+    } catch (error) {
+      logger.error('[initializeProjectList]', error, { context: CONTEXT });
+    }
+  }
+
+  /**
+   * Setup project list filtering and search
+   */
+  function setupProjectFilters() {
+    try {
+      // Get filter buttons and search input
+      const filterButtons = domAPI.querySelectorAll('.project-filter-btn');
+      const searchInput = domAPI.getElementById('projectSearchInput');
+
+      // Add click handlers to filter buttons
+      filterButtons.forEach(button => {
+        const filter = button.dataset.filter || 'all';
+
+        eventHandlers.trackListener(
+          button,
+          'click',
+          safeHandler(() => {
+            // Update active filter
+            state.currentFilter = filter;
+
+            // Update active button state
+            filterButtons.forEach(btn => {
+              if (btn.dataset.filter === filter) {
+                btn.classList.add('active');
+              } else {
+                btn.classList.remove('active');
+              }
+            });
+
+            // Apply filtering
+            applyProjectFilters();
+          }, 'projectFilterClick'),
+          { context: CONTEXT }
+        );
+      });
+
+      // Add search input handler
+      if (searchInput) {
+        eventHandlers.trackListener(
+          searchInput,
+          'input',
+          safeHandler(() => {
+            state.searchTerm = domAPI.getValue(searchInput).toLowerCase();
+            applyProjectFilters();
+          }, 'projectSearchInput'),
+          { context: CONTEXT }
+        );
+      }
+    } catch (error) {
+      logger.error('[setupProjectFilters]', error, { context: CONTEXT });
+    }
+  }
+
+  /**
+   * Apply current filters and search term to project list
+   */
+  function applyProjectFilters() {
+    try {
+      const projectCards = domAPI.querySelectorAll('.project-card');
+      let visibleCount = 0;
+
+      projectCards.forEach(card => {
+        // Get project data from card
+        const isPinned = card.dataset.pinned === 'true';
+        const isArchived = card.dataset.archived === 'true';
+        const projectName = (card.querySelector('.project-name')?.textContent || '').toLowerCase();
+        const projectDesc = (card.querySelector('.project-description')?.textContent || '').toLowerCase();
+
+        // Determine if card should be visible based on filter
+        let isVisible = true;
+
+        // Apply filter
+        switch (state.currentFilter) {
+          case 'pinned':
+            isVisible = isPinned;
+            break;
+          case 'archived':
+            isVisible = isArchived;
+            break;
+          case 'active':
+            isVisible = !isArchived;
+            break;
+          case 'all':
+          default:
+            isVisible = true;
+            break;
+        }
+
+        // Apply search term if present
+        if (state.searchTerm && isVisible) {
+          isVisible = projectName.includes(state.searchTerm) ||
+                      projectDesc.includes(state.searchTerm);
+        }
+
+        // Update visibility
+        if (isVisible) {
+          card.style.display = '';
+          visibleCount++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+
+      // Show/hide empty state
+      const emptyState = domAPI.querySelector('.project-list-empty-state');
+      if (emptyState) {
+        if (visibleCount === 0) {
+          emptyState.style.display = '';
+
+          // Update empty state message based on filter/search
+          const messageEl = emptyState.querySelector('p');
+          if (messageEl) {
+            if (state.searchTerm) {
+              domAPI.setTextContent(messageEl, `No projects found matching "${state.searchTerm}"`);
+            } else {
+              switch (state.currentFilter) {
+                case 'pinned':
+                  domAPI.setTextContent(messageEl, 'No pinned projects');
+                  break;
+                case 'archived':
+                  domAPI.setTextContent(messageEl, 'No archived projects');
+                  break;
+                case 'active':
+                  domAPI.setTextContent(messageEl, 'No active projects');
+                  break;
+                default:
+                  domAPI.setTextContent(messageEl, 'No projects found');
+                  break;
+              }
+            }
+          }
+        } else {
+          emptyState.style.display = 'none';
+        }
+      }
+    } catch (error) {
+      logger.error('[applyProjectFilters]', error, { context: CONTEXT });
+    }
+  }
+
+  /**
+   * Initialize project details enhancements
    */
   async function initialize() {
     try {
-      // First check if we're on the project details page
+      if (state.initialized) return;
+
+      // Determine if we're on the project list or project details page
+      const isProjectListPage = !!domAPI.querySelector('.project-list-container');
       const isProjectDetailsPage = !!domAPI.querySelector('.project-details-root');
 
-      // Or if we're on the project list page
-      const isProjectListPage = !!domAPI.getElementById('projectList');
+      // Initialize appropriate enhancements
+      if (isProjectListPage && !state.projectListInitialized) {
+        await initializeProjectList();
+      }
 
       if (isProjectDetailsPage && !state.initialized) {
         // Wait for DOM to be ready for project details
@@ -790,12 +747,9 @@ export function createProjectDetailsEnhancements({
         }
 
         state.initialized = true;
-        logger.debug('[ProjectEnhancements] Project details initialized successfully', { context: CONTEXT });
-      }
-
-      if (isProjectListPage && !state.projectListInitialized) {
-        // Initialize project list enhancements
-        await initializeProjectList();
+        logger.info('[initialize] Project details enhancements initialized', {
+          context: CONTEXT
+        });
       }
     } catch (error) {
       logger.error('[initialize]', error, { context: CONTEXT });
@@ -803,16 +757,147 @@ export function createProjectDetailsEnhancements({
   }
 
   /**
-   * Clean up event listeners and references
+   * Clean up event listeners and resources
    */
   function cleanup() {
-    eventHandlers.cleanupListeners({ context: CONTEXT });
+    try {
+      // Clean up all event listeners
+      eventHandlers.cleanupListeners({ context: CONTEXT });
+
+      // Reset state
+      state.initialized = false;
+      state.projectListInitialized = false;
+
+      logger.info('[cleanup] Project details enhancements cleaned up', {
+        context: CONTEXT
+      });
+    } catch (error) {
+      logger.error('[cleanup]', error, { context: CONTEXT });
+    }
+  }
+
+  /**
+   * Add chat UI enhancements to the project chat tab
+   * @param {HTMLElement} chatContainer - The container element for the chat UI
+   */
+  function setupProjectChatUI(chatContainer) {
+    try {
+      if (!chatContainer) return;
+
+      // Find the chat UI container in the project details
+      const chatUIContainer = domAPI.getElementById('chatUIContainer');
+      if (!chatUIContainer) return;
+
+      // Check if we have a chatUIEnhancements module available
+      const DependencySystem = eventHandlers.DependencySystem;
+      if (!DependencySystem?.modules?.get('chatUIEnhancements')) {
+        logger.warn('[setupProjectChatUI] chatUIEnhancements module not available', {
+          context: CONTEXT
+        });
+        return;
+      }
+
+      // Get the chatUIEnhancements module
+      const chatUIEnhancements = DependencySystem.modules.get('chatUIEnhancements');
+
+      // Set the message container for the chat UI
+      if (typeof chatUIEnhancements.setMessageContainer === 'function') {
+        const messagesContainer = domAPI.querySelector('#chatUIContainer #chatMessages');
+        if (messagesContainer) {
+          chatUIEnhancements.setMessageContainer(messagesContainer);
+
+          logger.info('[setupProjectChatUI] Set message container for chat UI', {
+            context: CONTEXT
+          });
+        }
+      }
+
+      // Setup project-specific chat enhancements
+      if (typeof chatUIEnhancements.setupProjectChatEnhancements === 'function') {
+        chatUIEnhancements.setupProjectChatEnhancements();
+
+        logger.info('[setupProjectChatUI] Setup project chat enhancements', {
+          context: CONTEXT
+        });
+      }
+    } catch (error) {
+      logger.error('[setupProjectChatUI]', error, { context: CONTEXT });
+    }
+  }
+
+  /**
+   * Enhance project stats with visual elements
+   */
+  function enhanceProjectStats() {
+    try {
+      // Find all stat elements
+      const statElements = domAPI.querySelectorAll('.stat');
+      if (statElements.length === 0) return;
+
+      statElements.forEach(statEl => {
+        // Skip if already enhanced
+        if (statEl.classList.contains('enhanced')) return;
+
+        // Get stat value and title
+        const valueEl = statEl.querySelector('.stat-value');
+        const titleEl = statEl.querySelector('.stat-title');
+
+        if (!valueEl || !titleEl) return;
+
+        const value = valueEl.textContent.trim();
+        const title = titleEl.textContent.trim().toLowerCase();
+
+        // Create sparkline container
+        const sparklineContainer = domAPI.createElement('div');
+        sparklineContainer.className = 'sparkline';
+
+        // Generate appropriate sparkline based on stat type
+        let sparklineHTML = '';
+        let lastValue = 0;
+
+        if (title.includes('completion') || title.includes('progress')) {
+          // For completion/progress stats, use the percentage value
+          const percentMatch = value.match(/(\d+)%/);
+          if (percentMatch) {
+            lastValue = parseInt(percentMatch[1], 10);
+            sparklineHTML = generateSparkline(7, lastValue);
+          }
+        } else if (title.includes('files') || title.includes('artifacts')) {
+          // For count stats, use a random trend
+          const countMatch = value.match(/(\d+)/);
+          if (countMatch) {
+            lastValue = parseInt(countMatch[1], 10);
+            sparklineHTML = generateSparkline(7, Math.min(lastValue * 10, 100));
+          }
+        } else if (title.includes('conversations')) {
+          // For conversation stats, use a random trend
+          const countMatch = value.match(/(\d+)/);
+          if (countMatch) {
+            lastValue = parseInt(countMatch[1], 10);
+            sparklineHTML = generateSparkline(7, Math.min(lastValue * 5, 100));
+          }
+        }
+
+        // Add sparkline if generated
+        if (sparklineHTML) {
+          domAPI.setInnerHTML(sparklineContainer, sanitizer.sanitize(sparklineHTML));
+          domAPI.appendChild(statEl, sparklineContainer);
+          statEl.classList.add('enhanced');
+        }
+      });
+    } catch (error) {
+      logger.error('[enhanceProjectStats]', error, { context: CONTEXT });
+    }
   }
 
   // Return public API
   return {
     initialize,
-    cleanup
+    cleanup,
+    enhanceProjectCards,
+    setupProjectFilters,
+    enhanceEmptyStates,
+    setupProjectChatUI,
+    enhanceProjectStats
   };
 }
-
