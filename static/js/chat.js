@@ -537,6 +537,16 @@ export function createChatManager(deps = {}) {
       return null;
     }
 
+    /**
+     * Called by coreInit once the definitive ProjectDetailsComponent
+     * has been created.  Replaces the placeholder reference.
+     */
+    setProjectDetailsComponent(component) {
+      if (component) {
+        this.projectDetails = component;
+      }
+    }
+
     cleanup() {
       logger.info(`[ChatManager][cleanup] Cleaning up ChatManager for project ${this.projectId}.`, { context: "chatManager" });
       this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
