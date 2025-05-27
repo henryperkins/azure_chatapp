@@ -15,11 +15,16 @@ export function createAppStateManager({ DependencySystem, logger }) {
   if (!DependencySystem) {
     throw new Error('[appState] Missing required dependencies for app state management.');
   }
-  // Allow logger to be missing at first; fallback to browserService console or a no-op.
-  if (!logger) {
+  /* ── mutable logger; upgrade later when real logger exists ── */
+  let _logger = logger;
+  if (!_logger) {
     const winConsole =
       DependencySystem?.modules?.get?.('browserService')?.getWindow?.()?.console;
-    logger = winConsole ?? { info() {}, warn() {}, error() {}, debug() {}, log() {} };
+    _logger = winConsole ?? { info() {}, warn() {}, error() {}, debug() {}, log() {} };
+  }
+
+  function setLogger(newLogger) {
+    if (newLogger) _logger = newLogger;
   }
 
   const appModule = {
@@ -45,7 +50,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
         isAuthenticated: newAuthState.isAuthenticated,
         currentUser: newAuthState.currentUser ? { id: newAuthState.currentUser.id, username: newAuthState.currentUser.username } : null
       };
-      logger.info('[appState][setAuthState] Updating auth state.', {
+      _logger.info('[appState][setAuthState] Updating auth state.', {
         oldAuthState,
         newAuthState: newAuthStateForLog,
         context: 'appState:setAuthState'
@@ -61,7 +66,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
         initializing: this.state.initializing,
         currentPhase: this.state.currentPhase
       };
-      logger.info('[appState][setAppLifecycleState] Updating app lifecycle state.', {
+      _logger.info('[appState][setAppLifecycleState] Updating app lifecycle state.', {
         oldLifecycleState: oldLifecycleStateForLog,
         newLifecycleState,
         context: 'appState:setAppLifecycleState'
@@ -87,7 +92,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
      */
     setLifecycleState(...args) {
       // optional: surface a gentle warning once per session
-      logger?.warn?.('[appState] setLifecycleState() is deprecated – use setAppLifecycleState()', { context: 'appState:compat' });
+      _logger?.warn?.('[appState] setLifecycleState() is deprecated – use setAppLifecycleState()', { context: 'appState:compat' });
       return this.setAppLifecycleState(...args);
     },
 
@@ -110,7 +115,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
         // Clear project state
         this.state.currentProjectId = null;
         this.state.currentProject = null;
-        logger.info('[appState][setCurrentProject] Clearing current project.', {
+        _logger.info('[appState][setCurrentProject] Clearing current project.', {
           oldProjectId,
           context: 'appState:setCurrentProject:clear'
         });
@@ -121,7 +126,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
         if (this.state.currentProject?.id !== projectIdOrObject) {
           this.state.currentProject = null;
         }
-        logger.info('[appState][setCurrentProject] Updating current project ID.', {
+        _logger.info('[appState][setCurrentProject] Updating current project ID.', {
           oldProjectId,
           newProjectId: projectIdOrObject,
           context: 'appState:setCurrentProject:id'
@@ -130,13 +135,13 @@ export function createAppStateManager({ DependencySystem, logger }) {
         // Setting full project object
         this.state.currentProjectId = projectIdOrObject.id;
         this.state.currentProject = projectIdOrObject;
-        logger.info('[appState][setCurrentProject] Updating current project object.', {
+        _logger.info('[appState][setCurrentProject] Updating current project object.', {
           oldProjectId,
           newProjectId: projectIdOrObject.id,
           context: 'appState:setCurrentProject:object'
         });
       } else {
-        logger.warn('[appState][setCurrentProject] Invalid project data provided.', {
+        _logger.warn('[appState][setCurrentProject] Invalid project data provided.', {
           projectIdOrObject,
           context: 'appState:setCurrentProject:invalid'
         });
@@ -174,7 +179,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
             previousProjectId: previousProject?.id || null
           };
 
-          logger.debug('[appState] Dispatching currentProjectChanged event.', {
+          _logger.debug('[appState] Dispatching currentProjectChanged event.', {
             projectId: eventDetail.projectId,
             previousProjectId: eventDetail.previousProjectId,
             context: 'appState:projectChangeEvent'
@@ -189,7 +194,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
           if (currentProject && domAPI) {
             const doc = domAPI.getDocument();
             if (doc) {
-              logger.debug('[appState] Dispatching legacy "projectSelected" event.', {
+              _logger.debug('[appState] Dispatching legacy "projectSelected" event.', {
                 projectId: currentProject.id,
                 context: 'appState:projectChangeEvent:legacy'
               });
@@ -206,7 +211,7 @@ export function createAppStateManager({ DependencySystem, logger }) {
           }
         }
       } catch (error) {
-        logger.error('[appState] Failed to dispatch project change event.', {
+        _logger.error('[appState] Failed to dispatch project change event.', {
           error: error.message,
           context: 'appState:projectChangeEvent:error'
         });
@@ -236,13 +241,14 @@ export function createAppStateManager({ DependencySystem, logger }) {
 
   return {
     ...appModule,
+    setLogger,        // ← NEW
     cleanup() {
       // Clear any stored state if needed during shutdown
       const eventHandlers = DependencySystem.modules.get('eventHandlers');
       if (eventHandlers) {
         eventHandlers.cleanupListeners({ context: 'appState' });
       }
-      logger.debug('[appState] Cleanup completed', { context: 'appState:cleanup' });
+      _logger.debug('[appState] Cleanup completed', { context: 'appState:cleanup' });
     }
   };
 }

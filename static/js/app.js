@@ -264,6 +264,7 @@ browserServiceInstance.setLogger?.(logger); // ← NEW
 
 // Expose an opportunity for serviceInit to accept logger
 serviceInit.setLogger(logger);
+appModule.setLogger?.(logger);            // ← NEW
 
 
 // Provide a lazy proxy for apiRequest until advanced services
