@@ -71,6 +71,9 @@ export function createEventHandlers({
   function setLogger(newLogger)      { if (newLogger) logger = newLogger; }
   function setSafeHandler(newSH)     { if (typeof newSH === 'function') SH = newSH; }
 
+  /* allow late upgrade once the real errorReporter exists */
+  function setErrorReporter(newER)   { if (newER) errorReporter = newER; }
+
   // --- safeHandler canonical dependency check ---
   let   SH = safeHandler || DependencySystem.modules.get('safeHandler');
   if (typeof SH !== 'function') {
@@ -648,6 +651,7 @@ export function createEventHandlers({
     setDomReadinessService,
     setLogger,
     setSafeHandler,
+    setErrorReporter,      // ← NEW
     DependencySystem,
     cleanup
   };
