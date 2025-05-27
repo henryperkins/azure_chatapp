@@ -197,36 +197,33 @@ DependencySystem.register('globalUtils', {
   isValidProjectId
 });
 
-// ---------------------------------------------------------------------------
-// 10) Create service initializer
-// ---------------------------------------------------------------------------
-const serviceInit = createServiceInitializer({
-  DependencySystem,
-  domAPI,
-  browserServiceInstance,
-  eventHandlers,
-  domReadinessService,
-  sanitizer,
-  APP_CONFIG,
-  uiUtils,
-  globalUtils: {
-    shouldSkipDedup,
-    stableStringify,
-    normaliseUrl,
-    isAbsoluteUrl,
-    isValidProjectId
-  },
-  createFileUploadComponent,
-  createApiClient, // apiClient factory
-  createAccessibilityEnhancements,
-  createNavigationService,
-  createHtmlTemplateLoader,
-  createUiRenderer,
-  getSessionId // logger created later
-});
-
-// Register basic services (creates the real logger)
-serviceInit.registerBasicServices();
+ // ---------------------------------------------------------------------------
+ // 10) Create service initializer
+ // ---------------------------------------------------------------------------
+ const serviceInit = createServiceInitializer({
+   DependencySystem,
+   domAPI,
+   browserServiceInstance,
+   eventHandlers,
+   domReadinessService,
+   sanitizer,
+   APP_CONFIG,
+   uiUtils,
+   globalUtils: {
+     shouldSkipDedup,
+     stableStringify,
+     normaliseUrl,
+     isAbsoluteUrl,
+     isValidProjectId
+   },
+   createFileUploadComponent,
+   createApiClient, // apiClient factory
+   createAccessibilityEnhancements,
+   createNavigationService,
+   createHtmlTemplateLoader,
+   createUiRenderer,
+   getSessionId // logger created later
+ });
 
 // ---------------------------------------------------------------------------
 // Create the real logger
@@ -256,6 +253,7 @@ if (DependencySystem.modules.has('safeHandler')) {
 }
 
 // ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
+// ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
 eventHandlers.setLogger(logger);
 eventHandlers.setSafeHandler(safeHandler);
 domReadinessService.setLogger(logger);   // ← NEW
@@ -265,6 +263,9 @@ browserServiceInstance.setLogger?.(logger); // ← NEW
 // Expose an opportunity for serviceInit to accept logger
 serviceInit.setLogger(logger);
 appModule.setLogger?.(logger);            // ← NEW
+
+// ── NOW that a real logger exists, wire the foundational services ──
+serviceInit.registerBasicServices();
 
 
 // Provide a lazy proxy for apiRequest until advanced services
