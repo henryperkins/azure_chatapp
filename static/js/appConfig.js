@@ -49,6 +49,11 @@ export function createAppConfig({ overrides = {}, DependencySystem } = {}) {
   const cfg = { ...APP_CONFIG, ...overrides };
   return {
     APP_CONFIG: cfg,
-    cleanup() { /* stateless */ }
+    cleanup() {
+      // honour Rule-4: always route listener cleanup through the
+      // central EventHandler module
+      const evts = DependencySystem?.modules?.get?.('eventHandlers');
+      evts?.cleanupListeners?.({ context: 'appConfig' });
+    }
   };
 }

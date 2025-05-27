@@ -202,6 +202,9 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
     if (eventHandlers?.cleanupListeners) {
       eventHandlers.cleanupListeners({ context: 'ThemeManager' });
     }
+    // rule-4 compliance: ensure any listeners we delegated through
+    // eventHandlers are purged here as well
+    eventHandlers?.cleanupListeners?.({ context: 'ThemeManager' });
   };
 
   // backwards-compat
