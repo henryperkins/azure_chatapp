@@ -8,7 +8,7 @@
  *   DependencySystem.register('logger', logger);
  */
 
-const LEVELS = { debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 };
+const LEVELS = (()=>({ debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 }))();
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
@@ -135,12 +135,14 @@ export function createLogger({
       _c.warn(`[Logger] Fetch to ${endpoint} failed (Level: ${level}): ${err && err.message ? err.message : err}`);
     }
   }
-  const _c = (_win?.console) || { log: () => { }, info: () => { }, warn: () => { }, error: () => { }, debug: () => { } };
+  function createNoopConsole(){ return {log(){},info(){},warn(){},error(){},debug(){}};}
+  const _c = (_win?.console) || createNoopConsole();
   function wrap(level, fn = _c.log) {
     const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
     return (...args) => {
       if (consoleEnabled) safe(`[${context}]`, ...args);
       void send(level, args);
+      return { status:0, data:null, message:'noop' };
     };
   }
 

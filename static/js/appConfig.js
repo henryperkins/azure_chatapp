@@ -44,16 +44,14 @@ export const APP_CONFIG = {
 };
 
 /* Guard-rail factory export */
-export function createAppConfig({ overrides = {}, DependencySystem } = {}) {
+export function createAppConfig({ overrides = {}, DependencySystem, eventHandlers } = {}) {
   if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
+  if (!eventHandlers?.cleanupListeners) throw new Error('[appConfig] Missing eventHandlers');
   const cfg = { ...APP_CONFIG, ...overrides };
   return {
     APP_CONFIG: cfg,
     cleanup() {
-      // honour Rule-4: always route listener cleanup through the
-      // central EventHandler module
-      const evts = DependencySystem?.modules?.get?.('eventHandlers');
-      evts?.cleanupListeners?.({ context: 'appConfig' });
+      eventHandlers.cleanupListeners({ context: 'appConfig' });
     }
   };
 }
