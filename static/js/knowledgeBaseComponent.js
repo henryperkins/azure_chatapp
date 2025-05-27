@@ -731,7 +731,3 @@ return {
  * (…existing module code…)
  */
 
-// ... rest of the file ...
-
-  return {
-    // ...other exports...
