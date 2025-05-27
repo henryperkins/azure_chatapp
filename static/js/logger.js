@@ -124,9 +124,10 @@ export function createLogger({
   }
   const _c = (_win?.console) || createNoopConsole();
   function wrap(level, fn = _c.log) {
-    const safe = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
     return (...args) => {
-      if (consoleEnabled) safe(`[${context}]`, ...args);
+      /* resolve the latest safeHandler each invocation */
+      const exec = safeHandler ? safeHandler(fn, `logger:${level}`) : fn;
+      if (consoleEnabled) exec(`[${context}]`, ...args);
       void send(level, args);            // fire-and-forget
     };
   }
@@ -146,6 +147,11 @@ export function createLogger({
     }
   }
 
+  /* allow late upgrade to the canonical safeHandler */
+  function setSafeHandler(newSH) {
+    if (typeof newSH === 'function') safeHandler = newSH;
+  }
+
   return {
     log: wrap('log', _c.log),
     info: wrap('info', _c.info),
@@ -157,6 +163,7 @@ export function createLogger({
     setServerLoggingEnabled,
     setMinLevel,
     upgradeWithApiClient,
+    setSafeHandler,          // ← NEW
     cleanup() {
       if (eventHandlers?.cleanupListeners)
         eventHandlers.cleanupListeners({ context: 'logger' });

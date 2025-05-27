@@ -264,6 +264,9 @@ browserServiceInstance.setLogger?.(logger); // ← NEW
 serviceInit.setLogger(logger);
 appModule.setLogger?.(logger);            // ← NEW
 
+// ---- upgrade the logger with the canonical safeHandler ----
+logger.setSafeHandler?.(safeHandler);          // ← NEW
+
 // ── NOW that a real logger exists, wire the foundational services ──
 serviceInit.registerBasicServices();
 
