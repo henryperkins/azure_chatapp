@@ -154,6 +154,7 @@ export function createServiceInitializer({
           },
           getAuthModule : () => DependencySystem.modules.get('auth'), // Accessor for auth module
           browserService: browserServiceInstance,
+          eventHandlers,                 // ← ADD THIS LINE
           logger        : DependencySystem.modules.get('logger'),
         });
         /* ---------dd---------------------------------------------------------
