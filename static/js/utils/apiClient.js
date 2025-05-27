@@ -20,6 +20,7 @@ export function createApiClient({
   globalUtils,
   getAuthModule,
   browserService,
+  eventHandlers,
   logger
 }) {
   // Dependency validation (MANDATORY for factories)
@@ -27,6 +28,8 @@ export function createApiClient({
   if (!globalUtils) throw new Error('[apiClient] Missing globalUtils dependency');
   if (!getAuthModule) throw new Error('[apiClient] Missing getAuthModule dependency');
   if (!browserService) throw new Error('[apiClient] Missing browserService dependency');
+  if (!eventHandlers) throw new Error('[apiClient] Missing eventHandlers dependency');
+  if (typeof eventHandlers.cleanupListeners !== "function") throw new Error('[apiClient] eventHandlers.cleanupListeners is required');
   if (!logger) throw new Error('[apiClient] Missing logger dependency');
 
   const pending = new Map();
@@ -183,7 +186,10 @@ export function createApiClient({
   mainApiRequest.fetch = mainApiRequest; // Expose the main function as .fetch
 
   // Expose cleanup
-  const cleanup = () => pending.clear();
+  const cleanup = () => {
+    pending.clear();
+    eventHandlers.cleanupListeners({ context: "apiClient" });
+  };
 
   return {
     fetch: mainApiRequest,

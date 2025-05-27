@@ -91,9 +91,9 @@ if (!DependencySystem?.modules?.get) {
 
 // --- EARLY SAFEHANDLER: Register dummy for boot phase to break logger/safeHandler/eventHandlers chain ---
 function __dummySafeHandler(fn) {
-  return typeof fn === "function" ? fn : () => {};
+  return typeof fn === "function" ? fn : () => { };
 }
-__dummySafeHandler.cleanup = function() {};
+__dummySafeHandler.cleanup = function () { };
 DependencySystem.register('safeHandler', __dummySafeHandler);
 
 // --- 1) Early logger REMOVED: logger is now initialized after serviceInit basic services (see below)
@@ -208,7 +208,7 @@ const serviceInit = createServiceInitializer({
   getSessionId
 });
 
- // Register basic services (this creates the logger)
+// Register basic services (this creates the logger)
 serviceInit.registerBasicServices(); // This should now create and register apiClientObject
 
 // ---- NEW ORDER: Logger creation/registration BEFORE advanced services ----
@@ -230,7 +230,8 @@ DependencySystem.register('logger', loggerInstance);
 const logger = loggerInstance; // Make it available to rest of app.js
 
 // Upgrade safeHandler to use the correct logger
-const safeHandler = createSafeHandler({ logger });
+const safeHandlerModule = createSafeHandler({ logger, eventHandlers });
+const safeHandler = safeHandlerModule.safeHandler;
 if (DependencySystem?.modules?.has?.('safeHandler')) {
   DependencySystem.modules.set('safeHandler', safeHandler);
   logger.debug('[app] safeHandler upgraded to canonical implementation', { context: 'app:safeHandler' });
@@ -653,8 +654,8 @@ export async function init() {
     // Modals are initialized within coreInit.initializeCoreSystems() via modalManager.init().
     logger.log('[App.init] Stage 4: Waiting for modals to load...', { context: 'app:init' });
     await domReadinessService.waitForEvent('modalsLoaded', {
-        timeout: 10000, // Increased timeout for modal loading
-        context: 'app.init:modalsLoaded'
+      timeout: 10000, // Increased timeout for modal loading
+      context: 'app.init:modalsLoaded'
     });
     logger.info('[App.init] Stage 4: Modals loaded successfully.', { context: 'app:init' });
 

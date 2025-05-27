@@ -870,7 +870,7 @@ export function createProjectListComponent(deps) {
     // --- Exposed cleanup API per .clinerules ---
     function destroy() {
         if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-            eventHandlers.cleanupListeners();
+            eventHandlers.cleanupListeners({ context: MODULE_CONTEXT });
         }
         if (domReadinessService && typeof domReadinessService.destroy === 'function') {
             domReadinessService.destroy();

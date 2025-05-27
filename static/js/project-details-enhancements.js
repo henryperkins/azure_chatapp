@@ -271,9 +271,9 @@ export function createProjectDetailsEnhancements({
     }
   }
 
-    /**
-   * Track active tab changes to update FAB behavior
-   */
+  /**
+ * Track active tab changes to update FAB behavior
+ */
   function setupTabTracking() {
     try {
       const tabButtons = domAPI.querySelectorAll('.project-tab');
@@ -346,18 +346,18 @@ export function createProjectDetailsEnhancements({
           badgeElems.forEach(badge => {
             const tip = badge.dataset.tip;
             if (tip === 'Pinned') {
-              badge.innerHTML = sanitizer.sanitize(`
+              domAPI.setInnerHTML(badge, sanitizer.sanitize(`
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
-              `);
+              `));
               badge.classList.add('text-warning');
             } else if (tip === 'Archived') {
-              badge.innerHTML = sanitizer.sanitize(`
+              domAPI.setInnerHTML(badge, sanitizer.sanitize(`
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
                 </svg>
-              `);
+              `));
               badge.classList.add('text-error');
             }
           });
@@ -657,7 +657,7 @@ export function createProjectDetailsEnhancements({
         // Apply search term if present
         if (state.searchTerm && isVisible) {
           isVisible = projectName.includes(state.searchTerm) ||
-                      projectDesc.includes(state.searchTerm);
+            projectDesc.includes(state.searchTerm);
         }
 
         // Update visibility
