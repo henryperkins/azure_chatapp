@@ -52,7 +52,10 @@ export function createEventHandlers({
   if (!APP_CONFIG) {
     throw new Error('[eventHandler] Missing APP_CONFIG');
   }
-  function createNoopLogger(){return {info(){},warn(){},error(){},debug(){},log(){}};}
+  function createNoopLogger() {
+    return ['info', 'warn', 'error', 'debug', 'log']
+      .reduce((o, m) => { o[m] = () => {}; return o; }, {});
+  }
   if (!logger) {
     const winConsole = browserService?.getWindow?.()?.console;
     logger = winConsole ?? createNoopLogger();
