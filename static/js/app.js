@@ -253,6 +253,7 @@ if (DependencySystem.modules.has('safeHandler')) {
 // ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
 eventHandlers.setLogger(logger);
 eventHandlers.setSafeHandler(safeHandler);
+domReadinessService.setLogger(logger);   // ← NEW
 
 // Expose an opportunity for serviceInit to accept logger
 serviceInit.setLogger(logger);

@@ -67,10 +67,14 @@ export function createDomReadinessService({
   const DEFAULT_TIMEOUT = APP_CONFIG?.TIMEOUTS?.DOM_READY ?? 10000;
 
   // ───── unified logger ─────
-  const _logger =
+  let _logger =
     injectedLogger ||
     DependencySystem?.modules?.get?.('logger') ||
     { info: () => { }, warn: () => { }, error: () => { } };
+
+  function setLogger(newLogger) {
+    if (newLogger) _logger = newLogger;
+  }
 
   // ───── periodic cleanup for expired events ─────
   let cleanupTimer = null;
@@ -656,6 +660,7 @@ export function createDomReadinessService({
     getFiredEvents,
     getEventReplayStats,    // NEW: diagnostics
     cleanupExpiredEvents,   // NEW: manual trigger
-    isReplayEnabled         // NEW: config check
+    isReplayEnabled,        // NEW: config check
+    setLogger,              // ← NEW
   };
 }
