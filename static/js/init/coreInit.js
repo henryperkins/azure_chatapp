@@ -309,13 +309,24 @@ export function createCoreInitializer({
         projectDetailsComponentPlaceholder = DependencySystem.modules.get('projectDetailsComponent');
          logger.debug('[coreInit] Existing ProjectDetailsComponent placeholder found.', { context: 'coreInit' });
     } else {
-        projectDetailsComponentPlaceholder = createProjectDetailsComponent({ // Use corrected factory name
-            projectManager: null, eventHandlers, modalManager,
-            FileUploadComponentClass: FileUploadComponent, // Direct arg
-            domAPI, sanitizer, app, navigationService, htmlTemplateLoader, logger, APP_CONFIG, // Direct args
-            chatManager: null, modelConfig: modelConfigInstance, knowledgeBaseComponent: null,
-            apiClient: apiRequest, // Direct arg (fetch function)
-            domReadinessService, __placeholder: true // Flag as placeholder
+        projectDetailsComponentPlaceholder = createProjectDetailsComponent({
+            projectManager: null,
+            eventHandlers,
+            modalManager,
+            FileUploadComponentClass: FileUploadComponent,
+            domAPI,
+            sanitizer,
+            app,
+            navigationService : navigationServiceRef,
+            htmlTemplateLoader: htmlTemplateLoaderRef,
+            logger,
+            APP_CONFIG,
+            chatManager              : null,
+            modelConfig              : modelConfigInstance,
+            knowledgeBaseComponent   : null,
+            apiClient                : apiRequest,
+            domReadinessService,
+            __placeholder            : true
         });
         DependencySystem.register('projectDetailsComponent', projectDetailsComponentPlaceholder);
         logger.debug('[coreInit] New ProjectDetailsComponent placeholder registered.', { context: 'coreInit' });
