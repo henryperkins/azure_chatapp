@@ -9,23 +9,21 @@ export function createSafeHandler({ logger, eventHandlers } = {}) {
   }
 
   // Wrap a handler function for safety, context, and traceability.
-  // Usage: safeHandler(fn, description), or safeHandler(fn)
-  function safeHandler(fn, description) {
+  // Usage: safeHandlerFunction(fn, description), or safeHandlerFunction(fn)
+  function safeHandlerFunction(fn, description) {
     if (typeof fn !== 'function') {
       throw new TypeError('[SafeHandler] Provided arg is not a function');
     }
     // Description is for structured log context; may be omitted.
-    return function(...args) {
+    return function (...args) {
       try {
         return fn.apply(this, args);
       } catch (err) {
         // Always use structured logging (never direct console).
         logger.error(
           '[SafeHandler] Unhandled error in handler',
-          { status: err?.status ?? 500,
-            data: err,
-            message: err?.message ?? String(err) },
-          { context: 'SafeHandler' }
+          err,
+          { context: `SafeHandler:${description || 'unknown'}` }
         );
         // Optionally rethrow or swallow; here, swallow to suppress UI breakage.
         // Uncomment this line to propagate errors if needed:
@@ -34,8 +32,16 @@ export function createSafeHandler({ logger, eventHandlers } = {}) {
     };
   }
 
-  safeHandler.cleanup = () =>
-    eventHandlers?.cleanupListeners?.({ context: 'SafeHandler' });
+  // Return object with cleanup method as required by factory pattern
+  return {
+    // Main safeHandler function
+    safeHandler: safeHandlerFunction,
 
-  return safeHandler;
+    // Required cleanup method
+    cleanup() {
+      if (eventHandlers && eventHandlers.cleanupListeners) {
+        eventHandlers.cleanupListeners({ context: 'SafeHandler' });
+      }
+    }
+  };
 }

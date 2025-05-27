@@ -13,78 +13,33 @@
  * - Project-specific chat integration
  */
 
+import { createDomWaitHelper } from './utils/initHelpers.js';
+import { createElement } from './utils/globalUtils.js';
+
 export function createChatUIEnhancements(deps = {}) {
-  // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
-  if (!deps) throw new Error('Missing deps');
-  if (!deps.domAPI) throw new Error('Missing domAPI');
-  if (!deps.eventHandlers) throw new Error('Missing eventHandlers');
-  if (!deps.browserService) throw new Error('Missing browserService');
-  if (!deps.domReadinessService) throw new Error('Missing domReadinessService');
-  if (!deps.logger) throw new Error('Missing logger');
-  if (!deps.sanitizer) throw new Error('Missing sanitizer');
-  if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
-  // chatManager and modalManager are optional
+  // Validate required dependencies
+  const required = ['domAPI', 'eventHandlers', 'browserService', 'domReadinessService', 'logger', 'sanitizer', 'DependencySystem'];
+  required.forEach(dep => { if (!deps[dep]) throw new Error(`Missing ${dep}`); });
 
   const { domAPI, eventHandlers, browserService, domReadinessService, logger, sanitizer, chatManager, modalManager, DependencySystem } = deps;
-
   const MODULE_CONTEXT = 'chatUIEnhancements';
 
   const state = {
     initialized: false,
     initializing: null,
     typingIndicatorVisible: false,
-    messageContainer: null, // ← cache current chat container
-    activeTab: null,        // Track active tab for project context
-    projectId: null,        // Store current project ID
+    messageContainer: null,
+    activeTab: null,
+    projectId: null,
     isMobile: browserService?.isMobile || false
   };
 
-  // Use canonical safeHandler from DI
   const safeHandler = DependencySystem.modules.get('safeHandler');
+  const chatUIBus = new EventTarget();
+  DependencySystem.modules.register('chatUIBus', chatUIBus);
 
-  /**
-   * Async readiness helper for chat UI elements.
-   * Resolves when all selectors are present; logs and rejects on error/timeout.
-   *
-   * @param {Object} opts
-   * @param {string[]} opts.domSelectors - Array of required selector strings.
-   * @param {number} [opts.timeout=8000] - Optional timeout (ms).
-   * @param {string} [opts.context]      - Optional log context.
-   * @returns {Promise<void>}
-   */
-  async function whenChatUIReady(opts = {}) {
-    const {
-      domSelectors,
-      timeout = 8000,
-      context = `${MODULE_CONTEXT}::whenChatUIReady`
-    } = opts;
-    if (!Array.isArray(domSelectors) || domSelectors.length === 0) {
-      logger.error(`[${MODULE_CONTEXT}] Invalid domSelectors param for whenChatUIReady`, {
-        context
-      });
-      return Promise.reject(new Error('Invalid domSelectors'));
-    }
-
-    try {
-      await domReadinessService.elementsReady(domSelectors, {
-        timeout,
-        context,
-        observeMutations: true
-      });
-      logger.debug(`[${MODULE_CONTEXT}] Chat UI elements ready`, {
-        context,
-        selectors: domSelectors
-      });
-      return Promise.resolve();
-    } catch (err) {
-      logger.error(`[${MODULE_CONTEXT}] Chat UI elements not ready within timeout`, err, {
-        context,
-        timeout,
-        selectors: domSelectors
-      });
-      return Promise.reject(err);
-    }
-  }
+  // Use utility helper for DOM waiting
+  const waitForElements = createDomWaitHelper(domReadinessService, logger);
 
   /**
    * Initialize chat UI enhancements. Waits for required DOM elements.
@@ -113,19 +68,16 @@ export function createChatUIEnhancements(deps = {}) {
 
     state.initializing = (async () => {
       try {
-        await whenChatUIReady({
+        await waitForElements({
           domSelectors: CHAT_SELECTORS,
+          timeout: 8000,
           context
         });
       } catch (err) {
-        logger.error('[chatUIEnhancements] Error during chat UI initialization', err, {
-          context
-        });
-        logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, {
-          context
-        });
+        logger.error('[chatUIEnhancements] Error during chat UI initialization', err, { context });
+        logger.warn('[chatUIEnhancements] Chat UI not yet in DOM – will retry later', err, { context });
         state.initializing = null;
-        return; // allow another "initialize()" call later
+        return;
       }
 
       const chatInput = domAPI.getElementById('chatInput');
@@ -137,53 +89,17 @@ export function createChatUIEnhancements(deps = {}) {
       state.messageContainer = chatContainer;
 
       // Add event listeners to default UI
-      if (chatInput) {
-        eventHandlers.trackListener(
-          chatInput,
-          'keypress',
-          safeHandler(handleInputKeypress, 'inputKeypress'),
-          {
-            context: MODULE_CONTEXT,
-            description: 'Chat input keypress handler'
-          }
-        );
-      }
+      const listeners = [
+        [chatInput, 'keypress', handleInputKeypress, 'inputKeypress', 'Chat input keypress handler'],
+        [doc, 'chatNewMessage', handleNewMessage, 'chatNewMessage', 'New message handler'],
+        [sendBtn, 'click', () => logger.info('[chatUIEnhancements] Default send button clicked', { context: MODULE_CONTEXT }), 'defaultSendButtonClick', 'Default send button click handler']
+      ];
 
-      // Add message event listener (listens on document for custom events)
-      if (doc) {
-        eventHandlers.trackListener(
-          doc,
-          'chatNewMessage',
-          safeHandler(handleNewMessage, 'chatNewMessage'),
-          {
-            context: MODULE_CONTEXT,
-            description: 'New message handler'
-          }
-        );
-      }
-
-      // Add click listener to default send button
-      if (sendBtn) {
-        eventHandlers.trackListener(
-          sendBtn,
-          'click',
-          safeHandler(() => {
-            // Assuming a global chat logic will pick up input value and handle send
-            logger.info('[chatUIEnhancements] Default send button clicked', {
-              context: MODULE_CONTEXT
-            });
-            // Note: This handler doesn't directly call a 'send' function.
-            // It's expected that external logic (e.g., ChatManager)
-            // listens for this click or provides a custom `onSend`
-            // via `attachEventHandlers`. This is a handler for the
-            // *default* send button if no custom one is provided.
-          }, 'defaultSendButtonClick'),
-          {
-            context: MODULE_CONTEXT,
-            description: 'Default send button click handler'
-          }
-        );
-      }
+      listeners.forEach(([element, event, handler, handlerName, description]) => {
+        if (element) {
+          eventHandlers.trackListener(element, event, safeHandler(handler, handlerName), { context: MODULE_CONTEXT, description });
+        }
+      });
 
       // Setup chat header collapse functionality
       setupChatHeaderCollapse();
@@ -285,119 +201,69 @@ export function createChatUIEnhancements(deps = {}) {
       // Create pull indicator if it doesn't exist
       let pullIndicator = domAPI.getElementById('chatPullToRefreshIndicator');
       if (!pullIndicator) {
-        pullIndicator = domAPI.createElement('div');
-        pullIndicator.id = 'chatPullToRefreshIndicator';
-        pullIndicator.className = 'pull-to-refresh-indicator';
-        domAPI.setInnerHTML(pullIndicator, `
-          <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span>Refreshing...</span>
-        `);
-        domAPI.setStyle(pullIndicator, 'position', 'absolute');
-        domAPI.setStyle(pullIndicator, 'top', '0');
-        domAPI.setStyle(pullIndicator, 'left', '0');
-        domAPI.setStyle(pullIndicator, 'right', '0');
-        domAPI.setStyle(pullIndicator, 'display', 'flex');
-        domAPI.setStyle(pullIndicator, 'justify-content', 'center');
-        domAPI.setStyle(pullIndicator, 'align-items', 'center');
-        domAPI.setStyle(pullIndicator, 'padding', '10px');
-        domAPI.setStyle(pullIndicator, 'background', 'var(--color-base-200)');
-        domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-        domAPI.setStyle(pullIndicator, 'transition', 'transform 0.3s ease');
-        domAPI.setStyle(pullIndicator, 'z-index', '10');
+        pullIndicator = createElement('div', {
+          id: 'chatPullToRefreshIndicator',
+          className: 'pull-to-refresh-indicator',
+          innerHTML: '<svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Refreshing...</span>'
+        }, eventHandlers.trackListener, domAPI);
+
+        const styles = {
+          position: 'absolute', top: '0', left: '0', right: '0', display: 'flex',
+          'justify-content': 'center', 'align-items': 'center', padding: '10px',
+          background: 'var(--color-base-200)', transform: 'translateY(-50px)',
+          transition: 'transform 0.3s ease', 'z-index': '10'
+        };
+        Object.entries(styles).forEach(([prop, value]) => domAPI.setStyle(pullIndicator, prop, value));
 
         const container = domAPI.querySelector('.chat-container');
-        if (container) {
-          domAPI.appendChild(container, pullIndicator);
-        }
+        if (container) domAPI.appendChild(container, pullIndicator);
       }
 
+      const resetPullIndicator = () => {
+        domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
+        domAPI.removeClass(pullIndicator, 'visible');
+        isPulling = false;
+        refreshTriggered = false;
+      };
+
       // Touch event handlers
-      const onTouchStart = (e) => {
-        if (chatMessages.scrollTop === 0) {
-          startY = e.touches[0].clientY;
-          isPulling = true;
-        }
-      };
-
-      const onTouchMove = (e) => {
-        if (!isPulling) return;
-
-        const currentY = e.touches[0].clientY;
-        const diff = currentY - startY;
-
-        if (diff > 0 && diff < 100) {
-          domAPI.setStyle(pullIndicator, 'transform', `translateY(${diff - 50}px)`);
-          if (diff > 70 && !refreshTriggered) {
-            domAPI.addClass(pullIndicator, 'visible');
+      const touchHandlers = {
+        touchstart: (e) => {
+          if (chatMessages.scrollTop === 0) {
+            startY = e.touches[0].clientY;
+            isPulling = true;
           }
-        }
-      };
-
-      const onTouchEnd = () => {
-        if (!isPulling) return;
-
-        const pullDistance = parseInt(pullIndicator.style.transform.replace('translateY(', '').replace('px)', '')) + 50;
-
-        if (pullDistance > 20) {
-          refreshTriggered = true;
-          domAPI.setStyle(pullIndicator, 'transform', 'translateY(0)');
-
-          // Reload conversation if in project context
-          if (state.projectId && chatManager) {
-            const currentConversationId = chatManager.currentConversationId;
-            if (currentConversationId) {
-              chatManager.loadConversation(currentConversationId)
-                .finally(() => {
-                  browserService.setTimeout(() => {
-                    domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-                    domAPI.removeClass(pullIndicator, 'visible');
-                    isPulling = false;
-                    refreshTriggered = false;
-                  }, 1000);
-                });
+        },
+        touchmove: (e) => {
+          if (!isPulling) return;
+          const diff = e.touches[0].clientY - startY;
+          if (diff > 0 && diff < 100) {
+            domAPI.setStyle(pullIndicator, 'transform', `translateY(${diff - 50}px)`);
+            if (diff > 70 && !refreshTriggered) domAPI.addClass(pullIndicator, 'visible');
+          }
+        },
+        touchend: () => {
+          if (!isPulling) return;
+          const pullDistance = parseInt(pullIndicator.style.transform.replace('translateY(', '').replace('px)', '')) + 50;
+          if (pullDistance > 20) {
+            refreshTriggered = true;
+            domAPI.setStyle(pullIndicator, 'transform', 'translateY(0)');
+            if (state.projectId && chatManager?.currentConversationId) {
+              chatManager.loadConversation(chatManager.currentConversationId)
+                .finally(() => browserService.setTimeout(resetPullIndicator, 1000));
             } else {
               resetPullIndicator();
             }
           } else {
             resetPullIndicator();
           }
-        } else {
-          // Not pulled far enough, reset
-          resetPullIndicator();
         }
       };
 
-      function resetPullIndicator() {
-        domAPI.setStyle(pullIndicator, 'transform', 'translateY(-50px)');
-        domAPI.removeClass(pullIndicator, 'visible');
-        isPulling = false;
-        refreshTriggered = false;
-      }
-
-      // Attach event listeners
-      eventHandlers.trackListener(
-        chatMessages,
-        'touchstart',
-        onTouchStart,
-        { context: MODULE_CONTEXT }
-      );
-
-      eventHandlers.trackListener(
-        chatMessages,
-        'touchmove',
-        onTouchMove,
-        { context: MODULE_CONTEXT }
-      );
-
-      eventHandlers.trackListener(
-        chatMessages,
-        'touchend',
-        onTouchEnd,
-        { context: MODULE_CONTEXT }
-      );
+      // Attach touch event listeners
+      Object.entries(touchHandlers).forEach(([event, handler]) => {
+        eventHandlers.trackListener(chatMessages, event, handler, { context: MODULE_CONTEXT });
+      });
     } catch (error) {
       logger.error('[setupPullToRefresh]', error, { context: MODULE_CONTEXT });
     }
@@ -480,46 +346,22 @@ export function createChatUIEnhancements(deps = {}) {
     );
   }
 
-  /**
-   * Handle new message event. Appends message element to container.
-   * @param {CustomEvent} event - The custom event containing message data in event.detail.
-   *   Expected detail structure: { message: string, sender: 'user'|'ai', timestamp?: number, messageId?: string|number }
-   */
+  // Handle new message event
   function handleNewMessage(event) {
-    const context = `${MODULE_CONTEXT}::handleNewMessage`;
     if (!event.detail) {
-      logger.warn(`[${MODULE_CONTEXT}] Received chatNewMessage event without detail`, {
-        context
-      });
+      logger.warn(`[${MODULE_CONTEXT}] Received chatNewMessage event without detail`, { context: MODULE_CONTEXT });
       return;
     }
 
-    const {
-      message,
-      sender,
-      timestamp,
-      messageId
-    } = event.detail;
-    logger.info(`[${MODULE_CONTEXT}] Processing new message event`, {
-      context,
-      sender,
-      messageId: messageId || 'N/A'
-    });
-
+    const { message, sender, timestamp, messageId } = event.detail;
     const messageEl = createMessageElement(message, sender, timestamp, messageId);
-    const chatContainer =
-      state.messageContainer || domAPI.getElementById('chatMessages'); // Use cached or find default
+    const chatContainer = state.messageContainer || domAPI.getElementById('chatMessages');
+
     if (chatContainer && messageEl) {
-      domAPI.appendChild(chatContainer, messageEl); // Use domAPI for append
+      domAPI.appendChild(chatContainer, messageEl);
       scrollToBottom(chatContainer);
-      logger.info(`[${MODULE_CONTEXT}] Message appended to container`, {
-        context,
-        messageId: messageId || 'N/A'
-      });
     } else {
-      logger.error(`[${MODULE_CONTEXT}] Failed to find chat container or create message element`, {
-        context
-      });
+      logger.error(`[${MODULE_CONTEXT}] Failed to find chat container or create message element`, { context: MODULE_CONTEXT });
     }
   }
 
@@ -567,14 +409,9 @@ export function createChatUIEnhancements(deps = {}) {
         'click',
         safeHandler((e) => {
           e.preventDefault();
-          // Dispatch citation click event
-          const doc = domAPI.getDocument();
-          if (doc) {
-            const event = new CustomEvent('citationClick', {
-              detail: { citeId }
-            });
-            doc.dispatchEvent(event);
-          }
+          // Dispatch citation click event on dedicated bus
+          const event = new CustomEvent('citationClick', { detail: { citeId } });
+          chatUIBus.dispatchEvent(event);
         }, 'citationClick'),
         { context: MODULE_CONTEXT }
       );
@@ -620,20 +457,10 @@ export function createChatUIEnhancements(deps = {}) {
       avatarEl.className = 'message-avatar';
 
       // Set avatar content based on sender
-      if (isUser) {
-        avatarEl.innerHTML = sanitizer.sanitize(`
-          <svg class="w-8 h-8 text-primary" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-            <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path>
-          </svg>
-        `);
-      } else {
-        avatarEl.innerHTML = sanitizer.sanitize(`
-          <svg class="w-8 h-8 text-secondary" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"></path>
-            <path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"></path>
-          </svg>
-        `);
-      }
+      const avatarSvg = isUser
+        ? '<svg class="w-8 h-8 text-primary" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"></path></svg>'
+        : '<svg class="w-8 h-8 text-secondary" fill="currentColor" viewBox="0 0 20 20"><path d="M2 10a8 8 0 018-8v8h8a8 8 0 11-16 0z"></path><path d="M12 2.252A8.014 8.014 0 0117.748 8H12V2.252z"></path></svg>';
+      domAPI.setInnerHTML(avatarEl, sanitizer.sanitize(avatarSvg));
 
       // Create message content container
       const contentEl = domAPI.createElement('div');
@@ -671,11 +498,8 @@ export function createChatUIEnhancements(deps = {}) {
         const copyBtn = domAPI.createElement('button');
         copyBtn.className = 'btn btn-ghost btn-xs';
         copyBtn.setAttribute('aria-label', 'Copy message');
-        copyBtn.innerHTML = sanitizer.sanitize(`
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-          </svg>
-        `);
+        const copySvg = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>';
+        domAPI.setInnerHTML(copyBtn, sanitizer.sanitize(copySvg));
 
         // Add click handler to copy button
         eventHandlers.trackListener(
@@ -746,16 +570,11 @@ export function createChatUIEnhancements(deps = {}) {
       });
 
       const textarea = domAPI.createElement('textarea');
-      domAPI.setStyle(textarea, 'position', 'fixed');
-      domAPI.setStyle(textarea, 'top', '0');
-      domAPI.setStyle(textarea, 'left', '0');
-      domAPI.setStyle(textarea, 'width', '2em');
-      domAPI.setStyle(textarea, 'height', '2em');
-      domAPI.setStyle(textarea, 'padding', '0');
-      domAPI.setStyle(textarea, 'border', 'none');
-      domAPI.setStyle(textarea, 'outline', 'none');
-      domAPI.setStyle(textarea, 'boxShadow', 'none');
-      domAPI.setStyle(textarea, 'background', 'transparent');
+      const textareaStyles = {
+        position: 'fixed', top: '0', left: '0', width: '2em', height: '2em',
+        padding: '0', border: 'none', outline: 'none', boxShadow: 'none', background: 'transparent'
+      };
+      Object.entries(textareaStyles).forEach(([prop, value]) => domAPI.setStyle(textarea, prop, value));
       domAPI.setValue(textarea, textContent);
 
       domAPI.appendChild(doc.body, textarea);
@@ -799,17 +618,12 @@ export function createChatUIEnhancements(deps = {}) {
       toast.textContent = success ? 'Copied to clipboard!' : 'Failed to copy';
 
       // Style the toast
-      domAPI.setStyle(toast, 'position', 'fixed');
-      domAPI.setStyle(toast, 'bottom', '20px');
-      domAPI.setStyle(toast, 'left', '50%');
-      domAPI.setStyle(toast, 'transform', 'translateX(-50%)');
-      domAPI.setStyle(toast, 'padding', '8px 16px');
-      domAPI.setStyle(toast, 'background', success ? 'var(--color-success)' : 'var(--color-error)');
-      domAPI.setStyle(toast, 'color', 'white');
-      domAPI.setStyle(toast, 'border-radius', '4px');
-      domAPI.setStyle(toast, 'z-index', '9999');
-      domAPI.setStyle(toast, 'opacity', '0');
-      domAPI.setStyle(toast, 'transition', 'opacity 0.3s ease');
+      const toastStyles = {
+        position: 'fixed', bottom: '20px', left: '50%', transform: 'translateX(-50%)',
+        padding: '8px 16px', background: success ? 'var(--color-success)' : 'var(--color-error)',
+        color: 'white', 'border-radius': '4px', 'z-index': '9999', opacity: '0', transition: 'opacity 0.3s ease'
+      };
+      Object.entries(toastStyles).forEach(([prop, value]) => domAPI.setStyle(toast, prop, value));
 
       // Add to DOM
       const doc = domAPI.getDocument();
