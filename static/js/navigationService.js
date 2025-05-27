@@ -19,9 +19,12 @@ export function createNavigationService({
   if (!browserService) throw new Error('[NavigationService] browserService is required');
   if (!DependencySystem) throw new Error('[NavigationService] DependencySystem is required');
   if (!eventHandlers) throw new Error('[NavigationService] eventHandlers is required');
+  const NOOP_LOGGER = ['error', 'warn', 'info', 'debug', 'log']
+    .reduce((acc, m) => { acc[m] = () => {}; return acc; }, {});
+
   let logger = providedLogger
     || DependencySystem?.modules?.get?.('logger')
-    || { error() {}, warn() {}, info() {}, debug() {}, log() {} };
+    || NOOP_LOGGER;
 
   // === Navigation State ===
   const state = {
