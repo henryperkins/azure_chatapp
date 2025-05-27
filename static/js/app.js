@@ -413,6 +413,7 @@ const coreInit = createCoreInitializer({
   MODAL_MAPPINGS,
   apiRequest,
   apiClientObject,
+  apiEndpoints        : DependencySystem.modules.get('apiEndpoints'),   // ← ADD
   app: appObj,
   uiUtils,
   navigationService,
