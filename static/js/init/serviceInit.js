@@ -1,4 +1,4 @@
-import { resolveApiEndpoints } from '../utils/apiEndpoints.js';
+import { createApiEndpoints } from '../utils/apiEndpoints.js';
 import { createErrorReporterStub } from '../utils/errorReporterStub.js';
 
 /**
@@ -112,7 +112,8 @@ export function createServiceInitializer({
       }
 
       // Register API endpoints. Resolves them if not already present in DI.
-      const resolvedEndpoints = DependencySystem.modules.get('apiEndpoints') || resolveApiEndpoints(APP_CONFIG);
+      const apiEndpointsInstance = createApiEndpoints({ logger, DependencySystem, config: APP_CONFIG });
+      const resolvedEndpoints = DependencySystem.modules.get('apiEndpoints') || apiEndpointsInstance.endpoints;
       safeRegister('apiEndpoints', resolvedEndpoints);
 
       logger?.debug('[serviceInit] API endpoints registered successfully.', {
@@ -153,16 +154,16 @@ export function createServiceInitializer({
           },
           getAuthModule : () => DependencySystem.modules.get('auth'), // Accessor for auth module
           browserService: browserServiceInstance,
-          logger        : DependencySystem.modules.get('logger') // Use the DI-registered logger
+          logger        : DependencySystem.modules.get('logger'),
         });
-        /* ------------------------------------------------------------------
+        /* ---------dd---------------------------------------------------------
          * Replace the early proxy with the real implementation.
          * If a placeholder already exists (registered in app.js), we overwrite
          * it so all modules now reference the fully-featured version.
          * ------------------------------------------------------------------ */
         if (DependencySystem?.modules?.has?.('apiRequest')) {
           DependencySystem.modules.set('apiRequest', apiClientInstance.fetch);
-          logger?.debug('[serviceInit] apiRequest proxy replaced with real implementation.', { context: 'serviceInit:registerAdvancedServices' });
+          logger?.debug('[serviceInit] apiRequest proxy replaced with real implementation.', { context: 'serviceInit:registerAdvancedServices', eventHandlers });
         } else {
           safeRegister('apiRequest', apiClientInstance.fetch);
         }
