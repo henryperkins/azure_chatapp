@@ -230,7 +230,7 @@ DependencySystem.register('globalUtils', {
 // ---------------------------------------------------------------------------
 const loggerInstance = createLogger({
   endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
-  enableServer: true,
+  enableServer: false, // start disabled
   debug: APP_CONFIG.DEBUG === true,
   minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
   consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
@@ -598,8 +598,16 @@ export async function init() {
 
     // Stage 6 auth
     logger.log('[App.init] Stage 6: auth system', { context: 'app:init' });
-    const safeAuthInit = safeHandler(() => authInit.initializeAuthSystem(), 'authInit.initializeAuthSystem');
+    const safeAuthInit = safeHandler(
+      () => authInit.initializeAuthSystem(),
+      'authInit.initializeAuthSystem'
+    );
     await safeAuthInit();
+
+    /* Remote logging is safe now: apiClient is ready and CSRF token
+       has been fetched by auth.init(). */
+    logger.setServerLoggingEnabled(true);
+
     logger.info('[App.init] Stage 6 done', { context: 'app:init' });
 
     // Stage 7 user
