@@ -735,9 +735,3 @@ return {
 
   return {
     // ...other exports...
-    cleanup() {
-      // Rule-4: delegate listener teardown to the central tracker
-      eventHandlers?.cleanupListeners?.({ context: 'KnowledgeBaseComponent' });
-    },
-  };
-}
