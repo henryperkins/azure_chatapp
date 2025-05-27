@@ -301,7 +301,8 @@ export function createDomReadinessService({
     deps = [],
     domSelectors = [],
     timeout = DEFAULT_TIMEOUT,
-    context = 'unknown'
+    context = 'unknown',
+    optional = false          // ← NEW: allow non-fatal selector misses
   } = {}) {
     // First wait for needed dependencies
     if (deps.length > 0) {
@@ -321,7 +322,14 @@ export function createDomReadinessService({
         await elementsReady(domSelectors, { timeout, context });
       } catch (err) {
         domSelectors.forEach((sel) => _missingSelectors.add(sel));
-        throw err;
+        if (optional) {
+          _logger.warn?.(
+            '[domReadinessService] Optional selectors not found – continuing bootstrap',
+            { selectors: domSelectors, context }
+          );
+          return true;        // ← do NOT abort init
+        }
+        throw err;            // original behaviour for required selectors
       }
     }
     return true;
