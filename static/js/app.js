@@ -644,6 +644,15 @@ export async function init() {
       services: requiredAdvancedServices
     });
 
+    // Inject advanced services into coreInit via setter
+    coreInit.setAdvancedServices({
+      htmlTemplateLoader : htmlTemplateLoaderService,
+      uiRenderer         : uiRendererService,
+      accessibilityUtils : accessibilityUtilsService,
+      navigationService  : navigationServiceService,
+      apiClientObject    : apiClientObjectService
+    });
+
     // Stage 3: Initialize Core Systems & Components (Modal Manager, Auth, Project Manager, etc.)
     // This includes internal initialization of some UI like modals and model config.
     logger.log('[App.init] Stage 3: Initializing Core Systems & Components...', { context: 'app:init' });
