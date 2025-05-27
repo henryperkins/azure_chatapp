@@ -276,31 +276,6 @@ export function createCoreInitializer({
 
     // uiUtils (direct argument) is used by KnowledgeBaseComponent later.
 
-    // 3.4. ProjectListComponent (Placeholder or Full Instance)
-    // Handles the display of the project list.
-    logger.debug('[coreInit] Creating ProjectListComponent (or ensuring placeholder)...', { context: 'coreInit' });
-    if (!DependencySystem.modules.has('projectListComponent')) {
-      const projectListComponentInstance = createProjectListComponent({ // Use corrected factory name
-        projectManager: null,     // Will be set after ProjectManager is created
-        eventHandlers,            // Direct arg
-        modalManager,             // Instance created above
-        app,                      // Direct arg
-        router: navigationServiceRef, // Use refreshed ref
-        storage: browserService,  // Direct arg (browserService acts as storage)
-        sanitizer,                // Direct arg
-        htmlSanitizer: sanitizer, // Direct arg
-        apiClient: apiRequest,    // Direct arg (fetch function)
-        domAPI,                   // Direct arg
-        domReadinessService,      // Direct arg
-        browserService,           // Direct arg
-        globalUtils,              // Direct arg
-        APP_CONFIG,
-        logger
-      });
-      // DependencySystem.register('projectListComponent', plc); // Original had `plc` which is undefined here. Corrected.
-      DependencySystem.register('projectListComponent', projectListComponentInstance);
-    }
-
     // 3.5. ProjectDetailsComponent (Placeholder for ChatManager)
     // A placeholder might be needed if ChatManager requires it before ProjectManager and KBC are ready.
     // The definitive instance (`finalPdc`) is created later.
@@ -376,11 +351,33 @@ export function createCoreInitializer({
 
     eventHandlers.setProjectManager?.(projectManager);
 
-    // Update components with projectManager reference
-    const plc = DependencySystem.modules.get('projectListComponent');
-    if (plc && typeof plc.setProjectManager === 'function') {
-      plc.setProjectManager(projectManager);
-    }
+    /* ────────────────────────────────────────────────────────────────
+       ProjectListComponent – now that projectManager exists we can
+       create the definitive instance with strict-DI compliance.
+    ───────────────────────────────────────────────────────────────── */
+
+    logger.debug('[coreInit] Creating ProjectListComponent...', { context: 'coreInit' });
+
+    const projectListComponent = createProjectListComponent({
+      projectManager,                // ← real instance
+      eventHandlers,
+      modalManager,                  // already created
+      app,
+      router           : navigationServiceRef,
+      storage          : browserService,
+      sanitizer,
+      htmlSanitizer    : sanitizer,
+      apiClient        : apiRequest,
+      domAPI,
+      domReadinessService,
+      browserService,
+      globalUtils,
+      APP_CONFIG,
+      logger
+    });
+
+    DependencySystem.register('projectListComponent', projectListComponent);
+    logger.debug('[coreInit] ProjectListComponent created and registered.', { context: 'coreInit' });
 
     logger.debug('[coreInit] ProjectManager instance created and registered.', { context: 'coreInit' });
 
@@ -492,6 +489,13 @@ export function createCoreInitializer({
       domReadinessService       // Direct arg
     });
     DependencySystem.register('projectDashboard', projectDashboard);
+
+    // Wire list component into dashboard
+    const plc = DependencySystem.modules.get('projectListComponent');
+    if (plc && typeof projectDashboard.setProjectListComponent === 'function') {
+      projectDashboard.setProjectListComponent(plc);
+    }
+
     logger.debug('[coreInit] ProjectDashboard instance created and registered.', { context: 'coreInit' });
 
     // 6.2. ProjectModal
