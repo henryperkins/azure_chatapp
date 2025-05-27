@@ -244,7 +244,8 @@ export function createCoreInitializer({
     }
     const authModule = createAuthModule({ // Use corrected factory name
       DependencySystem,
-      apiClient: apiClientObjectRef, // use refreshed reference
+      // pass the callable fetch wrapper expected by AuthModule
+      apiClient: apiRequest,
       eventHandlers,
       domAPI,
       sanitizer,
