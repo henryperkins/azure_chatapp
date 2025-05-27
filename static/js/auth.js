@@ -1029,6 +1029,15 @@ export function createAuthModule(deps) {
       } else {
         logger.debug('[AuthModule][init] Dispatching authReady event.', { detail: readyEventDetail, context: 'init:dispatchAuthReady' });
         AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail }));
+
+        // Also broadcast via domReadinessService for global listeners/replay support
+        try {
+          domReadinessService?.emitReplayable?.('authReady', readyEventDetail);
+        } catch (err) {
+          logger.error('[AuthModule] Failed to emit authReady via domReadinessService', err, {
+            context: 'init:dispatchAuthReady'
+          });
+        }
       }
 
       // Final broadcast based on the state determined during init.
