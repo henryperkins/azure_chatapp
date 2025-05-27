@@ -18,14 +18,8 @@ const MODULE = "KnowledgeBaseComponent";
  * @throws {Error} If required dependencies such as `DependencySystem`, `logger`, `sanitizer`, `app`, `projectManager`, `eventHandlers`, `uiUtils`, `modalManager`, or `domAPI` are missing or invalid.
  */
 export function createKnowledgeBaseComponent(options = {}) {
-  const DS = options.DependencySystem || options.DependencySystem;
-  const eventHandlers =
-      options.eventHandlers ??
-      DS.modules.get('eventHandlers') ??
-      (()=>{ throw new Error('[KBC] eventHandlers required'); })();
-  // --- Dependency Resolution ---
-  if (!options.DependencySystem) throw new Error("DependencySystem is required for KnowledgeBaseComponent");
   const DS = options.DependencySystem;
+  if (!DS) throw new Error("DependencySystem is required for KnowledgeBaseComponent");
   const getDep = (name) => name in options ? options[name] : DS.modules.get(name);
 
   const sanitizer = getDep("sanitizer");
@@ -735,4 +729,3 @@ return {
 /**
  * (…existing module code…)
  */
-
