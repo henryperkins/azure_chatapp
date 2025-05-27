@@ -8,7 +8,10 @@
  *   DependencySystem.register('logger', logger);
  */
 
-const LEVELS = (()=>({ debug: 10, info: 20, log: 20, warn: 30, error: 40, critical: 50, fatal: 60 }))();
+const LEVELS = new Map([
+  ['debug', 10], ['info', 20], ['log', 20],
+  ['warn', 30],  ['error', 40], ['critical', 50], ['fatal', 60]
+]);
 export function createLogger({
   endpoint = '/api/logs',
   enableServer = true,
@@ -26,7 +29,7 @@ export function createLogger({
   eventHandlers = null      // NEW
 } = {}) {
   const _win = browserService?.getWindow?.();   // unified, DI-safe window
-  let _minLvlNum = LEVELS[minLevel] ?? 10;
+  let _minLvlNum = LEVELS.get(minLevel) ?? 10;
   let _enableServer = enableServer;
 
   // Generate a unique request ID for correlation tracking
@@ -48,7 +51,7 @@ export function createLogger({
     // If you need authentication logic, pass isAuthenticated directly via createLogger options in DI.
 
 
-    if (LEVELS[level] < _minLvlNum) return;
+    if ((LEVELS.get(level) ?? 99) < _minLvlNum) return;
 
     try {
       // Generate request ID for correlation tracking
@@ -149,7 +152,7 @@ export function createLogger({
   // Mutators for runtime control
   function setServerLoggingEnabled(flag = true) { _enableServer = !!flag; }
   function setMinLevel(lvl = 'info') {   // accepts 'debug' … 'fatal'
-    if (LEVELS[lvl]) _minLvlNum = LEVELS[lvl];
+    if (LEVELS.has(lvl)) _minLvlNum = LEVELS.get(lvl);
   }
 
   // Upgrade logger with API client for proper CSRF handling
