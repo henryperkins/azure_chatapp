@@ -305,7 +305,14 @@ export function createDomReadinessService({
   } = {}) {
     // First wait for needed dependencies
     if (deps.length > 0) {
-      await DependencySystem.waitFor(deps, null, timeout);
+      if (DependencySystem?.waitForDependencies) {
+        // Preferred injection-based readiness API
+        await DependencySystem.waitForDependencies(deps, { timeout });
+      } else {
+        throw new Error(
+          '[domReadinessService] DependencySystem.waitForDependencies not available – direct waitFor forbidden by frontend guardrails. Please update DependencySystem DI to expose waitForDependencies.'
+        );
+      }
     }
 
     // Then wait for any DOM elements
