@@ -114,7 +114,8 @@ const domAPI = createDomAPI({
   windowObject: browserAPI.getWindow(),
   debug: APP_CONFIG.DEBUG === true,
   // logger is registered later; domAPI will pick it up via DependencySystem DI after logger is registered.
-  sanitizer
+  sanitizer,
+  logger         : tempLogger          // ← ADD
 });
 
 /* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
@@ -255,6 +256,8 @@ if (DependencySystem.modules.has('safeHandler')) {
 eventHandlers.setLogger(logger);
 eventHandlers.setSafeHandler(safeHandler);
 domReadinessService.setLogger(logger);   // ← NEW
+domAPI.setLogger?.(logger);                 // ← NEW
+browserServiceInstance.setLogger?.(logger); // ← NEW
 
 // Expose an opportunity for serviceInit to accept logger
 serviceInit.setLogger(logger);
