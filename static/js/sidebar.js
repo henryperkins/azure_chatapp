@@ -151,6 +151,7 @@ export function createSidebar({
       showSidebar();
     }
     dispatch('sidebarPinChanged', { pinned });
+    if (visible) dispatch('sidebarVisibilityChanged', { visible });
   }
 
   function updatePinButtonVisual() {
@@ -189,9 +190,7 @@ export function createSidebar({
     if (!chatSearchInputEl || !uiRenderer) return;
 
     try {
-      let searchTerm = chatSearchInputEl.value.trim().toLowerCase();
-      // Sanitize user input to prevent XSS
-      searchTerm = sanitizer?.sanitize(searchTerm) || searchTerm;
+      const searchTerm = chatSearchInputEl.value.trim().toLowerCase();   // raw text only
 
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       const currentProject = projectManager.getCurrentProject?.();
@@ -213,9 +212,7 @@ export function createSidebar({
     if (!sidebarProjectSearchInputEl || !projectManager || !uiRenderer) return;
 
     try {
-      let searchTerm = sidebarProjectSearchInputEl.value.trim().toLowerCase();
-      // Sanitize user input to prevent XSS
-      searchTerm = sanitizer?.sanitize(searchTerm) || searchTerm;
+      const searchTerm = sidebarProjectSearchInputEl.value.trim().toLowerCase();   // raw text only
 
       const allProjects = projectManager.projects || [];
       const filteredProjects = searchTerm
@@ -443,7 +440,8 @@ export function createSidebar({
 
     visible = false;
     el.classList.remove('open');            // ← reset the open flag
-    el.classList.add('-translate-x-full');
+    el.classList.remove('translate-x-0');   // remove open-transform
+    el.classList.add('-translate-x-full');  // apply hidden transform
 
     el.inert = true;
     el.setAttribute('aria-hidden', 'true');
@@ -562,14 +560,6 @@ export function createSidebar({
         if (activeTab === 'starred') maybeRenderStarredConversations();
       }, 'Sidebar:currentProjectChanged'),
       { context: 'Sidebar', description: 'Refresh conversations on project switch' }
-    );
-
-    // Rewired: Use sidebarAuth for all auth state logic
-    eventHandlers.trackListener(
-      domAPI.getDocument(),
-      'authStateChanged',
-      safeHandler(sidebarAuth.handleGlobalAuthStateChange, 'Sidebar:authStateChanged'),
-      { context: 'Sidebar', description: 'Sidebar reacts to auth state changes' }
     );
 
     // ENHANCED: Also listen to AuthBus directly for more reliable auth state updates
