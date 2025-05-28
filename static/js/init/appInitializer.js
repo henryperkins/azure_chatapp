@@ -799,6 +799,7 @@ export function createAppInitializer({
             });
             DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
 
+            const navigationService = DependencySystem.modules.get('navigationService');
             const chatManagerInstance = (() => {
                 const factory = DependencySystem.modules.get('createChatManager');
                 if (!factory) {
@@ -818,12 +819,7 @@ export function createAppInitializer({
                     domAPI,
                     domReadinessService,
                     logger,
-                    navAPI: {
-                        getSearch: () => browserService.getLocation().search,
-                        getHref: () => browserService.getLocation().href,
-                        pushState: (url, title = '') => browserService.pushState({}, title, url),
-                        getPathname: () => browserService.getLocation().pathname
-                    },
+                    navAPI: navigationService?.navAPI,
                     isValidProjectId: globalUtils.isValidProjectId,
                     isAuthenticated: () => !!authModule.isAuthenticated?.(),
                     DOMPurify: sanitizer,

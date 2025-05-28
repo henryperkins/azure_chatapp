@@ -127,6 +127,21 @@ export function createNavigationService({
       : browserService.pushState   ({}, '', newUrl);
   }
 
+  // ——— Centralized location helpers (used by ChatManager & others) ———
+  function getLocationSearch()   { return browserService.getLocation().search; }
+  function getCurrentHref()      { return browserService.getLocation().href; }
+  function getCurrentPathname()  { return browserService.getLocation().pathname; }
+  function pushState (url, title = '')    { browserService.pushState   ({}, title, url); }
+  function replaceState(url, title = '')  { browserService.replaceState({}, title, url); }
+
+  //  Legacy-compat “navAPI” shim expected by createChatManager
+  const navAPI = {
+    getSearch  : getLocationSearch,
+    getHref    : getCurrentHref,
+    getPathname: getCurrentPathname,
+    pushState
+  };
+
   // === View Management ===
   /**
    * Register a view with the navigation service
@@ -499,6 +514,14 @@ export function createNavigationService({
 
     // Initialization & cleanup
     init,
+
+    /* consolidated navigation helpers */
+    getLocationSearch : getLocationSearch,
+    getCurrentHref    : getCurrentHref,
+    getCurrentPathname: getCurrentPathname,
+    pushState,
+    replaceState,
+    navAPI,           // ← for modules that still DI-expect navAPI
     cleanup
   };
 }
