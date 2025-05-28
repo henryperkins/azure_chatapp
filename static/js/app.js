@@ -224,11 +224,20 @@ logger.setSafeHandler?.(safeHandler);          // ← NEW
 // (Removed redundant serviceInit.registerBasicServices() call here)
 
 
-if (!DependencySystem.modules.get('apiRequest') || typeof DependencySystem.modules.get('apiRequest') !== 'function') {
-  throw new Error('[app.js] apiRequest must be registered before proceeding');
+// ----- new lazy proxy (will be overwritten by serviceInit) -----
+let apiRequest = (...args) => {
+  const impl = DependencySystem.modules.get('apiRequest');
+  if (typeof impl !== 'function') {
+    throw new Error('[app.js] apiRequest invoked before api client initialization');
+  }
+  // Once the real impl is available the proxy simply delegates.
+  return impl(...args);
+};
+if (!DependencySystem.modules.has('apiRequest')) {
+  DependencySystem.register('apiRequest', apiRequest);
+} else {
+  apiRequest = DependencySystem.modules.get('apiRequest');
 }
-const apiRequest = DependencySystem.modules.get('apiRequest');
-DependencySystem.register('apiRequest', apiRequest);
 
 // ---------------------------------------------------------------------------
 // 12) App object & top-level
