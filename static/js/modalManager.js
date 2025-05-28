@@ -70,6 +70,12 @@ class ModalManager {
       { report: () => { } };
     this.app = this.DependencySystem?.modules?.get?.('app') || null;
 
+    // Ensure safeHandler is available everywhere
+    this.safeHandler =
+      this.DependencySystem?.modules?.get?.('safeHandler');
+    if (typeof this.safeHandler !== 'function')
+      throw new Error('[ModalManager] safeHandler dependency missing');
+
     // ─── Deferred “fully-ready” promise ─────────────────────────
     this._readyResolve = null;
     this._readyReject = null;
@@ -160,6 +166,7 @@ class ModalManager {
   }
 
   _registerAvailableModals() {
+    const sh = this.safeHandler;
     if (!this.modalMappings || typeof this.modalMappings !== 'object') {
       this.logger.warn?.('[ModalManager] _registerAvailableModals: No modalMappings available to register.');
       return;
@@ -181,7 +188,8 @@ class ModalManager {
         this.eventHandlers.trackListener(
           modalEl,
           'close',
-          () => this._onDialogClose(modalId), // Pass modalId to handler
+          sh(() => this._onDialogClose(modalId),
+             `ModalManager:dialogClose:${modalId}`),
           {
             description: `Dialog close event for ${modalId}`,
             context: 'modalManager',
@@ -197,10 +205,10 @@ class ModalManager {
           this.eventHandlers.trackListener(
             button,
             'click',
-            (e) => {
-              e.preventDefault();
-              this.hide(modalName); // Use modalName for hiding
-            },
+            sh((e) => {
+                e.preventDefault();
+                this.hide(modalName); // Use modalName for hiding
+              },`ModalManager:closeBtn:${modalName}`),
             {
               description: `Close button click for modal ${modalName} (${modalId})`,
               context: 'modalManager',
@@ -356,6 +364,9 @@ class ModalManager {
       this.logger.debug?.('[ModalManager] init: Registering available modals after modalsLoaded.');
       this._registerAvailableModals();
 
+      // Validate mapping ↔ DOM consistency
+      this.validateModalMappings(this.modalMappings);
+
       const doc = this.domAPI.getDocument();
       this.domAPI.dispatchEvent(
         doc,
@@ -416,7 +427,10 @@ class ModalManager {
       this.logger.warn?.(`[ModalManager] show(${modalName}): #modalsContainer element not found. Modals might not display correctly if they rely on this container.`, { modalName });
     }
 
-    if (this.app?.isInitializing && !options.showDuringInitialization) {
+    const INIT_SAFE = new Set(['login','register','error','fatal','confirm']);
+    if (this.app?.isInitializing &&
+        !options.showDuringInitialization &&
+        !INIT_SAFE.has(modalName)) {
       this.logger.warn?.(`[ModalManager] show(${modalName}): Attempt to show modal during app initialization (and !options.showDuringInitialization). Aborting.`, { modalName });
       return false;
     }
@@ -445,6 +459,10 @@ class ModalManager {
     }
 
     this._showModalElement(modalEl);
+
+    if (this.domReadinessService?.emitReplayable)
+      this.domReadinessService.emitReplayable('modalShown', { modal: modalName });
+
     this.activeModal = modalName;
     this.logger.info?.(`[ModalManager] Successfully shown modal: ${modalName} (#${modalId})`);
     return true;
@@ -452,6 +470,8 @@ class ModalManager {
 
   async confirmAction(options) {
     this.logger.debug?.('[ModalManager] confirmAction() called.', { options });
+
+    const sh = this.safeHandler;
 
     // CRITICAL CHANGE: Await readiness before proceeding (as it calls show())
     try {
@@ -508,18 +528,18 @@ class ModalManager {
     const newConfirmBtn = confirmBtn ? replaceWithClone(confirmBtn) : null;
     const newCancelBtn = cancelBtn ? replaceWithClone(cancelBtn) : null;
 
-    const confirmHandler = () => {
+    const confirmHandler = sh(() => {
       this.hide(modalName);
       if (typeof options.onConfirm === 'function') {
         options.onConfirm();
       }
-    };
-    const cancelHandler = () => {
+    }, 'ModalManager:confirmAction:confirm');
+    const cancelHandler = sh(() => {
       this.hide(modalName);
       if (typeof options.onCancel === 'function') {
         options.onCancel();
       }
-    };
+    }, 'ModalManager:confirmAction:cancel');
 
     if (this.eventHandlers?.trackListener) {
       if (newConfirmBtn) {
@@ -557,6 +577,10 @@ class ModalManager {
       return;
     }
     this._hideModalElement(modalEl); // This logs internally
+
+    if (this.domReadinessService?.emitReplayable)
+      this.domReadinessService.emitReplayable('modalHidden', { modal: modalName });
+
     if (this.activeModal === modalName) {
       this.activeModal = null;
       this.logger.debug?.(`[ModalManager] hide(${modalName}): Modal hidden and activeModal cleared.`);
