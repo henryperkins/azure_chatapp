@@ -15,19 +15,14 @@
 import { APP_CONFIG } from './appConfig.js';
 import { createDomAPI } from './utils/domAPI.js';
 import { createApiEndpoints } from './utils/apiEndpoints.js';
-import { createErrorReporterStub } from './utils/errorReporterStub.js';
+
 import { createBrowserService, normaliseUrl } from './utils/browserService.js';
 import { setBrowserService as registerSessionBrowserService } from './utils/session.js';
 import { getSessionId } from './utils/session.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
-import { createServiceInitializer } from './init/serviceInit.js';
-import { createCoreInitializer } from './init/coreInit.js';
-import { createUIInitializer } from './init/uiInit.js';
-import { createAuthInitializer } from './init/authInit.js';
-import { createAppStateManager } from './init/appState.js';
-import { createErrorInitializer } from './init/errorInit.js';
+import { createAppInitializer } from './init/appInitializer.js';
 import { safeInit } from './utils/initHelpers.js';
 
 import {
@@ -113,10 +108,7 @@ const domAPI = createDomAPI({
 /* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
 
 // ---------------------------------------------------------------------------
-// 6) Early app module (using factory) — NO LOGGER YET
-// ---------------------------------------------------------------------------
-const appModule = createAppStateManager({ DependencySystem /* logger registered later */ });
-DependencySystem.register('appModule', appModule);
+// 6) Early app module (using factory)—no appInit yet, define it later after eventHandlers
 
 // ---------------------------------------------------------------------------
 // 7) Define app object early (CRITICAL FIX)
@@ -142,6 +134,13 @@ const eventHandlers = createEventHandlers({
   // domReadinessService to be injected after instantiation
 });
 DependencySystem.register('eventHandlers', eventHandlers);
+// Now define appInit after eventHandlers is fully created:
+const appInit = createAppInitializer({
+  DependencySystem,
+  domAPI,
+  browserService: browserAPI,
+  eventHandlers
+});
 
 /* Correct domReadinessService creation — after eventHandlers are available. */
 const domReadinessService = createDomReadinessService({
@@ -181,35 +180,6 @@ DependencySystem.register('globalUtils', {
  // ---------------------------------------------------------------------------
  // 10) Create service initializer
  // ---------------------------------------------------------------------------
- const serviceInit = createServiceInitializer({
-   DependencySystem,
-   domAPI,
-   browserServiceInstance,
-   eventHandlers,
-   domReadinessService,
-   sanitizer,
-   APP_CONFIG,
-   uiUtils,
-   globalUtils: {
-     shouldSkipDedup,
-     stableStringify,
-     normaliseUrl,
-     isAbsoluteUrl,
-     isValidProjectId
-   },
-   createFileUploadComponent,
-   createApiClient, // apiClient factory
-   createAccessibilityEnhancements,
-   createNavigationService,
-   createHtmlTemplateLoader,
-   createUiRenderer,
-   getSessionId // logger created later
- });
-
- // --- Register baseline (core) services *before* any further modules rely
- // on them being available in DependencySystem.  This must happen right
- // after serviceInit is created, not later in the bootstrap.
- serviceInit.registerBasicServices();
 
 // ---------------------------------------------------------------------------
 // Create the real logger
@@ -246,8 +216,7 @@ if (DependencySystem.modules.has('safeHandler')) {
  browserServiceInstance.setLogger?.(logger); // ← NEW
 
 // Expose an opportunity for serviceInit to accept logger
-serviceInit.setLogger(logger);
-appModule.setLogger?.(logger);            // ← NEW
+appInit.setLogger?.(logger);
 
 // ---- upgrade the logger with the canonical safeHandler ----
 logger.setSafeHandler?.(safeHandler);          // ← NEW
@@ -319,9 +288,9 @@ app.setLifecycleState = (...args) => {
 
 app.DependencySystem = DependencySystem;
 app.apiRequest = apiRequest;
-app.state = appModule.state;
+app.state = appInit.state;
 Object.defineProperty(app, 'isInitializing', {
-  get: () => appModule.state.initializing,
+  get: () => appInit.state?.initializing,
   enumerable: true,
   configurable: true
 });
@@ -378,84 +347,11 @@ function fireAppReady(success = true, error = null) {
 // ---------------------------------------------------------------------------
 // Auth + error inits
 // ---------------------------------------------------------------------------
-const authInit = createAuthInitializer({
-  DependencySystem,
-  domAPI,
-  eventHandlers,
-  logger,
-  sanitizer,
-  safeHandler: DependencySystem.modules.get('safeHandler'),
-  domReadinessService,
-  APP_CONFIG
-});
-DependencySystem.register('authInit', authInit);
-
-const errorInit = createErrorInitializer({
-  DependencySystem,
-  browserService: browserServiceInstance,
-  eventHandlers,
-  logger,
-  safeHandler: DependencySystem.modules.get('safeHandler')
-});
-DependencySystem.register('errorInit', errorInit);
 
 // ---------------------------------------------------------------------------
 // Core + UI inits
 // ---------------------------------------------------------------------------
-const apiClientObject = DependencySystem.modules.get('apiClientObject');
-const appObj = DependencySystem.modules.get('app');
-const navigationService = DependencySystem.modules.get('navigationService');
-const htmlTemplateLoader = DependencySystem.modules.get('htmlTemplateLoader');
-const uiRenderer = DependencySystem.modules.get('uiRenderer');
-const accessibilityUtils = DependencySystem.modules.get('accessibilityUtils');
 
-const coreInit = createCoreInitializer({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  eventHandlers,
-  sanitizer,
-  logger,
-  APP_CONFIG,
-  domReadinessService,
-  createKnowledgeBaseComponent,
-  MODAL_MAPPINGS,
-  apiRequest,
-  apiClientObject,
-  apiEndpoints: DependencySystem.modules.get('apiEndpoints'),   // ← ADD
-  app: appObj,
-  uiUtils,
-  navigationService,
-  globalUtils: {
-    shouldSkipDedup,
-    stableStringify,
-    normaliseUrl,
-    isAbsoluteUrl,
-    isValidProjectId
-  },
-  FileUploadComponent: createFileUploadComponent,
-  htmlTemplateLoader,
-  uiRenderer,
-  accessibilityUtils,
-  safeHandler
-});
-
-const uiInit = createUIInitializer({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  eventHandlers,
-  domReadinessService,
-  logger,
-  APP_CONFIG,
-  safeHandler: DependencySystem.modules.get('safeHandler'),
-  sanitizer,
-  createProjectDetailsEnhancements,
-  createTokenStatsManager,
-  createKnowledgeBaseComponent,
-  apiRequest,
-  uiUtils
-});
 
 // ---------------------------------------------------------------------------
 // registerAppListeners
@@ -504,177 +400,13 @@ export async function init() {
 
   await domReadinessService.documentReady();
 
-  const GLOBAL_INIT_TIMEOUT_MS = 15000;
-  const PHASE_TIMEOUT = 5000;
-  let globalInitTimeoutFired = false;
-
-  const globalInitTimeoutId = browserAPI.getWindow().setTimeout(() => {
-    globalInitTimeoutFired = true;
-    const err = new Error(`[App.init] Global init timeout after ${GLOBAL_INIT_TIMEOUT_MS}ms.`);
-    logger.error('[App.init] Emergency global timeout', err, { context: 'app:init:globalTimeout' });
-    handleInitError(err);
-    fireAppReady(false, err);
-  }, GLOBAL_INIT_TIMEOUT_MS);
-
-  if (_globalInitCompleted || _globalInitInProgress) {
-    browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-    return _globalInitCompleted;
-  }
-  if (appModule.state.initialized || appModule.state.initializing) {
-    browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-    return appModule.state.initialized;
-  }
-
-  _globalInitInProgress = true;
-  appModule.setAppLifecycleState({ initializing: true, currentPhase: 'starting_init_process' });
-  toggleLoadingSpinner(true);
-
   try {
-    // Stage 1
-    logger.log('[App.init] Stage 1: Global error handling', { context: 'app:init' });
-    errorInit.initializeErrorHandling();
-    logger.info('[App.init] Stage 1 done', { context: 'app:init' });
-
-    // Stage 2
-    logger.log('[App.init] Stage 2: advanced services registration', { context: 'app:init' });
-    serviceInit.registerAdvancedServices();
-    logger.info('[App.init] Stage 2 done', { context: 'app:init' });
-
-    // Validate advanced services
-    const requiredAdvancedServices = [
-      'apiRequest',
-      'apiClientObject',
-      'navigationService',
-      'htmlTemplateLoader',
-      'uiRenderer',
-      'accessibilityUtils'
-    ];
-    const missingServices = [];
-    for (const sName of requiredAdvancedServices) {
-      if (!DependencySystem.modules.get(sName)) {
-        missingServices.push(sName);
-      }
-    }
-    if (missingServices.length > 0) {
-      const error = new Error(`Missing advanced services: ${missingServices.join(', ')}`);
-      logger.error('[app.js] advanced services fail', error, { context: 'app:init', missingServices });
-      throw error;
-    }
-
-    // --- Pass advanced-service instances to coreInit ------------------------
-    coreInit.setAdvancedServices({
-      htmlTemplateLoader: DependencySystem.modules.get('htmlTemplateLoader'),
-      uiRenderer: DependencySystem.modules.get('uiRenderer'),
-      accessibilityUtils: DependencySystem.modules.get('accessibilityUtils'),
-      navigationService: DependencySystem.modules.get('navigationService'),
-      apiClientObject: DependencySystem.modules.get('apiClientObject'),
-    });
-    // ------------------------------------------------------------------------
-
-    // Stage 3
-    logger.log('[App.init] Stage 3: core systems (modals, etc.)', { context: 'app:init' });
-    await coreInit.initializeCoreSystems();
-    logger.info('[App.init] Stage 3 done', { context: 'app:init' });
-
-    // Stage 4
-    logger.log('[App.init] Stage 4: waiting modals', { context: 'app:init' });
-    await domReadinessService.waitForEvent('modalsLoaded', { timeout: 10000, context: 'app.init:modalsLoaded' });
-    logger.info('[App.init] Stage 4 done', { context: 'app:init' });
-
-    // Stage 5
-    logger.log('[App.init] Stage 5: critical DI deps', { context: 'app:init' });
-    await domReadinessService.dependenciesAndElements({
-      deps: ['auth', 'eventHandlers', 'modalManager'],
-      timeout: PHASE_TIMEOUT,
-      context: 'app.init:depsReady'
-    });
-    logger.info('[App.init] Stage 5 done', { context: 'app:init' });
-
-    // Stage 6 auth
-    logger.log('[App.init] Stage 6: auth system', { context: 'app:init' });
-    const safeAuthInit = safeHandler(
-      () => authInit.initializeAuthSystem(),
-      'authInit.initializeAuthSystem'
-    );
-    await safeAuthInit();
-
-    /* Remote logging is safe now: apiClient is ready and CSRF token
-       has been fetched by auth.init(). */
-    logger.setServerLoggingEnabled(true);
-
-    logger.info('[App.init] Stage 6 done', { context: 'app:init' });
-
-    // Stage 7 user
-    if (appModule.state.isAuthenticated) {
-      logger.log('[App.init] Stage 7: fetch current user', { context: 'app:init' });
-      const authModule = DependencySystem.modules.get('auth');
-      if (authModule?.fetchCurrentUser) {
-        const user = await authModule.fetchCurrentUser();
-        if (user) {
-          app.setCurrentUser(user);
-          browserAPI.setCurrentUser(user);
-        }
-      } else {
-        logger.warn('[App.init] Stage 7: no fetchCurrentUser', { context: 'app:init' });
-      }
-      logger.info('[App.init] Stage 7 done', { context: 'app:init' });
-    }
-
-    // Stage 8 UI
-    logger.log('[App.init] Stage 8: UI init', { context: 'app:init' });
-    await uiInit.initializeUIComponents();
-    logger.info('[App.init] Stage 8 done', { context: 'app:init' });
-
-    // Stage 9
-    logger.log('[App.init] Stage 9: app-level listeners', { context: 'app:init' });
-    registerAppListeners();
-    logger.info('[App.init] Stage 9 done', { context: 'app:init' });
-
-    // Stage 10 nav
-    logger.log('[App.init] Stage 10: navigation service', { context: 'app:init' });
-    const navService = DependencySystem.modules.get('navigationService');
-    if (!navService) {
-      throw new Error('[App.init] no navigationService, aborting');
-    }
-    if (navService.init) {
-      await navService.init();
-    }
-    logger.info('[App.init] Stage 10 done', { context: 'app:init' });
-
-    // Stage 11 finalize
-    logger.log('[App.init] Stage 11: finalize app state', { context: 'app:init' });
-    appModule.setAppLifecycleState({ initialized: true });
-    _globalInitCompleted = true;
-    logger.info('[App.init] Stage 11 done', { context: 'app:init' });
-
-    // Stage 12 app:ready
-    if (!globalInitTimeoutFired) {
-      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-      logger.log('[App.init] Stage 12: dispatching app:ready', { context: 'app:init' });
-      fireAppReady(true);
-    }
-
-    // Stage 13 expose debug
-    logger.log('[App.init] Stage 13: debug helpers', { context: 'app:init' });
+    await appInit.initializeApp();
     exposeDebugHelpers();
-    logger.info('[App.init] Stage 13 done', { context: 'app:init' });
-
     return true;
   } catch (err) {
-    logger.error('[init] failed', err, { context: 'app:init', ts: Date.now() });
     handleInitError(err);
-    if (!globalInitTimeoutFired) {
-      browserAPI.getWindow().clearTimeout(globalInitTimeoutId);
-      fireAppReady(false, err);
-    }
     throw err;
-  } finally {
-    _globalInitInProgress = false;
-    appModule.setAppLifecycleState({
-      initializing: false,
-      currentPhase: appModule.state.initialized ? 'initialized_idle' : 'failed_idle'
-    });
-    toggleLoadingSpinner(false);
   }
 }
 
