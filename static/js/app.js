@@ -141,12 +141,8 @@ const eventHandlers = createEventHandlers({
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 // Now define appInit after eventHandlers is fully created:
-const appInit = createAppInitializer({
-  DependencySystem,
-  domAPI,
-  browserService: browserAPI,
-  eventHandlers
-});
+/* Defer AppInitializer creation until logger & safeHandler exist */
+let appInit;
 
 /* Correct domReadinessService creation — after eventHandlers are available. */
 const domReadinessService = createDomReadinessService({
@@ -174,6 +170,7 @@ DependencySystem.register('createProjectDetailsComponent', createProjectDetailsC
 DependencySystem.register('createProjectListComponent', createProjectListComponent);
 DependencySystem.register('createProjectModal', createProjectModal);
 DependencySystem.register('createSidebar', createSidebar);
+DependencySystem.register('createApiEndpoints', createApiEndpoints);
 DependencySystem.register('MODAL_MAPPINGS', MODAL_MAPPINGS);
 DependencySystem.register('globalUtils', {
   shouldSkipDedup,
@@ -213,6 +210,49 @@ if (DependencySystem.modules.has('safeHandler')) {
 } else {
   DependencySystem.register('safeHandler', safeHandler);
 }
+
+/* ───────────────────────────────
+   NOW create the AppInitializer
+   ─────────────────────────────── */
+appInit = createAppInitializer({
+  /* Core infrastructure */
+  DependencySystem,
+  domAPI,
+  browserService: browserAPI,
+  eventHandlers,
+  logger,
+  sanitizer,
+  safeHandler,
+  domReadinessService,
+  APP_CONFIG,
+  uiUtils,
+  globalUtils: DependencySystem.modules.get('globalUtils'),
+  createApiEndpoints,
+  getSessionId,
+
+  /* Modal mapping constant */
+  MODAL_MAPPINGS,
+
+  /* Factories */
+  createFileUploadComponent,
+  createApiClient,
+  createAccessibilityEnhancements,
+  createNavigationService,
+  createHtmlTemplateLoader,
+  createUiRenderer,
+  createKnowledgeBaseComponent,
+  createProjectDetailsEnhancements,
+  createTokenStatsManager,
+  createModalManager,
+  createAuthModule,
+  createProjectManager,
+  createModelConfig,
+  createProjectDashboard,
+  createProjectDetailsComponent,
+  createProjectListComponent,
+  createProjectModal,
+  createSidebar
+});
 
  // ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
  eventHandlers.setLogger(logger);
@@ -422,6 +462,7 @@ export async function init() {
   try {
     await appInit.initializeApp();
     exposeDebugHelpers();
+    fireAppReady(true);
     return true;
   } catch (err) {
     handleInitError(err);
@@ -482,10 +523,5 @@ if (typeof window !== 'undefined') {
 /**
  * Factory required by guard-rail Rule 1
  */
-export function createAppConfig({ DependencySystem } = {}) {
-  if (!DependencySystem) throw new Error('[appConfig] Missing DependencySystem');
-  return {
-    APP_CONFIG,
-    cleanup() { }
-  };
-}
+/* Re-export canonical factory to eliminate duplication */
+export { createAppConfig } from './appConfig.js';

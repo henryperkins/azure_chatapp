@@ -30,6 +30,8 @@ export function createAppInitializer({
     uiUtils,
     globalUtils,
     getSessionId,
+    // New: factory for API endpoints
+    createApiEndpoints,
 
     // Modal mapping constant
     MODAL_MAPPINGS,
@@ -60,7 +62,7 @@ export function createAppInitializer({
     const required = {
         DependencySystem, domAPI, browserService, eventHandlers,
         logger, sanitizer, safeHandler, domReadinessService,
-        APP_CONFIG, uiUtils, globalUtils, getSessionId,
+        APP_CONFIG, uiUtils, globalUtils, getSessionId, createApiEndpoints,
         MODAL_MAPPINGS,
         createModalManager, createAuthModule, createProjectManager,
         createModelConfig, createProjectDashboard, createProjectDetailsComponent,
@@ -78,18 +80,29 @@ export function createAppInitializer({
     // ──────────────────────────────────────────────
     // 2. Register all factory functions in DI so coreInit can retrieve them
     // ──────────────────────────────────────────────
-    [
-        'createModalManager', 'createAuthModule', 'createProjectManager',
-        'createModelConfig', 'createProjectDashboard', 'createProjectDetailsComponent',
-        'createProjectListComponent', 'createProjectModal', 'createSidebar',
-        'createFileUploadComponent', 'createApiClient',
-        'createAccessibilityEnhancements', 'createNavigationService',
-        'createHtmlTemplateLoader', 'createUiRenderer',
-        'createKnowledgeBaseComponent', 'createProjectDetailsEnhancements',
-        'createTokenStatsManager'
-    ].forEach(name => {
-        if (!DependencySystem.modules.has(name)) {
-            const fn = eval(name);
+    // --- Register factory functions without using eval (CSP-safe) ---
+    const factoryMap = {
+        createModalManager,
+        createAuthModule,
+        createProjectManager,
+        createModelConfig,
+        createProjectDashboard,
+        createProjectDetailsComponent,
+        createProjectListComponent,
+        createProjectModal,
+        createSidebar,
+        createFileUploadComponent,
+        createApiClient,
+        createAccessibilityEnhancements,
+        createNavigationService,
+        createHtmlTemplateLoader,
+        createUiRenderer,
+        createKnowledgeBaseComponent,
+        createProjectDetailsEnhancements,
+        createTokenStatsManager
+    };
+    Object.entries(factoryMap).forEach(([name, fn]) => {
+        if (fn && !DependencySystem.modules.has(name)) {
             DependencySystem.register(name, fn);
         }
     });
@@ -348,7 +361,9 @@ export function createAppInitializer({
             }
 
             // Register API endpoints
-            const { createApiEndpoints } = require('../utils/apiEndpoints.js');
+            if (typeof createApiEndpoints !== 'function') {
+                throw new Error('[serviceInit] createApiEndpoints factory missing.');
+            }
             const apiEndpointsInstance = createApiEndpoints({ logger, DependencySystem, config: APP_CONFIG });
             const resolvedEndpoints = DependencySystem.modules.get('apiEndpoints') || apiEndpointsInstance.endpoints;
             safeRegister('apiEndpoints', resolvedEndpoints);
@@ -393,6 +408,13 @@ export function createAppInitializer({
                     });
                 } else {
                     safeRegister('apiRequest', apiClientInstance.fetch);
+                }
+
+                // --- Ensure apiClient is ALSO registered (alias to fetch) ---
+                if (DependencySystem.modules.has('apiClient')) {
+                    DependencySystem.modules.set('apiClient', apiClientInstance.fetch);
+                } else {
+                    safeRegister('apiClient', apiClientInstance.fetch);
                 }
 
                 if (DependencySystem.modules.has('apiClientObject')) {
@@ -792,15 +814,9 @@ export function createAppInitializer({
             });
             DependencySystem.register('projectDetailsComponent', projectDetailsComp);
 
-            // Phase 3.5: KnowledgeBaseComponent & ChatManager
-            const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
-                DependencySystem,
-                apiRequest: DependencySystem.modules.get('apiRequest'),
-                projectManager: null, // set when projectManager is created
-                uiUtils,
-                sanitizer
-            });
-            DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+            // Phase 3.5: KnowledgeBaseComponent (placeholder) & ChatManager
+            // we must delay real instantiation until ProjectManager exists
+            let knowledgeBaseComponentInstance = null;
 
             const navigationService = DependencySystem.modules.get('navigationService');
             const chatManagerInstance = (() => {
@@ -860,6 +876,24 @@ export function createAppInitializer({
             /* NEW – activate its internal listeners & auth synchronisation */
             if (typeof projectManager.initialize === 'function') {
                 await projectManager.initialize();
+            }
+
+            // Instantiate KnowledgeBaseComponent now that ProjectManager is ready
+            if (!knowledgeBaseComponentInstance) {
+                knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
+                    DependencySystem,
+                    apiRequest: DependencySystem.modules.get('apiRequest'),
+                    app: appModule,
+                    projectManager,
+                    eventHandlers,
+                    modalManager,
+                    uiUtils,
+                    sanitizer
+                });
+                DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+                logger.debug('[coreInit] KnowledgeBaseComponent instantiated post ProjectManager.', {
+                    context: 'coreInit'
+                });
             }
 
             // Phase 3.7: ProjectListComponent
