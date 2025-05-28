@@ -384,6 +384,20 @@ function fireAppReady(success = true, error = null) {
     domAPI.dispatchEvent(domAPI.getDocument(), evt);
   }
 
+  /* ------------------------------------------------------------------
+   * ALSO dispatch ‘app:ready’ on window so base.html listener receives it.
+   * ------------------------------------------------------------------ */
+  try {
+    const win = browserAPI.getWindow?.();
+    if (win && typeof win.dispatchEvent === 'function') {
+      const winEvt = eventHandlers.createCustomEvent('app:ready', { detail });
+      win.dispatchEvent(winEvt);
+    }
+  } catch (err) {
+    logger.error('[fireAppReady] Failed to dispatch app:ready on window', err,
+      { context: 'app:fireAppReady' });
+  }
+
   DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', {
     success, error, context: 'app'
   });
