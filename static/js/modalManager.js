@@ -217,6 +217,10 @@ class ModalManager {
 
   async init() {
     this.logger.info?.('[ModalManager] init() called.');
+
+    // Track the (possibly synthetic) modalsLoaded event so we can replay it later
+    let modalsLoadedEventData = null;
+
     try {
       const depSys = this.DependencySystem;
       if (!depSys) {
@@ -321,7 +325,7 @@ class ModalManager {
         this.logger.info?.("[ModalManager] init: Waiting for 'modalsLoaded' event...");
         // CRITICAL CHANGE: Strict wait for modalsLoaded.
         // If modals.html fails to load or the event doesn't fire, ModalManager init will fail.
-        const modalsLoadedEventData = await this.domReadinessService.waitForEvent('modalsLoaded', {
+        modalsLoadedEventData = await this.domReadinessService.waitForEvent('modalsLoaded', {
           timeout: 15000, // Increased timeout to 15s for modals.html loading
           context: 'modalManager.init:waitForModalsLoaded'
         });
@@ -332,6 +336,17 @@ class ModalManager {
         this.logger.info?.("[ModalManager] init: 'modalsLoaded' event received.", { synthetic: modalsLoadedEventData?.detail?.synthetic });
       } else {
         this.logger.info?.("[ModalManager] init: Skipping 'modalsLoaded' event wait - modals already present.");
+      }
+
+      /* -----------------------------------------------------------------
+       * Ensure late listeners (e.g. app.js Stage-4) can still observe the
+       * event even if it happened earlier in this init().
+       * ----------------------------------------------------------------- */
+      if (this.domReadinessService?.emitReplayable) {
+        const detail =
+          modalsLoadedEventData?.detail
+            ?? { success: true, synthetic: !shouldWaitForEvent };
+        this.domReadinessService.emitReplayable('modalsLoaded', detail);
       }
 
       // The one-time listener for 'modalsLoaded' to re-scan is removed as we now strictly await it.
