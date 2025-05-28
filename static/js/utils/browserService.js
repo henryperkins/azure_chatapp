@@ -73,75 +73,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
    * -------------------------------------------------------------- */
 
   function createFallbackDependencySystem() {
-    const modules = new Map();
-    const pendingResolvers = new Map(); // depName -> [resolveFns]
-
-    function register(name, value) {
-      modules.set(name, value);
-      if (pendingResolvers.has(name)) {
-        pendingResolvers.get(name).forEach((r) => r(value));
-        pendingResolvers.delete(name);
-      }
-      return value;
-    }
-
-    function waitFor(deps = [], _ctx = null, timeout = 15000) {
-      const required = Array.isArray(deps) ? deps : [deps];
-      const remaining = required.filter((d) => !modules.has(d));
-      if (remaining.length === 0) return Promise.resolve(true);
-
-      return new Promise((resolve, reject) => {
-        const satisfied = new Set();
-
-        const maybeResolve = () => {
-          if (satisfied.size === remaining.length) resolve(true);
-        };
-
-        const timerId = timeout
-          ? setTimeout(
-              () => reject(new Error(`DependencySystem.waitFor timeout: [${remaining.join(', ')}]`)),
-              timeout,
-            )
-          : null;
-
-        remaining.forEach((dep) => {
-          const arr = pendingResolvers.get(dep) || [];
-          arr.push(() => {
-            satisfied.add(dep);
-            if (timerId && satisfied.size === remaining.length) clearTimeout(timerId);
-            maybeResolve();
-          });
-          pendingResolvers.set(dep, arr);
-        });
-      });
-    }
-
-    // ---- ALIAS NEEDED BY domReadinessService -----------------
-    // Keeps the same semantics but accepts the new opts-object signature.
-    function waitForDependencies(deps = [], { timeout = 15000, context = null } = {}) {
-      return waitFor(deps, context, timeout);
-    }
-    //-----------------------------------------------------------
-
-    function has(dep) {
-      return modules.has(dep);
-    }
-
-    function cleanupModuleListeners(context = '') {
-      const evHandlers = modules.get('eventHandlers');
-      if (evHandlers && typeof evHandlers.cleanupListeners === 'function') {
-        evHandlers.cleanupListeners({ context });
-      }
-    }
-
-    return {
-      modules,
-      register,
-      waitFor,
-      waitForDependencies,   // ← export the alias
-      has,
-      cleanupModuleListeners,
-    };
+    throw new Error('[browserService] Fallback DependencySystem is forbidden—application DI contract not satisfied.');
   }
 
   if (!windowObject.DependencySystem || typeof windowObject.DependencySystem.register !== 'function') {
@@ -235,12 +167,12 @@ export function createBrowserService({ windowObject, logger } = {}) {
       return windowObject.clearInterval(...args);
     },
 
-    requestAnimationFrame: (cb) =>
-      typeof windowObject.requestAnimationFrame === 'function'
-        ? windowObject.requestAnimationFrame(cb)
-        : (windowObject.setTimeout
-            ? windowObject.setTimeout(cb, 0)
-            : (() => { _logger?.error?.('browserService: windowObject.setTimeout is not available for requestAnimationFrame fallback.'); throw new Error('browserService: windowObject.setTimeout is not available for requestAnimationFrame fallback.'); })()),
+    requestAnimationFrame: (cb) => {
+      if (typeof windowObject.requestAnimationFrame === 'function') {
+        return windowObject.requestAnimationFrame(cb);
+      }
+      throw new Error('browserService: windowObject.requestAnimationFrame is required; fallback to setTimeout is forbidden.');
+    },
 
     // Location / navigation helpers
     setLocation: (url) => { windowObject.location.assign(url); },

@@ -78,6 +78,8 @@ export function createAuthInitializer({
       logger.info('[authInit] Calling auth.init()', { context: 'authInit:init' });
       await auth.init();
 
+      eventHandlers.dispatch('authReady');
+
       renderAuthHeader(); // Ensure this renders based on the now canonical appModule.state
       return true;
     } catch (err) {
@@ -204,12 +206,10 @@ export function createAuthInitializer({
       }
 
       if (isAuth && userMenu && userInitialsEl) {
-        let initials = '?';
-        if (user?.name) { // Prefer user.name if available
-          initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
-        } else if (user?.username) { // Fallback to username
-          initials = user.username.trim().slice(0, 2).toUpperCase();
+        if (!user?.name) {
+          throw new Error('[authInit][renderAuthHeader] user.name is required for user initials; fallback/derivation forbidden.');
         }
+        const initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
         domAPI.setTextContent(userInitialsEl, initials);
       } else if (userMenu && userInitialsEl) {
         domAPI.setTextContent(userInitialsEl, ''); // Clear if not authenticated
@@ -263,10 +263,7 @@ export function createAuthInitializer({
       if (modalManager && typeof modalManager.show === 'function') {
         modalManager.show('login');
       } else {
-        // Fallback: try the native dialog element directly using injected domAPI
-        const doc = domAPI.getDocument();
-        const loginDlg = doc?.getElementById('loginModal');
-        if (loginDlg) domAPI.callMethod(loginDlg, 'showModal');
+        throw new Error('[authInit][forceShowLoginModal] modalManager dependency missing—cannot show login modal.');
       }
     }
   }

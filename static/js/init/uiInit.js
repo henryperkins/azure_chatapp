@@ -97,13 +97,23 @@ export function createUIInitializer({
 
   async function waitForModalReadiness() {
     const modalMgr = DependencySystem.modules.get('modalManager');
-    if (modalMgr?.isReadyPromise) {
-      await Promise.race([
-        modalMgr.isReadyPromise(),
-        new Promise(res => browserService.getWindow().setTimeout(res, 8000))
-      ]).catch(() => {
-        logger.warn('[UIInit] ModalManager not ready after 8s – continuing', { context: 'uiInit' });
-      });
+    if (!modalMgr?.isReadyPromise) {
+      throw new Error('[uiInit] ModalManager is not available or missing isReadyPromise.');
+    }
+
+    const timeoutMS = 8000;
+    let timedOut = false;
+    await Promise.race([
+      modalMgr.isReadyPromise(),
+      new Promise((_, reject) =>
+        browserService.getWindow().setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`[uiInit] ModalManager readiness timeout after ${timeoutMS}ms.`));
+        }, timeoutMS)
+      )
+    ]);
+    if (timedOut) {
+      throw new Error('[uiInit] ModalManager did not become ready within the allotted time.');
     }
   }
 
@@ -117,25 +127,22 @@ export function createUIInitializer({
   async function waitForModalReadinessWithTimeout(timeout = 8000, context = 'waitForModalReadiness') {
     const modalMgr = DependencySystem.modules.get('modalManager');
     if (!modalMgr?.isReadyPromise) {
-      logger.warn(`[${context}] ModalManager or isReadyPromise not available`, { context });
-      return false;
+      throw new Error(`[${context}] ModalManager or isReadyPromise not available (strict mode).`);
     }
-
-    try {
-      await Promise.race([
-        modalMgr.isReadyPromise(),
-        new Promise((_, reject) =>
-          browserService.getWindow().setTimeout(
-            () => reject(new Error(`Modal readiness timeout after ${timeout}ms`)),
-            timeout
-          )
-        )
-      ]);
-      return true;
-    } catch (err) {
-      logger.error(`[${context}] ModalManager not ready after ${timeout}ms – continuing`, err, { context });
-      return false;
+    let timedOut = false;
+    await Promise.race([
+      modalMgr.isReadyPromise(),
+      new Promise((_, reject) =>
+        browserService.getWindow().setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`[${context}] Modal readiness timeout after ${timeout}ms (strict mode)`));
+        }, timeout)
+      )
+    ]);
+    if (timedOut) {
+      throw new Error(`[${context}] ModalManager not ready after ${timeout}ms (strict mode)`);
     }
+    return true;
   }
 
   // Creates and registers UI-specific components like ProjectDetailsEnhancements and TokenStatsManager.
@@ -236,8 +243,7 @@ export function createUIInitializer({
   async function registerNavigationViews() {
     const navigationService = DependencySystem.modules.get('navigationService');
     if (!navigationService || typeof navigationService.registerView !== 'function') {
-      logger.warn('[UIInit] NavigationService not available or missing registerView method', { context: 'uiInit:registerNavigationViews' });
-      return;
+      throw new Error('[uiInit] NavigationService not available or missing registerView method (strict mode)');
     }
 
     try {
@@ -256,7 +262,7 @@ export function createUIInitializer({
                 await plc.show();
                 return true;
               }
-              return false;
+              throw new Error('[uiInit] Could not display project list; both dashboard and projectListComponent missing show method (strict mode).');
             } catch (err) {
               logger.error('[UIInit] Error in projectList show', err, { context: 'uiInit:navigation:projectList:show' });
               throw err;
@@ -274,7 +280,7 @@ export function createUIInitializer({
                 await plc.hide();
                 return true;
               }
-              return false;
+              throw new Error('[uiInit] Could not hide project list; both dashboard and projectListComponent missing hide method (strict mode).');
             } catch (err) {
               logger.error('[UIInit] Error in projectList hide', err, { context: 'uiInit:navigation:projectList:hide' });
               throw err;
@@ -304,7 +310,7 @@ export function createUIInitializer({
                 await pdc.showProjectDetails(params.projectId);
                 return true;
               }
-              return false;
+              throw new Error('[uiInit] Could not display project details; both dashboard and projectDetailsComponent missing showProjectDetails method (strict mode).');
             } catch (err) {
               logger.error('[UIInit] Error in projectDetails show', err, { context: 'uiInit:navigation:projectDetails:show' });
               throw err;
@@ -322,7 +328,7 @@ export function createUIInitializer({
                 await pdc.hideProjectDetails();
                 return true;
               }
-              return false;
+              throw new Error('[uiInit] Could not hide project details; both dashboard and projectDetailsComponent missing hideProjectDetails method (strict mode).');
             } catch (err) {
               logger.error('[UIInit] Error in projectDetails hide', err, { context: 'uiInit:navigation:projectDetails:hide' });
               throw err;
@@ -355,7 +361,7 @@ export function createUIInitializer({
           '#projectListView',     // Container for the project list view
           '#projectDetailsView'   // Container for the project details view
         ],
-        timeout: 10000, 
+        timeout: 10000,
         context: 'uiInit:initializeUIComponents:baseDomCheck'
       });
       logger.debug('[UIInit] Step 1: Critical base DOM elements ready.', { context: 'uiInit' });
