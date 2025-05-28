@@ -88,8 +88,10 @@ export function createAppInitializer({
         'createKnowledgeBaseComponent', 'createProjectDetailsEnhancements',
         'createTokenStatsManager'
     ].forEach(name => {
-        const fn = eval(name);
-        DependencySystem.register(name, fn);
+        if (!DependencySystem.modules.has(name)) {
+            const fn = eval(name);
+            DependencySystem.register(name, fn);
+        }
     });
 
     // ──────────────────────────────────────────────
