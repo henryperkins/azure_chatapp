@@ -849,13 +849,7 @@ export function createSidebar({
       backdrop.remove();
       backdrop = null;
     }
-    if (domReadinessService && domReadinessService.destroy) {
-      try {
-        domReadinessService.destroy();
-      } catch (err) {
-        logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar:ensureProjectDashboard' });
-      }
-    }
+    // DO NOT destroy the shared domReadinessService; just remove Sidebar’s listeners
 
     pinned = false;
     visible = false;
