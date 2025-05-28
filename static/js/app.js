@@ -257,13 +257,12 @@ if (DependencySystem.modules.has('safeHandler')) {
   DependencySystem.register('safeHandler', safeHandler);
 }
 
-// ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
-// ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
-eventHandlers.setLogger(logger);
-eventHandlers.setSafeHandler(safeHandler);
-domReadinessService.setLogger(logger);   // ← NEW
-domAPI.setLogger?.(logger);                 // ← NEW
-browserServiceInstance.setLogger?.(logger); // ← NEW
+ // ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
+ eventHandlers.setLogger(logger);
+ eventHandlers.setSafeHandler(safeHandler);
+ domReadinessService.setLogger(logger);   // ← NEW
+ domAPI.setLogger?.(logger);                 // ← NEW
+ browserServiceInstance.setLogger?.(logger); // ← NEW
 
 // Expose an opportunity for serviceInit to accept logger
 serviceInit.setLogger(logger);
@@ -272,6 +271,7 @@ appModule.setLogger?.(logger);            // ← NEW
 // ---- upgrade the logger with the canonical safeHandler ----
 logger.setSafeHandler?.(safeHandler);          // ← NEW
 
+// (Removed redundant serviceInit.registerBasicServices() call here)
 
 
 // Provide a lazy proxy for apiRequest until advanced services
