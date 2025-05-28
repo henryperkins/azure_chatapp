@@ -136,10 +136,11 @@ export function createNavigationService({
 
   //  Legacy-compat “navAPI” shim expected by createChatManager
   const navAPI = {
-    getSearch  : getLocationSearch,
-    getHref    : getCurrentHref,
-    getPathname: getCurrentPathname,
-    pushState
+    getSearch   : getLocationSearch,
+    getHref     : getCurrentHref,
+    getPathname : getCurrentPathname,
+    pushState,
+    replaceState        // ← NEW
   };
 
   // === View Management ===
