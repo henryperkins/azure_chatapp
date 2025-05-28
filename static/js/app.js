@@ -347,7 +347,11 @@ function fireAppReady(success = true, error = null) {
     const win = browserAPI.getWindow?.();
     if (win && typeof win.dispatchEvent === 'function') {
       const winEvt = eventHandlers.createCustomEvent('app:ready', { detail });
-      win.dispatchEvent(winEvt);
+      /* Defer to next tick so inline script (registered after app.js)
+         can attach its listener before the event is fired.            */
+      browserAPI.setTimeout(() => {
+        try { win.dispatchEvent(winEvt); } catch (e) { /* swallow */ }
+      }, 0);
     }
   } catch (err) {
     logger.error('[fireAppReady] Failed to dispatch app:ready on window', err,
