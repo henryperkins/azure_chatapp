@@ -855,6 +855,11 @@ export function createAppInitializer({
                 logger.log('[coreInit] projectManager registered', { context: 'coreInit' });
             }
 
+            /* NEW – activate its internal listeners & auth synchronisation */
+            if (typeof projectManager.initialize === 'function') {
+                await projectManager.initialize();
+            }
+
             // Phase 3.7: ProjectListComponent
             const projectListComponent = makeProjectListComponent({
                 projectManager,

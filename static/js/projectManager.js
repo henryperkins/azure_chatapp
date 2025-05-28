@@ -475,8 +475,13 @@ export function createProjectManager({
 
     async loadProjectConversations(id) {
       try {
+        const convosUrl =
+          typeof this._CONFIG.CONVOS === 'function'
+            ? this._CONFIG.CONVOS(id)
+            : this._CONFIG.CONVOS.replace('{id}', id);
+
         const res = await this._req(
-          this._CONFIG.CONVOS.replace('{id}', id),
+          convosUrl,
           undefined,
           'loadProjectConversations'
         );
@@ -573,7 +578,7 @@ export function createProjectManager({
     async createConversation(projectId, opts = {}) {
       try {
         this.storage.setItem?.('selectedProjectId', projectId);
-        return await this.chatManager.createNewConversation(projectId, opts);
+        return await this.chatManager.createNewConversation(projectId);
       } catch (origErr) {
         logger.error('[ProjectManager][createConversation]', origErr, { context: MODULE });
         let finalErr = origErr;
