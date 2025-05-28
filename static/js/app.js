@@ -225,6 +225,11 @@ DependencySystem.register('globalUtils', {
    getSessionId // logger created later
  });
 
+ // --- Register baseline (core) services *before* any further modules rely
+ // on them being available in DependencySystem.  This must happen right
+ // after serviceInit is created, not later in the bootstrap.
+ serviceInit.registerBasicServices();
+
 // ---------------------------------------------------------------------------
 // Create the real logger
 // ---------------------------------------------------------------------------
@@ -267,13 +272,6 @@ appModule.setLogger?.(logger);            // ← NEW
 // ---- upgrade the logger with the canonical safeHandler ----
 logger.setSafeHandler?.(safeHandler);          // ← NEW
 
-// ── NOW that a real logger exists, wire the foundational services ──
-serviceInit.registerBasicServices();
-
-// ----- retrofit final errorReporter into early-created eventHandlers -----
-eventHandlers.setErrorReporter?.(
-  DependencySystem.modules.get('errorReporter')
-);
 
 
 // Provide a lazy proxy for apiRequest until advanced services
