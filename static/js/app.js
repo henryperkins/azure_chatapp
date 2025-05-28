@@ -84,6 +84,17 @@ if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
+// ──  Bootstrap fallbacks required before eventHandlers ─────────────
+if (!DependencySystem.modules.has('errorReporter')) {
+  DependencySystem.register('errorReporter', { report: () => {} });
+}
+if (!DependencySystem.modules.has('safeHandler')) {
+  const placeholderSafeHandler = (fn, lbl = 'placeholderSafeHandler') =>
+        (...args) => { try { return fn?.apply?.(this, args); }
+                       catch (e) { /* swallow until real SH installed */ } };
+  DependencySystem.register('safeHandler', placeholderSafeHandler);
+}
+
 // Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
 DependencySystem.register('AppBus', AppBus);
@@ -105,8 +116,6 @@ const domAPI = createDomAPI({
   sanitizer
 });
 
-/* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
-
 // ---------------------------------------------------------------------------
 // 6) Early app module (using factory)—no appInit yet, define it later after eventHandlers
 
@@ -118,10 +127,7 @@ DependencySystem.register('app', app);
 
 /* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
 
-if (!DependencySystem.modules.get('projectManager')) throw new Error('[app.js:init] ProjectManager not available.');
-if (!DependencySystem.modules.get('modalManager')) throw new Error('[app.js:init] ModalManager not available.');
-const errorReporter = DependencySystem.modules.get('errorReporter');
-if (!errorReporter) throw new Error('[app.js:init] ErrorReporter not available when required - initialization aborted.');
+const errorReporter = DependencySystem.modules.get('errorReporter');   // may be placeholder
 const eventHandlers = createEventHandlers({
   DependencySystem,
   domAPI,
