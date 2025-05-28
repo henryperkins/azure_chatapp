@@ -22,12 +22,20 @@ export const APP_CONFIG = {
   TIMEOUTS: {
     DEPENDENCY_WAIT: 5000,      // generic waitFor timeout (hardened, was 15000)
     STARTUP_ABORT: 12000,       // whole-app bootstrap max
+    DOM_READY      : 8000,      // new – required by domReadinessService
+    APP_READY_WAIT : 30000,     // optional – used by authInit
     API_REQUEST: 30000 // Increased API timeout to 30 seconds
   },
   PERFORMANCE_THRESHOLDS: {
     INIT_WARN: 3000
   },
   API_ENDPOINTS: {
+    AUTH_CSRF   : '/api/auth/csrf',
+    AUTH_LOGIN  : '/api/auth/login',
+    AUTH_LOGOUT : '/api/auth/logout',
+    AUTH_REGISTER: '/api/auth/register',
+    AUTH_VERIFY : '/api/auth/verify',
+    AUTH_REFRESH: '/api/auth/refresh',
     AUTH_SETTINGS: '/api/auth/settings',
     USER_PROFILE: '/api/user/me',
     USER_PROJECTS: '/api/user/projects',
