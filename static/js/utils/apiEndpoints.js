@@ -9,18 +9,11 @@ export function createApiEndpoints({ logger, DependencySystem, config } = {}) {
     throw new Error('[apiEndpoints] logger must provide .error and .info methods');
 
   // Defaults
-  const DEFAULT_API_ENDPOINTS = {
-    PROJECTS: '/api/projects/',
-    AUTH_CSRF: '/api/auth/csrf',
-    AUTH_LOGIN: '/api/auth/login',
-    AUTH_LOGOUT: '/api/auth/logout',
-    AUTH_REGISTER: '/api/auth/register',
-    AUTH_VERIFY: '/api/auth/verify',
-    AUTH_REFRESH: '/api/auth/refresh',
-    CONVERSATIONS: (pid) => `/api/projects/${pid}/conversations`,
-    CONVERSATION: (pid, cid) => `/api/projects/${pid}/conversations/${cid}`,
-    MESSAGES: (pid, cid) => `/api/projects/${pid}/conversations/${cid}/messages`
-  };
+  // FALLBACK REMOVED: If no config is provided, throw immediately.
+  if (!config || !config.API_ENDPOINTS) {
+    throw new Error('[apiEndpoints] No API_ENDPOINTS configuration supplied—fallbacks are forbidden under strict configuration.');
+  }
+  const DEFAULT_API_ENDPOINTS = {};
 
   const REQUIRED_ENDPOINT_KEYS = [
     'AUTH_CSRF', 'AUTH_LOGIN', 'AUTH_LOGOUT', 'AUTH_REGISTER', 'AUTH_VERIFY', 'AUTH_REFRESH'
@@ -28,11 +21,7 @@ export function createApiEndpoints({ logger, DependencySystem, config } = {}) {
 
   // Allow passing custom overrides via config
   const userCfg = config || {};
-  let endpoints = { ...DEFAULT_API_ENDPOINTS };
-
-  if (userCfg.API_ENDPOINTS && typeof userCfg.API_ENDPOINTS === 'object') {
-    endpoints = { ...DEFAULT_API_ENDPOINTS, ...userCfg.API_ENDPOINTS };
-  }
+  let endpoints = { ...config.API_ENDPOINTS };
 
   // Validation
   const missingKeys = [];

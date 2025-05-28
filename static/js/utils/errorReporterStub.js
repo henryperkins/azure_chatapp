@@ -1,17 +1,4 @@
 /**
- * errorReporterStub.js — Guardrails-compliant stub factory for error reporting.
+ * errorReporterStub.js — Guardrails-compliant: all fallbacks/stubs forbidden.
  */
-
-export function createErrorReporterStub({ logger, context = 'ErrorReporterStub' } = {}) {
-  if (!logger || typeof logger.error !== 'function') {
-    throw new Error('[errorReporterStub] logger dependency with .error() required');
-  }
-  function report(...args) {
-    logger.error(`[${context}]`, ...args, { context });
-  }
-  // Cleanup API for guardrails
-  function cleanup() {
-    // No-op: nothing to cleanup in stub, present for uniformity.
-  }
-  return { report, cleanup };
-}
+throw new Error('[errorReporterStub.js] No error reporter present — fallback/stub is forbidden under strict configuration. Please provide a real error reporter implementation.');

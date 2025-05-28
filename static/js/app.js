@@ -78,17 +78,6 @@ import { createLogger } from './logger.js';
 const browserServiceInstance = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
-/* ------------------------------------------------------------------ *
- * Early temporary logger – used by domAPI, eventHandlers, etc.
- * Must exist BEFORE any module that expects a logger.
- * ------------------------------------------------------------------ */
-const tempLogger = {
-  error: (...a) => console.error('[TempLogger]', ...a),
-  warn : (...a) => console.warn ('[TempLogger]', ...a),
-  info : (...a) => console.info ('[TempLogger]', ...a),
-  debug: (...a) => console.debug('[TempLogger]', ...a),
-  log  : (...a) => console.log  ('[TempLogger]', ...a),
-};
 registerSessionBrowserService(browserServiceInstance);
 const browserAPI = browserServiceInstance;
 
@@ -99,13 +88,6 @@ const DependencySystem = browserAPI.getDependencySystem();
 if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
-
-// --- EARLY SAFEHANDLER: Register dummy for boot phase to break logger/safeHandler/eventHandlers chain ---
-function __dummySafeHandler(fn) {
-  return typeof fn === "function" ? fn : () => { };
-}
-__dummySafeHandler.cleanup = function () { };
-DependencySystem.register('safeHandler', __dummySafeHandler);
 
 // Dedicated App Event Bus
 const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
@@ -125,8 +107,7 @@ const domAPI = createDomAPI({
   windowObject: browserAPI.getWindow(),
   debug: APP_CONFIG.DEBUG === true,
   // logger is registered later; domAPI will pick it up via DependencySystem DI after logger is registered.
-  sanitizer,
-  logger         : tempLogger          // ← ADD
+  sanitizer
 });
 
 /* (deleted old domReadinessService creation; correct DI with eventHandlers after eventHandlers instantiation) */
@@ -145,18 +126,19 @@ DependencySystem.register('app', app);
 
 /* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
 
+if (!DependencySystem.modules.get('projectManager')) throw new Error('[app.js:init] ProjectManager not available.');
+if (!DependencySystem.modules.get('modalManager')) throw new Error('[app.js:init] ModalManager not available.');
+const errorReporter = DependencySystem.modules.get('errorReporter');
+if (!errorReporter) throw new Error('[app.js:init] ErrorReporter not available when required - initialization aborted.');
 const eventHandlers = createEventHandlers({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
   APP_CONFIG,
-  errorReporter: createErrorReporterStub({ logger: tempLogger }),
+  errorReporter,
   sanitizer,
   app,
-  projectManager: null,
-  modalManager: null,
   safeHandler: DependencySystem.modules.get('safeHandler'), // fetch via DI (avoid TDZ)
-  logger        : tempLogger,   // ensure temp logger goes in
   // domReadinessService to be injected after instantiation
 });
 DependencySystem.register('eventHandlers', eventHandlers);
@@ -167,8 +149,7 @@ const domReadinessService = createDomReadinessService({
   domAPI,
   browserService: browserServiceInstance,
   eventHandlers,
-  APP_CONFIG,               // ← ADD
-  logger: tempLogger        // ← ADD
+  APP_CONFIG               // ← ADD
 });
 DependencySystem.register('domReadinessService', domReadinessService);
 
@@ -274,16 +255,11 @@ logger.setSafeHandler?.(safeHandler);          // ← NEW
 // (Removed redundant serviceInit.registerBasicServices() call here)
 
 
-// Provide a lazy proxy for apiRequest until advanced services
-function apiRequestProxy(...args) {
-  const impl = DependencySystem.modules.get('apiRequest');
-  if (typeof impl !== 'function') {
-    throw new Error('[app.js] apiRequest called before being registered');
-  }
-  return impl(...args);
+if (!DependencySystem.modules.get('apiRequest') || typeof DependencySystem.modules.get('apiRequest') !== 'function') {
+  throw new Error('[app.js] apiRequest must be registered before proceeding');
 }
-DependencySystem.register('apiRequest', apiRequestProxy);
-const apiRequest = apiRequestProxy;
+const apiRequest = DependencySystem.modules.get('apiRequest');
+DependencySystem.register('apiRequest', apiRequest);
 
 // ---------------------------------------------------------------------------
 // 12) App object & top-level
@@ -355,10 +331,11 @@ Object.defineProperty(app, 'isInitializing', {
 // ---------------------------------------------------------------------------
 function toggleLoadingSpinner(show) {
   const spinner = domAPI.getElementById('appLoadingSpinner');
-  if (spinner) {
-    if (show) domAPI.removeClass(spinner, 'hidden');
-    else domAPI.addClass(spinner, 'hidden');
+  if (!spinner) {
+    throw new Error('[toggleLoadingSpinner] Loading spinner element not found');
   }
+  if (show) domAPI.removeClass(spinner, 'hidden');
+  else domAPI.addClass(spinner, 'hidden');
 }
 
 // ---------------------------------------------------------------------------
@@ -378,13 +355,10 @@ function fireAppReady(success = true, error = null) {
   if (drs?.emitReplayable) {
     drs.emitReplayable('app:ready', detail);
   } else {
-    const evt = eventHandlers.createCustomEvent('app:ready', { detail });
-    domAPI.dispatchEvent(domAPI.getDocument(), evt);
+    throw new Error('[fireAppReady] domReadinessService unavailable; cannot dispatch app:ready event');
   }
 
-  /* ------------------------------------------------------------------
-   * ALSO dispatch ‘app:ready’ on window so base.html listener receives it.
-   * ------------------------------------------------------------------ */
+  /* ALSO dispatch ‘app:ready’ on window so base.html listener receives it. */
   try {
     const win = browserAPI.getWindow?.();
     if (win && typeof win.dispatchEvent === 'function') {

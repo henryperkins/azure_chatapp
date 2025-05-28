@@ -63,8 +63,10 @@ export function createDomReadinessService({
     cleanupIntervalMs: APP_CONFIG?.EVENT_CLEANUP_INTERVAL ?? 60000 // 1 min
   };
 
-  // Default timeout from APP_CONFIG or fallback
-  const DEFAULT_TIMEOUT = APP_CONFIG?.TIMEOUTS?.DOM_READY ?? 10000;
+  // Default timeout is required from APP_CONFIG, fallback forbidden
+  if (!APP_CONFIG?.TIMEOUTS?.DOM_READY)
+    throw new Error('[domReadinessService] APP_CONFIG.TIMEOUTS.DOM_READY is required; fallback is forbidden.');
+  const DEFAULT_TIMEOUT = APP_CONFIG.TIMEOUTS.DOM_READY;
 
   // ───── unified logger ─────
   let _logger =
@@ -282,7 +284,8 @@ export function createDomReadinessService({
     });
 
     const bodyEl = domAPI.getBody(); // or docAPI.getDocument().body
-    if (!bodyEl) return; // fallback if somehow no body
+    if (!bodyEl)
+      throw new Error('[domReadinessService] Document body not found – MutationObserver attachment failed. Fallback is forbidden.');
 
     observer.observe(bodyEl, {
       childList: true,
@@ -376,7 +379,7 @@ export function createDomReadinessService({
 
   /**
    * Emits a replay-able custom event that can be received by late listeners.
-   * Enhanced: TTL, maxEvents, fallback to standard, logs, eviction.
+   * Enhanced: TTL, maxEvents, logs, eviction. No fallback to standard allowed.
    */
   function emitReplayable(eventName, detail = {}) {
     // Validate eventName

@@ -102,12 +102,12 @@ export function stableStringify(v) {
     .map((k) => `${JSON.stringify(k)}:${stableStringify(v[k])}`)
     .join(",")}}`;
 }
-export function safeParseJSON(str, fallback) {
-  if (typeof str !== "string") return fallback;
+export function safeParseJSON(str) {
+  if (typeof str !== "string") throw new Error('[globalUtils.safeParseJSON] Input not a string and fallback is forbidden.');
   try {
     return JSON.parse(str);
-  } catch {
-    return fallback;
+  } catch (err) {
+    throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
   }
 }
 

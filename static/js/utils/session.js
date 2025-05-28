@@ -6,12 +6,10 @@ let sessionId = null;
 let _browserService = null;
 export function setBrowserService(bs) { _browserService = bs; }
 function generateSessionId() {
-  // Generate RFC4122v4 string with fallback if crypto not present
+  // Generate RFC4122v4 string; crypto randomUUID is required
   const cryptoObj = _browserService?.getWindow?.()?.crypto;
   if (cryptoObj?.randomUUID) return cryptoObj.randomUUID();
-  return 'ssn-xxxxxxxxyxxxxxxxyxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
+  throw new Error('[session.js] crypto.randomUUID is required; fallback UUID generation is forbidden.');
 }
 export function getSessionId() {
   if (!sessionId) sessionId = generateSessionId();

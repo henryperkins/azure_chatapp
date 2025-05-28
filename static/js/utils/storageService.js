@@ -8,13 +8,13 @@
  */
 
 export function createStorageService({ browserService, APP_CONFIG, logger, DependencySystem }) {
-  function safe(fn, fallback, ctx) {
+  function safe(fn, _fallback, ctx) {
     try {
       return fn();
     } catch (err) {
       const log = logger || DependencySystem?.modules?.get?.('logger');
       log?.warn?.(`[storageService] ${ctx} failed`, err);
-      return fallback;
+      throw new Error(`[storageService] ${ctx} failed and fallback is forbidden: ${err?.message || err}`);
     }
   }
 

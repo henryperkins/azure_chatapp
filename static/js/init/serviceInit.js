@@ -1,5 +1,4 @@
 import { createApiEndpoints } from '../utils/apiEndpoints.js';
-import { createErrorReporterStub } from '../utils/errorReporterStub.js';
 
 /**
  * serviceInit.js
@@ -41,13 +40,8 @@ export function createServiceInitializer({
     throw new Error('[serviceInit] Missing required dependencies for service initialization.');
   }
   // Capture whether a real logger instance was provided by caller
-  const providedLogger = !!logger;
-  // Allow logger to be missing at first; fallback to browserServiceInstance console or a no-op.
-  // This is useful for very early bootstrap before the main logger is configured.
-  if (!providedLogger) {
-    const winConsole = browserServiceInstance?.getWindow?.()?.console;
-    // Use a simple console-like object if no real logger or window.console is available.
-    logger = winConsole ?? { info() {}, warn() {}, error() {}, debug() {}, log() {} };
+  if (!logger) {
+    throw new Error('[serviceInit] Logger instance is required; fallback to console/no-op has been removed.');
   }
 
   // Helper: register a module with DependencySystem only if it's not already present.
@@ -70,9 +64,8 @@ export function createServiceInitializer({
     logger?.info('[serviceInit] Starting registration of basic services...', { context: 'serviceInit:registerBasicServices' });
     try {
       // Register the main logger instance if it was provided externally (i.e., fully configured).
-      if (providedLogger) {
-        safeRegister('logger', logger);
-      }
+      // Only register logger if supplied – fallback code has been removed and logger is checked on initialization above.
+      safeRegister('logger', logger);
 
       // Register core browser and DOM services.
       // These are fundamental for most interactions with the browser environment.
@@ -93,12 +86,12 @@ export function createServiceInitializer({
       }
 
       // Register or reuse a shared errorReporter.
-      // Falls back to a stub if no real error reporter is already in DI.
+      // Fallback/stub removed: errorReporter must be present before serviceInit is called.
       const existingErrorReporter = DependencySystem.modules.get('errorReporter');
-      safeRegister(
-        'errorReporter',
-        existingErrorReporter || createErrorReporterStub({ logger: DependencySystem.modules.get('logger') || logger }) // Use current logger
-      );
+      if (!existingErrorReporter) {
+        throw new Error('[serviceInit] errorReporter module must be registered before ServiceInit runs.');
+      }
+      safeRegister('errorReporter', existingErrorReporter);
 
       // Register utility services (UI utils, global utils, sanitizer).
       if (uiUtils) safeRegister('uiUtils', uiUtils);

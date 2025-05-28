@@ -40,132 +40,122 @@ export function createCoreInitializer({
   accessibilityUtils,       // Utilities for accessibility enhancements.
   safeHandler               // Wrapper for safe function execution with error handling.
  }) {
-   // Allow apiClientObject to be refreshed later, after ServiceInit has
-   // registered it.  Capture in a mutable ref.
-   let apiClientObjectRef      = apiClientObject;
-   let navigationServiceRef    = navigationService;
-   let htmlTemplateLoaderRef   = htmlTemplateLoader;
-   let uiRendererRef           = uiRenderer;
-   let accessibilityUtilsRef   = accessibilityUtils;
+    // Allow apiClientObject to be refreshed later, after ServiceInit has
+    // registered it.  Capture in a mutable ref.
+    let apiClientObjectRef      = apiClientObject;
+    let navigationServiceRef    = navigationService;
+    let htmlTemplateLoaderRef   = htmlTemplateLoader;
+    let uiRendererRef           = uiRenderer;
+    let accessibilityUtilsRef   = accessibilityUtils;
 
-   /**
-    * Some dependencies (e.g. `apiRequest`, `apiClientObject`) are not available
-    * at *construction* time because they are registered later by
-    * `serviceInit.registerAdvancedServices()` which runs during `App.init`.
-    *
-    * Therefore we postpone the exhaustive dependency validation until the first
-    * call to `initializeCoreSystems()`.  At factory-creation time we only
-    * validate the absolutely critical low-level services that are guaranteed to
-    * exist from the early bootstrap phase.
-    */
-   const constructionRequired = {
-     DependencySystem, domAPI, browserService, eventHandlers,
-     sanitizer, APP_CONFIG, domReadinessService, createKnowledgeBaseComponent
-   };
-   for (const [depName, dep] of Object.entries(constructionRequired)) {
-     if (!dep) {
-       throw new Error(`[coreInit] Missing critical dependency during coreInit construction: ${depName}`);
-     }
-   }
-
-   // ────────────────────────────────────────────────────────────────────────────
-   // Runtime validation helper – executed at the top of initializeCoreSystems().
-   // ────────────────────────────────────────────────────────────────────────────
-   function validateRuntimeDeps() {
-     const runtimeRequired = {
-       DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
-       domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
-       apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils,
-       navigationService : navigationServiceRef, globalUtils, FileUploadComponent,
-       htmlTemplateLoader : htmlTemplateLoaderRef,
-       uiRenderer         : uiRendererRef,
-       accessibilityUtils : accessibilityUtilsRef,
-       safeHandler
-     };
-     for (const [depName, dep] of Object.entries(runtimeRequired)) {
-       if (!dep) {
-         throw new Error(`[coreInit] Missing required dependency: ${depName}`);
-       }
-     }
-   }
-
-   // Utility: Create or get chatManager.
-  // This function ensures a single instance of ChatManager.
-  // Dependencies like `authModule`, `modelConfig`, `projectDetailsComponent` are passed directly.
-  function createOrGetChatManager(currentAuthModule, currentModelConfig, currentProjectDetailsComponent) {
-    const existingChatManager = DependencySystem.modules.get('chatManager');
-    if (existingChatManager) return existingChatManager;
-
-    // Retrieve the ChatManager factory from DI (as it's not a direct dependency of coreInit itself)
-    const createChatManagerFactory = DependencySystem.modules.get('createChatManager');
-    if (!createChatManagerFactory) {
-      logger.error('[coreInit] createChatManager factory not found in DependencySystem.', { context: 'coreInit:createOrGetChatManager' });
-      throw new Error('[coreInit] createChatManager factory not available in DI.');
+    /**
+     * Some dependencies (e.g. `apiRequest`, `apiClientObject`) are not available
+     * at *construction* time because they are registered later by
+     * `serviceInit.registerAdvancedServices()` which runs during `App.init`.
+     *
+     * Therefore we postpone the exhaustive dependency validation until the first
+     * call to `initializeCoreSystems()`.  At factory-creation time we only
+     * validate the absolutely critical low-level services that are guaranteed to
+     * exist from the early bootstrap phase.
+     */
+    const constructionRequired = {
+      DependencySystem, domAPI, browserService, eventHandlers,
+      sanitizer, APP_CONFIG, domReadinessService, createKnowledgeBaseComponent
+    };
+    for (const [depName, dep] of Object.entries(constructionRequired)) {
+      if (!dep) {
+        throw new Error(`[coreInit] Missing critical dependency during coreInit construction: ${depName}`);
+      }
     }
 
-    const chatManagerInstance = createChatManagerFactory({
-      DependencySystem,         // For internal DI if ChatManager needs it
-      apiRequest,               // Direct arg: API fetch function
-      auth: currentAuthModule,  // Direct arg: The created AuthModule instance
-      eventHandlers,            // Direct arg: Central event bus
-      modelConfig: currentModelConfig, // Direct arg: The created ModelConfig instance
-      projectDetailsComponent: currentProjectDetailsComponent, // Direct arg: ProjectDetailsComponent (can be placeholder initially)
-      app,                      // Direct arg: Main application object
-      domAPI,                   // Direct arg: DOM API utility
-      domReadinessService,      // Direct arg: DOM readiness service
-      logger,                   // Direct arg: Logger instance
-      navAPI: {                 // Constructed from browserService (direct arg)
-        getSearch: () => browserService.getLocation().search,
-        getHref: () => browserService.getLocation().href,
-        pushState: (url, title = "") => browserService.pushState({}, title, url),
-        getPathname: () => browserService.getLocation().pathname
-      },
-      isValidProjectId: globalUtils.isValidProjectId, // From globalUtils (direct arg)
-      isAuthenticated: () => !!currentAuthModule?.isAuthenticated?.(), // Derived from currentAuthModule
-      DOMPurify: sanitizer,     // Direct arg: DOMPurify instance
-      apiEndpoints,             // Direct arg: API endpoints map
-      APP_CONFIG
-    });
-    DependencySystem.register('chatManager', chatManagerInstance);
-    return chatManagerInstance;
-  }
+    // ────────────────────────────────────────────────────────────────────────────
+    // Runtime validation helper – executed at the top of initializeCoreSystems().
+    // ────────────────────────────────────────────────────────────────────────────
+    function validateRuntimeDeps() {
+      const runtimeRequired = {
+        DependencySystem, domAPI, browserService, eventHandlers, sanitizer, logger, APP_CONFIG,
+        domReadinessService, createKnowledgeBaseComponent, MODAL_MAPPINGS, apiRequest,
+        apiClientObject : apiClientObjectRef, apiEndpoints, app, uiUtils,
+        navigationService : navigationServiceRef, globalUtils, FileUploadComponent,
+        htmlTemplateLoader : htmlTemplateLoaderRef,
+        uiRenderer         : uiRendererRef,
+        accessibilityUtils : accessibilityUtilsRef,
+        safeHandler
+      };
+      for (const [depName, dep] of Object.entries(runtimeRequired)) {
+        if (!dep) {
+          throw new Error(`[coreInit] Missing required dependency: ${depName}`);
+        }
+      }
+    }
 
-  // Placeholder utility (No changes needed, it's self-contained)
-  function createPlaceholder(name) {
-    return {
-      state: { initialized: false },
-      initialize: async () => { },
-      show: () => { },
-      hide: () => { },
-      cleanup: () => { },
-      __placeholder: true,
-      toString() { return `[Placeholder ${name}]`; }
-    };
-  }
+    // Utility: Create or get chatManager.
+   // This function ensures a single instance of ChatManager.
+   // Dependencies like `authModule`, `modelConfig`, `projectDetailsComponent` are passed directly.
+   function createOrGetChatManager(currentAuthModule, currentModelConfig, currentProjectDetailsComponent) {
+     const existingChatManager = DependencySystem.modules.get('chatManager');
+     if (existingChatManager) return existingChatManager;
 
-  /**
-   * @async
-   * @function initializeCoreSystems
-   * @description Main core systems initialization function.
-   * Orchestrates the creation and registration of essential application modules and components.
-   * The order of initialization is critical for some dependencies.
-   *
-   * Initialization Order & Rationale:
-   * 1.  **ModalManager**: Needed early for error reporting and UI interactions during bootstrap.
-   * 2.  **AuthModule**: Fundamental for user authentication state, influences other modules.
-   * 3.  **ModelConfig**: Manages model configurations, potentially used by ProjectManager and ChatManager. Initializes its UI here.
-   * 4.  **ProjectListComponent (Placeholder)**: Registered early, full init may depend on ProjectManager.
-   * 5.  **ProjectDetailsComponent (Placeholder)**: Registered early for ChatManager. Full init after ProjectManager & KnowledgeBaseComponent.
-   * 6.  **ChatManager**: Depends on AuthModule, ModelConfig, and a (potentially placeholder) ProjectDetailsComponent.
-   * 7.  **ProjectManager**: Manages project data, depends on ChatManager, ModelConfig.
-   * 8.  **KnowledgeBaseComponent**: Depends on ProjectManager. Created here and injected into ProjectDetailsComponent.
-   * 9.  **ProjectDetailsComponent (Final)**: Fully initialized with ProjectManager and KnowledgeBaseComponent.
-   * 10. **modalManager.init()**: Loads modal HTML templates. Called after other core modules are registered, before eventHandlers.init().
-   * 11. **eventHandlers.init()**: Initializes global event handlers, potentially needing modal elements.
-   * 12. **ProjectDashboard**: UI container for project views.
-   * 13. **ProjectModal**: UI for project creation/editing. Initializes its UI here.
-   * 14. **Sidebar**: Main navigation UI, depends on many core services. Initializes its UI here.
-   */
+     // Retrieve the ChatManager factory from DI (as it's not a direct dependency of coreInit itself)
+     const createChatManagerFactory = DependencySystem.modules.get('createChatManager');
+     if (!createChatManagerFactory) {
+       logger.error('[coreInit] createChatManager factory not found in DependencySystem.', { context: 'coreInit:createOrGetChatManager' });
+       throw new Error('[coreInit] createChatManager factory not available in DI.');
+     }
+
+     const chatManagerInstance = createChatManagerFactory({
+       DependencySystem,         // For internal DI if ChatManager needs it
+       apiRequest,               // Direct arg: API fetch function
+       auth: currentAuthModule,  // Direct arg: The created AuthModule instance
+       eventHandlers,            // Direct arg: Central event bus
+       modelConfig: currentModelConfig, // Direct arg: The created ModelConfig instance
+       projectDetailsComponent: currentProjectDetailsComponent, // Direct arg: ProjectDetailsComponent (can be placeholder initially)
+       app,                      // Direct arg: Main application object
+       domAPI,                   // Direct arg: DOM API utility
+       domReadinessService,      // Direct arg: DOM readiness service
+       logger,                   // Direct arg: Logger instance
+       navAPI: {                 // Constructed from browserService (direct arg)
+         getSearch: () => browserService.getLocation().search,
+         getHref: () => browserService.getLocation().href,
+         pushState: (url, title = "") => browserService.pushState({}, title, url),
+         getPathname: () => browserService.getLocation().pathname
+       },
+       isValidProjectId: globalUtils.isValidProjectId, // From globalUtils (direct arg)
+       isAuthenticated: () => !!currentAuthModule?.isAuthenticated?.(), // Derived from currentAuthModule
+       DOMPurify: sanitizer,     // Direct arg: DOMPurify instance
+       apiEndpoints,             // Direct arg: API endpoints map
+       APP_CONFIG
+     });
+     DependencySystem.register('chatManager', chatManagerInstance);
+     return chatManagerInstance;
+   }
+
+   // Strict enforcement: placeholders are forbidden.
+   // If a required component is missing at this stage, throw an immediate error.
+
+   /**
+    * @async
+    * @function initializeCoreSystems
+    * @description Main core systems initialization function.
+    * Orchestrates the creation and registration of essential application modules and components.
+    * The order of initialization is critical for some dependencies.
+    *
+    * Initialization Order & Rationale:
+    * 1.  **ModalManager**: Needed early for error reporting and UI interactions during bootstrap.
+    * 2.  **AuthModule**: Fundamental for user authentication state, influences other modules.
+    * 3.  **ModelConfig**: Manages model configurations, potentially used by ProjectManager and ChatManager. Initializes its UI here.
+    * 4.  **ProjectListComponent**: Registered after ProjectManager is instantiated.
+    * 5.  **ProjectDetailsComponent**: Registered after ProjectManager & KnowledgeBaseComponent are ready.
+    * 6.  **ChatManager**: Depends on AuthModule, ModelConfig, and ProjectDetailsComponent.
+    * 7.  **ProjectManager**: Manages project data, depends on ChatManager, ModelConfig.
+    * 8.  **KnowledgeBaseComponent**: Depends on ProjectManager. Created here and injected into ProjectDetailsComponent.
+    * 9.  **ProjectDetailsComponent (Final)**: Fully initialized with ProjectManager and KnowledgeBaseComponent.
+    * 10. **modalManager.init()**: Loads modal HTML templates. Called after other core modules are registered, before eventHandlers.init().
+    * 11. **eventHandlers.init()**: Initializes global event handlers, potentially needing modal elements.
+    * 12. **ProjectDashboard**: UI container for project views.
+    * 13. **ProjectModal**: UI for project creation/editing. Initializes its UI here.
+    * 14. **Sidebar**: Main navigation UI, depends on many core services. Initializes its UI here.
+    */
   async function initializeCoreSystems() {
     logger.log('[coreInit][initializeCoreSystems] Starting core systems initialization.', { context: 'coreInit' });
 
@@ -276,30 +266,51 @@ export function createCoreInitializer({
 
     // uiUtils (direct argument) is used by KnowledgeBaseComponent later.
 
-    // 3.5. ProjectDetailsComponent (Placeholder for ChatManager)
-    // Use a minimal placeholder until projectManager exists.
-    logger.debug('[coreInit] Ensuring ProjectDetailsComponent placeholder...', { context: 'coreInit' });
-    let projectDetailsComponentPlaceholder =
-        DependencySystem.modules.get('projectDetailsComponent');
-
-    if (!projectDetailsComponentPlaceholder) {
-      projectDetailsComponentPlaceholder = createPlaceholder('ProjectDetailsComponent');
-      DependencySystem.register('projectDetailsComponent',
-                                projectDetailsComponentPlaceholder);
-      logger.debug('[coreInit] Placeholder ProjectDetailsComponent registered.', {
-        context: 'coreInit'
-      });
-    }
+    // 3.5. ProjectDetailsComponent (Final, instantiated after all dependencies exist)
+    logger.debug('[coreInit] Creating ProjectDetailsComponent instance...', { context: 'coreInit' });
+    const projectDetailsComponentFinal = createProjectDetailsComponent({
+      projectManager,
+      eventHandlers,
+      modalManager,
+      FileUploadComponentClass: FileUploadComponent,
+      domAPI,
+      sanitizer,
+      app,
+      navigationService: navigationServiceRef,
+      htmlTemplateLoader: htmlTemplateLoaderRef,
+      logger,
+      APP_CONFIG,
+      chatManager: null, // set after chatManager is created
+      modelConfig: modelConfigInstance,
+      knowledgeBaseComponent: null, // set after knowledgeBaseComponent is created
+      apiClient: apiRequest,
+      domReadinessService
+    });
+    DependencySystem.register('projectDetailsComponent', projectDetailsComponentFinal);
+    logger.debug('[coreInit] ProjectDetailsComponent instance created and registered.', { context: 'coreInit' });
 
     // 3.6. ChatManager
     // Manages chat functionalities; depends on auth state, model config, and project details.
     logger.debug('[coreInit] Creating ChatManager...', { context: 'coreInit' });
     const authModuleInstance = DependencySystem.modules.get('auth'); // Retrieve the instance created above
-    const chatManager = createOrGetChatManager(
-      authModuleInstance,             // The AuthModule instance
-      modelConfigInstance,            // The ModelConfig instance
-      projectDetailsComponentPlaceholder // The placeholder ProjectDetailsComponent
-    );
+    // Set up ProjectDetailsComponent knowledgeBaseComponent now
+    const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({
+      DependencySystem,
+      apiRequest,
+      projectManager,
+      uiUtils,
+      sanitizer
+    });
+    DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
+    logger.debug('[coreInit] KnowledgeBaseComponent instance created and registered.', { context: 'coreInit' });
+
+    // Update ProjectDetailsComponent now that knowledgeBaseComponent exists
+    projectDetailsComponentFinal.knowledgeBaseComponent = knowledgeBaseComponentInstance;
+
+    // 3.6. ChatManager
+    // Manages chat functionalities; depends on auth state, model config, and project details.
+    logger.debug('[coreInit] Creating ChatManager...', { context: 'coreInit' });
+    // ChatManager and knowledgeBaseComponentInstance already created above; skip redeclaration here.
     logger.debug('[coreInit] ChatManager instance created and registered.', { context: 'coreInit' });
 
     // 3.7. ProjectManager
@@ -307,7 +318,7 @@ export function createCoreInitializer({
     logger.debug('[coreInit] Creating ProjectManager...', { context: 'coreInit' });
     const pmFactory = await createProjectManager({ // Use corrected factory name
       DependencySystem,           // For potential internal DI
-      chatManager,                // Instance created above
+      chatManager: DependencySystem.modules.get('chatManager'), // Instance was registered above
       app,                        // Direct arg
       modelConfig: modelConfigInstance, // Instance created above
       apiRequest,                 // Direct arg (fetch function)
@@ -364,51 +375,10 @@ export function createCoreInitializer({
 
     logger.debug('[coreInit] ProjectManager instance created and registered.', { context: 'coreInit' });
 
-    // 3.8. KnowledgeBaseComponent
-    // Manages knowledge base interactions; depends on ProjectManager.
-    logger.debug('[coreInit] Creating KnowledgeBaseComponent...', { context: 'coreInit' });
-    const knowledgeBaseComponentInstance = createKnowledgeBaseComponent({ // createKnowledgeBaseComponent is already correct (direct arg)
-      DependencySystem,         // For potential internal DI
-      apiRequest,               // Direct arg (fetch function)
-      projectManager,           // Instance created above
-      uiUtils,                  // Direct arg
-      sanitizer                 // Direct arg
-    });
-    DependencySystem.register('knowledgeBaseComponent', knowledgeBaseComponentInstance);
-    logger.debug('[coreInit] KnowledgeBaseComponent instance created and registered.', { context: 'coreInit' });
+    // 3.8. KnowledgeBaseComponent already instantiated during ProjectDetailsComponent creation.
 
-    // 3.9. ProjectDetailsComponent (Definitive Instance)
-    // Handles the display of project details; depends on ProjectManager and KnowledgeBaseComponent.
-    // This overwrites the placeholder previously registered.
-    logger.debug('[coreInit] Creating definitive ProjectDetailsComponent instance...', { context: 'coreInit' });
-    const finalPdc = createProjectDetailsComponent({ // Use corrected factory name
-        projectManager,           // Instance created above
-        eventHandlers,            // Direct arg
-        modalManager,             // Instance created above
-        FileUploadComponentClass: FileUploadComponent, // Direct arg (factory)
-        domAPI,                   // Direct arg
-        sanitizer,                // Direct arg
-        app,                      // Direct arg
-        navigationService: navigationServiceRef,
-        htmlTemplateLoader: htmlTemplateLoaderRef,
-        logger,                   // Direct arg
-        APP_CONFIG,               // Direct arg
-        chatManager,              // Instance created above
-        modelConfig: modelConfigInstance, // Instance created above
-        knowledgeBaseComponent: knowledgeBaseComponentInstance, // Instance created above
-        apiClient: apiRequest,    // Direct arg (fetch function)
-        domReadinessService       // Direct arg
-    });
-    DependencySystem.modules.set('projectDetailsComponent', finalPdc); // Overwrite placeholder
-    logger.debug('[coreInit] Definitive ProjectDetailsComponent instance created and registered.', { context: 'coreInit' });
-
-    // Update ChatManager with the final ProjectDetailsComponent instance
-    if (typeof chatManager.setProjectDetailsComponent === 'function') {
-        chatManager.setProjectDetailsComponent(finalPdc);
-        logger.debug('[coreInit] Updated ChatManager with the final ProjectDetailsComponent instance.', { context: 'coreInit' });
-    } else {
-        logger.warn('[coreInit] ChatManager does not have a setProjectDetailsComponent method. It might be using the placeholder or an outdated instance.', { context: 'coreInit' });
-    }
+    // 3.9. now skipped—definitive ProjectDetailsComponent already created and registered above.
+    // No placeholder/overwrite, no ChatManager.setProjectDetailsComponent step needed.
 
     // Phase 4: Initialize Modal Manager UI (Loads Modal HTML)
     // This is done *after* core components are registered, as modals might be used by them,
@@ -430,9 +400,10 @@ export function createCoreInitializer({
               '#confirmModal',
               '#projectModal'
             ],
-            timeout: 6000,
+            timeout: (APP_CONFIG?.MODAL_DOM_TIMEOUT ?? 12000),
             context: 'coreInit:modalReadiness',
-            optional: true // Don't throw if some are missing
+            // All modal DOM elements must exist; missing ones are fatal.
+            optional: false
           });
           logger.debug('[coreInit] Phase 4: Modal DOM elements readiness confirmed.', { context: 'coreInit' });
         } else {
@@ -556,22 +527,9 @@ export function createCoreInitializer({
     return true;
   }
 
-  function setAdvancedServices({
-    htmlTemplateLoader,
-    uiRenderer,
-    accessibilityUtils,
-    navigationService,
-    apiClientObject
-  } = {}) {
-    if (htmlTemplateLoader)   htmlTemplateLoaderRef   = htmlTemplateLoader;
-    if (uiRenderer)           uiRendererRef           = uiRenderer;
-    if (accessibilityUtils)   accessibilityUtilsRef   = accessibilityUtils;
-    if (navigationService)    navigationServiceRef    = navigationService;
-    if (apiClientObject)      apiClientObjectRef      = apiClientObject;
-  }
+  // setAdvancedServices is forbidden in strict mode. All dependencies must be available at creation.
 
   return {
-    setAdvancedServices,
     initializeCoreSystems,
     cleanup() {
       // Cleanup any event listeners registered by core initialization

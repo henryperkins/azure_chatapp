@@ -1,7 +1,7 @@
 /**
  * errorInit.js
  * Factory for global error handling setup.
- * 
+ *
  * Handles global error and unhandled promise rejection setup for the application.
  * Sets up centralized error logging through the DI system.
  *
@@ -32,8 +32,7 @@ export function createErrorInitializer({
     try {
       const window = browserService.getWindow();
       if (!window) {
-        logger.warn('[errorInit] Window object not available, skipping error handler setup', { context: 'errorInit:setupGlobalErrorHandling' });
-        return;
+        throw new Error('[errorInit] browserService.getWindow() is required but returned null/undefined. Fatal in strict mode.');
       }
 
       // Centralised global-error listener via DI event system
@@ -83,7 +82,7 @@ export function createErrorInitializer({
     try {
       const window = browserService.getWindow();
       if (!window) {
-        return;
+        throw new Error('[errorInit] browserService.getWindow() is required for specific error handlers but returned null/undefined. Fatal in strict mode.');
       }
 
       // Setup additional error handling for specific scenarios if needed

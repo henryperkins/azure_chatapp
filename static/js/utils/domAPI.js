@@ -55,9 +55,7 @@ export function createDomAPI({
         base = arg1;
         selector = arg2;
       } else {
-        // fallback: treat first arg as selector, use document
-        selector = String(arg1);
-        base = documentObject;
+        throw new Error('[domAPI.querySelector] Invalid arguments; fallback to String(arg1) is forbidden.');
       }
       const el = base.querySelector(selector);
       if (!el) _log(`querySelector("${selector}") (base=${base?.id || base?.nodeName || 'document'}) → null`);
@@ -105,13 +103,12 @@ export function createDomAPI({
     window: windowObject,
     getActiveElement: () => documentObject.activeElement,
     body: documentObject.body,
-    getComputedStyle: (el) =>
-      (windowObject?.getComputedStyle)
-        ? windowObject.getComputedStyle(el)
-        : (() => {
-          _logger.warn('[domAPI] getComputedStyle fallback returned stub', { context: 'domAPI:getComputedStyle' });
-          return { visibility: '', display: '' };
-        })(),
+    getComputedStyle: (el) => {
+      if (windowObject?.getComputedStyle) {
+        return windowObject.getComputedStyle(el);
+      }
+      throw new Error('[domAPI.getComputedStyle] window.getComputedStyle is unavailable; fallback/stub is forbidden.');
+    },
     preventDefault: (e) => {
       if (e && typeof e.preventDefault === 'function') {
         e.preventDefault();
