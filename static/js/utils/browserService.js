@@ -181,30 +181,11 @@ export function createBrowserService({ windowObject, logger } = {}) {
     if (!windowObject.fetch) {
       throw new Error('browserService: windowObject.fetch is not available. This may occur in test/mocked environments.');
     }
-    if (_logger) {
-      _logger.log('[browserService][fetchImpl] Request', {
-        context: 'browserService:fetchImpl',
-        url: args[0]
-      });
-    }
     let response;
     try {
       response = await windowObject.fetch(...args);
-      if (!response.ok && _logger) {
-        _logger?.warn?.('[browserService][fetchImpl] Non-OK response: ' + response.status, {
-          context: 'browserService:fetchImpl',
-          url: args[0],
-          status: response.status
-        });
-      }
       return response;
     } catch (err) {
-      if (_logger) {
-        _logger?.error?.('[browserService][fetchImpl] Error during fetch', err, {
-          context: 'browserService:fetchImpl',
-          url: args[0]
-        });
-      }
       throw err;
     }
   }
