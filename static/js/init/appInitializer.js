@@ -444,6 +444,7 @@ export function createAppInitializer({
                     DependencySystem,
                     eventHandlers
                 });
+                navInstance.init();                 // ACTIVATE lifecycle & popstate handler
                 safeRegister('navigationService', navInstance);
                 logger.debug('[serviceInit] Navigation Service created.', {
                     context: 'serviceInit:registerAdvancedServices'
