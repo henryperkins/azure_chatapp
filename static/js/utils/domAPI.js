@@ -40,6 +40,17 @@ export function createDomAPI({
     // No event listeners or DOM state to clean, but present for guardrail compliance
   }
 
+  // --- Form helper wrappers for DI-strict modules ---
+  function checkFormValidity(form) {
+    return typeof form?.checkValidity === 'function' ? form.checkValidity() : false;
+  }
+  function reportFormValidity(form) {
+    return typeof form?.reportValidity === 'function' ? form.reportValidity() : false;
+  }
+  function resetForm(form) {
+    if (typeof form?.reset === 'function') form.reset();
+  }
+
   return {
     getElementById(id) {
       const el = documentObject.getElementById(id);

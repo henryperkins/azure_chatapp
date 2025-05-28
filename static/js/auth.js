@@ -1,3 +1,5 @@
+import { createAuthFormListenerFactory } from './authFormListenerFactory.js';
+
 /**
  * Creates and returns a centralized authentication module with dependency injection.
  *
@@ -696,7 +698,15 @@ export function createAuthModule(deps) {
   }
 
   // === 11) FORM EVENT HANDLER SETUP ===
-  const registeredListeners = [];
+  const authFormListenerFactory = createAuthFormListenerFactory({
+    eventHandlers,
+    domAPI,
+    domReadinessService,
+    browserService: DependencySystem.modules.get('browserService'),
+    safeHandler,
+    logger,
+    DependencySystem
+  });
 
   // CONSOLIDATED: Generic form handler for both login and register
   function createAuthFormHandler(formType, formElement, errorElementId, submitButtonSelector, loadingText, successText) {
@@ -787,167 +797,54 @@ export function createAuthModule(deps) {
     };
   }
 
-  function setupAuthForms() {
-    // #loginModalForm
-    const loginForm = domAPI.getElementById('loginModalForm');
-    if (loginForm && !loginForm._listenerAttached) {
-      loginForm._listenerAttached = true;
-      domAPI.setAttribute(loginForm, 'novalidate', 'novalidate');
-      domAPI.removeAttribute(loginForm, 'action');
-      domAPI.removeAttribute(loginForm, 'method');
+  // No-op: extracted to separate factory
 
-      const handler = createAuthFormHandler(
+  /**
+   * Wiring step 1: Waits for DOM readiness and attaches form event handlers (no network).
+   *
+   * Ensures all forms and related UI are ready, then wires listeners using the factory.
+   * No network/api/CSRF attempted in this setup.
+   */
+  async function setupAuthFormDOM() {
+    await domReadinessService.documentReady();
+
+    // Attach form listeners via dedicated factory
+    authFormListenerFactory.setup({
+      loginHandler: createAuthFormHandler(
         'login',
-        loginForm,
+        domAPI.getElementById('loginModalForm'),
         'loginModalError',
         'button[type="submit"]',
         'Logging in...',
         'Login'
-      );
-
-      registeredListeners.push(
-        eventHandlers.trackListener(loginForm, 'submit', safeHandler(handler, 'AuthModule:loginFormSubmit', logger), {
-          passive: false,
-          context: 'AuthModule:loginFormSubmit',
-          description: 'Login Form Submit'
-        })
-      );
-    }
-
-    // #registerModalForm - CONSOLIDATED: Use generic form handler
-    const registerForm = domAPI.getElementById('registerModalForm');
-    if (registerForm && !registerForm._listenerAttached) {
-      registerForm._listenerAttached = true;
-      domAPI.setAttribute(registerForm, 'novalidate', 'novalidate');
-      domAPI.removeAttribute(registerForm, 'action');
-      domAPI.removeAttribute(registerForm, 'method');
-
-      const handler = createAuthFormHandler(
+      ),
+      registerHandler: createAuthFormHandler(
         'register',
-        registerForm,
+        domAPI.getElementById('registerModalForm'),
         'registerModalError',
         '#registerModalSubmitBtn',
         'Registering...',
         'Register'
-      );
-
-      registeredListeners.push(
-        eventHandlers.trackListener(registerForm, 'submit', safeHandler(handler, 'AuthModule:registerFormSubmit', logger), {
-          passive: false,
-          context: 'AuthModule:registerFormSubmit',
-          description: 'Register Form Submit'
-        })
-      );
-    }
+      )
+    });
   }
 
   /**
-   * Initializes the authentication module, setting up event listeners, CSRF protection, and initial authentication state.
+   * Initializes the authentication module, orchestrating (a) DOM/form wiring and (b) CSRF/auth initialization.
    *
-   * Waits for DOM readiness, attaches form handlers, ensures CSRF token availability with retries, verifies authentication state, and schedules periodic re-verification. Dispatches an `authReady` event upon completion and updates application state. Handles initialization errors by clearing tokens, broadcasting a logged-out state, and raising a fatal modal if CSRF setup fails.
-   *
-   * @returns {Promise<boolean>} Resolves to the result of the initial authentication verification.
-   *
-   * @throws {Error} If required dependencies for periodic verification are missing or if an unhandled error occurs during initialization.
+   * Returns the result of the initial authentication verification.
    */
-
   async function init() {
-    // Wait for DOM/app readiness strictly via domReadinessService—no ad-hoc or legacy logic
     // Prevent multiple initializations
     const currentState = getAppState();
     if (currentState.isReady) {
       broadcastAuth(currentState.isAuthenticated, currentState.currentUser, 'init_already_ready');
       return currentState.isAuthenticated;
     }
-    // Wait for DOM readiness before setting up forms
-    await domReadinessService.documentReady();
+    // (a) DOM & form setup only
+    await setupAuthFormDOM();
 
-    setupAuthForms();
-    // modalsLoaded, DOM are both handled via the same readiness patterns
-    const doc = domAPI.getDocument();
-    if (doc && typeof eventHandlers.trackListener === "function") {
-      eventHandlers.trackListener(
-        doc,
-        'modalsLoaded',
-        safeHandler(function handleModalsLoadedTracked() {
-          eventHandlers.cleanupListeners({ context: 'AuthModule:modalsLoadedListener' });
-          setupAuthForms();
-          const browserServiceForTimeout = DependencySystem?.modules?.get('browserService');
-          if (!browserServiceForTimeout || typeof browserServiceForTimeout.setTimeout !== 'function') {
-            logger.error('[AuthModule] browserService.setTimeout is required for guardrail compliance (latePatchTimeout).', { context: 'modalsLoaded' });
-            return;
-          }
-          browserServiceForTimeout.setTimeout(() => {
-            const loginF = domAPI.getElementById('loginModalForm');
-            if (loginF) {
-              domAPI.removeAttribute(loginF, 'action');
-              domAPI.removeAttribute(loginF, 'method');
-              if (!loginF._listenerAttached) {
-                loginF._listenerAttached = true;
-                domAPI.setAttribute(loginF, 'novalidate', 'novalidate');
-                const lateHandler = async (e) => {
-                  domAPI.preventDefault(e);
-                  const errorEl = domAPI.getElementById('loginModalError');
-                  hideError(errorEl);
-                  const submitBtn = domAPI.querySelector('button[type="submit"]', loginF);
-                  setButtonLoading(submitBtn, true, 'Logging in...');
-                  const browserService = DependencySystem.modules.get('browserService');
-                  if (!browserService || !browserService.FormData) {
-                    throw new Error('[AuthModule] browserService.FormData is required for guardrail compliance. No global FormData fallback allowed.');
-                  }
-                  const formData = new browserService.FormData(loginF);
-                  const username = formData.get('username')?.trim();
-                  const password = formData.get('password');
-                  if (!username || !password) {
-                    showError(errorEl, 'Username and password are required.');
-                    setButtonLoading(submitBtn, false);
-                    return;
-                  }
-                  if (!validateUsername(username)) {
-                    showError(errorEl, 'Invalid username. Use 3-32 letters, numbers, or ._-');
-                    setButtonLoading(submitBtn, false);
-                    return;
-                  }
-                  const pwCheck = validatePassword(password);
-                  if (!pwCheck.valid) {
-                    showError(errorEl, pwCheck.message);
-                    setButtonLoading(submitBtn, false);
-                    return;
-                  }
-                  try {
-                    await publicAuth.login(username, password);
-                    if (modalManager?.hide) modalManager.hide('login');
-                  } catch (error) {
-                    logger.error('[loginModalForm:latepatch][catch]', error, { context: 'loginModalForm:latepatch' });
-                    let msg = 'Login failed due to server error.';
-                    if (error.status === 401) {
-                      msg = 'Incorrect username or password.';
-                    } else if (error.status === 400) {
-                      msg = error.data?.detail || 'Invalid login request.';
-                    } else {
-                      msg = error.data?.detail || error.message || msg;
-                    }
-                    showError(errorEl, msg);
-                  } finally {
-                    setButtonLoading(submitBtn, false, 'Login');
-                  }
-                };
-                eventHandlers.trackListener(loginF, 'submit', safeHandler(lateHandler, 'AuthModule:loginFormSubmit:LATEPATCH_TRACKED', logger), {
-                  passive: false,
-                  context: 'AuthModule:loginFormSubmit:LATEPATCH_TRACKED',
-                  description: 'Login Form Late Patch Submit (tracked)'
-                });
-              }
-            }
-          }, 400);
-        }, 'AuthModule:modalsLoadedListener', logger),
-        {
-          passive: false,
-          context: 'AuthModule:modalsLoadedListener',
-          description: 'Track modalsLoaded via centralized handler'
-        }
-      );
-    }
+    // (b) CSRF fetch, initial verify, periodic, lifecycle
     try {
       // CSRF retry logic: 3 attempts, user-visible modal on failure
       let csrfFetched = false, lastError = null;
@@ -983,7 +880,6 @@ export function createAuthModule(deps) {
       // Setup periodic verification
       const browserService = DependencySystem.modules.get('browserService');
       if (!browserService || typeof browserService.setInterval !== 'function') {
-        // This is a critical failure for long-term auth stability if not caught.
         logger.error('[AuthModule][init] browserService.setInterval is NOT available. Periodic auth verification will NOT run.', { context: 'init:setIntervalMissing' });
         throw new Error('[AuthModule] browserService.setInterval is required for periodic auth verification.');
       }
@@ -993,7 +889,6 @@ export function createAuthModule(deps) {
         if (!domAPI.isDocumentHidden?.() && periodicState.isAuthenticated) { // Check if document is visible
           logger.debug('[AuthModule][init] Performing periodic auth verification.', { context: 'init:periodicVerify' });
           verifyAuthState(false).catch((err) => {
-            // This catch is for the verifyAuthState call itself, not for errors during setInterval setup.
             logger.warn(
               '[AuthModule][init] Periodic verifyAuthState encountered an error (logged by verifyAuthState).',
               err,
@@ -1036,7 +931,6 @@ export function createAuthModule(deps) {
             domReadinessService.emitReplayable('authReady', readyEventDetail);
             logger.debug('[AuthModule] Successfully emitted authReady via domReadinessService', { context: 'init:dispatchAuthReady' });
           } else {
-            // Direct document dispatch fallback when domReadinessService is unavailable
             logger.warn('[AuthModule] domReadinessService.emitReplayable unavailable, using direct document dispatch fallback', { context: 'init:dispatchAuthReady' });
             const doc = domAPI.getDocument();
             if (doc && eventHandlers.createCustomEvent) {
@@ -1054,20 +948,17 @@ export function createAuthModule(deps) {
         }
       }
 
-      // Final broadcast based on the state determined during init.
-      // This ensures appModule is updated if it wasn't already through verifyAuthState's broadcasts.
       const broadcastState = getAppState();
       logger.debug('[AuthModule][init] Performing final broadcastAuth after init completion.', { authenticated: broadcastState.isAuthenticated, context: 'init' });
       broadcastAuth(broadcastState.isAuthenticated, broadcastState.currentUser, 'init_final_broadcast');
 
-      return verified; // Return the result of the initial verification attempt
+      return verified;
     } catch (err) {
       logger.error('[AuthModule][init] Unhandled error during initialization process.',
         err,
         { stack: err.stack, context: 'init:unhandledError' });
       await clearTokenState({ source: 'init_unhandled_error' });
 
-      // Mark as ready even on error, but ensure auth state is cleared
       const appModuleRef = DependencySystem?.modules?.get('appModule');
       if (appModuleRef?.setAppLifecycleState) {
         appModuleRef.setAppLifecycleState({ isReady: true });
@@ -1078,12 +969,7 @@ export function createAuthModule(deps) {
   }
 
   function cleanup() {
-    if (DependencySystem && typeof DependencySystem.cleanupModuleListeners === 'function') {
-      DependencySystem.cleanupModuleListeners('AuthModule');
-    } else if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-      eventHandlers.cleanupListeners({ context: 'AuthModule' });
-    }
-    registeredListeners.length = 0;
+    authFormListenerFactory.cleanup();
     if (verifyInterval) {
       const browserService = DependencySystem.modules.get('browserService');
       if (!browserService || typeof browserService.clearInterval !== 'function') {

@@ -304,14 +304,10 @@ export function createEventHandlers({
       domAPI.preventDefault(e); // Use domAPI to avoid direct event calls
       if (domAPI.hasClass(form, 'submitting')) return;
 
-      // To be fully DI-compliant, form-specific methods should also be called via domAPI.
-      // This assumes domAPI is extended or provides a generic way to call element methods.
-      // e.g., domAPI.callMethod(form, 'checkValidity') or specific domAPI.checkFormValidity(form)
-      if (validateBeforeSubmit && typeof form.checkValidity === 'function') { // form.checkValidity is a direct DOM call
-        if (!domAPI.callMethod(form, 'checkValidity')) { // Assumed domAPI.callMethod or similar
-          if (typeof form.reportValidity === 'function') { // form.reportValidity is a direct DOM call
-            domAPI.callMethod(form, 'reportValidity'); // Assumed domAPI.callMethod or similar
-          }
+      // To be fully DI-compliant, form-specific methods called via domAPI wrappers.
+      if (validateBeforeSubmit) {
+        if (!domAPI.checkFormValidity(form)) {
+          domAPI.reportFormValidity(form);
           return;
         }
       }
@@ -330,8 +326,8 @@ export function createEventHandlers({
           throw new Error('[EventHandler][setupForm] browserService.FormData unavailable (strict DI)');
         const formData = new browserService.FormData(form);
         await SH(submitHandler, 'EventHandler:setupForm:submitHandler')(formData, form);
-        if (resetOnSuccess && typeof form.reset === 'function') { // form.reset is a direct DOM call
-          domAPI.callMethod(form, 'reset'); // Assumed domAPI.callMethod or similar
+        if (resetOnSuccess) {
+          domAPI.resetForm(form);
         }
       } catch (error) {
         if (options.onError) {
@@ -706,21 +702,21 @@ export function createEventHandlers({
       if (authButtonDelegationBound) return;
       const parentNode = domAPI.getElementById('header') || domAPI.getDocument();
       const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-      
+
       logger.info('[EventHandler] bindAuthButtonDelegate', {
         parentNodeExists: !!parentNode,
         modalManagerExists: !!currentModalManager,
         modalManagerHasShow: !!(currentModalManager?.show),
         context: 'eventHandler.bindAuthButtonDelegate'
       });
-      
+
       if (!currentModalManager?.show) {
         logger.warn('[EventHandler] modalManager not available for auth button', {
           context: 'eventHandler.bindAuthButtonDelegate'
         });
         return;
       }
-      
+
       delegate(
         parentNode,
         'click',
@@ -728,8 +724,8 @@ export function createEventHandlers({
         (e) => {
           domAPI.preventDefault(e);
           logger.info('[EventHandler] Auth button clicked', { context: 'eventHandler.authButton' });
-          try { 
-            currentModalManager.show('login'); 
+          try {
+            currentModalManager.show('login');
             logger.info('[EventHandler] Login modal requested', { context: 'eventHandler.authButton' });
           }
           catch (error) {
