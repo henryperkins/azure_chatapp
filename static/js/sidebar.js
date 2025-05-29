@@ -268,6 +268,13 @@ const starred = new Set(
       }
       return;
     }
+    
+    // Verify uiRenderer is available
+    if (!uiRenderer?.renderConversations) {
+      logger.error('[Sidebar][maybeRenderRecentConversations] uiRenderer.renderConversations not available', { context: 'Sidebar' });
+      return;
+    }
+    
     logger.debug('[Sidebar][maybeRenderRecentConversations] Rendering conversations for project', {
       projectId,
       searchTerm,
@@ -283,7 +290,6 @@ const starred = new Set(
         searchTerm,
         context: 'Sidebar'
       });
-      logger.error('[Sidebar][maybeRenderStarredConversations] failed', new Error('No current project selected'), { context: 'Sidebar' });
       // Clear the list and show a message instead of trying to load without project ID
       const listElement = domAPI.getElementById('starredChatsSection')?.querySelector('ul');
       if (listElement) {
@@ -295,6 +301,13 @@ const starred = new Set(
       }
       return;
     }
+    
+    // Verify uiRenderer is available
+    if (!uiRenderer?.renderStarredConversations) {
+      logger.error('[Sidebar][maybeRenderStarredConversations] uiRenderer.renderStarredConversations not available', { context: 'Sidebar' });
+      return;
+    }
+    
     logger.debug('[Sidebar][maybeRenderStarredConversations] Rendering starred conversations for project', {
       projectId,
       searchTerm,
@@ -305,17 +318,28 @@ const starred = new Set(
 
   async function activateTab(name = 'recent') {
     try {
+      logger.info(`[Sidebar][activateTab] Activating tab: ${name}`, { context: 'Sidebar' });
+      
       const map = {
         recent: { btn: 'recentChatsTab', panel: 'recentChatsSection' },
         starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
         projects: { btn: 'projectsTab', panel: 'projectsSection' }
       };
       if (!map[name]) {
+        logger.warn(`[Sidebar][activateTab] Invalid tab name '${name}', defaulting to 'recent'`, { context: 'Sidebar' });
         name = 'recent';
       }
       Object.entries(map).forEach(([key, ids]) => {
         const btn = domAPI.getElementById(ids.btn);
         const panel = domAPI.getElementById(ids.panel);
+        
+        if (!btn) {
+          logger.warn(`[Sidebar][activateTab] Tab button not found: ${ids.btn}`, { context: 'Sidebar' });
+        }
+        if (!panel) {
+          logger.warn(`[Sidebar][activateTab] Tab panel not found: ${ids.panel}`, { context: 'Sidebar' });
+        }
+        
         if (btn && panel) {
           const isActive = key === name;
           btn.classList.toggle('tab-active', isActive);
@@ -324,6 +348,8 @@ const starred = new Set(
           panel.classList.toggle('hidden', !isActive);
           if (isActive) panel.classList.add('flex');
           else panel.classList.remove('flex');
+          
+          logger.debug(`[Sidebar][activateTab] Tab ${key} ${isActive ? 'activated' : 'deactivated'}`, { context: 'Sidebar' });
         }
       });
       storageAPI.setItem('sidebarActiveTab', name);
@@ -337,6 +363,8 @@ const starred = new Set(
         await ensureProjectDashboard();
         _handleProjectSearch();
       }
+      
+      logger.debug(`[Sidebar][activateTab] Successfully activated tab: ${name}`, { context: 'Sidebar' });
     } catch (error) {
       logger.error('[Sidebar][activateTab] failed', error, { context: 'Sidebar' });
     }
@@ -344,27 +372,48 @@ const starred = new Set(
 
   async function ensureProjectDashboard() {
     try {
-      if (!projectDashboard?.initialize) return;
+      if (!projectDashboard?.initialize) {
+        logger.warn('[Sidebar][ensureProjectDashboard] projectDashboard.initialize not available', { context: 'Sidebar' });
+        return;
+      }
 
       const section = domAPI.getElementById('projectsSection');
       if (section && !section.dataset.initialised) {
         section.dataset.initialised = 'true';
       }
 
+      // Check authentication before attempting to load projects
+      const appModule = DependencySystem.modules.get('appModule');
+      if (!appModule?.state?.isAuthenticated) {
+        logger.debug('[Sidebar][ensureProjectDashboard] User not authenticated, skipping project load', { context: 'Sidebar' });
+        if (uiRenderer?.renderProjects) {
+          uiRenderer.renderProjects([]);
+        }
+        return;
+      }
+
+      // Verify projectManager is available
+      if (!projectManager) {
+        logger.error('[Sidebar][ensureProjectDashboard] projectManager not available', { context: 'Sidebar' });
+        return;
+      }
+
       // CRITICAL FIX: Load projects if not already loaded
-      if (projectManager?.loadProjects && (!projectManager.projects || projectManager.projects.length === 0)) {
+      let projects = projectManager.projects || [];
+      if (typeof projectManager.loadProjects === 'function' && projects.length === 0) {
         logger.debug('[Sidebar][ensureProjectDashboard] Loading projects...', { context: 'Sidebar' });
         try {
-          await projectManager.loadProjects();
+          const loadedProjects = await projectManager.loadProjects();
+          projects = loadedProjects || projectManager.projects || [];
           logger.debug('[Sidebar][ensureProjectDashboard] Projects loaded successfully', {
-            count: projectManager.projects?.length || 0,
+            count: projects.length,
             context: 'Sidebar'
           });
 
           // ENHANCED: Auto-select first project if no current project is set
           const currentProject = projectManager.getCurrentProject?.();
-          if (!currentProject && projectManager.projects?.length > 0 && app?.setCurrentProject) {
-            const firstProject = projectManager.projects[0];
+          if (!currentProject && projects.length > 0 && app?.setCurrentProject) {
+            const firstProject = projects[0];
             logger.debug('[Sidebar][ensureProjectDashboard] Auto-selecting first project', {
               projectId: firstProject.id,
               projectName: firstProject.name,
@@ -376,16 +425,37 @@ const starred = new Set(
           logger.error('[Sidebar][ensureProjectDashboard] Failed to load projects',
                        loadErr,
                        { context: 'Sidebar:ensureProjectDashboard' });
+          // Show error in projects list
+          if (uiRenderer?.renderProjects) {
+            const projectsList = domAPI.getElementById('projectsSection')?.querySelector('ul');
+            if (projectsList) {
+              domAPI.setInnerHTML(projectsList, '');
+              const errorLi = domAPI.createElement('li');
+              errorLi.className = 'p-4 text-center text-error';
+              domAPI.setTextContent(errorLi, 'Failed to load projects. Please try refreshing.');
+              projectsList.appendChild(errorLi);
+            }
+          }
+          return;
         }
+      } else if (projects.length === 0) {
+        logger.debug('[Sidebar][ensureProjectDashboard] No projects available', { context: 'Sidebar' });
       }
 
-      if (projectManager?.projects?.length && uiRenderer.renderProjects) {
-        uiRenderer.renderProjects(projectManager.projects);
+      // Render projects using uiRenderer
+      if (uiRenderer?.renderProjects) {
+        logger.debug('[Sidebar][ensureProjectDashboard] Rendering projects', { 
+          projectCount: projects.length,
+          context: 'Sidebar' 
+        });
+        uiRenderer.renderProjects(projects);
 
         // ── ensure conversation lists show once a project exists ──
         const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
         if (activeTab === 'recent') maybeRenderRecentConversations();
         if (activeTab === 'starred') maybeRenderStarredConversations();
+      } else {
+        logger.error('[Sidebar][ensureProjectDashboard] uiRenderer.renderProjects not available', { context: 'Sidebar' });
       }
     } catch (err) {
       logger.error('[Sidebar][ensureProjectDashboard] failed',
@@ -603,13 +673,38 @@ const starred = new Set(
       eventHandlers.trackListener(
         auth.AuthBus,
         'authStateChanged',
-        safeHandler(sidebarAuth.handleGlobalAuthStateChange, 'Sidebar:AuthBus:authStateChanged'),
+        safeHandler((event) => {
+          sidebarAuth.handleGlobalAuthStateChange(event);
+          // If user just authenticated, refresh projects
+          if (event?.detail?.authenticated) {
+            logger.debug('[Sidebar] User authenticated, refreshing projects', { context: 'Sidebar' });
+            const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+            if (activeTab === 'projects') {
+              // Force reload projects if projects tab is active
+              if (projectManager?.projects) {
+                projectManager.projects = []; // Clear cache to force reload
+              }
+              ensureProjectDashboard().catch(err => 
+                logger.error('[Sidebar] Failed to refresh projects after auth', err, { context: 'Sidebar' })
+              );
+            }
+          }
+        }, 'Sidebar:AuthBus:authStateChanged'),
         { context: 'Sidebar', description: 'Sidebar reacts to AuthBus auth state changes' }
       );
       eventHandlers.trackListener(
         auth.AuthBus,
         'authReady',
-        safeHandler(sidebarAuth.handleGlobalAuthStateChange, 'Sidebar:AuthBus:authReady'),
+        safeHandler((event) => {
+          sidebarAuth.handleGlobalAuthStateChange(event);
+          // Load projects when auth is ready
+          logger.debug('[Sidebar] Auth ready, loading projects', { context: 'Sidebar' });
+          if (projectManager?.loadProjects) {
+            projectManager.loadProjects().catch(err => 
+              logger.error('[Sidebar] Failed to load projects after auth ready', err, { context: 'Sidebar' })
+            );
+          }
+        }, 'Sidebar:AuthBus:authReady'),
         { context: 'Sidebar', description: 'Sidebar reacts to AuthBus auth ready events' }
       );
       logger.debug('[Sidebar] Subscribed to AuthBus events for auth state changes', { context: 'Sidebar' });
@@ -632,6 +727,7 @@ const starred = new Set(
     ];
     tabs.forEach(({ id, tab, desc }) => {
       const element = domAPI.getElementById(id);
+      logger.debug(`[Sidebar][bindDomEvents] Tab element check: ${id} = ${!!element}`, { context: 'Sidebar' });
       if (element) {
         eventHandlers.trackListener(
           element,
@@ -639,13 +735,19 @@ const starred = new Set(
           safeHandler(
             async (e) => {
               if (e.preventDefault) e.preventDefault();
-              if (logger && logger.debug) logger.debug(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`, { context: 'Sidebar' });
+              logger.info(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`, { 
+                context: 'Sidebar',
+                tabName: tab,
+                buttonId: id,
+                eventType: e.type 
+              });
               try {
                 await activateTab(tab);
+                logger.info(`[Sidebar][TabMenu] Successfully activated '${tab}'`, { context: 'Sidebar' });
                 if (accessibilityUtils?.announce)
                   accessibilityUtils.announce(`Switched to ${tab} tab in sidebar`);
               } catch (error) {
-                if (logger && logger.error) logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`,
+                logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`,
                                                           error,
                                                           { context: 'Sidebar:tabmenu' });
               }
@@ -654,6 +756,8 @@ const starred = new Set(
           ),
           { context: 'Sidebar', description: `Sidebar tab button click => activateTab('${tab}')` }
         );
+      } else {
+        logger.warn(`[Sidebar][TabMenu] Tab element not found: ${id}`, { context: 'Sidebar' });
       }
     });
 
@@ -739,7 +843,11 @@ const starred = new Set(
     try {
       await domReadinessService.dependenciesAndElements({
         deps: ['eventHandlers', 'appModule'], // Ensure appModule is ready
-        domSelectors: ['#mainSidebar'],
+        domSelectors: [
+          '#mainSidebar',
+          '#recentChatsTab', '#starredChatsTab', '#projectsTab',
+          '#recentChatsSection', '#starredChatsSection', '#projectsSection'
+        ],
         timeout: 15000, // Increased timeout for critical dependencies
         context: 'Sidebar'
       });
@@ -781,6 +889,15 @@ const starred = new Set(
         throw new Error('[Sidebar] Critical element #mainSidebar not found after DOM readiness');
       }
 
+      // Ensure all dependencies are available before creating mobile dock
+      if (!domAPI) throw new Error('[Sidebar] domAPI required for mobile dock');
+      if (!eventHandlers) throw new Error('[Sidebar] eventHandlers required for mobile dock');
+      if (!viewportAPI) throw new Error('[Sidebar] viewportAPI required for mobile dock');
+      if (!logger) throw new Error('[Sidebar] logger required for mobile dock');
+      if (!domReadinessService) throw new Error('[Sidebar] domReadinessService required for mobile dock');
+      if (typeof safeHandler !== 'function') throw new Error('[Sidebar] safeHandler required for mobile dock');
+      if (typeof activateTab !== 'function') throw new Error('[Sidebar] activateTab required for mobile dock');
+
       sidebarMobileDock = createSidebarMobileDock({
         domAPI,
         eventHandlers,
@@ -790,7 +907,15 @@ const starred = new Set(
         safeHandler,
         onTabActivate: activateTab
       });
-      await sidebarMobileDock.init();
+      
+      try {
+        await sidebarMobileDock.init();
+        logger.info('[Sidebar] Mobile dock initialized successfully', { context: 'Sidebar' });
+      } catch (mobileDockErr) {
+        logger.error('[Sidebar] Mobile dock initialization failed', mobileDockErr, { context: 'Sidebar' });
+        // Don't fail sidebar init if mobile dock fails - it's a mobile-only enhancement
+        sidebarMobileDock = null;
+      }
 
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.init", { context: 'Sidebar' });
       try {
@@ -944,6 +1069,32 @@ const starred = new Set(
     return debugAuthState();
   }
 
+  function debugSidebarState() {
+    const debugInfo = {
+      visible,
+      pinned,
+      elementExists: !!el,
+      elementClasses: el ? Array.from(el.classList) : [],
+      btnToggleExists: !!btnToggle,
+      sidebarMobileDockExists: !!sidebarMobileDock,
+      viewportWidth: viewportAPI?.getInnerWidth(),
+      isMobile: viewportAPI?.getInnerWidth() < 768,
+      // Tab debugging
+      tabElementsExist: {
+        recentChatsTab: !!domAPI.getElementById('recentChatsTab'),
+        starredChatsTab: !!domAPI.getElementById('starredChatsTab'),
+        projectsTab: !!domAPI.getElementById('projectsTab'),
+        recentChatsSection: !!domAPI.getElementById('recentChatsSection'),
+        starredChatsSection: !!domAPI.getElementById('starredChatsSection'),
+        projectsSection: !!domAPI.getElementById('projectsSection')
+      },
+      uiRenderer: !!uiRenderer,
+      context: 'Sidebar:debug'
+    };
+    logger.info('[Sidebar] Debug sidebar state', debugInfo);
+    return debugInfo;
+  }
+
   return {
     init,
     destroy,
@@ -960,6 +1111,7 @@ const starred = new Set(
     isConversationStarred,
     toggleStarConversation,
     debugAuthState,
-    forceAuthStateRefresh
+    forceAuthStateRefresh,
+    debugSidebarState
   };
 }
