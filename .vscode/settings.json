@@ -1,6 +1,10 @@
 {
     "github.copilot.enable": {
-        "*": false
+        "*": true,
+        "plaintext": false,
+        "markdown": false,
+        "scminput": false,
+        "python": true
     },
     "python-envs.pythonProjects": [
         {
@@ -9,5 +13,6 @@
             "packageManager": "ms-python.python:pip"
         }
     ],
-    "typescript.tsdk": "node_modules/typescript/lib"
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "codium.codeCompletion.enable": true
 }

@@ -13,6 +13,7 @@ from config import settings  # NEW
 
 import aiofiles
 from aiofiles import os as aioos  # ← ADD
+import sentry_sdk
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -21,9 +22,19 @@ limiter = Limiter(key_func=get_remote_address)
 
 # -------- client-log rate limit ------------------------------------------
 _DEFAULT_RATE = "100/minute"
-LOGS_RATE_LIMIT = getattr(settings, "CLIENT_LOG_RATE_LIMIT", None) or (
-    "1000/minute" if getattr(settings, "DEBUG", False) else _DEFAULT_RATE
-)
+_DEBUG_RATE = "10000/minute"  # Very high limit for development
+
+# Check DEBUG setting and set appropriate rate limit
+is_debug = getattr(settings, "DEBUG", False)
+
+# Allow environment variable override
+env_rate_limit = os.getenv("CLIENT_LOG_RATE_LIMIT")
+if env_rate_limit:
+    LOGS_RATE_LIMIT = env_rate_limit
+else:
+    LOGS_RATE_LIMIT = _DEBUG_RATE if is_debug else _DEFAULT_RATE
+
+# Moved log message below after logger is defined
 
 # Add colorama and initialize (safe even if multiple imports)
 try:
@@ -45,6 +56,7 @@ except ImportError:
     Style = StyleDummy()
 
 logger = logging.getLogger("api.logs")
+logger.info(f"Client logs rate limit set to: {LOGS_RATE_LIMIT} (DEBUG={is_debug})")
 
 # ---------------------------------------------------------------------------
 # Duplicate-error suppression (in-memory, process-wide)
@@ -74,6 +86,17 @@ class ClientLog(BaseModel):
     request_id: str | None = None
     session_id: str | None = None
     trace_id: str | None = None  # ← NEW
+    timestamp: str | None = None
+    message: str | None = None
+    data: dict | None = None
+    metadata: dict | None = None
+
+    class Config:
+        extra = "allow"  # Allow unknown fields to make endpoint robust to future client-side logger additions
+
+
+class ClientLogBatch(BaseModel):
+    logs: list[ClientLog]
 
 
 router = APIRouter()
@@ -106,20 +129,69 @@ def get_color_for_level(level: str):
     return Style.NORMAL
 
 
-@router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit(
-    LOGS_RATE_LIMIT, exempt_when=lambda: settings.DEBUG
-)  # Disable rate limit entirely when DEBUG=True
-async def receive_logs(
-    request: Request, current_user: Optional[User] = Depends(get_current_user_optional)
-):
+# Apply rate limiter conditionally based on debug mode
+if is_debug:
+    # No rate limiting in debug mode
+    @router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
+    async def receive_logs(
+        request: Request,
+        _current_user: Optional[User] = Depends(get_current_user_optional),
+    ):
+        return await _process_log_request(request, _current_user)
+
+else:
+    # Apply rate limiting in production
+    @router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
+    @limiter.limit(LOGS_RATE_LIMIT)
+    async def receive_logs(
+        request: Request,
+        _current_user: Optional[User] = Depends(get_current_user_optional),
+    ):
+        return await _process_log_request(request, _current_user)
+
+
+async def _process_log_request(request: Request, _current_user: Optional[User]):
+    """Process the actual log request - extracted to avoid code duplication"""
     try:
         try:
-            log_entry = ClientLog(**(await request.json())).model_dump()
+            payload = await request.json()
+
+            # Check if it's a batch or single log
+            if isinstance(payload, dict) and "logs" in payload:
+                # It's a batch
+                batch = ClientLogBatch(**payload)
+                log_entries = [log.model_dump() for log in batch.logs]
+            else:
+                # It's a single log entry
+                log_entry = ClientLog(**payload)
+                log_entries = [log_entry.model_dump()]
+
         except ValidationError as ve:
-            logger.warning("Bad client-log payload", extra={"errors": ve.errors()})
+            # Log validation errors with the raw payload for debugging
+            body_preview = str(await request.body())[:500]  # First 500 chars
+            logger.warning(
+                "Bad client-log payload - validation failed",
+                extra={
+                    "errors": ve.errors(),
+                    "raw_body_preview": body_preview,
+                    "validation_error": str(ve),
+                },
+            )
             return Response(status_code=400)
 
+        # Process each log entry in the batch
+        for log_entry_data in log_entries:
+            await _process_single_log_entry(log_entry_data, request)
+
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except Exception as e:
+        logger.error("Could not process incoming client log", extra={"error": str(e)})
+        return Response(status_code=400)
+
+
+async def _process_single_log_entry(log_entry_data: dict, request: Request):
+    """Process a single log entry from either a batch or individual request"""
+    try:
         # --- Sanitize sensitive fields ---
         def sanitize_args(args):
             sensitive_patterns = [
@@ -171,32 +243,39 @@ async def receive_logs(
             return sanitized
 
         # Add correlation/meta if present
-        sanitized_entry = sanitize(log_entry)
+        sanitized_entry = sanitize(log_entry_data)
         # ---- prevent LogRecord key collision ----
         original_args = sanitized_entry.pop("args", None)  # drop reserved key
         if original_args is not None:
             sanitized_entry["client_args"] = original_args  # keep a safe copy
         sanitized_entry["request_id"] = request.headers.get(
             "X-Request-ID"
-        ) or log_entry.get("request_id")
-        sanitized_entry["session_id"] = log_entry.get("session_id")
+        ) or log_entry_data.get("request_id")
+        sanitized_entry["session_id"] = log_entry_data.get("session_id")
         sanitized_entry["trace_id"] = request.headers.get(
             "X-Trace-ID"
-        ) or log_entry.get("trace_id")
+        ) or log_entry_data.get("trace_id")
 
         # ── derived fields (must precede any further use) ─────────
-        level        = sanitized_entry.get("level", "info").lower()
-        ctx          = sanitized_entry.get("context", "client")
+        level = sanitized_entry.get("level", "info").lower()
+        ctx = sanitized_entry.get("context", "client")
         payload_args = sanitized_entry.get("client_args", [])
-        summary      = " ".join(map(str, payload_args)) or f"[{ctx}]"
-        color        = get_color_for_level(level)
-        reset        = getattr(Style, "RESET_ALL", "")
+        summary = " ".join(map(str, payload_args)) or f"[{ctx}]"
+        color = get_color_for_level(level)
+        reset = getattr(Style, "RESET_ALL", "")
 
         # ---------------------------------------------------------------
         # Strip logging-reserved keys so logger.log(extra=…) never fails
         # ---------------------------------------------------------------
-        reserved = {"args", "msg", "message", "levelname", "levelno",
-                    "level", "context"}
+        reserved = {
+            "args",
+            "msg",
+            "message",
+            "levelname",
+            "levelno",
+            "level",
+            "context",
+        }
         for k in reserved:
             sanitized_entry.pop(k, None)
 
@@ -247,7 +326,7 @@ async def receive_logs(
 
         # Skip Sentry for noise-level logs
         if level in ("debug", "info"):
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
+            return
 
         # Integration: Forward client log to Sentry as a message (retaining details)
         try:
@@ -266,8 +345,6 @@ async def receive_logs(
             )
             if send_level in ("warning", "error", "critical", "fatal"):
                 # Set Sentry tags for correlation
-                import sentry_sdk
-
                 with sentry_sdk.configure_scope() as scope:
                     scope.set_tag("session_id", sanitized_entry.get("session_id"))
                     scope.set_tag("request_id", sanitized_entry.get("request_id"))
@@ -289,10 +366,8 @@ async def receive_logs(
                 "Failed to forward log to Sentry", extra={"error": str(sentry_exc)}
             )
 
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except Exception as e:
-        logger.error("Could not process incoming client log", extra={"error": str(e)})
-        return Response(status_code=400)
+        logger.error("Could not process single log entry", extra={"error": str(e)})
 
 
 @router.get("/diagnostics/dom-replay-events")

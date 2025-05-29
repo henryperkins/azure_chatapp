@@ -150,11 +150,13 @@ export function createAuthModule(deps) {
   let _lastLoginTimestamp = 0;
   // Prevent log-storm: remember last value we logged
   let _lastLoggedCsrfPresence = null;
+  let _inLogDelivery = false; // Track if we're in a log delivery context
+  
   function getCSRFToken() {
     const current = readCookie('csrf_token');
     if (current && current !== csrfToken) csrfToken = current;
-    // ↓ Only log when cookie-presence state changes
-    if ((current ? 'has' : 'none') !== _lastLoggedCsrfPresence) {
+    // ↓ Only log when cookie-presence state changes AND not during log delivery
+    if (!_inLogDelivery && (current ? 'has' : 'none') !== _lastLoggedCsrfPresence) {
       _lastLoggedCsrfPresence = current ? 'has' : 'none';
       logger.debug(
         `[DIAGNOSTIC][auth.js][getCSRFToken] ${current ? 'cookie present' : 'no CSRF cookie'}`,
@@ -163,24 +165,40 @@ export function createAuthModule(deps) {
     }
     return csrfToken;
   }
+  
+  // Helper to mark log delivery context
+  function setLogDeliveryContext(value) {
+    _inLogDelivery = value;
+  }
   async function fetchCSRFToken() {
     if (!apiEndpoints.AUTH_CSRF) throw new Error('AUTH_CSRF endpoint missing in apiEndpoints');
     const csrfUrl = apiEndpoints.AUTH_CSRF;
     const url = csrfUrl.includes('?')
       ? `${csrfUrl}&ts=${Date.now()}`
       : `${csrfUrl}?ts=${Date.now()}`;
-    logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching', url, { context: 'fetchCSRFToken' });
+    
+    if (!_inLogDelivery) {
+      logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching', url, { context: 'fetchCSRFToken' });
+    }
+    
     const data = await apiClient(url, {
       method: 'GET',
       headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
       credentials: 'include',
       cache: 'no-store'
     });
+    
     if (!data || !data.token) {
-      logger.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data, { context: 'fetchCSRFToken' });
+      if (!_inLogDelivery) {
+        logger.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data, { context: 'fetchCSRFToken' });
+      }
       throw new Error('CSRF token missing');
     }
-    logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received CSRF token (masked)', { context: 'fetchCSRFToken' });
+    
+    if (!_inLogDelivery) {
+      logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received CSRF token (masked)', { context: 'fetchCSRFToken' });
+    }
+    
     return data.token;
   }
   async function getCSRFTokenAsync(forceFetch = false) {
@@ -225,9 +243,13 @@ export function createAuthModule(deps) {
       const token = getCSRFToken() || (await getCSRFTokenAsync());
       if (token) {
         options.headers['X-CSRF-Token'] = token;
-        logger.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header [masked] for', endpoint, { context: 'authRequest' });
+        if (!_inLogDelivery) {
+          logger.log('[DIAGNOSTIC][auth.js][authRequest] Adding X-CSRF-Token header [masked] for', endpoint, { context: 'authRequest' });
+        }
       } else {
-        logger.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint, { context: 'authRequest' });
+        if (!_inLogDelivery) {
+          logger.warn('[DIAGNOSTIC][auth.js][authRequest] No CSRF token found for state-changing request', endpoint, { context: 'authRequest' });
+        }
       }
     }
     // Bearer-auth header when we already hold an access token
@@ -239,12 +261,18 @@ export function createAuthModule(deps) {
       options.headers['Content-Type'] = 'application/json';
     }
     try {
-      logger.log('[DIAGNOSTIC][auth.js][authRequest][REQUEST]', endpoint, options, { context: 'authRequest' });
+      if (!_inLogDelivery) {
+        logger.log('[DIAGNOSTIC][auth.js][authRequest][REQUEST]', endpoint, options, { context: 'authRequest' });
+      }
       const data = await apiClient(endpoint, options);
-      logger.log('[DIAGNOSTIC][auth.js][authRequest][RESPONSE]', endpoint, data, { context: 'authRequest' });
+      if (!_inLogDelivery) {
+        logger.log('[DIAGNOSTIC][auth.js][authRequest][RESPONSE]', endpoint, data, { context: 'authRequest' });
+      }
       return data;
     } catch (error) {
-      logger.error('[DIAGNOSTIC][auth.js][authRequest][ERROR]', endpoint, error, { context: 'authRequest' });
+      if (!_inLogDelivery) {
+        logger.error('[DIAGNOSTIC][auth.js][authRequest][ERROR]', endpoint, error, { context: 'authRequest' });
+      }
       extendErrorWithStatus(error, error.message);
       throw error;
     }
@@ -1062,6 +1090,7 @@ export function createAuthModule(deps) {
     AuthBus,
     getCSRFTokenAsync,
     getCSRFToken,
+    setLogDeliveryContext,  // Export for apiClient to use
     hasAuthCookies: () => {
       const doc = domAPI.getDocument?.();
       if (!doc || typeof doc.cookie !== 'string') return false;

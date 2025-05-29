@@ -115,12 +115,12 @@ auth.AuthBus.addEventListener('authStateChanged', ({ detail }) => {
 | Chat Init              | chatManager.js                    | Via AppBus/AuthBus events                                     |
 | Application Config     | config.py                         | `from config import settings`                                 |
 | Database Connection    | db.py                             | `from db import get_async_session, get_async_session_context` |
-| Auth Utilities         | utils/auth\_utils.py              | `from utils.auth_utils import get_current_user_and_token`     |
-| Structured Logging     | utils/logging\_config.py          | `from utils.logging_config import init_structured_logging`    |
-| Telemetry              | utils/sentry\_utils.py            | `from utils.sentry_utils import configure_sentry`             |
-| Model Registry         | utils/model\_registry.py          | `from utils.model_registry import get_model_config`           |
+| Auth Utilities         | utils/auth_utils.py               | `from utils.auth_utils import get_current_user_and_token`     |
+| Structured Logging     | utils/logging_config.py           | `from utils.logging_config import init_structured_logging`    |
+| Telemetry              | utils/sentry_utils.py             | `from utils.sentry_utils import configure_sentry`             |
+| Model Registry         | utils/model_registry.py           | `from utils.model_registry import get_model_config`           |
 | Database Models        | models/                           | `from models import User, Project, Conversation`              |
-| Service Exports        | services/**init**.py              | `from services import get_conversation_service`               |
+| Service Exports        | services/__init__.py              | `from services import get_conversation_service`               |
 | DOM API                | static/js/utils/domAPI.js         | Injected via DI only                                          |
 | Event Handling         | static/js/utils/eventHandlers.js  | Injected via DI only                                          |
 | API Endpoints          | static/js/utils/apiEndpoints.js   | Injected via DI only                                          |
@@ -128,7 +128,7 @@ auth.AuthBus.addEventListener('authStateChanged', ({ detail }) => {
 | Bootstrap Process      | utils/bootstrap.py                | `from utils.bootstrap import init_telemetry`                  |
 | Frontend Model Config  | static/js/modelConfig.js          | Injected via DI only                                          |
 | Frontend App Config    | static/js/appConfig.js            | Imported directly in app.js only                              |
-| Knowledge Base Context | utils/ai\_helper.py               | `from utils.ai_helper import retrieve_knowledge_context`      |
+| Knowledge Base Context | utils/ai_helper.py               | `from utils.ai_helper import retrieve_knowledge_context`      |
 
 **General rule:** Only `app.js` may directly import services; all other modules must receive them through DI.
 

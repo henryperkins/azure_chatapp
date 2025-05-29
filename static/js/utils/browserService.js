@@ -208,6 +208,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
 
     /* correlation helpers */
     getSessionId : () => getSessionId(),
+    getUserAgent : () => windowObject.navigator?.userAgent || 'Unknown',
     setLogger(newLogger) { _logger = newLogger; },
   };
 }
