@@ -158,6 +158,7 @@ DependencySystem.register('domReadinessService', domReadinessService);
 
 /* Wire the circular dependency */
 eventHandlers.setDomReadinessService(domReadinessService);
+// (domReadinessService.setLogger(logger);)   // ← removed as redundant
 
 // ---------------------------------------------------------------------------
 // 8) Register factories (no logger yet), but DO NOT createApiEndpoints here
