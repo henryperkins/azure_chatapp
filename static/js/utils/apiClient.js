@@ -165,7 +165,13 @@ export function createApiClient({
         logger.error('[apiClient] API response not OK', err, { context: 'apiClient:apiError', url: normUrl, status: resp.status, payload });
         throw err;
       } catch (outerErr) {
-        logger.error('[apiClient] Unexpected API error', outerErr, { context: 'apiClient:outerCatch', url: normUrl, method, opts: restOpts });
+        // Prevent recursive logger/apiClient loop for logger delivery
+        if (!/\/api\/logs\b/.test(normUrl)) {
+          logger.error('[apiClient] Unexpected API error', outerErr, { context: 'apiClient:outerCatch', url: normUrl, method, opts: restOpts });
+        } else {
+          // Only output to console, not logger, for log delivery failures
+          (browserService?.getWindow?.()?.console ?? console).error('[apiClient] Failed to deliver log to /api/logs', outerErr);
+        }
         throw outerErr;
       } finally {
         browserService.clearTimeout(timer);
