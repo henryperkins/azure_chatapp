@@ -16,6 +16,8 @@
  *   • sub-APIs for backward compatibility (appModule, serviceInit, etc.)
  */
 
+import { SELECTORS } from "../utils/selectorConstants.js";
+
 export function createAppInitializer({
     // Core infrastructure
     DependencySystem,
@@ -1108,6 +1110,8 @@ export function createAppInitializer({
                 }
                 const isAuth = appModuleLocal.state.isAuthenticated;
                 const user = appModuleLocal.state.currentUser;
+                // Robust fallback displayed everywhere
+                const displayName = user?.name || user?.username || 'User';
 
                 logger.debug('[authInit][renderAuthHeader] Rendering auth header', {
                     isAuth, user, context: 'authInit:renderAuthHeader'
@@ -1149,10 +1153,12 @@ export function createAppInitializer({
                 }
 
                 if (isAuth && userMenu && userInitialsEl) {
-                    if (!user?.name) {
-                        throw new Error('[authInit][renderAuthHeader] user.name is required.');
-                    }
-                    const initials = user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase();
+                    // Robust fallback: allow username if no name field is present
+                    // This avoids header failures if backend only supplies username
+                    const displayName = user?.name || user?.username || "User";
+                    const initials = user?.name
+                        ? user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase()
+                        : (user?.username ? user.username.slice(0, 2).toUpperCase() : 'U');
                     domAPI.setTextContent(userInitialsEl, initials);
                 } else if (userMenu && userInitialsEl) {
                     domAPI.setTextContent(userInitialsEl, '');
@@ -1161,15 +1167,15 @@ export function createAppInitializer({
                 if (authStatus) {
                     domAPI.setTextContent(authStatus,
                         isAuth
-                            ? (user?.username ? `Signed in as ${user.username}` : 'Authenticated')
+                            ? `Signed in as ${displayName}`
                             : 'Not Authenticated'
                     );
                 }
 
                 if (userStatus) {
                     domAPI.setTextContent(userStatus,
-                        isAuth && user?.username
-                            ? `Hello, ${user.name ?? user.username}`
+                        isAuth
+                            ? `Hello, ${displayName}`
                             : 'Offline'
                     );
                 }
@@ -1481,15 +1487,25 @@ export function createAppInitializer({
                     context: 'uiInit:initializeUIComponents'
                 });
 
+                // Patch: Initialize projectListComponent after UI is ready
+                const plc = DependencySystem.modules.get('projectListComponent');
+                if (plc?.initialize) {
+                    try {
+                        await plc.initialize();
+                    } catch (e) {
+                        logger.error('[uiInit] projectListComponent.initialize failed', e, { context: 'uiInit' });
+                    }
+                }
+
                 // ── finally, wire up sidebar now that authReady has already fired ──
                 const sidebar = DependencySystem.modules.get('sidebar');
                 if (sidebar?.init) {
-                  try {
-                    await sidebar.init();
-                    logger.info('[uiInit] sidebar.init completed', { context: 'uiInit' });
-                  } catch (err) {
-                    logger.error('[uiInit] sidebar.init failed', err, { context: 'uiInit' });
-                  }
+                    try {
+                        await sidebar.init();
+                        logger.info('[uiInit] sidebar.init completed', { context: 'uiInit' });
+                    } catch (err) {
+                        logger.error('[uiInit] sidebar.init failed', err, { context: 'uiInit' });
+                    }
                 }
 
                 _uiInitialized = true;

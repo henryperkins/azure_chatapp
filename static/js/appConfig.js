@@ -2,6 +2,8 @@
  * Application-wide configuration object.
  * Exported as APP_CONFIG for use throughout the app.
  */
+import { SELECTORS } from "./utils/selectorConstants.js";
+
 export const APP_CONFIG = {
   DEBUG: true,
   VERBOSE_LOGGING: true, // Add this to enable verbose logging
@@ -17,7 +19,7 @@ export const APP_CONFIG = {
     USER_STATUS_SPAN: '#userStatusSpan',
     USER_MENU: '#userMenu',
     PROJECT_DETAILS_VIEW: '#projectDetailsView',
-    PROJECT_LIST_VIEW: '#projectListView'
+    PROJECT_LIST_VIEW: SELECTORS.projectListView
   },
   TIMEOUTS: {
     DEPENDENCY_WAIT: 5000,      // generic waitFor timeout (hardened, was 15000)
