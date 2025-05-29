@@ -283,6 +283,7 @@ const starred = new Set(
         searchTerm,
         context: 'Sidebar'
       });
+      logger.error('[Sidebar][maybeRenderStarredConversations] failed', new Error('No current project selected'), { context: 'Sidebar' });
       // Clear the list and show a message instead of trying to load without project ID
       const listElement = domAPI.getElementById('starredChatsSection')?.querySelector('ul');
       if (listElement) {
