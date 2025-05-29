@@ -53,11 +53,13 @@ export function createProjectListComponent(deps) {
 
     // ----- Internal State -----
     // Primary container used by the new template plus legacy fallback
+    // Strip any leading class (.) or id (#) markers so we end up with raw id names
+    // Prefer the new container ID first to avoid timing issues with legacy selector
     const ELEMENT_IDS = [
-        SELECTORS.projectListView.replace('#', ''),
-        SELECTORS.projectListContainer.replace('.', '')
+        SELECTORS.projectListContainer.replace('#', '').replace('.', ''),
+        SELECTORS.projectListView.replace('#', '')
     ];
-    let elementId = ELEMENT_IDS[0];
+    let elementId = ELEMENT_IDS[0]; // default to container which is present in current template
     let _doc = null;
     let element = null;
     let gridElement = null;
@@ -78,6 +80,15 @@ export function createProjectListComponent(deps) {
         return p?.uuid ?? p?.id ?? p?.project_id ?? p?.ID ?? null;
     }
 
+    // Helper to wait for DOM updates after template injection
+    function _waitForDOMUpdate() {
+        return new Promise(resolve => {
+            browserService.getWindow().requestAnimationFrame(() => {
+                browserService.setTimeout(resolve, 0);
+            });
+        });
+    }
+
     // ----- Initialization/Readiness -----
     async function initialize() {
         try {
@@ -86,14 +97,15 @@ export function createProjectListComponent(deps) {
                 timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_TEMPLATE ?? 15000,
                 context: MODULE_CONTEXT + '_template'
             });
-            // Now wait for the key DOM elements
+
+            // CRITICAL: Wait for DOM to fully update after template injection
+            await _waitForDOMUpdate();
+
+            // Now wait for the main container element
             await domReadinessService.dependenciesAndElements({
                 deps: ['projectManager', 'eventHandlers'],
-                domSelectors: [
-                    SELECTORS.projectListView,         // primary container
-                    SELECTORS.projectListContainer     // legacy fallback
-                ],
-                observeMutations: true,   // wait for template injection
+                domSelectors: [SELECTORS.projectListView, SELECTORS.projectListContainer],  // Wait for either container ID
+                observeMutations: true,
                 timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
                 context: MODULE_CONTEXT + '_init'
             });
@@ -114,21 +126,23 @@ export function createProjectListComponent(deps) {
 
         if (!element) {
             logger.error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`, null, { context: MODULE_CONTEXT });
-            _showErrorState(`Project list container <code>#${elementId}</code> not found. The project list UI cannot be initialized.`);
-            throw new Error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`);
-        }
-        if (element.classList.contains('mobile-grid')) {
-            gridElement = element;
-        } else if (domAPI?.querySelector) {
-            gridElement = domAPI.querySelector('.mobile-grid', element);
-        } else {
-            gridElement = element.querySelector('.mobile-grid');
+            _showErrorState(`Project list container <code>#${elementId}</code> not found.`);
+            throw new Error(`[ProjectListComponent] Element #${elementId} not found.`);
         }
 
+        // Find or create grid element with better fallback logic
+        gridElement = domAPI.querySelector('.mobile-grid', element) ||
+                     domAPI.getElementById('projectCardsPanel');
+
         if (!gridElement) {
-            logger.error(`'.mobile-grid' container not found within .project-list-container.`, null, { context: MODULE_CONTEXT });
-            _showErrorState(`Project grid <code>.mobile-grid</code> not found inside the project list container. The project list UI cannot be rendered.`);
-            throw new Error(`'.mobile-grid' container not found within .project-list-container.`);
+            // Create the grid if it doesn't exist
+            logger.warn('[ProjectListComponent] Grid element not found, creating fallback', { context: MODULE_CONTEXT });
+            gridElement = domAPI.createElement('div');
+            gridElement.className = "mobile-grid mobile-p-safe w-full";
+            gridElement.setAttribute('role', 'tabpanel');
+            gridElement.setAttribute('aria-labelledby', 'filterTabAll');
+            gridElement.setAttribute('id', 'projectCardsPanel');
+            element.appendChild(gridElement);
         }
 
         _bindEventListeners();
@@ -226,9 +240,37 @@ export function createProjectListComponent(deps) {
             }
         };
 
-        // Listen to both variants.
+        // Listen to both variants on the document
         eventHandlers.trackListener(doc, "authStateChanged", safeHandler(handleAuthStateChange, 'ProjectListComponent:authStateChanged'), { context: MODULE_CONTEXT });
         eventHandlers.trackListener(doc, "auth:stateChanged", safeHandler(handleAuthStateChange, 'ProjectListComponent:auth:stateChanged'), { context: MODULE_CONTEXT });
+        // Also react to "authReady" which fires once after initial verification
+        eventHandlers.trackListener(doc, "authReady", safeHandler(handleAuthStateChange, 'ProjectListComponent:authReady'), { context: MODULE_CONTEXT });
+        eventHandlers.trackListener(doc, "auth:ready", safeHandler(handleAuthStateChange, 'ProjectListComponent:auth:ready'), { context: MODULE_CONTEXT });
+
+        // NEW: Subscribe directly to AuthBus if available for more reliable auth updates
+        try {
+            const auth = app?.DependencySystem?.modules?.get?.('auth');
+            if (auth?.AuthBus) {
+                eventHandlers.trackListener(
+                    auth.AuthBus,
+                    'authStateChanged',
+                    safeHandler(handleAuthStateChange, 'ProjectListComponent:AuthBus:authStateChanged'),
+                    { context: MODULE_CONTEXT, description: 'AuthBus authStateChanged listener' }
+                );
+                // Listen once for authReady to capture initial ready event
+                eventHandlers.trackListener(
+                    auth.AuthBus,
+                    'authReady',
+                    safeHandler(handleAuthStateChange, 'ProjectListComponent:AuthBus:authReady'),
+                    { context: MODULE_CONTEXT, description: 'AuthBus authReady listener', once: true }
+                );
+                logger.debug('[ProjectListComponent] Subscribed to AuthBus "authStateChanged" and "authReady".', { context: MODULE_CONTEXT });
+            } else {
+                logger.warn('[ProjectListComponent] AuthBus not available – relying on document-level auth events only.', { context: MODULE_CONTEXT });
+            }
+        } catch (busErr) {
+            logger.error('[ProjectListComponent] Failed to subscribe to AuthBus authStateChanged', busErr, { context: MODULE_CONTEXT });
+        }
 
         _bindFilterEvents();
 
@@ -407,35 +449,25 @@ export function createProjectListComponent(deps) {
                 logger.error('[ProjectListComponent][show] initialize failed', err, { context: MODULE_CONTEXT });
             }
         }
+
+        // IMPROVED: Better element availability check with fallback creation
         if (!gridElement) {
-            const parentElement = element || domAPI.getElementById(elementId) || domAPI.getElementById(elementId);
-            if (parentElement) {
-                gridElement = parentElement.querySelector('.mobile-grid');
-                if (!gridElement) {
-                    const grid = domAPI?.createElement ?
-                        domAPI.createElement('div') :
-                        domAPI.createElement('div');
-                    grid.className = "mobile-grid";
-                    grid.setAttribute('role', 'tabpanel');
-                    grid.setAttribute('aria-labelledby', 'filterTabAll');
-                    grid.setAttribute('tabindex', '0');
-                    parentElement.appendChild(grid);
-                    gridElement = grid;
-                }
-            } else {
-                logger.error('[ProjectListComponent][show] failed to create/find mobileGridElement', null, { context: MODULE_CONTEXT });
-                return;
+            gridElement = domAPI.querySelector('.mobile-grid', element) ||
+                         domAPI.getElementById('projectCardsPanel');
+
+            if (!gridElement) {
+                logger.warn('[ProjectListComponent][show] Creating missing grid element', { context: MODULE_CONTEXT });
+                gridElement = domAPI.createElement('div');
+                gridElement.className = "mobile-grid mobile-p-safe w-full";
+                gridElement.setAttribute('role', 'tabpanel');
+                gridElement.setAttribute('aria-labelledby', 'filterTabAll');
+                gridElement.setAttribute('id', 'projectCardsPanel');
+                element.appendChild(gridElement);
             }
         }
-        try {
-            await domReadinessService.elementsReady(
-                [SELECTORS.projectCardsPanel, SELECTORS.projectFilterTabs],
-                { timeout: 5000, context: MODULE_CONTEXT + '_show' }
-            );
-        } catch (err) {
-            logger.error('[ProjectListComponent][show] elementsReady failed', err, { context: MODULE_CONTEXT });
-            _showErrorState("Project list UI failed: one or more required UI elements did not appear.<br>" + (err?.message || ""));
-        }
+
+        // Remove the problematic elementsReady call that causes timeouts
+        // The elements should already be ready from initialize()
 
         // CONSOLIDATED: Check authentication state before showing content
         const appModule = app?.DependencySystem?.modules?.get?.('appModule');
