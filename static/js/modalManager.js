@@ -60,10 +60,8 @@ class ModalManager {
       null;
 
     // logger and errorReporter DI pattern
-    this.logger =
-      logger ||
-      this.DependencySystem?.modules?.get?.('logger') ||
-      { error: () => { }, warn: () => { }, info: () => { }, log: () => { }, debug: () => { } };
+    if (!logger) throw new Error('[ModalManager] logger is required');
+    this.logger = logger;
     this.errorReporter =
       errorReporter ||
       this.DependencySystem?.modules?.get?.('errorReporter') ||
@@ -682,10 +680,8 @@ class ProjectModal {
       throw new Error('[ProjectModal] domReadinessService DI not provided');
     }
 
-    this.logger =
-      logger ||
-      this.DependencySystem?.modules?.get?.('logger') ||
-      { error: () => { }, warn: () => { }, info: () => { }, log: () => { }, debug: () => { } };
+    if (!logger) throw new Error('[ProjectModal] logger is required');
+    this.logger = logger;
     this.errorReporter =
       errorReporter ||
       this.DependencySystem?.modules?.get?.('errorReporter') ||
@@ -1039,22 +1035,13 @@ class ProjectModal {
  * Create a single ModalManager instance using the classes above.
  */
 export function createModalManager({
-  eventHandlers,
-  domAPI,
-  browserService,
-  DependencySystem,
-  modalMapping,
-  domPurify,
-  domReadinessService
+  eventHandlers, domAPI, browserService, DependencySystem,
+  modalMapping, domPurify, domReadinessService, logger
 } = {}) {
+  if (!logger) throw new Error('[createModalManager] logger dependency is required');
   return new ModalManager({
-    eventHandlers,
-    domAPI,
-    browserService,
-    DependencySystem,
-    modalMapping,
-    domPurify,
-    domReadinessService
+    eventHandlers, domAPI, browserService, DependencySystem,
+    modalMapping, domPurify, domReadinessService, logger
   });
 }
 

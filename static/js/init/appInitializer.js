@@ -966,7 +966,7 @@ export function createAppInitializer({
 
             const projectModal = makeProjectModal({
                 projectManager, eventHandlers, DependencySystem, domAPI,
-                domReadinessService, domPurify: sanitizer
+                domReadinessService, domPurify: sanitizer, logger
             });
             DependencySystem.register('projectModal', projectModal);
             await projectModal.initialize();
