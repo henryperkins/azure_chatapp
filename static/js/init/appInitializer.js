@@ -1506,23 +1506,41 @@ export function createAppInitializer({
             currentPhase: 'starting_init_process'
         });
 
-        // 1. Services
-        serviceInit.registerBasicServices();
-        serviceInit.registerAdvancedServices();
+        // Unified phase runner for structured logging & error handling
+        const phaseRunner = async (name, fn) => {
+            const start = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            logger.info(`[appInitializer] ▶ Phase start: ${name}`);
+            try {
+                const result = await fn();
+                const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - start;
+                logger.info(`[appInitializer] ✔ Phase complete: ${name} (${duration.toFixed(0)} ms)`);
+                return result;
+            } catch (err) {
+                const duration = ((typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()) - start;
+                logger.error(`[appInitializer] ✖ Phase failed: ${name} after ${duration.toFixed(0)} ms`, err, {
+                    context: `appInitializer:${name}`
+                });
+                // reflect lifecycle failure
+                appModule.setAppLifecycleState({
+                    initializing: false,
+                    initialized: false,
+                    currentPhase: 'failed_idle',
+                    isReady: false
+                });
+                eventHandlers.dispatch('app:failed');
+                throw err;
+            }
+        };
 
-        // 2. Errors
-        errorInit.initializeErrorHandling();
+        // Execute phases sequentially
+        await phaseRunner('services:basic', () => serviceInit.registerBasicServices());
+        await phaseRunner('services:advanced', () => serviceInit.registerAdvancedServices());
+        await phaseRunner('errors', () => errorInit.initializeErrorHandling());
+        await phaseRunner('core', () => coreInit.initializeCoreSystems());
+        await phaseRunner('auth', () => authInit.initializeAuthSystem());
+        await phaseRunner('ui', () => uiInit.initializeUIComponents());
 
-        // 3. Core
-        await coreInit.initializeCoreSystems();
-
-        // 4. Auth
-        await authInit.initializeAuthSystem();
-
-        // 5. UI
-        await uiInit.initializeUIComponents();
-
-        // 6. Finalize
+        // Finalize
         appModule.setAppLifecycleState({
             initializing: false,
             initialized: true,

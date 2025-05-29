@@ -40,7 +40,7 @@ export function createDomReadinessService({
   DependencySystem,
   domAPI,
   browserService,
-  eventHandlers,
+  eventHandlers = null, // optional to break circular dependency
   APP_CONFIG,
   logger: injectedLogger = null        // ← NEW
 } = {}) {
@@ -76,6 +76,38 @@ export function createDomReadinessService({
 
   function setLogger(newLogger) {
     if (newLogger) _logger = newLogger;
+  }
+
+  // ---- late binding for eventHandlers to break circular dependency ----
+  let _eventHandlers = eventHandlers || null;
+  function setEventHandlers(newEH) {
+    if (newEH) _eventHandlers = newEH;
+  }
+
+  function _trackListener(target, type, handler, options = {}) {
+    if (_eventHandlers?.trackListener) {
+      return _eventHandlers.trackListener(target, type, handler, options);
+    }
+    if (!target || typeof target.addEventListener !== 'function') return () => {};
+    target.addEventListener(type, handler, options);
+    return () => target.removeEventListener(type, handler, options);
+  }
+
+  function _createCustomEvent(type, opts = {}) {
+    if (_eventHandlers?.createCustomEvent) {
+      return _eventHandlers.createCustomEvent(type, opts);
+    }
+    const win = browserService.getWindow?.();
+    if (win?.CustomEvent) {
+      return new win.CustomEvent(type, opts);
+    }
+    return { type, detail: opts?.detail };
+  }
+
+  function _cleanupListeners(opts = {}) {
+    if (_eventHandlers?.cleanupListeners) {
+      _eventHandlers.cleanupListeners(opts);
+    }
   }
 
   // ───── periodic cleanup for expired events ─────
@@ -665,5 +697,6 @@ export function createDomReadinessService({
     cleanupExpiredEvents,   // NEW: manual trigger
     isReplayEnabled,        // NEW: config check
     setLogger,              // ← NEW
+    setEventHandlers,       // ← NEW
   };
 }

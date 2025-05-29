@@ -67,7 +67,13 @@ export function createEventHandlers({
   // ================================================================
   const MODULE = 'EventHandler';
   let _domReadinessService = domReadinessService || null;
-  function setDomReadinessService(svc) { _domReadinessService = svc; }
+  function setDomReadinessService(svc) {
+    _domReadinessService = svc;
+    // Break circular dependency: inform domReadinessService about EventHandlers
+    if (svc?.setEventHandlers) {
+      svc.setEventHandlers(eventHandlerAPI);
+    }
+  }
   function setLogger(newLogger)      { if (newLogger) logger = newLogger; }
   function setSafeHandler(newSH)     { if (typeof newSH === 'function') SH = newSH; }
 
@@ -621,7 +627,40 @@ export function createEventHandlers({
       return { type, detail: options.detail }; // Fallback to a plain object
     }
     return new windowObject.CustomEvent(type, options);
-  }
+   }
+
+   /**
+    * Dispatch a custom event in a DI-compliant way.
+    *
+    * @param {string}       type               Event name.
+    * @param {Object}       [detail={}]        Detail payload.
+    * @param {EventTarget}  [target=null]      Dispatch target (defaults to document).
+    * @returns {boolean}                       True if dispatched, otherwise false.
+    */
+   function dispatch(type, detail = {}, target = null) {
+     try {
+       const evt = createCustomEvent(type, { detail, bubbles: true });
+       const tgt =
+         target ||
+         (domAPI?.getDocument
+           ? domAPI.getDocument()
+           : browserService?.getWindow?.()?.document);
+
+       if (!tgt || typeof tgt.dispatchEvent !== 'function') {
+         logger.warn(`[${MODULE}][dispatch] Cannot dispatch "${type}" – invalid target`, {
+           context: MODULE
+         });
+         return false;
+       }
+       domAPI.dispatchEvent(tgt, evt);
+       return true;
+     } catch (err) {
+       logger.error(`[${MODULE}][dispatch] Failed to dispatch "${type}"`, err, {
+         context: MODULE
+       });
+       return false;
+     }
+   }
 
   function cleanup() {
     // centralised cleanup – must reference the public API, not the
@@ -635,6 +674,7 @@ export function createEventHandlers({
     trackListener,
     cleanupListeners,
     delegate,
+    dispatch,
     debounce        : globalDebounce,
     toggleVisible,
     setupCollapsible,
