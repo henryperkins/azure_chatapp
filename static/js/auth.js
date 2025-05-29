@@ -148,57 +148,44 @@ export function createAuthModule(deps) {
   let csrfToken = '';
   let csrfTokenPromise = null;
   let _lastLoginTimestamp = 0;
-  // Prevent log-storm: remember last value we logged
-  let _lastLoggedCsrfPresence = null;
-  let _inLogDelivery = false; // Track if we're in a log delivery context
-  
+// Logging simplification: always treat as not in log-delivery context
+  const _inLogDelivery = false;
+
   function getCSRFToken() {
     const current = readCookie('csrf_token');
-    if (current && current !== csrfToken) csrfToken = current;
-    // ↓ Only log when cookie-presence state changes AND not during log delivery
-    if (!_inLogDelivery && (current ? 'has' : 'none') !== _lastLoggedCsrfPresence) {
-      _lastLoggedCsrfPresence = current ? 'has' : 'none';
-      logger.debug(
-        `[DIAGNOSTIC][auth.js][getCSRFToken] ${current ? 'cookie present' : 'no CSRF cookie'}`,
-        { context: 'getCSRFToken' }
-      );
-    }
+    if (current) csrfToken = current;
     return csrfToken;
   }
-  
-  // Helper to mark log delivery context
-  function setLogDeliveryContext(value) {
-    _inLogDelivery = value;
-  }
+
   async function fetchCSRFToken() {
     if (!apiEndpoints.AUTH_CSRF) throw new Error('AUTH_CSRF endpoint missing in apiEndpoints');
     const csrfUrl = apiEndpoints.AUTH_CSRF;
     const url = csrfUrl.includes('?')
       ? `${csrfUrl}&ts=${Date.now()}`
       : `${csrfUrl}?ts=${Date.now()}`;
-    
+
     if (!_inLogDelivery) {
       logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Fetching', url, { context: 'fetchCSRFToken' });
     }
-    
+
     const data = await apiClient(url, {
       method: 'GET',
       headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
       credentials: 'include',
       cache: 'no-store'
     });
-    
+
     if (!data || !data.token) {
       if (!_inLogDelivery) {
         logger.error('[DIAGNOSTIC][auth.js][fetchCSRFToken] Missing or bad response:', data, { context: 'fetchCSRFToken' });
       }
       throw new Error('CSRF token missing');
     }
-    
+
     if (!_inLogDelivery) {
       logger.log('[DIAGNOSTIC][auth.js][fetchCSRFToken] Received CSRF token (masked)', { context: 'fetchCSRFToken' });
     }
-    
+
     return data.token;
   }
   async function getCSRFTokenAsync(forceFetch = false) {
@@ -1090,7 +1077,6 @@ export function createAuthModule(deps) {
     AuthBus,
     getCSRFTokenAsync,
     getCSRFToken,
-    setLogDeliveryContext,  // Export for apiClient to use
     hasAuthCookies: () => {
       const doc = domAPI.getDocument?.();
       if (!doc || typeof doc.cookie !== 'string') return false;
