@@ -245,7 +245,7 @@ const starred = new Set(
         `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
       );
     } catch (error) {
-      logger.error('[Sidebar][_handleProjectSearch] Failed to handle project search', error && error.stack ? error.stack : error, { context: 'Sidebar:_handleProjectSearch' });
+      logger.error('[Sidebar][_handleProjectSearch]', error, { context: 'Sidebar' });
     }
   }
 
@@ -259,7 +259,7 @@ const starred = new Set(
       // Clear the list and show a message instead of trying to load without project ID
       const listElement = domAPI.getElementById('recentChatsSection')?.querySelector('ul');
       if (listElement) {
-        listElement.innerHTML = sanitizer.sanitize('');
+        domAPI.setInnerHTML(listElement, sanitizer.sanitize(''));
         const li = domAPI.createElement('li');
         li.className = 'p-4 text-center text-gray-500';
         domAPI.setTextContent(li, 'Select a project to view conversations');
@@ -285,7 +285,7 @@ const starred = new Set(
       // Clear the list and show a message instead of trying to load without project ID
       const listElement = domAPI.getElementById('starredChatsSection')?.querySelector('ul');
       if (listElement) {
-        listElement.innerHTML = sanitizer.sanitize('');
+        domAPI.setInnerHTML(listElement, sanitizer.sanitize(''));
         const li = domAPI.createElement('li');
         li.className = 'p-4 text-center text-gray-500';
         domAPI.setTextContent(li, 'Select a project to view starred conversations');
@@ -743,7 +743,8 @@ const starred = new Set(
           context: 'Sidebar.init:waitForAuthReady'
         });
       } catch (timeoutErr) {
-        logger.warn('[Sidebar] authReady timeout, proceeding with auth state sync fallback', { context: 'Sidebar:init:authReadyFallback' });
+        logger.error('[Sidebar] authReady wait timed-out', timeoutErr, { context: 'Sidebar:init:authReadyFallback' });
+        logger.warn('[Sidebar] authReady timeout, proceeding with fallback', { context: 'Sidebar:init:authReadyFallback' });
         // Fallback: manually sync with current auth state
         const appModule = DependencySystem.modules.get('appModule');
         if (appModule?.state) {
