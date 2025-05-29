@@ -5,8 +5,8 @@
 
 export const SELECTORS = {
   projectListView: '#projectListView',
-  projectListContainer: '.project-list-container',
-  projectListContainerId: '#projectListContainer',
+  // Updated to match current template structure which uses an ID, not a class
+  projectListContainer: '#projectListContainer',
   projectCardsPanel: '#projectCardsPanel',
   projectFilterTabs: '#projectFilterTabs',
   loadingState: '#loadingState',
