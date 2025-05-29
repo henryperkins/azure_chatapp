@@ -85,28 +85,45 @@ if (!DependencySystem?.modules?.get) {
   throw new Error('[App] DependencySystem not present - bootstrap aborted');
 }
 
-// ──  Bootstrap fallbacks required before eventHandlers ─────────────
-if (!DependencySystem.modules.has('errorReporter')) {
-  DependencySystem.register('errorReporter', { report: () => {} });
-}
-if (!DependencySystem.modules.has('safeHandler')) {
-  const placeholderSafeHandler = (fn, lbl = 'placeholderSafeHandler') =>
-        (...args) => { try { return fn?.apply?.(this, args); }
-                       catch (e) { /* swallow until real SH installed */ } };
-  DependencySystem.register('safeHandler', placeholderSafeHandler);
-}
-
-// Dedicated App Event Bus
-const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
-DependencySystem.register('AppBus', AppBus);
-
-// ──  initialise sanitizer FIRST ──────────────────────────────────
 let sanitizer = browserAPI.getWindow()?.DOMPurify;
 if (!sanitizer) {
   throw new Error('[App] DOMPurify not found - aborting bootstrap for security reasons.');
 }
 DependencySystem.register('sanitizer', sanitizer);
 DependencySystem.register('domPurify', sanitizer); // legacy alias
+
+// --- Logger ------------------------------------------------------
+const loggerInstance = createLogger({
+  context         : 'App',
+  endpoint        : APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
+  enableServer    : false,
+  debug           : APP_CONFIG.DEBUG === true,
+  minLevel        : APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
+  consoleEnabled  : APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
+  browserService  : browserServiceInstance,
+  sessionIdProvider: getSessionId,
+  traceIdProvider : () => DependencySystem?.modules?.get?.('traceId')
+});
+DependencySystem.register('logger', loggerInstance);
+const logger = loggerInstance;
+
+// --- SafeHandler (depends only on logger) ------------------------
+const safeHandlerModule = createSafeHandler({ logger });
+const safeHandler       = safeHandlerModule.safeHandler;
+DependencySystem.register('safeHandler', safeHandler);
+logger.setSafeHandler?.(safeHandler);
+
+// --- ErrorReporter (real implementation) ------------------------
+const errorReporter = {
+  report(error, ctx = {}) {
+    logger.error('[errorReporter] reported', error, { context: 'errorReporter', ...ctx });
+  }
+};
+DependencySystem.register('errorReporter', errorReporter);
+
+// Dedicated App Event Bus
+const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
+DependencySystem.register('AppBus', AppBus);
 
 // ──  now it is safe to create domAPI  ────────────────────────────
 const domAPI = createDomAPI({
@@ -123,26 +140,22 @@ const domAPI = createDomAPI({
 // ---------------------------------------------------------------------------
 // 7) Define app object early (CRITICAL FIX)
 // ---------------------------------------------------------------------------
-// ── Temporary stub logger (replaced later by the real logger) ──
-const stubLogger = { debug(){}, info(){}, warn(){}, error(){}, log(){} };
-
 const app = {}; // This will be enriched later
 DependencySystem.register('app', app);
 
 /* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
 
-const errorReporter = DependencySystem.modules.get('errorReporter');   // may be placeholder
 const eventHandlers = createEventHandlers({
   DependencySystem,
   domAPI,
   browserService: browserServiceInstance,
   APP_CONFIG,
-  errorReporter,
+  errorReporter,          // ← real reporter
   sanitizer,
   app,
-  safeHandler: DependencySystem.modules.get('safeHandler'), // fetch via DI (avoid TDZ)
-  logger: stubLogger           // ← new line
-  // domReadinessService to be injected after instantiation
+  safeHandler,            // ← canonical safe-handler function
+  logger                  // ← real logger
+  // domReadinessService injected later
 });
 DependencySystem.register('eventHandlers', eventHandlers);
 // Now define appInit after eventHandlers is fully created:
@@ -262,9 +275,6 @@ appInit = createAppInitializer({
   createSidebar
 });
 
- // ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
- eventHandlers.setLogger(logger);
- eventHandlers.setSafeHandler(safeHandler);
  domAPI.setLogger?.(logger);                 // ← NEW
  browserServiceInstance.setLogger?.(logger); // ← NEW
 
