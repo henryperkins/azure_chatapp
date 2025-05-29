@@ -184,10 +184,19 @@ async def receive_logs(
             "X-Trace-ID"
         ) or log_entry.get("trace_id")
 
+        # ── derived fields (must precede any further use) ─────────
+        level        = sanitized_entry.get("level", "info").lower()
+        ctx          = sanitized_entry.get("context", "client")
+        payload_args = sanitized_entry.get("client_args", [])
+        summary      = " ".join(map(str, payload_args)) or f"[{ctx}]"
+        color        = get_color_for_level(level)
+        reset        = getattr(Style, "RESET_ALL", "")
+
         # ---------------------------------------------------------------
         # Strip logging-reserved keys so logger.log(extra=…) never fails
         # ---------------------------------------------------------------
-        reserved = {"args", "msg", "message", "levelname", "levelno"}
+        reserved = {"args", "msg", "message", "levelname", "levelno",
+                    "level", "context"}
         for k in reserved:
             sanitized_entry.pop(k, None)
 

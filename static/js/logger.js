@@ -39,11 +39,10 @@ export function createLogger({
 
   // Generate a unique request ID for correlation tracking
   function generateRequestId() {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    // Fallback for older browsers
-    return 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g, function (c) {
+    if (_win?.crypto?.randomUUID)           // use injected window only
+      return _win.crypto.randomUUID();
+    // fallback (unchanged)
+    return 'xxxx-xxxx-4xxx-yxxx'.replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
