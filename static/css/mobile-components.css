@@ -252,10 +252,13 @@ input, select, textarea {
   @apply border-2 border-dashed border-base-300;
   @apply rounded-2xl bg-base-200/30;
   @apply transition-all duration-300;
-  @apply hover:border-primary/70 hover:bg-primary/5;
   padding: var(--spacing-xl);
   min-height: 200px;
   @apply flex flex-col items-center justify-center;
+}
+
+.file-upload-container:hover {
+  @apply border-primary/70 bg-primary/5;
 }
 
 .file-upload-container.drag-active {
@@ -317,8 +320,11 @@ input, select, textarea {
 .expandable-header {
   @apply flex items-center justify-between p-4;
   @apply cursor-pointer select-none;
-  @apply hover:bg-base-200;
   min-height: var(--mobile-touch-target);
+}
+
+.expandable-header:hover {
+  @apply bg-base-200;
 }
 
 .expandable-indicator {
@@ -378,13 +384,13 @@ input, select, textarea {
   @apply flex items-center justify-between gap-3;
   @apply bg-base-100 border-2 border-base-200 rounded-xl;
   @apply transition-all duration-200;
-  @apply hover:border-base-300 hover:shadow-sm;
   @apply cursor-pointer;
   padding: var(--spacing-md);
   min-height: calc(var(--mobile-touch-target) + var(--spacing-sm));
 }
 
 .conversation-item:hover {
+  @apply border-base-300 shadow-sm;
   transform: translateX(2px);
 }
 

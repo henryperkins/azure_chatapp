@@ -60,7 +60,6 @@
   @apply flex-1;
   padding: var(--spacing-sm) var(--spacing-lg);
   @apply border-2 border-base-300 rounded-full;
-  @apply focus:ring-2 focus:ring-primary focus:border-primary;
   @apply bg-base-200 text-base-content;
   font-size: var(--mobile-safe-font);
   min-height: var(--mobile-touch-target);
@@ -72,7 +71,6 @@
   height: var(--mobile-touch-target);
   @apply rounded-full flex-shrink-0;
   @apply bg-primary text-primary-content;
-  @apply hover:bg-primary/90 active:scale-95;
   @apply shadow-md transition-all duration-200;
   @apply flex items-center justify-center;
 }
