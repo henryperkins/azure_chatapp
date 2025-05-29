@@ -69,7 +69,9 @@ export function createDomReadinessService({
   const DEFAULT_TIMEOUT = APP_CONFIG.TIMEOUTS.DOM_READY;
 
   // ───── unified logger ─────
-  let _logger = injectedLogger || { info: () => { }, warn: () => { }, error: () => { } };
+  if (!injectedLogger)
+    throw new Error('[domReadinessService] logger is required');
+  let _logger = injectedLogger;
 
   function setLogger(newLogger) {
     if (newLogger) _logger = newLogger;

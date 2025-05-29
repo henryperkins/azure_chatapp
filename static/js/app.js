@@ -151,7 +151,8 @@ const domReadinessService = createDomReadinessService({
   domAPI,
   browserService: browserServiceInstance,
   eventHandlers,
-  APP_CONFIG               // ← ADD
+  APP_CONFIG,               // ← ADD
+  logger           // ← inject mandatory logger
 });
 DependencySystem.register('domReadinessService', domReadinessService);
 
