@@ -15,14 +15,13 @@ import { SELECTORS } from "./utils/selectorConstants.js";
 
 export function createProjectListComponent(deps) {
     // ----- Dependency Validation -----
-    if (!deps) throw new Error('[ProjectListComponent] Missing dependencies object to factory.');
+    if (!deps || !deps.DependencySystem) throw new Error('[ProjectListComponent] Missing dependencies object or DependencySystem to factory.');
 
     const {
         projectManager: initialProjectManager,
         eventHandlers,
         modalManager,
         app,
-        router,
         storage,
         sanitizer: htmlSanitizer,
         apiClient,
@@ -31,7 +30,8 @@ export function createProjectListComponent(deps) {
         globalUtils,
         domReadinessService,
         APP_CONFIG,
-        logger
+        logger,
+        DependencySystem
     } = deps;
 
     // Allow projectManager to be reassigned later via setProjectManager()
@@ -40,8 +40,8 @@ export function createProjectListComponent(deps) {
     const MODULE_CONTEXT = "ProjectListComponent";
 
     // Allow projectManager to be null initially - it gets set later via setProjectManager()
-    if (!eventHandlers || !router || !storage || !htmlSanitizer)
-        throw new Error("[ProjectListComponent] Missing required dependencies: eventHandlers, router, storage, sanitizer.");
+    if (!eventHandlers || !storage || !htmlSanitizer)
+        throw new Error("[ProjectListComponent] Missing required dependencies: eventHandlers, storage, sanitizer.");
     if (!domAPI)
         throw new Error("[ProjectListComponent] domAPI injection is mandatory.");
     if (!domReadinessService)
@@ -163,7 +163,7 @@ export function createProjectListComponent(deps) {
 
         // Remove any local isAuthenticated flags, always use appModule.state.isAuthenticated or listen to auth.AuthBus
 
-        if (app?.DependencySystem?.modules?.get?.('appModule')?.state?.isAuthenticated) {
+        if (app?.state?.isAuthenticated) {
             _loadProjects();
         } else {
             _showLoginRequired();
@@ -178,8 +178,8 @@ export function createProjectListComponent(deps) {
     }
     function _bindEventListeners() {
         const doc = domAPI?.getDocument?.();
-        // Normalize safeHandler retrieved via DI – supports early-boot object `{ safeHandler }`
-        const safeHandlerRaw = app?.DependencySystem?.modules?.get?.('safeHandler');
+        // Normalize safeHandler retrieved via DI (from DependencySystem, not app)
+        const safeHandlerRaw = DependencySystem?.modules?.get?.('safeHandler');
         const safeHandler =
             typeof safeHandlerRaw === 'function'
                 ? safeHandlerRaw
@@ -249,7 +249,7 @@ export function createProjectListComponent(deps) {
 
         // NEW: Subscribe directly to AuthBus if available for more reliable auth updates
         try {
-            const auth = app?.DependencySystem?.modules?.get?.('auth');
+            const auth = DependencySystem?.modules?.get?.('auth');
             if (auth?.AuthBus) {
                 eventHandlers.trackListener(
                     auth.AuthBus,
@@ -364,10 +364,11 @@ export function createProjectListComponent(deps) {
     }
     function _updateUrl(filter) {
         try {
-            if (app?.DependencySystem?.modules?.get?.('navigationService') &&
-                typeof app.DependencySystem.modules.get('navigationService').updateUrlParams === 'function'
+            const navigationService = DependencySystem?.modules?.get?.('navigationService');
+            if (navigationService &&
+                typeof navigationService.updateUrlParams === 'function'
             ) {
-                app.DependencySystem.modules.get('navigationService').updateUrlParams({ filter }, true);
+                navigationService.updateUrlParams({ filter }, true);
             }
         } catch (e) {
             logger.error('[ProjectListComponent] updateUrlParams failed', e, { context: MODULE_CONTEXT });
@@ -470,8 +471,7 @@ export function createProjectListComponent(deps) {
         // The elements should already be ready from initialize()
 
         // CONSOLIDATED: Check authentication state before showing content
-        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
-        const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+        const isAuthenticated = app?.state?.isAuthenticated ?? false;
 
         logger.debug('[ProjectListComponent][show] Checking auth state before showing content', {
             isAuthenticated,
@@ -503,8 +503,7 @@ export function createProjectListComponent(deps) {
             });
 
             // CONSOLIDATED: Check authentication state before loading projects
-            const appModule = app?.DependencySystem?.modules?.get?.('appModule');
-            const isAuthenticated = appModule?.state?.isAuthenticated ?? false;
+            const isAuthenticated = app?.state?.isAuthenticated ?? false;
 
             if (!isAuthenticated) {
                 logger.debug('[ProjectListComponent][_loadProjects] User not authenticated, showing login required', { context: MODULE_CONTEXT });
@@ -552,8 +551,7 @@ export function createProjectListComponent(deps) {
         const isCreateButton = e.target.closest('#createProjectBtn');
         if (isCreateButton) { return; }
         // CONSOLIDATED: Single source of truth - only check app.state
-        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
-        if (appModule?.state?.isAuthenticated) {
+        if (app?.state?.isAuthenticated) {
             onViewProject(projectId);
         } else {
             eventBus.dispatchEvent(new CustomEvent("requestLogin"));
@@ -898,11 +896,10 @@ export function createProjectListComponent(deps) {
     function onViewProject(projectObjOrId) {
         const projectId = (typeof projectObjOrId === "object" && projectObjOrId.id) ? projectObjOrId.id : projectObjOrId;
         // --- Set project context before navigation ---
-        const appModule = app?.DependencySystem?.modules?.get?.('appModule');
-        if (appModule && typeof appModule.setCurrentProject === "function") {
+        if (app && typeof app.setCurrentProject === "function") {
             // Already have project object
             if (typeof projectObjOrId === "object" && projectObjOrId.id) {
-                appModule.setCurrentProject(projectObjOrId);
+                app.setCurrentProject(projectObjOrId);
             } else if (projectId) {
                 // Try to locate project object in state
                 const projectObj = state.projects.find(p => {
@@ -910,16 +907,15 @@ export function createProjectListComponent(deps) {
                     return String(pid) === String(projectId);
                 });
                 if (projectObj) {
-                    appModule.setCurrentProject(projectObj);
+                    app.setCurrentProject(projectObj);
                 } else {
-                    appModule.setCurrentProject({ id: projectId });
+                    app.setCurrentProject({ id: projectId });
                 }
             }
         }
-        if (app?.DependencySystem?.modules?.get?.('navigationService')
-            && typeof app.DependencySystem.modules.get('navigationService').navigateToProject === "function"
-        ) {
-            app.DependencySystem.modules.get('navigationService').navigateToProject(projectId);
+        const navigationService = DependencySystem?.modules?.get?.('navigationService');
+        if (navigationService && typeof navigationService.navigateToProject === "function") {
+            navigationService.navigateToProject(projectId);
         }
     }
     // --- Exposed cleanup API per .clinerules ---

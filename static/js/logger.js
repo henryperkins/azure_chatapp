@@ -49,8 +49,15 @@ export function createLogger({
     });
   }
 
+  // Add recursion guard for log delivery
+  let logDeliveryRecursion = false;
+
   async function send(level, args) {
     if (!_enableServer) return;
+    if (logDeliveryRecursion) {
+      _c.error(`[Logger] Dropped recursive error attempting to deliver log to server`);
+      return;
+    }
 
     // If you need authentication logic, pass isAuthenticated directly via createLogger options in DI.
 
@@ -97,16 +104,11 @@ export function createLogger({
           });
           return; // Success with API client
         } catch (apiErr) {
-          // Fall back to direct fetch if API client fails
-          // THIS FALLBACK IS PROBLEMATIC AS IT BYPASSES CSRF
-          // Per user request, this fallback should be reconsidered or removed
-          // For now, keeping the log but the fetch call below will be removed or conditional
-          const _c = (_win?.console) || { warn: () => { } };
-          _c.warn(`[Logger] API client failed for ${endpoint} (Level: ${level}), falling back to direct fetch: ${apiErr && apiErr.message ? apiErr.message : apiErr}`);
-          // If apiClient is provided, we should NOT fall back to a fetch without CSRF.
-          // Throw or log critical error.
-          _c.error(`[Logger] CRITICAL: API client failed for ${endpoint}. Log NOT sent via fallback to prevent CSRF bypass. Error: ${apiErr?.message}`);
-          return; // Do not proceed to insecure fallback if apiClient was intended to be used.
+          // Engage recursion guard and only output to console
+          logDeliveryRecursion = true;
+          _c.error(`[Logger] Log delivery failure: ${apiErr && apiErr.message ? apiErr.message : apiErr}`);
+          logDeliveryRecursion = false;
+          return;
         }
       }
       /* Insecure direct-fetch fallback removed – logger relies solely

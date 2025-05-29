@@ -191,41 +191,42 @@ class ProjectDetailsComponent {
     }
     const coreSelectors = [
       '#projectTitle', '#backToProjectsBtn',
-      '.project-tab', '#chatTab', '#filesTab', '#knowledgeTab', '#settingsTab'
+      '.project-tab',
+      // Tab content containers (Panes)
+      '#chatTab', '#filesTab', '#knowledgeTab', '#settingsTab', '#detailsTab'
     ];
     // Optional but expected selectors; if missing we continue with warning.
     const optionalSelectors = [
-      // Knowledge tab
-      "#knowledgeSearchInput", "#searchKnowledgeBtn",
-      "#knowledgeResults",
-      "#kbToggle", "#reprocessButton", "#setupButton", "#settingsButton",
-      "#modelSelect",
-      "#knowledgeBaseName", "#kbModelDisplay", "#kbVersionDisplay", "#kbLastUsedDisplay",
-      "#kbDocCount", "#kbChunkCount",
-      // Project metadata editing
+      // Project metadata editing (in Settings Tab)
       "#projectNameInput", "#projectDescriptionInput",
-      // File-upload controls (previously missing – caused FileUploadComponent crash)
+      // File-upload controls (in Files Tab)
       "#fileInput", "#uploadFileBtn", "#dragDropZone",
       "#filesUploadProgress", "#fileProgressBar", "#uploadStatus",
-      // Misc project actions
+      // Misc project actions (Header or Settings Tab)
       "#archiveProjectBtn", "#deleteProjectBtn",
-      "#editProjectBtn", "#projectMenuBtn", "#projectFab"
+      "#editProjectBtn", "#projectMenuBtn", "#projectFab",
+      // New Conversation Button (in Chat Tab)
+      "#newConversationBtn"
+      // KnowledgeBaseComponent internal selectors (e.g., #kbChunkCount) have been removed.
+      // ProjectDetailsComponent should only ensure #knowledgeTab (the container) exists, which is in coreSelectors.
     ];
     try {
       await this.domReadinessService.elementsReady(coreSelectors, {
         timeout: this.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 5000,
-        context: `${MODULE_CONTEXT}::_ensureElementsReady`
+        context: `${MODULE_CONTEXT}::_ensureElementsReady::core`
       });
+
       this.domReadinessService.elementsReady(optionalSelectors, {
         observeMutations: true,
-        timeout: 2000,
-        context: `${MODULE_CONTEXT}::optionalElements`
+        timeout: this.APP_CONFIG?.TIMEOUTS?.OPTIONAL_ELEMENTS_READY ?? 3000,
+        context: `${MODULE_CONTEXT}::_ensureElementsReady::optional`
       }).catch((err) => {
         this._logInfo(`Some optional elements not found within timeout, continuing anyway`, {
           missingElements: err?.message || 'unknown',
-          context: `${MODULE_CONTEXT}::optionalElements`
+          context: `${MODULE_CONTEXT}::_ensureElementsReady::optionalElements`
         });
       });
+
       const $ = (sel) => this.elements.container.querySelector(sel);
       this.elements.title = $("#projectTitle");
       this.elements.backBtn = $("#backToProjectsBtn");
@@ -279,28 +280,15 @@ class ProjectDetailsComponent {
       return;
     }
 
-    // Validate presence of all required DOM nodes before instantiation.
-    const required = {
-      fileInput: this.elements.fileInput,
-      uploadBtn: this.elements.uploadBtn,
-      dragZone: this.elements.dragZone,
-      uploadProgress: this.elements.uploadProgress,
-      progressBar: this.elements.progressBar,
-      uploadStatus: this.elements.uploadStatus
+    // Define the selectors FileUploadComponent needs.
+    const fileUploadElementSelectors = {
+      fileInput: '#fileInput',
+      uploadBtn: '#uploadFileBtn',
+      dragZone: '#dragDropZone',
+      uploadProgress: '#filesUploadProgress',
+      progressBar: '#fileProgressBar',
+      uploadStatus: '#uploadStatus'
     };
-    const missingKeys = Object.entries(required)
-      .filter(([_, el]) => !el)
-      .map(([k]) => k);
-
-    if (missingKeys.length) {
-      this._logError(
-        `Cannot initialize FileUploadComponent; missing elements: ${missingKeys.join(
-          ", "
-        )}`,
-        new Error("Missing DOM Elements")
-      );
-      return;
-    }
 
     try {
       this.fileUploadComponent = new this.FileUploadComponentClass({
@@ -314,12 +302,17 @@ class ProjectDetailsComponent {
           if (!this.projectId) return;
           await this.projectManager.loadProjectFiles(this.projectId);
         }, "UploadComplete"),
-        elements: required
+        elements: fileUploadElementSelectors // Pass the selectors object
       });
+
       const initFn =
         this.fileUploadComponent.init || this.fileUploadComponent.initialize;
-      if (typeof initFn === "function")
+      if (typeof initFn === "function") {
         await initFn.call(this.fileUploadComponent);
+        this._logInfo("FileUploadComponent initialized successfully.");
+      } else {
+        this._logWarn("FileUploadComponent does not have an init/initialize method.");
+      }
     } catch (err) {
       this._logError("Error initializing FileUploadComponent", err);
     }
