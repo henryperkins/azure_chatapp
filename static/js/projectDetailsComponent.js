@@ -291,13 +291,15 @@ class ProjectDetailsComponent {
     };
 
     try {
-      this.fileUploadComponent = new this.FileUploadComponentClass({
+      // Use factory function instead of constructor
+      this.fileUploadComponent = this.FileUploadComponentClass({
         eventHandlers: this.eventHandlers,
         domAPI: this.domAPI,
         projectManager: this.projectManager,
         app: this.eventHandlers.DependencySystem.modules.get("app"),
         domReadinessService: this.domReadinessService,
         logger: this.logger,
+        projectId: this.projectId, // Pass current project ID
         onUploadComplete: this.safeHandler(async () => {
           if (!this.projectId) return;
           await this.projectManager.loadProjectFiles(this.projectId);
@@ -436,9 +438,11 @@ class ProjectDetailsComponent {
         this.projectManager.loadProjectStats(this.projectId);
         break;
       case "knowledge":
-        if (this.knowledgeBaseComponent) {
+        if (this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function") {
           this.knowledgeBaseComponent.initialize(true, this.projectData?.knowledge_base, this.projectId)
             .catch(e => this._logError("Error initializing knowledgeBaseComponent", e));
+        } else {
+          this._logWarn("KnowledgeBaseComponent not ready - skipping initialization");
         }
         break;
     }
@@ -948,25 +952,30 @@ class ProjectDetailsComponent {
     } catch (err) { this._logError("Error creating new conversation", err); }
   }
 
-  _restoreChatAndModelConfig() {
+  async _restoreChatAndModelConfig() {
     const tab = this.state.activeTab;
-    if ((tab === "conversations" || tab === "chat") &&
-      this.chatManager?.initialize) {
+    if ((tab === "conversations" || tab === "chat") && this.chatManager?.initialize) {
       const chatTabContent = this.elements.tabs.chat;
       if (chatTabContent) {
         this._logInfo("Initializing chatManager for chat tab", { projectId: this.projectId });
 
-        // First, load the chat UI template into the container
-        const htmlLoader = this.DependencySystem?.modules?.get('htmlTemplateLoader');
-        if (htmlLoader?.loadTemplate) {
-          htmlLoader.loadTemplate({
-            url: '/static/html/chat_ui.html',
-            containerSelector: "#chatUIContainer",
-            eventName: 'chatUITemplateLoaded',
-            append: false // Replace content instead of appending
-          }).then(() => {
+        try {
+          // First, load the chat UI template into the container using injected htmlTemplateLoader
+          if (this.htmlTemplateLoader?.loadTemplate) {
+            await this.htmlTemplateLoader.loadTemplate({
+              url: '/static/html/chat_ui.html',
+              containerSelector: "#chatUIContainer",
+              eventName: 'chatUITemplateLoaded',
+              append: false // Replace content instead of appending
+            });
+
+            this._logInfo("Chat UI template loaded successfully", { projectId: this.projectId });
+
+            // Wait a moment for DOM to be ready
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             // After template is loaded, initialize the chat manager
-            this.chatManager.initialize({
+            await this.chatManager.initialize({
               projectId: this.projectId,
               containerSelector: "#chatUIContainer .chat-container",
               messageContainerSelector: "#chatMessages",
@@ -974,21 +983,25 @@ class ProjectDetailsComponent {
               sendButtonSelector: "#chatSendBtn",
               titleSelector: "#chatTitle"
             });
-          }).catch(err => {
-            this._logError("Failed to load chat UI template", err);
-          });
-        } else {
-          this._logError("htmlTemplateLoader not available");
+
+            this._logInfo("ChatManager initialized successfully", { projectId: this.projectId });
+          } else {
+            this._logError("htmlTemplateLoader not available in dependencies");
+          }
+        } catch (err) {
+          this._logError("Failed to load chat UI template or initialize chat manager", err);
         }
       }
     }
   }
 
   _restoreKnowledgeTab() {
-    if (this.knowledgeBaseComponent && this.state.activeTab === "knowledge") {
+    if (this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function" && this.state.activeTab === "knowledge") {
       const kbData = this.projectData?.knowledge_base;
       this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
         .catch(e => this._logError("Error re-initializing knowledge base component", e));
+    } else if (this.state.activeTab === "knowledge") {
+      this._logWarn("KnowledgeBaseComponent not ready - skipping re-initialization");
     }
   }
 
@@ -1003,10 +1016,12 @@ class ProjectDetailsComponent {
   setKnowledgeBaseComponent(kbcInstance) {
     this.knowledgeBaseComponent = kbcInstance;
     this._logInfo("KnowledgeBaseComponent instance received and set.", { kbcInstance: !!kbcInstance });
-    if (this.state.activeTab === "knowledge" && this.knowledgeBaseComponent && this.projectId) {
+    if (this.state.activeTab === "knowledge" && this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function" && this.projectId) {
       const kbData = this.projectData?.knowledge_base;
       this.knowledgeBaseComponent.initialize(true, kbData, this.projectId)
         .catch(e => this._logError("Error re-initializing knowledge base component after set", e));
+    } else if (this.state.activeTab === "knowledge" && this.projectId) {
+      this._logWarn("KnowledgeBaseComponent not ready after set - skipping re-initialization");
     }
   }
 }

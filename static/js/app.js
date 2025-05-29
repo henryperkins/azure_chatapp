@@ -24,6 +24,7 @@ import { createDomReadinessService } from './utils/domReadinessService.js';
 import { createApiClient } from './utils/apiClient.js';
 import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
 import { createAppInitializer } from './init/appInitializer.js';
+import { createLogDeliveryService } from './logDeliveryService.js';
 import { safeInit } from './utils/initHelpers.js';
 
 import {
@@ -67,6 +68,8 @@ const uiUtils = {
   fileIcon: globalFileIcon
 };
 
+
+// leave only one instance:
 import { createLogger } from './logger.js';
 
 // ---------------------------------------------------------------------------
@@ -93,49 +96,18 @@ if (!sanitizer) {
 DependencySystem.register('sanitizer', sanitizer);
 DependencySystem.register('domPurify', sanitizer); // legacy alias
 
-// --- Logger (console-only initially) ------------------------------------------------------
-// Create a basic console-only logger first, will be upgraded later when apiClient is ready
-let currentLogger = {
-  debug: (msg, ...args) => { if (APP_CONFIG.DEBUG) console.debug(`[DEBUG] ${msg}`, ...args); },
-  info: (msg, ...args) => console.info(`[INFO] ${msg}`, ...args),
-  warn: (msg, ...args) => console.warn(`[WARN] ${msg}`, ...args),
-  error: (msg, ...args) => console.error(`[ERROR] ${msg}`, ...args),
-  log: (msg, ...args) => console.log(`[LOG] ${msg}`, ...args),
-  setServerLoggingEnabled: () => {},
-  setSafeHandler: () => {},
-  withContext: (ctx) => currentLogger,
-  setMinLevel: () => {},
-  flush: async () => {},
-  cleanup: () => {},
-  upgradeWithApiClient: (apiClient) => {
-    // Upgrade to full logger when apiClient is available
-    console.log('[Logger] Upgrading to full logger with server capabilities');
-    try {
-      const fullLogger = createLogger({
-        context: 'App',
-        debug: APP_CONFIG.DEBUG === true,
-        minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'info',
-        enableServer: true,
-        apiClient: apiClient,
-        browserService: browserServiceInstance,
-        sessionIdProvider: getSessionId,
-        traceIdProvider: () => DependencySystem?.modules?.get?.('traceId'),
-        safeHandler: DependencySystem.modules.get('safeHandler'),
-        consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
-        allowUnauthenticated: true
-      });
+// --- Logger (immediate creation, no proxy) ---
+const logger = createLogger({
+  context: 'App',
+  debug: APP_CONFIG.DEBUG === true,
+  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL || 'info',
+  consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED !== false,
+  sessionIdProvider: getSessionId,
+  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId')
+});
 
-      // Replace the current logger with the full logger
-      Object.assign(currentLogger, fullLogger);
-      DependencySystem.modules.set('logger', currentLogger);
-      console.log('[Logger] Successfully upgraded to full logger');
-    } catch (err) {
-      console.error('[Logger] Failed to upgrade logger:', err);
-    }
-  }
-};
-DependencySystem.register('logger', currentLogger);
-const logger = currentLogger;
+DependencySystem.register('logger', logger);
+
 
 // --- SafeHandler (depends only on logger) ------------------------
 const safeHandlerModule = createSafeHandler({ logger });

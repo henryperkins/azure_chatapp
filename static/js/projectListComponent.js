@@ -379,18 +379,21 @@ export function createProjectListComponent(deps) {
         isRendering = true;
         try {
             if (data && data.error && data.reason === 'auth_required') {
+                _setState({ loading: false }); // Clear loading state on auth error
                 _showLoginRequired();
                 return;
             }
             if (data && data.error && typeof data.error === 'string') {
+                _setState({ loading: false }); // Clear loading state on general error
                 _showErrorState(data.error || "Failed to load projects.");
                 return;
             }
             const projects = _extractProjects(data);
-            _setState({ projects: projects || [] });
+            _setState({ projects: projects || [], loading: false }); // Clear loading state when data arrives
 
             if (!gridElement) return;
             if (!projects?.length) {
+                _setState({ loading: false }); // Clear loading state for empty results
                 _showEmptyState();
                 return;
             }
@@ -516,11 +519,11 @@ export function createProjectListComponent(deps) {
             _setState({ loading: true });
             _showLoadingState();
             await projectManager.loadProjects(state.filter);
+            // NOTE: Loading state is cleared in renderProjects() when data arrives
         } catch (error) {
             logger.error('[ProjectListComponent][_loadProjects] Failed to load projects', error, { context: MODULE_CONTEXT });
             _showErrorState("Failed to load projects");
-        } finally {
-            _setState({ loading: false });
+            _setState({ loading: false }); // Clear loading state on error
         }
     }
     function _handleAction(action, projectId) {

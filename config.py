@@ -49,6 +49,11 @@ class Settings:
     APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
     APP_NAME = os.getenv("APP_NAME", "azure-chatapp")  # Added APP_NAME
 
+    # Client logging configuration
+    CLIENT_LOG_FILE = os.getenv("CLIENT_LOG_FILE", "")  # Empty string = no file logging
+    CLIENT_ERROR_DEDUP_TTL = int(os.getenv("CLIENT_ERROR_DEDUP_TTL", "300"))  # 5 minutes
+    CLIENT_MAX_BATCH_SIZE = int(os.getenv("CLIENT_MAX_BATCH_SIZE", "100"))
+
     # Debug/Environment
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
     ENV = os.getenv("ENV", "development")  # Force 'development' for insecure mode
