@@ -62,7 +62,7 @@ from utils.db_utils import schedule_token_cleanup  # noqa: E402
 import sentry_sdk  # noqa: E402
 
 # ----- Ensure ALL models are registered for migrations/table creation -----
-import models  # noqa: E402, F401 # F401: imported but unused - common for model registration
+import models  # noqa: E402
 
 # Import your routers
 from auth import router as auth_router, create_default_user  # noqa: E402
@@ -104,21 +104,29 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
 
     is_production = getattr(settings, "ENV", "development").lower() == "production"
     # Accept allowed origins from env for dev flexibility
-    allowed_origins = getattr(settings, "CORS_ORIGINS", None)
-    if allowed_origins:
-        if isinstance(allowed_origins, str):
-            allowed_origins = [
-                o.strip() for o in allowed_origins.split(",") if o.strip()
-            ]
-        elif isinstance(allowed_origins, list):
-            # Already a list, make sure all items are properly stripped strings
-            allowed_origins = [
-                str(o).strip() for o in allowed_origins if str(o).strip()
-            ]
-        else:
-            # Handle any other data type by converting to a single-item list
-            allowed_origins = [str(allowed_origins).strip()]
-    else:
+
+    def parse_origins(val):
+        # Always returns a list of allowed origins, quiet for linters
+        if isinstance(val, list):
+            return [str(o).strip() for o in val if str(o).strip()]
+        if isinstance(val, str):
+            # Try comma split; if looks like a JSON list, eval safely
+            sval = val.strip()
+            if sval.startswith("[") and sval.endswith("]"):
+                try:
+                    import json
+                    items = json.loads(sval)
+                    if isinstance(items, list):
+                        return [str(o).strip() for o in items if str(o).strip()]
+                except Exception:
+                    pass
+            return [o.strip() for o in sval.split(",") if o.strip()]
+        if val is not None:
+            return [str(val).strip()]
+        return None
+
+    allowed_origins = parse_origins(getattr(settings, "CORS_ORIGINS", None))
+    if not allowed_origins:
         # Allow multiple common local development origins
         allowed_origins = [
             "http://localhost:8000",
@@ -161,6 +169,7 @@ def setup_middlewares_insecure(app: FastAPI) -> None:
     )
 
     # Add a simple CSP header middleware if you want CSP headers:
+
     @app.middleware("http")
     async def csp_header_middleware(request: Request, call_next):
         response = await call_next(request)
@@ -290,11 +299,11 @@ try:
     logger.info(f"Static files mounted from {STATIC_DIR}")
 except Exception as e:
     logger.critical(f"Failed to mount static files: {str(e)}", exc_info=True)
-    raise RuntimeError(f"Failed to mount static files: {str(e)}")
+    raise RuntimeError(f"Failed to mount static files: {str(e)}") from e
 
 
 @app.get("/", include_in_schema=False)
-async def index(request: Request) -> Response:
+async def index() -> Response:
     """
     Insecurely serve an HTML page (base.html).
     """
@@ -302,7 +311,7 @@ async def index(request: Request) -> Response:
 
 
 @app.get("/login", include_in_schema=False)
-async def serve_login(request: Request) -> Response:
+async def serve_login() -> Response:
     """
     Insecurely serve the login page.
     """
@@ -310,7 +319,7 @@ async def serve_login(request: Request) -> Response:
 
 
 @app.get("/modals", include_in_schema=False)
-async def serve_modals(request: Request) -> Response:
+async def serve_modals() -> Response:
     """
     Special direct route to serve modals.html for debugging.
     """

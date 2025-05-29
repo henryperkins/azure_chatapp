@@ -5,6 +5,7 @@
 
 import { createKnowledgeBaseSearchHandler } from './knowledgeBaseSearchHandler.js';
 import { createKnowledgeBaseManager } from './knowledgeBaseManager.js';
+import { ELEMENT_SELECTORS } from './utils/selectorConstants.js';
 
 const MODULE = "KnowledgeBaseComponent";
 /**
@@ -52,38 +53,22 @@ export function createKnowledgeBaseComponent(options = {}) {
   // --- domReadinessService Rule 7 compliance: replace any DependencySystem.waitFor(['app']) with domReadinessService.waitForEvent('app:ready', ...)
   // (No such code found in this file, so nothing to replace here.)
 
-  const elementSelectors = { // Renamed from 'elements'
-    container: "knowledgeTab", // Store selectors (strings)
-    activeSection: "knowledgeStatus",
-    inactiveSection: "knowledgeBaseInactive",
-    statusBadge: "kbStatusBadge",
+  // Use centralized selectors for consistency
+  const elementSelectors = {
+    ...ELEMENT_SELECTORS.KB,
+    // Add any additional selectors not in the centralized config
     searchInput: "knowledgeSearchInput", // Optional - will be added to HTML
     searchButton: "searchKnowledgeBtn", // Optional - will be added to HTML
     resultsContainer: "knowledgeResults",
     resultsSection: "knowledgeResults",
     noResultsSection: "noResults",
     topKSelect: "knowledgeTopK",
-    kbToggle: "kbToggle", // Fixed: matches HTML id="kbToggle"
-    reprocessButton: "reprocessButton", // Fixed: matches HTML id="reprocessButton"
-    setupButton: "setupButton", // Fixed: matches HTML id="setupButton"
-    settingsButton: "settingsButton", // Fixed: matches HTML id="settingsButton"
-    kbNameDisplay: "knowledgeBaseName",
-    kbModelDisplay: "kbModelDisplay", // Fixed: matches HTML id="kbModelDisplay"
-    kbVersionDisplay: "kbVersionDisplay", // Fixed: matches HTML id="kbVersionDisplay"
-    kbLastUsedDisplay: "kbLastUsedDisplay", // Fixed: matches HTML id="kbLastUsedDisplay"
-    settingsModal: "knowledgeBaseSettingsModal",
-    settingsForm: "knowledgeBaseForm",
-    cancelSettingsBtn: "cancelKnowledgeBaseFormBtn",
-    deleteKnowledgeBaseBtn: "deleteKnowledgeBaseBtn",
-    modelSelect: "modelSelect", // Fixed: matches HTML id="modelSelect"
     resultModal: "knowledgeResultModal",
     resultTitle: "knowledgeResultTitle",
     resultSource: "knowledgeResultSource",
     resultScore: "knowledgeResultScore",
     resultContent: "knowledgeResultContent",
     useInChatBtn: "useInChatBtn",
-    knowledgeBaseFilesSection: "knowledgeBaseFilesSection",
-    knowledgeBaseFilesListContainer: "knowledgeBaseFilesListContainer",
     kbGitHubAttachedRepoInfo: "kbGitHubAttachedRepoInfo",
     kbAttachedRepoUrlDisplay: "kbAttachedRepoUrlDisplay",
     kbAttachedRepoBranchDisplay: "kbAttachedRepoBranchDisplay",
@@ -93,9 +78,29 @@ export function createKnowledgeBaseComponent(options = {}) {
     kbGitHubBranchInput: "kbGitHubBranchInput",
     kbGitHubFilePathsTextarea: "kbGitHubFilePathsTextarea",
     kbAttachRepoBtn: "kbAttachRepoBtn",
-    knowledgeFileCount: "kbDocCount", // Fixed: matches HTML id="kbDocCount"
-    knowledgeChunkCount: "kbChunkCount", // Fixed: matches HTML id="kbChunkCount"
-    knowledgeFileSize: "knowledgeFileSize",
+    // Map centralized names to local names for backward compatibility
+    container: ELEMENT_SELECTORS.KB.container,
+    activeSection: ELEMENT_SELECTORS.KB.activeSection,
+    inactiveSection: ELEMENT_SELECTORS.KB.inactiveSection,
+    statusBadge: ELEMENT_SELECTORS.KB.statusBadge,
+    kbToggle: ELEMENT_SELECTORS.KB.toggle,
+    reprocessButton: ELEMENT_SELECTORS.KB.reprocessButton,
+    setupButton: ELEMENT_SELECTORS.KB.setupButton,
+    settingsButton: ELEMENT_SELECTORS.KB.settingsButton,
+    kbNameDisplay: ELEMENT_SELECTORS.KB.baseName,
+    kbModelDisplay: ELEMENT_SELECTORS.KB.modelDisplay,
+    kbVersionDisplay: ELEMENT_SELECTORS.KB.versionDisplay,
+    kbLastUsedDisplay: ELEMENT_SELECTORS.KB.lastUsedDisplay,
+    settingsModal: ELEMENT_SELECTORS.KB.settingsModal,
+    settingsForm: ELEMENT_SELECTORS.KB.settingsForm,
+    cancelSettingsBtn: ELEMENT_SELECTORS.KB.cancelSettingsBtn,
+    deleteKnowledgeBaseBtn: ELEMENT_SELECTORS.KB.deleteBtn,
+    modelSelect: ELEMENT_SELECTORS.KB.modelSelect,
+    knowledgeBaseFilesSection: ELEMENT_SELECTORS.KB.filesSection,
+    knowledgeBaseFilesListContainer: ELEMENT_SELECTORS.KB.filesListContainer,
+    knowledgeFileCount: ELEMENT_SELECTORS.KB.docCount,
+    knowledgeChunkCount: ELEMENT_SELECTORS.KB.chunkCount,
+    knowledgeFileSize: ELEMENT_SELECTORS.KB.fileSize,
   };
 
   // Resolve validateUUID and apiRequest with robust fallbacks

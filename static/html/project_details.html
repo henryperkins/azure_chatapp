@@ -369,14 +369,124 @@
 
       <!-- KNOWLEDGE TAB -->
       <div id="knowledgeTab" class="tab-pane hidden" role="tabpanel" aria-labelledby="tab-knowledge">
-        <!-- Example Knowledge Base content -->
-        <!-- (Optional advanced knowledge base UI can go here) -->
-        <div class="p-3 bg-base-100 rounded">
-          <h3 class="font-semibold mb-3">Knowledge Base</h3>
-          <p class="text-sm text-base-content/70">
-            Configure and manage your project’s knowledge base here.
-          </p>
-          <!-- Additional knowledge features or instructions -->
+        <!-- Knowledge Base Active Section -->
+        <div id="knowledgeStatus" class="space-y-4">
+          <!-- KB Status Header -->
+          <div class="flex items-center justify-between p-4 bg-base-100 rounded-lg border">
+            <div class="flex items-center gap-3">
+              <h3 class="font-semibold">Knowledge Base</h3>
+              <span id="kbStatusBadge" class="badge badge-success badge-sm">Active</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input id="kbToggle" type="checkbox" class="toggle toggle-success" checked />
+                <span class="text-sm">Enable</span>
+              </label>
+              <button id="settingsButton" class="btn btn-ghost btn-sm btn-square" aria-label="KB Settings">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- KB Info Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="stat bg-base-100 rounded-lg p-4 text-center">
+              <div class="stat-title text-sm">Documents</div>
+              <div id="kbDocCount" class="stat-value text-2xl font-bold text-info">0</div>
+            </div>
+            <div class="stat bg-base-100 rounded-lg p-4 text-center">
+              <div class="stat-title text-sm">Chunks</div>
+              <div id="kbChunkCount" class="stat-value text-2xl font-bold text-success">0</div>
+            </div>
+            <div class="stat bg-base-100 rounded-lg p-4 text-center">
+              <div class="stat-title text-sm">Model</div>
+              <div id="kbModelDisplay" class="stat-value text-lg font-bold text-accent">text-embedding-3-small</div>
+            </div>
+          </div>
+
+          <!-- KB Details -->
+          <div class="bg-base-100 rounded-lg p-4 space-y-3">
+            <h4 class="font-medium">Details</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span class="text-base-content/60">Name:</span>
+                <span id="knowledgeBaseName" class="ml-2">Project Knowledge Base</span>
+              </div>
+              <div>
+                <span class="text-base-content/60">Version:</span>
+                <span id="kbVersionDisplay" class="ml-2">v1</span>
+              </div>
+              <div>
+                <span class="text-base-content/60">Last Used:</span>
+                <span id="kbLastUsedDisplay" class="ml-2">Never</span>
+              </div>
+              <div>
+                <span class="text-base-content/60">Size:</span>
+                <span id="knowledgeFileSize" class="ml-2">0 B</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex gap-2">
+            <button id="reprocessButton" class="btn btn-outline btn-sm">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              Reprocess Files
+            </button>
+          </div>
+
+          <!-- Knowledge Base Files Section -->
+          <div id="knowledgeBaseFilesSection" class="space-y-4">
+            <h4 class="font-medium">Knowledge Base Files</h4>
+            <div id="knowledgeBaseFilesListContainer" class="bg-base-200 rounded-lg p-4">
+              <p class="text-center text-base-content/60">Loading files...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Knowledge Base Inactive Section -->
+        <div id="knowledgeBaseInactive" class="hidden p-6 text-center">
+          <div class="space-y-4">
+            <svg class="w-16 h-16 mx-auto text-base-content/30" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path>
+            </svg>
+            <h3 class="text-lg font-medium">Knowledge Base Not Active</h3>
+            <p class="text-base-content/60">Set up a knowledge base to enable AI-powered search and chat features.</p>
+            <button id="setupButton" class="btn btn-primary">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+              </svg>
+              Setup Knowledge Base
+            </button>
+          </div>
+        </div>
+
+        <!-- Knowledge Base Settings Modal -->
+        <div id="knowledgeBaseSettingsModal" class="modal">
+          <div class="modal-box">
+            <h3 class="font-bold text-lg">Knowledge Base Settings</h3>
+            <form id="knowledgeBaseForm" class="space-y-4 mt-4">
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text">Embedding Model</span>
+                </label>
+                <select id="modelSelect" class="select select-bordered w-full">
+                  <option value="text-embedding-3-small">text-embedding-3-small</option>
+                  <option value="text-embedding-3-large">text-embedding-3-large</option>
+                </select>
+              </div>
+              <div class="modal-action">
+                <button type="button" id="cancelKnowledgeBaseFormBtn" class="btn">Cancel</button>
+                <button type="button" id="deleteKnowledgeBaseBtn" class="btn btn-error">Delete</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
 

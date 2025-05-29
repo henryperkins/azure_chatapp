@@ -85,7 +85,7 @@ export function createLogger({
     }
   }
 
-  return {
+  const logger = {
     debug: (message, ...args) => log('debug', message, ...args),
     info: (message, ...args) => log('info', message, ...args),
     warn: (message, ...args) => log('warn', message, ...args),
@@ -109,4 +109,7 @@ export function createLogger({
       }
     }
   };
+
+  logger.log = logger.info;
+  return logger;
 }

@@ -1,11 +1,12 @@
+# services/client_log_service.py - Updated version
+
 """
 services/client_log_service.py - Business logic for client log processing
-Separates concerns: logging, Sentry forwarding, persistence
 """
 
 import logging
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import aiofiles
 import sentry_sdk
@@ -19,8 +20,8 @@ class ClientLogService:
 
     def __init__(self):
         self.error_cache = {}  # Simple in-memory dedup
-        self.cache_ttl = timedelta(minutes=5)
-        self.log_file = settings.CLIENT_LOG_FILE
+        self.cache_ttl = timedelta(seconds=settings.CLIENT_ERROR_DEDUP_TTL)
+        self.log_file = settings.CLIENT_LOG_FILE if settings.CLIENT_LOG_FILE else None
 
     async def process_client_logs(
         self,
@@ -64,7 +65,7 @@ class ClientLogService:
             # Clean old entries
             self._clean_cache()
 
-        # Log to Python logger
+        # Log to Python logger with context
         extra = {
             "client_log": True,
             "client_context": entry.context,
@@ -76,49 +77,55 @@ class ClientLogService:
         if entry.data:
             extra["client_data"] = entry.data
 
+        if entry.metadata:
+            extra["client_metadata"] = entry.metadata
+
         logger.log(
             level,
             f"[CLIENT] {entry.message}",
             extra=extra
         )
 
-        # Forward to Sentry if error/critical
-        if level >= logging.ERROR and settings.SENTRY_ENABLED:
-            self._forward_to_sentry(entry, request_context)
+        # Forward to Sentry if error/critical and enabled
+        if level >= logging.ERROR and getattr(settings, 'SENTRY_ENABLED', False):
+            await self._forward_to_sentry(entry, request_context)
 
         # Persist to file if configured
         if self.log_file:
             await self._write_to_file(entry, request_context)
 
-    def _forward_to_sentry(
+    async def _forward_to_sentry(
         self,
         entry: Any,
         request_context: Dict[str, Any]
     ) -> None:
         """Forward error logs to Sentry"""
-        with sentry_sdk.push_scope() as scope:
-            scope.set_tag("source", "client")
-            scope.set_tag("client_context", entry.context)
+        try:
+            with sentry_sdk.push_scope() as scope:
+                scope.set_tag("source", "client")
+                scope.set_tag("client_context", entry.context)
 
-            if entry.sessionId:
-                scope.set_tag("session_id", entry.sessionId)
+                if entry.sessionId:
+                    scope.set_tag("session_id", entry.sessionId)
 
-            if request_context.get("user_id"):
-                scope.set_user({"id": request_context["user_id"]})
+                if request_context.get("user_id"):
+                    scope.set_user({"id": request_context["user_id"]})
 
-            # Add breadcrumb for context
-            sentry_sdk.add_breadcrumb(
-                category="client",
-                message=entry.message,
-                level=entry.level,
-                data=entry.data or {}
-            )
+                # Add breadcrumb for context
+                sentry_sdk.add_breadcrumb(
+                    category="client",
+                    message=entry.message,
+                    level=entry.level,
+                    data=entry.data or {}
+                )
 
-            # Capture as message
-            sentry_sdk.capture_message(
-                f"[CLIENT] {entry.message}",
-                level=entry.level
-            )
+                # Capture as message
+                sentry_sdk.capture_message(
+                    f"[CLIENT] {entry.message}",
+                    level=entry.level
+                )
+        except Exception as e:
+            logger.error(f"Failed to forward to Sentry: {e}")
 
     async def _write_to_file(
         self,
@@ -135,9 +142,9 @@ class ClientLogService:
 
             async with aiofiles.open(self.log_file, "a") as f:
                 await f.write(json.dumps(log_data) + "\n")
-        except Exception:
-            # Silent fail for file operations
-            pass
+        except Exception as e:
+            # Log but don't fail
+            logger.debug(f"Failed to write client log to file: {e}")
 
     def _clean_cache(self) -> None:
         """Remove expired entries from error cache"""

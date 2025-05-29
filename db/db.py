@@ -26,7 +26,6 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 import ssl
 import os
-from urllib.parse import quote_plus
 
 # para usar el bundle de certifi cuando esté disponible
 try:
