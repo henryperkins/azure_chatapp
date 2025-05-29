@@ -407,9 +407,8 @@ const starred = new Set(
     logger.info('[Sidebar] showSidebar - making sidebar visible', { context: 'Sidebar' });
     visible = true;
 
-    el.classList.remove('-translate-x-full');
-    el.classList.add('translate-x-0');
-    el.classList.add('open');               // ← ensures CSS .sidebar.open {...} overrides mobile transform
+    el.classList.add('open');               // rely on CSS .sidebar.open to slide in
+    el.classList.remove('-translate-x-full');  // safety: strip the hidden class
 
     if (sidebarMobileDock && typeof sidebarMobileDock.updateDockVisibility === 'function') {
       sidebarMobileDock.updateDockVisibility(true);
@@ -467,9 +466,8 @@ const starred = new Set(
     }
 
     visible = false;
-    el.classList.remove('open');            // ← reset the open flag
-    el.classList.remove('translate-x-0');   // remove open-transform
-    el.classList.add('-translate-x-full');  // apply hidden transform
+    el.classList.remove('open');            // CSS fallback slides sidebar out
+    el.classList.add('-translate-x-full');  // ensure it is hidden when not “open”
 
     el.inert = true;
     // aria-hidden removed; inert alone blocks AT and focus
@@ -710,8 +708,7 @@ const starred = new Set(
     if (pinned || isDesktop) {
       el.classList.add('sidebar-pinned');
       el.classList.remove('-translate-x-full');
-      el.classList.add('translate-x-0');
-      el.classList.add('open');             // keep open state on reload / desktop
+      el.classList.add('open');
       visible = true;
       el.inert = false;
       // aria-hidden removed; inert alone blocks AT and focus
