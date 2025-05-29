@@ -21,6 +21,35 @@ export function createKnowledgeBaseManager(ctx) {
   const REQUIRED_DEPS = ["apiRequest", "eventHandlers", "domAPI"];
   for (const dep of REQUIRED_DEPS) {
     if (!ctx?.[dep]) {
+      // ------------------------------------------------------------------
+      // Special handling for apiRequest – allow lazy resolution
+      // ------------------------------------------------------------------
+      if (dep === "apiRequest") {
+        const fallbackApiRequest =
+          ctx.app?.apiRequest ||                // direct app reference
+          ctx.getDep?.("app")?.apiRequest;      // via DependencySystem
+        if (typeof fallbackApiRequest === "function") {
+          ctx.apiRequest = fallbackApiRequest;
+          continue; // dependency satisfied with fallback
+        }
+
+        /* ----------------------------------------------------------------
+         * Lazy placeholder: defer hard-failure until apiRequest is used.
+         * This allows the component to initialize during early bootstrap
+         * phases (when only a proxy or no apiClient is registered yet).
+         * ---------------------------------------------------------------- */
+        ctx.apiRequest = async () => {
+          throw new Error(
+            `[${MODULE}] apiRequest dependency not ready – called before registration.`
+          );
+        };
+        console.warn(
+          `[${MODULE}] apiRequest dependency missing during initialization – using lazy placeholder.`
+        );
+        continue; // treat as satisfied for now
+      }
+
+      // For all other dependencies we must fail fast.
       throw new Error(`[${MODULE}] Missing required dependency '${dep}'`);
     }
   }

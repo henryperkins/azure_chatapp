@@ -1,5 +1,5 @@
 <!-- Enhanced Mobile-First Project List -->
-<div id="projectListContainer" class="project-list-container max-w-xl mx-auto px-4 sm:px-0">
+<div id="projectListContainer" class="project-list-container w-full max-w-7xl mx-auto px-2 md:px-8">
 
   <!-- Header -->
   <div class="flex items-center justify-between mb-6 mobile-p-safe">
@@ -45,9 +45,15 @@
       </svg>
       <input id="projectSearchInput" type="search" class="input w-full pl-10 pr-10" placeholder="Search projects..."
         inputmode="search" enterkeyhint="search" aria-label="Search projects">
-      <button id="clearSearchBtn"
+      <button
+        id="clearSearchBtn"
+        type="button"
         class="btn btn-ghost btn-square btn-sm absolute right-1 top-1/2 -translate-y-1/2 hidden"
-        aria-label="Clear search">
+        aria-label="Clear search"
+        tabindex="-1"
+        style="pointer-events: auto;"
+        title="Clear the project search input"
+      >
         <svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
         </svg>
@@ -56,31 +62,12 @@
   </div>
 
   <!-- Project Grid -->
-  <div id="projectCardsPanel" class="mobile-grid mobile-p-safe" role="tabpanel" aria-labelledby="filterTabAll"
+  <div id="projectCardsPanel" class="mobile-grid mobile-p-safe w-full" role="tabpanel" aria-labelledby="filterTabAll"
     tabindex="0">
     <!-- Projects will be inserted here -->
   </div>
 
-  <!-- Enhanced Empty State -->
-  <div id="emptyState" class="empty-state hidden">
-    <div class="empty-state-icon">
-      <svg class="w-24 h-24 text-base-content/20 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-      </svg>
-    </div>
-    <h3 class="empty-state-title">No projects yet</h3>
-    <p class="empty-state-description">
-      Start a new project to begin organizing your AI conversations
-    </p>
-    <button class="empty-state-action" aria-label="Create your first project">
-      <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-      </svg>
-      New Project
-    </button>
-  </div>
+  <!-- (empty state will be rendered dynamically by the ProjectListComponent JS) -->
 
   <!-- Project Card Template (for reference) -->
   <template id="projectCardTemplate">

@@ -38,7 +38,7 @@ export function normaliseUrl(u = '') {
     const raw   = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
     const path  = raw || '/';
     return path + url.search + url.hash;
-  } catch (err) {
+  } catch {
     return u;
   }
 }
@@ -114,12 +114,8 @@ export function createBrowserService({ windowObject, logger } = {}) {
       throw new Error('browserService: windowObject.fetch is not available. This may occur in test/mocked environments.');
     }
     let response;
-    try {
-      response = await windowObject.fetch(...args);
-      return response;
-    } catch (err) {
-      throw err;
-    }
+    response = await windowObject.fetch(...args);
+    return response;
   }
 
   function setCurrentUser(userObj) { _currentUser = userObj ?? null; }
