@@ -66,6 +66,10 @@
   line-height: 1.6;
 }
 
+.chat-input:focus {
+  @apply ring-2 ring-primary border-primary;
+}
+
 .chat-send-btn {
   width: var(--mobile-touch-target);
   height: var(--mobile-touch-target);
@@ -74,6 +78,9 @@
   @apply shadow-md transition-all duration-200;
   @apply flex items-center justify-center;
 }
+
+.chat-send-btn:hover  { @apply bg-primary/90; }
+.chat-send-btn:active { @apply scale-95; }
 
 /* Enhanced Project Details Layout */
 .project-details {
