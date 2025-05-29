@@ -927,20 +927,12 @@ export function createAuthModule(deps) {
 
         // Also broadcast via domReadinessService for global listeners/replay support
         try {
-          if (domReadinessService?.emitReplayable) {
-            domReadinessService.emitReplayable('authReady', readyEventDetail);
-            logger.debug('[AuthModule] Successfully emitted authReady via domReadinessService', { context: 'init:dispatchAuthReady' });
-          } else {
-            logger.warn('[AuthModule] domReadinessService.emitReplayable unavailable, using direct document dispatch fallback', { context: 'init:dispatchAuthReady' });
-            const doc = domAPI.getDocument();
-            if (doc && eventHandlers.createCustomEvent) {
-              const authReadyEvent = eventHandlers.createCustomEvent('authReady', { detail: readyEventDetail });
-              doc.dispatchEvent(authReadyEvent);
-              logger.debug('[AuthModule] Successfully dispatched authReady via document fallback', { context: 'init:dispatchAuthReady' });
-            } else {
-              logger.error('[AuthModule] Cannot dispatch authReady: document or eventHandlers.createCustomEvent unavailable', { context: 'init:dispatchAuthReady' });
-            }
+          if (!domReadinessService?.emitReplayable) {
+            throw new Error('[AuthModule] domReadinessService.emitReplayable is required for emitting authReady event. Unsafe fallback disabled.');
           }
+          logger.info('[AuthModule] emitReplayable authReady', { context: 'init:dispatchAuthReady', detail: readyEventDetail });
+          domReadinessService.emitReplayable('authReady', readyEventDetail);
+          logger.debug('[AuthModule] Successfully emitted authReady via domReadinessService', { context: 'init:dispatchAuthReady' });
         } catch (err) {
           logger.error('[AuthModule] Failed to emit authReady event', err, {
             context: 'init:dispatchAuthReady'

@@ -6,9 +6,9 @@
  */
 
 import { safeParseJSON, debounce as globalDebounce } from './utils/globalUtils.js';
-import { createSidebarMobileDock } from './sidebarMobileDock.js';
 import { createSidebarEnhancements } from './sidebar-enhancements.js';
 import { createSidebarAuth } from './sidebarAuth.js';
+import { createSidebarMobileDock } from './sidebarMobileDock.js';
 
 export function createSidebar({
   eventHandlers,
@@ -115,9 +115,10 @@ export function createSidebar({
   let visible = false;
   let pinned = false;
 
-  const starred = new Set(
-    safeParseJSON(storageAPI.getItem('starredConversations'), [])
-  );
+const starredJson = storageAPI.getItem('starredConversations');
+const starred = new Set(
+  typeof starredJson === 'string' ? safeParseJSON(starredJson) : []
+);
 
   function maybeRenderModelConfig() {
     const panel = _ensureSettingsPanel();
@@ -403,7 +404,7 @@ export function createSidebar({
     }
 
     el.inert = false;
-    el.setAttribute('aria-hidden', 'false');
+    // aria-hidden removed; inert alone blocks AT and focus
     if (btnToggle) {
       btnToggle.setAttribute('aria-expanded', 'true');
     }
@@ -426,6 +427,12 @@ export function createSidebar({
     const activeEl = domAPI.getActiveElement();
     let focusMoved = false;
     if (el.contains(activeEl)) {
+      // Accessibility fix: Never let a hidden region keep focus inside
+      // Step 1: Blur the current element, if possible (most robust guard)
+      if (typeof activeEl.blur === 'function') {
+        activeEl.blur();
+      }
+      // Step 2: Move focus to an outside logical element
       if (
         btnToggle &&
         typeof btnToggle.focus === 'function' &&
@@ -434,15 +441,16 @@ export function createSidebar({
         btnToggle.focus();
         focusMoved = (domAPI.getActiveElement() === btnToggle);
       }
+      // Step 3: Fallback - focus body and forcibly blur again as a last resort
       if (!focusMoved) {
         if (domAPI.body && typeof domAPI.body.focus === 'function') {
           domAPI.body.focus();
-          if (el.contains(domAPI.getActiveElement()) && typeof activeEl.blur === 'function') {
-            activeEl.blur();
-          }
-        } else if (typeof activeEl.blur === 'function') {
-          activeEl.blur();
         }
+      }
+      // Step 4: If STILL focused in sidebar, blur again (robust against stubborn fields)
+      const newActive = domAPI.getActiveElement();
+      if (el.contains(newActive) && typeof newActive.blur === 'function') {
+        newActive.blur();
       }
     }
 
@@ -452,7 +460,7 @@ export function createSidebar({
     el.classList.add('-translate-x-full');  // apply hidden transform
 
     el.inert = true;
-    el.setAttribute('aria-hidden', 'true');
+    // aria-hidden removed; inert alone blocks AT and focus
     if (btnToggle) {
       btnToggle.setAttribute('aria-expanded', 'false');
     }
@@ -694,7 +702,7 @@ export function createSidebar({
       el.classList.add('open');             // keep open state on reload / desktop
       visible = true;
       el.inert = false;
-      el.setAttribute('aria-hidden', 'false');
+      // aria-hidden removed; inert alone blocks AT and focus
       if (btnToggle) {
         btnToggle.setAttribute('aria-expanded', 'true');
       }
@@ -836,10 +844,8 @@ export function createSidebar({
       if (!doc || typeof doc.dispatchEvent !== 'function') {
         throw new Error('[Sidebar] Document from domAPI must support dispatchEvent');
       }
-+
        // Mark module as fully initialized so E2E tests can verify readiness
        state.initialized = true;
-+
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: completed successfully", { context: 'Sidebar' });
       return true;
     } catch (err) {
@@ -923,7 +929,6 @@ export function createSidebar({
 
     // Expose state for external observers/tests
     state,
-+
     toggleSidebar,
     closeSidebar,
     showSidebar,

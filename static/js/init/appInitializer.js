@@ -875,7 +875,12 @@ export function createAppInitializer({
 
             /* NEW – activate its internal listeners & auth synchronisation */
             if (typeof projectManager.initialize === 'function') {
-                await projectManager.initialize();
+                // Run in background so auth phase can begin
+                projectManager.initialize().catch((err) =>
+                    logger.error('[coreInit] ProjectManager initialization failed', err, {
+                        context: 'coreInit:projectManager:init'
+                    })
+                );
             }
 
             // Instantiate KnowledgeBaseComponent now that ProjectManager is ready
@@ -922,7 +927,9 @@ export function createAppInitializer({
                 try {
                     await modalManager.init();
                     await domReadinessService.dependenciesAndElements({
-                        domSelectors: ['#loginModal', '#errorModal', '#confirmModal', '#projectModal'],
+                        // IMPORTANT: Keep selector values in sync with MODAL_MAPPINGS in modalConstants.js.
+                        // If you rename any modal IDs, update both the mapping and this bootstrap list.
+                        domSelectors: ['#loginModal', '#errorModal', '#confirmActionModal', '#projectModal'],
                         timeout: APP_CONFIG.MODAL_DOM_TIMEOUT ?? 12000,
                         context: 'coreInit:modalReadiness'
                     });
@@ -974,7 +981,8 @@ export function createAppInitializer({
                 sanitizer, domReadinessService, logger, safeHandler, APP_CONFIG
             });
             DependencySystem.register('sidebar', sidebar);
-            if (sidebar.init) await sidebar.init();
+            // ↓ DEFERRED: sidebar now initialized during UI phase
+            // if (sidebar.init) await sidebar.init();
 
             logger.info('[coreInit] Core systems initialization completed.', {
                 context: 'coreInit'
@@ -1472,6 +1480,18 @@ export function createAppInitializer({
                 logger.log('[uiInit] UI initialization complete', {
                     context: 'uiInit:initializeUIComponents'
                 });
+
+                // ── finally, wire up sidebar now that authReady has already fired ──
+                const sidebar = DependencySystem.modules.get('sidebar');
+                if (sidebar?.init) {
+                  try {
+                    await sidebar.init();
+                    logger.info('[uiInit] sidebar.init completed', { context: 'uiInit' });
+                  } catch (err) {
+                    logger.error('[uiInit] sidebar.init failed', err, { context: 'uiInit' });
+                  }
+                }
+
                 _uiInitialized = true;
             } catch (err) {
                 logger.error('[uiInit] Critical error in UI init', err, {

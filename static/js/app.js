@@ -1,3 +1,4 @@
+import './utils/polyfillCustomEvent.js';
 /**
  * app.js - Main application orchestration.
  *
@@ -521,7 +522,7 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Factory required by guard-rail Rule 1
+ * Application entrypoint and bootstrapper.
  */
 /* Re-export canonical factory to eliminate duplication */
 export { createAppConfig } from './appConfig.js';

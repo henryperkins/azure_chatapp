@@ -659,8 +659,7 @@ export function createEventHandlers({
   function createCustomEvent(type, options = {}) {
     const windowObject = browserService?.getWindow?.(); // browserService is in the factory's scope
     if (!windowObject || typeof windowObject.CustomEvent !== 'function') {
-      logger.warn(`[${MODULE}][createCustomEvent] Cannot create CustomEvent: windowObject or window.CustomEvent is not available.`, { context: MODULE });
-      return { type, detail: options.detail };
+      throw new Error(`[${MODULE}][createCustomEvent] FATAL: windowObject.CustomEvent is not available. This will break app event dispatching. Please ensure the polyfill is loaded before any app code.`);
     }
     return new windowObject.CustomEvent(type, options);
    }

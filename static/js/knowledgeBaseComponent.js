@@ -98,8 +98,15 @@ export function createKnowledgeBaseComponent(options = {}) {
     knowledgeFileSize: "knowledgeFileSize",
   };
 
+  // Resolve validateUUID and apiRequest with robust fallbacks
   const validateUUID = app.validateUUID;
-  const apiRequest = app.apiRequest;
+  const apiRequest =
+    // 1. Explicit override via factory options
+    options.apiRequest
+    // 2. DependencySystem registration (e.g., after advanced services phase)
+    || getDep("apiRequest")
+    // 3. Fallback to app proxy (may still be a placeholder in early phases)
+    || app.apiRequest;
   const config = {
     maxConcurrentProcesses: options.maxConcurrentProcesses || 3,
     searchDebounceTime: options.searchDebounceTime || 300,

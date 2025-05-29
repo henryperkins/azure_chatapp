@@ -107,7 +107,9 @@ def get_color_for_level(level: str):
 
 
 @router.post("/api/logs", status_code=status.HTTP_204_NO_CONTENT)
-@limiter.limit(LOGS_RATE_LIMIT, exempt_when=lambda: settings.DEBUG)  # Disable rate limit entirely when DEBUG=True
+@limiter.limit(
+    LOGS_RATE_LIMIT, exempt_when=lambda: settings.DEBUG
+)  # Disable rate limit entirely when DEBUG=True
 async def receive_logs(
     request: Request, current_user: Optional[User] = Depends(get_current_user_optional)
 ):
@@ -117,18 +119,6 @@ async def receive_logs(
         except ValidationError as ve:
             logger.warning("Bad client-log payload", extra={"errors": ve.errors()})
             return Response(status_code=400)
-
-        # Normalize log level
-        level = str(log_entry.get("level", "info")).lower()
-        if level == "warn":  # unify non-standard alias early
-            level = "warning"
-        if level not in level_map:
-            level = "info"
-        ctx = log_entry.get("context", "client")
-        payload_args = log_entry.get("args", [])
-        summary = payload_args[0] if payload_args else ""
-        color = get_color_for_level(level)
-        reset = Style.RESET_ALL if hasattr(Style, "RESET_ALL") else ""
 
         # --- Sanitize sensitive fields ---
         def sanitize_args(args):
@@ -254,11 +244,16 @@ async def receive_logs(
         try:
             msg = f"[{ctx}] {level.upper()}: {summary}"
             # Determine final sentry level (Literal for static type checkers)
-            send_level: Literal["fatal", "critical", "error", "warning", "info", "debug"] = (
-                cast(
-                    Literal["fatal", "critical", "error", "warning", "info", "debug"],
-                    level if level in ("fatal", "critical", "error", "warning", "info", "debug") else "info",
-                )
+            send_level: Literal[
+                "fatal", "critical", "error", "warning", "info", "debug"
+            ] = cast(
+                Literal["fatal", "critical", "error", "warning", "info", "debug"],
+                (
+                    level
+                    if level
+                    in ("fatal", "critical", "error", "warning", "info", "debug")
+                    else "info"
+                ),
             )
             if send_level in ("warning", "error", "critical", "fatal"):
                 # Set Sentry tags for correlation
@@ -289,3 +284,23 @@ async def receive_logs(
     except Exception as e:
         logger.error("Could not process incoming client log", extra={"error": str(e)})
         return Response(status_code=400)
+
+
+@router.get("/diagnostics/dom-replay-events")
+async def get_dom_replay_events():
+    """
+    Placeholder route for frontend domReadinessService.getEventReplayStats().
+    Real implementation should connect to a metric bridge or log-scraping mechanism if frontend pushes these diagnostics.
+    """
+    # Replace this stub with actual metric export as engineering progresses
+    return {
+        "enabled": True,
+        "totalCachedEvents": 0,
+        "maxEvents": 50,
+        "ttlMs": 300000,
+        "events": {},
+        "oldestEvent": None,
+        "newestEvent": None,
+        "expiredCount": 0,
+        "note": "This is a placeholder. To connect real domReadinessService stats, build a bridge from the frontend.",
+    }
