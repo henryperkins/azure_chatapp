@@ -1066,7 +1066,8 @@ export function createProjectModal(deps = {}) {
     DependencySystem,
     domAPI,
     domPurify,
-    domReadinessService
+    domReadinessService,
+    logger
   } = deps;
 
   // ─── Dependency validation (Factory Rule #1) ────────────────────────────────
@@ -1074,15 +1075,12 @@ export function createProjectModal(deps = {}) {
   if (!eventHandlers) throw new Error('[createProjectModal] Missing dependency: eventHandlers');
   if (!domAPI) throw new Error('[createProjectModal] Missing dependency: domAPI');
   if (!domReadinessService) throw new Error('[createProjectModal] Missing dependency: domReadinessService');
+  if (!logger)             throw new Error('[createProjectModal] Missing dependency: logger');
 
   // ─── Instance creation ──────────────────────────────────────────────────────
   const instance = new ProjectModal({
-    projectManager,
-    eventHandlers,
-    DependencySystem,
-    domAPI,
-    domPurify,
-    domReadinessService
+    projectManager, eventHandlers, DependencySystem,
+    domAPI, domPurify, domReadinessService, logger
   });
 
   // ─── Exposed public API (no direct instance leak) ───────────────────────────
