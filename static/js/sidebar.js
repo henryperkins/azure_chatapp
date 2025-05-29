@@ -373,7 +373,9 @@ const starred = new Set(
             app.setCurrentProject(firstProject);
           }
         } catch (loadErr) {
-          logger.error('[Sidebar][ensureProjectDashboard] Failed to load projects', loadErr, { context: 'Sidebar' });
+          logger.error('[Sidebar][ensureProjectDashboard] Failed to load projects',
+                       loadErr,
+                       { context: 'Sidebar:ensureProjectDashboard' });
         }
       }
 
@@ -386,7 +388,9 @@ const starred = new Set(
         if (activeTab === 'starred') maybeRenderStarredConversations();
       }
     } catch (err) {
-      logger.error('[Sidebar][ensureProjectDashboard]', err && err.stack ? err.stack : err, { context: 'Sidebar' });
+      logger.error('[Sidebar][ensureProjectDashboard] failed',
+                   err,
+                   { context: 'Sidebar:ensureProjectDashboard' });
     }
   }
 
@@ -641,7 +645,9 @@ const starred = new Set(
                 if (accessibilityUtils?.announce)
                   accessibilityUtils.announce(`Switched to ${tab} tab in sidebar`);
               } catch (error) {
-                if (logger && logger.error) logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`, error && error.stack ? error.stack : error, { context: 'Sidebar' });
+                if (logger && logger.error) logger.error(`[Sidebar][TabMenu] Failed to activate '${tab}'`,
+                                                          error,
+                                                          { context: 'Sidebar:tabmenu' });
               }
             },
             `Sidebar:tabmenu:${id}`
@@ -745,7 +751,9 @@ const starred = new Set(
           context: 'Sidebar.init:waitForAuthReady'
         });
       } catch (timeoutErr) {
-        logger.error('[Sidebar] authReady wait timed-out', timeoutErr, { context: 'Sidebar:init:authReadyFallback' });
+        logger.error('[Sidebar] authReady wait timed-out',
+                     timeoutErr,
+                     { context: 'Sidebar:init:authReadyFallback' });
         logger.warn('[Sidebar] authReady timeout, proceeding with fallback', { context: 'Sidebar:init:authReadyFallback' });
         // Fallback: manually sync with current auth state
         const appModule = DependencySystem.modules.get('appModule');
@@ -865,7 +873,9 @@ const starred = new Set(
       return true;
     } catch (err) {
       if (logger && logger.error) {
-        logger.error('[Sidebar] init failed', err && err.stack ? err.stack : err, { context: 'Sidebar' });
+        logger.error('[Sidebar] init failed',
+                     err,
+                     { context: 'Sidebar:init' });
       }
       throw err;
     }
