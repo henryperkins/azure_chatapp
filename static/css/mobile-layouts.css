@@ -461,3 +461,14 @@
 .skip-to-content:focus {
   @apply translate-y-0;
 }
+
+/* Prevent body scroll when mobile sidebar is visible */
+body.with-sidebar-open {
+  overflow: hidden;
+}
+
+@media (min-width: 1024px) {
+  body.with-sidebar-open {
+    overflow: auto;   /* keep normal scroll on desktop */
+  }
+}
