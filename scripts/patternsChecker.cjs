@@ -7,8 +7,8 @@
  * Properly enforces all Frontend Code Guardrails
  * Includes changes from the remediation guide to ensure:
  *   - factory cleanup calls eventHandlers.cleanupListeners({ context: ... })
- *   - logger.withContext(...) usage has a final metadata object with { context: ... }
- *   - direct logger usage checks consolidated in vDI
+ *   - logger.withContext(...) usage, AND direct logger calls,
+ *     MUST have a final metadata object with { context: ... }
  *   - domAPI.js no longer fully exempt from vSanitize; only certain assignments allowed
  *   - logger runtime controls restricted to app.js/logger.js
  */
@@ -171,12 +171,12 @@ function hasProp(objExpr, propName) {
       // Regular property with key
       if (p.type === "Property" && p.key) {
         return (p.key.type === "Identifier" && p.key.name === propName) ||
-               (p.key.type === "StringLiteral" && p.key.value === propName);
+          (p.key.type === "StringLiteral" && p.key.value === propName);
       }
       // Method definition (e.g., cleanup() { ... })
       if (p.type === "Method" && p.key) {
         return (p.key.type === "Identifier" && p.key.name === propName) ||
-               (p.key.type === "StringLiteral" && p.key.value === propName);
+          (p.key.type === "StringLiteral" && p.key.value === propName);
       }
       // Spread element - we can't easily determine if it contains the property
       // but for now, let's assume it might
@@ -415,9 +415,9 @@ function vFactory(err, file, config) {
               // cleanup in spread patterns
               const hasSpreadCleanup = returnPath.node.argument.properties.some(prop => {
                 return prop.type === "Property" &&
-                       prop.method === true &&
-                       prop.key &&
-                       (prop.key.name === "cleanup" || prop.key.name === "teardown" || prop.key.name === "destroy");
+                  prop.method === true &&
+                  prop.key &&
+                  (prop.key.name === "cleanup" || prop.key.name === "teardown" || prop.key.name === "destroy");
               });
 
               if (hasDirectCleanup || hasSpreadCleanup) {
@@ -763,9 +763,9 @@ function vDI(err, file, isAppJs, config) {
         cNode.type === "MemberExpression" &&
         cNode.object.type === "Identifier" &&
         cNode.object.name === "console" &&
-        !p.scope.hasBinding("console") &&     // local shadowing
-        !isLoggerJs &&                        // logger.js
-        !isNodeScript                         // tooling/test
+        !p.scope.hasBinding("console") &&
+        !isLoggerJs &&
+        !isNodeScript
       ) {
         const badMethod = cNode.property.name;
         err.push(
@@ -774,56 +774,53 @@ function vDI(err, file, isAppJs, config) {
             p.node.loc.start.line,
             12,
             `console.${badMethod} is forbidden – use DI logger.`,
-            `Replace 'console.${badMethod}(...)' with '${serviceNamesConfig.logger}.${badMethod === "error" ? "error" : "info"}("desc", data, { context: "module" })'`
+            `Replace 'console.${badMethod}(...)' with '${serviceNamesConfig.logger}.${badMethod === "error" ? "error" : "info"}("Message string", data, { context: "Module:operation" })'`
           )
         );
       }
 
-      // --- Direct logger.method(...) checks (Final Guardrails) ---
+      // --- MODIFIED: Direct logger.method(...) checks ---
+      // --- Require final metadata object with { context: ... } ---
       if (
         cNode.type === "MemberExpression" &&
-        cNode.object.type === "Identifier" &&
+        cNode.object.type === "Identifier" && // Ensures it's `logger.method`
         cNode.object.name === serviceNamesConfig.logger &&
         !p.scope.hasBinding(serviceNamesConfig.logger) &&
-        !isAppJs && !isLoggerJs
+        !isAppJs && !isLoggerJs && // Exempt app.js and logger.js from this module usage pattern
+        cNode.property.name !== "withContext" // Handled by vLog
       ) {
         const loggerMethodName = cNode.property.name;
         const args = p.get("arguments");
-        if (["info", "warn", "error", "debug", "log"].includes(loggerMethodName)) {
-          if (args.length < 2) {
+        const lastArgIndex = args.length - 1;
+
+        if (["info", "warn", "error", "debug", "log", "critical", "fatal"].includes(loggerMethodName)) {
+          if (lastArgIndex < 0) { // No arguments at all
             err.push(
               E(
                 file,
                 p.node.loc.start.line,
                 12,
-                `Direct '${serviceNamesConfig.logger}.${loggerMethodName}' call requires at least a context string and a message string.`,
-                `Example: ${serviceNamesConfig.logger}.${loggerMethodName}('MyModule:Action', 'Event occurred', { data: 'details' });`
+                `'${serviceNamesConfig.logger}.${loggerMethodName}' call missing arguments (expected at least message and metadata with { context }).`,
+                `Example: ${serviceNamesConfig.logger}.${loggerMethodName}("Event occurred", { data: 'details' }, { context: "Module:Action" });`
               )
             );
           } else {
-            const firstArgPath = args[0];
-            const firstArgNode = getExpressionSourceNode(firstArgPath);
-            if (!firstArgNode || firstArgNode.type !== "StringLiteral") {
+            const lastArgPath = args[lastArgIndex];
+            const lastArgNode = getExpressionSourceNode(lastArgPath);
+            if (
+              !(
+                lastArgNode &&
+                lastArgNode.type === "ObjectExpression" &&
+                hasProp(lastArgNode, "context")
+              )
+            ) {
               err.push(
                 E(
                   file,
-                  firstArgPath.node.loc.start.line,
+                  p.node.loc.start.line,
                   12,
-                  `First argument to direct '${serviceNamesConfig.logger}.${loggerMethodName}' call must be a context string.`,
-                  `Example: ${serviceNamesConfig.logger}.${loggerMethodName}('MyModule:Action', 'Event occurred', ...); Found type: ${firstArgNode ? firstArgNode.type : 'undefined'}`
-                )
-              );
-            }
-            const secondArgPath = args[1];
-            const secondArgNode = getExpressionSourceNode(secondArgPath);
-            if (!secondArgNode || secondArgNode.type !== "StringLiteral") {
-              err.push(
-                E(
-                  file,
-                  secondArgPath.node.loc.start.line,
-                  12,
-                  `Second argument (message) to direct '${serviceNamesConfig.logger}.${loggerMethodName}' call must be a message string.`,
-                  `Example: ${serviceNamesConfig.logger}.${loggerMethodName}('MyContext', 'My message string', ...); Found type: ${secondArgNode ? secondArgNode.type : 'undefined'}`
+                  `Direct '${serviceNamesConfig.logger}.${loggerMethodName}' call missing a final metadata object with a 'context' property.`,
+                  `Ensure logger calls like '${loggerMethodName}' end with, e.g., { context: "Module:description" }. Found type for last arg: ${lastArgNode ? lastArgNode.type : 'undefined'}`
                 )
               );
             }
@@ -835,73 +832,64 @@ function vDI(err, file, isAppJs, config) {
 }
 
 /* 12. Logger context checking (for withContext) + SafeHandler usage in events. */
-// UPDATED vLog to handle logger.withContext(...).method(messageString, ...)
-function vLog(err, file, isAppJs, moduleCtxIgnored, config) {
+// MODIFIED vLog to require logger.withContext(...).method(...) to have a final metadata object with { context: ... }
+function vLog(err, file, isAppJs, moduleCtx, config) {
   const loggerName = config.serviceNames.logger;
   const isLoggerJs = /\/logger\.(js|ts)$/i.test(file);
 
   return {
     CallExpression(p) {
       const calleeNode = p.node.callee;
-      // --- logger.withContext('CTX').info(...) checks (Final Guardrails) ---
+
+      // Check for logger.withContext('CTX').someMethod(...)
       if (
         calleeNode.type === "MemberExpression" &&
-        calleeNode.object.type === "CallExpression" &&
+        calleeNode.object.type === "CallExpression" && // The base is a call, i.e., logger.withContext()
         calleeNode.object.callee?.type === "MemberExpression" &&
         calleeNode.object.callee.object.type === "Identifier" &&
         calleeNode.object.callee.object.name === loggerName &&
         calleeNode.object.callee.property.name === "withContext" &&
         !p.scope.hasBinding(loggerName) &&
-        !isAppJs && !isLoggerJs
+        !isAppJs && !isLoggerJs // Exempt app.js and logger.js
       ) {
         const chainedMethodName = calleeNode.property.name;
         const chainedArgs = p.get("arguments");
-        if (!["info", "warn", "error", "debug", "log"].includes(chainedMethodName)) {
-          return;
+        const lastChainedArgIndex = chainedArgs.length - 1;
+
+        if (!["info", "warn", "error", "debug", "log", "critical", "fatal"].includes(chainedMethodName)) {
+          return; // Not a standard logging method being chained
         }
-        if (chainedArgs.length < 1) {
+
+        if (lastChainedArgIndex < 0) { // No arguments to the chained call
           err.push(
             E(
               file,
               p.node.loc.start.line,
               12,
-              `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' requires at least a message argument.`,
-              `Example: ${loggerName}.withContext('MyModule').${chainedMethodName}('Event occurred', { data: 'details' });`
+              `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' requires at least a message and a final metadata object with { context }.`,
+              `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" });`
             )
           );
         } else {
-          const firstChainedArgPath = chainedArgs[0];
-          const firstChainedArgNode = getExpressionSourceNode(firstChainedArgPath);
-          if (!firstChainedArgNode || firstChainedArgNode.type !== "StringLiteral") {
+          const lastChainedArgPath = chainedArgs[lastChainedArgIndex];
+          const lastChainedArgNode = getExpressionSourceNode(lastChainedArgPath);
+
+          if (
+            !(
+              lastChainedArgNode &&
+              lastChainedArgNode.type === "ObjectExpression" &&
+              hasProp(lastChainedArgNode, "context")
+            )
+          ) {
             err.push(
               E(
                 file,
-                firstChainedArgPath.node.loc.start.line,
+                p.node.loc.start.line,
                 12,
-                `First argument (message) to chained logger call '${loggerName}.withContext(...).${chainedMethodName}' must be a message string.`,
-                `Example: ${loggerName}.withContext('MyModule').${chainedMethodName}('Event occurred', ...); Found type: ${firstChainedArgNode ? firstChainedArgNode.type : 'undefined'}`
+                `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' missing a final metadata object with a 'context' property.`,
+                `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" }); Found type for last arg: ${lastChainedArgNode ? lastChainedArgNode.type : 'undefined'}`
               )
             );
-          }
-          // Final argument must NOT be an object with a 'context' property
-          if (chainedArgs.length > 0) {
-            const lastArgPath = chainedArgs[chainedArgs.length - 1];
-            const lastNode = getExpressionSourceNode(lastArgPath);
-            if (
-              lastNode &&
-              lastNode.type === "ObjectExpression" &&
-              hasProp(lastNode, "context")
-            ) {
-              err.push(
-                E(
-                  file,
-                  lastNode.loc.start.line,
-                  12,
-                  `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' should not have a separate { context: ... } metadata object. The primary context is set by 'withContext'.`,
-                  `The 'withContext()' call provides the context. Remove the final { context: ... } argument from the '.${chainedMethodName}()' call. Ensure its first argument is the message string.`
-                )
-              );
-            }
           }
         }
       }
@@ -1621,73 +1609,64 @@ function vAPI(err, file, config) {
 }
 
 /* 12. Logger context checking (for withContext) + SafeHandler usage in events. */
-// UPDATED vLog to handle logger.withContext(...).method(messageString, ...)
-function vLog(err, file, isAppJs, moduleCtxIgnored, config) {
+// MODIFIED vLog to require logger.withContext(...).method(...) to have a final metadata object with { context: ... }
+function vLog(err, file, isAppJs, moduleCtx, config) {
   const loggerName = config.serviceNames.logger;
   const isLoggerJs = /\/logger\.(js|ts)$/i.test(file);
 
   return {
     CallExpression(p) {
       const calleeNode = p.node.callee;
-      // --- logger.withContext('CTX').info(...) checks (Final Guardrails) ---
+
+      // Check for logger.withContext('CTX').someMethod(...)
       if (
         calleeNode.type === "MemberExpression" &&
-        calleeNode.object.type === "CallExpression" &&
+        calleeNode.object.type === "CallExpression" && // The base is a call, i.e., logger.withContext()
         calleeNode.object.callee?.type === "MemberExpression" &&
         calleeNode.object.callee.object.type === "Identifier" &&
         calleeNode.object.callee.object.name === loggerName &&
         calleeNode.object.callee.property.name === "withContext" &&
         !p.scope.hasBinding(loggerName) &&
-        !isAppJs && !isLoggerJs
+        !isAppJs && !isLoggerJs // Exempt app.js and logger.js
       ) {
         const chainedMethodName = calleeNode.property.name;
         const chainedArgs = p.get("arguments");
-        if (!["info", "warn", "error", "debug", "log"].includes(chainedMethodName)) {
-          return;
+        const lastChainedArgIndex = chainedArgs.length - 1;
+
+        if (!["info", "warn", "error", "debug", "log", "critical", "fatal"].includes(chainedMethodName)) {
+          return; // Not a standard logging method being chained
         }
-        if (chainedArgs.length < 1) {
+
+        if (lastChainedArgIndex < 0) { // No arguments to the chained call
           err.push(
             E(
               file,
               p.node.loc.start.line,
               12,
-              `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' requires at least a message argument.`,
-              `Example: ${loggerName}.withContext('MyModule').${chainedMethodName}('Event occurred', { data: 'details' });`
+              `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' requires at least a message and a final metadata object with { context }.`,
+              `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" });`
             )
           );
         } else {
-          const firstChainedArgPath = chainedArgs[0];
-          const firstChainedArgNode = getExpressionSourceNode(firstChainedArgPath);
-          if (!firstChainedArgNode || firstChainedArgNode.type !== "StringLiteral") {
+          const lastChainedArgPath = chainedArgs[lastChainedArgIndex];
+          const lastChainedArgNode = getExpressionSourceNode(lastChainedArgPath);
+
+          if (
+            !(
+              lastChainedArgNode &&
+              lastChainedArgNode.type === "ObjectExpression" &&
+              hasProp(lastChainedArgNode, "context")
+            )
+          ) {
             err.push(
               E(
                 file,
-                firstChainedArgPath.node.loc.start.line,
+                p.node.loc.start.line,
                 12,
-                `First argument (message) to chained logger call '${loggerName}.withContext(...).${chainedMethodName}' must be a message string.`,
-                `Example: ${loggerName}.withContext('MyModule').${chainedMethodName}('Event occurred', ...); Found type: ${firstChainedArgNode ? firstChainedArgNode.type : 'undefined'}`
+                `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' missing a final metadata object with a 'context' property.`,
+                `Example: ${loggerName}.withContext('BaseContext').${chainedMethodName}('Event occurred', { data: 'val' }, { context: "${moduleCtx}:operation" }); Found type for last arg: ${lastChainedArgNode ? lastChainedArgNode.type : 'undefined'}`
               )
             );
-          }
-          // Final argument must NOT be an object with a 'context' property
-          if (chainedArgs.length > 0) {
-            const lastArgPath = chainedArgs[chainedArgs.length - 1];
-            const lastNode = getExpressionSourceNode(lastArgPath);
-            if (
-              lastNode &&
-              lastNode.type === "ObjectExpression" &&
-              hasProp(lastNode, "context")
-            ) {
-              err.push(
-                E(
-                  file,
-                  lastNode.loc.start.line,
-                  12,
-                  `Chained logger call '${loggerName}.withContext(...).${chainedMethodName}' should not have a separate { context: ... } metadata object. The primary context is set by 'withContext'.`,
-                  `The 'withContext()' call provides the context. Remove the final { context: ... } argument from the '.${chainedMethodName}()' call. Ensure its first argument is the message string.`
-                )
-              );
-            }
           }
         }
       }

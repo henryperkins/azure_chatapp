@@ -176,34 +176,83 @@ auth.AuthBus.addEventListener('authStateChanged', ({ detail }) => {
 
 ### ✅ Logger Factory Creation (app.js ONLY)
 
+The `createLogger` factory initializes a logger instance with a base context and other configurations.
+
 ```javascript
-import { createLogger } from './logger.js';
+// In app.js
+import { createLogger } from './logger.js'; // Adjust path as needed
+// const APP_CONFIG = DependencySystem.modules.get('appConfig'); // Or however APP_CONFIG is obtained
+// const { getSessionId } = DependencySystem.modules.get('sessionManager'); // Example
+// const { getTraceId } = DependencySystem.modules.get('telemetry'); // Example
+
 const logger = createLogger({
-  context: 'App',
+  context: 'AppBase', // Base context for all logs from this instance
   debug: APP_CONFIG.DEBUG,
   minLevel: 'info',
-  enableServer: false,
-  sessionIdProvider: () => getSessionId(),
-  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId')
+  enableServer: true, // Or based on APP_CONFIG
+  apiClient: DependencySystem.modules.get('apiClient'), // Inject apiClient
+  browserService: DependencySystem.modules.get('browserService'),
+  sessionIdProvider: () => getSessionId(), // Example
+  traceIdProvider: () => getTraceId(),     // Example
+  safeHandler: DependencySystem.modules.get('safeHandler'),
+  // consoleEnabled: true, // Default
+  // allowUnauthenticated: false // Default
 });
 
-// After auth initialization
-logger.setServerLoggingEnabled(true);
+DependencySystem.register('logger', logger); // Register the created logger
+
+// After auth initialization (if server logging depends on auth state, though allowUnauthenticated helps)
+// if (authModule.isAuthenticated()) { // Example condition
+//   logger.setServerLoggingEnabled(true);
+// }
 ```
 
-### ✅ Logger Usage (ALL OTHER MODULES)
+### ✅ Logger Usage (ALL OTHER MODULES - via DI)
+
+When using the DI-injected logger:
+*   The first argument is the primary log message (string).
+*   Subsequent arguments can be data objects or an Error object.
+*   A **final metadata object** containing a `context` property (string) with a specific operational context **MUST** be provided. This `context` complements the base context set during `createLogger`.
 
 ```javascript
+// In a module, e.g., createMyModule({ logger, ... })
 export function createMyModule({ logger, apiClient, domAPI }) {
-  const context = 'MyModule';
-  logger.info(context, 'Module initialized', { timestamp: Date.now() });
-  logger.error(context, 'Operation failed', error, { userId: user.id });
+  // Validate deps
+  if (!logger) throw new Error("Logger is required");
+
+  // Example usages:
+  logger.info('Module initialized successfully.', {
+    timestamp: Date.now(),
+    featureFlags: { /* ... */ },
+    context: 'MyModule:init' // Specific operational context
+  });
+
+  try {
+    // ... some operation ...
+    throw new Error("Simulated failure");
+  } catch (error) {
+    logger.error('Operation failed unexpectedly.', error, { // Error object as second to last
+      userId: 'user123',
+      operationId: 'op456',
+      context: 'MyModule:criticalOperation:failure' // Specific context for this error
+    });
+  }
+
+  // If using logger.withContext (though less common with this pattern)
+  // The primary context is set by withContext. The chained call's *last* argument
+  // must still be an object with a 'context' property for the specific operational context.
+  const userActionLogger = logger.withContext('UserActions'); // Sets a new base context
+  userActionLogger.info('User clicked save button.', {
+    buttonId: 'save-config',
+    context: 'MyModule:userSaveAction' // Specific context for the action
+  });
+
 
   return { cleanup() { /* ... */ } };
 }
 ```
 
-* **FORBIDDEN in modules**: `logger.setServerLoggingEnabled()`, `logger.setMinLevel()`, direct logger import.
+*   **FORBIDDEN in modules**: `logger.setServerLoggingEnabled()`, `logger.setMinLevel()`, direct logger import.
 
 ---
 
