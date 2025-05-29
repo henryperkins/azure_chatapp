@@ -187,36 +187,6 @@ DependencySystem.register('globalUtils', {
  // ---------------------------------------------------------------------------
 
 /* Correct domReadinessService creation — after eventHandlers are available. */
-// ---------------------------------------------------------------------------
-// Create the real logger
-// ---------------------------------------------------------------------------
-const loggerInstance = createLogger({
-  context: 'App',
-  endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
-  enableServer: false, // start disabled
-  debug: APP_CONFIG.DEBUG === true,
-  minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL ?? 'debug',
-  consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
-  browserService: browserServiceInstance,
-  sessionIdProvider: getSessionId,
-  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId'),
-  apiClient: DependencySystem.modules.get('apiClientObject'),
-  safeHandler: DependencySystem.modules.get('safeHandler')
-});
-DependencySystem.register('logger', loggerInstance);
-const logger = loggerInstance; // convenient local reference
-
-// Upgrade safeHandler to use the correct logger
-const safeHandlerModule = createSafeHandler({ logger, eventHandlers });
-const safeHandler = safeHandlerModule.safeHandler;
-if (DependencySystem.modules.has('safeHandler')) {
-  DependencySystem.modules.set('safeHandler', safeHandler);
-  logger.debug('[app] safeHandler upgraded to canonical', { context: 'app:safeHandler' });
-} else {
-  DependencySystem.register('safeHandler', safeHandler);
-}
-
-// Now create domReadinessService after logger is defined
 const domReadinessService = createDomReadinessService({
   DependencySystem,
   domAPI,
@@ -280,9 +250,6 @@ appInit = createAppInitializer({
 
 // Expose an opportunity for serviceInit to accept logger
 appInit.setLogger?.(logger);
-
-// ---- upgrade the logger with the canonical safeHandler ----
-logger.setSafeHandler?.(safeHandler);          // ← NEW
 
 // (Removed redundant serviceInit.registerBasicServices() call here)
 
