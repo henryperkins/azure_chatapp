@@ -123,6 +123,9 @@ const domAPI = createDomAPI({
 // ---------------------------------------------------------------------------
 // 7) Define app object early (CRITICAL FIX)
 // ---------------------------------------------------------------------------
+// ── Temporary stub logger (replaced later by the real logger) ──
+const stubLogger = { debug(){}, info(){}, warn(){}, error(){}, log(){} };
+
 const app = {}; // This will be enriched later
 DependencySystem.register('app', app);
 
@@ -138,6 +141,7 @@ const eventHandlers = createEventHandlers({
   sanitizer,
   app,
   safeHandler: DependencySystem.modules.get('safeHandler'), // fetch via DI (avoid TDZ)
+  logger: stubLogger           // ← new line
   // domReadinessService to be injected after instantiation
 });
 DependencySystem.register('eventHandlers', eventHandlers);
