@@ -99,36 +99,59 @@ class ModalManager {
   _manageBodyScroll(enableScroll) {
     const scrollingEl = this.domAPI.getScrollingElement();
     if (!enableScroll) {
+      // Store both vertical and horizontal scroll positions
       this._scrollLockY = scrollingEl.scrollTop;
+      this._scrollLockX = scrollingEl.scrollLeft;
       this.domAPI.getBody().style.position = 'fixed';
       this.domAPI.getBody().style.top = `-${this._scrollLockY}px`;
+      this.domAPI.getBody().style.left = `-${this._scrollLockX || 0}px`;
       this.domAPI.getBody().style.width = '100vw';
       this.domAPI.getBody().style.overflow = 'hidden';
       this.domAPI.getDocumentElement().style.overflow = 'hidden';
+      /* iOS Safari viewport-height fix:
+         Force html element to full height while locked, preventing
+         shrink on address-bar collapse which otherwise allows
+         background scroll. */
+      this.domAPI.getDocumentElement().style.height = '100%';
     } else {
       this.domAPI.getBody().style.position = '';
       this.domAPI.getBody().style.top = '';
+      this.domAPI.getBody().style.left = '';
       this.domAPI.getBody().style.width = '';
       this.domAPI.getBody().style.overflow = '';
       this.domAPI.getDocumentElement().style.overflow = '';
-      if (this._scrollLockY !== undefined) {
-        scrollingEl.scrollTop = this._scrollLockY;
-        this._scrollLockY = undefined;
-      }
+      /* reset iOS fix */
+      this.domAPI.getDocumentElement().style.height = '';
+      // Patch: always reset scrollTop and scrollLeft using the stored values from before modal open.
+      const y = this._scrollLockY !== undefined ? this._scrollLockY : 0;
+      const x = this._scrollLockX !== undefined ? this._scrollLockX : 0;
+      setTimeout(() => {
+        if (typeof scrollingEl.scrollTo === 'function') {
+          scrollingEl.scrollTo({ left: x, top: y, behavior: 'auto' });
+        } else {
+          scrollingEl.scrollTop = y;
+          scrollingEl.scrollLeft = x;
+        }
+      }, 0);
+      this._scrollLockY = undefined;
+      this._scrollLockX = undefined;
     }
   }
 
   _showModalElement(modalEl) {
     const modalId = modalEl.id || 'unknown_modal_id';
     this.logger.debug?.(`[ModalManager] Showing modal element: #${modalId}`, { modalId });
+
+    // Patch: always clear inline display (let DaisyUI/Tailwind flex show responsively)
+    modalEl.style.display = '';
+    modalEl.classList.remove('hidden');
+    modalEl.removeAttribute('hidden'); // Defensive: clear if present
+    modalEl.style.zIndex = '9999';
+
     if (typeof modalEl.showModal === 'function') {
       modalEl.showModal();
-      modalEl.style.zIndex = '9999';
       this._manageBodyScroll(false);
     } else {
-      modalEl.classList.remove('hidden');
-      modalEl.style.display = 'flex';
-      modalEl.style.zIndex = '9999';
       modalEl.setAttribute('open', 'true');
       this._manageBodyScroll(false);
     }
@@ -137,11 +160,14 @@ class ModalManager {
   _hideModalElement(modalEl) {
     const modalId = modalEl.id || 'unknown_modal_id';
     this.logger.debug?.(`[ModalManager] Hiding modal element: #${modalId}`, { modalId });
+
+    // Patch: always clear any inline display (do not force display:none/flex, let DaisyUI handle)
+    modalEl.style.display = '';
+    modalEl.removeAttribute('hidden');
     if (typeof modalEl.close === 'function') {
       modalEl.close();
     } else {
       modalEl.classList.add('hidden');
-      modalEl.style.display = 'none';
       modalEl.removeAttribute('open');
     }
     this._manageBodyScroll(true);
@@ -416,12 +442,13 @@ class ModalManager {
       return false; // Cannot proceed if manager isn't ready
     }
 
-    // --- Ensure the injected modals container is visible -----------------
+    // --- Ensure the injected modals container is visible and clear display overrides
+    // Patch: make #modalsContainer always visible (remove 'hidden'/hidden/display:none) whenever opening
     const containerEl = this.domAPI.getElementById('modalsContainer');
     if (containerEl) {
       this.domAPI.removeClass(containerEl, 'hidden');
       containerEl.removeAttribute?.('hidden');
-      if (containerEl.style.display === 'none') containerEl.style.display = '';
+      containerEl.style.display = '';
     } else {
       // This might not be a critical error if modals are directly in body, but good to log.
       this.logger.warn?.(`[ModalManager] show(${modalName}): #modalsContainer element not found. Modals might not display correctly if they rely on this container.`, { modalName });
@@ -586,6 +613,24 @@ class ModalManager {
       this.logger.debug?.(`[ModalManager] hide(${modalName}): Modal hidden and activeModal cleared.`);
     } else {
       this.logger.debug?.(`[ModalManager] hide(${modalName}): Modal hidden. It was not the active modal (activeModal was ${this.activeModal}).`);
+    }
+
+    // Race-proof PATCH: Only hide #modalsContainer if *no* modals are visible or open.
+    const containerEl = this.domAPI.getElementById('modalsContainer');
+    if (containerEl) {
+      const modals = containerEl.querySelectorAll('.modal');
+      let stillOpen = false;
+      modals.forEach(modal => {
+        if ((typeof modal.open === 'boolean' && modal.open) ||
+            (!modal.classList.contains('hidden') && !modal.hasAttribute('hidden'))) {
+          stillOpen = true;
+        }
+      });
+      if (!stillOpen) {
+        containerEl.classList.add('hidden');
+        containerEl.setAttribute('hidden', 'true');
+        containerEl.style.display = 'none';
+      }
     }
   }
 }
@@ -1072,3 +1117,22 @@ export function createProjectModal(deps = {}) {
     }
   };
 }
+
+// Inject mobile modal safe-area rule once only (after library/module load)
+(function injectModalBoxSafeAreaCSS() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  const markerId = 'modal-box-safe-area-css';
+  if (!document.getElementById(markerId)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = markerId;
+    /* extend mobile rules: full-height, inner scroll & align flex-start */
+    styleEl.textContent =
+      `@media (max-width:640px){` +
+      `.modal-box{max-width:calc(100vw - 2rem)!important;` +
+      `max-height:calc(100vh - 3.5rem)!important;overflow-y:auto;}` +
+      `.modal.modal-bottom{align-items:flex-end;}` +
+      `.sm\\:modal-middle{align-items:flex-start;}` +
+      `}`;
+    document.head.appendChild(styleEl);
+  }
+})();
