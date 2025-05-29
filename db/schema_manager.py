@@ -151,7 +151,6 @@ class SchemaManager:
                         description = sql_file.name.split("__")[1].split(".sql")[0].replace("_", " ")
                     except (IndexError, ValueError) as e:
                         logger.error(f"Could not parse version/description from filename {sql_file.name}: {e}")
-                        logger.error(f"Could not parse version/description from filename {sql_file.name}: {e}")
                         continue
 
                     if version in applied_versions:
@@ -164,7 +163,6 @@ class SchemaManager:
                         #     raise RuntimeError(f"Checksum mismatch for applied migration {sql_file.name}")
                         continue
 
-                    logger.info(f"Attempting to apply migration: {sql_file.name} (Version: {version})")
                     logger.info(f"Attempting to apply migration: {sql_file.name} (Version: {version})")
                     sql_content = sql_file.read_text()
                     checksum = hashlib.sha256(sql_content.encode()).hexdigest()
@@ -195,11 +193,9 @@ class SchemaManager:
                             },
                         )
                         logger.info(f"Successfully applied migration {sql_file.name} in {duration_ms}ms.")
-                        logger.info(f"Successfully applied migration {sql_file.name} in {duration_ms}ms.")
                     except Exception as e:
                         duration_ms = int((time.perf_counter() - start_time) * 1000)
                         logger.error(f"Failed to apply migration {sql_file.name}: {e}", exc_info=True)
-                        logger.error(f"Failed to apply migration {sql_file.name}: {e}")
                         await conn.execute(
                             text("""
                                 INSERT INTO schema_history (version, description, installed_by, execution_time, success, checksum)
@@ -224,7 +220,6 @@ class SchemaManager:
             finally:
                 # Release advisory lock
                 await conn.execute(text("SELECT pg_advisory_unlock(hashtext('schema_migrate'))"))
-                logger.info("Released schema migration lock.")
                 logger.info("Released schema migration lock.")
         logger.info("Database migration process finished.")
 
