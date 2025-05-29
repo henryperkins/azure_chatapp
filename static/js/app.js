@@ -186,6 +186,7 @@ DependencySystem.register('globalUtils', {
  // 10) Create service initializer
  // ---------------------------------------------------------------------------
 
+/* Correct domReadinessService creation — after eventHandlers are available. */
 // ---------------------------------------------------------------------------
 // Create the real logger
 // ---------------------------------------------------------------------------
@@ -212,6 +213,45 @@ if (DependencySystem.modules.has('safeHandler')) {
 } else {
   DependencySystem.register('safeHandler', safeHandler);
 }
+
+// Now create domReadinessService after logger is defined
+const domReadinessService = createDomReadinessService({
+  DependencySystem,
+  domAPI,
+  browserService: browserServiceInstance,
+  eventHandlers,
+  APP_CONFIG,
+  logger
+});
+DependencySystem.register('domReadinessService', domReadinessService);
+eventHandlers.setDomReadinessService(domReadinessService);
+
+// ---------------------------------------------------------------------------
+// 8) Register factories (no logger yet), but DO NOT createApiEndpoints here
+// ---------------------------------------------------------------------------
+DependencySystem.register('createModalManager', createModalManager);
+DependencySystem.register('createAuthModule', createAuthModule);
+DependencySystem.register('createChatManager', createChatManager);
+DependencySystem.register('createProjectManager', createProjectManager);
+DependencySystem.register('createModelConfig', createModelConfig);
+DependencySystem.register('createProjectDashboard', createProjectDashboard);
+DependencySystem.register('createProjectDetailsComponent', createProjectDetailsComponent);
+DependencySystem.register('createProjectListComponent', createProjectListComponent);
+DependencySystem.register('createProjectModal', createProjectModal);
+DependencySystem.register('createSidebar', createSidebar);
+DependencySystem.register('createApiEndpoints', createApiEndpoints);
+DependencySystem.register('MODAL_MAPPINGS', MODAL_MAPPINGS);
+DependencySystem.register('globalUtils', {
+  shouldSkipDedup,
+  stableStringify,
+  normaliseUrl,
+  isAbsoluteUrl,
+  isValidProjectId
+});
+
+ // ---------------------------------------------------------------------------
+ // 10) Create service initializer
+ // ---------------------------------------------------------------------------
 
 /* ───────────────────────────────
    NOW create the AppInitializer
@@ -259,7 +299,6 @@ appInit = createAppInitializer({
  // ---- retrofit final logger / safeHandler into the already-created eventHandlers ----
  eventHandlers.setLogger(logger);
  eventHandlers.setSafeHandler(safeHandler);
- domReadinessService.setLogger(logger);   // ← NEW
  domAPI.setLogger?.(logger);                 // ← NEW
  browserServiceInstance.setLogger?.(logger); // ← NEW
 
