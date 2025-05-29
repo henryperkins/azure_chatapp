@@ -17,6 +17,7 @@
  */
 
 import { SELECTORS } from "../utils/selectorConstants.js";
+import { createLogDeliveryService } from "../logDeliveryService.js";
 
 export function createAppInitializer({
     // Core infrastructure
@@ -434,6 +435,38 @@ export function createAppInitializer({
                     logger.debug('[serviceInit] Logger upgraded with apiClient', {
                         context: 'serviceInit:registerAdvancedServices'
                     });
+                }
+
+                // --- Log Delivery Service ------------------------------------------
+                if (apiClientInstance && APP_CONFIG.LOGGING?.BACKEND_ENABLED !== false) {
+                    try {
+                        const logDelivery = createLogDeliveryService({
+                            apiClient: apiClientInstance,
+                            browserService,
+                            eventHandlers,
+                            enabled: false // Will enable after auth
+                        });
+                        DependencySystem.register('logDelivery', logDelivery);
+
+                        // Enable log delivery after auth is ready
+                        eventHandlers.trackListener(
+                            domAPI.getDocument(),
+                            'authReady',
+                            () => {
+                                logDelivery.start();
+                                logger.info('Log delivery service started', { context: 'app:logDelivery' });
+                            },
+                            { once: true, description: 'Start logDelivery after authReady', context: 'logDelivery' }
+                        );
+
+                        logger.debug('[serviceInit] LogDeliveryService registered', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    } catch (err) {
+                        logger.error('[serviceInit] Failed to create LogDeliveryService', err, {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    }
                 }
             } else {
                 logger.warn('[serviceInit] createApiClient or globalUtils not provided. Skipping API client.', {
