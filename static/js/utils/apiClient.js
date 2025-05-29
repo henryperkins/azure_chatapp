@@ -80,10 +80,21 @@ export function createApiClient({
 
     // CSRF token injection
     if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && auth?.getCSRFToken) {
+      // Set log delivery context if this is a request to /api/logs
+      const isLogDelivery = /\/api\/logs\b/.test(normUrl);
+      if (isLogDelivery && auth.setLogDeliveryContext) {
+        auth.setLogDeliveryContext(true);
+      }
+      
       const csrf = auth.getCSRFToken();
+      
+      if (isLogDelivery && auth.setLogDeliveryContext) {
+        auth.setLogDeliveryContext(false);
+      }
+      
       if (csrf) {
         restOpts.headers["X-CSRF-Token"] = csrf;
-      } else if (auth?.logger && typeof auth.logger.warn === "function") {
+      } else if (!isLogDelivery && auth?.logger && typeof auth.logger.warn === "function") {
         auth.logger.warn("[apiClient] Missing CSRF token for " + normUrl, { context: "apiClient:csrf" });
       }
     }
@@ -162,7 +173,12 @@ export function createApiClient({
         const err = new Error(humanMsg);
         err.status = resp.status;
         err.data = payload;
-        logger.error('[apiClient] API response not OK', err, { context: 'apiClient:apiError', url: normUrl, status: resp.status, payload });
+        
+        // Prevent recursive logger/apiClient loop for logger delivery
+        if (!/\/api\/logs\b/.test(normUrl)) {
+          logger.error('[apiClient] API response not OK', err, { context: 'apiClient:apiError', url: normUrl, status: resp.status, payload });
+        }
+        
         throw err;
       } catch (outerErr) {
         // Prevent recursive logger/apiClient loop for logger delivery
