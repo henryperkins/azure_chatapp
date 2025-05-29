@@ -225,7 +225,8 @@ const starred = new Set(
         accessibilityUtils.announce?.(`Starred conversations filtered: "${searchTerm || 'all'}"`);
       }
     } catch (err) {
-      logger.error('[Sidebar][_handleChatSearch] Failed to handle chat search', err, { context: 'Sidebar' });
+      logger.error('[Sidebar][ensureProjectDashboard]', err, { context: 'Sidebar' });
+      logger.warn('[Sidebar][ensureProjectDashboard] continuing after error', { context: 'Sidebar' });
     }
   }
 
@@ -317,7 +318,7 @@ const starred = new Set(
         if (btn && panel) {
           const isActive = key === name;
           btn.classList.toggle('tab-active', isActive);
-          btn.setAttribute('aria-selected', String(isActive));
+          btn.setAttribute('aria-selected', isActive ? "true" : "false");
           btn.tabIndex = isActive ? 0 : -1;
           panel.classList.toggle('hidden', !isActive);
           if (isActive) panel.classList.add('flex');
@@ -336,7 +337,7 @@ const starred = new Set(
         _handleProjectSearch();
       }
     } catch (error) {
-      logger.error('[Sidebar][activateTab] Failed to activate tab', error, { context: 'Sidebar', tab: name });
+      logger.error('[Sidebar][activateTab] failed', error, { context: 'Sidebar' });
     }
   }
 
