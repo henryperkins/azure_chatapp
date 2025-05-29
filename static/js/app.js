@@ -462,6 +462,8 @@ export async function init() {
 
   try {
     await appInit.initializeApp();
+    // Switch on server-side log shipping once the app is ready
+    logger.setServerLoggingEnabled?.(true);
     exposeDebugHelpers();
     fireAppReady(true);
     return true;

@@ -13,8 +13,7 @@ export function createDomAPI({
   windowObject,
   debug = false,
   sanitizer = null,
-  logger = null,
-  DependencySystem = null
+  logger = null
 } = {}) {
   if (!documentObject || !windowObject) {
     throw new Error('[domAPI] documentObject & windowObject are required – do not rely on globals.');
@@ -27,10 +26,7 @@ export function createDomAPI({
   };
 
   // unified warn/error sink (no direct console)
-  let _logger =
-    logger ||
-    DependencySystem?.modules?.get?.('logger') ||
-    { warn: () => { }, error: () => { } };
+  let _logger = logger || { warn: () => { }, error: () => { } };
 
   /* allow late upgrade when real logger is ready */
   function setLogger(newLogger) { if (newLogger) _logger = newLogger; }
