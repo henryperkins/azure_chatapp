@@ -215,29 +215,6 @@ const domReadinessService = createDomReadinessService({
 DependencySystem.register('domReadinessService', domReadinessService);
 eventHandlers.setDomReadinessService(domReadinessService);
 
-// ---------------------------------------------------------------------------
-// 8) Register factories (no logger yet), but DO NOT createApiEndpoints here
-// ---------------------------------------------------------------------------
-DependencySystem.register('createModalManager', createModalManager);
-DependencySystem.register('createAuthModule', createAuthModule);
-DependencySystem.register('createChatManager', createChatManager);
-DependencySystem.register('createProjectManager', createProjectManager);
-DependencySystem.register('createModelConfig', createModelConfig);
-DependencySystem.register('createProjectDashboard', createProjectDashboard);
-DependencySystem.register('createProjectDetailsComponent', createProjectDetailsComponent);
-DependencySystem.register('createProjectListComponent', createProjectListComponent);
-DependencySystem.register('createProjectModal', createProjectModal);
-DependencySystem.register('createSidebar', createSidebar);
-DependencySystem.register('createApiEndpoints', createApiEndpoints);
-DependencySystem.register('MODAL_MAPPINGS', MODAL_MAPPINGS);
-DependencySystem.register('globalUtils', {
-  shouldSkipDedup,
-  stableStringify,
-  normaliseUrl,
-  isAbsoluteUrl,
-  isValidProjectId
-});
-
  // ---------------------------------------------------------------------------
  // 10) Create service initializer
  // ---------------------------------------------------------------------------
