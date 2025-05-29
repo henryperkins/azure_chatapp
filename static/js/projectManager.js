@@ -868,13 +868,50 @@ export function createProjectManager({
       const auth = this.DependencySystem.modules.get('auth');
       const appModule = this.DependencySystem.modules.get('appModule');
 
-      if (auth && !auth.isReady()) {
-        this.logger.info(`[${MODULE}] Auth module not ready yet, waiting for authReady event.`, { context: MODULE });
-        await new Promise(resolve => {
-          this.listenerTracker.add(auth.AuthBus, 'authReady', () => {
-            this.logger.info(`[${MODULE}] Received authReady event.`, { context: MODULE });
-            resolve();
-          }, 'ProjectManager_AuthReadyListener', { once: true });
+      /* ---------------------------------------------------------------------
+       * Guard against legacy or partially-initialised auth modules that do
+       * not expose `.isReady()`.  Per Dec 2024 guardrails, the canonical
+       * readiness signal is `auth.AuthBus` → `authReady` OR the presence of
+       * `appModule.state.isAuthenticated`.
+       * ------------------------------------------------------------------- */
+      const authIsReadyFn = typeof auth?.isReady === 'function' ? auth.isReady.bind(auth) : null;
+      const authReady =
+        (authIsReadyFn && authIsReadyFn()) ||
+        Boolean(appModule?.state?.isAuthenticated);
+
+      if (!authReady) {
+        this.logger.info(`[${MODULE}] Auth not ready yet, waiting for authReady/authStateChanged.`, { context: MODULE });
+        await new Promise((resolve) => {
+          if (auth?.AuthBus) {
+            this.listenerTracker.add(
+              auth.AuthBus,
+              'authReady',
+              () => {
+                this.logger.info(`[${MODULE}] Received authReady event.`, { context: MODULE });
+                resolve();
+              },
+              'ProjectManager_AuthReadyListener',
+              { once: true }
+            );
+            /* Fallback: also resolve when authenticated state flips true */
+            this.listenerTracker.add(
+              auth.AuthBus,
+              'authStateChanged',
+              (e) => {
+                if (e?.detail?.authenticated) resolve();
+              },
+              'ProjectManager_AuthStateChangedListener',
+              { once: true }
+            );
+          } else {
+            /* No AuthBus available – poll appModule.state as last resort */
+            const poll = setInterval(() => {
+              if (this.DependencySystem.modules.get('appModule')?.state?.isAuthenticated) {
+                clearInterval(poll);
+                resolve();
+              }
+            }, 200);
+          }
         });
       }
       this.logger.info(`[${MODULE}] Auth module is ready. Current appModule auth state: ${appModule?.state?.isAuthenticated}`, { context: MODULE });

@@ -50,6 +50,14 @@ export function createSidebar({
   if (!APP_CONFIG) throw new Error('[Sidebar] APP_CONFIG is required.');
 
   const MODULE = 'Sidebar';
+  /**
+   * Global state exposed for E2E and other runtime checks.
+   * Tests (e.g. bootstrap-order.e2e.spec.js) assert Sidebar module readiness
+   * via `DependencySystem.modules.get('sidebar').state.initialized === true`.
+   */
+  const state = {
+    initialized: false
+  };
 
   app = app || tryResolve('app');
   projectDashboard = projectDashboard || tryResolve('projectDashboard');
@@ -828,6 +836,10 @@ export function createSidebar({
       if (!doc || typeof doc.dispatchEvent !== 'function') {
         throw new Error('[Sidebar] Document from domAPI must support dispatchEvent');
       }
++
+       // Mark module as fully initialized so E2E tests can verify readiness
+       state.initialized = true;
++
       if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: completed successfully", { context: 'Sidebar' });
       return true;
     } catch (err) {
@@ -908,6 +920,10 @@ export function createSidebar({
     destroy,
     cleanup,
     eventBus: SidebarBus,
+
+    // Expose state for external observers/tests
+    state,
++
     toggleSidebar,
     closeSidebar,
     showSidebar,
