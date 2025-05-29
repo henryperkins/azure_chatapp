@@ -909,7 +909,6 @@ export function createAppInitializer({
                 eventHandlers,
                 modalManager,
                 app: appModule,
-                router: DependencySystem.modules.get('navigationService'),
                 storage: browserService,
                 sanitizer,
                 htmlSanitizer: sanitizer,
@@ -919,7 +918,8 @@ export function createAppInitializer({
                 browserService,
                 globalUtils,
                 APP_CONFIG,
-                logger
+                logger,
+                DependencySystem // Explicitly provide the DI system per guardrails
             });
             DependencySystem.register('projectListComponent', projectListComponent);
             logger.debug('[coreInit] ProjectListComponent registered.', { context: 'coreInit' });
