@@ -400,7 +400,7 @@ export function createAppInitializer({
                     getAuthModule: () => DependencySystem.modules.get('auth'),
                     browserService,
                     eventHandlers,
-                    logger: DependencySystem.modules.get('logger')
+                    logger
                 });
 
                 if (DependencySystem.modules.has('apiRequest')) {
