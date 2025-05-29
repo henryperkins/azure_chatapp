@@ -42,7 +42,23 @@ export const APP_CONFIG = {
     USER_PROFILE: '/api/user/me',
     USER_PROJECTS: '/api/user/projects',
     USER_STARRED_CONVERSATIONS: '/api/preferences/starred',
-    USER_UPDATE_PREFERENCES: '/api/user/preferences'
+    USER_UPDATE_PREFERENCES: '/api/user/preferences',
+    // Project endpoints
+    PROJECTS: '/api/projects/',
+    PROJECT_DETAIL: '/api/projects/{id}/',
+    PROJECT_CONVERSATIONS_URL_TEMPLATE: '/api/projects/{id}/conversations',
+    PROJECT_FILES: '/api/projects/{id}/files/',
+    PROJECT_ARTIFACTS: '/api/projects/{id}/artifacts/',
+    // Conversation endpoints  
+    CONVERSATIONS: (projectId) => `/api/projects/${projectId}/conversations`,
+    CONVERSATION_DETAIL: (projectId, conversationId) => `/api/projects/${projectId}/conversations/${conversationId}`,
+    // Knowledge base endpoints
+    KB_LIST_URL_TEMPLATE: '/api/projects/{id}/knowledge-bases/',
+    KB_DETAIL_URL_TEMPLATE: '/api/projects/{id}/knowledge-bases/{kb_id}/',
+    // File endpoints
+    FILE_DETAIL: '/api/projects/{id}/files/{file_id}/',
+    FILE_DOWNLOAD: '/api/projects/{id}/files/{file_id}/download/',
+    ARTIFACT_DOWNLOAD: '/api/projects/{id}/artifacts/{artifact_id}/download/'
   },
   LOGGING: {
     BACKEND_ENABLED: true,

@@ -47,8 +47,25 @@ export function createSidebarMobileDock({
     if (!button) {
       button = domAPI.createElement('button');
       button.id = id;
-      button.className = 'btn btn-ghost btn-square flex-1';
-      domAPI.setInnerHTML(button, `${icon}<span class="sr-only">${label}</span>`);
+      button.className = 'dock-btn';
+      button.setAttribute('type', 'button');
+      button.setAttribute('aria-label', label);
+      
+      // Create dock button structure with icon and label
+      const iconEl = domAPI.createElement('div');
+      iconEl.className = 'dock-icon';
+      domAPI.setTextContent(iconEl, icon);
+      
+      const labelEl = domAPI.createElement('div');
+      labelEl.className = 'dock-label';
+      domAPI.setTextContent(labelEl, label);
+      
+      const indicatorEl = domAPI.createElement('div');
+      indicatorEl.className = 'dock-indicator';
+      
+      domAPI.appendChild(button, iconEl);
+      domAPI.appendChild(button, labelEl);
+      domAPI.appendChild(button, indicatorEl);
 
       eventHandlers.trackListener(
         button,
@@ -61,7 +78,13 @@ export function createSidebarMobileDock({
       );
 
       if (mobileDockEl) {
-        domAPI.appendChild(mobileDockEl, button);
+        // Append to the dock-nav container, not the main dock
+        const dockNav = mobileDockEl.querySelector('.dock-nav');
+        if (dockNav) {
+          domAPI.appendChild(dockNav, button);
+        } else {
+          domAPI.appendChild(mobileDockEl, button);
+        }
       }
     }
     return button;
@@ -73,30 +96,53 @@ export function createSidebarMobileDock({
   function ensureMobileDock() {
     // Only show on mobile screens
     if (viewportAPI.getInnerWidth() >= 640) {
+      logger.debug('[SidebarMobileDock] Skipping dock creation - not mobile viewport', {
+        width: viewportAPI.getInnerWidth(),
+        context: MODULE_CONTEXT
+      });
       return null;
     }
 
     if (mobileDockEl) {
+      logger.debug('[SidebarMobileDock] Mobile dock already exists', { context: MODULE_CONTEXT });
       return mobileDockEl;
     }
 
     mobileDockEl = domAPI.getElementById('sidebarDock');
     if (!mobileDockEl) {
+      // Create main dock container
       mobileDockEl = domAPI.createElement('div');
       mobileDockEl.id = 'sidebarDock';
       mobileDockEl.className = 'sidebar-dock hidden';
+      
+      // Create navigation container
+      const dockNav = domAPI.createElement('div');
+      dockNav.className = 'dock-nav';
+      domAPI.appendChild(mobileDockEl, dockNav);
 
-      // Find sidebar element to append to
-      const sidebarEl = domAPI.getElementById('mainSidebar');
-      if (sidebarEl) {
-        domAPI.appendChild(sidebarEl, mobileDockEl);
+      // Append mobile dock to body so it can be positioned fixed at bottom
+      const body = domAPI.getDocument()?.body;
+      if (body) {
+        domAPI.appendChild(body, mobileDockEl);
+        logger.debug('[SidebarMobileDock] Mobile dock created and appended to body', { context: MODULE_CONTEXT });
+      } else {
+        logger.warn('[SidebarMobileDock] Document body not found - dock cannot be attached', { context: MODULE_CONTEXT });
+        return null;
       }
+    } else {
+      logger.debug('[SidebarMobileDock] Found existing mobile dock element', { context: MODULE_CONTEXT });
     }
 
     // Create dock buttons (only 3 to match sidebar tabs)
-    createDockButton('dockRecentBtn', 'Recent', '🕑', () => onTabActivate('recent'));
-    createDockButton('dockStarredBtn', 'Starred', '⭐', () => onTabActivate('starred'));
-    createDockButton('dockProjectsBtn', 'Projects', '📁', () => onTabActivate('projects'));
+    try {
+      createDockButton('dockRecentBtn', 'Recent', '🕑', () => onTabActivate('recent'));
+      createDockButton('dockStarredBtn', 'Starred', '⭐', () => onTabActivate('starred'));
+      createDockButton('dockProjectsBtn', 'Projects', '📁', () => onTabActivate('projects'));
+      logger.debug('[SidebarMobileDock] Dock buttons created successfully', { context: MODULE_CONTEXT });
+    } catch (buttonErr) {
+      logger.error('[SidebarMobileDock] Failed to create dock buttons', buttonErr, { context: MODULE_CONTEXT });
+      return null;
+    }
 
     return mobileDockEl;
   }
@@ -126,17 +172,28 @@ export function createSidebarMobileDock({
    * Updates dock visibility based on viewport and sidebar state
    */
   function updateDockVisibility(sidebarVisible = false) {
-    if (!mobileDockEl) return;
+    if (!mobileDockEl) {
+      logger.warn('[SidebarMobileDock] updateDockVisibility called but mobileDockEl is null', { context: MODULE_CONTEXT });
+      return;
+    }
 
     const isMobile = viewportAPI.getInnerWidth() < 640;
     const shouldShow = isMobile && sidebarVisible;
 
-    domAPI.toggleClass(mobileDockEl, 'hidden', !shouldShow);
+    if (shouldShow) {
+      domAPI.removeClass(mobileDockEl, 'hidden');
+      logger.debug('[SidebarMobileDock] Mobile dock shown', { context: MODULE_CONTEXT });
+    } else {
+      domAPI.addClass(mobileDockEl, 'hidden');
+      logger.debug('[SidebarMobileDock] Mobile dock hidden', { context: MODULE_CONTEXT });
+    }
 
     logger.debug('[SidebarMobileDock] Visibility updated', {
       isMobile,
       sidebarVisible,
       shouldShow,
+      elementExists: !!mobileDockEl,
+      elementHidden: mobileDockEl.classList.contains('hidden'),
       context: MODULE_CONTEXT
     });
   }
@@ -161,11 +218,19 @@ export function createSidebarMobileDock({
    */
   async function init() {
     try {
+      // Wait for critical dependencies and DOM elements
       await domReadinessService.dependenciesAndElements({
-        deps: ['viewportAPI'],
+        deps: ['viewportAPI', 'eventHandlers', 'domAPI'],
         domSelectors: ['#mainSidebar'],
+        timeout: 10000, // 10 second timeout
         context: MODULE_CONTEXT
       });
+
+      // Verify all injected dependencies are still available
+      if (!domAPI) throw new Error('[SidebarMobileDock] domAPI became unavailable during init');
+      if (!eventHandlers) throw new Error('[SidebarMobileDock] eventHandlers became unavailable during init');
+      if (!viewportAPI) throw new Error('[SidebarMobileDock] viewportAPI became unavailable during init');
+      if (!logger) throw new Error('[SidebarMobileDock] logger became unavailable during init');
 
       // Set up resize listener
       eventHandlers.trackListener(
@@ -178,11 +243,14 @@ export function createSidebarMobileDock({
         }
       );
 
-      // Create initial dock if on mobile
+      // Create initial dock if on mobile (this will check viewport size)
       ensureMobileDock();
 
       isInitialized = true;
-      logger.info('[SidebarMobileDock] Initialized successfully', { context: MODULE_CONTEXT });
+      logger.info('[SidebarMobileDock] Initialized successfully', { 
+        context: MODULE_CONTEXT,
+        isMobile: viewportAPI.getInnerWidth() < 640
+      });
 
     } catch (error) {
       logger.error('[SidebarMobileDock] Failed to initialize', error, { context: MODULE_CONTEXT });
