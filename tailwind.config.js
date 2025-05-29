@@ -1,10 +1,5 @@
 import daisyui from 'daisyui';
 
-const withOpacity = (cssVar) => ({ opacityValue }) =>
-  opacityValue === undefined
-    ? `rgb(var(${cssVar}) / 1)`
-    : `rgb(var(${cssVar}) / ${opacityValue})`;
-
 export default {
   /* Files Tailwind should scan for class-names ---------------------- */
   content: [
@@ -17,19 +12,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary            : withOpacity('--p'),
-        'primary-content'  : withOpacity('--pc'),
-        secondary          : withOpacity('--s'),
-        'secondary-content': withOpacity('--sc'),
-        accent             : withOpacity('--a'),
+        primary             : 'rgb(var(--p)  / <alpha-value>)',
+        'primary-content'   : 'rgb(var(--pc) / <alpha-value>)',
+        secondary           : 'rgb(var(--s)  / <alpha-value>)',
+        'secondary-content' : 'rgb(var(--sc) / <alpha-value>)',
+        accent              : 'rgb(var(--a)  / <alpha-value>)',
 
-        'base-100': withOpacity('--b1'),
-        'base-200': withOpacity('--b2'),
-        'base-300': withOpacity('--b3'),
+        'base-100': 'rgb(var(--b1) / <alpha-value>)',
+        'base-200': 'rgb(var(--b2) / <alpha-value>)',
+        'base-300': 'rgb(var(--b3) / <alpha-value>)',
 
-        success : withOpacity('--su'),
-        warning : withOpacity('--wa'),
-        error   : withOpacity('--er'),
+        success : 'rgb(var(--su) / <alpha-value>)',
+        warning : 'rgb(var(--wa) / <alpha-value>)',
+        error   : 'rgb(var(--er) / <alpha-value>)',
       },
     },
   },
