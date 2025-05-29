@@ -166,7 +166,7 @@ if not hasattr(socket, "_orig_socketpair"):
     socket._orig_socketpair = socket.socketpair  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
 
-def _socketpair_fallback(family=socket.AF_UNIX, sock_type=socket.SOCK_STREAM, proto=0):  # noqa: D401
+def _socketpair_fallback(family=None, sock_type=socket.SOCK_STREAM, proto=0):  # noqa: D401
     """A safe replacement for socket.socketpair for restricted sandboxes.
 
     It provides the subset of functionality required by asyncio's selector
@@ -174,6 +174,10 @@ def _socketpair_fallback(family=socket.AF_UNIX, sock_type=socket.SOCK_STREAM, pr
     The implementation is *only* used when the original socketpair call is
     disallowed by the OS (e.g. returns EPERM).
     """
+
+    # Set default family based on platform availability
+    if family is None:
+        family = getattr(socket, 'AF_UNIX', socket.AF_INET)
 
     try:
         # Attempt the original call first; fall back if unavailable
