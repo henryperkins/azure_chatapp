@@ -225,7 +225,7 @@ const starred = new Set(
         accessibilityUtils.announce?.(`Starred conversations filtered: "${searchTerm || 'all'}"`);
       }
     } catch (err) {
-      logger.error('[Sidebar][ensureProjectDashboard]', err, { context: 'Sidebar' });
+      logger.error('[Sidebar][_handleChatSearch] failed', err, { context: 'Sidebar' });
       logger.warn('[Sidebar][ensureProjectDashboard] continuing after error', { context: 'Sidebar' });
     }
   }
@@ -246,7 +246,7 @@ const starred = new Set(
         `Projects filtered for "${searchTerm || 'all'}". Found ${filteredProjects.length} projects.`
       );
     } catch (error) {
-      logger.error('[Sidebar][_handleProjectSearch]', error, { context: 'Sidebar' });
+      logger.error('[Sidebar][_handleProjectSearch] failed', error, { context: 'Sidebar' });
     }
   }
 
