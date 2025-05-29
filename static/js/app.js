@@ -30,11 +30,12 @@ import {
   shouldSkipDedup,
   stableStringify,
   isAbsoluteUrl,
-  isValidProjectId,
   formatBytes as globalFormatBytes,
   formatDate as globalFormatDate,
   fileIcon as globalFileIcon
 } from './utils/globalUtils.js';
+
+import { isValidProjectId } from './projectManager.js';   // ← NEW (canonical source)
 
 import { createEventHandlers } from './eventHandler.js';
 import { createAuthModule } from './auth.js';
