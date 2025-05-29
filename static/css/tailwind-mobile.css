@@ -107,9 +107,14 @@
 .text-responsive-2xl { font-size: var(--font-size-2xl); }
 
 /* Enhanced focus states */
+/* Base – no ring until the element is focused */
 .focus-ring {
-  @apply focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2;
-  @apply focus:ring-offset-base-100;
+  @apply outline-none;
+}
+
+/* Focus styles */
+.focus-ring:focus {
+  @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-base-100;
 }
 
 /* Import focused component files */
