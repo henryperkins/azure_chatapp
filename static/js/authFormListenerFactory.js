@@ -2,6 +2,12 @@
  * Factory for standardized auth modal form listener setup/cleanup.
  * All dependencies must be injected for guardrail compliance.
  * Handles both immediate and dynamic modal form listener attachment, with single-source cleanup.
+ *
+ * Remediation per event-listener leak/duplication guardrails:
+ * - No anonymous handlers (all named/const).
+ * - Module-level setup guard (isSetup).
+ * - All listeners use context: "AuthFormListenerFactory".
+ * - No local attachedListeners array: rely solely on context-based cleanup.
  */
 
 export function createAuthFormListenerFactory(deps) {
@@ -23,28 +29,74 @@ export function createAuthFormListenerFactory(deps) {
     DependencySystem
   } = deps;
 
-  // Used to allow cleanup of all listeners
-  const attachedListeners = [];
+  // Module-level guard to prevent duplicate registrations
+  let isSetup = false;
 
-  // For guardrails: Single-source-of-truth (do not touch ._listenerAttached)
+  // ---- NAMED HANDLERS ----
+  let loginHandlerRef = null;
+  let registerHandlerRef = null;
+  let modalsLoadedHandlerRef = null;
+
+  function handleLoginFormSubmit(e) {
+    // formHandlers.loginHandler WILL be rebound below
+    if (loginHandlerRef) {
+      return loginHandlerRef(e);
+    }
+  }
+
+  function handleRegisterFormSubmit(e) {
+    if (registerHandlerRef) {
+      return registerHandlerRef(e);
+    }
+  }
+
+  function handleModalsLoadedEvent() {
+    cleanupListenersOnly();
+    isSetup = false;
+    setup(currentFormHandlers);
+    // Patch up late-initialized forms after modal dynamic load
+    if (browserService?.setTimeout) {
+      browserService.setTimeout(() => {
+        cleanupListenersOnly();
+        isSetup = false;
+        setup(currentFormHandlers);
+      }, 400);
+    }
+  }
+
+  // Reference to most recent handlers for re-setup
+  let currentFormHandlers = null;
+
   function setup(formHandlers) {
+    if (isSetup) {
+      logger.debug("[AuthFormListenerFactory] Setup called but listeners are already attached.");
+      return;
+    }
+    isSetup = true;
+    currentFormHandlers = formHandlers;
+
+    // Rebind so they're always up to date for event handler invocation
+    loginHandlerRef = safeHandler(formHandlers.loginHandler, "AuthFormListenerFactory", logger);
+    registerHandlerRef = safeHandler(formHandlers.registerHandler, "AuthFormListenerFactory", logger);
+
+    // Always use module-level handler identity for event removal correctness
+    modalsLoadedHandlerRef = safeHandler(handleModalsLoadedEvent, "AuthFormListenerFactory", logger);
+
     // Attach listeners to login and register forms by ID
     const loginForm = domAPI.getElementById("loginModalForm");
     if (loginForm) {
       domAPI.setAttribute(loginForm, 'novalidate', 'novalidate');
       domAPI.removeAttribute(loginForm, 'action');
       domAPI.removeAttribute(loginForm, 'method');
-      attachedListeners.push(
-        eventHandlers.trackListener(
-          loginForm,
-          "submit",
-          safeHandler(formHandlers.loginHandler, "AuthFormListener:loginFormSubmit", logger),
-          {
-            passive: false,
-            context: "AuthFormListener:loginFormSubmit",
-            description: "Login Form Submit"
-          }
-        )
+      eventHandlers.trackListener(
+        loginForm,
+        "submit",
+        handleLoginFormSubmit,
+        {
+          passive: false,
+          context: "AuthFormListenerFactory",
+          description: "Login Form Submit"
+        }
       );
     }
     const registerForm = domAPI.getElementById("registerModalForm");
@@ -52,52 +104,42 @@ export function createAuthFormListenerFactory(deps) {
       domAPI.setAttribute(registerForm, 'novalidate', 'novalidate');
       domAPI.removeAttribute(registerForm, 'action');
       domAPI.removeAttribute(registerForm, 'method');
-      attachedListeners.push(
-        eventHandlers.trackListener(
-          registerForm,
-          "submit",
-          safeHandler(formHandlers.registerHandler, "AuthFormListener:registerFormSubmit", logger),
-          {
-            passive: false,
-            context: "AuthFormListener:registerFormSubmit",
-            description: "Register Form Submit"
-          }
-        )
+      eventHandlers.trackListener(
+        registerForm,
+        "submit",
+        handleRegisterFormSubmit,
+        {
+          passive: false,
+          context: "AuthFormListenerFactory",
+          description: "Register Form Submit"
+        }
       );
     }
     // Attach modalsLoaded dynamic re-setup (for late-loaded modals)
     const doc = domAPI.getDocument?.();
     if (doc && typeof eventHandlers.trackListener === "function") {
-      attachedListeners.push(
-        eventHandlers.trackListener(
-          doc,
-          "modalsLoaded",
-          safeHandler(() => {
-            cleanupListenersOnly();
-            setup(formHandlers);
-            // Patch up late-initialized forms after modal dynamic load, using a small timeout if needed
-            if (browserService?.setTimeout) {
-              browserService.setTimeout(() => {
-                setup(formHandlers);
-              }, 400);
-            }
-          }, "AuthFormListener:modalsLoaded", logger),
-          {
-            passive: false,
-            context: "AuthFormListener:modalsLoaded",
-            description: "modalsLoaded Listener"
-          }
-        )
+      eventHandlers.trackListener(
+        doc,
+        "modalsLoaded",
+        modalsLoadedHandlerRef,
+        {
+          passive: false,
+          context: "AuthFormListenerFactory",
+          description: "modalsLoaded Listener"
+        }
       );
     }
+    logger.info("[AuthFormListenerFactory] Listener setup completed", { context: "AuthFormListenerFactory" });
   }
 
-  // Only clean up attached listeners, not user session, service timers, etc.
   function cleanupListenersOnly() {
     if (eventHandlers && typeof eventHandlers.cleanupListeners === "function") {
       eventHandlers.cleanupListeners({ context: "AuthFormListenerFactory" });
     }
-    attachedListeners.length = 0;
+    isSetup = false;
+    loginHandlerRef = null;
+    registerHandlerRef = null;
+    modalsLoadedHandlerRef = null;
   }
 
   function cleanup() {

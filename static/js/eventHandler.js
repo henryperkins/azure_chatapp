@@ -168,7 +168,7 @@ export function createEventHandlers({
       remove: remove          // <- new
     });
 
-    return remove;                       // ← ahora devolvemos la función “unsubscribe”
+    return remove;                       // ← now returns the “unsubscribe” function
   }
 
   function toggleVisible(elementSelectorOrElement, show) {
@@ -177,6 +177,23 @@ export function createEventHandlers({
         ? domAPI.querySelector(elementSelectorOrElement)
         : elementSelectorOrElement;
     return globalToggleElement(element, show, domAPI);
+  }
+
+  // ---------------------- HANDLER ANONYMITY REMEDIATION: NAMED FUNCS ----------------------------------
+
+  function togglePanelFactory({ panel, toggleButton, chevron, toggleId, storageBackend, domAPI, onExpand }) {
+    return function togglePanel(expand) {
+      domAPI.toggleClass(panel, 'hidden', !expand);
+      if (chevron) domAPI.setStyle(chevron, 'transform', expand ? 'rotate(180deg)' : 'rotate(0deg)');
+      domAPI.setAttribute(toggleButton, 'aria-expanded', String(expand));
+
+      if (expand && typeof onExpand === 'function') {
+        onExpand();
+      }
+      if (toggleId && storageBackend?.setItem) {
+        storageBackend.setItem(`${toggleId}_expanded`, String(expand));
+      }
+    };
   }
 
   function setupCollapsible(toggleId, panelId, chevronId, onExpand) {
@@ -192,19 +209,7 @@ export function createEventHandlers({
     domAPI.setAttribute(toggleButton, 'aria-controls', panelId);
     domAPI.setAttribute(toggleButton, 'aria-expanded', 'false');
 
-    const togglePanel = (expand) => {
-      domAPI.toggleClass(panel, 'hidden', !expand);
-      if (chevron) domAPI.setStyle(chevron, 'transform', expand ? 'rotate(180deg)' : 'rotate(0deg)');
-      domAPI.setAttribute(toggleButton, 'aria-expanded', String(expand));
-
-      if (expand && typeof onExpand === 'function') {
-        onExpand();
-      }
-
-      if (toggleId && storageBackend?.setItem) {
-        storageBackend.setItem(`${toggleId}_expanded`, String(expand));
-      }
-    };
+    const togglePanel = togglePanelFactory({ panel, toggleButton, chevron, toggleId, storageBackend, domAPI, onExpand });
 
     let savedState = null;
     if (toggleId && storageBackend?.getItem) {
@@ -212,27 +217,24 @@ export function createEventHandlers({
     }
     togglePanel(savedState === 'true');
 
+    // Named handler for collapsible toggle
+    function handleCollapsibleClick() {
+      const isCurrentlyExpanded = domAPI.getAttribute(toggleButton, 'aria-expanded') === 'true';
+      togglePanel(!isCurrentlyExpanded);
+    }
+
     trackListener(
       toggleButton,
       'click',
-      () => {
-        const isCurrentlyExpanded = domAPI.getAttribute(toggleButton, 'aria-expanded') === 'true';
-        togglePanel(!isCurrentlyExpanded);
-      },
+      SH(handleCollapsibleClick, `EventHandler:Collapsible:${toggleId}`),
       { description: `Toggle Collapsible ${toggleId}`, module: MODULE, context: 'collapsible', source: 'setupCollapsible' }
     );
   }
 
-  function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
-    const modal = domAPI.getElementById(modalId);
-    const openBtn = openBtnId ? domAPI.getElementById(openBtnId) : null;
-    const closeBtn = closeBtnId ? domAPI.getElementById(closeBtnId) : null;
+  // MODAL HANDLERS: All moved to named functions with safeHandler wrapping
 
-    if (!modal) {
-      return { open: () => { }, close: () => { } };
-    }
-
-    const open = () => {
+  function makeModalOpenHandler(modal, modalId, onOpen, SH, modalManager, domAPI) {
+    return function open() {
       if (typeof onOpen === 'function') {
         SH(onOpen, `EventHandler:setupModal:onOpen`)(modal);
       }
@@ -245,8 +247,10 @@ export function createEventHandlers({
         domAPI.setAttribute(modal, 'open', 'true');
       }
     };
+  }
 
-    const close = () => {
+  function makeModalCloseHandler(modal, modalId, onClose, SH, modalManager, domAPI) {
+    return function close() {
       if (modalManager?.hide) {
         modalManager.hide(modalId);
       } else if (typeof modal.close === 'function') {
@@ -259,7 +263,30 @@ export function createEventHandlers({
         SH(onClose, `EventHandler:setupModal:onClose`)(modal);
       }
     };
+  }
 
+  function setupModal(modalId, openBtnId, closeBtnId, onOpen, onClose) {
+    const modal = domAPI.getElementById(modalId);
+    const openBtn = openBtnId ? domAPI.getElementById(openBtnId) : null;
+    const closeBtn = closeBtnId ? domAPI.getElementById(closeBtnId) : null;
+
+    if (!modal) {
+      return { open: () => { }, close: () => { } };
+    }
+
+    const open = makeModalOpenHandler(modal, modalId, onOpen, SH, modalManager, domAPI);
+    const close = makeModalCloseHandler(modal, modalId, onClose, SH, modalManager, domAPI);
+
+    // ESC close named handler
+    function handleModalEscClose(e) {
+      if (e.key === 'Escape') close();
+    }
+    // backdrop click close named handler
+    function handleModalBackdropClick(e) {
+      if (domAPI.isSameNode(e.target, modal)) close();
+    }
+
+    // Handlers for buttons
     if (openBtn) {
       trackListener(openBtn, 'click', SH(open, `EventHandler:setupModal:open`), {
         description: `Open Modal ${modalId}`,
@@ -280,23 +307,21 @@ export function createEventHandlers({
     trackListener(
       modal,
       'keydown',
-      SH((e) => {
-        if (e.key === 'Escape') close();
-      }, `EventHandler:setupModal:keydown`),
+      SH(handleModalEscClose, `EventHandler:setupModal:keydown`),
       { description: `Modal ESC Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
     trackListener(
       modal,
       'click',
-      SH((e) => {
-        if (domAPI.isSameNode(e.target, modal)) close();
-      }, `EventHandler:setupModal:backdropClick`),
+      SH(handleModalBackdropClick, `EventHandler:setupModal:backdropClick`),
       { description: `Modal Backdrop Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
     return { open, close };
   }
+
+  // FORM HANDLERS
 
   function setupForm(formId, submitHandler, options = {}) {
     const form = domAPI.getElementById(formId);
@@ -306,11 +331,11 @@ export function createEventHandlers({
 
     const { validateBeforeSubmit = true, showLoadingState = true, resetOnSuccess = true } = options;
 
-    const handleSubmit = async (e) => {
+    // Named handler for form submit
+    async function handleSubmit(e) {
       domAPI.preventDefault(e); // Use domAPI to avoid direct event calls
       if (domAPI.hasClass(form, 'submitting')) return;
 
-      // To be fully DI-compliant, form-specific methods called via domAPI wrappers.
       if (validateBeforeSubmit) {
         if (!domAPI.checkFormValidity(form)) {
           domAPI.reportFormValidity(form);
@@ -327,7 +352,6 @@ export function createEventHandlers({
       }
 
       try {
-        // Use browserService.FormData if available (it's a required dep)
         if (!browserService?.FormData)
           throw new Error('[EventHandler][setupForm] browserService.FormData unavailable (strict DI)');
         const formData = new browserService.FormData(form);
@@ -363,7 +387,7 @@ export function createEventHandlers({
           }
         }
       }
-    };
+    }
 
     trackListener(form, 'submit', SH(handleSubmit, 'EventHandler:setupForm:handleSubmit'), {
       passive: false,
@@ -374,18 +398,20 @@ export function createEventHandlers({
     });
   }
 
+  // COMMON ELEMENTS
 
   function setupCommonElements() {
     const darkModeToggle = domAPI.getElementById('darkModeToggle');
     if (darkModeToggle && !domAPI.getDataAttribute(darkModeToggle, 'ehBound')) {
+      function handleDarkModeToggleClick() {
+        domAPI.toggleClass(domAPI.getDocument().documentElement, 'dark');
+        const isDark = domAPI.hasClass(domAPI.getDocument().documentElement, 'dark');
+        storageBackend.setItem('darkMode', isDark ? 'true' : 'false');
+      }
       trackListener(
         darkModeToggle,
         'click',
-        () => {
-          domAPI.toggleClass(domAPI.getDocument().documentElement, 'dark');
-          const isDark = domAPI.hasClass(domAPI.getDocument().documentElement, 'dark');
-          storageBackend.setItem('darkMode', isDark ? 'true' : 'false');
-        },
+        SH(handleDarkModeToggleClick, 'EventHandler:setupCommonElements:DarkModeToggleClick'),
         { description: 'Dark Mode Toggle', module: MODULE, context: 'ui', source: 'setupCommonElements' }
       );
       domAPI.setDataAttribute(darkModeToggle, 'ehBound', '1'); // marca como enlazado
@@ -396,44 +422,21 @@ export function createEventHandlers({
     }
   }
 
-  function setupProjectModalForm() {
-    const pm = _projectManager || DependencySystem.modules.get('projectManager');
-    if (!pm) {
-      return;
-    }
-    setupForm(
-      'projectModalForm',
-      async (formData) => {
-        const data = Object.fromEntries(formData.entries());
-        if (data.max_tokens) data.max_tokens = parseInt(data.max_tokens, 10);
-        if (!data.name) {
-          throw new Error('Project name is required.');
-        }
-        await pm.saveProject(data.projectId, data);
-        modalManager?.hide?.('project');
-        pm.loadProjects?.('all');
-      },
-      {
-        resetOnSuccess: true,
-        onError: (err) => {
-          logger.error(`[${MODULE}][setupProjectModalForm] Error in project form submit`, err, { context: 'projectModalForm' });
-        }
-      }
-    );
-  }
+  // NAVIGATION ELEMENTS
 
   function setupNavigationElements() {
     const navLinks = domAPI.querySelectorAll('.nav-link');
     navLinks.forEach((link) => {
       if (!domAPI.getDataAttribute(link, 'ehBound')) {
+        function handleNavLinkClick(e) {
+          domAPI.preventDefault(e);
+          const href = domAPI.getAttribute(link, 'href');
+          if (href) redirect(href);
+        }
         trackListener(
           link,
           'click',
-          (e) => {
-            domAPI.preventDefault(e);
-            const href = domAPI.getAttribute(link, 'href');
-            if (href) redirect(href);
-          },
+          SH(handleNavLinkClick, `EventHandler:setupNavigationElements:NavLink:${domAPI.getAttribute(link, 'href') || 'unknown'}`),
           {
             description: `Navigation Link: ${domAPI.getAttribute(link, 'href') || 'unknown'}`,
             module: MODULE,
@@ -445,6 +448,38 @@ export function createEventHandlers({
       }
     });
   }
+
+  // PROJECT MODAL FORM
+
+  function setupProjectModalForm() {
+    const pm = _projectManager || DependencySystem.modules.get('projectManager');
+    if (!pm) {
+      return;
+    }
+    async function handleProjectFormSubmit(formData) {
+      const data = Object.fromEntries(formData.entries());
+      if (data.max_tokens) data.max_tokens = parseInt(data.max_tokens, 10);
+      if (!data.name) {
+        throw new Error('Project name is required.');
+      }
+      await pm.saveProject(data.projectId, data);
+      modalManager?.hide?.('project');
+      pm.loadProjects?.('all');
+    }
+    function handleProjectFormError(err) {
+      logger.error(`[${MODULE}][setupProjectModalForm] Error in project form submit`, err, { context: 'projectModalForm' });
+    }
+    setupForm(
+      'projectModalForm',
+      handleProjectFormSubmit,
+      {
+        resetOnSuccess: true,
+        onError: handleProjectFormError
+      }
+    );
+  }
+
+  // CONTENT ELEMENTS
 
   function setupContentElements() {
     const collapsibleToggles = domAPI.querySelectorAll('[data-collapsible-toggle]');
@@ -532,14 +567,15 @@ export function createEventHandlers({
     });
   }
 
+  // DELEGATE: make sure delegate handler is always a named const for remediation
   function delegate(container, eventType, selector, handler, options = {}) {
-    const delegatedHandler = function (event) {
+    const delegatedHandler = function delegatedEventHandler(event) {
       const target = domAPI.closest(event.target, selector);
       if (target) {
         handler.call(target, event, target);
       }
     };
-    return trackListener(container, eventType, delegatedHandler, {
+    return trackListener(container, eventType, SH(delegatedHandler, `EventHandler:delegate:${eventType}:${selector}`), {
       ...options,
       description: options.description || `Delegate ${eventType} on ${selector}`,
       context: options.context || MODULE,
@@ -548,10 +584,51 @@ export function createEventHandlers({
     });
   }
 
+  // login-modal tab handlers as named functions
   function setupLoginModalTabs() {
     const loginModal = domAPI.getElementById('loginModal');
     if (!loginModal) {
       return;
+    }
+
+    function handleLoginTabClick(event, tabElement) {
+      const registerTabElement = domAPI.querySelector(loginModal, '#modalRegisterTab');
+      const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
+      const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
+      if (!registerTabElement || !loginPanel || !registerPanel) {
+        return;
+      }
+      domAPI.addClass(tabElement, 'tab-active');
+      domAPI.setAttribute(tabElement, 'aria-selected', 'true');
+      domAPI.removeClass(registerTabElement, 'tab-active');
+      domAPI.setAttribute(registerTabElement, 'aria-selected', 'false');
+      domAPI.removeClass(loginPanel, 'hidden');
+      domAPI.addClass(registerPanel, 'hidden');
+    }
+
+    function handleRegisterTabClick(event, tabElement) {
+      const loginTabElement = domAPI.querySelector(loginModal, '#modalLoginTab');
+      const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
+      const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
+
+      if (!loginTabElement || !loginPanel || !registerPanel) {
+        return;
+      }
+
+      if (tabElement && tabElement.classList) {
+        domAPI.addClass(tabElement, 'tab-active');
+        domAPI.setAttribute(tabElement, 'aria-selected', 'true');
+      }
+      if (loginTabElement && loginTabElement.classList) {
+        domAPI.removeClass(loginTabElement, 'tab-active');
+        domAPI.setAttribute(loginTabElement, 'aria-selected', 'false');
+      }
+      if (registerPanel && registerPanel.classList) {
+        domAPI.removeClass(registerPanel, 'hidden');
+      }
+      if (loginPanel && loginPanel.classList) {
+        domAPI.addClass(loginPanel, 'hidden');
+      }
     }
 
     // Delegated listener for Login Tab
@@ -559,22 +636,7 @@ export function createEventHandlers({
       loginModal,
       'click',
       '#modalLoginTab',
-      (event, tabElement) => {
-        const registerTabElement = domAPI.querySelector(loginModal, '#modalRegisterTab');
-        const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
-        const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
-
-        if (!registerTabElement || !loginPanel || !registerPanel) {
-          return;
-        }
-
-        domAPI.addClass(tabElement, 'tab-active');
-        domAPI.setAttribute(tabElement, 'aria-selected', 'true');
-        domAPI.removeClass(registerTabElement, 'tab-active');
-        domAPI.setAttribute(registerTabElement, 'aria-selected', 'false');
-        domAPI.removeClass(loginPanel, 'hidden');
-        domAPI.addClass(registerPanel, 'hidden');
-      },
+      handleLoginTabClick,
       { description: 'Switch to Login Tab (Delegated)', module: MODULE, context: 'authTabs' }
     );
 
@@ -583,31 +645,7 @@ export function createEventHandlers({
       loginModal,
       'click',
       '#modalRegisterTab',
-      (event, tabElement) => {
-        const loginTabElement = domAPI.querySelector(loginModal, '#modalLoginTab');
-        const loginPanel = domAPI.querySelector(loginModal, '#loginPanel');
-        const registerPanel = domAPI.querySelector(loginModal, '#registerPanel');
-
-        if (!loginTabElement || !loginPanel || !registerPanel) {
-          return;
-        }
-
-        // Defensive: Only act if element is truthy and has classList/setAttribute
-        if (tabElement && tabElement.classList) {
-          domAPI.addClass(tabElement, 'tab-active');
-          domAPI.setAttribute(tabElement, 'aria-selected', 'true');
-        }
-        if (loginTabElement && loginTabElement.classList) {
-          domAPI.removeClass(loginTabElement, 'tab-active');
-          domAPI.setAttribute(loginTabElement, 'aria-selected', 'false');
-        }
-        if (registerPanel && registerPanel.classList) {
-          domAPI.removeClass(registerPanel, 'hidden');
-        }
-        if (loginPanel && loginPanel.classList) {
-          domAPI.addClass(loginPanel, 'hidden');
-        }
-      },
+      handleRegisterTabClick,
       { description: 'Switch to Register Tab (Delegated)', module: MODULE, context: 'authTabs' }
     );
   }
@@ -621,10 +659,8 @@ export function createEventHandlers({
   function createCustomEvent(type, options = {}) {
     const windowObject = browserService?.getWindow?.(); // browserService is in the factory's scope
     if (!windowObject || typeof windowObject.CustomEvent !== 'function') {
-      // Depending on strictness, could throw an error or log via an injected logger if available
-      // For now, returning null or a simple object if CustomEvent is not polyfilled/available.
       logger.warn(`[${MODULE}][createCustomEvent] Cannot create CustomEvent: windowObject or window.CustomEvent is not available.`, { context: MODULE });
-      return { type, detail: options.detail }; // Fallback to a plain object
+      return { type, detail: options.detail };
     }
     return new windowObject.CustomEvent(type, options);
    }
@@ -757,48 +793,52 @@ export function createEventHandlers({
         return;
       }
 
+      function handleAuthButtonClick(e, element) {
+        domAPI.preventDefault(e);
+        logger.info('[EventHandler] Auth button clicked', { context: 'eventHandler.authButton' });
+        try {
+          currentModalManager.show('login');
+          logger.info('[EventHandler] Login modal requested', { context: 'eventHandler.authButton' });
+        }
+        catch (error) {
+          logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, { context: 'auth' });
+        }
+      }
+
       delegate(
         parentNode,
         'click',
         '#authButton',
-        (e) => {
-          domAPI.preventDefault(e);
-          logger.info('[EventHandler] Auth button clicked', { context: 'eventHandler.authButton' });
-          try {
-            currentModalManager.show('login');
-            logger.info('[EventHandler] Login modal requested', { context: 'eventHandler.authButton' });
-          }
-          catch (error) {
-            logger.error(`[${MODULE}][bindAuthButtonDelegate]`, error, { context: 'auth' });
-          }
-        },
+        handleAuthButtonClick,
         { description: 'Delegated Login Modal Show', context: 'auth', module: MODULE }
       );
       authButtonDelegationBound = true;
     }
 
-    /* global requestLogin listener */
+    // global requestLogin listener
+    function handleRequestLogin() {
+      const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
+      currentModalManager?.show?.('login');
+    }
     trackListener(
       domAPI.getDocument(),
       'requestLogin',
-      SH(() => {
-        const currentModalManager = modalManager || DependencySystem.modules.get('modalManager');
-        currentModalManager?.show?.('login');
-      }, 'EventHandler:requestLogin'),
+      SH(handleRequestLogin, 'EventHandler:requestLogin'),
       { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE, source: 'requestLogin' }
     );
 
-    bindAuthButtonDelegate();
-
-    /* re-bind after modalsLoaded */
+    function handleModalsLoaded() {
+      bindAuthButtonDelegate();
+      setupLoginModalTabs();
+    }
     trackListener(
       domAPI.getDocument(),
       'modalsLoaded',
-      SH(() => { bindAuthButtonDelegate(); setupLoginModalTabs(); }, 'EventHandler:modalsLoaded'),
+      SH(handleModalsLoaded, 'EventHandler:modalsLoaded'),
       { once: true, description: 'Rebind login / tabs after modalsLoaded', context: 'auth', module: MODULE, source: 'modalsLoaded' }
     );
 
-    /* fast-path if modals already present */
+    // fast-path if modals already present
     if (domAPI.getElementById('modalsContainer')?.childElementCount > 0) {
       setupLoginModalTabs();
     }
