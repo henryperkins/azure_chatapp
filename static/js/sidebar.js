@@ -115,7 +115,6 @@ export function createSidebar({
     sidebarEnhancements.toggleSettingsPanel(force, maybeRenderModelConfig);
   }
 
-  let el = null;
   let btnToggle = null;
   let btnClose = null;
   let btnPin = null;
