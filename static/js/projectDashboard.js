@@ -12,6 +12,8 @@
  * - Navigation via navigationService
  */
 
+import { SELECTORS } from "./utils/selectorConstants.js";
+
 export function createProjectDashboard({
   DependencySystem,
   domAPI,
@@ -336,7 +338,7 @@ export function createProjectDashboard({
       try {
         await domReadinessService.dependenciesAndElements({
           deps: ['app'],
-          domSelectors: ['#projectListView'],
+          domSelectors: [SELECTORS.projectListView],
           context: 'ProjectDashboard_showList'
         });
 
@@ -678,7 +680,7 @@ export function createProjectDashboard({
       this.browserService.requestAnimationFrame(() => {
         const loginRequiredMessage = this.domAPI.getElementById('loginRequiredMessage');
         const mainContent = this.domAPI.getElementById('mainContent');
-        const projectListView = this.domAPI.getElementById('projectListView');
+        const projectListView = this.domAPI.getElementById(SELECTORS.projectListView.replace('#', ''));
         const projectDetailsView = this.domAPI.getElementById('projectDetailsView');
 
         if (!authenticated) {
@@ -722,7 +724,7 @@ export function createProjectDashboard({
             this.browserService.setTimeout(() => {
               this._loadProjects();
               this.browserService.setTimeout(() => {
-                const plv = this.domAPI.getElementById('projectListView');
+                const plv = this.domAPI.getElementById(SELECTORS.projectListView.replace('#', ''));
                 if (plv) {
                   plv.classList.remove('opacity-0');
                   plv.style.display = '';
@@ -960,7 +962,7 @@ export function createProjectDashboard({
       const listTemplateAlreadyLoaded = (() => {
         try {
           if (this.components.projectList?.state?.templateLoaded) return true;
-          const listViewEl = this.domAPI.getElementById('projectListView');
+          const listViewEl = this.domAPI.getElementById(SELECTORS.projectListView.replace('#', ''));
           return !!(listViewEl && listViewEl.childElementCount > 0);
         } catch {
           return false;
@@ -1033,7 +1035,7 @@ export function createProjectDashboard({
       if (mainContent) this.domAPI.toggleClass(mainContent, 'hidden', false);
 
       // List view controlling
-      const listView = this.domAPI.getElementById('projectListView');
+      const listView = this.domAPI.getElementById(SELECTORS.projectListView.replace('#', ''));
       if (listView) {
         this.domAPI.toggleClass(listView, 'hidden', !showList);
         this.domAPI.toggleClass(listView, 'opacity-0', !showList);

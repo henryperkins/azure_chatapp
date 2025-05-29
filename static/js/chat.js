@@ -92,8 +92,14 @@ export function createChatManager(deps = {}) {
     DependencySystem
   });
 
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
+  // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
+  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
+  const safeHandler =
+    typeof safeHandlerRaw === 'function'
+      ? safeHandlerRaw
+      : (typeof safeHandlerRaw?.safeHandler === 'function'
+        ? safeHandlerRaw.safeHandler
+        : (fn) => fn); // graceful fallback
 
   // --- Live Token Estimation Logic ---
   // (patch instance after construction, see after ChatManager)

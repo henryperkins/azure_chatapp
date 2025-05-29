@@ -48,7 +48,7 @@ export function createSidebarAuth({
     sidebarAuthFormEl = domAPI.getElementById('sidebarAuthForm');
     sidebarUsernameContainerEl = domAPI.getElementById('sidebarUsernameContainer');
     sidebarUsernameInputEl = domAPI.getElementById('sidebarUsername');
-    sidebarEmailInputEl = domAPI.getElementById('sidebarEmail');
+    sidebarEmailInputEl = domAPI.getElementById('sidebarUsernameLogin');
     sidebarPasswordInputEl = domAPI.getElementById('sidebarPassword');
     sidebarConfirmPasswordContainerEl = domAPI.getElementById('sidebarConfirmPasswordContainer');
     sidebarConfirmPasswordInputEl = domAPI.getElementById('sidebarConfirmPassword');
@@ -100,11 +100,10 @@ export function createSidebarAuth({
         updateAuthFormUI(false);
         domAPI.setTextContent(sidebarAuthErrorEl, 'Registration successful. Please sign in.');
       } else {
-        // In login mode, the username field is hidden, so use email as username
-        // The backend expects a username field, but users enter their email in login mode
-        const loginUsername = username || email;
+        // In login mode, use the "username" input field directly
+        const loginUsername = email;
         if (!loginUsername || !password) {
-          throw new Error('Email and password are required.');
+          throw new Error('Username and password are required.');
         }
         await authModule.login(loginUsername, password);
       }

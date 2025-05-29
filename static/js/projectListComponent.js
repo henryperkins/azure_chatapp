@@ -11,6 +11,8 @@
  *   plc.destroy();
  */
 
+import { SELECTORS } from "./utils/selectorConstants.js";
+
 export function createProjectListComponent(deps) {
     // ----- Dependency Validation -----
     if (!deps) throw new Error('[ProjectListComponent] Missing dependencies object to factory.');
@@ -51,7 +53,10 @@ export function createProjectListComponent(deps) {
 
     // ----- Internal State -----
     // Primary container used by the new template plus legacy fallback
-    const ELEMENT_IDS = ["projectListView", "project-list-container"];
+    const ELEMENT_IDS = [
+        SELECTORS.projectListView.replace('#', ''),
+        SELECTORS.projectListContainer.replace('.', '')
+    ];
     let elementId = ELEMENT_IDS[0];
     let _doc = null;
     let element = null;
@@ -76,12 +81,17 @@ export function createProjectListComponent(deps) {
     // ----- Initialization/Readiness -----
     async function initialize() {
         try {
-            // Check app readiness using only DI domReadinessService
+            // Wait for template load event before waiting for children
+            await domReadinessService.waitForEvent('projectListHtmlLoaded', {
+                timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_TEMPLATE ?? 15000,
+                context: MODULE_CONTEXT + '_template'
+            });
+            // Now wait for the key DOM elements
             await domReadinessService.dependenciesAndElements({
                 deps: ['projectManager', 'eventHandlers'],
                 domSelectors: [
-                    '#projectListView',        // primary container
-                    '.project-list-container'  // legacy fallback
+                    SELECTORS.projectListView,         // primary container
+                    SELECTORS.projectListContainer     // legacy fallback
                 ],
                 observeMutations: true,   // wait for template injection
                 timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
@@ -89,6 +99,7 @@ export function createProjectListComponent(deps) {
             });
         } catch (err) {
             logger.error('[ProjectListComponent][initialize] dependenciesAndElements failed', err, { context: MODULE_CONTEXT });
+            _showErrorState("Project list UI failed to load: required elements missing.<br>" + (err?.message || ""));
             throw err;
         }
 
@@ -99,10 +110,11 @@ export function createProjectListComponent(deps) {
         element =
             domAPI.getElementById(elementId) ||
             domAPI.getElementById(ELEMENT_IDS[1]) ||
-            domAPI.querySelector('#projectListView, .project-list-container');
+            domAPI.querySelector(`${SELECTORS.projectListView}, ${SELECTORS.projectListContainer}`);
 
         if (!element) {
             logger.error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`, null, { context: MODULE_CONTEXT });
+            _showErrorState(`Project list container <code>#${elementId}</code> not found. The project list UI cannot be initialized.`);
             throw new Error(`[ProjectListComponent] Element #${elementId} not found. Cannot initialize.`);
         }
         if (element.classList.contains('mobile-grid')) {
@@ -115,6 +127,7 @@ export function createProjectListComponent(deps) {
 
         if (!gridElement) {
             logger.error(`'.mobile-grid' container not found within .project-list-container.`, null, { context: MODULE_CONTEXT });
+            _showErrorState(`Project grid <code>.mobile-grid</code> not found inside the project list container. The project list UI cannot be rendered.`);
             throw new Error(`'.mobile-grid' container not found within .project-list-container.`);
         }
 
@@ -151,7 +164,14 @@ export function createProjectListComponent(deps) {
     }
     function _bindEventListeners() {
         const doc = domAPI?.getDocument?.();
-        const safeHandler = app?.DependencySystem?.modules?.get?.('safeHandler');
+        // Normalize safeHandler retrieved via DI – supports early-boot object `{ safeHandler }`
+        const safeHandlerRaw = app?.DependencySystem?.modules?.get?.('safeHandler');
+        const safeHandler =
+            typeof safeHandlerRaw === 'function'
+                ? safeHandlerRaw
+                : (typeof safeHandlerRaw?.safeHandler === 'function'
+                    ? safeHandlerRaw.safeHandler
+                    : (fn) => fn); // graceful fallback – pass-through
         const projectsLoadedHandler = (e) => renderProjects(e.detail);
 
         eventHandlers.trackListener(
@@ -186,7 +206,9 @@ export function createProjectListComponent(deps) {
                     await domReadinessService.dependenciesAndElements({
                         deps: ['app', 'projectManager', 'eventHandlers', 'auth'],
                         domSelectors: [
-                            '.project-list-container', '.mobile-grid', '#projectFilterTabs'
+                            SELECTORS.projectListContainer,
+                            '.mobile-grid',
+                            SELECTORS.projectFilterTabs
                         ],
                         timeout: 10000,
                         context: MODULE_CONTEXT + '_authStateChange'
@@ -407,11 +429,12 @@ export function createProjectListComponent(deps) {
         }
         try {
             await domReadinessService.elementsReady(
-                ['#projectCardsPanel', '#projectFilterTabs'],
+                [SELECTORS.projectCardsPanel, SELECTORS.projectFilterTabs],
                 { timeout: 5000, context: MODULE_CONTEXT + '_show' }
             );
         } catch (err) {
             logger.error('[ProjectListComponent][show] elementsReady failed', err, { context: MODULE_CONTEXT });
+            _showErrorState("Project list UI failed: one or more required UI elements did not appear.<br>" + (err?.message || ""));
         }
 
         // CONSOLIDATED: Check authentication state before showing content

@@ -443,7 +443,14 @@ export function createNavigationService({
    */
   function init() {
     // Register popstate handler
-    const safeHandler = DependencySystem.modules.get('safeHandler');
+    // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
+    const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
+    const safeHandler =
+      typeof safeHandlerRaw === 'function'
+        ? safeHandlerRaw
+        : (typeof safeHandlerRaw?.safeHandler === 'function'
+          ? safeHandlerRaw.safeHandler
+          : (fn) => fn); // graceful fallback
     eventHandlers.trackListener(
       browserService.getWindow(),
       'popstate',

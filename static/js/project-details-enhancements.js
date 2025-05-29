@@ -4,6 +4,8 @@
  * following the styling in the corresponding CSS files
  */
 
+import { SELECTORS } from "./utils/selectorConstants.js";
+
 export function createProjectDetailsEnhancements({
   domAPI,
   browserService,
@@ -21,8 +23,14 @@ export function createProjectDetailsEnhancements({
   if (!logger) throw new Error('[createProjectDetailsEnhancements] Missing dependency: logger');
   if (!sanitizer) throw new Error('[createProjectDetailsEnhancements] Missing dependency: sanitizer');
   if (!DependencySystem) throw new Error('Missing DependencySystem');
-  // Use canonical safeHandler from DI
-  const safeHandler = DependencySystem.modules.get('safeHandler');
+  // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
+  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
+  const safeHandler =
+    typeof safeHandlerRaw === 'function'
+      ? safeHandlerRaw
+      : (typeof safeHandlerRaw?.safeHandler === 'function'
+        ? safeHandlerRaw.safeHandler
+        : (fn) => fn); // graceful fallback
   if (!safeHandler) throw new Error('safeHandler missing from DependencySystem');
 
   // State management
@@ -549,7 +557,7 @@ export function createProjectDetailsEnhancements({
 
       // Wait for DOM to be ready for project list
       await domReadinessService.dependenciesAndElements({
-        domSelectors: ['.project-list-container'],
+        domSelectors: [SELECTORS.projectListContainer],
         context: CONTEXT
       });
 
@@ -714,7 +722,7 @@ export function createProjectDetailsEnhancements({
       if (state.initialized) return;
 
       // Determine if we're on the project list or project details page
-      const isProjectListPage = !!domAPI.querySelector('.project-list-container');
+      const isProjectListPage = !!domAPI.querySelector(SELECTORS.projectListContainer);
       const isProjectDetailsPage = !!domAPI.querySelector('.project-details-root');
 
       // Initialize appropriate enhancements

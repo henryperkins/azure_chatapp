@@ -82,6 +82,16 @@ export function createHtmlTemplateLoader({
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
       logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template ${url} will not be injected.`);
+      // Surface template error visibly in document body
+      try {
+        const errDiv = domAPI.createElement('div');
+        errDiv.className = 'template-error';
+        errDiv.setAttribute('style', 'background:#efe5e5;color:#a00;font-size:1.2em;padding:1.5em;margin:2em;border:2px solid #a00;z-index:3000;');
+        domAPI.setInnerHTML(errDiv, `[HtmlTemplateLoader] ERROR: Could not find container <code>${containerSelector}</code> for template: <code>${url}</code>.<br>Check base.html or container injection order.`);
+        domAPI.appendChild(domAPI.getBody(), errDiv);
+      } catch (e) {
+        // fallback: ignore
+      }
       // Dispatch event even if container is not found, so listeners are unblocked
       emitEvent(eventName, { success: false, error: `Container ${containerSelector} not found` });
 
