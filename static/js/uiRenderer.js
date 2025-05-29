@@ -24,11 +24,15 @@ export function createUiRenderer(deps = {}) {
   let _domReady = null;
   async function ensureSidebarReady() {
     if (!_domReady) {
-      _domReady = domReadinessService.dependenciesAndElements([
-        "#projectsSection ul",
-        "#recentChatsSection ul",
-        "#starredChatsSection ul"
-      ]);
+      _domReady = domReadinessService.dependenciesAndElements({
+        // no extra module deps needed here
+        domSelectors: [
+          '#projectsSection ul',
+          '#recentChatsSection ul',
+          '#starredChatsSection ul'
+        ],
+        context: `${CONTEXT}::ensureSidebarReady`
+      });
     }
     return await _domReady;
   }
