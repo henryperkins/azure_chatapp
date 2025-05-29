@@ -145,24 +145,6 @@ DependencySystem.register('eventHandlers', eventHandlers);
 /* Defer AppInitializer creation until logger & safeHandler exist */
 let appInit;
 
-/* Correct domReadinessService creation — after eventHandlers are available. */
-const domReadinessService = createDomReadinessService({
-  DependencySystem,
-  domAPI,
-  browserService: browserServiceInstance,
-  eventHandlers,
-  APP_CONFIG,               // ← ADD
-  logger           // ← inject mandatory logger
-});
-DependencySystem.register('domReadinessService', domReadinessService);
-
-/* Wire the circular dependency */
-eventHandlers.setDomReadinessService(domReadinessService);
-// (domReadinessService.setLogger(logger);)   // ← removed as redundant
-
-// ---------------------------------------------------------------------------
-// 8) Register factories (no logger yet), but DO NOT createApiEndpoints here
-// ---------------------------------------------------------------------------
 DependencySystem.register('createModalManager', createModalManager);
 DependencySystem.register('createAuthModule', createAuthModule);
 DependencySystem.register('createChatManager', createChatManager);
@@ -192,6 +174,7 @@ DependencySystem.register('globalUtils', {
 // Create the real logger
 // ---------------------------------------------------------------------------
 const loggerInstance = createLogger({
+  context: 'App',
   endpoint: APP_CONFIG.API_ENDPOINTS?.LOGS ?? '/api/logs',
   enableServer: false, // start disabled
   debug: APP_CONFIG.DEBUG === true,
@@ -199,6 +182,7 @@ const loggerInstance = createLogger({
   consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED ?? true,
   browserService: browserServiceInstance,
   sessionIdProvider: getSessionId,
+  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId'),
   apiClient: DependencySystem.modules.get('apiClientObject'),
   safeHandler: DependencySystem.modules.get('safeHandler')
 });
