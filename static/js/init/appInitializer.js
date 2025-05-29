@@ -429,10 +429,9 @@ export function createAppInitializer({
                     context: 'serviceInit:registerAdvancedServices'
                 });
 
-                const globalLogger = DependencySystem.modules.get('logger');
-                if (apiClientInstance && globalLogger.upgradeWithApiClient) {
-                    globalLogger.upgradeWithApiClient(apiClientInstance);
-                    globalLogger.debug('[serviceInit] Logger upgraded with apiClient', {
+                if (apiClientInstance && logger?.upgradeWithApiClient) {
+                    logger.upgradeWithApiClient(apiClientInstance);
+                    logger.debug('[serviceInit] Logger upgraded with apiClient', {
                         context: 'serviceInit:registerAdvancedServices'
                     });
                 }
