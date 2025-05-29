@@ -50,6 +50,13 @@ export function createSidebar({
   if (!APP_CONFIG) throw new Error('[Sidebar] APP_CONFIG is required.');
 
   const MODULE = 'Sidebar';
+
+  // -----------------------------------------------------------------
+  // DOM root element reference – must exist before helpers use it
+  // -----------------------------------------------------------------
+  let el = null;                 //  ←  NEW (moved up)
+  const SidebarBus = new EventTarget();   //  ←  MOVED UP
+
   /**
    * Global state exposed for E2E and other runtime checks.
    * Tests (e.g. bootstrap-order.e2e.spec.js) assert Sidebar module readiness
@@ -92,7 +99,13 @@ export function createSidebar({
 
   let settingsPanelEl = null;
   function _ensureSettingsPanel() {
-    if (!el) throw new Error('[Sidebar] #mainSidebar not found when attaching settings panel');
+    if (el === null) {
+      // DOM not cached yet – locate it now
+      findDom();
+    }
+    if (!el) {
+      throw new Error('[Sidebar] #mainSidebar not found when attaching settings panel');
+    }
     settingsPanelEl = sidebarEnhancements.attachSettingsPanel(el);
     return settingsPanelEl;
   }
@@ -873,8 +886,6 @@ const starred = new Set(
     visible = false;
     sidebarAuth.cleanup();
   }
-
-  const SidebarBus = new EventTarget();
 
   function cleanup() {
     destroy();
