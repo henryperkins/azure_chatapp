@@ -420,7 +420,8 @@ const starred = new Set(
       btnToggle.setAttribute('aria-expanded', 'true');
     }
     createBackdrop();
-    domAPI.body?.classList.add('with-sidebar-open');
+    const _body = domAPI.getDocument()?.body;
+    _body?.classList.add('with-sidebar-open');
 
     const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
     if (activeTab === 'projects') {
@@ -475,7 +476,8 @@ const starred = new Set(
       btnToggle.setAttribute('aria-expanded', 'false');
     }
     removeBackdrop();
-    domAPI.body?.classList.remove('with-sidebar-open');
+    const _body = domAPI.getDocument()?.body;
+    _body?.classList.remove('with-sidebar-open');
     if (sidebarMobileDock && typeof sidebarMobileDock.updateDockVisibility === 'function') {
       sidebarMobileDock.updateDockVisibility(false);
     }
@@ -507,7 +509,8 @@ const starred = new Set(
         description: 'Sidebar backdrop click => close'
       }
     );
-    domAPI.body?.appendChild(backdrop);
+    const _body = domAPI.getDocument()?.body;
+    _body?.appendChild(backdrop);
   }
 
   function removeBackdrop() {
