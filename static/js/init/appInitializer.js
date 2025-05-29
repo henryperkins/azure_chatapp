@@ -448,7 +448,7 @@ export function createAppInitializer({
                 const accessibilityUtilsInstance = createAccessibilityEnhancements({
                     domAPI,
                     eventHandlers,
-                    logger: DependencySystem.modules.get('logger'),
+                    logger,
                     domReadinessService,
                     DependencySystem,
                     safeHandler: DependencySystem.modules.get('safeHandler')
@@ -467,7 +467,8 @@ export function createAppInitializer({
                     domAPI,
                     browserService,
                     DependencySystem,
-                    eventHandlers
+                    eventHandlers,
+                    logger
                 });
                 navInstance.init();                 // ACTIVATE lifecycle & popstate handler
                 safeRegister('navigationService', navInstance);
@@ -491,7 +492,7 @@ export function createAppInitializer({
                     apiClient: apiClientInstance,
                     timerAPI: browserService,
                     domReadinessService,
-                    logger: DependencySystem.modules.get('logger')
+                    logger
                 });
                 safeRegister('htmlTemplateLoader', htmlLoaderInstance);
                 logger.debug('[serviceInit] HTML Template Loader created.', {
