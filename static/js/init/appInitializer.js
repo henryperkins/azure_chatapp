@@ -505,7 +505,6 @@ export function createAppInitializer({
                     context: 'serviceInit:registerAdvancedServices'
                 });
                 const curEndpoints = DependencySystem.modules.get('apiEndpoints');
-                const curLogger = DependencySystem.modules.get('logger');
                 if (curEndpoints) {
                     const uiRendererInstance = createUiRenderer({
                         domAPI,
@@ -513,7 +512,7 @@ export function createAppInitializer({
                         apiRequest: apiClientInstance.fetch,
                         apiEndpoints: curEndpoints,
                         domReadinessService,
-                        logger: curLogger,
+                        logger,
                         DependencySystem,
                         onConversationSelect: (conversationId) => {
                             const doc = domAPI.getDocument();
@@ -541,7 +540,7 @@ export function createAppInitializer({
                         context: 'serviceInit:registerAdvancedServices'
                     });
                 } else {
-                    curLogger.error('[serviceInit] apiEndpoints missing; skipping uiRenderer.', {
+                    logger.error('[serviceInit] apiEndpoints missing; skipping uiRenderer.', {
                         context: 'serviceInit:registerAdvancedServices'
                     });
                 }
