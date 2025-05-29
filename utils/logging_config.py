@@ -261,6 +261,12 @@ def init_structured_logging() -> None:
     # Attach noise filter specifically to utils.auth_utils
     logging.getLogger("utils.auth_utils").addFilter(auth_noise_filter)
 
+    # Attach AuthNoiseFilter to common Uvicorn loggers to suppress auth token spam
+    for lg_name in ("uvicorn.access", "uvicorn.error", ""):       # root as ""  
+        lg = logging.getLogger(lg_name)
+        if not any(isinstance(f, AuthNoiseFilter) for f in lg.filters):
+            lg.addFilter(auth_noise_filter)
+
     logging.info("Structured logging initialized.")
 
 

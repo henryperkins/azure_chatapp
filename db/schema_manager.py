@@ -104,13 +104,11 @@ class SchemaManager:
         Uses a PostgreSQL advisory lock to ensure multi-pod safety.
         """
         logger.info(f"Starting database migration process from {migrations_path}...")
-        logger.info(f"Starting database migration process from {migrations_path}...")
 
         async with async_engine.begin() as conn:
             # Acquire advisory lock
             lock_acquired = await conn.execute(text("SELECT pg_try_advisory_lock(hashtext('schema_migrate'))"))
             if not lock_acquired.scalar_one():
-                logger.warning("Could not acquire schema migration lock. Another migration process may be running.")
                 logger.warning("Could not acquire schema migration lock. Another migration process may be running.")
                 # Depending on desired behavior, could raise an error or just return
                 return
@@ -134,20 +132,16 @@ class SchemaManager:
                     WHERE success;
                 """))
                 logger.info("Ensured schema_history table exists.")
-                logger.info("Ensured schema_history table exists.")
 
                 result = await conn.execute(text("SELECT version FROM schema_history WHERE success = TRUE"))
                 applied_versions = {row[0] for row in result}
                 logger.info(f"Found {len(applied_versions)} successfully applied migration versions: {applied_versions}")
-                logger.info(f"Found {len(applied_versions)} successfully applied migration versions.")
 
                 if not migrations_path.exists():
-                    logger.warning(f"Migrations directory {migrations_path} does not exist. No migrations to apply.")
-                    logger.warning(f"Migrations directory {migrations_path} does not exist. No migrations to apply.")
+                    logger.info("Migrations directory %s does not exist. Skipping migration step.", migrations_path)
                     return
 
                 migration_files = sorted(migrations_path.glob("V*.sql"))
-                logger.info(f"Found {len(migration_files)} migration files in {migrations_path}.")
                 logger.info(f"Found {len(migration_files)} migration files in {migrations_path}.")
 
                 for sql_file in migration_files:
@@ -243,23 +237,19 @@ class SchemaManager:
         """
         try:
             logger.info("Starting database initialization...")
-            logger.info("Starting database initialization...")
 
             # 1️⃣  Versioned SQL files (Flyway-style)
             await self.migrate()
 
             # 2️⃣  Auto-alignment – additive changes & optional destructive fixes
             logger.info("Running schema alignment (fix_schema)...")
-            logger.info("Running schema alignment (fix_schema)...")
             await self.fix_schema()
 
             # 3️⃣  Validate
             logger.info("Validating schema...")
-            logger.info("Validating schema...")
             issues = await self.validate_schema()
             if issues:
                 msg = f"Schema validation completed with {len(issues)} issues."
-                logger.warning(msg)
                 logger.warning(msg)
                 for issue in issues[:5]:  # Log first 5 issues
                     logger.warning(f"  - {issue}")
