@@ -137,6 +137,7 @@ export function createSidebarAuth({
   }
 
   async function handleGlobalAuthStateChange(event) {
+    console.log('[SidebarAuth] handleGlobalAuthStateChange called with event:', event);
     // Wait for DOM readiness if available
     if (domReadinessService?.elementsReady) {
       try {

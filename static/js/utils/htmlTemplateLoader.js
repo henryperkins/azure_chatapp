@@ -103,12 +103,24 @@ export function createHtmlTemplateLoader({
 
     // Early exit: template already injected – we mark this via a data attribute
     if (container.dataset?.htmlLoaded === 'true') {
-      logger.info?.(`[HtmlTemplateLoader] Template already present in ${containerSelector}, skipping fetch for ${url}`, { url, containerSelector });
-      emitEvent(eventName, { success: true, skipped: true, reason: 'Template already present', url });
-      if (isModalsHtml) {
-        emitEvent('modalsLoaded', { success: true, skipped: true, reason: 'Template already present', url });
+      // Robustness: Check that DOM actually contains the expected selector for project_list.html
+      let templateValid = true;
+      if (url.endsWith('project_list.html') && !domAPI.querySelector('#projectCardsPanel', container)) {
+        logger.warn?.(`[HtmlTemplateLoader] data-html-loaded is set but #projectCardsPanel missing — resetting loader state for ${url}`);
+        templateValid = false;
+        // Reset the state
+        container.removeAttribute('data-html-loaded');
+        domAPI.setInnerHTML(container, ''); // clear out possibly corrupt/partial markup
       }
-      return true;
+      if (templateValid) {
+        logger.info?.(`[HtmlTemplateLoader] Template already present in ${containerSelector}, skipping fetch for ${url}`, { url, containerSelector });
+        emitEvent(eventName, { success: true, skipped: true, reason: 'Template already present', url });
+        if (isModalsHtml) {
+          emitEvent('modalsLoaded', { success: true, skipped: true, reason: 'Template already present', url });
+        }
+        return true;
+      }
+      // Otherwise, proceed to fetch as normal below.
     }
 
     if (container.dataset.htmlLoading === 'true') {

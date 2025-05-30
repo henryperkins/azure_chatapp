@@ -44,23 +44,32 @@ export function createAppInitializer(opts = {}) {
         });
 
         // 4. Create logger first (minimal stub for eventHandlers), then wire both with circular DI
+
+        // --- Bootstrap minimal safeHandler stub for pre-logger DI ---
+        function stubSafeHandler(fn, _description) {
+            if (typeof fn !== 'function') return () => { };
+            return function (...args) {
+                try { return fn.apply(this, args); } catch { /* intentionally ignored for stubSafeHandler */ }
+            };
+        }
+
         let logger;
         const eventHandlers = createEventHandlers({
             DependencySystem: opts.DependencySystem,
             domAPI,
             browserService: opts.browserService,
             APP_CONFIG: opts.APP_CONFIG,
-            safeHandler: null,
+            safeHandler: stubSafeHandler,
             sanitizer,
             errorReporter: {
                 report: (...args) => logger ? logger.error('[errorReporter]', ...args) : undefined
             },
             logger: {
-                debug: () => {},
-                info: () => {},
-                warn: () => {},
-                error: () => {},
-                log: () => {}
+                debug: () => { },
+                info: () => { },
+                warn: () => { },
+                error: () => { },
+                log: () => { }
             }
         });
         logger = createLogger({
@@ -92,8 +101,13 @@ export function createAppInitializer(opts = {}) {
             domAPI.setLogger(logger);
         }
 
-        // 8. Create safeHandler
+        // 8. Create real safeHandler with logger
         const { safeHandler } = createSafeHandler({ logger });
+
+        // 8.1 Upgrade eventHandlers with the real safeHandler after logger is ready
+        if (typeof eventHandlers.setSafeHandler === 'function') {
+            eventHandlers.setSafeHandler(safeHandler);
+        }
 
         // 9. Register these core objects into DependencySystem so downstream code can retrieve them
         opts.DependencySystem.register('browserService', opts.browserService);
@@ -257,7 +271,7 @@ export function createAppInitializer(opts = {}) {
         if (!_logger) {
             const winConsole =
                 DependencySystem?.modules?.get?.('browserService')?.getWindow?.()?.console;
-            _logger = winConsole ?? { info() {}, warn() {}, error() {}, debug() {}, log() {} };
+            _logger = winConsole ?? { info() { }, warn() { }, error() { }, debug() { }, log() { } };
         }
 
         function setLogger(newLogger) {
@@ -387,9 +401,17 @@ export function createAppInitializer(opts = {}) {
                             previousProjectId: detail.previousProjectId,
                             context: 'appState:projectChangeEvent'
                         });
-                        appBus.dispatchEvent(
-                            handlers.createCustomEvent('currentProjectChanged', { detail })
-                        );
+if (handlers?.dispatchEvent) {
+    handlers.dispatchEvent(
+        'currentProjectChanged',
+        { detail },
+        appBus
+    );
+} else if (typeof appBus.dispatchEvent === 'function') {
+    appBus.dispatchEvent(
+        handlers.createCustomEvent('currentProjectChanged', { detail })
+    );
+}
 
                         // Legacy event
                         if (state.currentProject && domAPIlookup) {
@@ -399,15 +421,28 @@ export function createAppInitializer(opts = {}) {
                                     projectId: state.currentProject.id,
                                     context: 'appState:projectChangeEvent:legacy'
                                 });
-                                domAPIlookup.dispatchEvent(
-                                    doc,
-                                    handlers.createCustomEvent('projectSelected', {
-                                        detail: {
-                                            projectId: state.currentProject.id,
-                                            project: { ...state.currentProject }
-                                        }
-                                    })
-                                );
+if (handlers?.dispatchEvent) {
+    handlers.dispatchEvent(
+        'projectSelected',
+        {
+            detail: {
+                projectId: state.currentProject.id,
+                project: { ...state.currentProject }
+            }
+        },
+        doc
+    );
+} else if (typeof domAPIlookup.dispatchEvent === 'function') {
+    domAPIlookup.dispatchEvent(
+        doc,
+        handlers.createCustomEvent('projectSelected', {
+            detail: {
+                projectId: state.currentProject.id,
+                project: { ...state.currentProject }
+            }
+        })
+    );
+}
                             }
                         }
                     }
@@ -497,8 +532,8 @@ export function createAppInitializer(opts = {}) {
             } else {
                 // fallback minimal shim
                 AppBusInstance = {
-                    addEventListener() {},
-                    removeEventListener() {},
+                    addEventListener() { },
+                    removeEventListener() { },
                     dispatchEvent() { return false; }
                 };
                 logger.warn('[serviceInit] EventTarget not available – using shim for AppBus.', {
@@ -1548,7 +1583,7 @@ export function createAppInitializer(opts = {}) {
         function ensureBaseProjectContainers() {
             logger.info('[uiInit] ensureBaseProjectContainers ENTER', { context: 'uiInit:ensureBaseProjectContainers' });
             try {
-                const doc = domAPI.getDocument?.() || document;
+                const doc = domAPI.getDocument?.();
                 if (!doc) {
                     logger.error('[uiInit] No document available in ensureBaseProjectContainers', { context: 'uiInit:ensureBaseProjectContainers' });
                     return;
@@ -1757,6 +1792,13 @@ export function createAppInitializer(opts = {}) {
                     timeout: 10000,
                     context: 'uiInit:initializeUIComponents:baseDomCheck'
                 });
+                // NEW – wait for inner project-list selectors injected by template
+                await domReadinessService.dependenciesAndElements({
+                    domSelectors: ['#projectCardsPanel', '#projectFilterTabs'],
+                    observeMutations: true,
+                    timeout: APP_CONFIG?.TIMEOUTS?.PROJECT_LIST_ELEMENTS ?? 15000,
+                    context: 'uiInit:initializeUIComponents:projectListInnerSelectors'
+                });
 
                 await setupSidebarControls();
                 await waitForModalReadiness();
@@ -1855,6 +1897,34 @@ export function createAppInitializer(opts = {}) {
         await phaseRunner('auth', () => authInit.initializeAuthSystem());
         await phaseRunner('ui', () => uiInit.initializeUIComponents());
 
+        // --- PATCH: Extra post-UI readiness verification ---
+        // Ensure DOM/selectors needed for post-auth/project UI actually exist
+        const domVerify = (sel, desc) => {
+            const el = domAPI.querySelector(sel);
+            if (!el) {
+                logger.error(`[appInitializer] Required selector missing post-UIInit: ${sel}`, { context: 'appInitializer:postUiInit' });
+                throw new Error(`[appInitializer] Required UI selector missing: ${sel} (${desc})`);
+            }
+            return true;
+        };
+        try {
+            domVerify('#projectListView', 'Project List outer');
+            domVerify('#projectCardsPanel', 'Project card grid');
+            domVerify('#projectFilterTabs', 'Project filter tabs');
+        } catch (verifyErr) {
+            logger.error('[appInitializer] Aborting boot due to missing base selectors.', verifyErr, {
+                context: 'appInitializer:finalCheck'
+            });
+            appModule.setAppLifecycleState({
+                initializing: false,
+                initialized: false,
+                currentPhase: 'failed_idle',
+                isReady: false
+            });
+            eventHandlers.dispatch('app:failed');
+            throw verifyErr;
+        }
+
         // Finalize
         appModule.setAppLifecycleState({
             initializing: false,
@@ -1862,7 +1932,17 @@ export function createAppInitializer(opts = {}) {
             currentPhase: 'initialized_idle',
             isReady: true
         });
-        eventHandlers.dispatch('app:ready');
+        // Emit as replay-capable so late listeners using domReadinessService.waitForEvent
+        // can instantly resolve without waiting (prevents 8000 ms timeout)
+        if (domReadinessService?.emitReplayable) {
+            domReadinessService.emitReplayable('app:ready');
+        } else {
+            // Fallback – standard dispatch (should not normally be used)
+            eventHandlers.dispatch('app:ready');
+            logger.warn('[appInitializer] domReadinessService.emitReplayable unavailable – used fallback dispatch', {
+                context: 'appInitializer'
+            });
+        }
         logger.info('[appInitializer] Boot sequence complete – app is READY');
     }
 

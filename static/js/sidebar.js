@@ -716,6 +716,23 @@ export function createSidebar({
       sidebarAuth.init();
       sidebarAuth.setupInlineAuthForm();
 
+      // Listen for authentication state changes and update sidebar UI
+      // Prefer AuthBus if available, otherwise fall back to document
+      let authBus = null;
+      if (DependencySystem?.modules?.get('auth')?.eventBus) {
+        authBus = DependencySystem.modules.get('auth').eventBus;
+      }
+      const authEventTarget = authBus || domAPI.getDocument();
+      eventHandlers.trackListener(
+        authEventTarget,
+        'authStateChanged',
+        safeHandler((event) => {
+          console.log('[Sidebar] authStateChanged event received:', event);
+          sidebarAuth.handleGlobalAuthStateChange(event);
+        }, '[Sidebar] authStateChanged'),
+        { context: MODULE }
+      );
+
       // Restore pinned state
       restorePersistentState();
 
