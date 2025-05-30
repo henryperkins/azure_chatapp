@@ -107,8 +107,8 @@ export function safeParseJSON(str) {
   try {
     return JSON.parse(str);
   } catch (err) {
-    const log = globalThis?.DependencySystem?.modules?.get?.('logger');
-    log?.error?.('[globalUtils] safeParseJSON failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
+    logger?.error('[globalUtils] safeParseJSON failed', err,
       { context: 'globalUtils:safeParseJSON' });
     throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
   }
@@ -160,8 +160,8 @@ export function createElement(tag, opts = {}, trackListener, domAPI) {
       if (opts[p] !== undefined) el[p] = opts[p];
     });
   } catch (err) {
-    const log = globalThis?.DependencySystem?.modules?.get?.('logger');
-    log?.error?.('[globalUtils] createElement failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
+    logger?.error('[globalUtils] createElement failed', err,
       { context: 'globalUtils:createElement' });
     throw err;
   }
@@ -176,8 +176,8 @@ export function toggleElement(selOrEl, show, domAPI) {
       selOrEl.classList.toggle("hidden", !show);
     }
   } catch (err) {
-    const log = globalThis?.DependencySystem?.modules?.get?.('logger');
-    log?.error?.('[globalUtils] toggleElement failed', err,
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
+    logger?.error('[globalUtils] toggleElement failed', err,
       { context: 'globalUtils:toggleElement' });
   }
 }
@@ -188,7 +188,10 @@ export const formatDate = (d) => {
   if (!d) return "";
   try {
     return new Date(d).toLocaleDateString();
-  } catch {
+  } catch (err) {
+    const logger = globalThis?.DependencySystem?.modules?.get?.('logger');
+    logger?.error('[globalUtils] formatDate failed', err,
+      { context: 'globalUtils:formatDate' });
     return String(d);
   }
 };
@@ -226,7 +229,8 @@ export const fileIcon = (t = "") =>
  * @deprecated Use apiClient + proper .get/.post signature for this
  * (errorReporter/maybeCapture removed)
  */
-export async function fetchData({ apiClient }, id) {
+export async function fetchData({ apiClient } = {}, id) {
+  if (!apiClient) throw new Error('[globalUtils.fetchData] Missing apiClient dependency');
   return await apiClient.get(`/item/${id}`);
 }
 

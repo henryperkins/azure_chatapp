@@ -1,3 +1,7 @@
+export function createSelectorConstants() {
+  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
+}
+
 /**
  * selectorConstants.js
  * Centralized selectors for critical DOM elements used across the application.

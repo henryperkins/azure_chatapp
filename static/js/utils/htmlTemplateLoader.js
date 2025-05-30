@@ -163,8 +163,10 @@ export function createHtmlTemplateLoader({
       } catch (primaryErr) {
         // Fallback: if the first try used apiClient and we have native fetch
         if (primaryFetch !== _nativeFetch && _nativeFetch) {
+          logger.error('[HtmlTemplateLoader] Primary fetch failed', primaryErr,
+            { context: 'HtmlTemplateLoader:primaryFetchFailed', url });
           logger.warn('[HtmlTemplateLoader] Primary fetch failed, retrying with native fetch',
-            { url, context: 'HtmlTemplateLoader:primaryFetchFailed' });
+            { url, context: 'HtmlTemplateLoader:primaryFetchRetry' });
           resp = await _nativeFetch(url, {
             method: 'GET',
             cache: 'no-store',
@@ -212,7 +214,7 @@ export function createHtmlTemplateLoader({
       errorInfo = errorInfo || err.message;
       // Log the actual error for debugging
       logger.error(`[HtmlTemplateLoader] Failed to load template from ${url}`, err, {
-        context: 'HtmlTemplateLoader.loadTemplate',
+        context: 'HtmlTemplateLoader:loadTemplate',
         url,
         containerSelector,
         eventName

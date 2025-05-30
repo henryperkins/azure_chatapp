@@ -31,7 +31,7 @@ export async function safeInit(instance, name, methodName, logger) {
     const result = await instance[methodName]();
     return result === undefined ? true : !!result;
   } catch (err) {
-    logger?.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `initHelpers:safeInit:${name}:${methodName}` });
+    logger.error(`[safeInit] Error during ${name}.${methodName}()`, err, { context: `initHelpers:safeInit:${name}:${methodName}` });
     throw err;
   }
 }
@@ -58,7 +58,7 @@ export function createDomWaitHelper(domReadinessService, logger) {
       });
       return true;
     } catch (err) {
-      logger?.error(`[domWaitHelper] Failed to wait for dependencies/elements`, err, { 
+      logger.error('[domWaitHelper] Failed to wait for dependencies/elements', err, { 
         context, 
         deps, 
         domSelectors, 
