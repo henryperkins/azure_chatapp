@@ -51,6 +51,31 @@ export function createSidebar({
 
   const MODULE = 'Sidebar';
 
+  // ──────────────────────────────────────────────
+  // Unified phase-runner for consolidated init
+  // ──────────────────────────────────────────────
+  function _phaseRunner(name, fn) {
+    const start = (typeof performance !== 'undefined' && performance.now)
+      ? performance.now() : Date.now();
+    logger.info(`[Sidebar] ▶ Phase start: ${name}`, { context: MODULE });
+    return Promise.resolve()
+      .then(fn)
+      .then((res) => {
+        const dur = ((typeof performance !== 'undefined' && performance.now)
+          ? performance.now() : Date.now()) - start;
+        logger.info(`[Sidebar] ✔ Phase complete: ${name} (${Math.round(dur)} ms)`,
+                    { context: MODULE });
+        return res;
+      })
+      .catch((err) => {
+        const dur = ((typeof performance !== 'undefined' && performance.now)
+          ? performance.now() : Date.now()) - start;
+        logger.error(`[Sidebar] ✖ Phase failed: ${name} after ${Math.round(dur)} ms`,
+                     err, { context: MODULE });
+        throw err;
+      });
+  }
+
   // -----------------------------------------------------------------
   // DOM root element reference – must exist before helpers use it
   // -----------------------------------------------------------------
@@ -838,172 +863,71 @@ const starred = new Set(
   }
 
   async function init() {
-    if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: Starting...", { context: 'Sidebar' });
-
-    try {
+    if (state.initialized) return true;       // already booted
+    
+    // 1) Dependencies, DOM selectors, authReady (with fallback)
+    await _phaseRunner('deps+dom', async () => {
       await domReadinessService.dependenciesAndElements({
-        deps: ['eventHandlers', 'appModule'], // Ensure appModule is ready
+        deps: ['eventHandlers', 'appModule'],
         domSelectors: [
           '#mainSidebar',
           '#recentChatsTab', '#starredChatsTab', '#projectsTab',
           '#recentChatsSection', '#starredChatsSection', '#projectsSection'
         ],
-        timeout: 15000, // Increased timeout for critical dependencies
-        context: 'Sidebar'
+        timeout: 15000,
+        context: 'Sidebar:init:deps'
       });
-
-      // Wait for authentication to be ready or fallback quickly if delayed
       try {
         await domReadinessService.waitForEvent('authReady', {
           timeout: 15000,
-          context: 'Sidebar.init:waitForAuthReady'
+          context: 'Sidebar:init:authReady'
         });
-      } catch (timeoutErr) {
-        logger.error('[Sidebar] authReady wait timed-out',
-                     timeoutErr,
-                     { context: 'Sidebar:init:authReadyFallback' });
-        logger.warn('[Sidebar] authReady timeout, proceeding with fallback', { context: 'Sidebar:init:authReadyFallback' });
-        // Fallback: manually sync with current auth state
+      } catch {
         const appModule = DependencySystem.modules.get('appModule');
-        if (appModule?.state) {
-          sidebarAuth.handleGlobalAuthStateChange({
-            detail: {
-              authenticated: appModule.state.isAuthenticated,
-              user: appModule.state.currentUser,
-              source: 'sidebar_init_fallback_sync'
-            }
-          });
-        }
+        sidebarAuth.handleGlobalAuthStateChange({
+          detail: {
+            authenticated: appModule?.state?.isAuthenticated,
+            user         : appModule?.state?.currentUser,
+            source       : 'sidebar_init_fallback_sync'
+          }
+        });
       }
+    });
 
-      const appModule = DependencySystem.modules.get('appModule');
-      if (!appModule || !appModule.state) {
-        throw new Error('[Sidebar] appModule or appModule.state not available after authReady.');
-      }
+    // 2) Query DOM / cache elements
+    await _phaseRunner('dom-query', () => { findDom(); });
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: findDom", { context: 'Sidebar' });
-      findDom();
-
-      // Verify critical elements exist
-      if (!el) {
-        throw new Error('[Sidebar] Critical element #mainSidebar not found after DOM readiness');
-      }
-
-      // Ensure all dependencies are available before creating mobile dock
-      if (!domAPI) throw new Error('[Sidebar] domAPI required for mobile dock');
-      if (!eventHandlers) throw new Error('[Sidebar] eventHandlers required for mobile dock');
-      if (!viewportAPI) throw new Error('[Sidebar] viewportAPI required for mobile dock');
-      if (!logger) throw new Error('[Sidebar] logger required for mobile dock');
-      if (!domReadinessService) throw new Error('[Sidebar] domReadinessService required for mobile dock');
-      if (typeof safeHandler !== 'function') throw new Error('[Sidebar] safeHandler required for mobile dock');
-      if (typeof activateTab !== 'function') throw new Error('[Sidebar] activateTab required for mobile dock');
-
+    // 3) Mobile dock
+    await _phaseRunner('mobileDock', async () => {
       sidebarMobileDock = createSidebarMobileDock({
-        domAPI,
-        eventHandlers,
-        viewportAPI,
-        logger,
-        domReadinessService,
-        safeHandler,
+        domAPI, eventHandlers, viewportAPI,
+        logger, domReadinessService, safeHandler,
         onTabActivate: activateTab
       });
-      
-      try {
-        await sidebarMobileDock.init();
-        logger.info('[Sidebar] Mobile dock initialized successfully', { context: 'Sidebar' });
-      } catch (mobileDockErr) {
-        logger.error('[Sidebar] Mobile dock initialization failed', mobileDockErr, { context: 'Sidebar' });
-        // Don't fail sidebar init if mobile dock fails - it's a mobile-only enhancement
-        sidebarMobileDock = null;
-      }
+      try { await sidebarMobileDock.init(); } catch { sidebarMobileDock = null; }
+    });
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.init", { context: 'Sidebar' });
-      try {
-        sidebarAuth.init(); // sidebarAuth will now use appModule.state
-        logger.info("[Sidebar] sidebarAuth.init completed", { context: 'Sidebar' });
-      } catch (err) {
-        logger.error("[Sidebar] sidebarAuth.init failed", err, { context: 'Sidebar' });
-        // Don't throw - continue with sidebar initialization
-      }
+    // 4) Inline auth (forms)
+    await _phaseRunner('authInline', async () => {
+      sidebarAuth.init();
+      sidebarAuth.setupInlineAuthForm();
+    });
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: sidebarAuth.setupInlineAuthForm", { context: 'Sidebar' });
-      try {
-        sidebarAuth.setupInlineAuthForm();
-        logger.info("[Sidebar] sidebarAuth.setupInlineAuthForm completed", { context: 'Sidebar' });
-      } catch (err) {
-        logger.error("[Sidebar] sidebarAuth.setupInlineAuthForm failed", err, { context: 'Sidebar' });
-        // Don't throw - continue with sidebar initialization
-      }
+    // 5) Restore pinned/visible state
+    await _phaseRunner('restoreState', () => { restorePersistentState(); });
 
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: restorePersistentState", { context: 'Sidebar' });
-      try {
-        restorePersistentState();
-        logger.info("[Sidebar] restorePersistentState completed", { context: 'Sidebar' });
-      } catch (err) {
-        logger.error("[Sidebar] restorePersistentState failed", err, { context: 'Sidebar' });
-        // Fallback: Force sidebar visible on desktop
-        if (viewportAPI.getInnerWidth() >= 768 && el) {
-          logger.warn("[Sidebar] Forcing sidebar visible as fallback", { context: 'Sidebar' });
-          el.classList.remove('-translate-x-full');
-          el.classList.add('translate-x-0');
-          visible = true;
-        }
-      }
+    // 6) Bind runtime event listeners
+    await _phaseRunner('bindEvents', () => { bindDomEvents(); });
 
-      // Initial auth state sync using the now guaranteed ready appModule.state
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: initial auth state sync", { context: 'Sidebar' });
-      sidebarAuth.handleGlobalAuthStateChange({
-        detail: {
-          authenticated: appModule.state.isAuthenticated,
-          user: appModule.state.currentUser,
-          source: 'sidebar_init_sync_after_authReady'
-        }
-      });
-
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: bindDomEvents", { context: 'Sidebar' });
-      bindDomEvents();
-
-      if (app && typeof app.getInitialSidebarContext === 'function') {
-        const { projectId } = app.getInitialSidebarContext() || {};
-        if (projectId && typeof app.setCurrentProject === 'function') {
-          app.setCurrentProject({ id: projectId });
-        }
-      }
-
+    // 7) Activate remembered/default tab
+    await _phaseRunner('activateTab', async () => {
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
+    });
 
-      eventHandlers.trackListener(
-        domAPI.getDocument(),
-        'app:ready',
-        safeHandler(() => {
-          logger.debug('[Sidebar] App ready event received, re-syncing auth state if necessary', { context: 'Sidebar:appReadyListener' });
-          const currentAppModule = DependencySystem.modules?.get?.('appModule');
-          if (currentAppModule?.state) {
-            sidebarAuth.handleGlobalAuthStateChange({
-              detail: { authenticated: currentAppModule.state.isAuthenticated, user: currentAppModule.state.currentUser, source: 'sidebar_app_ready_sync' }
-            });
-          }
-        }, 'Sidebar:app:ready'),
-        { context: 'Sidebar:appReadyListener', description: 'Re-sync auth state after app ready', once: true }
-      );
-
-      const doc = domAPI.getDocument();
-      if (!doc || typeof doc.dispatchEvent !== 'function') {
-        throw new Error('[Sidebar] Document from domAPI must support dispatchEvent');
-      }
-       // Mark module as fully initialized so E2E tests can verify readiness
-       state.initialized = true;
-      if (logger && logger.info && (typeof APP_CONFIG === "undefined" || APP_CONFIG.DEBUG)) logger.info("[Sidebar] init: completed successfully", { context: 'Sidebar' });
-      return true;
-    } catch (err) {
-      if (logger && logger.error) {
-        logger.error('[Sidebar] init failed',
-                     err,
-                     { context: 'Sidebar:init' });
-      }
-      throw err;
-    }
+    // Finalise
+    state.initialized = true;
+    return true;
   }
 
   function destroy() {
