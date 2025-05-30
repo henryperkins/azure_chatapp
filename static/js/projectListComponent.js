@@ -681,6 +681,39 @@ export function createProjectListComponent(deps) {
     function _showLoginRequired() {
         if (!element) return;
         _clearElement(element);
+
+        // ──────────────────────────────────────────────────────────────
+        // Guarantee #projectCardsPanel exists at ALL times.
+        // When _clearElement() runs we lose the grid, causing appInitializer
+        // domVerify (post-UI check) to throw.  Re-create or re-attach the
+        // grid here so the selector is permanently present regardless of
+        // authentication state or template timing.
+        // ──────────────────────────────────────────────────────────────
+        gridElement = domAPI.getElementById('projectCardsPanel');
+        if (!gridElement) {
+            gridElement = domAPI.createElement("div");
+            gridElement.id = "projectCardsPanel";
+            gridElement.className = "mobile-grid mobile-p-safe w-full";
+            gridElement.setAttribute("role", "tabpanel");
+            gridElement.setAttribute("aria-labelledby", "filterTabAll");
+        }
+        if (!gridElement.parentNode || gridElement.parentNode !== element) {
+            element.appendChild(gridElement);
+        }
+        // ──────────────────────────────────────────────────────────────
+        // Also guarantee #projectFilterTabs exists to satisfy appInitializer
+        // even when loginRequired UI is shown.
+        // ──────────────────────────────────────────────────────────────
+        let filterTabs = domAPI.getElementById('projectFilterTabs');
+        if (!filterTabs) {
+            filterTabs = domAPI.createElement('div');
+            filterTabs.id = 'projectFilterTabs';
+            filterTabs.className = 'project-tabs hidden';
+        }
+        if (!filterTabs.parentNode || filterTabs.parentNode !== element) {
+            element.appendChild(filterTabs);
+        }
+
         element.classList.add("grid", "project-list");
         const loginDiv = domAPI.createElement("div");
         loginDiv.className = "project-list-fallback";
