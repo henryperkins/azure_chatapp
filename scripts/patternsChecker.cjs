@@ -338,7 +338,7 @@ function collectDIParamNamesFromParams(params, namesSet) {
 
 /* 1. Factory Function Export */
 function vFactory(err, file, config) {
-  let factoryInfo = { found: false, line: 1, name: "", paramsNode: null };
+  let factoryInfo = { found: false, line: 1, name: "", paramsNode: null, returnNodePath: null };
   let hasCleanup = false;
   let hasDepCheck = false;
   let cleanupInvokesEH = false;
@@ -428,104 +428,93 @@ function vFactory(err, file, config) {
 
         p.traverse({
           ReturnStatement(returnPath) {
-            // Ensure this return is directly from the factory, not a nested function
-            if (returnPath.getFunctionParent()?.node !== funcNode) return;
+            if (returnPath.getFunctionParent()?.node === funcNode) {
+              factoryInfo.returnNodePath = returnPath;
+            }
+          }
+        });
+      }
+    },
 
-            if (returnPath.node.argument?.type === "ObjectExpression") {
-              const hasDirectCleanup =
-                hasProp(returnPath.node.argument, "cleanup") ||
-                hasProp(returnPath.node.argument, "teardown") ||
-                hasProp(returnPath.node.argument, "destroy");
+    Program: {
+      exit(programPath) {
+        if (!factoryInfo.found) {
+          err.push(E(file, 1, 1, "Missing factory export.", "A module must export a function like 'createMyFeature(deps)'."));
+          return;
+        }
+        if (!hasDepCheck) {
+            err.push(E(file, factoryInfo.line, 1, `Factory '${factoryInfo.name}' must validate its dependencies.`, `Example: if (!deps.logger) throw new Error("Missing logger dependency");`));
+        }
 
-              if (hasDirectCleanup) {
-                hasCleanup = true;
-                returnPath.get("argument").get("properties").forEach(propPath => {
-                  const keyNode = propPath.node.key;
-                  const keyName = (keyNode?.type === "Identifier" ? keyNode.name : (keyNode?.type === "StringLiteral" ? keyNode.value : null));
+        if (factoryInfo.returnNodePath) {
+          const returnArgPath = factoryInfo.returnNodePath.get("argument");
+          let returnedObjectPath = returnArgPath;
 
-                  if (["cleanup", "teardown", "destroy"].includes(keyName) && propPath.node.value) {
-                    propPath.get("value").traverse({ // Traverse the cleanup function's body
+          if (returnArgPath.isIdentifier()) {
+            const binding = returnArgPath.scope.getBinding(returnArgPath.node.name);
+            if (binding && binding.path.isVariableDeclarator() && binding.path.get("init").isObjectExpression()) {
+              returnedObjectPath = binding.path.get("init");
+            } else {
+              returnedObjectPath = null;
+            }
+          }
+
+          if (returnedObjectPath && returnedObjectPath.isObjectExpression()) {
+            const returnedObjectNode = returnedObjectPath.node;
+            if (hasProp(returnedObjectNode, "cleanup") || hasProp(returnedObjectNode, "teardown") || hasProp(returnedObjectNode, "destroy")) {
+              hasCleanup = true;
+
+              returnedObjectPath.get("properties").forEach(propPath => {
+                if (!propPath.isObjectMethod() && !propPath.isProperty()) return;
+                const keyNode = propPath.node.key;
+                const keyName = (keyNode?.type === "Identifier" ? keyNode.name : (keyNode?.type === "StringLiteral" ? keyNode.value : null));
+
+                if (["cleanup", "teardown", "destroy"].includes(keyName)) {
+                  const valuePath = propPath.isObjectMethod() ? propPath : propPath.get("value");
+                  if (valuePath.isFunction()) {
+                    valuePath.traverse({
                       CallExpression(callPath) {
                         const cal = callPath.node.callee;
-                        if (
-                          cal.type === "MemberExpression" &&
-                          cal.object.name === config.serviceNames.eventHandlers && // Assuming eventHandlers is DI'd
-                          cal.property.name === "cleanupListeners"
-                        ) {
+                        const ehName = config.serviceNames.eventHandlers;
+                        let isEhCall = false;
+                        if (cal.type === "MemberExpression" && cal.property.name === "cleanupListeners") {
+                            if (cal.object.type === "Identifier") {
+                                if (cal.object.name === ehName && !callPath.scope.hasBinding(ehName)) {
+                                    isEhCall = true;
+                                } else {
+                                    const binding = callPath.scope.getBinding(cal.object.name);
+                                    // Simplified check for DI param
+                                    if (binding?.kind === 'param') {
+                                        isEhCall = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (isEhCall) {
                           const callArgs = callPath.get("arguments");
                           if (callArgs.length > 0) {
                             const firstArgPath = callArgs[0];
                             const firstArgNode = getExpressionSourceNode(firstArgPath);
-                            if (
-                              firstArgNode &&
-                              firstArgNode.type === "ObjectExpression" &&
-                              hasProp(firstArgNode, "context")
-                            ) {
+                            if (firstArgNode && firstArgNode.type === "ObjectExpression" && hasProp(firstArgNode, "context")) {
                               cleanupInvokesEH = true;
+                              callPath.stop();
                             }
                           }
                         }
                       }
                     });
                   }
-                });
-              }
+                }
+              });
             }
-          },
-          // Consider cleanup defined as a separate function within the factory scope and returned by reference
-          // This is more complex; the current check focuses on inline object returns.
-        });
-      }
-    },
+          }
+        }
 
-    Program: {
-      exit() {
-        if (!factoryInfo.found) {
-          err.push(
-            E(
-              file,
-              1,
-              1,
-              "Missing factory export.",
-              "A module must export a function like 'createMyFeature(deps)'."
-            )
-          );
-        } else {
-          if (!hasDepCheck) {
-            err.push(
-              E(
-                file,
-                factoryInfo.line,
-                1,
-                `Factory '${factoryInfo.name}' must validate its dependencies.`,
-                `Example: if (!deps.logger) throw new Error("Missing logger dependency");`
-              )
-            );
-          }
-          if (!hasCleanup) {
-            err.push(
-              E(
-                file,
-                factoryInfo.line,
-                1,
-                `Factory '${factoryInfo.name}' must expose a cleanup, teardown, or destroy API.`,
-                `Example: return { ..., cleanup: () => { /* detach listeners, etc. */ } };`
-              )
-            );
-          } else if (!cleanupInvokesEH) {
-            // This check assumes eventHandlers is available and used.
-            // If a module legitimately has no event listeners to clean up via eventHandlers,
-            // this might be a false positive. Consider if config.serviceNames.eventHandlers is injected.
-            err.push(
-              E(
-                file,
-                factoryInfo.line,
-                4, // Rule 4: Centralised Event Handling for cleanup part
-                `Factory '${factoryInfo.name}' provides cleanup() but does not appear to call ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }).`,
-                `Invoke ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }) inside cleanup() if listeners were tracked.`
-              )
-            );
-          }
+        if (!hasCleanup) {
+          err.push(E(file, factoryInfo.line, 1, `Factory '${factoryInfo.name}' must expose a cleanup, teardown, or destroy API.`, `Example: return { ..., cleanup: () => { /* ... */ } };`));
+        } else if (!cleanupInvokesEH) {
+          err.push(E(file, factoryInfo.line, 4, `Factory '${factoryInfo.name}' provides cleanup() but does not appear to call ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }).`, `Invoke ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }) inside cleanup() if listeners were tracked.`));
         }
       }
     }
@@ -1490,46 +1479,49 @@ function vState(err, file, isBootstrapFile, config) {
 /* 9. Module Event Bus */
 function vBus(err, file, config) {
   const knownBusNames = config.knownBusNames || DEFAULT_CONFIG.knownBusNames;
+  const ehName = config.serviceNames.eventHandlers;
+
   return {
     CallExpression(p) {
       const callee = p.node.callee;
       if (callee.type === "MemberExpression" && callee.property.name === "dispatchEvent") {
         const busObjectPath = p.get("callee.object");
-        const busSourceNode = getExpressionSourceNode(busObjectPath); // Resolves identifier to its declaration if possible
+        const busSourceNode = getExpressionSourceNode(busObjectPath);
 
-        // Allow if the object is explicitly 'domAPI' (for native element dispatch)
-        if (busSourceNode?.name === "domAPI") {
-            return;
-        }
-        // Allow if object is 'eventHandlers' (if it has its own dispatch proxy)
-        if (busSourceNode?.name === config.serviceNames.eventHandlers) {
-            return;
-        }
+        if (busSourceNode?.name === "domAPI") return;
+        if (busSourceNode?.name === "document" && !p.scope.hasBinding("document")) return;
+        if (busSourceNode?.name === "window" && !p.scope.hasBinding("window")) return;
 
+        if (busSourceNode?.type === "Identifier" && busSourceNode.name === ehName && !p.scope.hasBinding(ehName)) {
+          return;
+        }
+        if (busSourceNode?.type === "Identifier" && p.scope.hasBinding(busSourceNode.name)) {
+            const binding = p.scope.getBinding(busSourceNode.name);
+            if(binding?.path.isVariableDeclarator() && binding.path.node.init?.name === ehName && !binding.scope.hasBinding(ehName)) {
+                 // This logic is complex to perfectly trace DI. A direct config of 'eventHandlers' in knownBusNames is safer.
+            }
+        }
 
         let isKnownBus = false;
         if (busSourceNode) {
-            if (busSourceNode.type === "Identifier" && knownBusNames.includes(busSourceNode.name) && !p.scope.hasBinding(busSourceNode.name)) {
-                isKnownBus = true; // Global/DI'd known bus
-            } else if (busSourceNode.type === "Identifier" && p.scope.hasBinding(busSourceNode.name)) {
-                // Check if a local variable is an instance of EventTarget or a known bus class
-                const binding = p.scope.getBinding(busSourceNode.name);
-                if (binding?.path.node.init?.type === "NewExpression" &&
-                    binding.path.node.init.callee.name === "EventTarget") {
-                    isKnownBus = true;
-                }
-                // Could add more checks here if buses are created via factories, e.g., createEventBus()
-            } else if (busSourceNode.type === "ThisExpression") {
-                isKnownBus = true; // Assuming `this.dispatchEvent` is on a class that is a bus
-            } else if (busSourceNode.type === "NewExpression" && busSourceNode.callee.name === "EventTarget") {
-                isKnownBus = true; // new EventTarget().dispatchEvent()
+          if (busSourceNode.type === "Identifier" && knownBusNames.includes(busSourceNode.name) && !p.scope.hasBinding(busSourceNode.name)) {
+            isKnownBus = true;
+          } else if (busSourceNode.type === "Identifier" && p.scope.hasBinding(busSourceNode.name)) {
+            const binding = p.scope.getBinding(busSourceNode.name);
+            if (binding?.path.node.init?.type === "NewExpression" && binding.path.node.init.callee.name === "EventTarget") {
+              isKnownBus = true;
             }
-            // Add check for buses obtained via a getter, e.g. someService.getEventBus().dispatchEvent()
-            else if (busSourceNode.type === "CallExpression" && busSourceNode.callee.property?.name?.match(/get.*Bus$/i)) {
+            if (binding?.path.node.init?.type === "Identifier" && knownBusNames.includes(binding.path.node.init.name)) {
                 isKnownBus = true;
             }
+          } else if (busSourceNode.type === "ThisExpression") {
+            isKnownBus = true;
+          } else if (busSourceNode.type === "NewExpression" && busSourceNode.callee.name === "EventTarget") {
+            isKnownBus = true;
+          } else if (busSourceNode.type === "CallExpression" && busSourceNode.callee.property?.name?.match(/get.*Bus$/i)) {
+            isKnownBus = true;
+          }
         }
-
 
         if (!isKnownBus) {
           err.push(
@@ -1538,7 +1530,7 @@ function vBus(err, file, config) {
               p.node.loc.start.line,
               9,
               `Event dispatched on an object not identified as a dedicated event bus (found: ${busSourceNode?.name || busSourceNode?.type || 'unknown'}).`,
-              `Dispatch events via a DI-provided known bus (e.g., '${knownBusNames[0]}.dispatchEvent()') or an instance of EventTarget.`
+              `Dispatch events via a DI-provided known bus (e.g., '${knownBusNames[0]}.dispatchEvent()'), an instance of EventTarget, or the canonical 'eventHandlers.dispatchEvent()'. Global document.dispatchEvent() is also permitted.`
             )
           );
         }
@@ -2202,48 +2194,97 @@ function vCanonical(err, file, isBootstrapFile, code, config) {
 }
 
 /* 16. Error Object Structure */
-function vErrorStructure(err, file) {
-  if (/[/\\](logger|apiClient)\.(js|ts)$/i.test(file)) return {}; // Logger/API client might define these structures
+function vErrorStructure(err, file, config) {
+  if (/[/\\](logger|apiClient|appInitializer|bootstrap)\.(js|ts)$/i.test(file) || config.bootstrapFileRegex.test(file)) {
+    return {};
+  }
+
+  const loggerName = config.serviceNames.logger;
 
   return {
     ObjectExpression(p) {
-      // Check only if this object is part of an error context (e.g., in a throw, or assigned to an 'error' var)
-      // This is hard to do perfectly. For now, check objects with typical error-like property names.
+      if (p.parentPath.isCallExpression() &&
+          p.parentPath.node.callee.type === "MemberExpression" &&
+          p.parentPath.node.callee.object.name === loggerName) {
+        const args = p.parentPath.get("arguments");
+        if (!(args.length > 0 && args[args.length - 1].node === p.node)) {
+          return;
+        }
+      }
+
+      if (p.parentPath.isCallExpression()) {
+        const callee = p.parentPath.node.callee;
+        if (callee.type === "MemberExpression" &&
+            (callee.object.name === "modalManager" || callee.property.name === "confirmAction" ||
+             (callee.object.name === "Object" && callee.property.name === "assign")
+            )) {
+          return;
+        }
+      }
+
+      if (p.parentPath.isVariableDeclarator()) {
+        const varName = p.parentPath.node.id.name;
+        if (varName && /(CONFIG|DETAIL|PARAMS|OPTIONS|MAPPINGS|STATE|EVENT_DATA)$/i.test(varName)) {
+          return;
+        }
+      }
+      if (p.parentPath.isProperty() && p.parentPath.node.key &&
+          /(CONFIG|DETAIL|PARAMS|OPTIONS|MAPPINGS|STATE|EVENT_DATA)$/i.test(p.parentPath.node.key.name || p.parentPath.node.key.value)) {
+          return;
+      }
+
       const props = p.node.properties.map(prop =>
         prop.key?.name || prop.key?.value
       ).filter(Boolean);
 
-      const hasErrorIndicator = props.some(key => /err(or)?|fault|issue|problem/i.test(key)) ||
-                               (props.includes("message") && props.length > 1); // 'message' alone is fine, but with other props suggests an error object
-
-      if (hasErrorIndicator) {
-        const hasStandardStructure =
-          props.includes("status") && // Or statusCode
-          // props.includes("data") && // Data is optional, message is key
-          props.includes("message");
-
-        // More lenient: if it has 'detail' or 'code', might be another valid internal error structure.
-        const hasOtherValidStructure = props.includes("detail") || props.includes("code");
-
-        if (!hasStandardStructure && !hasOtherValidStructure && props.length > 1 && !props.includes("stack")) { // Allow { message, stack }
-          // Check if it's directly inside a NewExpression for Error, TypeError etc.
-          if (p.parentPath.isNewExpression() && /Error$/.test(p.parentPath.node.callee?.name)) {
-            // Standard Error constructor takes message, then options { cause }
-            // `new Error("msg", { cause: otherError, custom: foo })`
-            // This rule might be too noisy for Error constructor options.
-            return;
-          }
-
-          err.push(
-            E(
-              file,
-              p.node.loc.start.line,
-              16,
-              "Non-standard error object structure detected.",
-              "Prefer { status, message, data? } or { code, message, detail? } for custom error objects. Standard Error instances are fine."
-            )
-          );
+      let isLikelyErrorContext = false;
+      const funcParent = p.getFunctionParent();
+      if (funcParent && funcParent.isFunctionDeclaration() && /^(create|build|generate|format|to)Error$/i.test(funcParent.node.id?.name)) {
+        if (p.parentPath.isReturnStatement() && p.parentPath.getFunctionParent() === funcParent) {
+            isLikelyErrorContext = true;
         }
+      }
+      if (p.parentPath.isVariableDeclarator() && p.parentPath.node.id.name && /^(err(or)?|exception|fault)$/i.test(p.parentPath.node.id.name)) {
+        isLikelyErrorContext = true;
+      }
+
+      const hasErrorKeywords = props.some(key => /err(or)?|fault|issue|problem|status(Code)?|code/i.test(key));
+      const hasMessageAndOthers = props.includes("message") && props.length > 1;
+
+      if (!isLikelyErrorContext && !(hasErrorKeywords || hasMessageAndOthers)) {
+        return;
+      }
+
+      if (props.includes("valid") && typeof p.node.properties.find(pr => pr.key?.name === "valid" || pr.key?.value === "valid")?.value?.value === 'boolean' && props.includes("message")) {
+        return;
+      }
+
+      const hasStandardStructure =
+        (props.includes("status") || props.includes("statusCode")) &&
+        props.includes("message");
+      const hasAlternativeStructure =
+        (props.includes("code") && props.includes("message")) ||
+        (props.includes("detail") && props.includes("message"));
+
+      if (props.length === 1 && (props.includes("message") || props.includes("stack"))) {
+        return;
+      }
+      if (props.length === 2 && props.includes("message") && props.includes("stack")) {
+          return;
+      }
+
+      if (!hasStandardStructure && !hasAlternativeStructure) {
+          if (isLikelyErrorContext || (hasErrorKeywords && hasMessageAndOthers && !props.includes("type"))) {
+            err.push(
+                E(
+                file,
+                p.node.loc.start.line,
+                16,
+                "Non-standard error object structure detected.",
+                "Prefer { status, message, data? }, { code, message, detail? }, or a standard Error instance. Validation results like { valid: boolean, message: string } are also acceptable."
+                )
+            );
+          }
       }
     },
 
@@ -2253,19 +2294,18 @@ function vErrorStructure(err, file) {
           prop.key?.name || prop.key?.value
         ).filter(Boolean);
 
-        if (!props.includes("message") || (!props.includes("status") && !props.includes("code") && !props.includes("detail"))) {
+        if (!props.includes("message")) {
           err.push(
             E(
               file,
               p.node.loc.start.line,
               16,
-              "Thrown error object missing standard properties.",
-              "Include at least { message } and preferably { status } or { code } in thrown custom error objects."
+              "Thrown error object missing 'message' property.",
+              "Thrown custom error objects must include at least a 'message'. Consider adding 'status' or 'code'."
             )
           );
         }
       }
-      // `throw new Error("message")` is fine and not an ObjectExpression.
     }
   };
 }
