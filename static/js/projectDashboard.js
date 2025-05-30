@@ -273,27 +273,9 @@ export function createProjectDashboard({
         }
       };
 
-      // Defer to 'ui:templates:ready'
-      // If event already fired, run immediately; otherwise, add one-time listener
-      let done = false;
-      const tryRun = () => {
-        if (!done) {
-          done = true;
-          runInitialize();
-        }
-      };
-
-      if (window.__templatesReadyFired) {
-        // Defensive: allow for test re-entry/hot reload
-        tryRun();
-      } else {
-        const handler = () => {
-          window.removeEventListener('ui:templates:ready', handler);
-          window.__templatesReadyFired = true; // Mark as fired
-          tryRun();
-        };
-        window.addEventListener('ui:templates:ready', handler, { once: true });
-      }
+      // Wait for templates ready event via domReadinessService, then initialize
+      await domReadinessService.waitForEvent('ui:templates:ready', { context: 'projectDashboard' });
+      await runInitialize();
     }
 
     /**

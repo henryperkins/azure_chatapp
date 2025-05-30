@@ -362,11 +362,9 @@ export function createAuthModule(deps) {
         AuthBus.dispatchEvent(evt);
 
         /* -----------------------------------------------------------------
-         * ALSO broadcast on the global document.  Some components initialise
-         * before AuthModule is created and therefore subscribe only to
-         * document-level events (e.g. ProjectListComponent when DI lacks AuthBus
-         * during early bootstrap).  This guarantees they receive real-time auth
-         * updates without requiring a full page refresh.
+         * ALSO broadcast via domAPI.getDocument() so components listening
+         * for document-level authStateChanged events (before AuthBus DI) will
+         * receive updates.
          * ----------------------------------------------------------------- */
         try {
           const docObj = domAPI?.getDocument?.();

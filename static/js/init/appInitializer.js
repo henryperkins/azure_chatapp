@@ -1629,8 +1629,7 @@ export function createAppInitializer({
 
                 await setupSidebarControls();
                 await waitForModalReadiness();
-                window.__templatesReadyFired = true;
-                window.dispatchEvent(new CustomEvent('ui:templates:ready'));
+                domReadinessService.emitReplayable('ui:templates:ready');
                 await createAndRegisterUIComponents();
                 await registerNavigationViews();
                 logger.log('[uiInit] UI initialization complete', {

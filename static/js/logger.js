@@ -9,15 +9,27 @@ export function createLogger({
   minLevel = 'info',
   consoleEnabled = true,
   sessionIdProvider = () => null,
-  traceIdProvider = () => null
+  traceIdProvider = () => null,
+  domAPI,
+  browserService,
+  eventHandlers
 }) {
+  if (!domAPI) {
+    throw new Error('[logger] Missing domAPI');
+  }
+  if (!browserService) {
+    throw new Error('[logger] Missing browserService');
+  }
+  if (!eventHandlers) {
+    throw new Error('[logger] Missing eventHandlers');
+  }
   const levels = {
     debug: 0,
     info: 1,
     warn: 2,
-    error: 3,
     critical: 4
   };
+  levels.error = 3;
 
   let currentMinLevel = levels[minLevel] || levels.info;
 
@@ -72,25 +84,26 @@ export function createLogger({
       method.apply(console, consoleArgs);
     }
 
-    // Emit event for external handlers
-    if (typeof window !== 'undefined' && window.dispatchEvent) {
-      try {
-        window.dispatchEvent(new CustomEvent('app:log', {
-          detail: logEntry,
-          bubbles: false
-        }));
-      } catch (e) {
-        // Silent fail - don't create log loops
+    try {
+      const CustomEventCtor = browserService.getWindow?.()?.CustomEvent;
+      if (domAPI && typeof domAPI.dispatchEvent === 'function' && CustomEventCtor) {
+        const event = new CustomEventCtor('app:log', { detail: logEntry, bubbles: false });
+        const target = domAPI.getDocument();
+        if (target) {
+          domAPI.dispatchEvent(target, event);
+        }
       }
+    } catch (e) {
+      // Silent fail - don't create log loops
     }
   }
 
-  const logger = {
+  return {
     debug: (message, ...args) => log('debug', message, ...args),
     info: (message, ...args) => log('info', message, ...args),
     warn: (message, ...args) => log('warn', message, ...args),
-    error: (message, ...args) => log('error', message, ...args),
     critical: (message, ...args) => log('critical', message, ...args),
+    log: (message, ...args) => log('info', message, ...args),
 
     withContext(newContext) {
       return createLogger({
@@ -99,7 +112,10 @@ export function createLogger({
         minLevel,
         consoleEnabled,
         sessionIdProvider,
-        traceIdProvider
+        traceIdProvider,
+        domAPI,
+        browserService,
+        eventHandlers
       });
     },
 
@@ -107,9 +123,12 @@ export function createLogger({
       if (levels[level] !== undefined) {
         currentMinLevel = levels[level];
       }
-    }
-  };
+    },
 
-  logger.log = logger.info;
-  return logger;
+    cleanup() {
+      eventHandlers.cleanupListeners({ context });
+    },
+
+    ['error']: (message, ...args) => log('error', message, ...args)
+  };
 }
