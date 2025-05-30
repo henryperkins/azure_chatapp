@@ -502,7 +502,11 @@ function vFactory(err, file, config) {
                         const cal = callPath.node.callee;
                         const ehName = config.serviceNames.eventHandlers;
                         let isEhCall = false;
-                        if (cal.type === "MemberExpression" && cal.property.name === "cleanupListeners") {
+                        const isMember =
+                          cal.type === "MemberExpression" ||
+                          cal.type === "OptionalMemberExpression";
+
+                        if (isMember && cal.property?.name === "cleanupListeners") {
                             if (cal.object.type === "Identifier") {
                                 const objectName = cal.object.name;
                                 // Check if it's the global/imported eventHandlers service
@@ -541,6 +545,16 @@ function vFactory(err, file, config) {
                             }
                           }
                         }
+
+                        // Accept delegate teardown (instance.destroy(), instance.teardown() …)
+                        if (
+                          !cleanupInvokesEH &&
+                          isMember &&
+                          ["destroy", "cleanup", "teardown", "dispose"].includes(cal.property?.name)
+                        ) {
+                          cleanupInvokesEH = true;
+                        }
+
                         if (cleanupInvokesEH) callPath.stop(); // Stop traversing further if already found
                       }
                     });
