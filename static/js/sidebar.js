@@ -877,6 +877,21 @@ const starred = new Set(
         timeout: 15000,
         context: 'Sidebar:init:deps'
       });
+
+      // Wait (non-blocking) for controls that get event-handlers later.
+      await domReadinessService.dependenciesAndElements({
+        domSelectors : [
+          '#navToggleBtn',          // header burger
+          '#closeSidebarBtn',       // sidebar “X”
+          '#chatSearchInput',       // recent/starred search
+          '#sidebarProjectSearch',  // project search
+          '#sidebarAuthFormContainer' // inline auth root
+        ],
+        optional     : true,        // ← do NOT abort if any are absent
+        timeout      : 8_000,
+        context      : 'Sidebar:init:optionalDom'
+      });
+
       try {
         await domReadinessService.waitForEvent('authReady', {
           timeout: 15000,
