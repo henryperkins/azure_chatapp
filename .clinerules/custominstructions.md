@@ -1,269 +1,220 @@
-Here's your complete, clarified, and consistent set of **Code Generation Guardrails** with all contradictions addressed:
+# 🚧 **Code Generation Guardrails**
+
+## 🚨 **Critical Rules**
+
+* **NO new feature modules**: Use existing modules only, unless splitting modules over 1000 lines.
+* **Module size limit**: Keep modules below 1000 lines; refactor or split as needed.
+* **Single source of truth**: No duplication of logic.
 
 ---
 
-# 🚧 Code Generation Guardrails (Final)
+## 📐 **Frontend Module Structure**
 
-## 🚨 CRITICAL RULES
-
-1. **NO NEW FEATURE MODULES** – Work within the existing module structure only.
-   **Exception**: Allowed only when splitting existing modules exceeding 1000 lines.
-2. **Modules < 1000 lines** – Refactor or split if approaching this limit.
-3. **Single Source of Truth** – No duplicate implementations.
-
----
-
-## 📐 Frontend Architecture
-
-### Core Patterns (MANDATORY)
+### ✅ **Mandatory Export Pattern**
 
 ```javascript
-// ✅ Every module exports via factory
 export function createModuleName(dependencies) {
   if (!dependencies.required) throw new Error('Missing dependency');
-
+  
   // Module logic here
-
+  
   return {
-    cleanup() { /* Cleanup logic */ }
+    cleanup() { /* cleanup logic */ }
   };
 }
 ```
 
 ---
 
-### Dependency Injection Rules (MANDATORY)
+## 🔗 **Dependency Injection (DI)**
 
-* **NEVER** access globals directly (`window`, `document`, `console`).
-* **ALWAYS** use injected abstractions (`domAPI`, `apiClient`, `logger`).
-* **ONLY EXCEPTION**: Critical system errors in global error handlers **before DI is ready** (use `console.error` temporarily; remove once DI operational).
+* **Always** inject dependencies (e.g., `domAPI`, `apiClient`, `logger`).
+* **Never** directly access global objects (`window`, `document`, `console`).
+* **Only Exception**: `console.error` temporarily allowed for critical errors during global bootstrap before DI is ready.
 
-**Direct `DependencySystem.modules.get()` calls:**
+### **Direct Dependency Access (`DependencySystem.modules.get()`):**
 
-* Allowed only in `app.js` bootstrap/setup code.
-* **FORBIDDEN** everywhere else (modules must receive dependencies via DI).
+* ✅ Allowed **only** in `app.js` (bootstrap/setup).
+* ❌ Forbidden elsewhere.
 
 ---
 
-### DOM Readiness (MANDATORY)
+## 🖥️ **DOM Readiness**
+
+* ✅ Use only injected `domReadinessService`:
 
 ```javascript
-// ✅ CORRECT – Only use injected domReadinessService
 await domReadinessService.waitForEvent('app:ready');
 await domReadinessService.dependenciesAndElements(['#myElement']);
-
-// ❌ FORBIDDEN
-// Custom promises, timeouts, manual listeners, DependencySystem.waitFor()
 ```
+
+* ❌ No custom promises, manual listeners, or `DependencySystem.waitFor()`.
 
 ---
 
-### Event Handling (MANDATORY)
+## 🎯 **Event Handling**
+
+* ✅ Correct usage:
 
 ```javascript
-// ✅ Correct event handling pattern
 eventHandlers.trackListener(element, 'click', handler, { context: 'ModuleName' });
 
 return {
-  cleanup: () => {
-    eventHandlers.cleanupListeners({ context: "ModuleName" });
-  }
+  cleanup: () => eventHandlers.cleanupListeners({ context: 'ModuleName' })
 };
 ```
 
 ---
 
-## 🔐 Authentication (BREAKING CHANGE Dec 2024)
+## 🔐 **Authentication**
 
-### ✅ NEW Pattern (ONLY)
+**ONLY permitted patterns:**
 
 ```javascript
 const appModule = DependencySystem.modules.get('appModule');
 const { isAuthenticated, currentUser } = appModule.state;
 
-// OR helpers:
+// OR using helpers:
 const isAuthenticated = appModule.isAuthenticated();
 const currentUser = appModule.getCurrentUser();
 
-// Listen for changes
+// Listen to auth state changes:
 auth.AuthBus.addEventListener('authStateChanged', ({ detail }) => {
   const { authenticated, user } = detail;
 });
 ```
 
-### ❌ ELIMINATED Patterns
+**Prohibited patterns:**
 
-* Local `authState` variables
-* `auth.isAuthenticated()` fallbacks
-* Module-level `setAuthState()` methods
-* Direct `appModule.state` access without DependencySystem
-
----
-
-## 📚 Canonical Implementations (USE THESE)
-
-| Feature                | Location                          | Access / Import (Allowed)                                     |
-| ---------------------- | --------------------------------- | ------------------------------------------------------------- |
-| SafeHandler            | app.js (bootstrap only)           | DependencySystem.modules.get('safeHandler')                   |
-| Logger Factory         | logger.js                         | Imported in app.js only: `createLogger(...)`                  |
-| App State              | appState.js                       | DependencySystem.modules.get('appModule')                     |
-| Auth State             | appModule.state                   | `.isAuthenticated`, `.currentUser`                            |
-| Project State          | appModule.state                   | `.currentProjectId`, `.currentProject`                        |
-| Form Handlers          | auth.js                           | Imported in app.js only: `createAuthFormHandler()`            |
-| URL Parsing            | navigationService                 | Injected via DI (`.navigateTo()`, `.parseURL()`)              |
-| Error Objects          | Standard                          | `{ status, data, message }`                                   |
-| Chat Init              | chatManager.js                    | Via AppBus/AuthBus events                                     |
-| Application Config     | config.py                         | `from config import settings`                                 |
-| Database Connection    | db.py                             | `from db import get_async_session, get_async_session_context` |
-| Auth Utilities         | utils/auth_utils.py               | `from utils.auth_utils import get_current_user_and_token`     |
-| Structured Logging     | utils/logging_config.py           | `from utils.logging_config import init_structured_logging`    |
-| Telemetry              | utils/sentry_utils.py             | `from utils.sentry_utils import configure_sentry`             |
-| Model Registry         | utils/model_registry.py           | `from utils.model_registry import get_model_config`           |
-| Database Models        | models/                           | `from models import User, Project, Conversation`              |
-| Service Exports        | services/__init__.py              | `from services import get_conversation_service`               |
-| DOM API                | static/js/utils/domAPI.js         | Injected via DI only                                          |
-| Event Handling         | static/js/utils/eventHandlers.js  | Injected via DI only                                          |
-| API Endpoints          | static/js/utils/apiEndpoints.js   | Injected via DI only                                          |
-| Browser Service        | static/js/utils/browserService.js | Injected via DI only                                          |
-| Bootstrap Process      | utils/bootstrap.py                | `from utils.bootstrap import init_telemetry`                  |
-| Frontend Model Config  | static/js/modelConfig.js          | Injected via DI only                                          |
-| Frontend App Config    | static/js/appConfig.js            | Imported directly in app.js only                              |
-| Knowledge Base Context | utils/ai_helper.py               | `from utils.ai_helper import retrieve_knowledge_context`      |
-
-**General rule:** Only `app.js` may directly import services; all other modules must receive them through DI.
+* ❌ Local `authState` variables
+* ❌ `auth.isAuthenticated()` fallbacks
+* ❌ Module-level auth state methods
+* ❌ Direct `appModule.state` access without DependencySystem
 
 ---
 
-## 🔒 Security Requirements (MANDATORY)
+## 📚 **Canonical Implementations**
 
-* **Sanitize ALL user HTML**: `sanitizer.sanitize(userContent)`
-* **CSRF Protection**: Always include tokens in API calls
-* **No persistent sensitive data** in localStorage/sessionStorage – use in-memory transient module state instead.
+**Follow these exact canonical patterns:**
+
+| Feature             | Canonical Location                  | Access via                          |
+| ------------------- | ----------------------------------- | ----------------------------------- |
+| Logger              | `logger.js`                         | Imported only in `app.js`           |
+| App/Auth State      | `appModule.state`                   | DI (`DependencySystem.modules.get`) |
+| SafeHandler         | `app.js` (bootstrap only)           | DI (`DependencySystem.modules.get`) |
+| Form Handlers       | `auth.js`                           | Imported only in `app.js`           |
+| DOM API             | `static/js/utils/domAPI.js`         | Injected via DI                     |
+| Event Handlers      | `static/js/utils/eventHandlers.js`  | Injected via DI                     |
+| API Endpoints       | `static/js/utils/apiEndpoints.js`   | Injected via DI                     |
+| Browser Service     | `static/js/utils/browserService.js` | Injected via DI                     |
+| Knowledge Context   | `utils/ai_helper.py`                | `retrieve_knowledge_context()`      |
+| Telemetry           | `utils/sentry_utils.py`             | `configure_sentry()`                |
+| Structured Logging  | `utils/logging_config.py`           | `init_structured_logging()`         |
+| Database Connection | `db.py`                             | `get_async_session()`               |
+
+**General rule**: Only `app.js` directly imports canonical services; all other modules **must** use DI.
 
 ---
 
-## 🐍 Backend (Python/FastAPI) (MANDATORY)
+## 🔒 **Security Requirements**
 
-### Structure
+* ✅ Always sanitize user input (`sanitizer.sanitize()`).
+* ✅ Always include CSRF tokens in API requests.
+* ❌ No sensitive data in `localStorage` or `sessionStorage`.
+
+---
+
+## 🐍 **Backend (Python/FastAPI)**
+
+### Structure:
 
 * **Routes**: Thin controllers delegating to services.
-* **Services**: All business logic, domain exceptions.
-* **Database**: Async SQLAlchemy queries strictly within services.
-* **Responses**: Explicit Pydantic models only (never `dict` or `Any`).
+* **Services**: Contain business logic and domain exceptions.
+* **Database Access**: Async SQLAlchemy queries **only in services**.
+* **Responses**: Use explicit Pydantic models.
 
-### Key Rules
+### Mandatory Rules:
 
-* NO database queries directly in route handlers.
-* NO raising `HTTPException` in services (domain exceptions only).
-* Structured JSON logging exclusively.
-* Explicit dependency injection everywhere.
-
----
-
-## 🚩 Red Flags to Avoid (MANDATORY)
-
-* Direct `console.*` calls (except global error handlers pre-DI).
-* Business logic directly in routes.
-* Duplicate implementations.
-* Silent failures or swallowed errors.
-* Mutable module-level state.
-* Generic (`dict` or `Any`) response types.
-* Synchronous operations in async code.
+* ❌ NO database logic directly in route handlers.
+* ❌ NO raising `HTTPException` in services.
+* ✅ Explicit DI throughout.
+* ✅ Structured JSON logging only.
 
 ---
 
-## 📜 Logging Patterns (MANDATORY)
+## 🚩 **Red Flags (AVOID)**
 
-### ✅ Logger Factory Creation (app.js ONLY)
+* ❌ Direct `console.*` calls (except initial global bootstrap errors).
+* ❌ Business logic in routes.
+* ❌ Duplicate implementations.
+* ❌ Silenced or swallowed errors.
+* ❌ Mutable state at module-level scope.
+* ❌ Generic (`dict` or `Any`) responses.
+* ❌ Synchronous code inside async functions.
 
-The `createLogger` factory initializes a logger instance with a base context and other configurations.
+---
+
+## 📜 **Logging Patterns**
+
+### **Logger Factory (`app.js` only):**
 
 ```javascript
-// In app.js
-import { createLogger } from './logger.js'; // Adjust path as needed
-// const APP_CONFIG = DependencySystem.modules.get('appConfig'); // Or however APP_CONFIG is obtained
-// const { getSessionId } = DependencySystem.modules.get('sessionManager'); // Example
-// const { getTraceId } = DependencySystem.modules.get('telemetry'); // Example
+import { createLogger } from './logger.js';
 
 const logger = createLogger({
-  context: 'AppBase', // Base context for all logs from this instance
+  context: 'AppBase',
   debug: APP_CONFIG.DEBUG,
   minLevel: 'info',
-  enableServer: true, // Or based on APP_CONFIG
-  apiClient: DependencySystem.modules.get('apiClient'), // Inject apiClient
+  enableServer: true,
+  apiClient: DependencySystem.modules.get('apiClient'),
   browserService: DependencySystem.modules.get('browserService'),
-  sessionIdProvider: () => getSessionId(), // Example
-  traceIdProvider: () => getTraceId(),     // Example
+  sessionIdProvider: () => getSessionId(),
+  traceIdProvider: () => getTraceId(),
   safeHandler: DependencySystem.modules.get('safeHandler'),
-  // consoleEnabled: true, // Default
-  // allowUnauthenticated: false // Default
 });
 
-DependencySystem.register('logger', logger); // Register the created logger
-
-// After auth initialization (if server logging depends on auth state, though allowUnauthenticated helps)
-// if (authModule.isAuthenticated()) { // Example condition
-//   logger.setServerLoggingEnabled(true);
-// }
+DependencySystem.register('logger', logger);
 ```
 
-### ✅ Logger Usage (ALL OTHER MODULES - via DI)
-
-When using the DI-injected logger:
-*   The first argument is the primary log message (string).
-*   Subsequent arguments can be data objects or an Error object.
-*   A **final metadata object** containing a `context` property (string) with a specific operational context **MUST** be provided. This `context` complements the base context set during `createLogger`.
+### **Logger Usage (all other modules, via DI):**
 
 ```javascript
-// In a module, e.g., createMyModule({ logger, ... })
-export function createMyModule({ logger, apiClient, domAPI }) {
-  // Validate deps
-  if (!logger) throw new Error("Logger is required");
+export function createMyModule({ logger, apiClient }) {
+  if (!logger) throw new Error('Logger required');
 
-  // Example usages:
-  logger.info('Module initialized successfully.', {
+  logger.info('Initialization complete.', {
     timestamp: Date.now(),
-    featureFlags: { /* ... */ },
-    context: 'MyModule:init' // Specific operational context
+    context: 'MyModule:init'
   });
 
   try {
-    // ... some operation ...
-    throw new Error("Simulated failure");
+    throw new Error('Simulated error');
   } catch (error) {
-    logger.error('Operation failed unexpectedly.', error, { // Error object as second to last
-      userId: 'user123',
+    logger.error('Operation failed.', error, {
       operationId: 'op456',
-      context: 'MyModule:criticalOperation:failure' // Specific context for this error
+      context: 'MyModule:operation:failure'
     });
   }
 
-  // If using logger.withContext (though less common with this pattern)
-  // The primary context is set by withContext. The chained call's *last* argument
-  // must still be an object with a 'context' property for the specific operational context.
-  const userActionLogger = logger.withContext('UserActions'); // Sets a new base context
-  userActionLogger.info('User clicked save button.', {
-    buttonId: 'save-config',
-    context: 'MyModule:userSaveAction' // Specific context for the action
-  });
-
-
-  return { cleanup() { /* ... */ } };
+  return { cleanup() { /*...*/ } };
 }
 ```
 
-*   **FORBIDDEN in modules**: `logger.setServerLoggingEnabled()`, `logger.setMinLevel()`, direct logger import.
+* ❌ Forbidden methods in modules:
+
+  * `logger.setServerLoggingEnabled()`
+  * Direct logger imports.
 
 ---
 
-## ⚡ Quick Reference Template
+## ⚡ **Quick Module Template**
 
 ```javascript
 export function createMyModule({
-  logger, apiClient, domAPI, navigationService,
+  logger, apiClient, domAPI,
   domReadinessService, eventHandlers, sanitizer
 }) {
-  // Validate deps
+  if (!logger || !apiClient) throw new Error('Missing dependencies');
 
   await domReadinessService.waitForEvent('app:ready');
 
@@ -279,7 +230,3 @@ export function createMyModule({
   };
 }
 ```
-
----
-
-✅ **FINALIZED**: All contradictions resolved.
