@@ -357,7 +357,31 @@ export function createAuthModule(deps) {
         if (!eventHandlers.createCustomEvent) {
           throw new Error('[AuthModule] eventHandlers.createCustomEvent is required to DI-create events for guardrail compliance.');
         }
-        AuthBus.dispatchEvent(eventHandlers.createCustomEvent('authStateChanged', { detail: eventDetail }));
+        // Dispatch event via AuthBus
+        const evt = eventHandlers.createCustomEvent('authStateChanged', { detail: eventDetail });
+        AuthBus.dispatchEvent(evt);
+
+        /* -----------------------------------------------------------------
+         * ALSO broadcast on the global document.  Some components initialise
+         * before AuthModule is created and therefore subscribe only to
+         * document-level events (e.g. ProjectListComponent when DI lacks AuthBus
+         * during early bootstrap).  This guarantees they receive real-time auth
+         * updates without requiring a full page refresh.
+         * ----------------------------------------------------------------- */
+        try {
+          const docObj = domAPI?.getDocument?.();
+          if (docObj) {
+            if (typeof domAPI.dispatchEvent === 'function') {
+              domAPI.dispatchEvent(docObj, evt);
+            } else {
+              docObj.dispatchEvent(evt);
+            }
+          }
+        } catch (docErr) {
+          logger.error('[AuthModule][broadcastAuth] Failed to dispatch authStateChanged on document',
+            docErr,
+            { context: 'broadcastAuth:docDispatch' });
+        }
       } catch (busErr) {
         logger.error('[DIAGNOSTIC][auth.js][broadcastAuth] AuthBus dispatch failed', busErr, { context: 'broadcastAuth' });
       }

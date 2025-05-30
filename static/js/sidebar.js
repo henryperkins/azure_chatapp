@@ -293,13 +293,13 @@ const starred = new Set(
       }
       return;
     }
-    
+
     // Verify uiRenderer is available
     if (!uiRenderer?.renderConversations) {
       logger.error('[Sidebar][maybeRenderRecentConversations] uiRenderer.renderConversations not available', { context: 'Sidebar' });
       return;
     }
-    
+
     logger.debug('[Sidebar][maybeRenderRecentConversations] Rendering conversations for project', {
       projectId,
       searchTerm,
@@ -326,13 +326,13 @@ const starred = new Set(
       }
       return;
     }
-    
+
     // Verify uiRenderer is available
     if (!uiRenderer?.renderStarredConversations) {
       logger.error('[Sidebar][maybeRenderStarredConversations] uiRenderer.renderStarredConversations not available', { context: 'Sidebar' });
       return;
     }
-    
+
     logger.debug('[Sidebar][maybeRenderStarredConversations] Rendering starred conversations for project', {
       projectId,
       searchTerm,
@@ -344,7 +344,7 @@ const starred = new Set(
   async function activateTab(name = 'recent') {
     try {
       logger.info(`[Sidebar][activateTab] Activating tab: ${name}`, { context: 'Sidebar' });
-      
+
       const map = {
         recent: { btn: 'recentChatsTab', panel: 'recentChatsSection' },
         starred: { btn: 'starredChatsTab', panel: 'starredChatsSection' },
@@ -357,14 +357,14 @@ const starred = new Set(
       Object.entries(map).forEach(([key, ids]) => {
         const btn = domAPI.getElementById(ids.btn);
         const panel = domAPI.getElementById(ids.panel);
-        
+
         if (!btn) {
           logger.warn(`[Sidebar][activateTab] Tab button not found: ${ids.btn}`, { context: 'Sidebar' });
         }
         if (!panel) {
           logger.warn(`[Sidebar][activateTab] Tab panel not found: ${ids.panel}`, { context: 'Sidebar' });
         }
-        
+
         if (btn && panel) {
           const isActive = key === name;
           btn.classList.toggle('tab-active', isActive);
@@ -373,7 +373,7 @@ const starred = new Set(
           panel.classList.toggle('hidden', !isActive);
           if (isActive) panel.classList.add('flex');
           else panel.classList.remove('flex');
-          
+
           logger.debug(`[Sidebar][activateTab] Tab ${key} ${isActive ? 'activated' : 'deactivated'}`, { context: 'Sidebar' });
         }
       });
@@ -388,7 +388,7 @@ const starred = new Set(
         await ensureProjectDashboard();
         _handleProjectSearch();
       }
-      
+
       logger.debug(`[Sidebar][activateTab] Successfully activated tab: ${name}`, { context: 'Sidebar' });
     } catch (error) {
       logger.error('[Sidebar][activateTab] failed', error, { context: 'Sidebar' });
@@ -469,9 +469,9 @@ const starred = new Set(
 
       // Render projects using uiRenderer
       if (uiRenderer?.renderProjects) {
-        logger.debug('[Sidebar][ensureProjectDashboard] Rendering projects', { 
+        logger.debug('[Sidebar][ensureProjectDashboard] Rendering projects', {
           projectCount: projects.length,
-          context: 'Sidebar' 
+          context: 'Sidebar'
         });
         uiRenderer.renderProjects(projects);
 
@@ -709,7 +709,7 @@ const starred = new Set(
               if (projectManager?.projects) {
                 projectManager.projects = []; // Clear cache to force reload
               }
-              ensureProjectDashboard().catch(err => 
+              ensureProjectDashboard().catch(err =>
                 logger.error('[Sidebar] Failed to refresh projects after auth', err, { context: 'Sidebar' })
               );
             }
@@ -725,7 +725,7 @@ const starred = new Set(
           // Load projects when auth is ready
           logger.debug('[Sidebar] Auth ready, loading projects', { context: 'Sidebar' });
           if (projectManager?.loadProjects) {
-            projectManager.loadProjects().catch(err => 
+            projectManager.loadProjects().catch(err =>
               logger.error('[Sidebar] Failed to load projects after auth ready', err, { context: 'Sidebar' })
             );
           }
@@ -736,6 +736,43 @@ const starred = new Set(
     } else {
       logger.warn('[Sidebar] AuthBus not available, relying only on document events', { context: 'Sidebar' });
     }
+
+    // Always listen to document-level auth events. This guarantees Sidebar reacts even when
+    // it initialised before the Auth module registered its AuthBus.
+    eventHandlers.trackListener(
+      domAPI.getDocument(),
+      'authStateChanged',
+      safeHandler((event) => {
+        sidebarAuth.handleGlobalAuthStateChange(event);
+        if (event?.detail?.authenticated) {
+          logger.debug('[Sidebar] (document) User authenticated, refreshing projects', { context: 'Sidebar' });
+          const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
+          if (activeTab === 'projects') {
+            if (projectManager?.projects) {
+              projectManager.projects = []; // Clear cache to force reload
+            }
+            ensureProjectDashboard().catch(err =>
+              logger.error('[Sidebar] Failed to refresh projects after auth (document listener)', err, { context: 'Sidebar' })
+            );
+          }
+        }
+      }, 'Sidebar:Document:authStateChanged'),
+      { context: 'Sidebar', description: 'Sidebar reacts to document authStateChanged events' }
+    );
+    eventHandlers.trackListener(
+      domAPI.getDocument(),
+      'authReady',
+      safeHandler((event) => {
+        sidebarAuth.handleGlobalAuthStateChange(event);
+        logger.debug('[Sidebar] (document) Auth ready, loading projects', { context: 'Sidebar' });
+        if (projectManager?.loadProjects) {
+          projectManager.loadProjects().catch(err =>
+            logger.error('[Sidebar] Failed to load projects after auth ready (document listener)', err, { context: 'Sidebar' })
+          );
+        }
+      }, 'Sidebar:Document:authReady'),
+      { context: 'Sidebar', description: 'Sidebar reacts to document authReady events' }
+    );
 
     if (btnPin) {
       eventHandlers.trackListener(
@@ -760,11 +797,11 @@ const starred = new Set(
           safeHandler(
             async (e) => {
               if (e.preventDefault) e.preventDefault();
-              logger.info(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`, { 
+              logger.info(`[Sidebar][TabMenu] ${desc} clicked, activating '${tab}'`, {
                 context: 'Sidebar',
                 tabName: tab,
                 buttonId: id,
-                eventType: e.type 
+                eventType: e.type
               });
               try {
                 await activateTab(tab);
@@ -864,7 +901,7 @@ const starred = new Set(
 
   async function init() {
     if (state.initialized) return true;       // already booted
-    
+
     // 1) Dependencies, DOM selectors, authReady (with fallback)
     await _phaseRunner('deps+dom', async () => {
       await domReadinessService.dependenciesAndElements({

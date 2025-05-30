@@ -1,8 +1,21 @@
+<!--
+  modals.html
+  Revised with suggested improvements for consistency, accessibility, and best practices.
+
+  Key Changes:
+  1. Converted instructionsModal and contentViewModal from <div> to <dialog>.
+  2. Removed redundant role="dialog" and aria-modal="true" from native <dialog> elements.
+  3. Removed or updated autocomplete="off" where appropriate.
+  4. Removed onsubmit="return false;" in favor of JS-based form handling (if used in app.js).
+  5. Cleaned up aria-selected on login/register tabs (JavaScript should update it dynamically).
+  6. Left the skip-to-content link in place, but ideally it should be in base.html's top.
+-->
+
+<!-- Might be better placed at the very top of base.html -->
 <a href="#main-content" class="skip-to-content sr-only focus:not-sr-only">Skip to main content</a>
 
-<!-- Project Creation/Edit Modal (Enhanced for Accessibility) -->
-<dialog id="projectModal" class="modal modal-bottom sm:modal-middle" role="dialog" aria-modal="true"
-    aria-labelledby="projectModalTitle">
+<!-- Project Creation/Edit Modal -->
+<dialog id="projectModal" class="modal modal-bottom sm:modal-middle">
     <div class="modal-box max-w-2xl w-full">
         <div class="flex justify-between items-center mb-6">
             <h3 id="projectModalTitle" class="text-2xl font-bold">Create New Project</h3>
@@ -11,19 +24,22 @@
                 <span class="sr-only">Close</span>
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
+        <!-- Removed role="dialog" and aria-modal="true" (native <dialog> behavior) -->
         <form id="projectModalForm">
             <input type="hidden" id="projectModalIdInput" name="projectId" value="" />
             <div class="form-control-enhanced">
                 <label for="projectModalNameInput" class="label">
                     <span class="label-text font-medium">Project Name <span class="text-error">*</span></span>
                 </label>
+                <!-- Removed autocomplete="off" to allow helpful browser suggestions -->
                 <input id="projectModalNameInput" name="name" type="text" required aria-required="true"
-                    autocomplete="off" class="input input-bordered w-full validator"
-                    aria-describedby="projectModalNameInput-hint" />
+                       class="input input-bordered w-full validator"
+                       aria-describedby="projectModalNameInput-hint" />
                 <p id="projectModalNameInput-hint" class="validator-hint hidden" role="alert"></p>
             </div>
 
@@ -32,8 +48,8 @@
                     Description
                 </label>
                 <textarea id="projectModalDescInput" name="description" rows="3"
-                    placeholder="Description helps organize and understand project purpose"
-                    class="textarea textarea-bordered w-full"></textarea>
+                          placeholder="Description helps organize and understand project purpose"
+                          class="textarea textarea-bordered w-full"></textarea>
             </div>
 
             <div class="form-control-enhanced">
@@ -41,16 +57,18 @@
                     Goals
                 </label>
                 <textarea id="projectModalGoalsInput" name="goals" rows="3"
-                    placeholder="What are the main objectives of this project?"
-                    class="textarea textarea-bordered w-full"></textarea>
+                          placeholder="What are the main objectives of this project?"
+                          class="textarea textarea-bordered w-full"></textarea>
             </div>
 
             <div class="form-control-enhanced">
                 <label for="projectModalMaxTokensInput" class="block text-sm font-medium text-base-content">
                     Maximum Tokens
                 </label>
-                <input id="projectModalMaxTokensInput" name="maxTokens" type="number" value="200000" min="50000"
-                    max="500000" autocomplete="off" class="input input-bordered w-full validator" />
+                <!-- Removed autocomplete="off" to allow numeric suggestions -->
+                <input id="projectModalMaxTokensInput" name="maxTokens" type="number" value="200000"
+                       min="50000" max="500000"
+                       class="input input-bordered w-full validator" />
                 <p class="text-base-content/60 text-xs mt-1">
                     Maximum token limit for this project (50,000 - 500,000)
                 </p>
@@ -75,23 +93,28 @@
             </div>
         </form>
     </div>
+    <!-- Click-off backdrop -->
     <form method="dialog" class="modal-backdrop">
-        <button>close</button>
+        <button aria-label="Close"></button>
     </form>
 </dialog>
 
-<!-- Custom Instructions Modal -->
-<div id="instructionsModal" class="modal hidden">
+<!-- Converted instructionsModal from <div> to <dialog> -->
+<dialog id="instructionsModal" class="modal"
+        aria-labelledby="instructionsModalTitle">
     <div class="modal-box max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
-            <h3 class="text-xl font-semibold">Custom Instructions</h3>
+            <!-- Added an ID to reference from aria-labelledby -->
+            <h3 id="instructionsModalTitle" class="text-xl font-semibold">Custom Instructions</h3>
             <button id="closeInstructionsBtn" type="button"
-                class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]">
+                class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close dialog">
                 <span class="sr-only">Close</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6
-                18L18 6M6 6l12 12" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
@@ -100,8 +123,8 @@
                 Custom instructions are sent at the beginning of every conversation in this project.
             </p>
             <textarea id="customInstructionsInput" rows="8"
-                class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
-                placeholder="Enter instructions for the AI to follow in this project..."></textarea>
+                      class="w-full px-3 py-2 border border-base-300 rounded-lg shadow-xs focus:outline-hidden focus:ring-primary focus:border-primary h-20"
+                      placeholder="Enter instructions for the AI to follow in this project..."></textarea>
         </div>
         <div class="flex justify-end gap-2">
             <button id="cancelInstructionsBtn" type="button" class="btn btn-outline">
@@ -112,11 +135,16 @@
             </button>
         </div>
     </div>
-</div>
+    <!-- Click-off backdrop -->
+    <form method="dialog" class="modal-backdrop">
+        <button aria-label="Close"></button>
+    </form>
+</dialog>
 
 <!-- Delete Confirmation Modal -->
 <dialog id="deleteConfirmModal" class="modal">
     <div class="modal-box max-w-md w-full">
+        <!-- Removed redundant role="dialog" and aria-modal="true" -->
         <h3 class="text-xl font-semibold mb-4">Confirm Delete</h3>
         <p id="deleteConfirmText" class="mb-6">Are you sure you want to delete this item?</p>
         <div class="flex justify-end gap-2">
@@ -128,15 +156,18 @@
             </button>
         </div>
     </div>
+    <form method="dialog" class="modal-backdrop">
+        <button aria-label="Close"></button>
+    </form>
 </dialog>
 
-<!-- Generic Confirmation Modal (Added for ModalManager.confirmAction) -->
+<!-- Generic Confirmation Modal -->
 <dialog id="confirmActionModal" class="modal" aria-labelledby="confirmActionTitle">
     <div class="modal-box max-w-md w-full">
         <form method="dialog">
             <!-- Close button top right -->
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 min-w-[44px] min-h-[44px]"
-                aria-label="Close dialog">
+                    aria-label="Close dialog">
                 <span class="sr-only">Close</span>✕
             </button>
         </form>
@@ -148,7 +179,7 @@
         </div>
     </div>
     <form method="dialog" class="modal-backdrop">
-        <button>close</button>
+        <button aria-label="Close"></button>
     </form>
 </dialog>
 
@@ -158,15 +189,19 @@
         <form method="dialog">
             <!-- Close button top right -->
             <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2 min-w-[44px] min-h-[44px]"
-                aria-label="Close dialog">
+                    aria-label="Close dialog">
                 <span class="sr-only">Close</span>✕
             </button>
         </form>
         <div class="flex items-center gap-3 mb-4">
             <div class="text-error">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 
+                             1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.268 
+                             19.5c-.77.833.192 2.5 1.732 2.5z" />
                 </svg>
             </div>
             <h3 id="errorModalTitle" class="font-bold text-lg text-error">Error</h3>
@@ -178,7 +213,7 @@
                     <summary class="collapse-title text-xs font-medium">Technical Details</summary>
                     <div class="collapse-content">
                         <pre id="errorModalDetailsContent"
-                            class="text-xs bg-base-200 p-2 rounded whitespace-pre-wrap overflow-auto max-h-32"></pre>
+                             class="text-xs bg-base-200 p-2 rounded whitespace-pre-wrap overflow-auto max-h-32"></pre>
                     </div>
                 </details>
             </div>
@@ -188,31 +223,39 @@
         </div>
     </div>
     <form method="dialog" class="modal-backdrop">
-        <button>close</button>
+        <button aria-label="Close"></button>
     </form>
 </dialog>
 
-
-<!-- Content View Modal (for files and artifacts) -->
-<div id="contentViewModal" class="modal hidden">
+<!-- Converted contentViewModal from <div> to <dialog> -->
+<dialog id="contentViewModal" class="modal"
+        aria-labelledby="contentViewModalTitle">
     <div class="modal-box max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
+            <!-- Added an ID to reference from aria-labelledby -->
             <h3 id="contentViewModalTitle" class="text-xl font-semibold">File Content</h3>
             <button id="closeContentViewModalBtn" type="button"
-                class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]">
+                    class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close dialog">
                 <span class="sr-only">Close</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18
-                6M6 6l12 12" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round" 
+                          stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
         <div id="contentViewModalContent"></div>
     </div>
-</div>
+    <!-- Click-off backdrop -->
+    <form method="dialog" class="modal-backdrop">
+        <button aria-label="Close"></button>
+    </form>
+</dialog>
 
-<!-- Knowledge Base Settings Modal (Enhanced) -->
+<!-- Knowledge Base Settings Modal -->
 <dialog id="knowledgeBaseSettingsModal" class="modal" data-kb-debug="true">
     <div class="modal-box max-w-lg w-full">
         <div class="flex justify-between items-center mb-4">
@@ -220,13 +263,16 @@
             <button id="closeKnowledgeSettingsBtn" type="button"
                 class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close dialog">
                 <span class="sr-only">Close</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
-
         <form id="knowledgeBaseForm">
             <input type="hidden" id="knowledgeBaseIdInput" name="knowledge_base_id" value="" />
 
@@ -234,9 +280,11 @@
                 <label for="knowledgeBaseNameInput" class="block text-sm font-medium text-base-content">
                     Knowledge Base Name <span class="text-error">*</span>
                 </label>
+                <!-- Removed autocomplete="off" to allow normal browser suggestions -->
                 <input id="knowledgeBaseNameInput" name="name" type="text" required aria-required="true"
-                    autocomplete="off" placeholder="Enter a descriptive name for this knowledge base"
-                    class="input input-bordered w-full validator" aria-describedby="knowledgeBaseNameInput-hint" />
+                       placeholder="Enter a descriptive name for this knowledge base"
+                       class="input input-bordered w-full validator"
+                       aria-describedby="knowledgeBaseNameInput-hint" />
                 <p id="knowledgeBaseNameInput-hint" class="validator-hint hidden" role="alert"></p>
             </div>
 
@@ -245,8 +293,8 @@
                     Description
                 </label>
                 <textarea id="knowledgeBaseDescInput" name="description" rows="3"
-                    placeholder="Describe the purpose and content of this knowledge base"
-                    class="textarea textarea-bordered w-full"></textarea>
+                          placeholder="Describe the purpose and content of this knowledge base"
+                          class="textarea textarea-bordered w-full"></textarea>
             </div>
 
             <div class="form-control-enhanced">
@@ -271,7 +319,7 @@
                 <div class="form-control mb-2">
                     <label class="flex items-center space-x-2 cursor-pointer">
                         <input type="checkbox" id="processAllFilesCheckbox" name="process_all_files"
-                            class="checkbox checkbox-primary checkbox-sm" />
+                               class="checkbox checkbox-primary checkbox-sm" />
                         <span class="label-text">Process all project files for knowledge search</span>
                     </label>
                     <p class="text-xs text-base-content/70 mt-1 ml-7">
@@ -283,7 +331,7 @@
                 <div class="form-control">
                     <label class="flex items-center space-x-2 cursor-pointer">
                         <input type="checkbox" id="autoEnableCheckbox" name="auto_enable"
-                            class="checkbox checkbox-primary checkbox-sm" checked />
+                               class="checkbox checkbox-primary checkbox-sm" checked />
                         <span class="label-text">Automatically use knowledge in conversations</span>
                     </label>
                     <p class="text-xs text-base-content/70 mt-1 ml-7">
@@ -299,40 +347,50 @@
                 <div id="kbGitHubAttachedRepoInfo" class="mb-3 hidden">
                     <p class="text-sm">Currently attached: <strong id="kbAttachedRepoUrlDisplay"></strong> (<span
                             id="kbAttachedRepoBranchDisplay"></span>)</p>
-                    <button type="button" id="kbDetachRepoBtn" class="btn btn-xs btn-outline btn-warning mt-1">Detach
-                        Repository</button>
+                    <button type="button" id="kbDetachRepoBtn" class="btn btn-xs btn-outline btn-warning mt-1">
+                        Detach Repository
+                    </button>
                 </div>
                 <div id="kbGitHubAttachForm">
                     <div class="form-control-enhanced mb-2">
-                        <label for="kbGitHubRepoUrlInput" class="block text-xs font-medium text-base-content">Repository
-                            URL</label>
+                        <label for="kbGitHubRepoUrlInput" class="block text-xs font-medium text-base-content">
+                            Repository URL
+                        </label>
                         <input id="kbGitHubRepoUrlInput" name="github_repo_url" type="url"
-                            placeholder="https://github.com/owner/repo" class="input input-sm input-bordered w-full" />
+                               placeholder="https://github.com/owner/repo"
+                               class="input input-sm input-bordered w-full" />
                     </div>
                     <div class="form-control-enhanced mb-2">
                         <label for="kbGitHubBranchInput"
-                            class="block text-xs font-medium text-base-content">Branch</label>
+                               class="block text-xs font-medium text-base-content">Branch</label>
                         <input id="kbGitHubBranchInput" name="github_branch" type="text" value="main"
-                            class="input input-sm input-bordered w-full" />
+                               class="input input-sm input-bordered w-full" />
                     </div>
                     <div class="form-control-enhanced mb-3">
-                        <label for="kbGitHubFilePathsTextarea"
-                            class="block text-xs font-medium text-base-content">Specific File Paths (Optional, one per
-                            line)</label>
+                        <label for="kbGitHubFilePathsTextarea" class="block text-xs font-medium text-base-content">
+                            Specific File Paths (Optional, one per line)
+                        </label>
                         <textarea id="kbGitHubFilePathsTextarea" name="github_file_paths" rows="2"
-                            placeholder="e.g., src/main.js&#10;docs/README.md"
-                            class="textarea textarea-sm textarea-bordered w-full"></textarea>
+                                  placeholder="e.g., src/main.js&#10;docs/README.md"
+                                  class="textarea textarea-sm textarea-bordered w-full"></textarea>
                     </div>
-                    <button type="button" id="kbAttachRepoBtn" class="btn btn-sm btn-primary">Attach Repository</button>
+                    <button type="button" id="kbAttachRepoBtn" class="btn btn-sm btn-primary">
+                        Attach Repository
+                    </button>
                 </div>
             </fieldset>
 
             <!-- Processing status indicator -->
             <div id="kbProcessingStatus" class="alert alert-info shadow-xs mt-4 hidden">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                    class="stroke-info shrink-0 w-5 h-5" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     fill="none" viewBox="0 0 24 24"
+                     class="stroke-info shrink-0 w-5 h-5" aria-hidden="true">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M13 16h-1v-4h-1m1-4h.01M21 
+                             12a9 9 0 11-18 0 9 9 0 0118 
+                             0z" />
                 </svg>
                 <div>
                     <h3 class="font-bold text-sm">Processing</h3>
@@ -347,13 +405,12 @@
             </div>
 
             <div class="flex justify-between items-center mt-6">
-                <div> <!-- Delete button on the left -->
+                <div>
                     <button type="button" id="deleteKnowledgeBaseBtn" class="btn btn-error hidden">
-                        <!-- Initially hidden -->
                         Delete Knowledge Base
                     </button>
                 </div>
-                <div class="flex gap-2"> <!-- Existing buttons on the right -->
+                <div class="flex gap-2">
                     <kbd class="kbd-shortcut hidden md:inline-flex">
                         <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to cancel</span>
                     </kbd>
@@ -367,19 +424,26 @@
             </div>
         </form>
     </div>
+    <form method="dialog" class="modal-backdrop">
+        <button aria-label="Close"></button>
+    </form>
 </dialog>
 
 <!-- Token Stats Modal -->
-<dialog id="tokenStatsModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="tokenStatsModalTitle">
+<dialog id="tokenStatsModal" class="modal">
     <div class="modal-box max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-6">
             <h3 id="tokenStatsModalTitle" class="text-2xl font-bold">Token Usage Statistics</h3>
             <button id="closeTokenStatsBtn" type="button"
                 class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close dialog">
                 <span class="sr-only">Close</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
@@ -407,8 +471,8 @@
                 </div>
                 <div class="w-full">
                     <div class="text-sm font-medium mb-2">Usage Progress</div>
-                    <progress id="tokenStatsProgressBar" class="progress progress-warning w-full" value="0"
-                        max="100"></progress>
+                    <progress id="tokenStatsProgressBar" class="progress progress-warning w-full"
+                              value="0" max="100"></progress>
                 </div>
             </div>
         </div>
@@ -476,14 +540,23 @@
                 <kbd class="kbd kbd-sm">Esc</kbd> <span class="mx-1">to close</span>
             </kbd>
             <button id="refreshTokenStatsBtn" type="button" class="btn btn-outline btn-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M4 4v5h.582m15.356 
+                             2A8.001 8.001 0 004.582 
+                             9m0 0H9m11 11v-5h-.581m0 
+                             0a8.003 8.003 0 01-15.357
+                             -2m15.357 2H15" />
                 </svg>
                 Refresh
             </button>
-            <button type="button" class="btn btn-primary" onclick="this.closest('dialog').close()">Close</button>
+            <button type="button" class="btn btn-primary" onclick="this.closest('dialog').close()">
+                Close
+            </button>
         </div>
     </div>
     <form method="dialog" class="modal-backdrop">
@@ -491,68 +564,80 @@
     </form>
 </dialog>
 
-<!-- Knowledge Result Detail Modal (Enhanced) -->
-<dialog id="loginModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="loginRegisterModalTitle">
+<!-- Login/Register Modal -->
+<dialog id="loginModal" class="modal" aria-labelledby="loginRegisterModalTitle">
     <div class="modal-box max-w-sm w-full">
         <button id="loginModalCloseBtn" class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
-            aria-label="Close dialog" type="button">
+                aria-label="Close dialog" type="button">
             <span class="sr-only">Close</span>✕
         </button>
         <h3 id="loginRegisterModalTitle" class="font-bold text-xl mb-3 mt-2 text-center">Welcome</h3>
         <div class="flex border-b border-base-200 mb-3">
-            <button id="modalLoginTab" type="button" class="tab tab-bordered flex-1 tab-active rounded-t-lg"
-                aria-selected="true">Login</button>
-            <button id="modalRegisterTab" type="button" class="tab tab-bordered flex-1 rounded-t-lg"
-                aria-selected="false">Register</button>
+            <!-- Removed static aria-selected; recommended to set via JS -->
+            <button id="modalLoginTab" type="button"
+                    class="tab tab-bordered flex-1 tab-active rounded-t-lg">
+                Login
+            </button>
+            <button id="modalRegisterTab" type="button"
+                    class="tab tab-bordered flex-1 rounded-t-lg">
+                Register
+            </button>
         </div>
         <div id="loginPanel" class="tab-panel" role="tabpanel" aria-labelledby="loginTab">
-            <!-- Removed style="display:block;" -->
-            <form id="loginModalForm" class="space-y-3" autocomplete="off" onsubmit="return false;">
+            <!-- Removed onsubmit="return false;" -- handle in JS if needed -->
+            <form id="loginModalForm" class="space-y-3" autocomplete="on">
                 <div class="form-control-enhanced">
                     <label for="loginModalUsername" class="label font-medium">Username</label>
+                    <!-- Use autocomplete="username" for better user experience -->
                     <input type="text" id="loginModalUsername" name="username" required aria-required="true"
-                        class="input input-bordered w-full validator" autocomplete="username" />
+                           class="input input-bordered w-full validator"
+                           autocomplete="username" />
                     <p id="loginModalUsername-hint" class="validator-hint hidden" role="alert"></p>
                 </div>
                 <div class="form-control-enhanced">
                     <label for="loginModalPassword" class="label font-medium">Password</label>
+                    <!-- Use autocomplete="current-password" for better user experience -->
                     <input type="password" id="loginModalPassword" name="password" required aria-required="true"
-                        class="input input-bordered w-full validator" autocomplete="current-password" />
+                           class="input input-bordered w-full validator"
+                           autocomplete="current-password" />
                     <p id="loginModalPassword-hint" class="validator-hint hidden" role="alert"></p>
                 </div>
                 <div id="loginModalError" class="hidden text-error text-sm" role="alert"></div>
                 <div class="modal-action flex-col sm:flex-row justify-end gap-2 pt-2">
                     <button id="loginModalSubmitBtn" type="submit"
-                        class="btn btn-primary w-full sm:w-auto">Login</button>
+                            class="btn btn-primary w-full sm:w-auto">Login</button>
                 </div>
             </form>
         </div>
         <div id="registerPanel" class="tab-panel hidden" role="tabpanel" aria-labelledby="registerTab">
-            <!-- Added hidden, removed style="display:none;" -->
-            <form id="registerModalForm" class="space-y-3">
+            <form id="registerModalForm" class="space-y-3" autocomplete="on">
                 <div class="form-control-enhanced">
                     <label for="registerModalUsername" class="label font-medium">Username</label>
                     <input type="text" id="registerModalUsername" name="username" required aria-required="true"
-                        class="input input-bordered w-full validator" autocomplete="username" />
+                           class="input input-bordered w-full validator"
+                           autocomplete="username" />
                     <p id="registerModalUsername-hint" class="validator-hint hidden" role="alert"></p>
                 </div>
                 <div class="form-control-enhanced">
                     <label for="registerModalPassword" class="label font-medium">Password</label>
+                    <!-- Use autocomplete="new-password" when creating a new password -->
                     <input type="password" id="registerModalPassword" name="password" required aria-required="true"
-                        minlength="8" class="input input-bordered w-full validator" autocomplete="new-password" />
+                           minlength="8" class="input input-bordered w-full validator"
+                           autocomplete="new-password" />
                     <p id="registerModalPassword-hint" class="validator-hint hidden" role="alert"></p>
                 </div>
                 <div class="form-control-enhanced">
                     <label for="registerModalPasswordConfirm" class="label font-medium">Confirm Password</label>
                     <input type="password" id="registerModalPasswordConfirm" name="passwordConfirm" required
-                        aria-required="true" minlength="8" class="input input-bordered w-full validator"
-                        autocomplete="new-password" />
+                           aria-required="true" minlength="8"
+                           class="input input-bordered w-full validator"
+                           autocomplete="new-password" />
                     <p id="registerModalPasswordConfirm-hint" class="validator-hint hidden" role="alert"></p>
                 </div>
                 <div id="registerModalError" class="hidden text-error text-sm" role="alert"></div>
                 <div class="modal-action flex-col sm:flex-row justify-end gap-2 pt-2">
                     <button id="registerModalSubmitBtn" type="submit"
-                        class="btn btn-primary w-full sm:w-auto">Register</button>
+                            class="btn btn-primary w-full sm:w-auto">Register</button>
                 </div>
             </form>
         </div>
@@ -562,16 +647,20 @@
     </form>
 </dialog>
 
-<dialog id="knowledgeResultModal" class="modal" aria-modal="true" role="dialog" aria-labelledby="knowledgeResultTitle">
+<dialog id="knowledgeResultModal" class="modal" aria-labelledby="knowledgeResultTitle">
     <div class="modal-box max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div class="flex justify-between items-center mb-4">
             <h3 id="knowledgeResultTitle" class="text-xl font-semibold">Knowledge Result</h3>
             <button id="closeKnowledgeResultBtn" type="button"
-                class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close dialog">
+                    class="btn btn-ghost btn-sm btn-square min-w-[44px] min-h-[44px]" aria-label="Close dialog">
                 <span class="sr-only">Close</span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor" aria-hidden="true">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M6 18L18 6M6 6l12 12" />
                 </svg>
             </button>
         </div>
@@ -589,12 +678,16 @@
                     </div>
 
                     <div id="knowledgeResultMetadata"
-                        class="col-span-1 md:col-span-2 flex flex-wrap gap-2 text-xs text-base-content/70 border-t border-base-300 pt-2 mt-1">
-                        <span class="badge badge-ghost badge-sm">Type: <span id="knowledgeResultType">text</span></span>
-                        <span class="badge badge-ghost badge-sm">Last Modified: <span
-                                id="knowledgeResultDate">2024-04-12</span></span>
-                        <span class="badge badge-ghost badge-sm">Size: <span id="knowledgeResultSize">2.4
-                                KB</span></span>
+                         class="col-span-1 md:col-span-2 flex flex-wrap gap-2 text-xs text-base-content/70 border-t border-base-300 pt-2 mt-1">
+                        <span class="badge badge-ghost badge-sm">Type:
+                            <span id="knowledgeResultType">text</span>
+                        </span>
+                        <span class="badge badge-ghost badge-sm">Last Modified:
+                            <span id="knowledgeResultDate">2024-04-12</span>
+                        </span>
+                        <span class="badge badge-ghost badge-sm">Size:
+                            <span id="knowledgeResultSize">2.4 KB</span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -606,21 +699,35 @@
 
         <div class="modal-action">
             <kbd class="kbd-shortcut hidden md:inline-flex mr-auto">
-                <kbd class="kbd kbd-sm">Ctrl</kbd> + <kbd class="kbd kbd-sm">C</kbd> <span class="mx-1">to copy</span>
+                <kbd class="kbd kbd-sm">Ctrl</kbd> + <kbd class="kbd kbd-sm">C</kbd>
+                <span class="mx-1">to copy</span>
             </kbd>
             <button id="copyContentBtn" type="button" class="btn btn-outline btn-sm">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M8 7v8a2 2 0 002 2h6M8 
+                             7V5a2 2 0 012-2h4.586a1 
+                             1 0 01.707.293l4.414 
+                             4.414a1 1 0 01.293.707V15
+                             a2 2 0 01-2 2h-2M8 7H6a2 
+                             2 0 00-2 2v10a2 2 0 002 2
+                             h8a2 2 0 002-2v-2" />
                 </svg>
                 Copy
             </button>
             <button id="useInChatBtn" type="button" class="btn btn-primary btn-sm">
-                <svg xmlns="http://www.w3.org
-                stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M17 8l4 4m0 0l-4 4m4-4H7" />
+                <svg xmlns="http://www.w3.org/2000/svg"
+                     class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24"
+                     stroke="currentColor">
+                    <path stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M17 8l4 4m0 0l-4 
+                             4m4-4H7" />
                 </svg>
                 Use in Chat
             </button>
@@ -636,4 +743,4 @@
     <form method="dialog" class="modal-backdrop" tabindex="-1">
         <button aria-label="Close"></button>
     </form>
-</dialog> <!-- /#knowledgeResultModal -->
+</dialog>
