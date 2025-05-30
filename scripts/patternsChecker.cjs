@@ -413,6 +413,16 @@ function vFactory(err, file, config) {
             const isParamNegation = (node) => { /* ... */ };
             const hasParamValidation = (testNode) => { /* ... */ };
             if (hasParamValidation(ifPath.node.test)) hasDepCheck = true;
+          },
+          CallExpression(callPath) {
+            if (callPath.getFunctionParent() !== funcPath) return;
+
+            const cal = callPath.node.callee;
+            const isAssert =
+                  (cal.type === 'Identifier' && cal.name === 'assertDeps') ||
+                  (cal.type === 'MemberExpression' && cal.property?.name === 'assertDeps');
+
+            if (isAssert) hasDepCheck = true;
           }
         });
 
@@ -475,13 +485,19 @@ function vFactory(err, file, config) {
                 const keyName = (keyNode?.type === "Identifier" ? keyNode.name : (keyNode?.type === "StringLiteral" ? keyNode.value : null));
 
                 if (["cleanup", "teardown", "destroy"].includes(keyName)) {
+                  // helper-delegated cleanup e.g.  cleanup: makeCleanup(...)
+                  if (valuePath.isCallExpression()) {
+                      hasCleanup = true;
+                      cleanupInvokesEH = true;   // we trust the helper
+                      return;                    // done analysing this property
+                  }
                   let actualFunctionPath = null;
-                  const valuePath = propPath.isObjectMethod() ? propPath : propPath.get("value");
+                  const valuePathInner = propPath.isObjectMethod() ? propPath : propPath.get("value");
 
-                  if (valuePath.isFunction()) {
-                    actualFunctionPath = valuePath;
-                  } else if (valuePath.isIdentifier() && factoryInfo.factoryFunctionPath) {
-                    const functionName = valuePath.node.name;
+                  if (valuePathInner.isFunction()) {
+                    actualFunctionPath = valuePathInner;
+                  } else if (valuePathInner.isIdentifier() && factoryInfo.factoryFunctionPath) {
+                    const functionName = valuePathInner.node.name;
                     // Resolve the binding within the factory function's scope
                     const binding = factoryInfo.factoryFunctionPath.scope.getBinding(functionName);
                     if (binding) {
@@ -1369,6 +1385,16 @@ function analyze(file, code, configToUse) {
   }
 
   vModuleSize(errors, file, code, configToUse);
+
+  // --- VENDOR-EXEMPT EARLY RETURN ---
+  const isVendorFile =
+    configToUse.vendoredCommentRegex &&
+    configToUse.vendoredCommentRegex.test(code.slice(0, 500));
+
+  if (isVendorFile) {
+    // still honour size-rule (already executed above) but ignore the rest
+    return errors;   // ← early-return, after vModuleSize but BEFORE AST parse
+  }
 
   let ast;
   try {
