@@ -321,7 +321,42 @@ export function createDomAPI({
       return obs;
     },
 
-    /* ── </NEW helpers> ───────────────────────────────────────────── */
+    /* ── <NEW helpers – event/DI compliance> ───────────────────────── */
+    /* Document-level attributes (ThemeManager & others) */
+    getDocumentAttribute(attr) {
+      const docEl = documentObject.documentElement;
+      return docEl ? docEl.getAttribute(attr) : null;
+    },
+    setDocumentAttribute(attr, value) {
+      const docEl = documentObject.documentElement;
+      if (!docEl) return;
+      if (value === null || value === undefined) docEl.removeAttribute(attr);
+      else docEl.setAttribute(attr, value);
+    },
+
+    /* Local-storage helpers (ThemeManager) */
+    localStorageGet(key) {
+      try { return windowObject.localStorage.getItem(key); }
+      catch { return null; }
+    },
+    localStorageSet(key, value) {
+      try { windowObject.localStorage.setItem(key, value); }
+      catch { /* quota / disabled – silently ignore */ }
+    },
+
+    /* matchMedia shim (ThemeManager) */
+    matchMedia(query) {
+      return (typeof windowObject.matchMedia === 'function')
+        ? windowObject.matchMedia(query)
+        : { matches: false, addListener() {}, removeListener() {},
+            addEventListener() {}, removeEventListener() {} };
+    },
+
+    /* Form-validation wrappers (eventHandlers.setupForm) */
+    checkFormValidity ,
+    reportFormValidity,
+    resetForm         ,
+    /* ── </NEW helpers> ─────────────────────────────────────────────── */
 
     setLogger,      // ← NEW
     cleanup
