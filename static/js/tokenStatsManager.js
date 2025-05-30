@@ -108,50 +108,67 @@ export function createTokenStatsManager({
     if (state.initialized) return;
     if (state.initializing) return state.initializing;
 
-    state.initializing = (async () => {
-      try {
-        _logInfo('Initializing token stats manager');
-
-        const requiredSel = [
-          '#tokenUsageStat',
-          '#tokenStatsBtn',
-          '#tokenStatsCurrentUsage'
-        ];
-
+    // Deferred logic: run only when ui:templates:ready event fires.
+    const runInit = async () => {
+      state.initializing = (async () => {
         try {
-          await domReadinessService.elementsReady(requiredSel, {
-            observeMutations: true,          // handle late template injection
-            timeout: 8000,
-            context: MODULE_CONTEXT + '::init'
-          });
+          _logInfo('Initializing token stats manager');
+
+          const requiredSel = [
+            '#tokenUsageStat',
+            '#tokenStatsBtn',
+            '#tokenStatsCurrentUsage'
+          ];
+
+          try {
+            await domReadinessService.elementsReady(requiredSel, {
+              observeMutations: true,          // handle late template injection
+              timeout: 8000,
+              context: MODULE_CONTEXT + '::init'
+            });
+          } catch (err) {
+            _logInfo('Token-stats UI not yet present – deferring initialization', {
+              missing: requiredSel
+            });
+            logger.error(`[${MODULE_CONTEXT}] elementsReady failed`, err,
+              { context: MODULE_CONTEXT, phase: 'init', missing: requiredSel });
+            state.initializing = null;   // allow future retries
+            return false;                // non-fatal
+          }
+
+          // Bind event listeners
+          _bindEventListeners();
+
+          // Initialize modal functionality
+          _initializeTokenStatsModal();
+
+          state.initialized = true;
+          _logInfo('Token stats manager initialized');
         } catch (err) {
-          _logInfo('Token-stats UI not yet present – deferring initialization', {
-            missing: requiredSel
-          });
-          logger.error(`[${MODULE_CONTEXT}] elementsReady failed`, err,
-            { context: MODULE_CONTEXT, phase: 'init', missing: requiredSel });
-          state.initializing = null;   // allow future retries
-          return false;                // non-fatal
+          _logError('Failed to initialize token stats manager', err);
+          logger.error(`[${MODULE_CONTEXT}] Failed to initialize token stats manager`, err,
+            { context: MODULE_CONTEXT });
+        } finally {
+          state.initializing = null;
         }
+      })();
 
-        // Bind event listeners
-        _bindEventListeners();
+      return state.initializing;
+    };
 
-        // Initialize modal functionality
-        _initializeTokenStatsModal();
-
-        state.initialized = true;
-        _logInfo('Token stats manager initialized');
-      } catch (err) {
-        _logError('Failed to initialize token stats manager', err);
-        logger.error(`[${MODULE_CONTEXT}] Failed to initialize token stats manager`, err,
-          { context: MODULE_CONTEXT });
-      } finally {
-        state.initializing = null;
-      }
-    })();
-
-    return state.initializing;
+    // Defer to ui:templates:ready; run immediately if already fired.
+    if (window.__templatesReadyFired) {
+      return runInit();
+    } else {
+      return new Promise((resolve) => {
+        const handler = () => {
+          window.removeEventListener('ui:templates:ready', handler);
+          window.__templatesReadyFired = true;
+          resolve(runInit());
+        };
+        window.addEventListener('ui:templates:ready', handler, { once: true });
+      });
+    }
   }
 
   /**
