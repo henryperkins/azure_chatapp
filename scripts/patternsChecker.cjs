@@ -642,11 +642,11 @@ function vDI(err, file, isBootstrapFile, config) {
   const isNodeScript = NODE_SCRIPT_REGEX.test(file);
   const diParamsInFactory = new Set();
   const destructuredServices = new Set();
-  let factoryParamsProcessed = false;
+  // let factoryParamsProcessed = false;
 
   return {
-    ExportNamedDeclaration(p) {
-      if (factoryParamsProcessed || p.parentPath.type !== "Program") return;
+    ExportNamedDeclaration(p) {                 // ← keep whole body, just
+      if (p.parentPath.type !== "Program") return;   //   remove early-exit
       const decl = p.node.declaration;
       let funcNode;
       if ( decl && decl.type === "FunctionDeclaration" && /^create[A-Z]/.test(decl.id?.name) ) funcNode = decl;
@@ -663,7 +663,7 @@ function vDI(err, file, isBootstrapFile, config) {
             }
           }
         });
-        factoryParamsProcessed = true;
+        // factoryParamsProcessed = true; // removed
       }
     },
     ImportDeclaration(p) {
@@ -688,6 +688,13 @@ function vDI(err, file, isBootstrapFile, config) {
       if ( Object.values(serviceNamesConfig).includes(serviceName) &&
           !p.scope.hasBinding(serviceName) &&
           !isBootstrapFile ) {
+
+        //  Skip '!logger' / '!apiClient' style validation inside factories
+        if (
+          p.parentPath.isUnaryExpression({ operator: "!" }) &&
+          p.parentPath.parentPath.isIfStatement()
+        ) { return; }
+
         const isDirectlyInjected = diParamsInFactory.has(serviceName) || destructuredServices.has(serviceName);
         /* NEW: follow alias chains one level */
         const aliasBinding = p.scope.getBinding(serviceName);
