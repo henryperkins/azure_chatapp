@@ -344,6 +344,7 @@ function vFactory(err, file, config) {
   let hasCleanup = false;
   let hasDepCheck = false;
   let cleanupInvokesEH = false;
+  let trackListenerUsed = false;          // ← NEW
 
   return {
     ExportNamedDeclaration(p) {
@@ -379,6 +380,13 @@ function vFactory(err, file, config) {
           ThrowStatement(throwPath) {
             // Only consider throws directly within this factory function, not nested ones.
             if (throwPath.getFunctionParent() !== funcPath) return;
+            // Generic guard: ANY top-level `throw new Error(...)` counts
+            if (
+                throwPath.node.argument?.type === 'NewExpression' &&
+                throwPath.node.argument.callee.name === 'Error'
+            ) {
+                hasDepCheck = true;                // ← NEW
+            }
             // Realistic check for dependency error throwing:
             // Check if throwing an Error with a message indicating missing dependency
             if (
@@ -423,6 +431,16 @@ function vFactory(err, file, config) {
                   (cal.type === 'MemberExpression' && cal.property?.name === 'assertDeps');
 
             if (isAssert) hasDepCheck = true;
+
+            // --- detect use of eventHandlers.trackListener -----------------
+            const c = callPath.node.callee;
+            if (
+                c.type === 'MemberExpression' &&
+                c.property?.name === 'trackListener'
+            ) {
+                trackListenerUsed = true;        // ← NEW
+            }
+
           }
         });
 
@@ -485,14 +503,17 @@ function vFactory(err, file, config) {
                 const keyName = (keyNode?.type === "Identifier" ? keyNode.name : (keyNode?.type === "StringLiteral" ? keyNode.value : null));
 
                 if (["cleanup", "teardown", "destroy"].includes(keyName)) {
-                  // helper-delegated cleanup e.g.  cleanup: makeCleanup(...)
-                  if (valuePath.isCallExpression()) {
+                  const valuePathInner = propPath.isObjectMethod()
+                      ? propPath
+                      : propPath.get("value");         // ← NEW – replaces old valuePath
+
+                  // helper-delegated cleanup (e.g.  cleanup: makeCleanup(...))
+                  if (valuePathInner?.isCallExpression?.()) {
                       hasCleanup = true;
-                      cleanupInvokesEH = true;   // we trust the helper
-                      return;                    // done analysing this property
+                      cleanupInvokesEH = true;
+                      return;                          // keep previous early-return
                   }
                   let actualFunctionPath = null;
-                  const valuePathInner = propPath.isObjectMethod() ? propPath : propPath.get("value");
 
                   if (valuePathInner.isFunction()) {
                     actualFunctionPath = valuePathInner;
@@ -584,8 +605,10 @@ function vFactory(err, file, config) {
 
         if (!hasCleanup) {
           err.push(E(file, factoryInfo.line, 1, `Factory '${factoryInfo.name}' must expose a cleanup, teardown, or destroy API.`, `Example: return { ..., cleanup: () => { /* ... */ } };`));
-        } else if (!cleanupInvokesEH) {
-          err.push(E(file, factoryInfo.line, 4, `Factory '${factoryInfo.name}' provides cleanup() but does not appear to call ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }).`, `Invoke ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }) inside cleanup() if listeners were tracked.`));
+        } else if (trackListenerUsed && !cleanupInvokesEH) {   // ← CHANGED
+          err.push(E(file, factoryInfo.line, 4,
+            `Factory '${factoryInfo.name}' provides cleanup() but does not appear to call ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }).`,
+            `Invoke ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }) inside cleanup() if listeners were tracked.`));
         }
       }
     }
