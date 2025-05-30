@@ -41,9 +41,11 @@ export function normaliseUrl(u = '') {
     const path  = raw || '/';
     return path + url.search + url.hash;
   } catch (err) {
-    const logger = _moduleLogger;             // Rule-12 alias
-    logger.error('[browserService] normaliseUrl failed', err,
-      { context: 'browserService:normaliseUrl', input: u });
+    const logger = _moduleLogger;
+    if (logger) {
+      logger.error('[browserService] normaliseUrl failed', err,
+        { context: 'browserService:normaliseUrl', input: u });
+    }
     return u;
   }
 }

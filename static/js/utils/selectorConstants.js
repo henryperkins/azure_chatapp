@@ -1,6 +1,3 @@
-export function createSelectorConstants() {
-  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
-}
 
 /**
  * selectorConstants.js

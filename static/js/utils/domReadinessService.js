@@ -236,30 +236,48 @@ export function createDomReadinessService({
           appearanceListeners.set(key, {
             selectors: selectorArray,
             onAppear: () => {
-              const newAppear = selectorArray.map((sel) => domAPI.querySelector(sel));
-              if (newAppear.every((el) => el !== null)) {
-                // Clear the pending state
-                browserService.clearTimeout(timeoutId);
-                pendingPromises.delete(key);
-                appearanceListeners.delete(key);
-                _markEnd(selectorArray);
-                _logger.info?.(
-                  '[domReadinessService] selectors ready',
-                  { selectors: selectorArray, duration: Math.round(_nowPerf() - startTime) }
-                );
-                resolve(newAppear);
+              try {
+                const newAppear = selectorArray.map((sel) => domAPI.querySelector(sel));
+                if (newAppear.every((el) => el !== null)) {
+                  // Clear the pending state
+                  browserService.clearTimeout(timeoutId);
+                  pendingPromises.delete(key);
+                  appearanceListeners.delete(key);
+                  _markEnd(selectorArray);
+                  _logger.info?.(
+                    '[domReadinessService] selectors ready',
+                    { selectors: selectorArray, duration: Math.round(_nowPerf() - startTime) }
+                  );
+                  resolve(newAppear);
+                }
+              } catch (err) {
+                _logger.error('[domReadinessService] elementsReady failed', err,
+                  { context: 'domReadinessService:elementsReady' });
+                throw err;
               }
             }
           });
           // Ensure at least one global observer is active
-          _ensureObserver();
+          try {
+            _ensureObserver();
+          } catch (err) {
+            _logger.error('[domReadinessService] ensureObserver failed', err,
+              { context: 'domReadinessService:ensureObserver' });
+            throw err;
+          }
         } else {
           // Fallback to a quick polling if we don't want to use observers
-          _pollForElements({
-            selectors: selectorArray,
-            timeoutId,
-            resolve
-          });
+          try {
+            _pollForElements({
+              selectors: selectorArray,
+              timeoutId,
+              resolve
+            });
+          } catch (err) {
+            _logger.error('[domReadinessService] elementsReady failed', err,
+              { context: 'domReadinessService:elementsReady' });
+            throw err;
+          }
         }
       });
     });
@@ -318,10 +336,16 @@ export function createDomReadinessService({
     if (!bodyEl)
       throw new Error('[domReadinessService] Document body not found – MutationObserver attachment failed. Fallback is forbidden.');
 
-    observer.observe(bodyEl, {
-      childList: true,
-      subtree: true
-    });
+    try {
+      observer.observe(bodyEl, {
+        childList: true,
+        subtree: true
+      });
+    } catch (err) {
+      _logger.error('[domReadinessService] ensureObserver failed', err,
+        { context: 'domReadinessService:ensureObserver' });
+      throw err;
+    }
 
     observers.push(observer);
   }
@@ -359,6 +383,8 @@ export function createDomReadinessService({
       try {
         await elementsReady(domSelectors, { timeout, context });
       } catch (err) {
+        _logger.error('[domReadinessService] dependenciesAndElements failed', err,
+          { context: 'domReadinessService:dependenciesAndElements' });
         const logger = _logger;   // Rule-12 alias
         logger.error('[domReadinessService] elementsReady failed', err,
                      { context: 'domReadinessService:dependenciesAndElements' });
@@ -464,6 +490,8 @@ export function createDomReadinessService({
       const event = eventHandlers.createCustomEvent(eventName, { detail });
       domAPI.dispatchEvent(domAPI.getDocument(), event);
     } catch (err) {
+      _logger.error('[domReadinessService] emitReplayable failed', err,
+        { context: 'domReadinessService:emitReplayable' });
       const logger = _logger;   // Rule-12 alias
       logger.error('[domReadinessService] emitReplayable failed', err,
                    { context: 'domReadinessService:emitReplayable' });
@@ -584,6 +612,8 @@ export function createDomReadinessService({
           { once: true, context: 'domReadinessService' }
         );
       } catch (err) {
+        _logger.error('[domReadinessService] waitForEvent failed', err,
+          { context: 'domReadinessService:waitForEvent' });
         const logger = _logger;   // Rule-12 alias
         logger.error('[domReadinessService] waitForEvent listener setup failed', err,
                      { context: 'domReadinessService:waitForEvent' });

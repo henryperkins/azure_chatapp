@@ -276,6 +276,8 @@ export function createHtmlTemplateLoader({
         });
 
       } catch (err) {
+        logger.error('[HtmlTemplateLoader] loadAppTemplates failed', err,
+          { context: 'HtmlTemplateLoader:loadAppTemplates', url: config.url });
         results.push({
           url: config.url,
           success: false,
