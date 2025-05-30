@@ -155,7 +155,7 @@ export function createProjectManager({
       this.DependencySystem = DependencySystem;
       this.domReadinessService = domReadinessService;
 
-      this.app = app ?? DependencySystem.modules.get('app');
+      this.app = app ?? DependencySystem.modules.get('appModule');
       this.chatManager = chatManager ?? DependencySystem.modules.get('chatManager');
       this.modelConfig = modelConfig ?? DependencySystem.modules.get('modelConfig');
       this.timer = timerFunc;

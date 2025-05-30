@@ -1,32 +1,27 @@
-import './utils/polyfillCustomEvent.js';
-/**
- * app.js - Main application orchestration.
+/* app.js
+ * Main application orchestration (root-level entry).
  *
- * ╔════════════════ WARNING: BOOTSTRAP EXCEPTION ════════════════╗
- * ║ This is the ONLY JS/TS module permitted to contain          ║
- * ║ top-level code, side effects, and initialization logic.     ║
- * ║ ALL other modules MUST export factories with no import-time ║
- * ║ effects, per .clinerules/custominstructions.md.             ║
- * ║ This exception is intentional for app.js as Root Orchestrator║
- * ╚══════════════════════════════════════════════════════════════╝
- *
- * Coordinates module wiring, initialization phases, and DI usage.
+ * ╔═══════════════════════════════════════════════════════════════════╗
+ * ║ This is the ONLY module allowed to contain top-level side effects ║
+ * ║ or immediate execution, per .clinerules/custominstructions.md.    ║
+ * ╚═══════════════════════════════════════════════════════════════════╝
  */
 
+// Polyfill for CustomEvent in older browsers
+import './utils/polyfillCustomEvent.js';
+
+// 1) Core config & factory imports
 import { APP_CONFIG } from './appConfig.js';
+import { createBrowserService } from './utils/browserService.js';
+import { setBrowserService as registerSessionBrowserService, getSessionId } from './utils/session.js';
 import { createDomAPI } from './utils/domAPI.js';
-import { createApiEndpoints } from './utils/apiEndpoints.js';
-
-import { createBrowserService, normaliseUrl } from './utils/browserService.js';
-import { setBrowserService as registerSessionBrowserService } from './utils/session.js';
-import { getSessionId } from './utils/session.js';
 import { createDomReadinessService } from './utils/domReadinessService.js';
-import { createApiClient } from './utils/apiClient.js';
-import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
+import { createEventHandlers } from './eventHandler.js';
+import { createSafeHandler } from './safeHandler.js';
+import { createLogger } from './logger.js';
 import { createAppInitializer } from './init/appInitializer.js';
-import { createLogDeliveryService } from './logDeliveryService.js';
-import { safeInit } from './utils/initHelpers.js';
 
+// Additional factories (passed through to appInitializer)
 import {
   shouldSkipDedup,
   stableStringify,
@@ -36,86 +31,78 @@ import {
   fileIcon as globalFileIcon
 } from './utils/globalUtils.js';
 
-import { isValidProjectId } from './projectManager.js';   // ← NEW (canonical source)
-
-import { createEventHandlers } from './eventHandler.js';
-import { createAuthModule } from './auth.js';
-import { createChatManager } from './chat.js';
-import { createProjectManager } from './projectManager.js';
-import { createProjectModal, createModalManager } from './modalManager.js';
-import { createModelConfig } from './modelConfig.js';
-import { createProjectDashboard } from './projectDashboard.js';
-import { createProjectListComponent } from './projectListComponent.js';
-import { createProjectDetailsComponent } from './projectDetailsComponent.js';
-import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
-import { createAccessibilityEnhancements } from './accessibility-utils.js';
-import { createNavigationService } from './navigationService.js';
-import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
-import { createTokenStatsManager } from './tokenStatsManager.js';
-import { createSidebar } from './sidebar.js';
-import { createUiRenderer } from './uiRenderer.js';
-
+import { isValidProjectId } from './projectManager.js';
+import { createApiEndpoints } from './utils/apiEndpoints.js';
+import { createApiClient } from './utils/apiClient.js';
+import { createHtmlTemplateLoader } from './utils/htmlTemplateLoader.js';
 import MODAL_MAPPINGS from './modalConstants.js';
 import { createFileUploadComponent } from './FileUploadComponent.js';
-import { createSafeHandler } from './safeHandler.js'; // Canonical SafeHandler factory
+import { createAccessibilityEnhancements } from './accessibility-utils.js';
+import { createNavigationService } from './navigationService.js';
+import { createUiRenderer } from './uiRenderer.js';
+import { createKnowledgeBaseComponent } from './knowledgeBaseComponent.js';
+import { createProjectDetailsEnhancements } from './project-details-enhancements.js';
+import { createTokenStatsManager } from './tokenStatsManager.js';
+import { createModalManager } from './modalManager.js';
+import { createAuthModule } from './auth.js';
+import { createProjectManager, isValidProjectId as isValidIdDup } from './projectManager.js';
+import { createModelConfig } from './modelConfig.js';
+import { createProjectDashboard } from './projectDashboard.js';
+import { createChatManager } from './chat.js';
+import { createProjectDetailsComponent } from './projectDetailsComponent.js';
+import { createProjectListComponent } from './projectListComponent.js';
+import { createProjectModal } from './modalManager.js';
+import { createSidebar } from './sidebar.js';
 
-// ---------------------------------------------------------------------------
-// UI helpers for KnowledgeBaseComponent
-// ---------------------------------------------------------------------------
-const uiUtils = {
-  formatBytes: globalFormatBytes,
-  formatDate: globalFormatDate,
-  fileIcon: globalFileIcon
-};
+// ─────────────────────────────────────────────────────────────────────────────
+// 2) Minimal singletons: DependencySystem, logger, sanitizer, eventHandlers
+// ─────────────────────────────────────────────────────────────────────────────
 
-
-// leave only one instance:
-import { createLogger } from './logger.js';
-
-// ---------------------------------------------------------------------------
-// 1) Create base services
-// ---------------------------------------------------------------------------
-const browserServiceInstance = createBrowserService({
+// Create base browser service & register with session
+const browserService = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
-registerSessionBrowserService(browserServiceInstance);
-const browserAPI = browserServiceInstance;
+registerSessionBrowserService(browserService);
 
-// ---------------------------------------------------------------------------
-// 2) Initialize DependencySystem (moved up, before first use)
-// ---------------------------------------------------------------------------
-const DependencySystem = browserAPI.getDependencySystem();
-if (!DependencySystem?.modules?.get) {
-  throw new Error('[App] DependencySystem not present - bootstrap aborted');
+const DependencySystem = browserService.getDependencySystem();
+if (!DependencySystem || !DependencySystem.modules) {
+  throw new Error('[app.js] Missing or invalid DependencySystem — aborting startup.');
 }
 
-let sanitizer = browserAPI.getWindow()?.DOMPurify;
+// Grab DOMPurify from the global window (if present)
+const sanitizer = browserService.getWindow()?.DOMPurify;
 if (!sanitizer) {
-  throw new Error('[App] DOMPurify not found - aborting bootstrap for security reasons.');
+  throw new Error('[App] DOMPurify not found — cannot proceed (security requirement).');
 }
-DependencySystem.register('sanitizer', sanitizer);
-DependencySystem.register('domPurify', sanitizer); // legacy alias
 
-// --- Logger (immediate creation, no proxy) ---
+// Create main logger
 const logger = createLogger({
   context: 'App',
-  debug: APP_CONFIG.DEBUG === true,
+  debug: (APP_CONFIG.DEBUG === true),
   minLevel: APP_CONFIG.LOGGING?.MIN_LEVEL || 'info',
   consoleEnabled: APP_CONFIG.LOGGING?.CONSOLE_ENABLED !== false,
-  sessionIdProvider: getSessionId,
-  traceIdProvider: () => DependencySystem?.modules?.get?.('traceId')
+  sessionIdProvider: getSessionId
 });
 
-DependencySystem.register('logger', logger);
+// Create the safeHandler wrapper
+const { safeHandler } = createSafeHandler({ logger });
 
-
-// --- SafeHandler (depends only on logger) ------------------------
-const safeHandlerModule = createSafeHandler({ logger });
-const safeHandler       = safeHandlerModule.safeHandler;
+// Register these essentials with the DependencySystem
+DependencySystem.register('sanitizer',   sanitizer);
+DependencySystem.register('domPurify',   sanitizer); // legacy alias
+DependencySystem.register('logger',      logger);
 DependencySystem.register('safeHandler', safeHandler);
-logger.setSafeHandler?.(safeHandler);
+DependencySystem.register('createChatManager', createChatManager);
 
-// --- ErrorReporter (real implementation) ------------------------
+const domAPI = createDomAPI({
+  documentObject: browserService.getDocument(),
+  windowObject:   browserService.getWindow(),
+  debug:          APP_CONFIG.DEBUG === true,
+  sanitizer
+});
+
+// Create minimal errorReporter stub so serviceInit won't fail
+// (the real errorReporter might get replaced or augmented by system)
 const errorReporter = {
   report(error, ctx = {}) {
     logger.error('[errorReporter] reported', error, { context: 'errorReporter', ...ctx });
@@ -123,76 +110,31 @@ const errorReporter = {
 };
 DependencySystem.register('errorReporter', errorReporter);
 
-// Dedicated App Event Bus
-const AppBus = new (browserAPI.getWindow()?.EventTarget || EventTarget)();
-DependencySystem.register('AppBus', AppBus);
-
-// ──  now it is safe to create domAPI  ────────────────────────────
-const domAPI = createDomAPI({
-  documentObject: browserAPI.getDocument(),
-  windowObject: browserAPI.getWindow(),
-  debug: APP_CONFIG.DEBUG === true,
-  // logger is registered later; domAPI will pick it up via DependencySystem DI after logger is registered.
-  sanitizer
-});
-
-// ---------------------------------------------------------------------------
-// 6) Early app module (using factory)—no appInit yet, define it later after eventHandlers
-
-// ---------------------------------------------------------------------------
-// 7) Define app object early (CRITICAL FIX)
-// ---------------------------------------------------------------------------
-const app = {}; // This will be enriched later
-DependencySystem.register('app', app);
-
-/* ──  NOW: Create eventHandlers instance via DI-compliant factory  ────────── */
-
 const eventHandlers = createEventHandlers({
   DependencySystem,
   domAPI,
-  browserService: browserServiceInstance,
+  browserService,
   APP_CONFIG,
-  errorReporter,          // ← real reporter
+  errorReporter,      // pass a real errorReporter stub, not null
   sanitizer,
-  app,
-  safeHandler,            // ← canonical safe-handler function
-  logger                  // ← real logger
-  // domReadinessService injected later
-});
-DependencySystem.register('eventHandlers', eventHandlers);
-// Now define appInit after eventHandlers is fully created:
-/* Defer AppInitializer creation until logger & safeHandler exist */
-let appInit;
-
-DependencySystem.register('createModalManager', createModalManager);
-DependencySystem.register('createAuthModule', createAuthModule);
-DependencySystem.register('createChatManager', createChatManager);
-DependencySystem.register('createProjectManager', createProjectManager);
-DependencySystem.register('createModelConfig', createModelConfig);
-DependencySystem.register('createProjectDashboard', createProjectDashboard);
-DependencySystem.register('createProjectDetailsComponent', createProjectDetailsComponent);
-DependencySystem.register('createProjectListComponent', createProjectListComponent);
-DependencySystem.register('createProjectModal', createProjectModal);
-DependencySystem.register('createSidebar', createSidebar);
-DependencySystem.register('createApiEndpoints', createApiEndpoints);
-DependencySystem.register('MODAL_MAPPINGS', MODAL_MAPPINGS);
-DependencySystem.register('globalUtils', {
-  shouldSkipDedup,
-  stableStringify,
-  normaliseUrl,
-  isAbsoluteUrl,
-  isValidProjectId
+  safeHandler,
+  logger
 });
 
- // ---------------------------------------------------------------------------
- // 10) Create service initializer
- // ---------------------------------------------------------------------------
+// Register them
+DependencySystem.register('domAPI',        domAPI);
+DependencySystem.register('browserService', browserService);
+DependencySystem.register('eventHandlers',  eventHandlers);
 
-/* Correct domReadinessService creation — after eventHandlers are available. */
+// ─────────────────────────────────────────────────────────────────────────────
+// 3) Create the single unified appInitializer instance
+// ─────────────────────────────────────────────────────────────────────────────
+
+// We also need a domReadinessService for certain phases
 const domReadinessService = createDomReadinessService({
   DependencySystem,
   domAPI,
-  browserService: browserServiceInstance,
+  browserService,
   eventHandlers,
   APP_CONFIG,
   logger
@@ -200,18 +142,28 @@ const domReadinessService = createDomReadinessService({
 DependencySystem.register('domReadinessService', domReadinessService);
 eventHandlers.setDomReadinessService(domReadinessService);
 
- // ---------------------------------------------------------------------------
- // 10) Create service initializer
- // ---------------------------------------------------------------------------
+// Prepare a dictionary of helper functions for UI usage
+const uiUtils = {
+  formatBytes: globalFormatBytes,
+  formatDate:  globalFormatDate,
+  fileIcon:    globalFileIcon
+};
 
-/* ───────────────────────────────
-   NOW create the AppInitializer
-   ─────────────────────────────── */
-appInit = createAppInitializer({
-  /* Core infrastructure */
+// Prepare a dictionary of global utility functions
+const globalUtils = {
+  shouldSkipDedup,
+  stableStringify,
+  normaliseUrl: browserService.normaliseUrl || null,
+  isAbsoluteUrl,
+  isValidProjectId  // canonical reference
+};
+
+// Now instantiate the unified AppInitializer
+const appInit = createAppInitializer({
+  // Core infrastructure
   DependencySystem,
   domAPI,
-  browserService: browserAPI,
+  browserService,
   eventHandlers,
   logger,
   sanitizer,
@@ -219,14 +171,12 @@ appInit = createAppInitializer({
   domReadinessService,
   APP_CONFIG,
   uiUtils,
-  globalUtils: DependencySystem.modules.get('globalUtils'),
-  createApiEndpoints,
+  globalUtils,
   getSessionId,
-
-  /* Modal mapping constant */
+  createApiEndpoints,
   MODAL_MAPPINGS,
 
-  /* Factories */
+  // Factories
   createFileUploadComponent,
   createApiClient,
   createAccessibilityEnhancements,
@@ -241,275 +191,23 @@ appInit = createAppInitializer({
   createProjectManager,
   createModelConfig,
   createProjectDashboard,
+  createChatManager,
   createProjectDetailsComponent,
   createProjectListComponent,
   createProjectModal,
   createSidebar
 });
 
- domAPI.setLogger?.(logger);                 // ← NEW
- browserServiceInstance.setLogger?.(logger); // ← NEW
-
-// Expose an opportunity for serviceInit to accept logger
-appInit.setLogger?.(logger);
-
-// (Removed redundant serviceInit.registerBasicServices() call here)
-
-
-// ----- new lazy proxy (will be overwritten by serviceInit) -----
-let apiRequest = (...args) => {
-  const impl = DependencySystem.modules.get('apiRequest');
-  if (typeof impl !== 'function') {
-    throw new Error('[app.js] apiRequest invoked before api client initialization');
-  }
-  // Once the real impl is available the proxy simply delegates.
-  return impl(...args);
-};
-if (!DependencySystem.modules.has('apiRequest')) {
-  DependencySystem.register('apiRequest', apiRequest);
-} else {
-  apiRequest = DependencySystem.modules.get('apiRequest');
-}
-
-// ---------------------------------------------------------------------------
-// 12) App object & top-level
-// ---------------------------------------------------------------------------
-let _globalInitCompleted = false;
-let _globalInitInProgress = false;
-
-Object.assign(app, {
-  getProjectId: () => {
-    const navigationService = DependencySystem.modules.get('navigationService');
-    if (navigationService?.getUrlParams) {
-      return navigationService.getUrlParams().project || null;
-    }
-    logger.warn('[app] getProjectId: no navigationService', { context: 'app:getProjectId' });
-    return null;
-  },
-  getCurrentProject: () => {
-    const mod = DependencySystem.modules.get('appModule');
-    return mod?.getCurrentProject?.() || null;
-  },
-  setCurrentProject: (project) => {
-    const mod = DependencySystem.modules.get('appModule');
-    if (mod?.setCurrentProject) {
-      mod.setCurrentProject(project);
-      return project;
-    }
-    logger.warn('[app] setCurrentProject: appModule not found', { context: 'app:setCurrentProject' });
-    return null;
-  },
-  navigateToConversation: async (chatId) => {
-    const chatMgr = DependencySystem.modules.get('chatManager');
-    if (chatMgr?.loadConversation) {
-      return chatMgr.loadConversation(chatId);
-    }
-    return false;
-  },
-  validateUUID: isValidProjectId,
-  setCurrentUser: (user) => {
-    const mod = DependencySystem.modules.get('appModule');
-    if (mod) {
-      logger.info('[app] setCurrentUser -> appModule.state', {
-        userId: user?.id,
-        username: user?.username
-      });
-      mod.setAuthState({ currentUser: user });
-    } else {
-      logger.warn('[app] setCurrentUser: appModule not found', { context: 'app:setCurrentUser' });
-    }
-  }
-});
-
-app.setLifecycleState = (...args) => {
-  DependencySystem.modules.get('logger')
-    ?.warn?.('[app] setLifecycleState() deprecated; use setAppLifecycleState()', { context: 'app:compat' });
-  DependencySystem.modules.get('appModule')?.setAppLifecycleState?.(...args);
-};
-
-app.DependencySystem = DependencySystem;
-app.apiRequest = apiRequest;
-app.state = appInit.state;
-Object.defineProperty(app, 'isInitializing', {
-  get: () => appInit.state?.initializing,
-  enumerable: true,
-  configurable: true
-});
-
-// ---------------------------------------------------------------------------
-// Utility
-// ---------------------------------------------------------------------------
-function toggleLoadingSpinner(show) {
-  const spinner = domAPI.getElementById('appLoadingSpinner');
-  if (!spinner) {
-    throw new Error('[toggleLoadingSpinner] Loading spinner element not found');
-  }
-  if (show) domAPI.removeClass(spinner, 'hidden');
-  else domAPI.addClass(spinner, 'hidden');
-}
-
-// ---------------------------------------------------------------------------
-// Fire app:ready once
-// ---------------------------------------------------------------------------
-let _appReadyDispatched = false;
-function fireAppReady(success = true, error = null) {
-  if (_appReadyDispatched) return;
-  _appReadyDispatched = true;
-
-  app._appReadyDispatched = true;
-  const detail = success
-    ? { status: 200, data: { success }, message: 'ok' }
-    : { status: error?.status || 500, data: error, message: error?.message || 'init-failed' };
-
-  const drs = DependencySystem.modules.get('domReadinessService');
-  if (drs?.emitReplayable) {
-    drs.emitReplayable('app:ready', detail);
-  } else {
-    throw new Error('[fireAppReady] domReadinessService unavailable; cannot dispatch app:ready event');
-  }
-
-  /* ALSO dispatch ‘app:ready’ on window so base.html listener receives it. */
-  try {
-    const win = browserAPI.getWindow?.();
-    if (win && typeof win.dispatchEvent === 'function') {
-      const winEvt = eventHandlers.createCustomEvent('app:ready', { detail });
-      /* Defer to next tick so inline script (registered after app.js)
-         can attach its listener before the event is fired.            */
-      browserAPI.setTimeout(() => {
-        try { win.dispatchEvent(winEvt); } catch (e) { /* swallow */ }
-      }, 0);
-    }
-  } catch (err) {
-    logger.error('[fireAppReady] Failed to dispatch app:ready on window', err,
-      { context: 'app:fireAppReady' });
-  }
-
-  DependencySystem.modules.get('logger')?.log('[fireAppReady] dispatched', {
-    success, error, context: 'app'
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Auth + error inits
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Core + UI inits
-// ---------------------------------------------------------------------------
-
-
-// ---------------------------------------------------------------------------
-// registerAppListeners
-// ---------------------------------------------------------------------------
-function registerAppListeners() {
-  logger.info('[app] registerAppListeners: no op, delegated to modules', {
-    context: 'app:registerAppListeners'
-  });
-}
-
-// ---------------------------------------------------------------------------
-// handleInitError
-// ---------------------------------------------------------------------------
-function handleInitError(err) {
-  const modalManager = DependencySystem.modules.get('modalManager');
-  const shownViaModal = modalManager?.show?.('error', {
-    title: 'Application initialization failed',
-    message: err?.message || 'Unknown initialization error',
-    showDuringInitialization: true
-  });
-
-  domAPI.dispatchEvent(
-    domAPI.getDocument(),
-    eventHandlers.createCustomEvent('app:initError', { detail: { error: err } })
-  );
-
-  if (!shownViaModal) {
-    try {
-      const errorContainer = domAPI.getElementById('appInitError');
-      if (errorContainer) {
-        domAPI.setTextContent(errorContainer, `Initialization failed: ${err?.message || 'Unknown error'}`);
-        domAPI.removeClass(errorContainer, 'hidden');
-      }
-    } catch (displayErr) {
-      logger.error('[handleInitError]', displayErr, { context: 'app:handleInitError' });
-    }
-  }
-}
-
-/**
- * init
- * The main initialization function for the entire application lifecycle.
- */
-export async function init() {
-  logger.log('[App.init] Called', { context: 'app:init', ts: Date.now() });
-
-  await domReadinessService.documentReady();
-
+// ─────────────────────────────────────────────────────────────────────────────
+// 4) Kick off appInit so it runs all orchestration phases
+// ─────────────────────────────────────────────────────────────────────────────
+(async () => {
   try {
     await appInit.initializeApp();
-    // Switch on server-side log shipping once the app is ready
-    logger.setServerLoggingEnabled?.(true);
-    exposeDebugHelpers();
-    fireAppReady(true);
-    return true;
   } catch (err) {
-    handleInitError(err);
-    throw err;
+    logger.error('[app.js] Application failed to initialize.', err, { context: 'app:bootstrap' });
   }
-}
+})();
 
-// ---------------------------------------------------------------------------
-// Expose debug helpers
-// ---------------------------------------------------------------------------
-async function exposeDebugHelpers() {
-  await domReadinessService.waitForEvent('app:ready');
-  const windowObj = browserAPI.getWindow();
-  if (windowObj) {
-    windowObj.debugSidebarAuth = () => {
-      const sb = DependencySystem.modules.get('sidebar');
-      return sb?.debugAuthState
-        ? sb.debugAuthState()
-        : (logger.warn('[App] sidebar debug not available'), null);
-    };
-    windowObj.debugAppState = () => {
-      const mod = DependencySystem.modules.get('appModule');
-      const st = {
-        appState: mod?.state,
-        authInfo: {
-          isAuthenticated: mod?.state?.isAuthenticated,
-          currentUser: mod?.state?.currentUser
-        }
-      };
-      logger.info('[App] Debug app state requested', st);
-      return st;
-    };
-    logger.info('[App] debug fns: window.debugSidebarAuth(), window.debugAppState()');
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Auto-bootstrap in browser
-// ---------------------------------------------------------------------------
-if (typeof window !== 'undefined') {
-  (async () => {
-    try {
-      await init();
-    } catch (err) {
-      const log = DependencySystem?.modules?.get?.('logger');
-      if (log?.error) {
-        log.error('[app.js][bootstrap] init() failed', err, { context: 'app:bootstrap' });
-      }
-      try {
-        fireAppReady(false, err);
-      } catch (e) {
-        logger.error('[app.js][bootstrap] Error in fireAppReady', e, { context: 'app:bootstrap:fireAppReady' });
-      }
-    }
-  })();
-}
-
-/**
- * Application entrypoint and bootstrapper.
- */
-/* Re-export canonical factory to eliminate duplication */
+// If desired, you can export references to “appInit” or config
 export { createAppConfig } from './appConfig.js';

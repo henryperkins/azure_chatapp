@@ -102,7 +102,7 @@ class ProjectDetailsComponent {
     this.modalManager = deps.modalManager;
     this.FileUploadComponentClass = deps.FileUploadComponentClass;
     this.knowledgeBaseComponent = deps.knowledgeBaseComponent;
-    this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('app');
+    this.app = deps.app || this.eventHandlers.DependencySystem?.modules?.get('appModule');
     this.modelConfig = deps.modelConfig;
     this.chatManager = deps.chatManager;
     this.apiClient = deps.apiClient;
@@ -296,7 +296,7 @@ class ProjectDetailsComponent {
         eventHandlers: this.eventHandlers,
         domAPI: this.domAPI,
         projectManager: this.projectManager,
-        app: this.eventHandlers.DependencySystem.modules.get("app"),
+        app: this.eventHandlers.DependencySystem.modules.get("appModule"),
         domReadinessService: this.domReadinessService,
         logger: this.logger,
         projectId: this.projectId, // Pass current project ID
@@ -437,14 +437,44 @@ class ProjectDetailsComponent {
       case "details":
         this.projectManager.loadProjectStats(this.projectId);
         break;
-      case "knowledge":
-        if (this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function") {
-          this.knowledgeBaseComponent.initialize(true, this.projectData?.knowledge_base, this.projectId)
-            .catch(e => this._logError("Error initializing knowledgeBaseComponent", e));
-        } else {
-          this._logWarn("KnowledgeBaseComponent not ready - skipping initialization");
+      case "knowledge": {
+        const tryInit = () => {
+          if (this.knowledgeBaseComponent && typeof this.knowledgeBaseComponent.initialize === "function") {
+            this.knowledgeBaseComponent.initialize(
+              true,
+              this.projectData?.knowledge_base,
+              this.projectId
+            ).catch(e => this._logError("Error initializing knowledgeBaseComponent", e));
+            return true;
+          }
+          return false;
+        };
+
+        /* 1️⃣ Attempt immediate initialisation if the component is already injected */
+        if (!tryInit()) {
+          /* 2️⃣ Try resolving the instance from the DI container */
+          const kbc = this.eventHandlers?.DependencySystem?.modules?.get?.('knowledgeBaseComponent');
+          if (kbc) {
+            this.setKnowledgeBaseComponent(kbc);
+            if (tryInit()) break;
+          }
+
+          /* 3️⃣ Still unavailable – set up a one-time listener to retry after injection */
+          this._logWarn("KnowledgeBaseComponent not ready – deferring initialization until available");
+          const onceHandler = this.safeHandler(() => {
+            const cmp = this.eventHandlers?.DependencySystem?.modules?.get?.('knowledgeBaseComponent');
+            if (cmp) {
+              this.setKnowledgeBaseComponent(cmp);
+              tryInit();
+            }
+            this.domAPI.getDocument().removeEventListener('knowledgebasecomponent:initialized', onceHandler);
+          }, 'KnowledgeTabDeferredInit');
+          this.domAPI
+            .getDocument()
+            .addEventListener('knowledgebasecomponent:initialized', onceHandler, { once: true });
         }
         break;
+      }
     }
   }
 

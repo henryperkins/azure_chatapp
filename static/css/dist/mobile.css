@@ -3858,6 +3858,11 @@
       --size: calc(var(--size-selector, 0.25rem) * 5);
     }
   }
+  .toggle-success {
+    &:checked, &[aria-checked="true"] {
+      --input-color: var(--color-success);
+    }
+  }
   .toggle-xs {
     &:is([type="checkbox"]), &:has([type="checkbox"]) {
       --size: calc(var(--size-selector, 0.25rem) * 4);

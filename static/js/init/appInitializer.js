@@ -105,7 +105,8 @@ export function createAppInitializer({
         createTokenStatsManager
     };
     Object.entries(factoryMap).forEach(([name, fn]) => {
-        if (fn && !DependencySystem.modules.has(name)) {
+        // [CHANGED] Only register if it's a function and not registered yet.
+        if (typeof fn === 'function' && !DependencySystem.modules.has(name)) {
             DependencySystem.register(name, fn);
         }
     });
@@ -308,6 +309,10 @@ export function createAppInitializer({
         return api;
     })();
     DependencySystem.register('appModule', appModule);
+    // Alias for legacy consumers waiting on "app"
+    if (!DependencySystem.modules.has('app')) {
+        DependencySystem.register('app', appModule);
+    }
 
 
     // ──────────────────────────────────────────────
@@ -340,6 +345,29 @@ export function createAppInitializer({
             safeRegister('viewportAPI', browserService);
             safeRegister('storage', browserService);
             safeRegister('eventHandlers', eventHandlers);
+
+            // ──────────────────────────────────────────────
+            // Register global application EventTarget bus
+            // ──────────────────────────────────────────────
+            const winObj = browserService?.getWindow?.();
+            let AppBusInstance = null;
+            if (winObj && typeof winObj.EventTarget === 'function') {
+                AppBusInstance = new winObj.EventTarget();
+            } else if (typeof EventTarget === 'function') {
+                AppBusInstance = new EventTarget();
+            } else {
+                // Fallback minimal shim
+                AppBusInstance = {
+                    addEventListener() {},
+                    removeEventListener() {},
+                    dispatchEvent() { return false; }
+                };
+                logger.warn('[serviceInit] EventTarget not available – using shim for AppBus.', {
+                    context: 'serviceInit:registerBasicServices'
+                });
+            }
+            safeRegister('AppBus', AppBusInstance);
+
             safeRegister('domReadinessService', domReadinessService);
 
             if (eventHandlers.setDomReadinessService) {
@@ -404,43 +432,43 @@ export function createAppInitializer({
                     logger
                 });
 
-                        // --- Log Delivery Service ------------------------------------------
-                        if (apiClientInstance && APP_CONFIG.LOGGING?.BACKEND_ENABLED !== false) {
-                            try {
-                                const logDelivery = createLogDeliveryService({
-                                    apiClient: apiClientInstance,
-                                    browserService,
-                                    eventHandlers,
-                                    enabled: false // Will enable after auth
-                                });
-                                if (!DependencySystem.modules.has('logDelivery')) {
-                                    DependencySystem.register('logDelivery', logDelivery);
-                                } else {
-                                    DependencySystem.modules.set('logDelivery', logDelivery);
-                                }
-
-                                // Enable log delivery after auth is ready
-                                eventHandlers.trackListener(
-                                    domAPI.getDocument(),
-                                    'authReady',
-                                    () => {
-                                        logDelivery.start();
-                                        logger.info('Log delivery service started', { context: 'app:logDelivery' });
-                                    },
-                                    { once: true, description: 'Start logDelivery after authReady', context: 'logDelivery' }
-                                );
-
-                                logger.debug('[serviceInit] LogDeliveryService registered', {
-                                    context: 'serviceInit:registerAdvancedServices'
-                                });
-                            } catch (err) {
-                                logger.error('[serviceInit] Failed to create LogDeliveryService', err, {
-                                    context: 'serviceInit:registerAdvancedServices'
-                                });
-                            }
+                // --- Log Delivery Service ------------------------------------------
+                if (apiClientInstance && APP_CONFIG.LOGGING?.BACKEND_ENABLED !== false) {
+                    try {
+                        const logDelivery = createLogDeliveryService({
+                            apiClient: apiClientInstance,
+                            browserService,
+                            eventHandlers,
+                            enabled: false // Will enable after auth
+                        });
+                        if (!DependencySystem.modules.has('logDelivery')) {
+                            DependencySystem.register('logDelivery', logDelivery);
+                        } else {
+                            DependencySystem.modules.set('logDelivery', logDelivery);
                         }
 
-                        if (DependencySystem.modules.has('apiRequest')) {
+                        // Enable log delivery after auth is ready
+                        eventHandlers.trackListener(
+                            domAPI.getDocument(),
+                            'authReady',
+                            () => {
+                                logDelivery.start();
+                                logger.info('Log delivery service started', { context: 'app:logDelivery' });
+                            },
+                            { once: true, description: 'Start logDelivery after authReady', context: 'logDelivery' }
+                        );
+
+                        logger.debug('[serviceInit] LogDeliveryService registered', {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    } catch (err) {
+                        logger.error('[serviceInit] Failed to create LogDeliveryService', err, {
+                            context: 'serviceInit:registerAdvancedServices'
+                        });
+                    }
+                }
+
+                if (DependencySystem.modules.has('apiRequest')) {
                     DependencySystem.modules.set('apiRequest', apiClientInstance.fetch);
                     logger.debug('[serviceInit] apiRequest proxy replaced with real implementation.', {
                         context: 'serviceInit:registerAdvancedServices'
@@ -508,7 +536,7 @@ export function createAppInitializer({
                     eventHandlers,
                     logger
                 });
-                navInstance.init();                 // ACTIVATE lifecycle & popstate handler
+                navInstance.init(); // ACTIVATE lifecycle & popstate handler
                 safeRegister('navigationService', navInstance);
                 logger.debug('[serviceInit] Navigation Service created.', {
                     context: 'serviceInit:registerAdvancedServices'
@@ -745,6 +773,9 @@ export function createAppInitializer({
                 }
             }
 
+            // Validate mandatory runtime dependencies
+            validateRuntimeDeps();
+
             // Phase 1: Basic DOM readiness
             await domReadinessService.dependenciesAndElements({
                 deps: ['domAPI'],
@@ -853,8 +884,7 @@ export function createAppInitializer({
             });
             DependencySystem.register('projectDetailsComponent', projectDetailsComp);
 
-            // Phase 3.5: KnowledgeBaseComponent (placeholder) & ChatManager
-            // we must delay real instantiation until ProjectManager exists
+            // Phase 3.5: KnowledgeBaseComponent & ChatManager
             let knowledgeBaseComponentInstance = null;
 
             const navigationService = DependencySystem.modules.get('navigationService');
@@ -912,7 +942,7 @@ export function createAppInitializer({
                 logger.log('[coreInit] projectManager registered', { context: 'coreInit' });
             }
 
-            /* NEW – activate its internal listeners & auth synchronisation */
+            // NEW – activate its internal listeners & auth synchronisation
             if (typeof projectManager.initialize === 'function') {
                 // Run in background so auth phase can begin
                 projectManager.initialize().catch((err) =>
@@ -964,7 +994,7 @@ export function createAppInitializer({
                 globalUtils,
                 APP_CONFIG,
                 logger,
-                DependencySystem // Explicitly provide the DI system per guardrails
+                DependencySystem
             });
             DependencySystem.register('projectListComponent', projectListComponent);
             logger.debug('[coreInit] ProjectListComponent registered.', { context: 'coreInit' });
@@ -974,8 +1004,7 @@ export function createAppInitializer({
                 try {
                     await modalManager.init();
                     await domReadinessService.dependenciesAndElements({
-                        // IMPORTANT: Keep selector values in sync with MODAL_MAPPINGS in modalConstants.js.
-                        // If you rename any modal IDs, update both the mapping and this bootstrap list.
+                        // Keep selector values in sync with MODAL_MAPPINGS
                         domSelectors: ['#loginModal', '#errorModal', '#confirmActionModal', '#projectModal'],
                         timeout: APP_CONFIG.MODAL_DOM_TIMEOUT ?? 12000,
                         context: 'coreInit:modalReadiness'
@@ -1028,8 +1057,6 @@ export function createAppInitializer({
                 sanitizer, domReadinessService, logger, safeHandler, APP_CONFIG
             });
             DependencySystem.register('sidebar', sidebar);
-            // ↓ DEFERRED: sidebar now initialized during UI phase
-            // if (sidebar.init) await sidebar.init();
 
             logger.info('[coreInit] Core systems initialization completed.', {
                 context: 'coreInit'
@@ -1119,7 +1146,7 @@ export function createAppInitializer({
 
             const isAuthenticated = appModuleLocal.state.isAuthenticated;
             const navService = DependencySystem.modules.get('navigationService');
-            const appReadyDispatched = DependencySystem.modules.get('app')?._appReadyDispatched;
+            const appReadyDispatched = DependencySystem.modules.get('appModule')?._appReadyDispatched;
             const readyNow = appReadyDispatched || appModuleLocal.state.isReady;
 
             const proceed = () => {
@@ -1155,7 +1182,6 @@ export function createAppInitializer({
                 }
                 const isAuth = appModuleLocal.state.isAuthenticated;
                 const user = appModuleLocal.state.currentUser;
-                // Robust fallback displayed everywhere
                 const displayName = user?.name || user?.username || 'User';
 
                 logger.debug('[authInit][renderAuthHeader] Rendering auth header', {
@@ -1198,9 +1224,6 @@ export function createAppInitializer({
                 }
 
                 if (isAuth && userMenu && userInitialsEl) {
-                    // Robust fallback: allow username if no name field is present
-                    // This avoids header failures if backend only supplies username
-                    const displayName = user?.name || user?.username || "User";
                     const initials = user?.name
                         ? user.name.trim().split(/\s+/).map(p => p[0]).join('').toUpperCase()
                         : (user?.username ? user.username.slice(0, 2).toUpperCase() : 'U');
@@ -1319,6 +1342,11 @@ export function createAppInitializer({
                     url: '/static/html/project_details.html',
                     containerSelector: '#projectDetailsView',
                     eventName: 'projectDetailsHtmlLoaded'
+                });
+                await htmlLoader.loadTemplate({
+                    url: '/static/html/modals.html',
+                    containerSelector: 'body',
+                    eventName: 'modalsLoaded'
                 });
                 logger.log('[UIInit] Project templates loaded', {
                     context: 'uiInit:loadTemplates'
@@ -1542,7 +1570,6 @@ export function createAppInitializer({
                     }
                 }
 
-                // ── finally, wire up sidebar now that authReady has already fired ──
                 const sidebar = DependencySystem.modules.get('sidebar');
                 if (sidebar?.init) {
                     try {

@@ -14,7 +14,11 @@ import random
 import uuid
 import asyncio  # Added for asyncio.sleep
 
-from utils.sentry_utils import tag_transaction, sentry_span_context, inject_sentry_trace_headers
+from utils.sentry_utils import (
+    tag_transaction,
+    sentry_span_context,
+    inject_sentry_trace_headers,
+)
 from utils.mcp_sentry import (
     get_issue_details,
     search_issues,
@@ -121,9 +125,7 @@ async def test_sentry_performance(response: Response):
         await asyncio.sleep(0.1)  # 100ms simulated database query
 
     # Create a span for a simulated HTTP request
-    with sentry_span_context(
-        "http.client", "Simulate external API call"
-    ) as span:
+    with sentry_span_context("http.client", "Simulate external API call") as span:
         # Add HTTP request details
         span.set_tag("http.method", "GET")
         span.set_tag("http.url", "https://api.example.com/data")
@@ -133,9 +135,7 @@ async def test_sentry_performance(response: Response):
         await asyncio.sleep(0.2)  # 200ms simulated API call
 
         # Create a nested span
-        with sentry_span_context(
-            "serialization", "Process API response"
-        ) as child_span:
+        with sentry_span_context("serialization", "Process API response") as child_span:
             child_span.set_data("serialization.format", "json")
             child_span.set_data("response.size", 1240)
             await asyncio.sleep(0.05)  # 50ms simulated processing
@@ -268,25 +268,28 @@ async def test_sentry_mcp(issue_id: Optional[str] = None):
 
         # Otherwise, search for recent issues
         else:
-            with sentry_span_context(
-                "mcp.search_issues", "Search for recent issues"
-            ):
+            with sentry_span_context("mcp.search_issues", "Search for recent issues"):
                 issues = search_issues("is:unresolved", limit=5)
 
                 # Format the results
                 formatted_issues = []
                 for issue in issues:
-                    if not isinstance(issue, dict):
+                    # Ensure issue is a dict before calling .get()
+                    if isinstance(issue, dict):
+                        formatted_issues.append(
+                            {
+                                "id": issue.get("id"),
+                                "title": issue.get("title"),
+                                "status": issue.get("status"),
+                                "project": issue.get("project", {}).get(
+                                    "name", "Unknown"
+                                ),
+                                "count": issue.get("count", 0),
+                            }
+                        )
+                    else:
+                        # Optionally handle or log unexpected data structure
                         continue
-                    formatted_issues.append(
-                        {
-                            "id": issue.get("id"),
-                            "title": issue.get("title"),
-                            "status": issue.get("status"),
-                            "project": issue.get("project", {}).get("name", "Unknown"),
-                            "count": issue.get("count", 0),
-                        }
-                    )
 
                 return {
                     "message": "Successfully searched for recent issues",

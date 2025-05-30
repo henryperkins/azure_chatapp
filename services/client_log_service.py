@@ -7,13 +7,14 @@ services/client_log_service.py - Business logic for client log processing
 import logging
 import json
 from typing import List, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import aiofiles
 import sentry_sdk
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
 
 class ClientLogService:
     """Service for processing client-side logs"""
@@ -24,18 +25,14 @@ class ClientLogService:
         self.log_file = settings.CLIENT_LOG_FILE if settings.CLIENT_LOG_FILE else None
 
     async def process_client_logs(
-        self,
-        entries: List[Any],
-        request_context: Dict[str, Any]
+        self, entries: List[Any], request_context: Dict[str, Any]
     ) -> None:
         """Process a batch of client log entries"""
         for entry in entries:
             await self._process_single_log(entry, request_context)
 
     async def _process_single_log(
-        self,
-        entry: Any,
-        request_context: Dict[str, Any]
+        self, entry: Any, request_context: Dict[str, Any]
     ) -> None:
         """Process a single log entry"""
         # Map client levels to Python levels
@@ -53,7 +50,7 @@ class ClientLogService:
         # Check deduplication for errors
         if level >= logging.ERROR:
             cache_key = f"{entry.context}:{entry.message}"
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             if cache_key in self.error_cache:
                 last_seen = self.error_cache[cache_key]
@@ -71,7 +68,7 @@ class ClientLogService:
             "client_context": entry.context,
             "client_session_id": entry.sessionId,
             "client_trace_id": entry.traceId,
-            **request_context
+            **request_context,
         }
 
         if entry.data:
@@ -80,14 +77,10 @@ class ClientLogService:
         if entry.metadata:
             extra["client_metadata"] = entry.metadata
 
-        logger.log(
-            level,
-            f"[CLIENT] {entry.message}",
-            extra=extra
-        )
+        logger.log(level, f"[CLIENT] {entry.message}", extra=extra)
 
         # Forward to Sentry if error/critical and enabled
-        if level >= logging.ERROR and getattr(settings, 'SENTRY_ENABLED', False):
+        if level >= logging.ERROR and getattr(settings, "SENTRY_ENABLED", False):
             await self._forward_to_sentry(entry, request_context)
 
         # Persist to file if configured
@@ -95,9 +88,7 @@ class ClientLogService:
             await self._write_to_file(entry, request_context)
 
     async def _forward_to_sentry(
-        self,
-        entry: Any,
-        request_context: Dict[str, Any]
+        self, entry: Any, request_context: Dict[str, Any]
     ) -> None:
         """Forward error logs to Sentry"""
         try:
@@ -116,28 +107,26 @@ class ClientLogService:
                     category="client",
                     message=entry.message,
                     level=entry.level,
-                    data=entry.data or {}
+                    data=entry.data or {},
                 )
 
                 # Capture as message
                 sentry_sdk.capture_message(
-                    f"[CLIENT] {entry.message}",
-                    level=entry.level
+                    f"[CLIENT] {entry.message}", level=entry.level
                 )
         except Exception as e:
             logger.error(f"Failed to forward to Sentry: {e}")
 
-    async def _write_to_file(
-        self,
-        entry: Any,
-        request_context: Dict[str, Any]
-    ) -> None:
+    async def _write_to_file(self, entry: Any, request_context: Dict[str, Any]) -> None:
         """Write log entry to file"""
         try:
+            if not self.log_file:
+                return
+
             log_data = {
                 **entry.dict(),
                 **request_context,
-                "server_timestamp": datetime.utcnow().isoformat()
+                "server_timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
             async with aiofiles.open(self.log_file, "a") as f:
@@ -148,9 +137,10 @@ class ClientLogService:
 
     def _clean_cache(self) -> None:
         """Remove expired entries from error cache"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = [
-            key for key, timestamp in self.error_cache.items()
+            key
+            for key, timestamp in self.error_cache.items()
             if now - timestamp > self.cache_ttl
         ]
         for key in expired:

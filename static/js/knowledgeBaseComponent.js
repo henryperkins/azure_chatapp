@@ -24,7 +24,7 @@ export function createKnowledgeBaseComponent(options = {}) {
   const getDep = (name) => name in options ? options[name] : DS.modules.get(name);
 
   const sanitizer = getDep("sanitizer");
-  const app = getDep("app");
+  const app = getDep("appModule") || getDep("app");
   const projectManager = getDep("projectManager");
   const eventHandlers = getDep("eventHandlers");
   const uiUtils = getDep("uiUtils") || getDep("uiUtilsInstance");
@@ -263,7 +263,8 @@ export function createKnowledgeBaseComponent(options = {}) {
         domSelectors: presentSelectors,
         deps: ['auth', 'AppBus'], // Ensure auth and AppBus are ready for listeners
         context: MODULE + '::initializeDOM',
-        timeout: this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000
+        timeout: this.app?.APP_CONFIG?.TIMEOUTS?.COMPONENT_ELEMENTS_READY ?? 8000,
+        optional: true
       });
       this.logger.debug(`[${MODULE}] DOM elements and core deps (auth, AppBus) ready.`, { context: MODULE });
 
