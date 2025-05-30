@@ -359,8 +359,9 @@ export function createDomReadinessService({
       try {
         await elementsReady(domSelectors, { timeout, context });
       } catch (err) {
-        _logger.error('[domReadinessService] elementsReady failed', err,
-          { context: 'domReadinessService:dependenciesAndElements' });
+        const logger = _logger;   // Rule-12 alias
+        logger.error('[domReadinessService] elementsReady failed', err,
+                     { context: 'domReadinessService:dependenciesAndElements' });
         domSelectors.forEach((sel) => _missingSelectors.add(sel));
         if (optional) {
           _logger.warn?.(
@@ -463,8 +464,9 @@ export function createDomReadinessService({
       const event = eventHandlers.createCustomEvent(eventName, { detail });
       domAPI.dispatchEvent(domAPI.getDocument(), event);
     } catch (err) {
-      _logger.error('[domReadinessService] Failed to dispatch event', err,
-        { context: 'domReadinessService:emitReplayable' });
+      const logger = _logger;   // Rule-12 alias
+      logger.error('[domReadinessService] emitReplayable failed', err,
+                   { context: 'domReadinessService:emitReplayable' });
       _logger.error?.(`[domReadinessService] Failed to dispatch event: ${eventName}`, err, {
         eventName,
         detail
@@ -522,12 +524,9 @@ export function createDomReadinessService({
           });
           return Promise.resolve(syntheticEvent);
         } catch (err) {
-          _logger.error('[domReadinessService] Failed to create synthetic event', err,
-            { context: 'domReadinessService:waitForEvent' });
-          _logger.error?.(`[domReadinessService] Failed to create synthetic event for "${eventName}"`, err, {
-            eventName,
-            context
-          });
+          const logger = _logger;   // Rule-12 alias
+          logger.error('[domReadinessService] waitForEvent synthetic event failed', err,
+                       { context: 'domReadinessService:waitForEvent' });
           // Fall through to normal event listening
         }
       }
@@ -585,13 +584,10 @@ export function createDomReadinessService({
           { once: true, context: 'domReadinessService' }
         );
       } catch (err) {
-        _logger.error('[domReadinessService] Error setting up event listener', err,
-          { context: 'domReadinessService:waitForEvent' });
+        const logger = _logger;   // Rule-12 alias
+        logger.error('[domReadinessService] waitForEvent listener setup failed', err,
+                     { context: 'domReadinessService:waitForEvent' });
         cleanup();
-        _logger.error?.(`[domReadinessService] Error setting up event listener`, err, {
-          eventName,
-          context
-        });
         reject(new Error(`[domReadinessService] Failed to set up event listener for "${eventName}": ${err.message}`));
       }
     });
@@ -661,8 +657,9 @@ export function createDomReadinessService({
       try {
         obs.disconnect();
       } catch (err) {
-        _logger.error('[domReadinessService] observer.disconnect failed', err,
-          { context: 'domReadinessService:destroy' });
+        const logger = _logger;   // Rule-12 alias
+        logger.error('[domReadinessService] destroy observer.disconnect failed', err,
+                     { context: 'domReadinessService:destroy' });
       }
     });
     observers.length = 0;
