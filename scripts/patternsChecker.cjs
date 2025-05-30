@@ -345,6 +345,7 @@ function vFactory(err, file, config) {
   let hasDepCheck = false;
   let cleanupInvokesEH = false;
   let trackListenerUsed = false;          // ← NEW
+  let returnsObjectExpression = false;        // NEW
 
   return {
     ExportNamedDeclaration(p) {
@@ -369,6 +370,20 @@ function vFactory(err, file, config) {
       }
 
       if (funcName && funcNode && /^create[A-Z]/.test(funcName)) {
+        const firstParamNode = funcNode.params[0];
+        const isDIObjectParam =
+          firstParamNode &&
+          (
+            firstParamNode.type === 'ObjectPattern' ||                              // { logger, … }
+            (firstParamNode.type === 'AssignmentPattern' &&
+             firstParamNode.left.type === 'ObjectPattern')                         // { … } = {}
+          );
+
+        if (!isDIObjectParam) {
+          // Not a DI factory → skip Rule-1 checks to avoid false positives
+          return;
+        }
+
         factoryInfo.found = true;
         factoryInfo.line = funcNode.loc.start.line;
         factoryInfo.name = funcName;
@@ -493,6 +508,7 @@ function vFactory(err, file, config) {
           }
 
           if (returnedObjectPath && returnedObjectPath.isObjectExpression()) {
+            returnsObjectExpression = true;            // NEW  (track that factory returns an object)
             const returnedObjectNode = returnedObjectPath.node;
             if (hasProp(returnedObjectNode, "cleanup") || hasProp(returnedObjectNode, "teardown") || hasProp(returnedObjectNode, "destroy")) {
               hasCleanup = true;
@@ -603,9 +619,11 @@ function vFactory(err, file, config) {
           }
         }
 
-        if (!hasCleanup) {
-          err.push(E(file, factoryInfo.line, 1, `Factory '${factoryInfo.name}' must expose a cleanup, teardown, or destroy API.`, `Example: return { ..., cleanup: () => { /* ... */ } };`));
-        } else if (trackListenerUsed && !cleanupInvokesEH) {   // ← CHANGED
+        if (returnsObjectExpression && !hasCleanup) {
+          err.push(E(file, factoryInfo.line, 1,
+            `Factory '${factoryInfo.name}' must expose a cleanup, teardown, or destroy API.`,
+            `Example: return { ..., cleanup: () => { /* ... */ } };`));
+        } else if (returnsObjectExpression && trackListenerUsed && !cleanupInvokesEH) {
           err.push(E(file, factoryInfo.line, 4,
             `Factory '${factoryInfo.name}' provides cleanup() but does not appear to call ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }).`,
             `Invoke ${config.serviceNames.eventHandlers}.cleanupListeners({ context: … }) inside cleanup() if listeners were tracked.`));
