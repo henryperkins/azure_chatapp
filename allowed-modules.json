@@ -37,6 +37,7 @@
   "static/js/tokenStatsManager.js",
   "static/js/uiRenderer.js",
   "static/js/init/appInitializer.js",
+  "static/js/init/appInitializer.js.backup",
   "static/js/services/starredStorage.js",
   "static/js/utils/apiClient.js",
   "static/js/utils/apiEndpoints.js",
@@ -45,5 +46,10 @@
   "static/js/utils/domReadinessService.js",
   "static/js/utils/errorReporterStub.js",
   "static/js/utils/globalUtils.js",
-  "static/js/utils/htmlTemplateLoader.js"
+  "static/js/utils/htmlTemplateLoader.js",
+  "static/js/utils/initHelpers.js",
+  "static/js/utils/polyfillCustomEvent.js",
+  "static/js/utils/selectorConstants.js",
+  "static/js/utils/session.js",
+  "static/js/utils/storageService.js"
 ]

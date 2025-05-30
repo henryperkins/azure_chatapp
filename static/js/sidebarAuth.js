@@ -1,8 +1,11 @@
 /**
- * sidebarAuth.js - Auth form logic extracted from sidebar.
- * Addresses race conditions by waiting for DOM readiness, uses single event handler,
- * and toggles register/login mode cleanly.
+ * @module sidebarAuth
+ * @description Canonical DI-only factory for sidebar auth logic (strict .clinerules compliance).
+ * Exports a single createSidebarAuth({ ...deps }) factory. No top-level logic/side effects.
+ * All logger/event/context usage is canonicalized.
  */
+
+const MODULE = 'SidebarAuth';
 
 export function createSidebarAuth({
   domAPI,
@@ -13,13 +16,11 @@ export function createSidebarAuth({
   safeHandler,
   domReadinessService
 }) {
-  if (!domAPI) throw new Error('[SidebarAuth] domAPI is required');
-  if (!eventHandlers) throw new Error('[SidebarAuth] eventHandlers is required');
-  if (!DependencySystem) throw new Error('[SidebarAuth] DependencySystem is required');
-  if (!logger) throw new Error('[SidebarAuth] logger is required');
-  if (typeof safeHandler !== 'function') throw new Error('[SidebarAuth] safeHandler required');
-
-  const MODULE = 'SidebarAuth';
+  if (!domAPI) throw new Error(`[${MODULE}] domAPI is required`);
+  if (!eventHandlers) throw new Error(`[${MODULE}] eventHandlers is required`);
+  if (!DependencySystem) throw new Error(`[${MODULE}] DependencySystem is required`);
+  if (!logger) throw new Error(`[${MODULE}] logger is required`);
+  if (typeof safeHandler !== 'function') throw new Error(`[${MODULE}] safeHandler required`);
 
   let isRegisterMode = false;
 
@@ -137,7 +138,7 @@ export function createSidebarAuth({
   }
 
   async function handleGlobalAuthStateChange(event) {
-    console.log('[SidebarAuth] handleGlobalAuthStateChange called with event:', event);
+    logger.debug(`[${MODULE}] handleGlobalAuthStateChange called with event`, event, { context: MODULE });
     // Wait for DOM readiness if available
     if (domReadinessService?.elementsReady) {
       try {
@@ -146,7 +147,7 @@ export function createSidebarAuth({
           { timeout: 5000, context: `${MODULE}:handleAuthStateChange` }
         );
       } catch (err) {
-        logger.warn('[SidebarAuth] DOM not ready for auth update', err, { context: MODULE });
+        logger.error(`[${MODULE}] DOM not ready for auth update`, err, { context: MODULE });
         return;
       }
     }

@@ -1,18 +1,29 @@
-// static/js/chat-ui-utils.js
-const UI_CTX = 'chatManager:UI';
-
 /**
- * Factory for chat UI utilities. Enforces DI, logger, and event handler safety.
+ * @module chatUIUtils
+ * @description Canonical DI-only factory for chat UI utilities (strict .clinerules compliance)
+ * Provides a single createChatUIUtils({ ...deps }) export. No top-level code, no side effects.
+ *
+ * @param {Object} deps - Dependency Injection options.
+ * @param {Object} deps.DependencySystem - Required DI orchestrator.
+ * @param {Object} deps.logger - Required DI logger.
+ * @param {Object} deps.domAPI - Required DOM abstraction.
+ * @param {Object} deps.DOMPurify - Required HTML sanitizer (DI-injected).
+ * @param {Object} deps.eventHandlers - Required DI event manager.
+ * @param {Object} deps.domReadinessService - Required DOM readiness service.
+ * @returns {Object} { attachChatUI, cleanup } - Canonical interface for chat UI management.
  */
+
+const MODULE = 'chatUIUtils';
+
 export function createChatUIUtils(deps) {
   // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
-  if (!deps) throw new Error('Missing deps');
-  if (!deps.logger) throw new Error('Missing logger');
-  if (!deps.domAPI) throw new Error('Missing domAPI');
-  if (!deps.DOMPurify) throw new Error('Missing DOMPurify');
-  if (!deps.eventHandlers) throw new Error('Missing eventHandlers');
-  if (!deps.domReadinessService) throw new Error('Missing domReadinessService');
-  if (!deps.DependencySystem) throw new Error('Missing DependencySystem');
+  if (!deps) throw new Error(`[${MODULE}] Missing deps`);
+  if (!deps.logger) throw new Error(`[${MODULE}] Missing logger`);
+  if (!deps.domAPI) throw new Error(`[${MODULE}] Missing domAPI`);
+  if (!deps.DOMPurify) throw new Error(`[${MODULE}] Missing DOMPurify`);
+  if (!deps.eventHandlers) throw new Error(`[${MODULE}] Missing eventHandlers`);
+  if (!deps.domReadinessService) throw new Error(`[${MODULE}] Missing domReadinessService`);
+  if (!deps.DependencySystem) throw new Error(`[${MODULE}] Missing DependencySystem`);
 
   const { logger, domAPI, DOMPurify, eventHandlers, domReadinessService, DependencySystem } = deps;
 
@@ -22,7 +33,7 @@ export function createChatUIUtils(deps) {
   function attachChatUI(chatMgr) {
     async function _setupUIElements() {
       if (!domAPI) {
-        logger.error('[ChatUIUtils][_setupUIElements] domAPI is required for UI setup.', null, { context: UI_CTX });
+        logger.error(`[${MODULE}][_setupUIElements] domAPI is required for UI setup.`, null, { context: MODULE });
         chatMgr._handleError('_setupUIElements', new Error('domAPI is required for UI setup.'));
         throw new Error('domAPI is required for UI setup.');
       }
@@ -45,7 +56,7 @@ export function createChatUIUtils(deps) {
 
       chatMgr.container = domAPI.querySelector(chatMgr.containerSelector);
       if (!chatMgr.container) {
-        logger.error('[ChatUIUtils][_setupUIElements] Chat container not found', null, { context: UI_CTX });
+        logger.error(`[${MODULE}][_setupUIElements] Chat container not found`, null, { context: MODULE });
         throw new Error(`Chat container not found: ${chatMgr.containerSelector}`);
       }
 
@@ -94,7 +105,7 @@ export function createChatUIUtils(deps) {
         return;
       }
       if (typeof eventHandlers.cleanupListeners === 'function') {
-        eventHandlers.cleanupListeners({ context: UI_CTX });
+        eventHandlers.cleanupListeners({ context: MODULE });
       }
 
       if (chatMgr.sendButton && chatMgr.inputField) {
@@ -108,7 +119,7 @@ export function createChatUIUtils(deps) {
               chatMgr.inputField.value = '';
             }
           }, 'SendButtonClick'),
-          { context: UI_CTX, description: 'Chat Send Button' }
+          { context: MODULE, description: 'Chat Send Button' }
         );
       }
 
@@ -126,7 +137,7 @@ export function createChatUIUtils(deps) {
               }
             }
           }, 'InputFieldKeydown'),
-          { context: UI_CTX, description: 'Chat Input Enter Key' }
+          { context: MODULE, description: 'Chat Input Enter Key' }
         );
       }
 
@@ -137,7 +148,7 @@ export function createChatUIUtils(deps) {
           safeHandler(() => {
             chatMgr.toggleMinimize();
           }, 'MinimizeButtonClick'),
-          { context: UI_CTX, description: 'Chat Minimize Toggle' }
+          { context: MODULE, description: 'Chat Minimize Toggle' }
         );
       }
 
@@ -149,7 +160,7 @@ export function createChatUIUtils(deps) {
           safeHandler((e) => {
             if (e.detail) chatMgr.updateModelConfig(e.detail);
           }, 'ModelConfigChanged'),
-          { description: 'Model config changed event for ChatManager', context: UI_CTX }
+          { description: 'Model config changed event for ChatManager', context: MODULE }
         );
       }
     }
@@ -249,7 +260,7 @@ export function createChatUIUtils(deps) {
       };
       eventHandlers.trackListener(toggle, "click", safeHandler(handler, 'ThinkingBlockToggle'), {
         description: 'Thinking block toggle',
-        context: UI_CTX,
+        context: MODULE,
         source: 'ChatManager._createThinkingBlock'
       });
 
@@ -386,7 +397,7 @@ export function createChatUIUtils(deps) {
 
   function cleanup() {
     if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
-      eventHandlers.cleanupListeners({ context: UI_CTX });
+      eventHandlers.cleanupListeners({ context: MODULE });
     }
   }
 
