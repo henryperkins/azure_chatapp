@@ -619,24 +619,16 @@ if (handlers?.dispatchEvent) {
                             apiClient: apiClientInstance,
                             browserService,
                             eventHandlers,
-                            enabled: false // Will enable after auth
+                            enabled: true       // start buffering immediately
                         });
                         if (!DependencySystem.modules.has('logDelivery')) {
                             DependencySystem.register('logDelivery', logDelivery);
                         } else {
                             DependencySystem.modules.set('logDelivery', logDelivery);
                         }
-
-                        // Enable log delivery after auth is ready
-                        eventHandlers.trackListener(
-                            domAPI.getDocument(),
-                            'authReady',
-                            () => {
-                                logDelivery.start();
-                                logger.info('Log delivery service started', { context: 'app:logDelivery' });
-                            },
-                            { once: true, description: 'Start logDelivery after authReady', context: 'logDelivery' }
-                        );
+                        logDelivery.start();   // activate listener + batching now
+                        logger.info('[serviceInit] LogDeliveryService started (pre-auth)', 
+                                   { context: 'serviceInit:registerAdvancedServices' });
 
                         logger.debug('[serviceInit] LogDeliveryService registered', {
                             context: 'serviceInit:registerAdvancedServices'
