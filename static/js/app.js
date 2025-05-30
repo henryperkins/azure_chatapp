@@ -201,13 +201,14 @@ const appInit = createAppInitializer({
 // ─────────────────────────────────────────────────────────────────────────────
 // 4) Kick off appInit so it runs all orchestration phases
 // ─────────────────────────────────────────────────────────────────────────────
-(async () => {
+// DOMContentLoaded guard: don't initialize until DOM is fully parsed!
+window.addEventListener('DOMContentLoaded', async () => {
   try {
     await appInit.initializeApp();
   } catch (err) {
     logger.error('[app.js] Application failed to initialize.', err, { context: 'app:bootstrap' });
   }
-})();
+});
 
 // If desired, you can export references to “appInit” or config
 export { createAppConfig } from './appConfig.js';

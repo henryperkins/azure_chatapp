@@ -1401,6 +1401,65 @@ export function createAppInitializer({
             return true;
         }
 
+        /**
+         * Ensure #projectListView and #projectDetailsView exist before templates load.
+         * Creates them dynamically if missing to avoid race-condition timeouts
+         * in domReadinessService during UI bootstrap.
+         */
+        function ensureBaseProjectContainers() {
+            logger.info('[uiInit] ensureBaseProjectContainers ENTER', { context: 'uiInit:ensureBaseProjectContainers' });
+            try {
+                const doc = domAPI.getDocument?.() || document;
+                if (!doc) {
+                    logger.error('[uiInit] No document available in ensureBaseProjectContainers', { context: 'uiInit:ensureBaseProjectContainers' });
+                    return;
+                }
+
+                const panel = domAPI.querySelector('#projectManagerPanel') || doc.body;
+                if (!panel) {
+                    logger.error('[uiInit] No target panel (projectManagerPanel or body) in ensureBaseProjectContainers', { context: 'uiInit:ensureBaseProjectContainers' });
+                    return;
+                }
+
+                let listFound = !!domAPI.querySelector('#projectListView');
+                let detailsFound = !!domAPI.querySelector('#projectDetailsView');
+                if (listFound && detailsFound) {
+                    logger.info('[uiInit] Both #projectListView and #projectDetailsView already present', { context: 'uiInit:ensureBaseProjectContainers' });
+                }
+
+                if (!listFound) {
+                    const list = domAPI.createElement('div');
+                    list.id = 'projectListView';
+                    list.className = 'project-list-view';
+                    list.dataset.dynamic = 'true';
+                    domAPI.appendChild(panel, list);
+                    logger.info('[uiInit] #projectListView dynamically inserted', { context: 'uiInit:ensureBaseProjectContainers' });
+                }
+
+                if (!detailsFound) {
+                    const details = domAPI.createElement('div');
+                    details.id = 'projectDetailsView';
+                    details.className = 'project-details-view hidden';
+                    details.dataset.dynamic = 'true';
+                    domAPI.appendChild(panel, details);
+                    logger.info('[uiInit] #projectDetailsView dynamically inserted', { context: 'uiInit:ensureBaseProjectContainers' });
+                }
+
+                listFound = !!domAPI.querySelector('#projectListView');
+                detailsFound = !!domAPI.querySelector('#projectDetailsView');
+                if (listFound && detailsFound) {
+                    logger.info('[uiInit] Verified presence of both #projectListView and #projectDetailsView after ensureBaseProjectContainers', { context: 'uiInit:ensureBaseProjectContainers' });
+                } else {
+                    logger.error('[uiInit] One or both containers missing after ensureBaseProjectContainers', { context: 'uiInit:ensureBaseProjectContainers', listFound, detailsFound });
+                }
+            } catch (err) {
+                logger.error('[uiInit] ensureBaseProjectContainers failed', err, {
+                    context: 'uiInit:ensureBaseProjectContainers'
+                });
+            }
+            logger.info('[uiInit] ensureBaseProjectContainers EXIT', { context: 'uiInit:ensureBaseProjectContainers' });
+        }
+
         async function createAndRegisterUIComponents() {
             logger.log('[UIInit] Creating late-stage UI components', {
                 context: 'uiInit:createAndRegisterUIComponents'
@@ -1547,10 +1606,13 @@ export function createAppInitializer({
             try {
                 logger.log('[uiInit] Starting UI initialization...', { context: 'uiInit' });
 
-                // First load templates so dynamic DOM nodes exist
+                // CRITICAL: Create base containers FIRST
+                ensureBaseProjectContainers();
+
+                // Now load templates into the containers we just created
                 await loadProjectTemplates();
 
-                // Now wait for the selectors after they are injected
+                // Wait for the selectors that should now exist
                 await domReadinessService.dependenciesAndElements({
                     domSelectors: ['#projectListView', '#projectDetailsView'],
                     timeout: 10000,
@@ -1558,10 +1620,8 @@ export function createAppInitializer({
                 });
 
                 await setupSidebarControls();
-                // Templates are now fully injected; ensure modal framework is ready
-                // before notifying downstream modules that rely on template DOM IDs.
                 await waitForModalReadiness();
-                window.__templatesReadyFired = true; // idempotency flag for late subscribers
+                window.__templatesReadyFired = true;
                 window.dispatchEvent(new CustomEvent('ui:templates:ready'));
                 await createAndRegisterUIComponents();
                 await registerNavigationViews();
