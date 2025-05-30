@@ -115,3 +115,7 @@ export const ELEMENT_SELECTORS = {
     filesList: 'filesList'
   }
 };
+
+export function createSelectorConstants() {
+  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
+}

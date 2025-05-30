@@ -16,3 +16,18 @@ export function getSessionId() {
   return sessionId;
 }
 export function resetSessionId(){ sessionId=null; }
+
+export function createSessionManager({ browserService, logger } = {}) {
+  if (!browserService) throw new Error('[session] browserService required');
+  setBrowserService(browserService);
+  const log = logger ?? { debug(){}, error(){} };
+  return {
+    getSessionId,
+    resetSessionId,
+    cleanup () {
+      resetSessionId();
+      setBrowserService(null);
+      log.debug('[session] cleaned up', { context: 'session:cleanup' });
+    }
+  };
+}
