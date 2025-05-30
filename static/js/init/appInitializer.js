@@ -1546,14 +1546,23 @@ export function createAppInitializer({
             }
             try {
                 logger.log('[uiInit] Starting UI initialization...', { context: 'uiInit' });
+
+                // First load templates so dynamic DOM nodes exist
+                await loadProjectTemplates();
+
+                // Now wait for the selectors after they are injected
                 await domReadinessService.dependenciesAndElements({
                     domSelectors: ['#projectListView', '#projectDetailsView'],
                     timeout: 10000,
                     context: 'uiInit:initializeUIComponents:baseDomCheck'
                 });
+
                 await setupSidebarControls();
-                await loadProjectTemplates();
+                // Templates are now fully injected; ensure modal framework is ready
+                // before notifying downstream modules that rely on template DOM IDs.
                 await waitForModalReadiness();
+                window.__templatesReadyFired = true; // idempotency flag for late subscribers
+                window.dispatchEvent(new CustomEvent('ui:templates:ready'));
                 await createAndRegisterUIComponents();
                 await registerNavigationViews();
                 logger.log('[uiInit] UI initialization complete', {

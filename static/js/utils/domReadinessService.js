@@ -173,7 +173,7 @@ export function createDomReadinessService({
    * @returns {Promise<HTMLElement[]>}
    */
   function elementsReady(selectors, {
-    timeout = DEFAULT_TIMEOUT,
+    timeout = 15000,
     observeMutations = true,
     context = 'unknown'
   } = {}) {

@@ -189,108 +189,110 @@ export function createProjectDashboard({
         return true; // Already done
       }
 
+      // Defer template-dependent init until 'ui:templates:ready' event.
       const initStartTime = Date.now();
-      try {
-        /*
-         * IMPORTANT: Do **not** block ProjectDashboard initialization on the
-         * global `app:ready` event.  The dashboard itself is created and
-         * initialized from within `initializeUIComponents()` *before* the
-         * main app orchestrator emits `app:ready`.  Waiting here would cause
-         * a circular dependency:
-         *   1. App.init → initializeUIComponents → ProjectDashboard.initialize()
-         *   2. ProjectDashboard.initialize() waits for `app:ready`
-         *   3. App.init needs initializeUIComponents to finish before it can
-         *      progress to the phase that emits `app:ready` ➔ dead-lock
-         *
-         * Instead we perform a fast synchronous check.  If the `appModule`
-         * already reports `state.isReady` we treat the app as ready; if not
-         * we continue without waiting—the dashboard listens to later auth and
-         * navigation events and will hydrate views on demand.
-         */
-        const appModule = this.dependencySystem.modules.get('appModule');
-        if (!appModule?.state?.isReady) {
-          logger.debug?.('[ProjectDashboard] Proceeding before app:ready (bootstrap phase).', { context: 'projectDashboard' });
-        }
+      const runInitialize = async () => {
+        try {
+          const appModule = this.dependencySystem.modules.get('appModule');
+          if (!appModule?.state?.isReady) {
+            logger.debug?.('[ProjectDashboard] Proceeding before app:ready (bootstrap phase).', { context: 'projectDashboard' });
+          }
 
-        // Canonical authentication via appModule.state (avoid var redeclaration)
-        const authenticated = appModule?.state?.isAuthenticated ?? false;
+          const authenticated = appModule?.state?.isAuthenticated ?? false;
 
-        if (!authenticated) {
-          logger.warn('[ProjectDashboard][initialize] User not authenticated – dashboard initialisation deferred until login.', { context: 'projectDashboard' });
+          if (!authenticated) {
+            logger.warn('[ProjectDashboard][initialize] User not authenticated – dashboard initialisation deferred until login.', { context: 'projectDashboard' });
+            this._onAuthStateChanged({ detail: { authenticated: false } });
+            return false;
+          }
 
-          // Re-use the same handler that reacts to AuthBus updates so visual
-          // feedback (login required message, hidden main content, etc.) is
-          // consistent across eager and event-driven code-paths.
-          this._onAuthStateChanged({ detail: { authenticated: false } });
+          // Ensure required DOM elements are ready
+          await domReadinessService.dependenciesAndElements({
+            deps: ['app'],
+            domSelectors: ['#mainContent'],
+            context: 'ProjectDashboard_Init'
+          });
 
+          // Only now initialize components when DOM is ready
+          await this._initializeComponents();
+          this._setupEventListeners();
+          this._registerNavigationViews();
+
+          this.logger.debug('[ProjectDashboard][initialize] Checking initial auth state', {
+            authenticated,
+            appModuleExists: !!appModule,
+            context: 'projectDashboard'
+          });
+
+          if (authenticated) {
+            try {
+              await this.showProjectList();
+            } catch (err) {
+              this.logger.error('[ProjectDashboard][initialize] showProjectList failed', err, { context: 'projectDashboard' });
+            }
+          } else {
+            // Show login required state
+            const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
+            const mainCnt = this.domAPI.getElementById('mainContent');
+            if (loginMsg) loginMsg.classList.remove('hidden');
+            if (mainCnt) mainCnt.classList.add('hidden');
+          }
+
+          // Mark initialized
+          this.state.initialized = true;
+          const initDuration = Date.now() - initStartTime;
+
+          // Dispatch an internal event on the local bus
+          this.dashboardBus.dispatchEvent(
+            new CustomEvent('projectDashboardInitialized', {
+              detail: {
+                success: true,
+                timestamp: Date.now(),
+                duration: initDuration
+              }
+            })
+          );
+          return true;
+        } catch (err) {
+          logger.error('[ProjectDashboard][initialize]', err, { context: 'projectDashboard' });
+          this.state.initialized = false;
+          const initDuration = Date.now() - initStartTime;
+
+          this.dashboardBus.dispatchEvent(
+            new CustomEvent('projectDashboardInitialized', {
+              detail: {
+                success: false,
+                error: err,
+                errorMessage: err?.message,
+                timestamp: Date.now(),
+                duration: initDuration
+              }
+            })
+          );
           return false;
         }
+      };
 
-        // Ensure required DOM elements are ready
-        await domReadinessService.dependenciesAndElements({
-          deps: ['app'],
-          domSelectors: ['#mainContent'],
-          context: 'ProjectDashboard_Init'
-        });
-
-        // Initialize sub-components
-        await this._initializeComponents();
-        this._setupEventListeners();
-        this._registerNavigationViews();
-
-        this.logger.debug('[ProjectDashboard][initialize] Checking initial auth state', {
-          authenticated,
-          appModuleExists: !!appModule,
-          context: 'projectDashboard'
-        });
-
-        // Si el usuario ya está autenticado, mostrar la vista de proyectos
-        if (authenticated) {
-          try {
-            await this.showProjectList();
-          } catch (err) {
-            this.logger.error('[ProjectDashboard][initialize] showProjectList failed', err, { context: 'projectDashboard' });
-          }
-        } else {
-          // Show login required state
-          const loginMsg = this.domAPI.getElementById('loginRequiredMessage');
-          const mainCnt = this.domAPI.getElementById('mainContent');
-          if (loginMsg) loginMsg.classList.remove('hidden');
-          if (mainCnt) mainCnt.classList.add('hidden');
+      // Defer to 'ui:templates:ready'
+      // If event already fired, run immediately; otherwise, add one-time listener
+      let done = false;
+      const tryRun = () => {
+        if (!done) {
+          done = true;
+          runInitialize();
         }
+      };
 
-        // Mark initialized
-        this.state.initialized = true;
-        const initDuration = Date.now() - initStartTime;
-
-        // Dispatch an internal event on the local bus
-        this.dashboardBus.dispatchEvent(
-          new CustomEvent('projectDashboardInitialized', {
-            detail: {
-              success: true,
-              timestamp: Date.now(),
-              duration: initDuration
-            }
-          })
-        );
-        return true;
-      } catch (err) {
-        logger.error('[ProjectDashboard][initialize]', err, { context: 'projectDashboard' });
-        this.state.initialized = false;
-        const initDuration = Date.now() - initStartTime;
-
-        this.dashboardBus.dispatchEvent(
-          new CustomEvent('projectDashboardInitialized', {
-            detail: {
-              success: false,
-              error: err,
-              errorMessage: err?.message,
-              timestamp: Date.now(),
-              duration: initDuration
-            }
-          })
-        );
-        return false;
+      if (window.__templatesReadyFired) {
+        // Defensive: allow for test re-entry/hot reload
+        tryRun();
+      } else {
+        const handler = () => {
+          window.removeEventListener('ui:templates:ready', handler);
+          window.__templatesReadyFired = true; // Mark as fired
+          tryRun();
+        };
+        window.addEventListener('ui:templates:ready', handler, { once: true });
       }
     }
 
