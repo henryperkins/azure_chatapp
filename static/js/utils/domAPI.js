@@ -276,6 +276,53 @@ export function createDomAPI({
     createSVGElement: (tag) =>
       documentObject.createElementNS('http://www.w3.org/2000/svg', tag),
     getProperty: (el, prop) => el?.[prop],
+
+    /* ── <NEW helpers – added for ThemeManager> ───────────────────── */
+
+    /**
+     * Attach a listener to a MediaQueryList and return an unsubscribe fn.
+     * Works with both modern addEventListener('change', …) and the
+     * older addListener/removeListener APIs.
+     */
+    addMediaListener(mqList, handler) {
+      if (!mqList || typeof handler !== 'function') return () => {};
+      const wrapped = (e) => handler(e);
+      if (typeof mqList.addEventListener === 'function') {
+        mqList.addEventListener('change', wrapped);
+        return () => mqList.removeEventListener('change', wrapped);
+      }
+      if (typeof mqList.addListener === 'function') {
+        mqList.addListener(wrapped);
+        return () => mqList.removeListener(wrapped);
+      }
+      // Fallback: no-op unsubscribe
+      return () => {};
+    },
+
+    /**
+     * Convenience wrapper that creates & starts a MutationObserver.
+     * Returns the observer so callers can disconnect() later.
+     */
+    createMutationObserver(callback, options = {}, target = documentObject) {
+      const Observer = windowObject.MutationObserver;
+      if (typeof Observer !== 'function') {
+        _logger.error('[domAPI] MutationObserver unavailable – createMutationObserver noop',
+                      { context: 'domAPI:createMutationObserver' });
+        return { disconnect() {} };
+      }
+      const obs = new Observer(callback);
+      try {
+        const opts = Object.assign({ childList: true, subtree: true }, options);
+        obs.observe(target, opts);
+      } catch (err) {
+        _logger.error('[domAPI] MutationObserver.observe failed', err,
+                      { context: 'domAPI:createMutationObserver' });
+      }
+      return obs;
+    },
+
+    /* ── </NEW helpers> ───────────────────────────────────────────── */
+
     setLogger,      // ← NEW
     cleanup
   };
