@@ -693,6 +693,27 @@ class ProjectModal {
     this.currentProjectId = null;
 
     this.logger.info?.('[ProjectModal] constructed'); // Changed to info for better visibility
+
+    // Inject mobile modal safe-area CSS via domAPI (once per instance)
+    try {
+      const doc = this.domAPI.getDocument();
+      const win = this.domAPI.getWindow?.();
+      const markerId = 'modal-box-safe-area-css';
+      if (doc && win && !this.domAPI.getElementById(markerId)) {
+        const styleEl = this.domAPI.createElement('style');
+        styleEl.id = markerId;
+        styleEl.textContent =
+          `@media (max-width:640px){` +
+          `.modal-box{max-width:calc(100vw - 2rem)!important;` +
+          `max-height:calc(100vh - 3.5rem)!important;overflow-y:auto;}` +
+          `.modal.modal-bottom{align-items:flex-end;}` +
+          `.sm\\:modal-middle{align-items:flex-start;}` +
+          `}`;
+        this.domAPI.appendChild(doc.head, styleEl);
+      }
+    } catch (e) {
+      this.logger.debug?.('[ProjectModal] safe-area CSS injection failed', e, { context: 'modalManager' });
+    }
   }
 
   _isDebug() {
@@ -1104,20 +1125,3 @@ export function createProjectModal(deps = {}) {
 }
 
 // Inject mobile modal safe-area rule once only (after library/module load)
-(function injectModalBoxSafeAreaCSS() {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  const markerId = 'modal-box-safe-area-css';
-  if (!document.getElementById(markerId)) {
-    const styleEl = document.createElement('style');
-    styleEl.id = markerId;
-    /* extend mobile rules: full-height, inner scroll & align flex-start */
-    styleEl.textContent =
-      `@media (max-width:640px){` +
-      `.modal-box{max-width:calc(100vw - 2rem)!important;` +
-      `max-height:calc(100vh - 3.5rem)!important;overflow-y:auto;}` +
-      `.modal.modal-bottom{align-items:flex-end;}` +
-      `.sm\\:modal-middle{align-items:flex-start;}` +
-      `}`;
-    document.head.appendChild(styleEl);
-  }
-})();

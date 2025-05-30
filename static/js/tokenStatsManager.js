@@ -156,19 +156,9 @@ export function createTokenStatsManager({
       return state.initializing;
     };
 
-    // Defer to ui:templates:ready; run immediately if already fired.
-    if (window.__templatesReadyFired) {
-      return runInit();
-    } else {
-      return new Promise((resolve) => {
-        const handler = () => {
-          window.removeEventListener('ui:templates:ready', handler);
-          window.__templatesReadyFired = true;
-          resolve(runInit());
-        };
-        window.addEventListener('ui:templates:ready', handler, { once: true });
-      });
-    }
+    // Wait for templates ready via domReadinessService, then initialize
+    await domReadinessService.waitForEvent('ui:templates:ready', { context: MODULE_CONTEXT });
+    return runInit();
   }
 
   /**

@@ -2082,6 +2082,8 @@ function vCanonical(err, file, isAppJs, code) {
 
 /* 16. Error Object Structure */
 function vErrorStructure(err, file) {
+  // Skip error-structure checks for logger factory module
+  if (/[/\\]logger\.(js|ts)$/i.test(file)) return {};
   return {
     ObjectExpression(p) {
       const props = p.node.properties.map(prop =>

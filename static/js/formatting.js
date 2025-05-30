@@ -30,9 +30,12 @@ function processCodeBlocks(text) {
  * @returns {string} Escaped string
  */
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export { formatText };
@@ -41,8 +44,6 @@ export function createFormattingUtils({ domAPI, sanitizer, DependencySystem } = 
     throw new Error('[formatting] Missing required deps');
 
   //--- move existing code here ---
-  // Replace every ‘document.createElement’  →  domAPI.createElement
-  // Replace any other window / document usage with domAPI equivalents.
 
   return {
     // expose any helpers you actually keep
