@@ -1,16 +1,9 @@
 /**
- * sidebarAuth.js - Extracted authentication form logic for sidebar.
- *
- * Factory function with strict DI and no globals.
- * Handles:
- *  - Inline auth form DOM nodes and updates
- *  - Form validation and mode toggling
- *  - Auth submit and error display
- *  - Auth state synchronization
- *  - Exposes public API: init, handleGlobalAuthStateChange, cleanup
- *
- * @param {object} deps - All dependencies injected
+ * sidebarAuth.js - Auth form logic extracted from sidebar.
+ * Addresses race conditions by waiting for DOM readiness, uses single event handler,
+ * and toggles register/login mode cleanly.
  */
+
 export function createSidebarAuth({
   domAPI,
   eventHandlers,
@@ -18,29 +11,30 @@ export function createSidebarAuth({
   logger,
   sanitizer,
   safeHandler,
+  domReadinessService
 }) {
   if (!domAPI) throw new Error('[SidebarAuth] domAPI is required');
   if (!eventHandlers) throw new Error('[SidebarAuth] eventHandlers is required');
   if (!DependencySystem) throw new Error('[SidebarAuth] DependencySystem is required');
   if (!logger) throw new Error('[SidebarAuth] logger is required');
   if (typeof safeHandler !== 'function') throw new Error('[SidebarAuth] safeHandler required');
-  // sanitizer optional
 
   const MODULE = 'SidebarAuth';
-  // Inline auth state
+
   let isRegisterMode = false;
-  let sidebarAuthFormContainerEl,
-    sidebarAuthFormTitleEl,
-    sidebarAuthFormEl,
-    sidebarUsernameContainerEl,
-    sidebarUsernameInputEl,
-    sidebarEmailInputEl,
-    sidebarPasswordInputEl,
-    sidebarConfirmPasswordContainerEl,
-    sidebarConfirmPasswordInputEl,
-    sidebarAuthBtnEl,
-    sidebarAuthErrorEl,
-    sidebarAuthToggleEl;
+
+  let sidebarAuthFormContainerEl = null,
+      sidebarAuthFormTitleEl = null,
+      sidebarAuthFormEl = null,
+      sidebarUsernameContainerEl = null,
+      sidebarUsernameInputEl = null,
+      sidebarEmailInputEl = null,
+      sidebarPasswordInputEl = null,
+      sidebarConfirmPasswordContainerEl = null,
+      sidebarConfirmPasswordInputEl = null,
+      sidebarAuthBtnEl = null,
+      sidebarAuthErrorEl = null,
+      sidebarAuthToggleEl = null;
 
   function initAuthDom() {
     sidebarAuthFormContainerEl = domAPI.getElementById('sidebarAuthFormContainer');
@@ -58,9 +52,7 @@ export function createSidebarAuth({
   }
 
   function clearAuthForm() {
-    if (sidebarAuthFormEl) {
-      sidebarAuthFormEl.reset();
-    }
+    sidebarAuthFormEl?.reset();
     if (sidebarAuthErrorEl) {
       domAPI.setTextContent(sidebarAuthErrorEl, '');
     }
@@ -68,9 +60,8 @@ export function createSidebarAuth({
 
   function updateAuthFormUI(registerMode) {
     isRegisterMode = registerMode;
-    if (!sidebarAuthFormTitleEl || !sidebarAuthBtnEl || !sidebarConfirmPasswordContainerEl) {
-      return;
-    }
+    if (!sidebarAuthFormTitleEl || !sidebarAuthBtnEl || !sidebarConfirmPasswordContainerEl) return;
+
     domAPI.setTextContent(sidebarAuthFormTitleEl, registerMode ? 'Register' : 'Login');
     domAPI.setTextContent(sidebarAuthBtnEl, registerMode ? 'Create account' : 'Sign in');
     domAPI.toggleClass(sidebarConfirmPasswordContainerEl, 'hidden', !registerMode);
@@ -78,11 +69,12 @@ export function createSidebarAuth({
   }
 
   async function handleAuthSubmit(authModule) {
+    if (!authModule) return;
     let username = sidebarUsernameInputEl.value.trim();
     let email = sidebarEmailInputEl.value.trim();
     const password = sidebarPasswordInputEl.value;
 
-    // Sanitize user inputs to prevent XSS
+    // sanitize
     username = sanitizer?.sanitize(username) || username;
     email = sanitizer?.sanitize(email) || email;
 
@@ -100,7 +92,6 @@ export function createSidebarAuth({
         updateAuthFormUI(false);
         domAPI.setTextContent(sidebarAuthErrorEl, 'Registration successful. Please sign in.');
       } else {
-        // In login mode, use the "username" input field directly
         const loginUsername = email;
         if (!loginUsername || !password) {
           throw new Error('Username and password are required.');
@@ -108,148 +99,110 @@ export function createSidebarAuth({
         await authModule.login(loginUsername, password);
       }
     } catch (err) {
-      logger.error('[SidebarAuth][authSubmit]', err && err.stack ? err.stack : err, { context: MODULE });
-      const errorMessage = sanitizer?.sanitize(err?.message) || (isRegisterMode ? 'Registration failed.' : 'Login failed.');
-      domAPI.setTextContent(sidebarAuthErrorEl, errorMessage);
+      logger.error('[SidebarAuth][authSubmit]', err, { context: MODULE });
+      const errMsg = sanitizer?.sanitize(err?.message) ||
+                     (isRegisterMode ? 'Registration failed' : 'Login failed');
+      domAPI.setTextContent(sidebarAuthErrorEl, errMsg);
     } finally {
-      if (sidebarAuthBtnEl) {
-        domAPI.setProperty(sidebarAuthBtnEl, 'disabled', false);
-      }
+      domAPI.setProperty(sidebarAuthBtnEl, 'disabled', false);
     }
   }
 
   function setupInlineAuthForm() {
     const authModule = DependencySystem.modules?.get('auth') || DependencySystem.get?.('auth');
     if (!authModule) return;
+    if (!sidebarAuthFormEl || !sidebarAuthToggleEl) return;
 
-    // Toggle between "Register" and "Login"
+    // Toggle
     eventHandlers.trackListener(
       sidebarAuthToggleEl,
       'click',
       safeHandler(() => {
         updateAuthFormUI(!isRegisterMode);
         clearAuthForm();
-      }, '[SidebarAuth] toggle auth mode'),
-      { description: 'Sidebar toggle auth mode', context: MODULE }
+      }, '[SidebarAuth] toggle mode'),
+      { context: MODULE }
     );
 
-    // Auth form submit
+    // Submit
     eventHandlers.trackListener(
       sidebarAuthFormEl,
       'submit',
       safeHandler((e) => {
-        e.preventDefault();
+        domAPI.preventDefault(e);
         handleAuthSubmit(authModule);
-      }, '[SidebarAuth] auth form submit'),
-      { description: 'Sidebar auth submit', context: MODULE }
+      }, '[SidebarAuth] form submit'),
+      { context: MODULE }
     );
   }
 
   async function handleGlobalAuthStateChange(event) {
+    // Wait for DOM readiness if available
+    if (domReadinessService?.elementsReady) {
+      try {
+        await domReadinessService.elementsReady(
+          ['#sidebarAuthFormContainer', '#mainSidebar'],
+          { timeout: 5000, context: `${MODULE}:handleAuthStateChange` }
+        );
+      } catch (err) {
+        logger.warn('[SidebarAuth] DOM not ready for auth update', err, { context: MODULE });
+        return;
+      }
+    }
     if (!sidebarAuthFormContainerEl) {
       initAuthDom();
     }
 
-    // Use event detail from AuthModule, but also fallback to appModule.state for robustness
     let authenticated = event?.detail?.authenticated ?? false;
     let currentUser = event?.detail?.user ?? null;
 
-    // ENHANCED: If event doesn't have auth data, read from canonical source
     if (event?.detail?.authenticated === undefined) {
-      const appModule = DependencySystem?.modules?.get('appModule');
+      const appModule = DependencySystem.modules?.get('appModule');
       if (appModule?.state) {
         authenticated = appModule.state.isAuthenticated;
         currentUser = appModule.state.currentUser;
-        logger.debug('[SidebarAuth][handleGlobalAuthStateChange] Event missing auth data, reading from appModule.state:', {
-          authenticated,
-          currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null
-        });
       }
     }
-
-    logger.debug('[SidebarAuth][handleGlobalAuthStateChange] Auth state update:', {
-      isAuthenticated: authenticated,
-      currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null,
-      eventDetail: event?.detail,
-      sidebarAuthFormContainerEl_exists: !!sidebarAuthFormContainerEl,
-      sidebarAuthFormContainerEl_id: sidebarAuthFormContainerEl?.id,
-      eventSource: event?.detail?.source || 'unknown'
-    });
 
     if (sidebarAuthFormContainerEl) {
-      const shouldHideForm = authenticated;
-
-      logger.debug('[SidebarAuth][handleGlobalAuthStateChange] Updating form visibility:', {
-        shouldHideForm,
-        authenticated,
-        formCurrentlyHidden: domAPI.hasClass(sidebarAuthFormContainerEl, 'hidden')
-      });
-
-      domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', shouldHideForm);
-      domAPI.setStyle(sidebarAuthFormContainerEl, 'display', shouldHideForm ? 'none' : '');
-
-      if (shouldHideForm) {
-        sidebarAuthFormContainerEl.setAttribute?.('hidden', 'hidden');
-      } else {
-        sidebarAuthFormContainerEl.removeAttribute?.('hidden');
-      }
-    } else {
-      logger.warn('[SidebarAuth][handleGlobalAuthStateChange] sidebarAuthFormContainerEl not found, cannot update form visibility');
+      const hidden = !!authenticated;
+      domAPI.toggleClass(sidebarAuthFormContainerEl, 'hidden', hidden);
+      domAPI.setStyle(sidebarAuthFormContainerEl, 'display', hidden ? 'none' : '');
+      if (hidden) sidebarAuthFormContainerEl.setAttribute('hidden', 'hidden');
+      else sidebarAuthFormContainerEl.removeAttribute('hidden');
     }
 
-    // Always ensure the sidebar is visible independent of auth state
-    const sidebarEl = domAPI.getElementById('mainSidebar');
-    if (sidebarEl) {
-      domAPI.toggleClass(sidebarEl, 'hidden', false);
-      domAPI.setStyle(sidebarEl, 'display', '');
-      sidebarEl.removeAttribute?.('hidden');
+    // Always ensure #mainSidebar is visible
+    const mainSidebarEl = domAPI.getElementById('mainSidebar');
+    if (mainSidebarEl) {
+      domAPI.toggleClass(mainSidebarEl, 'hidden', false);
+      domAPI.setStyle(mainSidebarEl, 'display', '');
+      mainSidebarEl.removeAttribute('hidden');
     }
 
-    if (authenticated) {
-      try {
-        logger.info(`[SidebarAuth][auth:stateChanged] User authenticated.`, {
-          context: MODULE,
-          userId: currentUser?.id,
-          username: currentUser?.username
-        });
-        // Consumer should reload projects and activate tab if needed
-      } catch (err) {
-        logger.error(`[SidebarAuth][auth:stateChanged] Failed during post-auth actions.`, err, { context: MODULE });
-      }
-    } else {
-      logger.info(`[SidebarAuth][auth:stateChanged] User not authenticated. Resetting form.`, { context: MODULE });
-      if (isRegisterMode) {
-        updateAuthFormUI(false);
-      }
+    if (!authenticated) {
+      // reset
+      if (isRegisterMode) updateAuthFormUI(false);
       clearAuthForm();
     }
   }
 
   function forceAuthStateSync() {
-    logger.debug('[SidebarAuth][forceAuthStateSync] Forcing auth state sync from appModule.state');
-    const appModule = DependencySystem?.modules?.get('appModule');
+    logger.debug('[SidebarAuth] Forcing auth state sync from appModule', { context: MODULE });
+    const appModule = DependencySystem.modules?.get('appModule');
     if (appModule?.state) {
-      const authenticated = appModule.state.isAuthenticated;
-      const currentUser = appModule.state.currentUser;
-
-      logger.debug('[SidebarAuth][forceAuthStateSync] Current appModule state:', {
-        authenticated,
-        currentUser: currentUser ? { id: currentUser.id, username: currentUser.username } : null
-      });
-
       handleGlobalAuthStateChange({
         detail: {
-          authenticated,
-          user: currentUser,
-          source: 'force_auth_state_sync'
+          authenticated: appModule.state.isAuthenticated,
+          user: appModule.state.currentUser,
+          source: 'forceSync'
         }
       });
-
-      return { authenticated, currentUser };
-    } else {
-      logger.warn('[SidebarAuth][forceAuthStateSync] appModule.state not available');
-      return null;
     }
+  }
+
+  function init() {
+    initAuthDom();
   }
 
   function cleanup() {
@@ -270,7 +223,7 @@ export function createSidebarAuth({
   }
 
   return {
-    init: initAuthDom,
+    init,
     setupInlineAuthForm,
     handleGlobalAuthStateChange,
     forceAuthStateSync,
