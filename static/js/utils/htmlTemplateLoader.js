@@ -166,11 +166,29 @@ export function createHtmlTemplateLoader({
       const html = await resp.text();
       logger.info?.(`[HtmlTemplateLoader] Successfully fetched template: ${url}, preparing to inject. Length: ${html.length}`, { url });
 
-      // Always inject via domAPI to respect DI & built-in sanitiser
-      domAPI.setInnerHTML(container, html);
+      // ── Injection strategy ───────────────────────────────────────────────
+      // Replacing innerHTML on <body> wipes out existing DOM (e.g. the
+      // #projectDetailsView / #projectListView containers already injected),
+      // causing domReadinessService time-outs.  If the target container *is*
+      // <body>, append the fetched markup instead of replacing it.
+      //
+      if (domAPI.isSameNode(container, domAPI.getBody())) {
+        // Build the markup in a temporary wrapper to avoid double sanitisation
+        const tempWrapper = domAPI.createElement('div');
+        domAPI.setInnerHTML(tempWrapper, html);
+        Array.from(tempWrapper.childNodes).forEach((node) =>
+          domAPI.appendChild(container, node)
+        );
+      } else {
+        // Regular containers – safe to replace their content
+        domAPI.setInnerHTML(container, html);
+      }
       // Mark as loaded so subsequent loadTemplate calls can short-circuit safely
       container.setAttribute('data-html-loaded', 'true');
-      logger.info?.(`[HtmlTemplateLoader] Successfully injected template: ${url} into ${containerSelector}`, { url });
+      logger.info?.(
+        `[HtmlTemplateLoader] Successfully injected template: ${url} into ${containerSelector}`,
+        { url }
+      );
       success = true;
 
     } catch (err) {
