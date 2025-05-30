@@ -297,7 +297,15 @@ export function createAppInitializer({
             isAuthenticated: () => state.isAuthenticated,
             getCurrentUser: () => state.currentUser,
             setCurrentProject,
+            // ──────────────────────────────────────────────
+            // Legacy aliases required by older components
+            // ──────────────────────────────────────────────
             getCurrentProjectId: () => state.currentProjectId,
+            getProjectId: () => state.currentProjectId,
+            validateUUID: (id) => globalUtils?.isValidProjectId?.(id) === true,
+            // ──────────────────────────────────────────────
+            // Canonical accessors
+            // ──────────────────────────────────────────────
             getCurrentProject: () => state.currentProject,
             isAppReady: () => state.isReady,
             isInitialized: () => state.initialized,

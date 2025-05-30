@@ -76,8 +76,12 @@ export function createFileUploadComponent({
   let uploadState = { total: 0, completed: 0, failed: 0 };
   let _handlersBound = false;
 
-  // Deterministic timers (DI-friendly)
-  const _scheduler = scheduler || { setTimeout, clearTimeout };
+/* Deterministic timers (DI-friendly) — bind to global window to avoid “Illegal invocation” */
+const win = domAPI?.getWindow?.() || (typeof window !== 'undefined' ? window : null);
+const _scheduler = scheduler || {
+  setTimeout: (...args) => win?.setTimeout?.(...args),
+  clearTimeout: (...args) => win?.clearTimeout?.(...args)
+};
 
   // --- API Methods ---
 
