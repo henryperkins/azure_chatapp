@@ -81,7 +81,8 @@ export function createHtmlTemplateLoader({
 
     const container = domAPI.querySelector(containerSelector);
     if (!container) {
-      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template ${url} will not be injected.`);
+      logger.warn(`[HtmlTemplateLoader] containerSelector "${containerSelector}" not found in DOM. Template ${url} will not be injected.`,
+        { context: 'HtmlTemplateLoader:containerMissing', url, containerSelector });
       // Surface template error visibly in document body
       try {
         const errDiv = domAPI.createElement('div');
@@ -90,7 +91,8 @@ export function createHtmlTemplateLoader({
         domAPI.setInnerHTML(errDiv, `[HtmlTemplateLoader] ERROR: Could not find container <code>${containerSelector}</code> for template: <code>${url}</code>.<br>Check base.html or container injection order.`);
         domAPI.appendChild(domAPI.getBody(), errDiv);
       } catch (e) {
-        // fallback: ignore
+        logger.error('[HtmlTemplateLoader] Failed to inject error div', e,
+          { context: 'HtmlTemplateLoader:errorDiv', url, containerSelector });
       }
       // Dispatch event even if container is not found, so listeners are unblocked
       emitEvent(eventName, { success: false, error: `Container ${containerSelector} not found` });
@@ -106,7 +108,8 @@ export function createHtmlTemplateLoader({
       // Robustness: Check that DOM actually contains the expected selector for project_list.html
       let templateValid = true;
       if (url.endsWith('project_list.html') && !domAPI.querySelector('#projectCardsPanel', container)) {
-        logger.warn?.(`[HtmlTemplateLoader] data-html-loaded is set but #projectCardsPanel missing — resetting loader state for ${url}`);
+        logger.warn?.(`[HtmlTemplateLoader] data-html-loaded is set but #projectCardsPanel missing — resetting loader state for ${url}`,
+          { context: 'HtmlTemplateLoader:projectListPanelMissing', url, containerSelector });
         templateValid = false;
         // Reset the state
         container.removeAttribute('data-html-loaded');
@@ -134,7 +137,8 @@ export function createHtmlTemplateLoader({
     const controller = new AbortController();
     // Use injected timerAPI instead of window
     const tm = timerAPI.setTimeout(() => {
-      logger.warn(`[HtmlTemplateLoader] Timeout loading template: ${url}`, { url, timeout });
+      logger.warn(`[HtmlTemplateLoader] Timeout loading template: ${url}`,
+        { url, timeout, context: 'HtmlTemplateLoader:timeout' });
       controller.abort();
     }, timeout);
 
@@ -159,7 +163,8 @@ export function createHtmlTemplateLoader({
       } catch (primaryErr) {
         // Fallback: if the first try used apiClient and we have native fetch
         if (primaryFetch !== _nativeFetch && _nativeFetch) {
-          logger.warn('[HtmlTemplateLoader] Primary fetch failed, retrying with native fetch', { url });
+          logger.warn('[HtmlTemplateLoader] Primary fetch failed, retrying with native fetch',
+            { url, context: 'HtmlTemplateLoader:primaryFetchFailed' });
           resp = await _nativeFetch(url, {
             method: 'GET',
             cache: 'no-store',

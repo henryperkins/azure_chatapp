@@ -359,6 +359,8 @@ export function createDomReadinessService({
       try {
         await elementsReady(domSelectors, { timeout, context });
       } catch (err) {
+        _logger.error('[domReadinessService] elementsReady failed', err,
+          { context: 'domReadinessService:dependenciesAndElements' });
         domSelectors.forEach((sel) => _missingSelectors.add(sel));
         if (optional) {
           _logger.warn?.(
@@ -461,6 +463,8 @@ export function createDomReadinessService({
       const event = eventHandlers.createCustomEvent(eventName, { detail });
       domAPI.dispatchEvent(domAPI.getDocument(), event);
     } catch (err) {
+      _logger.error('[domReadinessService] Failed to dispatch event', err,
+        { context: 'domReadinessService:emitReplayable' });
       _logger.error?.(`[domReadinessService] Failed to dispatch event: ${eventName}`, err, {
         eventName,
         detail
@@ -518,6 +522,8 @@ export function createDomReadinessService({
           });
           return Promise.resolve(syntheticEvent);
         } catch (err) {
+          _logger.error('[domReadinessService] Failed to create synthetic event', err,
+            { context: 'domReadinessService:waitForEvent' });
           _logger.error?.(`[domReadinessService] Failed to create synthetic event for "${eventName}"`, err, {
             eventName,
             context
@@ -579,6 +585,8 @@ export function createDomReadinessService({
           { once: true, context: 'domReadinessService' }
         );
       } catch (err) {
+        _logger.error('[domReadinessService] Error setting up event listener', err,
+          { context: 'domReadinessService:waitForEvent' });
         cleanup();
         _logger.error?.(`[domReadinessService] Error setting up event listener`, err, {
           eventName,
@@ -649,7 +657,14 @@ export function createDomReadinessService({
     }
 
     // Stop all mutation observers
-    observers.forEach((obs) => obs.disconnect());
+    observers.forEach((obs) => {
+      try {
+        obs.disconnect();
+      } catch (err) {
+        _logger.error('[domReadinessService] observer.disconnect failed', err,
+          { context: 'domReadinessService:destroy' });
+      }
+    });
     observers.length = 0;
 
     // Clear pending states

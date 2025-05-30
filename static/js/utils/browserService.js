@@ -4,6 +4,8 @@
  * @param {Window} deps.windowObject – injected window for testability
  */
 
+let _moduleLogger = null;          // NEW – gives normaliseUrl access to logger
+
 /**
  * Shared URL helpers
  * Refactored for strict dependency injection — no global window.
@@ -38,7 +40,9 @@ export function normaliseUrl(u = '') {
     const raw   = url.pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '');
     const path  = raw || '/';
     return path + url.search + url.hash;
-  } catch {
+  } catch (err) {
+    _moduleLogger?.error?.('[browserService] normaliseUrl failed', err,
+      { context: 'browserService:normaliseUrl', input: u });
     return u;
   }
 }
@@ -48,6 +52,8 @@ export const normalizeUrl = normaliseUrl;
 
 export function createBrowserService({ windowObject, logger } = {}) {
   let _logger = logger;
+
+  _moduleLogger = _logger;
 
   let _currentUser = null;
 
@@ -210,5 +216,7 @@ export function createBrowserService({ windowObject, logger } = {}) {
     getSessionId : () => getSessionId(),
     getUserAgent : () => windowObject.navigator?.userAgent || 'Unknown',
     setLogger(newLogger) { _logger = newLogger; },
+
+    cleanup () {/* no internal listeners or timers */}
   };
 }

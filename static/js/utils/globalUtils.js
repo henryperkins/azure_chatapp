@@ -107,6 +107,9 @@ export function safeParseJSON(str) {
   try {
     return JSON.parse(str);
   } catch (err) {
+    const log = globalThis?.DependencySystem?.modules?.get?.('logger');
+    log?.error?.('[globalUtils] safeParseJSON failed', err,
+      { context: 'globalUtils:safeParseJSON' });
     throw new Error('[globalUtils.safeParseJSON] JSON parse failed and fallback is forbidden: ' + (err?.message || err));
   }
 }
@@ -115,46 +118,53 @@ export function safeParseJSON(str) {
 export function createElement(tag, opts = {}, trackListener, domAPI) {
   const doc = domAPI?.getDocument?.();
   if (!doc) throw new Error('[globalUtils.createElement] domAPI with getDocument() is required');
-  const el = doc.createElement(tag);
-  if (opts.className) el.className = opts.className;
-  if (opts.id) el.id = opts.id;
-  if ("textContent" in opts) el.textContent = opts.textContent;
-  if ("innerHTML" in opts) {
-    if (domAPI?.setInnerHTML) {
-      domAPI.setInnerHTML(el, opts.innerHTML);   // sanitizer aware
-    } else {
-      // Fallback: escape tags to avoid XSS
-      el.textContent = String(opts.innerHTML).replace(/<[^>]*>?/gm, '');
+  let el;
+  try {
+    el = doc.createElement(tag);
+    if (opts.className) el.className = opts.className;
+    if (opts.id) el.id = opts.id;
+    if ("textContent" in opts) el.textContent = opts.textContent;
+    if ("innerHTML" in opts) {
+      if (domAPI?.setInnerHTML) {
+        domAPI.setInnerHTML(el, opts.innerHTML);   // sanitizer aware
+      } else {
+        // Fallback: escape tags to avoid XSS
+        el.textContent = String(opts.innerHTML).replace(/<[^>]*>?/gm, '');
+      }
     }
+
+    // Attach event listeners via DI tracker
+    Object.entries(opts).forEach(([k, v]) => {
+      if (k.startsWith("on") && typeof v === "function") {
+        const evt = k.slice(2).toLowerCase();
+        if (!trackListener)
+          throw new Error(`[globalUtils] createElement requires trackListener for ${evt}`);
+        trackListener(el, evt, v);
+      }
+    });
+
+    // data‑* attributes & common HTML props
+    Object.entries(opts).forEach(([k, v]) => {
+      if (k.startsWith("data-")) el.setAttribute(k, v);
+    });
+    [
+      "title",
+      "alt",
+      "src",
+      "href",
+      "placeholder",
+      "type",
+      "value",
+      "name",
+    ].forEach((p) => {
+      if (opts[p] !== undefined) el[p] = opts[p];
+    });
+  } catch (err) {
+    const log = globalThis?.DependencySystem?.modules?.get?.('logger');
+    log?.error?.('[globalUtils] createElement failed', err,
+      { context: 'globalUtils:createElement' });
+    throw err;
   }
-
-  // Attach event listeners via DI tracker
-  Object.entries(opts).forEach(([k, v]) => {
-    if (k.startsWith("on") && typeof v === "function") {
-      const evt = k.slice(2).toLowerCase();
-      if (!trackListener)
-        throw new Error(`[globalUtils] createElement requires trackListener for ${evt}`);
-      trackListener(el, evt, v);
-    }
-  });
-
-  // data‑* attributes & common HTML props
-  Object.entries(opts).forEach(([k, v]) => {
-    if (k.startsWith("data-")) el.setAttribute(k, v);
-  });
-  [
-    "title",
-    "alt",
-    "src",
-    "href",
-    "placeholder",
-    "type",
-    "value",
-    "name",
-  ].forEach((p) => {
-    if (opts[p] !== undefined) el[p] = opts[p];
-  });
-
   return el;
 }
 
@@ -165,8 +175,10 @@ export function toggleElement(selOrEl, show, domAPI) {
     } else if (selOrEl && selOrEl.classList) {
       selOrEl.classList.toggle("hidden", !show);
     }
-  } catch (e) {
-    // no-op/log
+  } catch (err) {
+    const log = globalThis?.DependencySystem?.modules?.get?.('logger');
+    log?.error?.('[globalUtils] toggleElement failed', err,
+      { context: 'globalUtils:toggleElement' });
   }
 }
 
@@ -216,4 +228,19 @@ export const fileIcon = (t = "") =>
  */
 export async function fetchData({ apiClient }, id) {
   return await apiClient.get(`/item/${id}`);
+}
+
+export function createGlobalUtils({ logger, apiClient } = {}) {
+  if (!logger)        throw new Error('[globalUtils] logger required');
+  if (!apiClient)     throw new Error('[globalUtils] apiClient required');
+
+  return {
+    isAbsoluteUrl, normaliseUrl, normalizeUrl, shouldSkipDedup,
+    debounce, stableStringify, safeParseJSON,
+    createElement: (...a) => createElement(...a),
+    toggleElement: (...a) => toggleElement(...a),
+    formatNumber, formatDate, formatBytes, fileIcon,
+    fetchData   : (id) => apiClient.get(`/item/${id}`),
+    cleanup () {}
+  };
 }

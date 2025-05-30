@@ -17,6 +17,8 @@
  * @throws {Error} If the initialization method throws an error during execution.
  */
 export async function safeInit(instance, name, methodName, logger) {
+  if (!logger || typeof logger.error !== 'function')
+    throw new Error('[safeInit] logger is required');
   if (!instance) {
     logger?.warn(`[safeInit] Instance ${name} is null/undefined. Cannot call ${methodName}.`, { context: `initHelpers:safeInit:${name}` });
     return false;
@@ -106,6 +108,7 @@ export function createInitHelpers({ domReadinessService, browserService, logger 
   return {
     safeInit: (instance, name, methodName) => safeInit(instance, name, methodName, logger),
     waitForDependenciesAndElements: domWaitHelper,
-    withTimeout: timeoutWrapper
+    withTimeout: timeoutWrapper,
+    cleanup () {}
   };
 }
