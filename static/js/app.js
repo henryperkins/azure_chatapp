@@ -4,8 +4,8 @@
  * must now be invoked within static/js/init/appInitializer.js as clearly named functions or within the initialization sequence.
  */
 
-// Polyfill for CustomEvent in older browsers
-import './utils/polyfillCustomEvent.js';
+ // CustomEvent polyfill (DI-safe factory)
+import { createCustomEventPolyfill } from './utils/polyfillCustomEvent.js';
 
 // Core config & factory imports for bootstrapping
 import { APP_CONFIG } from './appConfig.js';
@@ -53,6 +53,10 @@ import { createSidebar } from './sidebar.js';
 const browserService = createBrowserService({
   windowObject: (typeof window !== 'undefined') ? window : undefined
 });
+
+// Ensure CustomEvent exists in the injected window
+createCustomEventPolyfill({ browserService });
+
 const DependencySystem = browserService.getDependencySystem();
 
 // Instantiate and run the app initializer

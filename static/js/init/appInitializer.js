@@ -12,6 +12,7 @@ import { createEventHandlers } from "../eventHandler.js";
 import { createSafeHandler } from "../safeHandler.js";
 import { createDomReadinessService } from "../utils/domReadinessService.js";
 import { createLogger } from "../logger.js";
+import { createCustomEventPolyfill } from "../utils/polyfillCustomEvent.js";
 import {
     setBrowserService as registerSessionBrowserService,
     getSessionId as coreGetSessionId
@@ -81,6 +82,11 @@ export function createAppInitializer(opts = {}) {
             domAPI,
             browserService: opts.browserService,
             eventHandlers
+        });
+        const { cleanup: customEventPolyfillCleanup } =
+              createCustomEventPolyfill({ browserService: opts.browserService, logger });
+        DependencySystem.register('customEventPolyfill', {
+            cleanup: customEventPolyfillCleanup
         });
         if (typeof eventHandlers.setLogger === 'function') {
             eventHandlers.setLogger(logger);
