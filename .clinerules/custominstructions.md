@@ -4,7 +4,9 @@
 
 * **NO new feature modules**: Use existing modules only, unless splitting modules over 1000 lines.
 * **Module size limit**: Keep modules below 1000 lines; refactor or split as needed.
+  *(Oversize exemption: directly vendored external libraries such as DOMPurify may exceed this limit for integrity/documentation reasons, with clear vendor attribution comment at top of file.)*
 * **Single source of truth**: No duplication of logic or state, anywhere.
+  *(Duplication enforcement: ≥2 instances of an identical function or code block over 15 lines in separate modules is an audit violation.)*
 
 ---
 
@@ -30,6 +32,8 @@ const appInit = createAppInitializer({
 domReadinessService.documentReady().then(() => appInit.initializeApp());
 ```
 
+* `static/js/init/appInitializer.js` **must not** import service-like modules directly; it receives them solely through its parameter object.
+
 **No business logic, orchestration, or singleton allocation outside `app.js` and `appInitializer.js`.**
 
 ---
@@ -46,7 +50,7 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
   ```
 * **No top-level side effects in modules:** Only factories. No listeners, timers, or DOM access until `.initialize()` or equivalent is called by DI.
 * **Only app.js/appInitializer.js can use direct imports** for factories/services. All non-boot modules must get ALL dependencies via DI (DependencySystem).
-* **No direct access to window, document, or global objects** except through injected `browserService`/`domAPI`.
+* **No direct access or polyfill writes to `window`, `document`, or any global object** except through injected `browserService`/`domAPI`.
 
 ---
 
@@ -103,6 +107,8 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
 
 * **All factories must expose a cleanup() method** that removes all listeners via eventHandlers.
 * **No ad-hoc, manual, or untracked event/observer setup or teardown.**
+* **You *must* call `eventHandlers.cleanupListeners({ context })` inside the factory’s `cleanup()`; returning an empty stub is non-compliant.**
+
 
 ---
 
@@ -111,15 +117,16 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
 | Feature             | Canonical Location                   | Access via                          |
 | ------------------- | ------------------------------------ | ----------------------------------- |
 | Root App DI         | `app.js`, `appInitializer.js`        | Direct only at root                 |
-| Logger              | `logger.js` (factory)                | Injected via DI, never direct import|
+| Logger              | `logger.js` (factory)                | Injected via DI **and every call ends with a metadata object `{ context }`.**|
 | App/Auth State      | `appModule.state`                    | DI (`DependencySystem.modules.get`) |
 | Event Handlers      | `static/js/utils/eventHandlers.js`   | Injected via DI                     |
+| Event Bus           | `static/js/utils/eventBus.js`        | Injected via DI                     |
 | DOM API             | `static/js/utils/domAPI.js`          | Injected via DI                     |
 | API Endpoints       | `static/js/utils/apiEndpoints.js`    | Injected via DI                     |
 | UI Components       | `static/js/`, `static/js/components/`| Registered via DI                   |
 | Bootstrap Factories | `static/js/init/appInitializer.js`   | Canonical dependency registration   |
 
-**No direct service imports, except at root. No top-level instance side effects outside app.js/appInitializer.js.**
+**No direct service or side-effect imports, except in `app.js`. No top-level instance side effects outside app.js/appInitializer.js.**
 
 ---
 
@@ -132,6 +139,7 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
 * “Shadow” state — anything not in appModule or canonical DI context.
 * Any React/Vue/Angular-style context hack or global store pattern outside this DI system.
 * _No_ direct invocation of DependencySystem.modules.get outside factory instantiation.
+* Using `console.*` anywhere after bootstrap (replace with `logger.*` and metadata object).
 
 ---
 
@@ -144,9 +152,11 @@ domReadinessService.documentReady().then(() => appInit.initializeApp());
   - All DB/service/resource logic in dedicated service modules (e.g., `services/project_service.py`).
   - All mutation/checks delegated; routes only wire args and call service helpers.
 * **All routes and services use explicit type annotations and async SQLAlchemy.**
+* **No direct DB calls (`session.execute`, raw SQL) in `routes/*.py`; use dedicated service.**
 * **Pydantic models are mandatory for all request/response schemas.**
 * **No synchronous code inside async routes/services.**
 * **No generic dict or Any-typed endpoints.**
+  All Pydantic models must define concrete field types; usage of `dict`, `Any`, or untyped `data: object` is disallowed.
 * **All error raising/handling is performed in service layer — not in route logic — with structured exceptions.**
 * **Structured logging is only present in service/route boundaries, not interleaved with business logic.**
 
@@ -185,6 +195,28 @@ export function createMyModule({
 * ❌ Response schemas that are `dict`, `Any`, or not pydantic-typed.
 
 ---
+
+## 🛠️ **Test & Regression Requirements (Critical Changes)**
+
+* After making **critical dependency, module interface, or DI chain changes**, you **must** run regression/unit tests using Jest to verify contracts are not broken:
+  - Run all tests:
+    ```
+    npx jest
+    ```
+  - Or run the logger DI contract test specifically:
+    ```
+    npx jest tests/logger-di-order.test.js
+    ```
+  - Add `npm run lint` and `flake8` to CI gate; merges blocked if linters detect guard-rail breaches.
+* If a contract regression is detected (e.g., missing DI, eventHandlers/logger contract break), revert or fix until the test passes.
+* Tests ensure that critical initialization errors (like "Missing eventHandlers" or "Missing logger dependency") are never reintroduced in future refactors.
+
+**Why:**
+- Automated tests provide a “safety net” against breaking critical app startup and DI contracts.
+- This must be part of your workflow anytime you:
+  - Refactor DI registrations (e.g., logger, eventHandlers)
+  - Change lifecycle/boot order of services
+  - Touch persistent architectural patterns
 
 ## 📝 **Update Process**
 
