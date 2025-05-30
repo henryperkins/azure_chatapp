@@ -1,31 +1,20 @@
 /**
- * Theme Manager Module (Production-Grade)
- * =======================================
+ * @module themeToggle
+ * @description Canonical DI-only factory for theme management (strict .clinerules compliance)
+ * Exports a single createThemeManager({ ...deps }) factory. No top-level logic/side effects.
  *
- * A completely isolated theme management system with zero global leakage,
- * full DI support, and comprehensive lifecycle management.
+ * @param {Object} deps - Dependency Injection options.
+ * @param {Object} deps.dom - Required DOM abstraction layer.
+ * @param {Object} deps.eventHandlers - Required event handler manager.
+ * @param {Object} deps.logger - Required DI logger.
+ * @returns {Object} ThemeManager API with lifecycle and theme utilities.
  */
+const MODULE = "ThemeManager";
 
-/**
- * Creates a new ThemeManager instance.
- * @param {Object} deps - Required dependencies
- * @param {Object} deps.dom - DOM abstraction layer
- * @param {Function} deps.dom.getDocumentAttribute
- * @param {Function} deps.dom.setDocumentAttribute
- * @param {Function} deps.dom.getElementById
- * @param {Function} deps.dom.createSVGElement
- * @param {Function} deps.dom.localStorageGet
- * @param {Function} deps.dom.localStorageSet
- * @param {Function} deps.dom.matchMedia
- * @param {Function} deps.dom.addMediaListener
- * @param {Function} deps.dom.addEventListener
- * @param {Function} deps.dom.createMutationObserver
- * @returns {Object} ThemeManager API
- */
 export function createThemeManager({ dom, eventHandlers, logger } = {}) {
-  const _logger = logger ?? { error: () => {} };
-  // --- Dependency Validation ---
-  if (!dom) throw new Error('DOM abstraction layer required');
+  if (!dom) throw new Error(`[${MODULE}] DOM abstraction layer required`);
+  if (!eventHandlers) throw new Error(`[${MODULE}] eventHandlers dependency required`);
+  if (!logger) throw new Error(`[${MODULE}] logger dependency required`);
 
   const requiredDomMethods = [
     'getDocumentAttribute', 'setDocumentAttribute',
@@ -35,11 +24,9 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
 
   requiredDomMethods.forEach(method => {
     if (typeof dom[method] !== 'function') {
-      throw new Error(`DOM.${method} implementation required`);
+      throw new Error(`[${MODULE}] DOM.${method} implementation required`);
     }
   });
-
-  // We no longer depend on "notify"
 
   // --- Constants ---
   const THEMES = Object.freeze({
@@ -117,16 +104,8 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
     const button = dom.getElementById('darkModeToggle');
     if (!button) return;
 
-    const evts = eventHandlers ?? {
-      trackListener: (el, t, h, o) => {
-        el.addEventListener(t, h, o);
-        return () => el.removeEventListener(t, h, o);
-      },
-      cleanupListeners: () => {}
-    };
     cleanupCallbacks.push(
-      evts.trackListener(button, 'click', handleToggleClick,
-                         { context: 'ThemeManager' })
+      eventHandlers.trackListener(button, 'click', handleToggleClick, { context: MODULE })
     );
   };
 
@@ -175,11 +154,7 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
       try {
         if (cleanup) cleanup();
       } catch (_err) {
-        _logger.error('[ThemeManager] cleanup error',
-                      { status: _err?.status ?? 500,
-                        data: _err,
-                        message: _err?.message ?? String(_err) },
-                      { context: 'ThemeManager:teardown' });
+        logger.error(`[${MODULE}] cleanup error`, _err, { context: MODULE + ':teardown' });
       }
     });
     cleanupCallbacks = [];
@@ -188,16 +163,13 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
       try {
         mutationObserver.disconnect();
       } catch (_err) {
-        _logger.error('[ThemeManager] cleanup error',
-                      { status: _err?.status ?? 500,
-                        data: _err,
-                        message: _err?.message ?? String(_err) },
-                      { context: 'ThemeManager:teardown' });
+        logger.error(`[${MODULE}] cleanup error`, _err, { context: MODULE + ':teardown' });
       }
       mutationObserver = null;
     }
-    if (eventHandlers?.cleanupListeners) {
-      eventHandlers.cleanupListeners({ context: 'ThemeManager' });
+
+    if (eventHandlers && typeof eventHandlers.cleanupListeners === 'function') {
+      eventHandlers.cleanupListeners({ context: MODULE });
     }
   };
 
@@ -214,4 +186,3 @@ export function createThemeManager({ dom, eventHandlers, logger } = {}) {
     THEMES
   };
 }
-

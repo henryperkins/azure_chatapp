@@ -35,9 +35,9 @@ export function createSidebar({
   if (!DependencySystem) throw new Error('[Sidebar] DependencySystem is required.');
   if (!domAPI) throw new Error('[Sidebar] domAPI is required.');
   if (!uiRenderer ||
-      typeof uiRenderer.renderConversations !== 'function' ||
-      typeof uiRenderer.renderStarredConversations !== 'function' ||
-      typeof uiRenderer.renderProjects !== 'function') {
+    typeof uiRenderer.renderConversations !== 'function' ||
+    typeof uiRenderer.renderStarredConversations !== 'function' ||
+    typeof uiRenderer.renderProjects !== 'function') {
     throw new Error('[Sidebar] uiRenderer with required methods is required.');
   }
   if (!storageAPI) throw new Error('[Sidebar] storageAPI is required.');
@@ -341,8 +341,13 @@ export function createSidebar({
         projects = await projectManager.loadProjects() || [];
         // Auto-select first if none selected
         const currentProject = projectManager.getCurrentProject?.();
-        if (!currentProject && projects.length > 0 && app?.setCurrentProject) {
-          app.setCurrentProject(projects[0]);
+        if (!currentProject && projects.length > 0) {
+          const appModule = DependencySystem.modules?.get('appModule');
+          if (appModule?.setCurrentProject) {
+            appModule.setCurrentProject(projects[0]);
+          } else if (app?.setCurrentProject) {
+            app.setCurrentProject(projects[0]);
+          }
         }
       } catch (err) {
         logger.error('[Sidebar] Failed to load projects', err, { context: MODULE });
@@ -727,7 +732,7 @@ export function createSidebar({
         authEventTarget,
         'authStateChanged',
         safeHandler((event) => {
-          console.log('[Sidebar] authStateChanged event received:', event);
+          logger.info('[Sidebar] authStateChanged event received', event, { context: MODULE });
           sidebarAuth.handleGlobalAuthStateChange(event);
         }, '[Sidebar] authStateChanged'),
         { context: MODULE }
@@ -756,9 +761,8 @@ export function createSidebar({
   function destroy() {
     if (DependencySystem?.cleanupModuleListeners) {
       DependencySystem.cleanupModuleListeners(MODULE);
-    } else {
-      eventHandlers.cleanupListeners({ context: MODULE });
     }
+    eventHandlers.cleanupListeners({ context: MODULE });
     removeBackdrop();
     pinned = false;
     visible = false;
@@ -784,7 +788,7 @@ export function createSidebar({
       fromAppModule: { isAuth, user },
       fromAuthModule: modState
     };
-    logger.info('[Sidebar] Auth state debug info', debugInfo);
+    logger.info('[Sidebar] Auth state debug info', debugInfo, { context: MODULE });
     sidebarAuth.handleGlobalAuthStateChange({
       detail: { authenticated: isAuth, user, source: 'debugAuthState' }
     });
@@ -804,7 +808,7 @@ export function createSidebar({
       dockInitialized: sidebarMobileDock?.isInitialized,
       context: `${MODULE}:debug`
     };
-    logger.info('[Sidebar] Debug sidebar state', debugInfo);
+    logger.info('[Sidebar] Debug sidebar state', debugInfo, { context: MODULE });
     return debugInfo;
   }
 
