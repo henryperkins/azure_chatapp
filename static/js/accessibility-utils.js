@@ -594,6 +594,22 @@ export function createAccessibilityEnhancements({
     getFocusable: instance._getFocusable ? instance._getFocusable.bind(instance) : undefined,
     trapFocus: instance._trapFocus ? instance._trapFocus.bind(instance) : undefined,
     cleanup,
+    preloadTemplates: async () => {
+      const loader = DependencySystem.modules.get('htmlTemplateLoader');
+      if (!loader?.loadTemplate) return;
+      await Promise.allSettled([
+        loader.loadTemplate({
+          url: '/static/html/project_details.html',
+          containerSelector: '#projectDetailsView',
+          eventName: 'projectDetailsTemplateLoaded'
+        }),
+        loader.loadTemplate({
+          url: '/static/html/project_list.html',
+          containerSelector: '#projectListView',
+          eventName: 'projectListHtmlLoaded'
+        })
+      ]);
+    },
     _instance: instance
   };
 }

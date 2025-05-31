@@ -120,27 +120,7 @@ export function createProjectDashboard({
       this._viewsRegistered = false;
       this._unsubs = [];
 
-      // Register minimal "stub" views first to avoid "unregistered view" errors
-      this._ensureNavigationViews();
-
-      // Listen for auth state changes on AuthBus
-      const authBus = this.auth?.AuthBus;
-      if (!authBus || typeof authBus.addEventListener !== 'function') {
-        logger.error('[ProjectDashboard][constructor]', 'AuthBus with addEventListener not found', { context: 'projectDashboard' });
-        throw new Error('[ProjectDashboard] AuthBus is required for auth state tracking.');
-      }
-
-      const safeAuthHandler = this._wrapHandler(
-        this._onAuthStateChanged.bind(this),
-        'authStateChangedGlobal'
-      );
-      const unsub = this.eventHandlers.trackListener(
-        authBus,
-        'authStateChanged',
-        safeAuthHandler,
-        { context: 'projectDashboard' }
-      );
-      if (typeof unsub === 'function') this._unsubs.push(unsub);
+      this._authBusBound = false;      // orchestration will bind once
     }
 
     /**
@@ -189,6 +169,24 @@ export function createProjectDashboard({
       if (this.state.initialized) {
         return true; // Already done
       }
+
+      /* ---- first–time bindings moved from ctor -------------------- */
+      if (!this._authBusBound) {
+        const authBus = this.auth?.AuthBus;
+        if (authBus && typeof authBus.addEventListener === 'function') {
+          const safeAuthHandler = this._wrapHandler(
+            this._onAuthStateChanged.bind(this),
+            'authStateChangedGlobal'
+          );
+          const unsub = this.eventHandlers.trackListener(
+            authBus, 'authStateChanged', safeAuthHandler,
+            { context: 'projectDashboard' }
+          );
+          if (typeof unsub === 'function') this._unsubs.push(unsub);
+          this._authBusBound = true;
+        }
+      }
+      if (!this._viewsRegistered) this._ensureNavigationViews();
 
       // Defer template-dependent init until 'ui:templates:ready' event.
       const initStartTime = Date.now();
@@ -1050,91 +1048,6 @@ export function createProjectDashboard({
   // ─────────────────────────────────────────────────────────────────────────
   const dashboard = new ProjectDashboard();
 
-  // ==== Speculative/Eager Project Details Template Loading (wait for container) ====
-  // Try to find htmlTemplateLoader in dependency system and trigger load
-  try {
-    const htmlTemplateLoader =
-      DependencySystem?.modules?.get?.('htmlTemplateLoader') ||
-      (dashboard.components.projectDetails && dashboard.components.projectDetails.htmlTemplateLoader);
-    if (htmlTemplateLoader?.loadTemplate) {
-      const drs = DependencySystem?.modules?.get?.('domReadinessService');
-
-      const loadDetailsTemplate = () =>
-        htmlTemplateLoader.loadTemplate({
-          url: '/static/html/project_details.html',
-          containerSelector: '#projectDetailsView',
-          eventName: 'projectDetailsTemplateLoaded'
-        });
-
-      /* Ensure #projectDetailsView exists before loading template */
-      if (drs?.elementsReady) {
-        drs.elementsReady('#projectDetailsView', {
-          timeout: 8000,
-          context: 'ProjectDashboard::detailsTplContainer'
-        })
-          .then(loadDetailsTemplate)
-          .catch(err => { logger.error('[ProjectDashboard][detailsTemplateLoader]', err, { context: 'projectDashboard' }); loadDetailsTemplate(); });          // fallback – still attempt
-      } else {
-        loadDetailsTemplate().catch(err => { logger.error('[ProjectDashboard][detailsTemplateLoader]', err, { context: 'projectDashboard' }); });
-      }
-    }
-  } catch (err) {
-    logger.error('[ProjectDashboard] Unable to fire-and-forget details template load', err, { context: 'projectDashboard' });
-  }
-
-  // ==== Speculative/Eager Project List Template Loading (wait for container) ====
-  try {
-    const htmlTemplateLoader =
-      DependencySystem?.modules?.get?.('htmlTemplateLoader');
-
-    if (htmlTemplateLoader?.loadTemplate) {
-      const drs = DependencySystem?.modules?.get?.('domReadinessService');
-
-      const loadListTemplate = () =>
-        htmlTemplateLoader.loadTemplate({
-          url: '/static/html/project_list.html',
-          containerSelector: '#projectListView',
-          eventName: 'projectListHtmlLoaded'
-        });
-
-      /* Ensure #projectListView exists before loading template */
-      if (drs?.elementsReady) {
-        drs.elementsReady('#projectListView', {
-          timeout: 8000,
-          context: 'ProjectDashboard::listTplContainer'
-        })
-          .then(loadListTemplate)
-          .catch(err => {
-            logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' });
-            // Do NOT attempt to load the template until the container actually exists.
-            // Prevents race condition where htmlTemplateLoader emits a failure event
-            // leading to cascading timeouts in ProjectListComponent.initialize().
-            // The template will be loaded automatically when elementsReady resolves.
-          });
-      } else {
-        // When domReadinessService.elementsReady is unavailable (unlikely but possible in
-        // early-bootstrap scenarios), guard against loading the template before the
-        // container actually exists to avoid emitting a failed event that blocks
-        // ProjectListComponent.initialize().
-        const containerExists =
-          typeof document !== 'undefined' &&
-          document.querySelector('#projectListView');
-        if (containerExists) {
-          loadListTemplate().catch(err => {
-            logger.error('[ProjectDashboard][listTemplateLoader]', err, { context: 'projectDashboard' });
-          });
-        } else {
-          logger.warn('[ProjectDashboard][listTemplateLoader] #projectListView not found; deferring template load until container is present.', { context: 'projectDashboard' });
-        }
-      }
-    }
-  } catch (err) {
-    logger.error(
-      '[ProjectDashboard] Unable to fire-and-forget list template load',
-      err,
-      { context: 'projectDashboard' }
-    );
-  }
 
   function cleanup() {
     if (eventHandlers?.cleanupListeners) {

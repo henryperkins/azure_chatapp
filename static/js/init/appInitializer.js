@@ -1216,6 +1216,11 @@ if (handlers?.dispatchEvent) {
             });
             DependencySystem.register('projectDashboard', projectDashboard);
 
+            // preload dashboard templates centrally (no ctor side-effects)
+            if (typeof projectDashboard.preloadTemplates === 'function') {
+              await projectDashboard.preloadTemplates();
+            }
+
             const plc = DependencySystem.modules.get('projectListComponent');
             if (plc && projectDashboard.setProjectListComponent) {
                 projectDashboard.setProjectListComponent(plc);
