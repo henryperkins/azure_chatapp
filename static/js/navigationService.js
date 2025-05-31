@@ -1,3 +1,5 @@
+import { getSafeHandler } from './utils/getSafeHandler.js';
+
 export function createNavigationService({
   domAPI,
   browserService,
@@ -19,13 +21,7 @@ export function createNavigationService({
   const MODULE_CONTEXT = 'navigationService';
 
   // Resolve safeHandler at factory time
-  const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
-  const safeHandler =
-    typeof safeHandlerRaw === 'function'
-      ? safeHandlerRaw
-      : (typeof safeHandlerRaw?.safeHandler === 'function'
-        ? safeHandlerRaw.safeHandler
-        : (fn) => fn /* fallback */);
+  const safeHandler = getSafeHandler(DependencySystem);
 
   // === Navigation State ===
   const state = {

@@ -551,7 +551,7 @@ class ProjectDetailsComponent {
     const div = doc.createElement("div");
     div.className = "flex items-center justify-between gap-3 p-3 bg-base-100 rounded-box shadow-xs hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.fileId = file.id;
-    this._setHTML(div, `
+    this.domAPI.setInnerHTML(div, `
       <div class="flex items-center gap-3 min-w-0 flex-1">
         <span class="text-xl text-primary">📄</span>
         <div class="flex flex-col min-w-0 flex-1">
@@ -586,7 +586,7 @@ class ProjectDetailsComponent {
     const div = doc.createElement("div");
     div.className = "conversation-item";
     div.dataset.conversationId = cv.id;
-    this._setHTML(div, `
+    this.domAPI.setInnerHTML(div, `
       <h4 class="font-medium truncate mb-1">${sanitizer.sanitize(cv.title || "Untitled conversation")}</h4>
       <p class="text-sm text-base-content/60 truncate leading-tight mt-0.5">${sanitizer.sanitize(cv.last_message || "No messages yet")}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
@@ -603,7 +603,7 @@ class ProjectDetailsComponent {
     const div = doc.createElement("div");
     div.className = "p-3 border-b border-base-300 hover:bg-base-200 transition-colors max-w-full w-full overflow-x-auto";
     div.dataset.artifactId = art.id;
-    this._setHTML(div, `
+    this.domAPI.setInnerHTML(div, `
       <div class="flex justify-between items-center">
         <h4 class="font-medium truncate">${sanitizer.sanitize(art.name || "Untitled artifact")}</h4>
         <span class="text-xs text-base-content/60">${sanitizer.sanitize(formatDate(art.created_at))}</span>
@@ -653,7 +653,6 @@ class ProjectDetailsComponent {
     }
   }
 
-  _setHTML(el, raw) { this.domAPI.setInnerHTML(el, raw); }
 
   async initialize() {
     await this.domReadinessService.waitForEvent('app:ready');

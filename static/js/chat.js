@@ -130,6 +130,8 @@ export function createChatManager(deps = {}) {
       this.isProcessing = false;
     }
 
+    // (Removed orphaned _updateURLWithConversationId and _removeConversationIdFromURL)
+
     /**
      * Replace the (placeholder) ProjectDetailsComponent reference with the
      * final instance registered later by coreInit.
@@ -665,7 +667,7 @@ export function createChatManager(deps = {}) {
               });
             }
           }
-          this._updateURLWithConversationId(conversationId);
+          browserService.setSearchParam('chatId', conversationId);
 
           // Update token stats for loaded conversation
           const tokenStatsManager = this.DependencySystem?.modules?.get('tokenStatsManager');
@@ -1064,7 +1066,7 @@ export function createChatManager(deps = {}) {
         if (loadedSuccessfully) {
           return;
         }
-        this._removeConversationIdFromURL();
+        browserService.removeSearchParam('chatId');
       }
 
       try {
