@@ -69,7 +69,7 @@ export function createAuthFormListenerFactory(deps) {
 
   function setup(formHandlers) {
     if (isSetup) {
-      logger.debug("[AuthFormListenerFactory] Setup called but listeners are already attached.");
+      logger.debug("[AuthFormListenerFactory] Setup called but listeners are already attached.", { context: "AuthFormListenerFactory" });
       return;
     }
     isSetup = true;
@@ -91,7 +91,7 @@ export function createAuthFormListenerFactory(deps) {
       eventHandlers.trackListener(
         loginForm,
         "submit",
-        handleLoginFormSubmit,
+        safeHandler(handleLoginFormSubmit, "AuthFormListenerFactory:loginSubmit"),
         {
           passive: false,
           context: "AuthFormListenerFactory",
@@ -107,7 +107,7 @@ export function createAuthFormListenerFactory(deps) {
       eventHandlers.trackListener(
         registerForm,
         "submit",
-        handleRegisterFormSubmit,
+        safeHandler(handleRegisterFormSubmit, "AuthFormListenerFactory:registerSubmit"),
         {
           passive: false,
           context: "AuthFormListenerFactory",
@@ -121,7 +121,7 @@ export function createAuthFormListenerFactory(deps) {
       eventHandlers.trackListener(
         doc,
         "modalsLoaded",
-        modalsLoadedHandlerRef,
+        safeHandler(modalsLoadedHandlerRef, "AuthFormListenerFactory:modalsLoaded"),
         {
           passive: false,
           context: "AuthFormListenerFactory",
@@ -151,3 +151,5 @@ export function createAuthFormListenerFactory(deps) {
     cleanup
   };
 }
+
+export default createAuthFormListenerFactory;

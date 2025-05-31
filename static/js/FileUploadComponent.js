@@ -77,7 +77,8 @@ export function createFileUploadComponent({
   let _handlersBound = false;
 
 /* Deterministic timers (DI-friendly) — bind to global window to avoid “Illegal invocation” */
-const win = domAPI?.getWindow?.() || (typeof window !== 'undefined' ? window : null);
+const win = domAPI?.getWindow?.();
+if (!win) throw new Error("[FileUploadComponent] browserService.getWindow() required");
 const _scheduler = scheduler || {
   setTimeout: (...args) => win?.setTimeout?.(...args),
   clearTimeout: (...args) => win?.clearTimeout?.(...args)
@@ -123,7 +124,9 @@ const _scheduler = scheduler || {
         );
       }
     } catch (error) {
-      logger.error('[FileUploadComponent][init] Initialization failed', error, { context: MODULE_CONTEXT });
+      logger.error('[FileUploadComponent][init] Initialization failed',
+        error,
+        { context: "FileUploadComponentContext:init" });
       throw error;
     }
   }
@@ -283,15 +286,10 @@ const _scheduler = scheduler || {
       }
       await projectManager.uploadFileWithRetry(pid, { file });
       _updateUploadProgress(1, 0);
-    } catch (error) {
-      logger.error('[FileUploadComponent][_uploadFile] Upload failed',
-        {
-          status: 400,
-          data: { fileName: file?.name },
-          message: String(error)
-        },
-        { context: MODULE_CONTEXT }
-      );
+    } catch (err) {
+      logger.error("[FileUploadComponent] uploadFile",
+        err,
+        { context: "FileUploadComponentContext:uploadFile" });
       _updateUploadProgress(0, 1);
     }
   }
@@ -322,14 +320,9 @@ const _scheduler = scheduler || {
           const tempFile = new File([file], sanitizedName, { type: file.type });
           file = tempFile;
         } catch (err) {
-          logger.error('[FileUploadComponent][_validateFiles] File name sanitization failed',
-            {
-              status: 400,
-              data: { fileName: file?.name },
-              message: String(err)
-            },
-            { context: MODULE_CONTEXT }
-          );
+          logger.error("[FileUploadComponent] validateFiles",
+            err,
+            { context: "FileUploadComponentContext:validateFiles" });
           invalidFiles.push({
             status: 400,
             data: { file },
