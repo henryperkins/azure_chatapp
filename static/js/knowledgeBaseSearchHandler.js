@@ -258,11 +258,16 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
     const refText = `Referring to content from "${filename}":\n\n> ${result.text.trim()}\n\nBased on this, `;
     const current = chatInput.value.trim();
 
-    chatInput.value = current ? `${current}\n\n${refText}` : refText;
-    chatInput.focus();
-    const inputEvt = new Event('input', { bubbles: true });
-    const doc = ctx.domAPI.getDocument();
-    ctx.domAPI.dispatchEvent(doc, inputEvt);
+    try {
+      chatInput.value = current ? `${current}\n\n${refText}` : refText;
+      chatInput.focus();
+      const inputEvt = new Event('input', { bubbles: true });
+      const doc = ctx.domAPI.getDocument();
+      ctx.domAPI.dispatchEvent(doc, inputEvt);
+    } catch (err) {
+      ctx.logger.error('[KnowledgeBaseSearchHandler] _useInConversation failed',
+                       err, { context: MODULE });
+    }
   }
 
   /**
