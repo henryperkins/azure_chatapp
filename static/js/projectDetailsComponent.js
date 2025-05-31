@@ -528,17 +528,6 @@ class ProjectDetailsComponent {
   }
 
 
-  _highlightActiveConversation(activeId) {
-    const list = this.elements?.conversationsList;
-    if (!list) return;
-    Array.from(list.children).forEach(item => {
-      item.classList.toggle(
-        'active',
-        item.dataset.conversationId === String(activeId)
-      );
-    });
-  }
-
   disableChatUI(reason = 'Chat unavailable') {
     try {
       const input = this.domAPI.getElementById('chatInput');
@@ -654,95 +643,6 @@ class ProjectDetailsComponent {
     catch (e) { this._logError("Error downloading file", e); }
   }
 
-  async _openConversation(cv) {
-    if (!this.projectId || !cv?.id) return;
-    if (!this._pendingOperations) this._pendingOperations = new Map();
-    const operationKey = `conversation_${cv.id}`;
-    if (this._pendingOperations.has(operationKey)) {
-      this._pendingOperations.get(operationKey).cancel();
-    }
-    class CancelableOperation {
-      constructor() {
-        this.canceled = false;
-        this.promise = null;
-      }
-      execute(asyncFn) {
-        this.canceled = false;
-        this.promise = (async () => {
-          try {
-            if (this.canceled) return null;
-            return await asyncFn();
-          } catch (err) {
-            if (this.canceled) {
-              return null;
-            }
-            throw err;
-          }
-        })();
-        return this.promise;
-      }
-      cancel() {
-        this.canceled = true;
-        this.promise = null;
-      }
-    }
-    const operation = new CancelableOperation();
-    this._pendingOperations.set(operationKey, operation);
-
-    return operation.execute(async () => {
-      try {
-        const currentProject = this.projectManager.getCurrentProject?.();
-        if (!currentProject || currentProject.id !== this.projectId) {
-          this.app?.setCurrentProject?.({ id: this.projectId });
-          try {
-            const projectDetails = await this.projectManager.loadProjectDetails(this.projectId);
-            if (projectDetails) {
-              this.app?.setCurrentProject?.(projectDetails);
-            }
-          } catch (_e) {
-            this._logError("Error loading project before conversation", _e);
-          }
-        }
-        await this.projectManager.getConversation(cv.id);
-        if (operation.canceled) return null;
-        if (this.navigationService) {
-          this.navigationService.navigateToConversation(this.projectId, cv.id);
-        }
-        if (this.chatManager && typeof this.chatManager.loadConversation === "function") {
-          if (!this.chatManager.projectId || this.chatManager.projectId !== this.projectId) {
-            this._logInfo("ChatManager not initialized for current project, initializing first", {
-              currentProjectId: this.projectId,
-              chatManagerProjectId: this.chatManager.projectId
-            });
-            if (this.chatManager.forceProjectIdSync) {
-              const syncedProjectId = this.chatManager.forceProjectIdSync();
-              this._logInfo("Attempted ChatManager project ID sync", {
-                syncedProjectId,
-                expectedProjectId: this.projectId
-              });
-            }
-            await this.chatManager.initialize({
-              projectId: this.projectId,
-              containerSelector: "#chatTab .chat-container",
-              messageContainerSelector: "#chatMessages",
-              inputSelector: "#chatInput",
-              sendButtonSelector: "#chatSendBtn",
-              titleSelector: "#chatTitle",
-              minimizeButtonSelector: "#minimizeChatBtn"
-            });
-          }
-          this._logInfo("Loading conversation in ChatManager", { conversationId: cv.id, projectId: this.projectId });
-          await this.chatManager.loadConversation(cv.id);
-        }
-        this._highlightActiveConversation(cv.id);
-      } catch (_e) {
-        if (!operation.canceled) {
-          this._logError("Error opening conversation", _e);
-        }
-        return null;
-      }
-    });
-  }
 
   _cleanupPendingOperations() {
     if (this._pendingOperations) {
