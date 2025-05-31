@@ -54,8 +54,6 @@ export function createSidebar({
   const MODULE = 'Sidebar';
   const SidebarBus = new EventTarget();
 
-  const state = {};    // lifecycle flags live in appModule only
-
   // Attempt to fill optional dependencies if not passed
   app = app || tryResolve('app');
   projectDashboard = projectDashboard || tryResolve('projectDashboard');
