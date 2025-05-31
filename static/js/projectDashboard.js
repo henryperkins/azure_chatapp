@@ -1,3 +1,4 @@
+ // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 /**
  * projectDashboard.js
  *

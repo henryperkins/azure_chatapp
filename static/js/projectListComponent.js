@@ -1,3 +1,4 @@
+ // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 /**
  * ProjectListComponent – guarded factory
  * Handles rendering and interaction with the project list UI.

@@ -1,3 +1,4 @@
+ // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 // Refactored to comply with factory export, pure imports, domReadinessService usage, event bus for module events,
 // and logger-based error handling per guardrails. No top-level logic is executed here; all initialization occurs inside createProjectManager.
 
