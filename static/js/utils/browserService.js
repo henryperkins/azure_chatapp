@@ -130,6 +130,29 @@ export function createBrowserService({ windowObject, logger } = {}) {
   function setCurrentUser(userObj) { _currentUser = userObj ?? null; }
   function getCurrentUser()      { return _currentUser; }
 
+  // ---------------- File download helper ----------------
+  /**
+   * Trigger a browser download for a Blob or ArrayBuffer.
+   * Falls back to console error if window APIs unavailable.
+   * @param {Blob|ArrayBuffer} blob
+   * @param {string} suggestedName
+   */
+  function triggerDownload(blob, suggestedName = 'download.bin') {
+    try {
+      const url = windowObject.URL.createObjectURL(blob);
+      const a = windowObject.document.createElement('a');
+      a.href = url;
+      a.download = suggestedName;
+      windowObject.document.body.appendChild(a);
+      a.click();
+      windowObject.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      _logger?.error?.('[browserService] triggerDownload failed', err);
+      throw err;
+    }
+  }
+
   return {
     // Query-string helpers
     buildUrl        : _buildUrl,

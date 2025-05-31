@@ -792,7 +792,12 @@ export function createProjectManager({
 
     async downloadFile(projectId, fileId) {
       const url = this._CONFIG.FILE_DOWNLOAD.replace('{id}', projectId).replace('{file_id}', fileId);
-      return this._req(url, undefined, 'downloadFile');
+      /* Request the response as a Blob so the caller can trigger a browser download */
+      return this._req(
+        url,
+        { responseType: 'blob' },
+        'downloadFile'
+      );
     }
 
     async downloadArtifact(projectId, artifactId) {

@@ -6,6 +6,8 @@ Serves as the single source of truth for all file operations.
 """
 
 import logging
+import os
+import mimetypes
 from uuid import UUID
 from typing import Optional, Tuple
 
@@ -17,7 +19,9 @@ from fastapi import (
     UploadFile,
     File,
     BackgroundTasks,
+    Response,
 )
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_async_session
@@ -265,10 +269,63 @@ async def download_project_file(
     db: AsyncSession = Depends(get_async_session),
 ):
     """
-    Stub for future file download endpoint.
-    Actual implementation will depend on storage backend.
+    Download a stored project file.
+
+    Streams the file from the underlying storage backend (local, Azure, S3)
+    with correct headers. Provides proper error responses (404, 403).
     """
     user, _token = current_user_and_token
-    raise HTTPException(
-        status_code=501, detail="File download endpoint not yet implemented"
-    )
+
+    with traced(op="file", description="Download Project File") as span:
+        try:
+            span.set_tag("project.id", str(project_id))
+            span.set_tag("file.id", str(file_id))
+            span.set_tag("user.id", str(user.id))
+
+            # Access control
+            await validate_project_access(project_id, user, db)
+
+            file_service = FileService(db)
+            meta = await file_service.get_file_metadata(project_id, file_id)
+            file_path = meta["file_path"]
+            filename = meta["filename"]
+
+            # Guess mime type (fallback to octet-stream)
+            mime_type, _ = mimetypes.guess_type(filename)
+            mime_type = mime_type or "application/octet-stream"
+
+            storage = file_service.storage
+
+            # ---------- Local filesystem path ----------
+            if storage.storage_type == "local" and os.path.isfile(file_path):
+                return FileResponse(
+                    path=file_path,
+                    media_type=mime_type,
+                    filename=filename,
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"'
+                    },
+                )
+
+            # ---------- Cloud backends ----------
+            # Read into memory; for very large files consider chunked StreamingResponse
+            content = await storage.get_file(file_path)
+            headers = {
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(content)),
+            }
+            return Response(content, media_type=mime_type, headers=headers)
+
+        except HTTPException:
+            span.set_tag("error", True)
+            raise
+        except Exception as e:
+            span.set_tag("error", True)
+            span.set_tag("error_type", type(e).__name__)
+            logger.error(
+                f"Error downloading file {file_id} for project {project_id}: {e}",
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=500, detail="Failed to download file"
+            ) from e
