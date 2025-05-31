@@ -39,6 +39,9 @@ export function createProjectDetailsComponent({
     }
     throw new Error(`[${MODULE_CONTEXT}] Missing required dependencies: ${missing.join(", ")}`);
   }
+  // Use canonical globalUtils helpers for formatting
+  const { formatDate, formatBytes } = DependencySystem.modules.get('globalUtils');
+
   const instance = new ProjectDetailsComponent({
     domAPI,
     htmlTemplateLoader,
@@ -524,64 +527,6 @@ class ProjectDetailsComponent {
     }
   }
 
-  _formatDate(dateString) {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString();
-    } catch (error) {
-      return 'Unknown';
-    }
-  }
-
-  renderFiles(files) {
-    const c = this.elements.filesList;
-    if (!c) return;
-    this.domAPI.replaceChildren(c);
-    if (!files.length) {
-      this.domAPI.setInnerHTML(c, `<div class="text-center py-8 text-base-content/60">
-        <p>No files uploaded yet.</p>
-        <p class="text-sm mt-1">Drag & drop or click Upload.</p>
-      </div>`);
-      return;
-    }
-    files.forEach(f => { c.appendChild(this._fileItem(f)); });
-  }
-
-  renderConversations(convs) {
-    const c = this.elements.conversationsList;
-    if (!c) return;
-    this.domAPI.replaceChildren(c);
-    if (!convs.length) {
-      this.domAPI.setInnerHTML(c, `<div class="text-center py-8">
-        <p>No conversations yet. Click “New Chat”.</p>
-      </div>`);
-      return;
-    }
-    convs.forEach(cv => { c.appendChild(this._conversationItem(cv)); });
-    if (this.chatManager?.currentConversationId) {
-      this._highlightActiveConversation(this.chatManager.currentConversationId);
-    }
-  }
-
-  renderArtifacts(arts) {
-    const c = this.elements.artifactsList;
-    if (!c) return;
-    this.domAPI.replaceChildren(c);
-    if (!arts.length) {
-      this.domAPI.setInnerHTML(c, `<div class="py-8 text-center">No artifacts yet.</div>`);
-      return;
-    }
-    arts.forEach(a => { c.appendChild(this._artifactItem(a)); });
-  }
-
-  renderStats(s = {}) {
-    const c = this.elements.container;
-    if (!c) return;
-    const sel = (id) => c.querySelector(id);
-    if (sel('#fileCount') && s.fileCount !== undefined) sel('#fileCount').textContent = s.fileCount;
-    if (sel('#conversationCount') && s.conversationCount !== undefined) sel('#conversationCount').textContent = s.conversationCount;
-    if (sel('#artifactCount') && s.artifactCount !== undefined) sel('#artifactCount').textContent = s.artifactCount;
-  }
 
   _highlightActiveConversation(activeId) {
     const list = this.elements?.conversationsList;
@@ -623,7 +568,7 @@ class ProjectDetailsComponent {
         <div class="flex flex-col min-w-0 flex-1">
           <div class="font-medium truncate" title="${this._safeAttr(file.filename)}">${this._safeTxt(file.filename)}</div>
           <div class="text-xs text-base-content/70">
-            ${this._safeTxt(this._formatBytes(file.file_size))} · ${this._safeTxt(this._formatDate(file.created_at))}
+            ${this._safeTxt(formatBytes(file.file_size))} · ${this._safeTxt(formatDate(file.created_at))}
           </div>
         </div>
       </div>
@@ -656,14 +601,11 @@ class ProjectDetailsComponent {
       <h4 class="font-medium truncate mb-1">${this._safeTxt(cv.title || "Untitled conversation")}</h4>
       <p class="text-sm text-base-content/60 truncate leading-tight mt-0.5">${this._safeTxt(cv.last_message || "No messages yet")}</p>
       <div class="flex justify-between mt-1 text-xs text-base-content/60">
-        <span>${this._safeTxt(this._formatDate(cv.updated_at))}</span>
+        <span>${this._safeTxt(formatDate(cv.updated_at))}</span>
         <span class="badge badge-ghost badge-sm">${this._safeTxt(cv.message_count || 0)} msgs</span>
       </div>
     `);
-    this.eventHandlers.trackListener(
-      div, "click",
-      this.safeHandler(() => this._openConversation(cv), `OpenConversation_${cv.id}`),
-      { context: this.listenersContext, description: `OpenConversation_${cv.id}` });
+    // No click handler here; chatUIEnhancements handles it.
     return div;
   }
 
@@ -675,7 +617,7 @@ class ProjectDetailsComponent {
     this._setHTML(div, `
       <div class="flex justify-between items-center">
         <h4 class="font-medium truncate">${this._safeTxt(art.name || "Untitled artifact")}</h4>
-        <span class="text-xs text-base-content/60">${this._safeTxt(this._formatDate(art.created_at))}</span>
+        <span class="text-xs text-base-content/60">${this._safeTxt(formatDate(art.created_at))}</span>
       </div>
       <p class="text-sm text-base-content/70 truncate mt-1">${this._safeTxt(art.description || art.type || "No description")}</p>
       <div class="mt-2">
@@ -813,7 +755,6 @@ class ProjectDetailsComponent {
 
   _safeAttr(str) { return String(str || "").replace(/[<>"']/g, "_"); }
   _safeTxt(str) { return this.sanitizer.sanitize(String(str ?? "")); }
-  _formatBytes(b) { if (!b) return "0 B"; const n = parseInt(b, 10); return n > 1e6 ? (n / 1e6).toFixed(1) + " MB" : n > 1e3 ? (n / 1e3).toFixed(1) + " kB" : n + " B"; }
   _setHTML(el, raw) { this.domAPI.setInnerHTML(el, raw); }
 
   async initialize() {
@@ -938,7 +879,6 @@ class ProjectDetailsComponent {
     this.eventHandlers.cleanupListeners({ context: 'ProjectDetailsComponent' });
     this.hide();
     this._cleanupPendingOperations();
-    this.eventHandlers.cleanupListeners({ context: 'Sidebar' });
     this._logInfo("Destroyed.");
   }
 
@@ -953,7 +893,6 @@ class ProjectDetailsComponent {
   _updateNewChatButtonState() {
     const newChatBtn = this.elements.container?.querySelector("#newConversationBtn");
     if (!newChatBtn) return;
-    const alreadyBound = newChatBtn.hasAttribute('data-newchat-bound');
     const kbActive =
       !!this.projectData?.knowledge_base &&
       this.projectData.knowledge_base.is_active !== false;
@@ -966,15 +905,7 @@ class ProjectDetailsComponent {
     newChatBtn.title = ready
       ? 'Start a new conversation'
       : (kbActive ? 'Sign-in required' : 'Knowledge Base required');
-    if (!alreadyBound) {
-      this.eventHandlers.trackListener(
-        newChatBtn,
-        "click",
-        this.safeHandler(() => this._createNewConversation(), "NewConversationBtn"),
-        { context: this.listenersContext, description: "NewConversationBtn" }
-      );
-      newChatBtn.setAttribute('data-newchat-bound', '1');
-    }
+    // No click handler here; chatUIEnhancements handles it.
   }
 
   async _createNewConversation() {
