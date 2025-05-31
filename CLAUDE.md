@@ -86,6 +86,20 @@ pytest path/to/test_file.py
 # Check existing tests in /tests directory
 ```
 
+## 🔍 Pull-Request Guardrails Checklist
+
+(_CI will block the merge unless every box is ticked; mirrors
+`.github/pull_request_template.md`_)
+
+- [ ] No module except **appModule** tracks initialization state internally  
+- [ ] All module methods are stateless **and** idempotent  
+- [ ] Initialization sequencing is managed **only** from  
+      `static/js/app.js` / `static/js/init/appInitializer.js`  
+- [ ] Every source file exports exactly one factory function (pure DI);  
+      no top-level side-effects  
+- [ ] Every `cleanup()` exists, is idempotent, and calls  
+      `eventHandlers.cleanupListeners({ context })`
+
 ## Architecture Overview
 
 ### Backend Architecture
