@@ -23,7 +23,6 @@ export function createSidebarMobileDock({
 
   const MODULE_CONTEXT = 'SidebarMobileDock';
   let mobileDockEl = null;
-  let isInitialized = false;
 
   let creationInProgress = false;
   let resizeDebounceTimer = null;
@@ -158,7 +157,6 @@ export function createSidebarMobileDock({
       { context: MODULE_CONTEXT }
     );
     ensureMobileDock();
-    isInitialized = true;
     logger.info('[SidebarMobileDock] Initialized', { context: MODULE_CONTEXT });
   }
 
@@ -172,7 +170,6 @@ export function createSidebarMobileDock({
       mobileDockEl.remove();
       mobileDockEl = null;
     }
-    isInitialized = false;
     creationInProgress = false;
     logger.debug('[SidebarMobileDock] Cleanup done', { context: MODULE_CONTEXT });
   }
@@ -184,9 +181,6 @@ export function createSidebarMobileDock({
     hideDock,
     updateDockVisibility,
     ensureMobileDock,
-    get isInitialized() {
-      return isInitialized;
-    },
     get dockElement() {
       return mobileDockEl;
     }

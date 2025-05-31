@@ -54,9 +54,7 @@ export function createSidebar({
   const MODULE = 'Sidebar';
   const SidebarBus = new EventTarget();
 
-  const state = {
-    initialized: false
-  };
+  const state = {};    // lifecycle flags live in appModule only
 
   // Attempt to fill optional dependencies if not passed
   app = app || tryResolve('app');
@@ -678,7 +676,6 @@ export function createSidebar({
   // Initialization
   // ───────────────────────────────────────────────
   async function init() {
-    if (state.initialized) return true;
     try {
       // Wait for critical DOM
       await domReadinessService.dependenciesAndElements({
@@ -745,7 +742,6 @@ export function createSidebar({
       const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
       await activateTab(activeTab);
 
-      state.initialized = true;
       return true;
     } catch (err) {
       logger.error('[Sidebar] init failed', err, { context: MODULE });
@@ -802,7 +798,7 @@ export function createSidebar({
       pinned,
       elementExists: !!el,
       pinnedClass: el?.classList?.contains('sidebar-pinned'),
-      dockInitialized: sidebarMobileDock?.isInitialized,
+      dockInitialized: !!sidebarMobileDock?.dockElement, // presence ≈ initialised
       context: `${MODULE}:debug`
     };
     logger.info('[Sidebar] Debug sidebar state', debugInfo, { context: MODULE });
