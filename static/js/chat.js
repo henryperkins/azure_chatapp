@@ -1,4 +1,3 @@
-import { createChatUIUtils } from "./chat-ui-utils.js";
 
 /**
  * @typedef {Object} DomAPI
@@ -82,15 +81,6 @@ export function createChatManager(deps = {}) {
   const _navAPI = navAPI || createDefaultNavAPI();
   const _EH = eventHandlers || createDefaultEventHandlers({ domReadinessService, logger });
 
-  // --- Chat UI Utilities (DI) ---
-  const chatUIUtils = createChatUIUtils({
-    logger,
-    domAPI,
-    DOMPurify,
-    eventHandlers: _EH,
-    domReadinessService,
-    DependencySystem
-  });
 
   // Use canonical safeHandler from DI, normalize for both direct function or object with .safeHandler (early bootstrap)
   const safeHandlerRaw = DependencySystem.modules.get('safeHandler');
@@ -230,7 +220,7 @@ export function createChatManager(deps = {}) {
     _ensureUIAttached() {
       if (!this._uiAttached) {
         logger.info("[ChatManager][_ensureUIAttached] Attaching UI utilities", { context: "chatManager" });
-        chatUIUtils.attachChatUI(this); // This injects UI methods onto `this`
+        // No-op: chatUIUtils is no longer used
         this._uiAttached = true;
       }
     }
@@ -362,8 +352,15 @@ export function createChatManager(deps = {}) {
 
         // UI Setup (ensure elements are present and events are bound)
         await this._setupUIElements(); // Resolves DOM elements based on selectors
-        this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' }); // Clear old UI listeners
-        this._setupEventListeners(); // Attach new listeners to potentially new elements
+
+        // Attach event handlers via chatUIEnhancements
+        const chatUIEnh = DependencySystem.modules.get('chatUIEnhancements');
+        chatUIEnh.attachEventHandlers({
+          inputField        : this.inputField,
+          sendButton        : this.sendButton,
+          messageContainer  : this.messageContainer,
+          onSend            : (txt)=>this.sendMessage(txt)
+        });
 
         // If already initialized for this same project, could be a UI refresh or re-bind.
         if (this._uiAttached && this.projectId === targetProjectId) {
@@ -398,7 +395,8 @@ export function createChatManager(deps = {}) {
                 await this.createNewConversation(); // Uses this.projectId
               } catch (err) {
                 logger.error("[ChatManager][New Conversation Button Click]", { error: err, context: "chatManager" });
-                this._showErrorMessage("Failed to start new chat: " + (err?.message || "Unknown error"));
+                const chatUIEnh = DependencySystem.modules.get('chatUIEnhancements');
+                chatUIEnh.appendMessage("system", "Failed to start new chat: " + (err?.message || "Unknown error"));
               }
             }, "NewConversationButtonClick"),
             { description: "New Conversation Button", context: "chatManagerNewConvoBtn" }
@@ -415,12 +413,13 @@ export function createChatManager(deps = {}) {
         logger.error(`[ChatManager][initialize] Initialization failed for project ${options.projectId || this.projectId}.`, { error: error, context: "chatManager.initialize" });
         const originalErrorMessage = this._extractErrorMessage(error);
         // Specific error handling for KB missing
+        const chatUIEnh = DependencySystem.modules.get('chatUIEnhancements');
         if (originalErrorMessage.toLowerCase().includes("project has no knowledge base")) {
           const specificMessage = "Chat initialization failed: Project has no knowledge base. Please add one to enable chat.";
-          this._showErrorMessage(specificMessage);
+          chatUIEnh.appendMessage("system", specificMessage);
           this.projectDetails?.disableChatUI?.(specificMessage);
         } else if (!originalErrorMessage.includes("User not authenticated")) { // Don't show generic if auth was the issue
-          this._showErrorMessage(`Chat error: ${originalErrorMessage}`);
+          chatUIEnh.appendMessage("system", `Chat error: ${originalErrorMessage}`);
         }
         return false;
       }
@@ -431,8 +430,13 @@ export function createChatManager(deps = {}) {
       this.currentConversationId = null;
       this.loadPromise = null; // Cancel any ongoing load for the old project
       this.isLoading = false;
-      this._clearMessages();
-      this._clearConversationList(); // Assumes this method exists or is added via UI utils
+      const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+      if (this.messageContainer) {
+        chatUIEnh.setMessageContainer(this.messageContainer);
+        chatUIEnh.hideTypingIndicator();
+        this.domAPI.replaceChildren(this.messageContainer);
+      }
+      this._clearConversationList && this._clearConversationList(); // Assumes this method exists or is added via UI utils
       if (this.titleElement) this.titleElement.textContent = "Chat"; // Reset title
       // this.projectId itself will be updated by the calling context (e.g., _handleAppCurrentProjectChanged or initialize)
     }
@@ -631,7 +635,8 @@ export function createChatManager(deps = {}) {
               appProjectId,
               urlProjectId
             });
-            this._showErrorMessage("Cannot load conversation: invalid/missing project ID.");
+            const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+            chatUIEnh.appendMessage("system", "Cannot load conversation: invalid/missing project ID.");
             return false;
           }
         }
@@ -650,11 +655,16 @@ export function createChatManager(deps = {}) {
       }
 
       this.isLoading = true;
-      this._showLoadingIndicator();
+      const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+      chatUIEnh.showTypingIndicator();
 
       this.loadPromise = (async () => {
         try {
-          this._clearMessages();
+          if (this.messageContainer) {
+            chatUIEnh.setMessageContainer(this.messageContainer);
+            chatUIEnh.hideTypingIndicator();
+            this.domAPI.replaceChildren(this.messageContainer);
+          }
 
           const [conversationResponse, messagesResponse] = await Promise.all([
             this._api(apiEndpoints.CONVERSATION(this.projectId, conversationId), { method: "GET" }),
@@ -677,7 +687,24 @@ export function createChatManager(deps = {}) {
           if (this.titleElement) {
             this.titleElement.textContent = conversation.title || "New Conversation";
           }
-          this._renderMessages(messages);
+          if (this.messageContainer) {
+            chatUIEnh.setMessageContainer(this.messageContainer);
+            chatUIEnh.hideTypingIndicator();
+            this.domAPI.replaceChildren(this.messageContainer);
+            if (!messages?.length) {
+              chatUIEnh.appendMessage("system", "No messages yet");
+            } else {
+              messages.forEach((msg) => {
+                chatUIEnh.appendMessage(
+                  msg.role,
+                  msg.content,
+                  msg.id,
+                  msg.thinking,
+                  msg.redacted_thinking
+                );
+              });
+            }
+          }
           this._updateURLWithConversationId(conversationId);
 
           // Update token stats for loaded conversation
@@ -692,7 +719,7 @@ export function createChatManager(deps = {}) {
           return false;
         } finally {
           this.isLoading = false;
-          this._hideLoadingIndicator();
+          chatUIEnh.hideTypingIndicator();
           this.loadPromise = null;
         }
       })();
@@ -851,7 +878,8 @@ export function createChatManager(deps = {}) {
         if (!this.isValidProjectId(this.projectId)) {
           const errorMsg = `No valid project ID (${this.projectId}). Select a project before sending messages.`;
           logger.error("[ChatManager][sending message]" + errorMsg, new Error(errorMsg), { context: "chatManager" });
-          this._showErrorMessage(errorMsg);
+          const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+          chatUIEnh.appendMessage("system", errorMsg);
           this.projectDetails?.disableChatUI?.("No valid project");
           return;
         }
@@ -866,9 +894,13 @@ export function createChatManager(deps = {}) {
           }
         }
 
-        this._showMessage("user", messageText);
-        this._clearInputField();
-        this._showThinkingIndicator();
+        const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+        chatUIEnh.appendMessage("user", messageText);
+        if (this.inputField) {
+          this.inputField.value = "";
+          this.inputField.focus();
+        }
+        chatUIEnh.showTypingIndicator();
 
         try {
           const response = await this._sendMessageToAPI(messageText, abortSignal);
@@ -883,10 +915,10 @@ export function createChatManager(deps = {}) {
           return response.data;
         } catch (error) {
           logger.error("[ChatManager][sending message]", error, { context: "chatManager" });
-          this._hideThinkingIndicator();
+          chatUIEnh.hideTypingIndicator();
 
           const msg = this._extractErrorMessage(error);
-          this._showErrorMessage(msg);
+          chatUIEnh.appendMessage("system", msg);
 
           /* Only disable chat UI for unrecoverable conditions */
           const critical =
@@ -957,10 +989,11 @@ export function createChatManager(deps = {}) {
     }
 
     _processAssistantResponse(response) {
-      this._hideThinkingIndicator();
+      const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
+      chatUIEnh.hideTypingIndicator();
       if (response.data?.assistant_message) {
         const { assistant_message, thinking, redacted_thinking } = response.data;
-        this._showMessage(
+        chatUIEnh.appendMessage(
           "assistant",
           assistant_message.content,
           null,
