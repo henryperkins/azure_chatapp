@@ -199,7 +199,6 @@ export function createChatManager(deps = {}) {
       this.chatBus = eventBusFactory();
       this.projectId = null;
       this.currentConversationId = null;
-      this.isInitialized = false;
       this.isLoading = false;
       this.currentImage = null;
       this.loadPromise = null;
@@ -367,7 +366,7 @@ export function createChatManager(deps = {}) {
         this._setupEventListeners(); // Attach new listeners to potentially new elements
 
         // If already initialized for this same project, could be a UI refresh or re-bind.
-        if (this.isInitialized && this.projectId === targetProjectId) {
+        if (this._uiAttached && this.projectId === targetProjectId) {
           logger.info(`[ChatManager][initialize] Already initialized for project ${this.projectId}. Re-checking conversation history / UI state.`, { context: "chatManager.initialize" });
           // Potentially reload current conversation if needed, or ensure UI is consistent.
           // _loadConversationHistory will handle loading last/URL-specified convo or creating new one.
@@ -383,8 +382,6 @@ export function createChatManager(deps = {}) {
         // First time initialization for this project context (or after project switch)
         logger.info(`[ChatManager][initialize] Initializing for project ${this.projectId}. Loading history.`, { context: "chatManager.initialize" });
         await this._loadConversationHistory();
-
-        this.isInitialized = true; // Mark as initialized AFTER history/convo load attempt
 
         // Setup "New Conversation" button
         const newConversationBtn = this.domAPI.getElementById("newConversationBtn"); // Assuming global button for now
@@ -416,7 +413,6 @@ export function createChatManager(deps = {}) {
 
       } catch (error) {
         logger.error(`[ChatManager][initialize] Initialization failed for project ${options.projectId || this.projectId}.`, { error: error, context: "chatManager.initialize" });
-        this.isInitialized = false; // Ensure it's marked as not initialized on failure
         const originalErrorMessage = this._extractErrorMessage(error);
         // Specific error handling for KB missing
         if (originalErrorMessage.toLowerCase().includes("project has no knowledge base")) {
@@ -451,7 +447,6 @@ export function createChatManager(deps = {}) {
         // Cleanup old project listeners and state before re-initializing
         this.eventHandlers.cleanupListeners?.({ context: 'chatManager:UI' }); // Clean UI specific listeners for the old project
         this._clearProjectSpecificData(); // Clear data related to oldProjectId
-        this.isInitialized = false; // Mark as not initialized for the new project yet
 
         // Re-initialize for the new project. Pass along current UI selectors.
         this.initialize({
@@ -467,7 +462,6 @@ export function createChatManager(deps = {}) {
         logger.info(`[ChatManager][_handleAppCurrentProjectChanged] Project context cleared. Cleaning up chat for project ${oldProjectId}.`, { context: "chatManager" });
         this._clearProjectSpecificData();
         this.projectId = null;
-        this.isInitialized = false;
         this.projectDetails?.disableChatUI?.("No project selected");
         if (this.inputField) this.inputField.disabled = true;
         if (this.sendButton) this.sendButton.disabled = true;
@@ -488,10 +482,10 @@ export function createChatManager(deps = {}) {
         // User logged in. If a projectId is already set (e.g. from URL or previous state),
         // try to re-initialize. This might also be handled by a subsequent currentProjectChanged event.
         logger.info(`[ChatManager][_handleGlobalAuthStateChanged] User authenticated.`, { currentProjectId: this.projectId, context: "chatManager" });
-        if (this.projectId && !this.isInitialized) { // If a project context exists but chat not initialized
+        if (this.projectId && !this._uiAttached) { // If a project context exists but chat not initialized
           logger.info(`[ChatManager][_handleGlobalAuthStateChanged] Attempting to re-initialize chat for project ${this.projectId} after auth.`, { context: "chatManager" });
           this.initialize({ projectId: this.projectId }).catch(err => logger.error(`[ChatManager][_handleGlobalAuthStateChanged] Error re-initializing post-auth`, { error: err, context: "chatManager" }));
-        } else if (this.projectId && this.isInitialized) {
+        } else if (this.projectId && this._uiAttached) {
           if (this.inputField) this.inputField.disabled = false;
           if (this.sendButton) this.sendButton.disabled = false;
         }
