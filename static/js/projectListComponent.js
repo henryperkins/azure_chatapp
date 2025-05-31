@@ -230,9 +230,7 @@ export function createProjectListComponent(deps) {
                         timeout: 10000,
                         context: MODULE_CONTEXT + '_authStateChange'
                     });
-                    if (!state.initialized) {
-                        await initialize();
-                    }
+                    await initialize();
                     await show();
                     await _loadProjects();
                 } catch (err) {

@@ -194,8 +194,6 @@ export function createProjectDashboardUtils(options = {}) {
   // Only use canonical bus found via DependencySystem.modules.get('eventBus')
   const eventBus = DependencySystem?.modules?.get?.("eventBus");
 
-  let initialized = false;
-
   return {
     UIUtils: createUIUtils({
       eventHandlers,
@@ -204,8 +202,6 @@ export function createProjectDashboardUtils(options = {}) {
     }),
 
     init: function () {
-      if (initialized) return this;
-      initialized = true;
       try {
         setupEventListeners(eventHandlers, logger, domAPI, projectManager, modalManager, DependencySystem);
         const doc = domAPI.getDocument();
@@ -225,7 +221,6 @@ export function createProjectDashboardUtils(options = {}) {
           }
         }
       } catch(error) {
-        initialized = false;
         logger && logger.error('Error in ProjectDashboardUtils.init', error, { context: 'ProjectDashboardUtils:init' });
       }
       return this;
@@ -236,7 +231,6 @@ export function createProjectDashboardUtils(options = {}) {
       if (eventHandlers && eventHandlers.cleanupListeners) {
         eventHandlers.cleanupListeners({ context: MODULE });
       }
-      initialized = false;
     },
 
     // Backward compatible destroy (alias)
@@ -245,7 +239,6 @@ export function createProjectDashboardUtils(options = {}) {
         eventHandlers.cleanupListeners({ context: 'projectActions' });
         eventHandlers.cleanupListeners({ context: 'uiUtils' });
       }
-      initialized = false;
     }
   };
 }

@@ -1870,6 +1870,16 @@ if (handlers?.dispatchEvent) {
                     }
                 }
 
+                const a11yUtils = DependencySystem.modules.get('accessibilityUtils');
+                if (a11yUtils?.init) {
+                  try {
+                    await a11yUtils.init();
+                    logger.debug('[uiInit] AccessibilityUtils initialised by orchestrator', { context: 'uiInit' });
+                  } catch (err) {
+                    logger.error('[uiInit] AccessibilityUtils.init failed', err, { context: 'uiInit' });
+                  }
+                }
+
                 _uiInitialized = true;
             } catch (err) {
                 logger.error('[uiInit] Critical error in UI init', err, {
