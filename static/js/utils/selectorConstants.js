@@ -3,8 +3,11 @@
  * selectorConstants.js
  * Centralized selectors for critical DOM elements used across the application.
  */
+export function createSelectorConstants () {
+  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
+}
 
-export const SELECTORS = {
+const SELECTORS = {
   // Project List View
   projectListView: '#projectListView',
   projectListContainer: '#projectListContainer',
@@ -67,7 +70,7 @@ export const SELECTORS = {
   deleteKnowledgeBaseBtn: '#deleteKnowledgeBaseBtn'
 };
 
-export const ELEMENT_SELECTORS = {
+const ELEMENT_SELECTORS = {
   // Knowledge Base Component specific selectors
   KB: {
     container: 'knowledgeTab',
@@ -116,7 +119,3 @@ export const ELEMENT_SELECTORS = {
     filesList: 'filesList'
   }
 };
-
-export function createSelectorConstants() {
-  return { SELECTORS, ELEMENT_SELECTORS, cleanup () {} };
-}
