@@ -1133,7 +1133,7 @@ export function createChatManager(deps = {}) {
       if (!this.messageContainer) {
         return;
       }
-      this._showLoadingIndicator();
+      chatUIEnh.showTypingIndicator();
 
       try {
         const response = await this._api(apiEndpoints.MESSAGES(this.projectId, conversationId), { method: 'GET' });
@@ -1156,7 +1156,7 @@ export function createChatManager(deps = {}) {
         logger.error("[ChatManager][_loadMessages]", error, { context: "chatManager" });
         this._showErrorMessage('Failed to load messages. Please try again.');
       } finally {
-        this._hideLoadingIndicator();
+        chatUIEnh.hideTypingIndicator();
       }
     }
 
@@ -1184,29 +1184,6 @@ export function createChatManager(deps = {}) {
       this.navAPI.pushState(newUrl);
     }
 
-    _showLoadingIndicator() {
-      if (!this.messageContainer) {
-        return;
-      }
-      const indicator = this.domAPI.createElement("div");
-      indicator.id = "chatLoadingIndicator";
-      indicator.className = "loading-indicator";
-      this.domAPI.setInnerHTML(
-        indicator,
-        `
-            <div class="loading-spinner"></div>
-            <span>Loading conversation...</span>
-        `
-      );
-      this.domAPI.appendChild(this.messageContainer, indicator);
-    }
-
-    _hideLoadingIndicator() {
-      const indicator = this.domAPI.querySelector("#chatLoadingIndicator");
-      if (indicator) {
-        indicator.remove();
-      }
-    }
 
 
     _showErrorMessage(message) {
