@@ -705,8 +705,7 @@ export function createSidebar({
       });
 
       // Auth forms
-      sidebarAuth.init();
-      sidebarAuth.setupInlineAuthForm();
+      // (moved: sidebarAuth.init() and setupInlineAuthForm() are now orchestrator-owned)
 
       // Listen for authentication state changes and update sidebar UI
       // Prefer AuthBus if available, otherwise fall back to document
@@ -815,6 +814,8 @@ export function createSidebar({
     forceAuthStateRefresh,
     debugSidebarState,
     /* new: explicit accessor – orchestrator now owns dock initialisation */
-    getMobileDock: () => sidebarMobileDock
+    getMobileDock: () => sidebarMobileDock,
+    /* new: explicit accessor – orchestrator now owns auth initialisation */
+    getSidebarAuth: () => sidebarAuth
   };
 }

@@ -1852,6 +1852,14 @@ if (handlers?.dispatchEvent) {
                           mobileDock.ensureMobileDock?.();   // guarantees DOM is present
                           logger.debug('[uiInit] Mobile dock initialised by orchestrator', { context: 'uiInit' });
                         }
+
+                        /* ── NEW: explicit Sidebar-Auth initialisation ─────── */
+                        const sidebarAuth = sidebar.getSidebarAuth?.();
+                        if (sidebarAuth?.init) {
+                          await sidebarAuth.init();
+                          sidebarAuth.setupInlineAuthForm?.();
+                          logger.debug('[uiInit] SidebarAuth initialised by orchestrator', { context: 'uiInit' });
+                        }
                     } catch (err) {
                         logger.error('[uiInit] sidebar.init failed', err, { context: 'uiInit' });
                     }
