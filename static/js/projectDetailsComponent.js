@@ -616,10 +616,10 @@ class ProjectDetailsComponent {
     div.dataset.artifactId = art.id;
     this._setHTML(div, `
       <div class="flex justify-between items-center">
-        <h4 class="font-medium truncate">${this._safeTxt(art.name || "Untitled artifact")}</h4>
+        <h4 class="font-medium truncate">${sanitizer.sanitize(art.name || "Untitled artifact")}</h4>
         <span class="text-xs text-base-content/60">${this._safeTxt(formatDate(art.created_at))}</span>
       </div>
-      <p class="text-sm text-base-content/70 truncate mt-1">${this._safeTxt(art.description || art.type || "No description")}</p>
+      <p class="text-sm text-base-content/70 truncate mt-1">${sanitizer.sanitize(art.description || art.type || "No description")}</p>
       <div class="mt-2">
         <button class="btn btn-xs btn-outline" data-action="download">Download</button>
       </div>`);
@@ -967,6 +967,8 @@ class ProjectDetailsComponent {
     this.projectManager.loadProjectStats(this.projectId)
       .catch(e => this._logError("Error loading stats in restoreStatsCounts", e));
   }
+
+// (No _safeTxt or _safeAttr helpers remain)
 
   getEventBus() { return this.bus; }
 

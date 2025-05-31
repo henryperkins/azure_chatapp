@@ -636,7 +636,6 @@ export function createProjectDetailsEnhancements({
       if (!chatUIContainer) return;
 
       // Check if we have a chatUIEnhancements module available
-      const DependencySystem = eventHandlers.DependencySystem;
       if (!DependencySystem?.modules?.get('chatUIEnhancements')) {
         logger.warn('[setupProjectChatUI] chatUIEnhancements module not available', {
           context: CONTEXT
