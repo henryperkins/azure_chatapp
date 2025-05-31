@@ -194,7 +194,8 @@ export function createKnowledgeBaseComponent(options = {}) {
 
     async _initializeSearchHandler() {
       try {
-        this.searchHandler = await createKnowledgeBaseSearchHandler(this);
+        this.searchHandler = createKnowledgeBaseSearchHandler(this);
+        await this.searchHandler.initialize?.();
         this.logger.debug(`[${MODULE}] Search handler initialized successfully.`, { context: MODULE });
       } catch (error) {
         this.logger.error(`[${MODULE}] Failed to initialize search handler: ${error.message}`, { error, context: MODULE });

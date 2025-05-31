@@ -19,14 +19,16 @@ const MODULE = "KnowledgeBaseSearchHandler";
  * @param {Function} ctx._safeSetInnerHTML - Function to safely set innerHTML.
  * @returns {Object} Search handler instance with public methods.
  */
-export async function createKnowledgeBaseSearchHandler(ctx) {
-  // App readiness guard—wait for dependencies before wiring up
+export function createKnowledgeBaseSearchHandler(ctx) {
   if (!ctx.domReadinessService)
     throw new Error(`[${MODULE}] domReadinessService missing for readiness check`);
-  await ctx.domReadinessService.dependenciesAndElements({
-    deps: ['app', 'projectManager', 'eventHandlers', 'domAPI'],
-    context: MODULE + ':init'
-  });
+
+  async function initialize() {
+    await ctx.domReadinessService.dependenciesAndElements({
+      deps     : ['app', 'projectManager', 'eventHandlers', 'domAPI'],
+      context  : MODULE + ':init'
+    });
+  }
 
 
   /**
@@ -334,6 +336,7 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
     triggerSearch,
     hideResultDetailModal: _hideResultDetailModal, // expose for direct calls if needed
     handleResultModalKeydown,
+    initialize,
     cleanup() {
       const EH = ctx.DependencySystem.modules.get('eventHandlers');
       if (EH && EH.cleanupListeners) EH.cleanupListeners({ context: 'KnowledgeBaseSearchHandler' });
