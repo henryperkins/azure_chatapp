@@ -342,12 +342,8 @@ export function createSidebar({
         // Auto-select first if none selected
         const currentProject = projectManager.getCurrentProject?.();
         if (!currentProject && projects.length > 0) {
-          const appModule = DependencySystem.modules?.get('appModule');
-          if (appModule?.setCurrentProject) {
-            appModule.setCurrentProject(projects[0]);
-          } else if (app?.setCurrentProject) {
-            app.setCurrentProject(projects[0]);
-          }
+          const appModule = DependencySystem.modules.get('appModule');
+          appModule?.setCurrentProject(projects[0]);
         }
       } catch (err) {
         logger.error('[Sidebar] Failed to load projects', err, { context: MODULE });

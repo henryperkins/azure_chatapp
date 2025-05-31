@@ -1,3 +1,6 @@
+/*
+// VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
+*/
 import { MODAL_MAPPINGS } from './modalConstants.js';
 
 /**
