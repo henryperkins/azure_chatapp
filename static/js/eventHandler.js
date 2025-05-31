@@ -75,9 +75,18 @@ export function createEventHandlers({
   function setErrorReporter(newER)   { if (newER) errorReporter = newER; }
 
   // --- safeHandler canonical dependency check ---
-  let   SH = safeHandler || DependencySystem.modules.get('safeHandler');
-  if (typeof SH !== 'function') {
-    throw new Error('[eventHandler] Missing safeHandler dependency');
+  let   SH = null;
+  function resolveSafeHandler() {
+    if (SH && typeof SH === 'function') return SH;
+    if (typeof safeHandler === 'function') {
+      SH = safeHandler;
+      return SH;
+    }
+    SH = DependencySystem.modules.get('safeHandler');
+    if (typeof SH !== 'function') {
+      throw new Error('[eventHandler] Missing safeHandler dependency');
+    }
+    return SH;
   }
 
   logger.debug('[EventHandler] Factory initialized', {
@@ -220,7 +229,7 @@ export function createEventHandlers({
     trackListener(
       toggleButton,
       'click',
-      SH(handleCollapsibleClick, `EventHandler:Collapsible:${toggleId}`),
+      resolveSafeHandler()(handleCollapsibleClick, `EventHandler:Collapsible:${toggleId}`),
       { description: `Toggle Collapsible ${toggleId}`, module: MODULE, context: 'collapsible', source: 'setupCollapsible' }
     );
   }
@@ -282,7 +291,7 @@ export function createEventHandlers({
 
     // Handlers for buttons
     if (openBtn) {
-      trackListener(openBtn, 'click', SH(open, `EventHandler:setupModal:open`), {
+      trackListener(openBtn, 'click', resolveSafeHandler()(open, `EventHandler:setupModal:open`), {
         description: `Open Modal ${modalId}`,
         module: MODULE,
         context: 'modal',
@@ -290,7 +299,7 @@ export function createEventHandlers({
       });
     }
     if (closeBtn) {
-      trackListener(closeBtn, 'click', SH(close, `EventHandler:setupModal:closeBtn`), {
+      trackListener(closeBtn, 'click', resolveSafeHandler()(close, `EventHandler:setupModal:closeBtn`), {
         description: `Close Modal ${modalId} via Button`,
         module: MODULE,
         context: 'modal',
@@ -301,14 +310,14 @@ export function createEventHandlers({
     trackListener(
       modal,
       'keydown',
-      SH(handleModalEscClose, `EventHandler:setupModal:keydown`),
+      resolveSafeHandler()(handleModalEscClose, `EventHandler:setupModal:keydown`),
       { description: `Modal ESC Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
     trackListener(
       modal,
       'click',
-      SH(handleModalBackdropClick, `EventHandler:setupModal:backdropClick`),
+      resolveSafeHandler()(handleModalBackdropClick, `EventHandler:setupModal:backdropClick`),
       { description: `Modal Backdrop Close ${modalId}`, module: MODULE, context: 'modal', source: 'setupModal' }
     );
 
@@ -383,7 +392,7 @@ export function createEventHandlers({
       }
     }
 
-    trackListener(form, 'submit', SH(handleSubmit, 'EventHandler:setupForm:handleSubmit'), {
+    trackListener(form, 'submit', resolveSafeHandler()(handleSubmit, 'EventHandler:setupForm:handleSubmit'), {
       passive: false,
       description: `Form Submit ${formId}`,
       module: MODULE,
@@ -405,7 +414,7 @@ export function createEventHandlers({
       trackListener(
         darkModeToggle,
         'click',
-        SH(handleDarkModeToggleClick, 'EventHandler:setupCommonElements:DarkModeToggleClick'),
+        resolveSafeHandler()(handleDarkModeToggleClick, 'EventHandler:setupCommonElements:DarkModeToggleClick'),
         { description: 'Dark Mode Toggle', module: MODULE, context: 'ui', source: 'setupCommonElements' }
       );
       domAPI.setDataAttribute(darkModeToggle, 'ehBound', '1'); // marca como enlazado
@@ -430,7 +439,7 @@ export function createEventHandlers({
         trackListener(
           link,
           'click',
-          SH(handleNavLinkClick, `EventHandler:setupNavigationElements:NavLink:${domAPI.getAttribute(link, 'href') || 'unknown'}`),
+          resolveSafeHandler()(handleNavLinkClick, `EventHandler:setupNavigationElements:NavLink:${domAPI.getAttribute(link, 'href') || 'unknown'}`),
           {
             description: `Navigation Link: ${domAPI.getAttribute(link, 'href') || 'unknown'}`,
             module: MODULE,
@@ -816,7 +825,7 @@ export function createEventHandlers({
     trackListener(
       domAPI.getDocument(),
       'requestLogin',
-      SH(handleRequestLogin, 'EventHandler:requestLogin'),
+      resolveSafeHandler()(handleRequestLogin, 'EventHandler:requestLogin'),
       { description: 'Show Login Modal (Global Event)', context: 'auth', module: MODULE, source: 'requestLogin' }
     );
 

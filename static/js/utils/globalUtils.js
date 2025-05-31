@@ -14,6 +14,8 @@
  *  -----
  */
 
+import { normaliseUrl, normalizeUrl } from './browserService.js';
+
 /**
  * @deprecated Use createApiClient from './apiClient.js'
  */

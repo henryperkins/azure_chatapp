@@ -26,6 +26,7 @@ export function createAppInitializer(opts = {}) {
      * initialization code has a fully built DI context to work with.
      */
     function initialDISetup() {
+        const { DependencySystem } = opts;
         // 1. Attach browserService to session for backward-compatibility usage
         registerSessionBrowserService(opts.browserService);
 
@@ -116,26 +117,26 @@ export function createAppInitializer(opts = {}) {
         }
 
         // 9. Register these core objects into DependencySystem so downstream code can retrieve them
-        opts.DependencySystem.register('browserService', opts.browserService);
-        opts.DependencySystem.register('logger', logger);
-        opts.DependencySystem.register('sanitizer', sanitizer);
-        opts.DependencySystem.register('domPurify', sanitizer); // legacy alias
-        opts.DependencySystem.register('safeHandler', safeHandler);
-        opts.DependencySystem.register('createChatManager', opts.createChatManager);
-        opts.DependencySystem.register('domAPI', domAPI);
-        opts.DependencySystem.register('eventHandlers', eventHandlers);
-        opts.DependencySystem.register('errorReporter', errorReporter);
+        DependencySystem.register('browserService', opts.browserService);
+        DependencySystem.register('logger', logger);
+        DependencySystem.register('sanitizer', sanitizer);
+        DependencySystem.register('domPurify', sanitizer); // legacy alias
+        DependencySystem.register('safeHandler', safeHandler);
+        DependencySystem.register('createChatManager', opts.createChatManager);
+        DependencySystem.register('domAPI', domAPI);
+        DependencySystem.register('eventHandlers', eventHandlers);
+        DependencySystem.register('errorReporter', errorReporter);
 
         // 10. Setup domReadinessService
         const domReadinessService = createDomReadinessService({
-            DependencySystem: opts.DependencySystem,
+            DependencySystem,
             domAPI,
             browserService: opts.browserService,
             eventHandlers,
             APP_CONFIG: opts.APP_CONFIG,
             logger
         });
-        opts.DependencySystem.register('domReadinessService', domReadinessService);
+        DependencySystem.register('domReadinessService', domReadinessService);
         eventHandlers.setDomReadinessService(domReadinessService);
 
         // 11. UI and global utilities
@@ -627,7 +628,7 @@ if (handlers?.dispatchEvent) {
                             DependencySystem.modules.set('logDelivery', logDelivery);
                         }
                         logDelivery.start();   // activate listener + batching now
-                        logger.info('[serviceInit] LogDeliveryService started (pre-auth)', 
+                        logger.info('[serviceInit] LogDeliveryService started (pre-auth)',
                                    { context: 'serviceInit:registerAdvancedServices' });
 
                         logger.debug('[serviceInit] LogDeliveryService registered', {
