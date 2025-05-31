@@ -212,4 +212,3 @@ export function createChatExtensions(options) {
 }
 
 export default createChatExtensions;
-export { createChatExtensions };

@@ -22,11 +22,11 @@ export default function createAuthFormListenerFactory(deps) {
   const {
     eventHandlers,
     domAPI,
-    domReadinessService,
-    browserService,
+    _domReadinessService: domReadinessService,
+    _browserService    : browserService,
     safeHandler,
     logger,
-    DependencySystem
+    _DependencySystem  : DependencySystem
   } = deps;
 
   // Module-level guard to prevent duplicate registrations
