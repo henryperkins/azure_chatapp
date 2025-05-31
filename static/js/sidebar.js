@@ -176,11 +176,6 @@ export function createSidebar({
     starred = await readStarred();
   }
 
-  // Load starred on module load
-  syncStarredFromStorage().catch(err => {
-    logger.error('[Sidebar] Could not load starred from storage', err, { context: MODULE });
-  });
-
   function isConversationStarred(id) {
     return starred.has(id);
   }
@@ -206,22 +201,6 @@ export function createSidebar({
     }
   }
 
-  // Also listen for cross-tab storage events
-  eventHandlers.trackListener(
-    domAPI.getWindow(),
-    'storage',
-    safeHandler(async (e) => {
-      if (e.key === starredStorageKey) {
-        // Reload starred
-        starred = await readStarred();
-        const activeTab = storageAPI.getItem('sidebarActiveTab') || 'recent';
-        if (activeTab === 'starred') {
-          maybeRenderStarredConversations();
-        }
-      }
-    }, '[Sidebar] storage sync'),
-    { context: MODULE }
-  );
 
   // ───────────────────────────────────────────────
   // Model Config
@@ -526,6 +505,21 @@ export function createSidebar({
   // Main event binding
   // ───────────────────────────────────────────────
   function bindDomEvents() {
+    // Cross-tab “starred” sync
+    eventHandlers.trackListener(
+      domAPI.getWindow(),
+      'storage',
+      safeHandler(async (e) => {
+        if (e.key === starredStorageKey) {
+          starred = await readStarred();
+          if ((storageAPI.getItem('sidebarActiveTab') || 'recent') === 'starred') {
+            maybeRenderStarredConversations();
+          }
+        }
+      }, '[Sidebar] storage sync'),
+      { context: MODULE }
+    );
+
     // Window resize
     eventHandlers.trackListener(
       domAPI.getWindow(),
@@ -674,6 +668,9 @@ export function createSidebar({
   // Initialization
   // ───────────────────────────────────────────────
   async function init() {
+    await syncStarredFromStorage().catch(err =>
+      logger.error('[Sidebar] Could not load starred from storage', err, { context: MODULE })
+    );
     try {
       // Wait for critical DOM
       await domReadinessService.dependenciesAndElements({

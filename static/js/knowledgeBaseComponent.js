@@ -269,6 +269,7 @@ export function createKnowledgeBaseComponent(options = {}) {
 
       try {
         this._initElements();
+        await this._initializeSearchHandler();
         this._bindEventHandlers(); // Bind handlers after elements are initialized
       } catch (error) {
         this.logger.error(`[${MODULE}] Failed to initialize elements or bind handlers: ${error.message}`, { error, context: MODULE });
