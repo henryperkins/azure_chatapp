@@ -68,8 +68,7 @@ export function createProjectListComponent(deps) {
         projects: [],
         filter: "all",
         loading: false,
-        customization: _loadCustomization(),
-        initialized: false
+        customization: _loadCustomization()
     };
     let isRendering = false;
     const eventBus = new EventTarget();
@@ -122,7 +121,6 @@ export function createProjectListComponent(deps) {
         }
 
         _doc = domAPI.getDocument?.();
-        if (state.initialized) return;
 
         // Try primary id, then legacy, then any matching selector
         element =
@@ -153,8 +151,6 @@ export function createProjectListComponent(deps) {
 
         _bindEventListeners();
         _bindCreateProjectButtons();
-
-        _setState({ initialized: true });
 
         eventBus.dispatchEvent(new CustomEvent('initialized', { detail: { success: true } }));
 
@@ -482,13 +478,6 @@ export function createProjectListComponent(deps) {
     }
     async function show() {
         if (isRendering) return;
-        if (!state.initialized) {
-            try {
-                await initialize();
-            } catch (err) {
-                logger.error('[ProjectListComponent][show] initialize failed', err, { context: MODULE_CONTEXT });
-            }
-        }
 
         // IMPROVED: Better element availability check with fallback creation
         if (!gridElement) {
@@ -1039,7 +1028,6 @@ export function createProjectListComponent(deps) {
         if (domReadinessService && typeof domReadinessService.destroy === 'function') {
             domReadinessService.destroy();
         }
-        _setState({ initialized: false });
     }
 
     return {

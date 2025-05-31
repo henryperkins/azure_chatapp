@@ -115,7 +115,6 @@ class ProjectDetailsComponent {
       this.containerId = "projectDetailsView";
       this.templatePath = "/static/html/project_details.html";
       this.state = {
-          initialized: false,
           templateLoaded: false,
           loading: false,
           activeTab: "chat",
@@ -818,10 +817,8 @@ class ProjectDetailsComponent {
   _setHTML(el, raw) { this.domAPI.setInnerHTML(el, raw); }
 
   async initialize() {
-    if (this.state.initialized) return;
     await this.domReadinessService.waitForEvent('app:ready');
     this._logInfo("Initializing...");
-    this._setState({ initialized: true });
     this._logInfo("Initialized successfully.");
   }
 
