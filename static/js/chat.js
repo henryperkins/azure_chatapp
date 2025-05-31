@@ -354,7 +354,7 @@ export function createChatManager(deps = {}) {
         }
 
         // Project Switch Logic
-        if (this.isInitialized && this.projectId && this.projectId !== targetProjectId) {
+        if (this._uiAttached && this.projectId && this.projectId !== targetProjectId) {
           logger.info(`[ChatManager][initialize] Project changed from ${this.projectId} to ${targetProjectId}. Clearing old project data.`, { context: "chatManager.initialize" });
           this._clearProjectSpecificData(); // Clear conversation list, current conversation, messages
         }
@@ -564,7 +564,6 @@ export function createChatManager(deps = {}) {
 
       this._clearProjectSpecificData();
       this.projectId = null;
-      this.isInitialized = false;
       // this.isGlobalMode = false; // If isGlobalMode is a relevant state
       this._uiAttached = false; // Allow UI to re-attach on next init
 
