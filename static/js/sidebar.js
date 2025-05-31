@@ -697,13 +697,12 @@ export function createSidebar({
         context: `${MODULE}:initOptional`
       });
       findDom();
-      // Mobile Dock
+      // Mobile Dock instance is prepared here; actual init is deferred
       sidebarMobileDock = createSidebarMobileDock({
         domAPI, eventHandlers, viewportAPI, logger,
         domReadinessService, safeHandler,
         onTabActivate: activateTab
       });
-      await sidebarMobileDock.init();
 
       // Auth forms
       sidebarAuth.init();
@@ -814,6 +813,8 @@ export function createSidebar({
     toggleStarConversation,
     debugAuthState,
     forceAuthStateRefresh,
-    debugSidebarState
+    debugSidebarState,
+    /* new: explicit accessor – orchestrator now owns dock initialisation */
+    getMobileDock: () => sidebarMobileDock
   };
 }
