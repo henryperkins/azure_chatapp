@@ -635,31 +635,6 @@ export function createChatUIEnhancements(deps = {}) {
     }
   }
 
-  /**
-   * Handle keypress in the chat input field.
-   * Submits on Enter (without Shift).
-   * @param {KeyboardEvent} event - The keypress event.
-   */
-  function handleInputKeypress(event) {
-    const context = `${MODULE_CONTEXT}::handleInputKeypress`;
-    // Submit on Enter (without Shift)
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault(); // Prevent default form submission or newline
-      const sendBtn = domAPI.getElementById('chatSendBtn'); // Use domAPI
-      if (sendBtn) {
-        // Trigger click on the send button. Assumes another handler (like in attachEventHandlers or external)
-        // is listening to this click event to perform the actual message sending.
-        sendBtn.click();
-        logger.info(`[${MODULE_CONTEXT}] Enter key pressed in input, simulating send button click`, {
-          context
-        });
-      } else {
-        logger.warn(`[${MODULE_CONTEXT}] Enter key pressed but send button not found`, {
-          context
-        });
-      }
-    }
-  }
 
   /**
    * Scroll a container to the bottom.

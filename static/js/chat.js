@@ -1090,8 +1090,9 @@ export function createChatManager(deps = {}) {
     }
 
     async _loadConversationHistory() {
+      const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
       if (!this.projectId) {
-        if (this.messageContainer) this._showMessage("system", "Please select a project to start chatting.");
+        chatUIEnh.appendMessage("system", "Please select a project to start chatting.");
         return;
       }
 
@@ -1200,42 +1201,6 @@ export function createChatManager(deps = {}) {
       }
     }
 
-    _showThinkingIndicator() {
-      const chatUIEnhancements = this.DependencySystem?.modules?.get('chatUIEnhancements');
-      if (chatUIEnhancements && typeof chatUIEnhancements.showTypingIndicator === 'function') {
-        chatUIEnhancements.showTypingIndicator();
-        return;
-      }
-      if (!this.messageContainer) {
-        return;
-      }
-      const indicator = this.domAPI.createElement("div");
-      indicator.id = "thinkingIndicator";
-      indicator.className = "thinking-indicator";
-      this.domAPI.setInnerHTML(
-        indicator,
-        `
-            <div class="thinking-dots">
-                <span></span><span></span><span></span>
-            </div>
-            <span>Claude is thinking...</span>
-        `
-      );
-      this.domAPI.appendChild(this.messageContainer, indicator);
-      this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
-    }
-
-    _hideThinkingIndicator() {
-      const chatUIEnhancements = this.DependencySystem?.modules?.get('chatUIEnhancements');
-      if (chatUIEnhancements && typeof chatUIEnhancements.hideTypingIndicator === 'function') {
-        chatUIEnhancements.hideTypingIndicator();
-        return;
-      }
-      const el = this.domAPI.querySelector("#thinkingIndicator");
-      if (el) {
-        el.remove();
-      }
-    }
 
     _showErrorMessage(message) {
       if (!this.messageContainer) {
@@ -1291,13 +1256,14 @@ export function createChatManager(deps = {}) {
     }
 
     _renderMessages(messages) {
+      const chatUIEnh = this.DependencySystem.modules.get('chatUIEnhancements');
       if (!messages || !Array.isArray(messages) || !this.messageContainer) {
         return;
       }
 
       this._clearMessages();
       messages.forEach(message => {
-        this._showMessage(
+        chatUIEnh.appendMessage(
           message.role,
           message.content,
           message.id,
@@ -1346,60 +1312,6 @@ export function createChatManager(deps = {}) {
       return true;
     }
 
-    _setupEventListeners() {
-      this.eventHandlers.cleanupListeners?.({ context: "chatManager:UI" });
-      const ctx = { context: "chatManager:UI" };
-      const chatUIEnhancements = this.DependencySystem?.modules?.get('chatUIEnhancements');
-
-      // Prefer centralized enhancements' event wiring if available
-      if (chatUIEnhancements && typeof chatUIEnhancements.attachEventHandlers === 'function') {
-        chatUIEnhancements.attachEventHandlers({
-          inputField: this.inputField,
-          sendButton: this.sendButton,
-          messageContainer: this.messageContainer,
-          onSend: (txt) => this.sendMessage(txt).catch(() => { })
-        });
-      } else {
-        if (this.sendButton) {
-          this.eventHandlers.trackListener(
-            this.sendButton,
-            "click",
-            safeHandler(() => {
-              const txt = this.inputField?.value ?? "";
-              this.sendMessage(txt).catch(() => { });
-            }, "sendBtnClick"),
-            ctx
-          );
-        }
-
-        if (this.inputField) {
-          this.eventHandlers.trackListener(
-            this.inputField,
-            "keydown",
-            safeHandler((e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                const txt = this.inputField.value;
-                this.sendMessage(txt).catch(() => { });
-              }
-            }, "inputEnter"),
-            ctx
-          );
-        }
-      }
-
-      if (this.minimizeButton && this.container) {
-        this.eventHandlers.trackListener(
-          this.minimizeButton,
-          "click",
-          safeHandler(() => {
-            this.container.classList.toggle("hidden");
-          }, "minimiseClick"),
-          ctx
-        );
-      }
-      return true;
-    }
   }
 
   const instance = new ChatManager();
