@@ -1190,11 +1190,6 @@ if (handlers?.dispatchEvent) {
                 }
             }
 
-            // Phase 5: eventHandlers init
-            if (eventHandlers.init) {
-                await eventHandlers.init();
-                logger.log('[coreInit] eventHandlers init complete', { context: 'coreInit' });
-            }
 
             // Phase 6: UI-oriented core components
             const projectDashboard = makeProjectDashboard({
@@ -1516,10 +1511,13 @@ if (handlers?.dispatchEvent) {
                     containerSelector: '#projectDetailsView',
                     eventName: 'projectDetailsHtmlLoaded'
                 });
+                /* NEW: Ensure modal dialogs are injected before ModalManager initialization
+                   This prevents race conditions where #projectModal is missing during
+                   modalManager.init() and button clicks. */
                 await htmlLoader.loadTemplate({
                     url: '/static/html/modals.html',
-                    containerSelector: 'body',
-                    eventName: 'modalsLoaded'
+                    containerSelector: '#modalsContainer',
+                    eventName: 'modalsHtmlLoaded'
                 });
                 logger.log('[UIInit] Project templates loaded', {
                     context: 'uiInit:loadTemplates'
@@ -1801,6 +1799,11 @@ if (handlers?.dispatchEvent) {
 
                 await setupSidebarControls();
                 await waitForModalReadiness();
+                // Deferred: eventHandlers init after UI DOM is present
+                if (eventHandlers.init) {
+                    await eventHandlers.init();
+                    logger.log('[uiInit] eventHandlers init complete', { context: 'uiInit' });
+                }
                 domReadinessService.emitReplayable('ui:templates:ready');
                 await createAndRegisterUIComponents();
                 await registerNavigationViews();
@@ -1896,6 +1899,15 @@ if (handlers?.dispatchEvent) {
         await phaseRunner('auth', () => authInit.initializeAuthSystem());
         await phaseRunner('ui', () => uiInit.initializeUIComponents());
 
+        // Mark initialization complete immediately after UI becomes interactive.
+        // Clearing the flag here prevents race conditions where early user actions
+        // (e.g., "Create Project" button) reach ModalManager.show() while
+        // appModule.state.initializing is still true, causing the modal to abort.
+        appModule.setAppLifecycleState({
+            initializing: false,
+            currentPhase: 'ui_ready'
+        });
+
         // --- PATCH: Extra post-UI readiness verification ---
         // Ensure DOM/selectors needed for post-auth/project UI actually exist
         const domVerify = (sel, desc) => {
@@ -1943,6 +1955,27 @@ if (handlers?.dispatchEvent) {
             });
         }
         logger.info('[appInitializer] Boot sequence complete – app is READY');
+        // ──────────────────────────────────────────────
+        // Hide initial loading overlay (#appLoading)
+        // Doing this inside appInitializer guarantees the overlay is removed
+        // even if external listeners were attached too late.
+        // ──────────────────────────────────────────────
+        try {
+            const loadingEl = domAPI.querySelector('#appLoading');
+            if (loadingEl) {
+                // Fade out first (matches inline base.html listener behaviour)
+                domAPI.setStyle(loadingEl, 'opacity', '0');
+                // After fade-out transition, remove from layout flow
+                browserService.setTimeout(() => {
+                    domAPI.setStyle(loadingEl, 'display', 'none');
+                }, 300);
+                logger.debug('[appInitializer] #appLoading overlay hidden', { context: 'appInitializer' });
+            } else {
+                logger.debug('[appInitializer] #appLoading element not found – nothing to hide', { context: 'appInitializer' });
+            }
+        } catch (err) {
+            logger.warn('[appInitializer] Failed to hide #appLoading overlay', err, { context: 'appInitializer' });
+        }
     }
 
     async function cleanup() {

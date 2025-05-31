@@ -582,16 +582,47 @@ export function createProjectListComponent(deps) {
         if (!eventHandlers?.trackListener)
             throw new Error("[ProjectListComponent] eventHandlers.trackListener is required for button events.");
 
-        // Event-delegation via a single tracked listener
-        eventHandlers.trackListener(
-            domAPI.getDocument(),
-            'click',
-            (e) => {
-                const btn = e.target.closest('#createProjectBtn');
-                if (btn) _openNewProjectModal();
-            },
-            { context: MODULE_CONTEXT, description: 'delegate:createProjectBtn' }
-        );
+        const doc = domAPI.getDocument();
+
+        // Helper to attach the delegated click listener
+        const bindListener = () => {
+            eventHandlers.trackListener(
+                doc,
+                'click',
+                async (e) => {
+                    const btn = e.target.closest('#createProjectBtn');
+                    if (!btn) return;
+
+                    /* Wait for ModalManager readiness – still guard against rare races */
+                    try {
+                        const mm = DependencySystem?.modules?.get?.('modalManager');
+                        if (mm?.isReadyPromise) {
+                            await mm.isReadyPromise().catch(() => { /* ignore */ });
+                        }
+                    } catch (_) { /* ignore */ }
+
+                    _openNewProjectModal();
+                },
+                { context: MODULE_CONTEXT, description: 'delegate:createProjectBtn' }
+            );
+        };
+
+        /* Bind only after global initialization completes.
+           The appInitializer emits a replay-capable 'app:ready' event when
+           appModule.state.initializing flips to false. Waiting prevents the
+           ModalManager.show() guard (showDuringInitialization) from aborting. */
+        const appMod = DependencySystem?.modules?.get?.('appModule');
+        if (appMod?.state?.initializing) {
+            domReadinessService
+                .waitForEvent('app:ready', {
+                    timeout: APP_CONFIG.TIMEOUTS?.APP_READY_WAIT ?? 30000,
+                    context: MODULE_CONTEXT + ':bindCreateProjectBtn'
+                })
+                .then(bindListener)
+                .catch(bindListener); // On timeout, bind anyway to avoid dead UI
+        } else {
+            bindListener();
+        }
     }
     function _openNewProjectModal() {
         if (!modalManager?.show) { return; }
