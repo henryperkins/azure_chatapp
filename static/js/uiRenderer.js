@@ -315,4 +315,5 @@ export function createUiRenderer(deps) {
   };
 }
 
+export { createUiRenderer };
 export default createUiRenderer;

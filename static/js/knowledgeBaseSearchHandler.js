@@ -261,7 +261,8 @@ export async function createKnowledgeBaseSearchHandler(ctx) {
     chatInput.value = current ? `${current}\n\n${refText}` : refText;
     chatInput.focus();
     const inputEvt = new Event('input', { bubbles: true });
-    ctx.domAPI.dispatchEvent(chatInput, inputEvt);
+    const doc = ctx.domAPI.getDocument();
+    ctx.domAPI.dispatchEvent(doc, inputEvt);
   }
 
   /**

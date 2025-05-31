@@ -17,7 +17,7 @@ import { createAuthFormListenerFactory } from './authFormListenerFactory.js';
  */
 
  // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
-export function createAuthModule(deps) {
+export function createAuth(deps) {   // ← canonical name for “auth.js”
   // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
   if (!deps || typeof deps !== "object") {
     throw new Error("[AuthModule] 'deps' DI object is required as argument to createAuthModule");
@@ -1115,4 +1115,7 @@ export function createAuthModule(deps) {
 }
 
 /* guard-rail: default factory export */
-export default createAuthModule;
+function createAuthModule(deps) { return createAuth(deps); }
+
+// Back-compat alias (internal, **NOT** exported)
+export default createAuth;

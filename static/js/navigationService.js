@@ -72,6 +72,7 @@ export function createNavigationService({
             err,
             { context: 'navigationService:transitionListener' }
           );
+          return false;
         }
       }
     });
