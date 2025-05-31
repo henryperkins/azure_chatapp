@@ -189,9 +189,6 @@ export function createKnowledgeBaseComponent(options = {}) {
       this.searchHandler = null;
       this.manager = createKnowledgeBaseManager(this);
 
-      // Initialize search handler asynchronously
-      this._initializeSearchHandler();
-
       // this._bindEventHandlers(); // Call this after _initElements in initialize
     }
 
