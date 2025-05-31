@@ -489,6 +489,41 @@ export function createDomReadinessService({
     try {
       const event = eventHandlers.createCustomEvent(eventName, { detail });
       domAPI.dispatchEvent(domAPI.getDocument(), event);
+
+      /* --- NEW: also notify window listeners --- */
+      try {
+        const winTarget = browserService?.getWindow?.();
+        if (winTarget && typeof winTarget.dispatchEvent === 'function') {
+          // immediate (same-tick) dispatch
+          domAPI.dispatchEvent(
+            winTarget,
+            eventHandlers.createCustomEvent(eventName, { detail })
+          );
+
+          // one more dispatch on next-tick so very-late inline listeners
+          // (e.g. in base.html) still catch the event
+          browserService.setTimeout(() => {
+            try {
+              domAPI.dispatchEvent(
+                winTarget,
+                eventHandlers.createCustomEvent(eventName, { detail, replay: true })
+              );
+            } catch (_) {
+              _logger.warn?.(
+                '[domReadinessService] delayed window dispatch failed',
+                _,
+                { context: 'domReadinessService:emitReplayable:window-delayed' }
+              );
+            }
+          }, 0);
+        }
+      } catch (err) {
+        _logger.warn?.(
+          '[domReadinessService] window dispatch failed',
+          err,
+          { context: 'domReadinessService:emitReplayable:window' }
+        );
+      }
     } catch (err) {
       _logger.error('[domReadinessService] emitReplayable failed', err,
         { context: 'domReadinessService:emitReplayable' });
