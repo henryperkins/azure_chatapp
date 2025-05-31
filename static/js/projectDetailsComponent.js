@@ -523,7 +523,7 @@ class ProjectDetailsComponent {
         this.sanitizer.sanitize(customInstructions || "No custom instructions."));
     }
     if (this.elements.projectCreatedDate && created_at) {
-      this.elements.projectCreatedDate.textContent = this._formatDate(created_at);
+      this.elements.projectCreatedDate.textContent = formatDate(created_at);
     }
   }
 
@@ -908,15 +908,6 @@ class ProjectDetailsComponent {
     // No click handler here; chatUIEnhancements handles it.
   }
 
-  async _createNewConversation() {
-    if (!this.projectId || !this.state.projectDataLoaded) return;
-    if (this.projectManager.projectLoadingInProgress) return;
-    if (!(this.auth && this.auth.getCurrentUserObject?.()?.id)) return;
-    try {
-      const conv = await this.projectManager.createConversation(this.projectId);
-      if (conv?.id) this._openConversation(conv);
-    } catch (err) { this._logError("Error creating new conversation", err); }
-  }
 
   async _restoreChatAndModelConfig() {
     const tab = this.state.activeTab;
