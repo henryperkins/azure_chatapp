@@ -294,7 +294,8 @@ export function createAppInitializer(opts = {}) {
             disableErrorTracking: false,
             initialized: false,
             initializing: false,
-            currentPhase: 'idle'
+            currentPhase: 'idle',
+            knowledgeBaseComponentReady: false
         };
 
         function setAuthState(newAuthState) {
@@ -1147,11 +1148,12 @@ if (handlers?.dispatchEvent) {
                 if (typeof knowledgeBaseComponentInstance.initialize === 'function') {
                     // Defensive: initialize with "not visible" and no kbData, which is safe.
                     knowledgeBaseComponentInstance.initialize(false, null, null)
-                        .then(() =>
+                        .then(() => {
                             logger.debug('[coreInit] KnowledgeBaseComponent initial hidden initialization complete.', {
                                 context: 'coreInit'
-                            })
-                        )
+                            });
+                            appModule.state.knowledgeBaseComponentReady = true;
+                        })
                         .catch(err =>
                             logger.error('[coreInit] KnowledgeBaseComponent initial hidden initialization failed',
                                 err, { context: 'coreInit' })
