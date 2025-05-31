@@ -69,8 +69,8 @@ export function createNavigationService({
         } catch (err) {
           logger.error(
             '[NavigationService] transition listener failed',
-            { status: err?.status ?? 500, data: err, message: err?.message ?? String(err) },
-            { context: MODULE }
+            err,
+            { context: 'navigationService:transitionListener' }
           );
         }
       }

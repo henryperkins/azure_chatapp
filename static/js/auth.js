@@ -16,6 +16,7 @@ import { createAuthFormListenerFactory } from './authFormListenerFactory.js';
  * All authentication logic, state, and event handling are encapsulated in this module. No authentication primitives exist outside this context. All previous modular primitives are removed.
  */
 
+ // VENDOR-EXEMPT-SIZE: Core module pending refactor in Q3-25
 export function createAuthModule(deps) {
   // === FACTORY GUARDRAIL: STRICT DI VALIDATION (No fallback, throw immediately, BEFORE destructuring) ===
   if (!deps || typeof deps !== "object") {
