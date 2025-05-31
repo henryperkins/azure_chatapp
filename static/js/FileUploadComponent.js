@@ -38,8 +38,8 @@ export function createFileUploadComponent({
       logger = ds?.modules?.get?.('logger');
     } catch (err) {
       logger.error('[FileUploadComponent] Auto-resolve logger failed',
-        { status: 500, data: err, message: err?.message ?? String(err) },
-        { context: MODULE_CONTEXT }
+        err,
+        { context: `${MODULE_CONTEXT}:auto-resolve` }
       );
     }
   }

@@ -210,3 +210,5 @@ export function createChatExtensions(options) {
     cleanup: cleanup
   };
 }
+
+export default createChatExtensions;

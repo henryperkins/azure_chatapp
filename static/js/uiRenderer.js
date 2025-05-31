@@ -314,3 +314,5 @@ export function createUiRenderer(deps) {
     cleanup
   };
 }
+
+export default createUiRenderer;
