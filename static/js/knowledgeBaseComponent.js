@@ -714,15 +714,23 @@ export function createKnowledgeBaseComponent(options = {}) {
     }
   }
 
-const instance = new KnowledgeBaseComponentWithDestroy();
-return {
-  ...instance,
-  cleanup(...a) {                      // satisfies pattern checker
-    (instance.getDep("DependencySystem")?.modules.get("eventHandlers") || instance.eventHandlers)
-      ?.cleanupListeners({ context: "KnowledgeBaseComponent" });
-    instance.cleanup?.(...a);
-  }
-};
+ // --- public API export (no spread-clone) ---
+ const instance = new KnowledgeBaseComponentWithDestroy();
+
+ // patch-in canonical cleanup that also clears listeners
+ const _origCleanup = typeof instance.cleanup === 'function'
+     ? instance.cleanup.bind(instance)
+     : () => {};
+
+ instance.cleanup = function (...args) {
+   (instance.getDep('DependencySystem')?.modules.get('eventHandlers')
+     || instance.eventHandlers)
+     ?.cleanupListeners({ context: 'KnowledgeBaseComponent' });
+   _origCleanup(...args);
+ };
+
+ // never expose `.state` directly
+ return instance;
 }
 
 export default createKnowledgeBaseComponent;

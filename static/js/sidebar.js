@@ -810,7 +810,6 @@ export function createSidebar({
     destroy,
     cleanup,
     eventBus: SidebarBus,
-    state,
     toggleSidebar,
     closeSidebar,
     showSidebar,
