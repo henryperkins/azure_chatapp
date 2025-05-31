@@ -8,6 +8,16 @@
  *   domAPI.getElementById('foo'); // etc.
  */
 
+/**
+ * domAPI.js — Abstracted DOM helpers for strict DI, testability, and browser-independent access.
+ * To be injected throughout app modules instead of direct usage of document, window, or related globals.
+ *
+ * Usage:
+ *   import { createDomAPI } from './domAPI.js';
+ *   const domAPI = createDomAPI({ documentObject: document, windowObject: window });
+ *   domAPI.getElementById('foo'); // etc.
+ */
+
 export function createDomAPI({
   documentObject,
   windowObject,
@@ -45,6 +55,61 @@ export function createDomAPI({
   }
   function resetForm(form) {
     if (typeof form?.reset === 'function') form.reset();
+  }
+
+  // --- Additional helpers for DI compliance ---
+  function toggleClass(el, cls, force) {
+    if (!el?.classList || !cls) return;
+    String(cls).split(/\s+/).filter(Boolean).forEach(c =>
+      typeof force === "boolean"
+        ? el.classList.toggle(c, force)
+        : el.classList.toggle(c)
+    );
+  }
+  function setStyle(el, prop, val) {
+    if (el && el.style) {
+      el.style[prop] = val;
+    }
+  }
+  function setProperty(el, prop, value) {
+    if (!el) return;
+    try {
+      if (prop in el) el[prop] = value;
+      else el.setAttribute(prop, value);
+    } catch (err) {
+      _logger.warn('[domAPI] setProperty failed', { error: err.message, prop, context: 'domAPI:setProperty' });
+    }
+  }
+  function getParentNode(el) {
+    return el?.parentNode ?? null;
+  }
+  function selectElement(el) {
+    try {
+      el?.select?.();
+    } catch (err) {
+      _logger.warn('[domAPI] selectElement failed', { error: err.message, context: 'domAPI:selectElement' });
+    }
+  }
+  function callMethod(obj, method, ...args) {
+    if (!obj) return undefined;
+    const fn = obj[method];
+    if (typeof fn === 'function') return fn.apply(obj, args);
+    return undefined;
+  }
+  function getValue(el) {
+    return el ? (typeof el.value !== 'undefined' ? el.value : '') : '';
+  }
+  function setValue(el, v) {
+    if (el && typeof el.value !== 'undefined') el.value = v;
+  }
+  function getTextContent(el) {
+    return el ? (typeof el.textContent !== 'undefined' ? el.textContent : '') : '';
+  }
+  function closest(el, selector) {
+    return el && typeof el.closest === 'function' ? el.closest(selector) : null;
+  }
+  function getDataAttribute(el, k) {
+    return el && el.dataset ? el.dataset[k] : undefined;
   }
 
   return {
@@ -121,29 +186,7 @@ export function createDomAPI({
         e.preventDefault();
       }
     },
-    closest(el, selector) {
-      if (!el || !selector) return null;
-      if (typeof el.closest === 'function') {
-        return el.closest(selector);
-      }
-      let node = el.nodeType === 1
-        ? el
-        : el.parentElement || el.parentNode;
-      const matches =
-        node?.matches ||
-        node?.webkitMatchesSelector ||
-        node?.msMatchesSelector ||
-        (() => false);
-      while (node && node.nodeType === 1) {
-        try {
-          if (matches.call(node, selector)) return node;
-        } catch (err) {
-          _logger.warn('[domAPI] closest selector match failed', { error: err.message, selector, context: 'domAPI:closest' });
-        }
-        node = node.parentElement || node.parentNode;
-      }
-      return null;
-    },
+    closest,
     addClass(el, cls) {
       if (!el?.classList || !cls) return;
       el.classList.add(...String(cls).split(/\s+/).filter(Boolean));
@@ -152,14 +195,7 @@ export function createDomAPI({
       if (!el?.classList || !cls) return;
       el.classList.remove(...String(cls).split(/\s+/).filter(Boolean));
     },
-    toggleClass(el, cls, force) {
-      if (!el?.classList || !cls) return;
-      String(cls).split(/\s+/).filter(Boolean).forEach(c =>
-        typeof force === "boolean"
-          ? el.classList.toggle(c, force)
-          : el.classList.toggle(c)
-      );
-    },
+    toggleClass,
     hasClass: (el, cls) => {
       return !!(el && el.classList && el.classList.contains(cls));
     },
@@ -184,50 +220,22 @@ export function createDomAPI({
         el.dataset[k] = v;
       }
     },
-    getDataAttribute: (el, k) => {
-      return (el && el.dataset) ? el.dataset[k] : undefined;
-    },
+    getDataAttribute,
     removeDataAttribute: (el, k) => {
       if (el && el.dataset) {
         delete el.dataset[k];
       }
     },
-    setStyle: (el, prop, val) => {
-      if (el && el.style) {
-        el.style[prop] = val;
-      }
-    },
-    setProperty(el, prop, value) {
-      if (!el) return;
-      try {
-        if (prop in el) el[prop] = value;
-        else el.setAttribute(prop, value);
-      } catch (err) {
-        _logger.warn('[domAPI] setProperty failed', { error: err.message, prop, context: 'domAPI:setProperty' });
-      }
-    },
-    getTextContent: (el) => {
-      if (el && typeof el.textContent === 'string') {
-        return el.textContent;
-      }
-      return '';
-    },
+    setStyle,
+    setProperty,
+    getTextContent,
     setTextContent: (el, text) => {
       if (el && typeof text === 'string') {
         el.textContent = text;
       }
     },
-    getValue: (el) => {
-      if (el && typeof el.value !== 'undefined') {
-        return el.value;
-      }
-      return '';
-    },
-    setValue: (el, value) => {
-      if (el && typeof el.value !== 'undefined') {
-        el.value = value;
-      }
-    },
+    getValue,
+    setValue,
     isSameNode: (elA, elB) => {
       if (elA && typeof elA.isSameNode === 'function') {
         return elA.isSameNode(elB);
@@ -253,24 +261,14 @@ export function createDomAPI({
       return target.dispatchEvent(event);
     },
     getDocument: () => documentObject,
-    callMethod: (el, methodName, ...args) => (
-      el && typeof el[methodName] === 'function'
-        ? el[methodName](...args)
-        : undefined
-    ),
+    callMethod,
     getWindow: () => windowObject,
     createDocumentFragment: () => documentObject.createDocumentFragment(),
     createTextNode: (txt = '') => documentObject.createTextNode(txt),
     setElementId: (el, id) => { if (el) el.id = id; },
     setClassName: (el, cls) => { if (el) el.className = cls; },
-    selectElement: (el) => {
-      try {
-        el?.select?.();
-      } catch (err) {
-        _logger.warn('[domAPI] selectElement failed', { error: err.message, context: 'domAPI:selectElement' });
-      }
-    },
-    getParentNode: (el) => el?.parentNode ?? null,
+    selectElement,
+    getParentNode,
     insertBefore: (parent, node, refNode = null) =>
       parent?.insertBefore?.(node, refNode),
     createSVGElement: (tag) =>
