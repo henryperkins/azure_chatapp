@@ -606,7 +606,7 @@ class ProjectDetailsComponent {
     this._setHTML(div, `
       <div class="flex justify-between items-center">
         <h4 class="font-medium truncate">${sanitizer.sanitize(art.name || "Untitled artifact")}</h4>
-        <span class="text-xs text-base-content/60">${this._safeTxt(formatDate(art.created_at))}</span>
+        <span class="text-xs text-base-content/60">${sanitizer.sanitize(formatDate(art.created_at))}</span>
       </div>
       <p class="text-sm text-base-content/70 truncate mt-1">${sanitizer.sanitize(art.description || art.type || "No description")}</p>
       <div class="mt-2">
