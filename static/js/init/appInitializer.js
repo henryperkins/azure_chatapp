@@ -1844,6 +1844,14 @@ if (handlers?.dispatchEvent) {
                     try {
                         await sidebar.init();
                         logger.info('[uiInit] sidebar.init completed', { context: 'uiInit' });
+
+                        /* ── NEW: explicit mobile-dock initialisation ───────────────────── */
+                        const mobileDock = sidebar.getMobileDock?.();
+                        if (mobileDock?.init) {
+                          await mobileDock.init();
+                          mobileDock.ensureMobileDock?.();   // guarantees DOM is present
+                          logger.debug('[uiInit] Mobile dock initialised by orchestrator', { context: 'uiInit' });
+                        }
                     } catch (err) {
                         logger.error('[uiInit] sidebar.init failed', err, { context: 'uiInit' });
                     }
