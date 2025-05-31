@@ -403,6 +403,8 @@ export function createProjectDetailsEnhancements({
 
       const conversationsList = domAPI.getElementById('conversationsList');
       if (!conversationsList) return;
+      if (conversationsList.dataset.ptrBound === '1') return;
+      conversationsList.dataset.ptrBound = '1';
 
       // Create pull indicator element
       const pullIndicator = domAPI.createElement('div');

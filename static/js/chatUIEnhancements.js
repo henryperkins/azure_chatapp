@@ -84,18 +84,10 @@ export function createChatUIEnhancements(deps = {}) {
     // Cache default container
     state.messageContainer = chatContainer;
 
-    // Add event listeners to default UI
-    const listeners = [
-      [chatInput, 'keypress', handleInputKeypress, 'inputKeypress', 'Chat input keypress handler'],
-      [doc, 'chatNewMessage', handleNewMessage, 'chatNewMessage', 'New message handler'],
-      [sendBtn, 'click', () => logger.info('[chatUIEnhancements] Default send button clicked', { context: MODULE_CONTEXT }), 'defaultSendButtonClick', 'Default send button click handler']
-    ];
-
-    listeners.forEach(([element, event, handler, handlerName, description]) => {
-      if (element) {
-        eventHandlers.trackListener(element, event, safeHandler(handler, handlerName), { context: MODULE_CONTEXT, description });
-      }
-    });
+    // Only add event listener for new message event (no input/send listeners here)
+    if (doc) {
+      eventHandlers.trackListener(doc, 'chatNewMessage', safeHandler(handleNewMessage, 'chatNewMessage'), { context: MODULE_CONTEXT, description: 'New message handler' });
+    }
 
     // Setup chat header collapse functionality
     setupChatHeaderCollapse();
@@ -183,6 +175,8 @@ export function createChatUIEnhancements(deps = {}) {
     try {
       const chatMessages = domAPI.getElementById('chatMessages');
       if (!chatMessages) return;
+      if (chatMessages.dataset.ptrBound === '1') return;
+      chatMessages.dataset.ptrBound = '1';
 
       let startY = 0;
       let isPulling = false;
@@ -952,8 +946,15 @@ export function createChatUIEnhancements(deps = {}) {
     });
   }
 
+  // Central message-append helper for ChatManager
+  function appendMessage(role, content, id = null, thinking = null, redacted = false) {
+    const msgEl = createMessageElement(content, role === 'user' ? 'user' : 'ai', Date.now(), id);
+    if (state.messageContainer) domAPI.appendChild(state.messageContainer, msgEl);
+    if (role !== 'user' && (thinking || redacted)) showTypingIndicator();
+  }
+
   // Public API
-  return {
+  const apiObject = {
     initialize,
     showTypingIndicator,
     hideTypingIndicator,
@@ -964,8 +965,13 @@ export function createChatUIEnhancements(deps = {}) {
     renderCitationsAsDOM,
     setMessageContainer,
     setupMobileEnhancements,
-    setupProjectChatEnhancements
+    setupProjectChatEnhancements,
+    appendMessage
   };
+
+  DependencySystem.modules.register('chatUIEnhancements', apiObject);
+
+  return apiObject;
 }
 
 export default createChatUIEnhancements;

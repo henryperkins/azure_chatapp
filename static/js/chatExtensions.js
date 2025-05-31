@@ -37,24 +37,7 @@ export function createChatExtensions(options) {
   var MODULE_CONTEXT = "chatExtensions";
 
   async function init() {
-    await domReadinessService.documentReady();
-    await domReadinessService.elementsReady(
-      ['#projectChatTitleEditBtn', '#projectChatTitle'],
-      { timeout: 8000, observeMutations: true, context: 'chatExtensions.init' }
-    );
-    await domReadinessService.dependenciesAndElements({
-      deps: ['chatManager', 'app'],
-      domSelectors: ['#projectChatTitleEditBtn', '#projectChatTitle'],
-      timeout: 8000,
-      context: 'chatExtensions.init'
-    });
-
-    setupChatTitleEditing();
-
-    const doc = domAPI.getDocument?.();
-    doc?.dispatchEvent(
-      new CustomEvent('chatextensions:initialized', { detail: { success: true } })
-    );
+    logger.info('[chatExtensions] disabled – awaiting redesign');
   }
 
   function setupChatTitleEditing() {
