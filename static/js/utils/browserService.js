@@ -182,14 +182,17 @@ export function createBrowserService({ windowObject, logger } = {}) {
     // Location / navigation helpers
     setLocation: (url) => { windowObject.location.assign(url); },
     getLocationPathname: () => windowObject.location.pathname,
+    getLocation: () => windowObject.location,
+    URLSearchParams: windowObject.URLSearchParams,
+    FormData: windowObject.FormData,
 
     // Browser APIs for DI/testability
-    FormData: FormDataImpl,
+    FormDataImpl,
     MutationObserver: MutationObserverImpl,
     fetch: fetchImpl,
 
     /* Native constructor needed by Auth & other modules */
-    URLSearchParams: windowObject.URLSearchParams,
+    // URLSearchParams: windowObject.URLSearchParams, // already above
 
     // Passthroughs for test harnesses
     getLocationHref: () => windowObject.location.href,
@@ -207,7 +210,6 @@ export function createBrowserService({ windowObject, logger } = {}) {
     getWindow           : () => windowObject,
     getDocument         : () => windowObject.document,
     getHistory          : () => windowObject.history,
-    getLocation         : () => windowObject.location,
     getInnerWidth       : () => windowObject.innerWidth,
     getDependencySystem : () => windowObject.DependencySystem,
 

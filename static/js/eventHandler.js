@@ -174,6 +174,15 @@ export function createEventHandlers({
     return remove;                       // ← now returns the “unsubscribe” function
   }
 
+  // --- Event factory/dispatcher for DI compliance ---
+  function createCustomEvent(type, opts = {}) {
+    return new CustomEvent(type, opts);
+  }
+  function dispatchEvent(type, { detail } = {}, tgt = (domAPI?.getDocument?.() || document)) {
+    if (!tgt?.dispatchEvent) throw new Error('dispatchEvent: invalid target');
+    return tgt.dispatchEvent(createCustomEvent(type, { detail, bubbles: true }));
+  }
+
   function toggleVisible(elementSelectorOrElement, show) {
     const element =
       typeof elementSelectorOrElement === 'string'
@@ -721,6 +730,7 @@ export function createEventHandlers({
     PRIORITY,
     untrackListener,
     createCustomEvent,
+    dispatchEvent,
     setProjectManager : (pm) => { _projectManager = pm; },
     setDomReadinessService,
     setLogger,
