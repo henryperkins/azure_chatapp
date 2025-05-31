@@ -35,10 +35,7 @@ export function createProjectDetailsEnhancements({
 
   // State management
   const state = {
-    initialized: false,
     activeTab: 'chat',
-    // Project list state
-    projectListInitialized: false,
     currentFilter: 'all',
     searchTerm: ''
   };
